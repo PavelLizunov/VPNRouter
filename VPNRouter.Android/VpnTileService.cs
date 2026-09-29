@@ -24,12 +24,6 @@ namespace VPNRouter.Android;
 [MetaData("android.service.quicksettings.ACTIVE_TILE", Value = "true")]
 public sealed class VpnTileService : TileService
 {
-    public const string ActionOpenFromTile = "com.ninitux.vpnrouter.OPEN_FROM_TILE";
-    public const string ExtraTileReason = "tile_reason";
-    public const string ReasonPermission = "permission";
-    public const string ReasonSetup = "setup";
-    public const string ReasonConnect = "connect";
-
     private const string PrefsName = "vpnrouter_settings";
     private const string ServiceClass = "com.ninitux.vpnrouter.VpnRouterService";
     private const string ActionStart = "com.ninitux.vpnrouter.TILE_START";
@@ -71,10 +65,10 @@ public sealed class VpnTileService : TileService
                 StopVpn();
                 break;
             case TileClickAction.OpenAppForPermission:
-                OpenApp(ReasonPermission);
+                OpenApp(TileIntentContract.ReasonPermission);
                 break;
             case TileClickAction.OpenAppForSetup:
-                OpenApp(ReasonSetup);
+                OpenApp(TileIntentContract.ReasonSetup);
                 break;
         }
 
@@ -97,7 +91,7 @@ public sealed class VpnTileService : TileService
         {
             global::Android.Util.Log.Warn(LogTag, $"Tile could not start the VPN service: {ex.GetType().Name}");
             WriteState(VpnConnectionState.Error, TileAppearanceFactory.ReasonForegroundStartBlocked);
-            OpenApp(ReasonConnect);
+            OpenApp(TileIntentContract.ReasonConnect);
         }
     }
 
@@ -116,9 +110,9 @@ public sealed class VpnTileService : TileService
     private void OpenApp(string reason)
     {
         var intent = new Intent(this, typeof(MainActivity))
-            .SetAction(ActionOpenFromTile)
+            .SetAction(TileIntentContract.ActionOpenFromTile)
             .AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop | ActivityFlags.SingleTop)
-            .PutExtra(ExtraTileReason, reason);
+            .PutExtra(TileIntentContract.ExtraReason, reason);
 
         if (OperatingSystem.IsAndroidVersionAtLeast(34))
         {

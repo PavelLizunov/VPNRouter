@@ -60,6 +60,29 @@ public static class AndroidStorage
 
     public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
 
+    /// <summary>The connection-state record of <c>VpnRouterService</c>, resolved for this process (see <see cref="VpnStateResolver"/>).</summary>
+    public static VpnStateSnapshot ResolveVpnState()
+    {
+        VpnStateSnapshot? stored = null;
+        try
+        {
+            var prefs = Application.Context?.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+            if (prefs is not null)
+            {
+                stored = VpnStateCodec.TryParse(
+                    prefs.GetString("vpn_state", null),
+                    prefs.GetString("vpn_state_reason", null),
+                    prefs.GetInt("vpn_state_pid", 0),
+                    prefs.GetLong("vpn_state_at_ms", 0));
+            }
+        }
+        catch
+        {
+            stored = null;
+        }
+        return VpnStateResolver.Resolve(stored, global::Android.OS.Process.MyPid(), DateTimeOffset.UtcNow);
+    }
+
     public static string? GetCustomConfigJson() => GetString(KeyCustomConfigJson);
     public static bool SetCustomConfigJson(string? value) => SetString(KeyCustomConfigJson, value);
 

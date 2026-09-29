@@ -111,6 +111,16 @@ public static class TileClickPlanner
         };
 }
 
+/// <summary>The intent the tile sends to the app when a tap cannot be handled in the shade.</summary>
+public static class TileIntentContract
+{
+    public const string ActionOpenFromTile = "com.ninitux.vpnrouter.OPEN_FROM_TILE";
+    public const string ExtraReason = "tile_reason";
+    public const string ReasonPermission = "permission";
+    public const string ReasonSetup = "setup";
+    public const string ReasonConnect = "connect";
+}
+
 public enum TileVisual
 {
     Off,

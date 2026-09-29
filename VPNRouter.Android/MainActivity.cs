@@ -165,6 +165,7 @@ public class MainActivity : AvaloniaMainActivity
 
         base.OnCreate(savedInstanceState);
         Instance = this;
+        HandleTileIntent(Intent);
 
         _tunnelReceiver = new TunnelStateReceiver();
         var filter = new IntentFilter();
@@ -365,11 +366,51 @@ public class MainActivity : AvaloniaMainActivity
                     + $"connected={corrected}");
                 SetIntent(corrected);
             }
+            else if (VPNRouter.Core.Services.TunnelStateResync.TryPromoteOnResume(
+                         IntendedConnected, AndroidStorage.ResolveVpnState(), live, vpnActive))
+            {
+                global::Android.Util.Log.Info("VpnRouter",
+                    "resume re-sync: the service reports a live tunnel that the card did not know about "
+                    + "(started outside the app, for example from the quick-settings tile) — showing Connected");
+                SetIntent(true);
+            }
         }
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("VpnRouter",
                 $"resume re-sync threw: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    protected override void OnNewIntent(Intent? intent)
+    {
+        base.OnNewIntent(intent);
+        HandleTileIntent(intent);
+    }
+
+    /// <summary>
+    /// The quick-settings tile could not act from the shade: it asks the app to show the system VPN consent dialog
+    /// and connect, or to tell the user that nothing is set up yet. The intent is consumed so that a rotation does
+    /// not repeat it.
+    /// </summary>
+    private void HandleTileIntent(Intent? intent)
+    {
+        if (intent?.Action != VPNRouter.Core.Services.TileIntentContract.ActionOpenFromTile)
+            return;
+
+        var reason = intent.GetStringExtra(VPNRouter.Core.Services.TileIntentContract.ExtraReason);
+        intent.SetAction(null);
+        global::Android.Util.Log.Info("VpnRouter", $"opened from the quick-settings tile (reason={reason})");
+
+        switch (reason)
+        {
+            case VPNRouter.Core.Services.TileIntentContract.ReasonPermission:
+            case VPNRouter.Core.Services.TileIntentContract.ReasonConnect:
+                new Handler(Looper.MainLooper!).Post(RequestConnect);
+                break;
+            case VPNRouter.Core.Services.TileIntentContract.ReasonSetup:
+                global::Android.Widget.Toast.MakeText(this, Localization.TileSetupNeeded, global::Android.Widget.ToastLength.Long)?.Show();
+                break;
         }
     }
 
