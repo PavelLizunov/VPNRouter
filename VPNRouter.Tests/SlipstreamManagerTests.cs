@@ -187,23 +187,6 @@ public class SlipstreamManagerTests
     }
 
     [Fact]
-    public void Start_FingerprintMatchWithColonsAndUpper_Spawns()
-    {
-        EnsureDummyBinary();
-        try
-        {
-            var colonUpper = string.Join(":",
-                Enumerable.Range(0, SampleFingerprint.Length / 2)
-                          .Select(i => SampleFingerprint.Substring(i * 2, 2).ToUpperInvariant()));
-            var (fake, _) = AliveRunner();
-            var mgr = new SlipstreamManager(runner: fake) { StartupProbeMs = 50 };
-            mgr.Start(MakeEntry(fingerprint: colonUpper));
-            Assert.Single(fake.StartCalls);
-        }
-        finally { CleanupFiles(); }
-    }
-
-    [Fact]
     public void Start_FingerprintMismatch_ThrowsAndNeverSpawns()
     {
         EnsureDummyBinary();

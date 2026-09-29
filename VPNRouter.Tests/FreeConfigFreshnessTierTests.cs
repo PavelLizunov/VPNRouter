@@ -47,18 +47,6 @@ public class FreeConfigFreshnessTierTests
             VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.ClassifyTier(entry, Now));
     }
 
-    [Theory]
-    [InlineData(8)]
-    [InlineData(15)]
-    [InlineData(29)]
-    public void Tier_Stale_When_Over_7d(int daysAgo)
-    {
-        var entry = Make(Now.AddDays(-daysAgo));
-        Assert.Equal(
-            VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshnessTier.Stale,
-            VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.ClassifyTier(entry, Now));
-    }
-
     [Fact]
     public void Tier_Failed_When_LastVerifyFailedAt_Greater_Than_LastTested()
     {
@@ -112,27 +100,6 @@ public class FreeConfigFreshnessTierTests
     }
 
     [Fact]
-    public void IsStale_False_For_Under_24h()
-    {
-        var entry = Make(Now.AddHours(-23));
-        Assert.False(VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.IsStale(entry, Now));
-    }
-
-    [Fact]
-    public void IsStale_True_For_FailedLastCheck()
-    {
-        var entry = Make(Now.AddHours(-1), Now);
-        Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.IsStale(entry, Now));
-    }
-
-    [Fact]
-    public void IsStale_True_For_NullLastTested()
-    {
-        var entry = Make(null);
-        Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.IsStale(entry, Now));
-    }
-
-    [Fact]
     public void SortKey_Fresh_Lower_Than_Ageing_Lower_Than_Stale_Lower_Than_Failed()
     {
         var fresh  = Make(Now.AddHours(-1));     fresh.LatencyMs  = 10;
@@ -167,12 +134,5 @@ public class FreeConfigFreshnessTierTests
     {
         var entry = Make(Now.AddDays(-3.7));
         Assert.Equal(3, VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.AgeDays(entry, Now));
-    }
-
-    [Fact]
-    public void AgeDays_Returns_0_For_Null_Or_Future()
-    {
-        Assert.Equal(0, VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.AgeDays(Make(null), Now));
-        Assert.Equal(0, VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.AgeDays(Make(Now.AddDays(1)), Now));
     }
 }

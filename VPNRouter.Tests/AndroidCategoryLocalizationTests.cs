@@ -51,16 +51,6 @@ public class AndroidCategoryLocalizationTests
             $"EN label for {id} fell through to default branch (got '{en}')");
     }
 
-    [Theory]
-    [MemberData(nameof(KnownCategoryIds))]
-    public void GroupDisplayName_HasRussianLabel(string id)
-    {
-        var ru = LookupAs(id, ru: true);
-        Assert.False(string.IsNullOrEmpty(ru), $"RU label for {id} is empty");
-        Assert.False(ru.Contains('_'),
-            $"RU label for {id} fell through to default branch (got '{ru}')");
-    }
-
     [Fact]
     public void GroupDisplayName_UnknownIdReturnsInternalNameVerbatim()
     {

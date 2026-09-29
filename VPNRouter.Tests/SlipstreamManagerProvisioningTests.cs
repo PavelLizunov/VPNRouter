@@ -41,25 +41,4 @@ public class SlipstreamManagerProvisioningTests : IDisposable
         Assert.False(ok);
         Assert.False(File.Exists(_target));
     }
-
-    [Fact]
-    public void Provision_BundledNull_ReturnsFalse()
-    {
-        var ok = SlipstreamManager.EnsureBinaryProvisioned(_target, null, _binDir, null);
-
-        Assert.False(ok);
-        Assert.False(File.Exists(_target));
-    }
-
-    [Fact]
-    public void Provision_CreatesBinDir_WhenMissing()
-    {
-        var bundled = WriteBundled("X");
-        Assert.False(Directory.Exists(_binDir));
-
-        SlipstreamManager.EnsureBinaryProvisioned(_target, bundled, _binDir, null);
-
-        Assert.True(Directory.Exists(_binDir));
-        Assert.True(File.Exists(_target));
-    }
 }

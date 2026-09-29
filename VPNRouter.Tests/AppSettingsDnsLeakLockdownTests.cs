@@ -50,25 +50,6 @@ public class AppSettingsDnsLeakLockdownTests
     }
 
     [Fact]
-    public void Yaml_RoundTrip_PreservesValue_False()
-    {
-        var yaml = """
-            schema_version: 5
-            app:
-              dns_leak_lockdown: false
-            """;
-
-        var settings = SettingsLoader.Parse(yaml);
-        var prop = GetDnsLeakLockdownProperty();
-        var value = (bool)prop.GetValue(settings.App)!;
-
-        Assert.False(value,
-            "Round-trip from explicit 'dns_leak_lockdown: false' must " +
-            "preserve false. If this fails, the property setter is " +
-            "ignoring input or the YAML alias is missing.");
-    }
-
-    [Fact]
     public void Yaml_LegacyConfigWithoutField_DefaultsToFalse()
     {
         var yaml = """

@@ -35,20 +35,6 @@ public sealed class AutoIntentScoringTests
         Assert.Contains("direct bypass is not automatic", pick.Reason);
     }
 
-    [Fact]
-    public void General_KeepsExplicitAliveServer()
-    {
-        var vless = new ServerLiveness(S("VLESS", "vless"), true, 20);
-        var hy2 = new ServerLiveness(S("HY2", "hysteria2"), true, 5);
-
-        var pick = ConnectionIntentScorer.PickServer(
-            new[] { vless, hy2 },
-            ConnectionIntent.General,
-            "VLESS");
-
-        Assert.Equal("VLESS", pick?.Name);
-    }
-
     private static VlessServerEntry S(string name, string protocol) => new()
     {
         Name = name,

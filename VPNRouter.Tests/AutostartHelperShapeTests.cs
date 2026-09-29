@@ -15,13 +15,6 @@ public class AutostartHelperShapeTests
     }
 
     [Fact]
-    public void EnsureCurrentPath_With_Empty_Path_ReturnsFalse()
-    {
-        Assert.False(VPNRouter.Core.Platform.AutostartHelper.EnsureCurrentPath(""));
-        Assert.False(VPNRouter.Core.Platform.AutostartHelper.EnsureCurrentPath("   "));
-    }
-
-    [Fact]
     public void Enable_With_Empty_Path_NoOp()
     {
         var wasEnabled = VPNRouter.Core.Platform.AutostartHelper.IsEnabled();

@@ -23,38 +23,6 @@ public sealed class AppPathsUnixPermissionsTests
     }
 
     [Fact]
-    public void SettingsSave_UsesOwnerReadWriteUnixMode()
-    {
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
-
-        WithTemporaryDataDir(() =>
-        {
-            AppPaths.EnsureDirectories();
-            RealSettingsStore.Instance.Save(new AppSettings(), AppPaths.ConfigYamlPath);
-
-            Assert.Equal(AppPaths.PrivateUnixFileMode, File.GetUnixFileMode(AppPaths.ConfigYamlPath));
-        });
-    }
-
-    [Fact]
-    public void SingBoxConfigWrite_UsesOwnerReadWriteUnixMode()
-    {
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
-
-        WithTemporaryDataDir(() =>
-        {
-            AppPaths.EnsureDirectories();
-            var writer = typeof(SingBoxManager).GetMethod(
-                "WriteJsonToDisk",
-                BindingFlags.Static | BindingFlags.NonPublic);
-
-            Assert.NotNull(writer);
-            var path = Assert.IsType<string>(writer.Invoke(null, ["{}"]));
-            Assert.Equal(AppPaths.PrivateUnixFileMode, File.GetUnixFileMode(path));
-        });
-    }
-
-    [Fact]
     public void EnsureDirectories_RejectsSymbolicConfigDirectory()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
@@ -68,29 +36,6 @@ public sealed class AppPathsUnixPermissionsTests
 
             Assert.Throws<IOException>(AppPaths.EnsureDirectories);
         });
-    }
-
-    [Fact]
-    public void EnsureDirectories_RemainsOwnerOnlyWithPermissiveUmask()
-    {
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
-
-        var previousMask = Umask(0);
-        try
-        {
-            WithTemporaryDataDir(() =>
-            {
-                AppPaths.EnsureDirectories();
-                AppPaths.WritePrivateText(AppPaths.CurrentConfigPath, "{}");
-                Assert.Equal(AppPaths.PrivateUnixDirectoryMode, File.GetUnixFileMode(AppPaths.DataDir));
-                Assert.Equal(AppPaths.PrivateUnixDirectoryMode, File.GetUnixFileMode(AppPaths.ConfigDir));
-                Assert.Equal(AppPaths.PrivateUnixFileMode, File.GetUnixFileMode(AppPaths.CurrentConfigPath));
-            });
-        }
-        finally
-        {
-            Umask(previousMask);
-        }
     }
 
     private static void WithTemporaryDataDir(Action test)

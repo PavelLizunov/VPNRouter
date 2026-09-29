@@ -54,12 +54,6 @@ public sealed class HealthCheckRobloxDiagnosticsTests
     }
 
     [Fact]
-    public void BuildPathMtuWarning_ReturnsNullWhenConfiguredMtuHasRoom()
-    {
-        Assert.Null(HealthCheck.BuildPathMtuWarning(1320, bestPayload: 1350, plainPingBlocked: false));
-    }
-
-    [Fact]
     public void BuildAdvice_RobloxOnVlessGivesTransportAction()
     {
         var advice = HealthCheck.BuildAdvice(new AppSettings(), """

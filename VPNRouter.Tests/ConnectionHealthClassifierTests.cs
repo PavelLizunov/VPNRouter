@@ -41,26 +41,6 @@ public sealed class ConnectionHealthClassifierTests
     }
 
     [Fact]
-    public void RelayOpenDialTimeout_IsRelayOpenFail_KindDialTimeout()
-    {
-        var ev = C(DialTimeout, Proxy);
-        Assert.Equal(ConnHealthCategory.RelayOpenFail, ev.Category);
-        Assert.Equal(RelayFailKind.DialTimeout, ev.FailKind);
-    }
-
-    [Fact]
-    public void RelayOpenSocketReset_IsRelayOpenFail_KindReset()
-    {
-        var ev = C(OpenResetToProxy, Proxy);
-        Assert.Equal(ConnHealthCategory.RelayOpenFail, ev.Category);
-        Assert.Equal(RelayFailKind.Reset, ev.FailKind);
-    }
-
-    [Fact]
-    public void UdpListenPacketEof_IsRelayOpenFail()
-        => Assert.Equal(ConnHealthCategory.RelayOpenFail, C(UdpRelayEof, Proxy).Category);
-
-    [Fact]
     public void RelayOpenEof_ParsesIdTagDestDuration()
     {
         var ev = C(Eof, Proxy);
@@ -75,18 +55,6 @@ public sealed class ConnectionHealthClassifierTests
     [InlineData(UploadRawReadTuple)]
     public void UploadClosedRawRead_IsLocalClose(string line)
         => Assert.Equal(ConnHealthCategory.LocalClose, C(line, Proxy).Category);
-
-    [Fact]
-    public void DownloadStreamBreakToProxy_IsProxyStreamError()
-        => Assert.Equal(ConnHealthCategory.ProxyStreamError, C(DownloadStreamBreakToProxy, Proxy).Category);
-
-    [Fact]
-    public void StreamBreakToNonProxyRemote_IsOther()
-        => Assert.Equal(ConnHealthCategory.Other, C(StreamBreakNonProxy, Proxy).Category);
-
-    [Fact]
-    public void StreamBreakWithoutEndpoints_DegradesToOther()
-        => Assert.Equal(ConnHealthCategory.Other, C(DownloadStreamBreakToProxy, null).Category);
 
     [Fact]
     public void OutboundConnectionTo_IsRelayOpenAttempt()

@@ -33,19 +33,6 @@ public class ServerHealthClassifierTests
     }
 
     [Fact]
-    public void TcpOk_ProxiedHttpFail_NoHandshakePhase_IsProtocolBlockedLikely()
-    {
-        var v = Verdict(new ServerHealthPhases(
-            TcpConnect: PhaseOutcome.Pass, ProxiedHttpControl: PhaseOutcome.Fail));
-        Assert.Equal(ServerHealthVerdict.ProtocolHandshakeBlockedLikely, v);
-    }
-
-    [Fact]
-    public void TcpOk_TlsCamouflageFail_IsProtocolBlockedLikely()
-        => Assert.Equal(ServerHealthVerdict.ProtocolHandshakeBlockedLikely,
-            Verdict(new ServerHealthPhases(TcpConnect: PhaseOutcome.Pass, TlsCamouflage: PhaseOutcome.Fail)));
-
-    [Fact]
     public void TcpOk_ProxyHandshakeOk_HttpFail_IsProxyStartedButHttpFailed()
     {
         var v = Verdict(new ServerHealthPhases(

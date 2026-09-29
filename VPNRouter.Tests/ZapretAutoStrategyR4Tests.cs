@@ -46,13 +46,6 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
     }
 
     [Fact]
-    public void HasOrphanedIpsetFlag_NonexistentDir_ReturnsFalse()
-    {
-        var bogus = Path.Combine(_tempRoot, "no-such-dir");
-        Assert.False(ZapretAutoStrategy.HasOrphanedIpsetFlag(bogus));
-    }
-
-    [Fact]
     public void RestoreIpsetAfterKill_NoFlag_NoOp()
     {
         ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);

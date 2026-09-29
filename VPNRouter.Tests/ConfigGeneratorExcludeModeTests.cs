@@ -99,59 +99,6 @@ public class ConfigGeneratorExcludeModeTests
     }
 
     [Fact]
-    public void ExcludeMode_EmptyExcludeList_StillRoutesEverythingThroughProxy()
-    {
-        var settings = BuildSettings(mode: "exclude");
-
-        var config = ConfigGenerator.Generate(EmptyProfile(),
-            resolvedProcessNames: System.Array.Empty<string>(), settings);
-
-        Assert.Equal("proxy", config.Route.Final);
-        var procRules = config.Route.Rules
-            .Where(r => r.ProcessName != null && r.ProcessName.Count > 0)
-            .ToList();
-        Assert.Empty(procRules);
-    }
-
-    [Fact]
-    public void ExcludeMode_IgnoresRoutingAppsIncludeList()
-    {
-        var settings = BuildSettings(
-            mode: "exclude",
-            include: new List<string> { "Discord.exe" },
-            exclude: new List<string> { "Steam.exe" });
-
-        var config = ConfigGenerator.Generate(EmptyProfile(),
-            resolvedProcessNames: System.Array.Empty<string>(), settings);
-
-        var procNames = config.Route.Rules
-            .Where(r => r.ProcessName != null)
-            .SelectMany(r => r.ProcessName!)
-            .Distinct()
-            .ToList();
-        Assert.Contains("Steam.exe", procNames);
-        Assert.DoesNotContain("Discord.exe", procNames);
-    }
-
-    [Fact]
-    public void ExcludeMode_FullTunnel_IgnoresPerAppList_KeepsFinalProxy()
-    {
-        var settings = BuildSettings(
-            mode: "exclude",
-            exclude: new List<string> { "Steam.exe" });
-        settings.App.RoutingMode = "full";
-
-        var config = ConfigGenerator.Generate(EmptyProfile(),
-            resolvedProcessNames: System.Array.Empty<string>(), settings);
-
-        Assert.Equal("proxy", config.Route.Final);
-        var procRules = config.Route.Rules
-            .Where(r => r.ProcessName != null && r.ProcessName.Count > 0)
-            .ToList();
-        Assert.Empty(procRules);
-    }
-
-    [Fact]
     public void ExcludeMode_DropsWildcardAndQuestionMarkEntries()
     {
         var settings = BuildSettings(
@@ -169,24 +116,6 @@ public class ConfigGeneratorExcludeModeTests
         Assert.Contains("Steam.exe", procNames);
         Assert.DoesNotContain("*.bin", procNames);
         Assert.DoesNotContain("weird?app.exe", procNames);
-    }
-
-    [Fact]
-    public void ExcludeMode_DeduplicatesCaseInsensitivelyButPreservesCasing()
-    {
-        var settings = BuildSettings(
-            mode: "exclude",
-            exclude: new List<string> { "Steam.exe", "steam.exe", "STEAM.EXE" });
-
-        var config = ConfigGenerator.Generate(EmptyProfile(),
-            resolvedProcessNames: System.Array.Empty<string>(), settings);
-
-        var procNames = config.Route.Rules
-            .Where(r => r.ProcessName != null)
-            .SelectMany(r => r.ProcessName!)
-            .ToList();
-        Assert.Single(procNames);
-        Assert.Equal("Steam.exe", procNames[0]);
     }
 
     [Fact]

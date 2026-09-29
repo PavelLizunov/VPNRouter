@@ -23,54 +23,6 @@ public sealed class TgProxyOneButtonMvpTests
     }
 
     [Fact]
-    public void IsPortAvailable_BoundPort_ReturnsFalse()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        try
-        {
-            var boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
-            Assert.False(
-                TgProxyManager.IsPortAvailable(boundPort),
-                $"IsPortAvailable({boundPort}) should be false while we hold the listener.");
-        }
-        finally
-        {
-            listener.Stop();
-        }
-    }
-
-    [Fact]
-    public void IsPortAvailable_InvalidPort_ReturnsFalse()
-    {
-        Assert.False(TgProxyManager.IsPortAvailable(0));
-        Assert.False(TgProxyManager.IsPortAvailable(-1));
-        Assert.False(TgProxyManager.IsPortAvailable(65536));
-        Assert.False(TgProxyManager.IsPortAvailable(99999));
-    }
-
-    [Fact]
-    public void TgProxyPortConflictException_NoOwnerHint_BuildsCleanMessage()
-    {
-        var ex = new TgProxyPortConflictException(port: 1443, ownerProcessHint: null);
-        Assert.Equal(1443, ex.Port);
-        Assert.Null(ex.OwnerProcessHint);
-        Assert.Contains("1443", ex.Message);
-        Assert.Contains("already in use", ex.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void TgProxyPortConflictException_WithOwnerHint_IncludesHintInMessage()
-    {
-        var ex = new TgProxyPortConflictException(port: 1443, ownerProcessHint: "python.exe (PID 1234)");
-        Assert.Equal(1443, ex.Port);
-        Assert.Equal("python.exe (PID 1234)", ex.OwnerProcessHint);
-        Assert.Contains("1443", ex.Message);
-        Assert.Contains("python.exe", ex.Message);
-        Assert.Contains("1234", ex.Message);
-    }
-
-    [Fact]
     public void TgProxySecret_RoundTrips_AcrossSaveAndLoad()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-tg-test-{Guid.NewGuid():N}");

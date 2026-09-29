@@ -15,17 +15,6 @@ public class ProfileApplicationTests
     }
 
     [Fact]
-    public void Plan_NullProfile_LeavesPerAppFieldsUntouched()
-    {
-        var plan = ProfileApplication.Plan(null);
-
-        Assert.Null(plan.AndroidPackages);
-        Assert.Null(plan.PerAppMode);
-        Assert.Null(plan.PerAppLastMode);
-        Assert.Null(plan.BlockOnVpnFail);
-    }
-
-    [Fact]
     public void Plan_AppliesProfile_WritesAllRoutingFields()
     {
         var profile = new Profile

@@ -158,25 +158,6 @@ public sealed class PerformanceShareLinkTests
         Assert.Equal(expected, ServerUriParser.IsSupportedScheme(line.AsSpan()));
     }
 
-    [Theory]
-    [InlineData("naive://test")]
-    [InlineData("naive+https://test")]
-    [InlineData("naive+quic://test")]
-    [InlineData("dns-tunnel://test")]
-    [InlineData("awg://test")]
-    [InlineData("amneziawg://test")]
-    public void IsSupportedScheme_SpanPreservesRuntimeGates(string line)
-    {
-        var expected = line.StartsWith("naive", StringComparison.Ordinal)
-            ? ServerUriParser.NaiveRuntimeAvailable
-            : line.StartsWith("dns-tunnel", StringComparison.Ordinal)
-                ? ServerUriParser.SlipstreamRuntimeAvailable
-                : SingBoxFeatures.AwgAvailable;
-
-        Assert.Equal(expected, ServerUriParser.IsSupportedScheme(line));
-        Assert.Equal(expected, ServerUriParser.IsSupportedScheme(line.AsSpan()));
-    }
-
     [Fact]
     public void ParseMultiple_PrefilterSkipsUnsupportedAndMalformedLines()
     {

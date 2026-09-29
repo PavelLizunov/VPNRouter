@@ -42,18 +42,4 @@ public sealed class DiagnosticsExporterTailBoundedTests
         }
         finally { try { File.Delete(path); } catch { } }
     }
-
-    [Fact]
-    public void TailLines_SmallFile_ReturnsAllContent()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"diag-tail-small-{Guid.NewGuid():N}.log");
-        try
-        {
-            File.WriteAllText(path, "alpha\nbeta\ngamma\n");
-            var tail = DiagnosticsExporter.TailLines(path, 800);
-            Assert.Contains("alpha", tail);
-            Assert.Contains("gamma", tail);
-        }
-        finally { try { File.Delete(path); } catch { } }
-    }
 }

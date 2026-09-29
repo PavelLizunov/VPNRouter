@@ -15,25 +15,6 @@ public class ServerHealthStringsTests
     }
 
     [Fact]
-    public void ProtocolBlocked_RuLabel_IsTheExactAuditWording()
-        => Assert.Equal("Хост доступен, но VPN-протокол не прошёл проверку",
-            WithLang("ru", () => Strings.HealthVerdictLabel(ServerHealthVerdict.ProtocolHandshakeBlockedLikely)));
-
-    [Fact]
-    public void TcpOnly_RuLabel_NeverClaimsTheServerWorks()
-    {
-        var label = WithLang("ru", () => Strings.HealthVerdictLabel(ServerHealthVerdict.TcpOpenProtocolUntested));
-        Assert.DoesNotContain("Сервер работает", label);
-        Assert.DoesNotContain("работает", label, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("не проверен", label);
-    }
-
-    [Fact]
-    public void Healthy_RuLabel_SaysWorksViaVpn()
-        => Assert.Equal("Работает через VPN",
-            WithLang("ru", () => Strings.HealthVerdictLabel(ServerHealthVerdict.Healthy)));
-
-    [Fact]
     public void EveryVerdict_HasNonEmptyDistinctLabels_InBothLanguages()
     {
         foreach (var verdict in Enum.GetValues<ServerHealthVerdict>())

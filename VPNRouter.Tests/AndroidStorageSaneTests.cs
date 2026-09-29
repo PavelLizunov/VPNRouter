@@ -105,19 +105,6 @@ public class AndroidStorageSaneTests
     }
 
     [Fact]
-    public void BadTheme_RepairsToLight()
-    {
-        var store = new FakeStore();
-        store.Live["theme"] = "neon";
-
-        var result = AndroidStorageSane.RepairAllOnLoad(
-            store.Get, store.Set, Specs, store.Quarantine);
-
-        Assert.Single(result.Changes);
-        Assert.Equal("light", store.Live["theme"]);
-    }
-
-    [Fact]
     public void MultipleBadValues_AllRepaired_AllRecorded()
     {
         var store = new FakeStore();

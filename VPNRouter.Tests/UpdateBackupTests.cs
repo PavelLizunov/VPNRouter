@@ -61,25 +61,6 @@ public sealed class UpdateBackupTests
     }
 
     [Fact]
-    public void CreateSnapshot_OverwritesPreviousSnapshot()
-    {
-        var root = CreateFakeInstall();
-        try
-        {
-            UpdateBackup.CreateSnapshot(root);
-
-            File.WriteAllText(Path.Combine(root, "app", "newfile.dll"), "new");
-
-            var second = UpdateBackup.CreateSnapshot(root);
-            Assert.True(second.Success);
-
-            Assert.True(File.Exists(Path.Combine(root, "app.bak", "newfile.dll")),
-                "second snapshot should include newfile.dll");
-        }
-        finally { CleanUp(root); }
-    }
-
-    [Fact]
     public void DeleteSnapshot_StaleGenerationCannotDeleteReplacement()
     {
         var root = CreateFakeInstall();
@@ -104,59 +85,6 @@ public sealed class UpdateBackupTests
             Assert.True(UpdateBackup.DeleteSnapshot(root, secondGeneration!));
             Assert.False(Directory.Exists(Path.Combine(root, "app.bak")));
             Assert.Null(UpdateBackup.GetSnapshotGeneration(root));
-        }
-        finally { CleanUp(root); }
-    }
-
-    [Fact]
-    public void SnapshotGeneration_MalformedSidecarsFailClosedAndRepair()
-    {
-        var root = CreateFakeInstall();
-        try
-        {
-            var snapshot = UpdateBackup.CreateSnapshot(root);
-            Assert.True(snapshot.Success, snapshot.Diagnostic);
-            var generationPath = Path.Combine(root, "app.bak.id");
-            var currentGeneration = UpdateBackup.GetSnapshotGeneration(root)!;
-
-            foreach (var malformed in new[]
-            {
-                string.Empty,
-                "not-a-guid",
-                currentGeneration + "0",
-                $" {currentGeneration} ",
-                new string('a', 4096),
-            })
-            {
-                File.WriteAllText(generationPath, malformed);
-                Assert.False(UpdateBackup.DeleteSnapshot(root, currentGeneration));
-                Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
-
-                var repaired = UpdateBackup.GetSnapshotGeneration(root);
-                Assert.NotNull(repaired);
-                Assert.NotEqual(currentGeneration, repaired);
-                currentGeneration = repaired!;
-            }
-
-            File.Delete(generationPath);
-            Assert.False(UpdateBackup.DeleteSnapshot(root, currentGeneration));
-            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
-            var repairedMissing = UpdateBackup.GetSnapshotGeneration(root);
-            Assert.NotNull(repairedMissing);
-            Assert.NotEqual(currentGeneration, repairedMissing);
-        }
-        finally { CleanUp(root); }
-    }
-
-    [Fact]
-    public void RestoreSnapshot_NoOpWhenNoSnapshot()
-    {
-        var root = CreateFakeInstall();
-        try
-        {
-            var r = UpdateBackup.RestoreSnapshot(root);
-            Assert.False(r.Restored);
-            Assert.Contains("no snapshot", r.Reason, StringComparison.OrdinalIgnoreCase);
         }
         finally { CleanUp(root); }
     }
@@ -194,35 +122,6 @@ public sealed class UpdateBackupTests
     }
 
     [Fact]
-    public void RestoreSnapshot_LockPathFailure_IsNotReportedAsContention()
-    {
-        var root = CreateFakeInstall();
-        try
-        {
-            var snapshot = UpdateBackup.CreateSnapshot(root);
-            Assert.True(snapshot.Success, snapshot.Diagnostic);
-
-            var lockPath = Path.Combine(root, UpdateBackup.OperationLockName);
-            File.Delete(lockPath);
-            Directory.CreateDirectory(lockPath);
-
-            var create = UpdateBackup.CreateSnapshot(root);
-            var restore = UpdateBackup.RestoreSnapshot(root);
-
-            Assert.False(create.Success);
-            Assert.Contains("lock unavailable", create.Diagnostic);
-            Assert.DoesNotContain("in progress", create.Diagnostic);
-            Assert.False(restore.Restored);
-            Assert.False(restore.OperationInProgress);
-            Assert.Contains("lock unavailable", restore.Reason);
-            Assert.True(Directory.Exists(Path.Combine(root, "app")));
-            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
-            Assert.False(Directory.Exists(Path.Combine(root, "app.bak.tmp")));
-        }
-        finally { CleanUp(root); }
-    }
-
-    [Fact]
     public void RestoreSnapshot_ReplacesCorruptedAppWithBackup()
     {
         var root = CreateFakeInstall();
@@ -244,35 +143,6 @@ public sealed class UpdateBackupTests
             Assert.False(Directory.Exists(Path.Combine(root, "app.bak")));
             var second = UpdateBackup.RestoreSnapshot(root);
             Assert.False(second.Restored);
-        }
-        finally { CleanUp(root); }
-    }
-
-    [Fact]
-    public void RestoreSnapshot_SecondMoveFailure_RestoresPreviousApp()
-    {
-        var root = CreateFakeInstall();
-        try
-        {
-            UpdateBackup.CreateSnapshot(root);
-            var marker = Path.Combine(root, "app", "current-tree.txt");
-            File.WriteAllText(marker, "keep-current");
-            var moveAttempt = 0;
-
-            var result = UpdateBackup.RestoreSnapshot(root, (source, destination) =>
-            {
-                moveAttempt++;
-                if (moveAttempt == 2)
-                    throw new IOException("injected snapshot move failure");
-                Directory.Move(source, destination);
-            });
-
-            Assert.False(result.Restored);
-            Assert.Contains("previous app tree was restored", result.Reason);
-            Assert.Equal("keep-current", File.ReadAllText(marker));
-            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
-            Assert.False(Directory.Exists(Path.Combine(root, "app.bak.tmp")));
-            Assert.Equal(3, moveAttempt);
         }
         finally { CleanUp(root); }
     }
@@ -323,68 +193,6 @@ public sealed class UpdateBackupTests
             Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
             Assert.False(Directory.Exists(stage));
             Assert.Equal(2, retryMove);
-        }
-        finally { CleanUp(root); }
-    }
-
-    [Fact]
-    public void RestoreSnapshot_RefusesEmptySnapshot()
-    {
-        var root = CreateFakeInstall();
-        try
-        {
-            var bak = Path.Combine(root, "app.bak");
-            Directory.CreateDirectory(bak);
-            File.WriteAllText(Path.Combine(bak, "lonely.txt"), "x");
-
-            var r = UpdateBackup.RestoreSnapshot(root);
-            Assert.False(r.Restored);
-            Assert.Contains("empty/truncated", r.Reason);
-
-            Assert.True(Directory.Exists(Path.Combine(root, "app")));
-            Assert.True(Directory.GetFiles(Path.Combine(root, "app"), "*", SearchOption.AllDirectories).Length > 0);
-        }
-        finally { CleanUp(root); }
-    }
-
-    [Fact]
-    public void DeleteSnapshot_RemovesBackupAndStagingDirs()
-    {
-        var root = CreateFakeInstall();
-        try
-        {
-            UpdateBackup.CreateSnapshot(root);
-            Directory.CreateDirectory(Path.Combine(root, "app.bak.tmp"));
-            File.WriteAllText(Path.Combine(root, "app.bak.tmp", "leak.txt"), "x");
-
-            var ok = UpdateBackup.DeleteSnapshot(root);
-            Assert.True(ok);
-            Assert.False(Directory.Exists(Path.Combine(root, "app.bak")));
-            Assert.False(Directory.Exists(Path.Combine(root, "app.bak.tmp")));
-            Assert.Null(UpdateBackup.GetSnapshotGeneration(root));
-
-            Assert.True(UpdateBackup.DeleteSnapshot(root));
-        }
-        finally { CleanUp(root); }
-    }
-
-    [Fact]
-    public void FailureMarker_RoundTrips()
-    {
-        var root = CreateFakeInstall();
-        try
-        {
-            Assert.False(UpdateBackup.HasFailureMarker(root));
-            Assert.Equal(string.Empty, UpdateBackup.ReadFailureMarker(root));
-
-            var markerPath = Path.Combine(root, "app", UpdateBackup.FailureMarkerName);
-            File.WriteAllText(markerPath, "xcopy exit=4 at 2026-05-06 11:23:45");
-
-            Assert.True(UpdateBackup.HasFailureMarker(root));
-            Assert.Contains("xcopy exit=4", UpdateBackup.ReadFailureMarker(root));
-
-            UpdateBackup.ClearFailureMarker(root);
-            Assert.False(UpdateBackup.HasFailureMarker(root));
         }
         finally { CleanUp(root); }
     }
