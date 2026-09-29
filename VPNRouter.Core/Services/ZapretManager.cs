@@ -31,8 +31,6 @@ public class ZapretManager : IDisposable
         }
     }
 
-    public event Action<string>? OutputReceived;
-
     public event Action? ImmediateExitDetected;
 
     public static readonly TimeSpan ImmediateExitWindow = TimeSpan.FromSeconds(2);

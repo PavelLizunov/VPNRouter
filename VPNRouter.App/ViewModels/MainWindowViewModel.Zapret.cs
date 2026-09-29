@@ -122,7 +122,7 @@ public partial class MainWindowViewModel
         var path = LastProbeLogPath;
         if (string.IsNullOrEmpty(path) || !File.Exists(path))
         {
-            _logger?.Information("[VM] OpenProbeLog: no log path or file missing ({Path})", path);
+            _logger.Information("[VM] OpenProbeLog: no log path or file missing ({Path})", path);
             return;
         }
         try
@@ -151,7 +151,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Warning(ex, "[VM] OpenProbeLog failed for {Path}", path);
+            _logger.Warning(ex, "[VM] OpenProbeLog failed for {Path}", path);
         }
     }
     [ObservableProperty]
@@ -207,7 +207,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger?.Debug(ex, "[VM] Failed to copy Zapret whitelist path");
+            _logger.Debug(ex, "[VM] Failed to copy Zapret whitelist path");
         }
     }
 
@@ -218,7 +218,7 @@ public partial class MainWindowViewModel
     {
         if (_isLoadingUI) return;
         try { SaveSettings(); }
-        catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AutostartZapret change failed"); }
+        catch (Exception ex) { _logger.Warning(ex, "[VM] Auto-save on AutostartZapret change failed"); }
     }
 
     [ObservableProperty]
@@ -324,7 +324,7 @@ public partial class MainWindowViewModel
         }
         else if (_parsedStrategies.Count == 0 && zapretActuallyInstalled)
         {
-            _logger?.Warning(
+            _logger.Warning(
                 "[VM] LoadZapretStrategies: Zapret install dir exists but ParseStrategies returned 0 — likely install corruption");
         }
         names.Add("custom");
@@ -342,7 +342,7 @@ public partial class MainWindowViewModel
             && (string.Equals(saved, "multisplit", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(saved, "fake+multisplit", StringComparison.OrdinalIgnoreCase)))
         {
-            _logger?.Information(
+            _logger.Information(
                 "[VM] Migrating saved ZapretStrategy '{Old}' (stub, no longer listed) → '{New}'",
                 saved, _parsedStrategies[0].Name);
             idx = names.IndexOf(_parsedStrategies[0].Name);
@@ -362,12 +362,12 @@ public partial class MainWindowViewModel
             if (!string.IsNullOrEmpty(newest))
             {
                 LastProbeLogPath = newest;
-                _logger?.Debug("[VM] TryRestoreLastProbeLog: {Path}", newest);
+                _logger.Debug("[VM] TryRestoreLastProbeLog: {Path}", newest);
             }
         }
         catch (Exception ex)
         {
-            _logger?.Debug(ex, "[VM] TryRestoreLastProbeLog failed (non-fatal)");
+            _logger.Debug(ex, "[VM] TryRestoreLastProbeLog failed (non-fatal)");
         }
     }
 
@@ -379,7 +379,7 @@ public partial class MainWindowViewModel
         try { cached = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger); }
         catch (Exception ex)
         {
-            _logger?.Debug(ex, "[VM] RefreshZapretStrategiesDisplay: probe cache load failed");
+            _logger.Debug(ex, "[VM] RefreshZapretStrategiesDisplay: probe cache load failed");
         }
 #endif
 

@@ -201,7 +201,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnSelectedTabIndexChanged(int value)
     {
         if (_isLoadingUI || _isReconnecting) return;
-        _logger?.Information(
+        _logger.Information(
             "[VM] OnSelectedTabIndexChanged tab={Tab} (was IsVlessMode={V}, IsSubscribeMode={S}, ServerModeIndex={I})",
             value, IsVlessMode, IsSubscribeMode, SelectedServerModeIndex);
         if (value == 0)
@@ -213,7 +213,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var desiredSubTab = (hasManual || !hasCustom) ? 0 : 1;
             if (SelectedServerModeIndex != desiredSubTab)
             {
-                _logger?.Information(
+                _logger.Information(
                     "[VM] OnSelectedTabIndexChanged: aligning sub-tab {From}->{To} (manual={M}, custom={C})",
                     SelectedServerModeIndex, desiredSubTab, Servers.Count, CustomConfigs.Count);
                 SelectedServerModeIndex = desiredSubTab;
@@ -399,7 +399,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     partial void OnSelectedServerModeIndexChanged(int value)
     {
         if (_isLoadingUI) return;
-        _logger?.Information(
+        _logger.Information(
             "[VM] OnSelectedServerModeIndexChanged value={V} (was IsVlessMode={IV}, IsSubscribeMode={IS})",
             value, IsVlessMode, IsSubscribeMode);
         IsVlessMode = value == 0;
