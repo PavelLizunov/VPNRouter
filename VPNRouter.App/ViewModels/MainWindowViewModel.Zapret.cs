@@ -1453,4 +1453,121 @@ public partial class MainWindowViewModel
     {
         OpenUrl("https://github.com/Flowseal/zapret-discord-youtube");
     }
+
+    private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
+
+    public string LblZapretHeroTitle
+    {
+        get
+        {
+            if (IsZapretProbing) return Strings.ZapretOneTapTitleProbing;
+            if (ZapretEnabled && !string.IsNullOrEmpty(ZapretWinningStrategy))
+                return Strings.ZapretOneTapTitleRunning(ZapretWinningStrategy);
+            if (IsZapretFallback) return Strings.ZapretOneTapTitleFallback;
+            return Strings.ZapretOneTapTitleStopped;
+        }
+    }
+
+    public string LblZapretHeroLede
+    {
+        get
+        {
+            if (IsZapretProbing && ZapretProbeTotal > 0)
+            {
+                var name = string.IsNullOrEmpty(ZapretProbeStrategy) ? "..." : ZapretProbeStrategy;
+                if (ZapretProbeTotalCount > 0)
+                    return Strings.ZapretOneTapLedeProbingScored(
+                        ZapretProbeIndex + 1, ZapretProbeTotal, name,
+                        ZapretProbePassCount, ZapretProbeTotalCount);
+                return Strings.ZapretOneTapLedeProbing(
+                    ZapretProbeIndex + 1, ZapretProbeTotal, name);
+            }
+            if (ZapretEnabled) return Strings.ZapretOneTapLedeRunning;
+            if (IsZapretFallback) return Strings.ZapretOneTapLedeFallback;
+            return Strings.ZapretOneTapLedeStopped;
+        }
+    }
+
+    public string LblZapretAirPill
+    {
+        get
+        {
+            var name = string.IsNullOrEmpty(ZapretWinningStrategy) ? "..." : ZapretWinningStrategy;
+            if (ZapretProbeTotalCount > 0)
+                return Strings.ZapretOneTapAirPillScored(name, ZapretProbePassCount, ZapretProbeTotalCount);
+            var pid = ZapretManager.WinwsPid ?? 0;
+            return Strings.ZapretOneTapAirPill(name, pid);
+        }
+    }
+
+    public string LblZapretProbeElapsed
+    {
+        get
+        {
+            if (!IsZapretProbing || ZapretProbeElapsedSeconds <= 0)
+                return string.Empty;
+            int? etaSec = null;
+            if (ZapretProbeIndex > 0 && ZapretProbeTotal > 0)
+            {
+                var perConfig = (double)ZapretProbeElapsedSeconds / Math.Max(1, ZapretProbeIndex);
+                var remaining = Math.Max(0, ZapretProbeTotal - ZapretProbeIndex);
+                etaSec = (int)(perConfig * remaining);
+            }
+            return Strings.ZapretProbeElapsedAndEta(ZapretProbeElapsedSeconds, etaSec);
+        }
+    }
+
+    public string LblZapretCacheStatus
+    {
+        get
+        {
+            var entry = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            if (entry == null || string.IsNullOrEmpty(entry.Strategy))
+                return Strings.ZapretCacheEmpty;
+            return Strings.ZapretCacheInfo(entry.Strategy, entry.SuccessRunCount);
+        }
+    }
+
+    public bool IsZapretSummaryVisible
+    {
+        get
+        {
+            var e = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            return e != null && !string.IsNullOrEmpty(e.Strategy);
+        }
+    }
+
+    public bool IsZapretCacheStale
+    {
+        get
+        {
+            var e = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            return e != null && e.IsStale();
+        }
+    }
+
+    public string LblZapretSummaryHeader
+    {
+        get
+        {
+            var e = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            if (e == null || string.IsNullOrEmpty(e.Strategy)) return string.Empty;
+            return e.IsStale()
+                ? Strings.ZapretSummaryHeaderStale(e.Strategy)
+                : Strings.ZapretSummaryHeaderFresh(e.Strategy);
+        }
+    }
+
+    public string LblZapretSummarySubtext
+    {
+        get
+        {
+            var e = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            if (e == null) return string.Empty;
+            var rel = FormatRelativeTime(e.LastSweepAt);
+            return e.HasTargetScore()
+                ? Strings.ZapretSummarySubtextWithScore(e.TargetsPassed, e.TargetsTotal, rel)
+                : Strings.ZapretSummarySubtextNoScore(rel);
+        }
+    }
 }

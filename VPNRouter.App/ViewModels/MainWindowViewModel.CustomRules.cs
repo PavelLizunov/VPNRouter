@@ -737,4 +737,43 @@ public partial class MainWindowViewModel
         NewRuleValidationError = string.Empty;
         FlushCustomRulesListToSettings();
     }
+
+    [ObservableProperty] private string _customRulesText = string.Empty;
+
+    [ObservableProperty] private string _customRulesErrorText = string.Empty;
+
+    [ObservableProperty] private string _customRulesConflictText = string.Empty;
+
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> CustomRulesList { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> FilteredCustomRulesList { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+
+    public string CustomRulesCountText
+    {
+        get
+        {
+            var total = CustomRulesList.Count;
+            var shown = string.IsNullOrWhiteSpace(CustomRulesSearchText)
+                ? total
+                : FilteredCustomRulesList.Count;
+            if (total == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(CustomRulesSearchText) || shown == total)
+                return IsRussian ? $"Всего: {total}" : $"Total: {total}";
+            return IsRussian
+                ? $"Показано: {shown} из {total}"
+                : $"Showing: {shown} of {total}";
+        }
+    }
+
+    public IReadOnlyList<string> AvailableRuleActions { get; }
+        = new[] { "direct", "proxy", "block" };
+
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeDirectRules { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeProxyRules { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeBlockRules { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
 }

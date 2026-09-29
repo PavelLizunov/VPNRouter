@@ -17,7 +17,13 @@ files rather than treating this map as an exhaustive API inventory.
   [MainWindowViewModel.TgProxy.cs](MainWindowViewModel.TgProxy.cs) and
   [MainWindowViewModel.CustomRules.cs](MainWindowViewModel.CustomRules.cs): the Zapret
   tool tab (probe, one-click, strategies, hosts), the Telegram proxy tab and the custom
-  rules editor. Fields shared with the constructor stay in `MainWindowViewModel.cs`.
+  rules editor. [MainWindowViewModel.Apps.cs](MainWindowViewModel.Apps.cs) holds the
+  routing-apps mode and per-app checks, [MainWindowViewModel.ServerList.cs](MainWindowViewModel.ServerList.cs)
+  server and custom-config add/remove/selection, and
+  [MainWindowViewModel.MacSudo.cs](MainWindowViewModel.MacSudo.cs) the macOS sudoers setup.
+  Settings load/save, conflicting-VPN and reconnect handling, and theme wiring live in the
+  existing Settings, Connection and ThemeAndLogo partials. `MainWindowViewModel.cs` keeps
+  the fields, constructor, tab state and `Dispose`.
 - [MainWindowViewModel.RuntimeStatus.cs](MainWindowViewModel.RuntimeStatus.cs):
   runtime-status reconciliation; read alongside connection event handling.
 - [Internals/TwoPhaseStartCoordinator.cs](Internals/TwoPhaseStartCoordinator.cs):

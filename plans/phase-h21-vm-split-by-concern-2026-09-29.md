@@ -12,7 +12,11 @@ without touching behavior, so later steps (extract testable controllers) have cl
 - New partials `MainWindowViewModel.Zapret.cs`, `.TgProxy.cs`, `.CustomRules.cs`.
 - Moved whole units by script: a member with its attributes, or a whole depth-1 `#if…#endif`
   block. Members are classified by declaration name; the shared field block, constructor and
-  everything else stay in `MainWindowViewModel.cs` (5265 to 2616 lines).
+  everything else stay in `MainWindowViewModel.cs` (5265 lines to about 855 after both steps).
+- Step 1b (second commit): the remaining thematic blocks move the same way into new
+  `.Apps.cs`, `.ServerList.cs`, `.MacSudo.cs` and into the existing Settings, Connection,
+  ThemeAndLogo, Zapret and CustomRules partials (declaration-based classification because some
+  property declarations put the brace on the next line). `MainWindowViewModel.cs` ends at about 855 lines.
 - Navigation list in `ViewModels/AGENTS.md` updated.
 
 ## Not covered
