@@ -15,6 +15,8 @@ still counted them.
   credentials entry (owner rotated the old keys; history rewrite awaits an explicit go). These
   stay open until the PRs merge.
 
+- New entry PAGESCREENSHOT-RENDER-INVALIDATION (P3) from the first full-suite run on the Windows worker.
+
 ## Not covered
 
 NIGHT-05, NIGHT-07 and two release P1s marked "largely/partly fixed" stay open; the WINBRAT
