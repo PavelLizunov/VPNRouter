@@ -1552,6 +1552,4 @@ public partial class AndroidApp : Avalonia.Application
         UpdateConfigSummary();
     }
 
-    private void OnLanguageToggleClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => ToggleLanguageAndRefresh();
 }
