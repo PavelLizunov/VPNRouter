@@ -13,6 +13,11 @@ files rather than treating this map as an exhaustive API inventory.
 
 - [MainWindowViewModel.Connection.cs](MainWindowViewModel.Connection.cs):
   `ToggleConnectionAsync`, engine status handling and connection error branches.
+- [MainWindowViewModel.Zapret.cs](MainWindowViewModel.Zapret.cs),
+  [MainWindowViewModel.TgProxy.cs](MainWindowViewModel.TgProxy.cs) and
+  [MainWindowViewModel.CustomRules.cs](MainWindowViewModel.CustomRules.cs): the Zapret
+  tool tab (probe, one-click, strategies, hosts), the Telegram proxy tab and the custom
+  rules editor. Fields shared with the constructor stay in `MainWindowViewModel.cs`.
 - [MainWindowViewModel.RuntimeStatus.cs](MainWindowViewModel.RuntimeStatus.cs):
   runtime-status reconciliation; read alongside connection event handling.
 - [Internals/TwoPhaseStartCoordinator.cs](Internals/TwoPhaseStartCoordinator.cs):
