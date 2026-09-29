@@ -65,10 +65,10 @@ public sealed class WindowsDnsLockdownOrderingCharacterizationTests : IDisposabl
         try
         {
             WindowsDnsHardening.ReconcileLockdownForHealth(tunnelServing: true, settings);
-            await firstAddEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await firstAddEntered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
             WindowsDnsHardening.ReconcileLockdownForHealth(tunnelServing: false, settings);
-            await Task.Delay(300);
+            await Task.Delay(300, TestContext.Current.CancellationToken);
 
             lock (gate)
                 Assert.DoesNotContain("delete", commands);
@@ -83,7 +83,7 @@ public sealed class WindowsDnsLockdownOrderingCharacterizationTests : IDisposabl
         {
             lock (gate)
                 if (commands.Count(c => c == "delete") >= 9) break;
-            await Task.Delay(50);
+            await Task.Delay(50, TestContext.Current.CancellationToken);
         }
 
         lock (gate)

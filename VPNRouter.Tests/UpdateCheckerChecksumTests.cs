@@ -48,7 +48,7 @@ public class UpdateCheckerChecksumTests
         var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
-        var dir = await checker.DownloadAndStageAsync(Info("7.7.7", Sha256Hex(zip)));
+        var dir = await checker.DownloadAndStageAsync(Info("7.7.7", Sha256Hex(zip)), TestContext.Current.CancellationToken);
         try
         {
             Assert.True(Directory.Exists(dir), $"staged dir missing: {dir}");
@@ -77,7 +77,7 @@ public class UpdateCheckerChecksumTests
             : new HashSet<string>(StringComparer.Ordinal);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => checker.DownloadAndStageAsync(Info("8.8.8", new string('b', 64))));
+            () => checker.DownloadAndStageAsync(Info("8.8.8", new string('b', 64)), TestContext.Current.CancellationToken));
         Assert.Contains("checksum mismatch", ex.Message, StringComparison.OrdinalIgnoreCase);
 
         var newDirs = Directory.Exists(stagingBase)
@@ -101,7 +101,7 @@ public class UpdateCheckerChecksumTests
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => checker.DownloadAndStageAsync(Info("5.5.5", "abc")));
+            () => checker.DownloadAndStageAsync(Info("5.5.5", "abc"), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class UpdateCheckerChecksumTests
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => checker.DownloadAndStageAsync(Info("9.9.9", null)));
+            () => checker.DownloadAndStageAsync(Info("9.9.9", null), TestContext.Current.CancellationToken));
         Assert.Contains("checksum is missing", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

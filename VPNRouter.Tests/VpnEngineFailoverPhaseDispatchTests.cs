@@ -27,8 +27,10 @@ public sealed class VpnEngineFailoverPhaseDispatchTests
 
     private sealed class StubProcessMonitor : IProcessMonitor
     {
+#pragma warning disable CS0067 // stub implements the interface; the events are never raised
         public event EventHandler<ProcessEventArgs>? ProcessStarted;
         public event EventHandler<ProcessEventArgs>? ProcessStopped;
+#pragma warning restore CS0067
         public void Start() { }
         public void Stop() { }
         public void Dispose() { }
