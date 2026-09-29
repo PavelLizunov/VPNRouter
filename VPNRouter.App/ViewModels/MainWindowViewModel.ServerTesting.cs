@@ -19,6 +19,7 @@ public partial class MainWindowViewModel
     private VlessDeepVerifier? _deepVerifier;
 
     private const int ServerTestConcurrency = 20;
+    private const int ServerDeepConcurrency = 5;
 
     [ObservableProperty] private string _serverTestProgressText = string.Empty;
 

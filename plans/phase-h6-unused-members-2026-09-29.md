@@ -7,12 +7,15 @@ found names that appear once in all tracked text (their own declaration).
 
 ## What
 
-Removed 23 members: 10 localization keys (`Strings`, `Strings.Android`),
+Removed 22 members: 10 localization keys (`Strings`, `Strings.Android`),
 `DefaultControlUrls`, three `KnownPlaceholder*` forwarders, `DefaultSeedOrder`,
-`CooldownMinutes`, `SlipstreamVersionPath`, `ProxyRepoPublic`, `ServerDeepConcurrency`,
+`CooldownMinutes`, `SlipstreamVersionPath`, `ProxyRepoPublic`,
 three unused Win32 error constants and `EventErrorFlag`.
 
 ## Kept after checking
+
+`MainWindowViewModel.ServerDeepConcurrency`: the characterization test pins a
+hash of the type surface and must not be re-pinned; first CI run failed on it.
 
 `FirewallManager.ConsoleEncoding`: its static initializer registers the code
 pages provider (a side effect other code may rely on). Extension classes
