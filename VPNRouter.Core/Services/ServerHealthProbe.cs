@@ -76,13 +76,13 @@ public sealed class ServerHealthProbe
                 {
                     _logger?.Debug("[ServerHealthProbe] {Name} ({Host}:{Port}) probe deadline expired",
                         s?.Name, s?.Server, s?.Port);
-                    results[index] = new ServerLiveness(s, false, int.MaxValue);
+                    results[index] = new ServerLiveness(s!, false, int.MaxValue);
                 }
                 catch (Exception ex)
                 {
                     _logger?.Debug("[ServerHealthProbe] {Name} ({Host}:{Port}) probe failed: {Err}",
                         s?.Name, s?.Server, s?.Port, ex.Message);
-                    results[index] = new ServerLiveness(s, false, int.MaxValue);
+                    results[index] = new ServerLiveness(s!, false, int.MaxValue);
                 }
             }
         }

@@ -14,7 +14,7 @@ namespace VPNRouter.App.ViewModels;
 public partial class ServiceViewModel : ObservableObject
 {
     private readonly ILogger _logger;
-    private bool _isLoading;
+    private bool _isLoading = false;
 
     [ObservableProperty] private bool _isInstalled;
     [ObservableProperty] private bool _isRunning;

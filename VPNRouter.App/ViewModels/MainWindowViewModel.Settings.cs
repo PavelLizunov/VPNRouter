@@ -605,7 +605,7 @@ public partial class MainWindowViewModel
 
         IsSimpleMode = true;
 
-        var firstEnabledSub = _settings.App.Subscriptions?
+        var firstEnabledSub = _settings.App.Subscriptions
             .FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
         if (firstEnabledSub != null)
             SmpInput = firstEnabledSub.Url;
