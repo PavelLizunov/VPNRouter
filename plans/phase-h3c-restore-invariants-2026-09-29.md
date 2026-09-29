@@ -21,5 +21,5 @@ Comment-only verifier: 34 files, 0 code differences. Exact-head PR CI green.
 
 ## Outcome
 
-Pending CI. Follow-up: cover the untested invariants with tests during the
+Merged as #334 on 2026-09-29; exact-head CI green. Follow-up: cover the untested invariants with tests during the
 code stage and drop comments that a test then enforces.

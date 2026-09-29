@@ -29,4 +29,4 @@ P0/P1 lines: 21 before, 11 after). Exact-head CI.
 
 ## Outcome
 
-Pending CI.
+Merged as #356 on 2026-09-29; exact-head CI green.

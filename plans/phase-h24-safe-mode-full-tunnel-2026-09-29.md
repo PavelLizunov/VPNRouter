@@ -26,4 +26,4 @@ Targeted run of `StartupPipelineTests` on `windows-worker` at the exact head SHA
 ## Outcome
 
 On `windows-worker` at 6475650f: `StartupPipelineTests` 12 of 12 passed. Negative check: with the one
-fix line removed the new test fails (`Expected "full", Actual "split"`). Exact-head CI: pending.
+fix line removed the new test fails (`Expected "full", Actual "split"`). Merged as #359; exact-head CI green.
