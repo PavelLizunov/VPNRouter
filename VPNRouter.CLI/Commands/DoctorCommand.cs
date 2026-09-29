@@ -7,7 +7,7 @@ namespace VPNRouter.CLI.Commands;
 
 public class DoctorCommand : Command
 {
-    public override int Execute(CommandContext context, CancellationToken cancellationToken)
+    protected override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
         AnsiConsole.Write(new Rule("[cyan]VPNRouter Doctor[/]"));
         AnsiConsole.MarkupLine($"Version: [green]{AppVersion.Version}[/]");

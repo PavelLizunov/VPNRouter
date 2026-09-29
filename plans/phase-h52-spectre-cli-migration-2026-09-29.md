@@ -12,7 +12,7 @@ failure was found by CI (see the memory note on dependency PR checks).
 
 - `VPNRouter.CLI.csproj`: the two package versions of #335.
 - The 13 command overrides in `Commands/` (`Doctor`, `Profiles` x3, `Service` x5, `Start`, `Status`, `Stop`,
-  `TestUpdate`) take the new `CancellationToken cancellationToken` parameter. The parameter is not used yet: none of
+  `TestUpdate`) take the new `CancellationToken cancellationToken` parameter and are `protected` (the base methods of 0.55 are protected; a public override does not compile). The parameter is not used yet: none of
   the commands is cancellable through the framework (they use their own Ctrl+C / stop-event handling).
 
 ## Verification
