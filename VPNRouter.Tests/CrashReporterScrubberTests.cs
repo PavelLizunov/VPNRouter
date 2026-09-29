@@ -302,4 +302,20 @@ public sealed class CrashReporterScrubberTests
         Assert.Contains("vless://[redacted]", report);
         Assert.Contains("benign line 5", report);
     }
+
+    [Fact]
+    public void WriteReport_TailRedactsBareKeyValueSecrets()
+    {
+        var logContent = string.Join(Environment.NewLine,
+            "benign line",
+            "auth failed password=hunter2-plain api_key: abcd1234efgh",
+            "last line");
+
+        var report = WriteReportWithLog(logContent);
+
+        Assert.DoesNotContain("hunter2-plain", report);
+        Assert.DoesNotContain("abcd1234efgh", report);
+        Assert.Contains("benign line", report);
+        Assert.Contains("last line", report);
+    }
 }

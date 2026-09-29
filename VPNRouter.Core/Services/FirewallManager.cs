@@ -70,6 +70,16 @@ public class FirewallManager : IFirewallManager
     {
         try
         {
+            if (OperatingSystem.IsMacOS())
+            {
+                VPNRouter.Core.Platform.macOS.MacFirewallManager.TryCleanupOrphanedRulesSafe(logger ?? Log.Logger);
+                return;
+            }
+            if (OperatingSystem.IsLinux())
+            {
+                VPNRouter.Core.Platform.Linux.LinuxFirewallManager.TryCleanupOrphanedRulesSafe(logger ?? Log.Logger);
+                return;
+            }
             if (!OperatingSystem.IsWindows()) return;
             using var fw = new FirewallManager(logger ?? Log.Logger);
             fw.CleanupOrphanedRules();
