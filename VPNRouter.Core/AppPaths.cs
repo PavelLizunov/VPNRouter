@@ -225,8 +225,9 @@ public static class AppPaths
 
             dirInfo.SetAccessControl(security);
         }
-        catch
+        catch (Exception ex)
         {
+            Serilog.Log.Warning(ex, "[AppPaths] Could not restrict the ACL of {BinDir}; the inherited permissions stay in place", binDir);
         }
     }
 

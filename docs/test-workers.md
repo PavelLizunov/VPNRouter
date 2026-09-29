@@ -29,7 +29,12 @@ Before a build, deployment, package operation, or test scenario:
 
 1. Resolve the requested trusted alias through the homelab tooling.
 2. Confirm the exact repository commit SHA to be tested. Never use a shared mutable source tree or an unspecified branch tip.
-3. Inspect CPU load, available RAM, free disk, required SDK/tool availability, and conflicting jobs using read-only commands.
+3. Inspect load and capacity with read-only commands and record the numbers before any compile or test:
+   - CPU: load average against the logical CPU count, and whether a `dotnet`, `msbuild`, `java` or `VBCSCompiler` process is already running.
+   - Memory: available RAM and swap in use. The 4 GiB `linux-worker` takes one build at a time and no parallel test runs.
+   - Disk: free space on the build volume, with headroom for outputs and NuGet/Android caches.
+   - Required SDK/tool availability and conflicting jobs.
+   Start only when the numbers show clear headroom; otherwise stop and report them.
 4. Treat Pulse/Beszel and hypervisor metrics as read-only observations. Do not add host memory and guest memory as though they were separate capacity.
 5. Stop before heavy work when the required SDK is absent or free resources are insufficient; report the concrete blocker instead of provisioning or cleaning automatically.
 
@@ -39,6 +44,7 @@ Before a build, deployment, package operation, or test scenario:
 - Do not change VM CPU, RAM, disk allocation, lifecycle, networking, monitoring, firewall topology, or DSH services.
 - Do not install SDKs, workloads, package managers, or persistent services unless the owner explicitly authorizes that infrastructure change.
 - Do not use the development workstation or `harness-test` as a fallback for WINBRAT verification.
+- Do not install SDKs or run builds, packaging or full test runs on the development workstation as a substitute for a worker. A local "does it compile" check counts. If no authorized worker fits, report the blocker or use GitHub CI.
 - All install, launch, connect, stop, UIA, and live-log operations for shipped Windows builds go through `tools/brat-verify.ps1`; identity mismatch is a hard stop.
 
 ## Cleanup rules
@@ -50,6 +56,6 @@ Before a build, deployment, package operation, or test scenario:
 
 ## Scheduling guidance
 
-- `windows-worker`: reserve for Windows-only UI, installer, updater, VPN, firewall, and dataplane verification.
+- `windows-worker`: main worker for Windows verification and, by owner decision on 2026-09-29, for Android builds. Android builds use the private toolchain in `C:\android-build\` (own .NET, JDK 17, Android SDK 36; the shared `C:\dotnet` is not touched), run unsigned on an exact SHA, one job at a time and never during a WINBRAT live scenario. Remove the per-run source checkout afterwards.
 - `linux-worker`: use only after confirming the required SDK/toolchain and sufficient disk/RAM; keep parallelism conservative on the 4 GiB node.
 - `mac-worker`: use only after a fresh disk check; its observed free space is constrained, so do not start heavy builds until dependencies and output headroom are proven.
