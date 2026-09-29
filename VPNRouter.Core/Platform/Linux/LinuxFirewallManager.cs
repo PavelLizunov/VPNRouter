@@ -337,7 +337,8 @@ public sealed class LinuxFirewallManager : IFirewallManager, ICommittedFirewallC
         sb.AppendLine($"flush table inet {TableName}");
         sb.AppendLine($"add chain inet {TableName} output {{ type filter hook output priority 0 ; policy drop ; }}");
         sb.AppendLine($"add rule inet {TableName} output oif \"lo\" accept");
-        sb.AppendLine($"add rule inet {TableName} output ip daddr {{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }} accept");
+        sb.AppendLine($"add rule inet {TableName} output ip daddr {{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10 }} accept");
+        sb.AppendLine($"add rule inet {TableName} output ip6 daddr {{ fe80::/10, fc00::/7 }} accept");
         var v4 = serverIps.Where(ip => !ip.Contains(':')).ToList();
         var v6 = serverIps.Where(ip => ip.Contains(':')).ToList();
         if (v4.Count > 0)
