@@ -7,6 +7,7 @@
 - Commit CI verification (`tools/verify-last-commit-ci.ps1`) and post-push watchers (`tools/watch-after-push.ps1`).
 - Post-ship release verification (`tools/post-ship-verify.ps1`) and Windows test VM automation (`tools/brat-verify.ps1`, `tools/testvm-control.ps1`).
 - Build helper scripts for sing-box and libbox (`build-singbox-lx.sh`, `build-libbox-aar.ps1`).
+- Refactor equivalence harness (`tools/refactor-equivalence/`, see its README): line-multiset check and seeded corpus comparison of a behaviour-preserving change; runs on a worker only.
 
 ## WINBRAT remote testing constraint
 
