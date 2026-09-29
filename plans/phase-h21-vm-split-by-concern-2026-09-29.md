@@ -35,4 +35,13 @@ code is the next step.
 
 ## Outcome
 
-Pending.
+Full `VPNRouter.Tests` suite on `windows-worker`, run with no name exclusions:
+
+- Step 1 (a87f4066) and step 1b (1d8bbf4c): 2777 tests, 2753 passed, 17 skipped, 7 failed.
+- Baseline `origin/main` (b1679a87) for the same tests: the same 7 failures. Six are
+  `PageScreenshotTests` (render-pass exception, present before this change, no CI job runs them;
+  see ledger PAGESCREENSHOT-RENDER-INVALIDATION) and one is
+  `Restart_DoesNotSpawnUntilQueuedRemovalCompletes` (fixed separately in H-19).
+- Targeted run of the ViewModel, Zapret, TgProxy and Autostart tests at a87f4066: 177 of 177
+  passed, including the public-surface characterization hash.
+- Exact-head CI: pending.
