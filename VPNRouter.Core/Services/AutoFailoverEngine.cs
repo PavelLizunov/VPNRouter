@@ -40,6 +40,66 @@ public sealed class AutoFailoverEngine
     {
         _logger?.Warning("[AutoFailover] Dead config: {Reason}", reason);
 
+        var rejected = TryRejectBeforeSwitch(reason, out var pending);
+        if (rejected != null)
+            return rejected;
+        var candidate = pending!;
+
+        var oldActive = _settings.Vless.ActiveServer ?? "";
+        var oldActiveSub = _settings.App.ActiveSubscriptionServer;
+
+        var newName = candidate.Name;
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            newName = $"{candidate.Server}:{candidate.Port}";
+        }
+
+        if (!IsIntentCurrent())
+        {
+            _logger?.Information(
+                "[AutoFailover] Stale failover intent before selector mutation — aborting without changes");
+            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(oldActive))
+            _tried.Add(oldActive);
+
+        _settings.Vless.ActiveServer = newName;
+        _settings.App.ActiveSubscriptionServer = newName;
+
+        var committed = await RestartWithRollbackAsync(newName, oldActive, oldActiveSub, ct);
+
+        if (!IsIntentCurrent())
+        {
+            _logger?.Information(
+                "[AutoFailover] Stale failover intent after restart — aborting without rollback or persist");
+            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
+        }
+
+        if (!committed)
+        {
+            if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(newName))
+                _tried.Add(newName);
+            _settings.Vless.ActiveServer = oldActive;
+            _settings.App.ActiveSubscriptionServer = oldActiveSub;
+            _logger?.Information(
+                "[AutoFailover] Replacement start not confirmed (cancelled/failed) — reverted ActiveServer to '{Old}', selection NOT persisted",
+                oldActive);
+            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
+        }
+
+        PersistSelection(newName, oldActive);
+
+        return new FailoverOutcome(
+            Switched: true,
+            NewActiveServer: newName,
+            UserFacingMessage: $"Переключение на сервер: {newName}");
+    }
+
+    private FailoverOutcome? TryRejectBeforeSwitch(string reason, out VlessServerEntry? candidate)
+    {
+        candidate = null;
+
         if (!IsIntentCurrent())
         {
             _logger?.Information("[AutoFailover] Stale failover intent at entry — aborting without changes");
@@ -91,7 +151,7 @@ public sealed class AutoFailoverEngine
                     "Проверьте подписку (Обновить) или сетевое подключение.");
         }
 
-        var candidate = PickNextCandidate(out var poolSource);
+        candidate = PickNextCandidate(out var poolSource);
         if (candidate == null)
         {
             _logger?.Warning(
@@ -109,28 +169,12 @@ public sealed class AutoFailoverEngine
                           "заблокирован или недоступен. Добавьте другой сервер.");
         }
 
-        var oldActive = _settings.Vless.ActiveServer ?? "";
-        var oldActiveSub = _settings.App.ActiveSubscriptionServer;
+        return null;
+    }
 
-        var newName = candidate.Name;
-        if (string.IsNullOrWhiteSpace(newName))
-        {
-            newName = $"{candidate.Server}:{candidate.Port}";
-        }
-
-        if (!IsIntentCurrent())
-        {
-            _logger?.Information(
-                "[AutoFailover] Stale failover intent before selector mutation — aborting without changes");
-            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
-        }
-
-        if (!string.IsNullOrWhiteSpace(oldActive))
-            _tried.Add(oldActive);
-
-        _settings.Vless.ActiveServer = newName;
-        _settings.App.ActiveSubscriptionServer = newName;
-
+    private async Task<bool> RestartWithRollbackAsync(
+        string newName, string oldActive, string oldActiveSub, CancellationToken ct)
+    {
         bool committed = true;
         if (_restart != null)
         {
@@ -148,25 +192,11 @@ public sealed class AutoFailoverEngine
             _logger?.Information("[AutoFailover] Restart delegate returned {Ok}", committed);
         }
 
-        if (!IsIntentCurrent())
-        {
-            _logger?.Information(
-                "[AutoFailover] Stale failover intent after restart — aborting without rollback or persist");
-            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
-        }
+        return committed;
+    }
 
-        if (!committed)
-        {
-            if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(newName))
-                _tried.Add(newName);
-            _settings.Vless.ActiveServer = oldActive;
-            _settings.App.ActiveSubscriptionServer = oldActiveSub;
-            _logger?.Information(
-                "[AutoFailover] Replacement start not confirmed (cancelled/failed) — reverted ActiveServer to '{Old}', selection NOT persisted",
-                oldActive);
-            return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
-        }
-
+    private void PersistSelection(string newName, string oldActive)
+    {
         try
         {
             var onDisk = _store.Load();
@@ -182,11 +212,6 @@ public sealed class AutoFailoverEngine
             _logger?.Warning(ex,
                 "[AutoFailover] Failed to persist ActiveServer migration — proceeding in-memory only");
         }
-
-        return new FailoverOutcome(
-            Switched: true,
-            NewActiveServer: newName,
-            UserFacingMessage: $"Переключение на сервер: {newName}");
     }
 
     private bool IsActiveLegitimateManual()

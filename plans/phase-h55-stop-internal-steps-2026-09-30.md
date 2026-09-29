@@ -27,4 +27,4 @@ cleanup path). No new test; the behaviour is pinned by those.
 
 ## Outcome
 
-Pending CI.
+Merged in #392 after green exact-head CI.
