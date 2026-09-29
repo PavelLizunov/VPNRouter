@@ -127,7 +127,7 @@ public sealed class AppAutomationDriverTests : IDisposable
             var treeJson = await treeResp.Content.ReadAsStringAsync();
             using var treeDoc = JsonDocument.Parse(treeJson);
             Assert.True(treeDoc.RootElement.GetProperty("ok").GetBoolean());
-            Assert.NotNull(treeDoc.RootElement.GetProperty("root"));
+            _ = treeDoc.RootElement.GetProperty("root");
 
             var badContent = new StringContent("not-valid-json", Encoding.UTF8, "application/json");
             var badResp = await client.PostAsync($"{baseUri}/ui/action", badContent);

@@ -38,7 +38,7 @@ public sealed class SubscriptionUrlRedactionTests
         SubscriptionFetcher.Http = fake;
         try
         {
-            var servers = await SubscriptionFetcher.FetchAsync(SubUrl, logger);
+            var servers = await SubscriptionFetcher.FetchAsync(SubUrl, logger, TestContext.Current.CancellationToken);
 
             Assert.Single(servers);
             var all = AllRenderedText(sink);
@@ -166,7 +166,7 @@ public sealed class SubscriptionUrlRedactionTests
         try
         {
             var entry = new SubscriptionEntry { Url = SubUrl };
-            var count = await SubscriptionFetcher.RefreshEntryAsync(entry, logger);
+            var count = await SubscriptionFetcher.RefreshEntryAsync(entry, logger, TestContext.Current.CancellationToken);
 
             Assert.Equal(0, count);
             var all = AllRenderedText(sink);
@@ -205,7 +205,7 @@ public sealed class SubscriptionUrlRedactionTests
         SubscriptionFetcher.Http = fake;
         try
         {
-            var servers = await SubscriptionFetcher.FetchAsync(invalidUrl, logger);
+            var servers = await SubscriptionFetcher.FetchAsync(invalidUrl, logger, TestContext.Current.CancellationToken);
             Assert.Empty(servers);
 
             var rendered = AllRenderedText(sink);
@@ -228,7 +228,7 @@ public sealed class SubscriptionUrlRedactionTests
         SubscriptionFetcher.Http = fake;
         try
         {
-            var servers = await SubscriptionFetcher.FetchAsync(SubUrl, logger);
+            var servers = await SubscriptionFetcher.FetchAsync(SubUrl, logger, TestContext.Current.CancellationToken);
             Assert.Empty(servers);
 
             var rendered = AllRenderedText(sink);
