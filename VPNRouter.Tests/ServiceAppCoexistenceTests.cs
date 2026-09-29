@@ -8,26 +8,6 @@ namespace VPNRouter.Tests;
 public sealed class ServiceAppCoexistenceTests
 {
     [Fact]
-    public void TunOwnershipLock_IsOwnedByAnyone_NonOwnerProbeIsIdempotent()
-    {
-        for (var i = 0; i < 50; i++)
-        {
-            _ = TunOwnershipLock.IsOwnedByAnyone();
-        }
-
-        using var fresh = new TunOwnershipLock();
-        var acquired = fresh.TryAcquire();
-        try
-        {
-            Assert.True(acquired || !acquired);
-        }
-        finally
-        {
-            if (acquired) fresh.Release();
-        }
-    }
-
-    [Fact]
     public void TunOwnershipLock_InstanceAfterDispose_ReturnsUsableReplacement()
     {
         var disposed = TunOwnershipLock.Instance();

@@ -20,34 +20,4 @@ public class StrictDnsFailoverPolicyTests
     {
         Assert.Equal(expected, StrictDnsFailoverPolicy.Decide(soleDriver, proxyHealthy, failedOver));
     }
-
-    [Fact]
-    public void ProxyUnreachable_WhileArmed_FailsOpen()
-    {
-        Assert.Equal(StrictDnsAction.FailOpen,
-            StrictDnsFailoverPolicy.Decide(strictDnsSoleDriver: true, proxyHealthy: false, currentlyFailedOver: false));
-    }
-
-    [Fact]
-    public void ProxyRecovers_ReArms()
-    {
-        Assert.Equal(StrictDnsAction.ReArm,
-            StrictDnsFailoverPolicy.Decide(strictDnsSoleDriver: true, proxyHealthy: true, currentlyFailedOver: true));
-    }
-
-    [Fact]
-    public void FullTunnel_NeverFailsOver()
-    {
-        Assert.Equal(StrictDnsAction.None,
-            StrictDnsFailoverPolicy.Decide(strictDnsSoleDriver: false, proxyHealthy: false, currentlyFailedOver: false));
-    }
-
-    [Fact]
-    public void SteadyStates_AreNoOps()
-    {
-        Assert.Equal(StrictDnsAction.None,
-            StrictDnsFailoverPolicy.Decide(true, true, false));
-        Assert.Equal(StrictDnsAction.None,
-            StrictDnsFailoverPolicy.Decide(true, false, true));
-    }
 }

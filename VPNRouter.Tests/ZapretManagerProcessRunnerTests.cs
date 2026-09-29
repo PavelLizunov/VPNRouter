@@ -210,18 +210,6 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Constructor_AcceptsCustomRunner_WiresUpInjection()
-    {
-        var fake = new FakeProcessRunner();
-
-        using var withFake = new ZapretManager(logger: null, runner: fake);
-        using var withDefault = new ZapretManager(logger: null, runner: null);
-
-        Assert.NotNull(withFake);
-        Assert.NotNull(withDefault);
-    }
-
-    [Fact]
     public void StartFromBat_RoutesThroughCmdBat_WithZapretDirAsWorkingDir()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-zapret-test-{Guid.NewGuid():N}");

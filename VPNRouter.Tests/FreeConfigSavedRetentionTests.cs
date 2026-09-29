@@ -71,11 +71,4 @@ public class FreeConfigSavedRetentionTests
         Assert.False(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
             .ShouldRetainInSavedList(null!, Now));
     }
-
-    [Fact]
-    public void RetentionDays_Const_Is30()
-    {
-        Assert.Equal(30, VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
-            .SavedListRetentionDays);
-    }
 }

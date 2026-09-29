@@ -199,14 +199,4 @@ public sealed class NetworkInterfaceDetectorTests
         Assert.NotNull(b);
         Assert.NotNull(c);
     }
-
-    [Fact]
-    public void DetectWireGuardSubnets_NullLogger_IsAcceptedGracefully()
-    {
-        var result = NetworkInterfaceDetector.DetectWireGuardSubnets(
-            ownTunName: "VPNRouter-TUN",
-            logger: null);
-
-        Assert.NotNull(result);
-    }
 }

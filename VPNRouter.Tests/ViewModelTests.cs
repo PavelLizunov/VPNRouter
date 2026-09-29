@@ -46,24 +46,6 @@ public class MainWindowViewModelTests
         Assert.Contains("changed@False", string.Join(",", notifications));
         Assert.False(vm.SmpAutostartChecked, "AutostartVpn=false → SmpAutostartChecked must be false");
     }
-
-    [AvaloniaFact]
-    public void Dispose_IsIdempotent()
-    {
-        var vm = new MainWindowViewModel();
-        var disposedField = vm.GetType().GetField(
-            "_disposed",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-
-        Assert.False((bool)disposedField.GetValue(vm)!, "Fresh VM must not be disposed");
-
-        vm.Dispose();
-        Assert.True((bool)disposedField.GetValue(vm)!, "After first Dispose, flag must be true");
-
-        vm.Dispose();
-        Assert.True((bool)disposedField.GetValue(vm)!, "Flag stays true after second Dispose");
-    }
-
 }
 
 public class AutostartStatusComputationTests

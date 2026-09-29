@@ -234,13 +234,6 @@ public sealed class MvmTwoPhaseStartTimerTests
     }
 
     [Fact]
-    public void DefaultBudgets_Are60sPhaseA_And20sPhaseB()
-    {
-        Assert.Equal(60, (int)TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds);
-        Assert.Equal(20, (int)TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds);
-    }
-
-    [Fact]
     public async Task Started_ThenCleanStartCompletion_LaterConnectedSucceeds()
     {
         var fake = new FakeEngineEvents();

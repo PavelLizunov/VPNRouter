@@ -7,18 +7,6 @@ namespace VPNRouter.Tests;
 public class SettingsMigratorMtuTests
 {
     [Fact]
-    public void NewSettings_DefaultMtuIs1420()
-    {
-        Assert.Equal(1420, new AppSettings().Tun.Mtu);
-    }
-
-    [Fact]
-    public void CurrentSchemaVersion_Is8()
-    {
-        Assert.Equal(8, AppSettings.CurrentSchemaVersion);
-    }
-
-    [Fact]
     public void Migrate_5_to_6_LowersJumboMtu()
     {
         var s = new AppSettings { SchemaVersion = 5 };

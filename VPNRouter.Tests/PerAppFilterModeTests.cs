@@ -55,14 +55,6 @@ public class PerAppFilterModeTests
         Assert.Equal(expected, PerAppFilterMode.IsSplit(input));
     }
 
-    [Fact]
-    public void Constants_MatchPersistedTokens()
-    {
-        Assert.Equal("off", PerAppFilterMode.Off);
-        Assert.Equal("include", PerAppFilterMode.Include);
-        Assert.Equal("exclude", PerAppFilterMode.Exclude);
-    }
-
     [Theory]
     [InlineData("off", "full")]
     [InlineData("OFF", "full")]

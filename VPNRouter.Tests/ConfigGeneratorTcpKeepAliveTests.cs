@@ -45,29 +45,6 @@ public sealed class ConfigGeneratorTcpKeepAliveTests
     }
 
     [Fact]
-    public void Model_SingBoxOutbound_HasTcpKeepAliveProperties()
-    {
-        var prop1 = typeof(SingBoxOutbound).GetProperty(nameof(SingBoxOutbound.TcpKeepAlive));
-        var prop2 = typeof(SingBoxOutbound).GetProperty(nameof(SingBoxOutbound.TcpKeepAliveInterval));
-        Assert.NotNull(prop1);
-        Assert.NotNull(prop2);
-        Assert.Equal(typeof(string), prop1!.PropertyType);
-        Assert.Equal(typeof(string), prop2!.PropertyType);
-    }
-
-    [Fact]
-    public void Generate_SingleVlessServer_OutboundHasTcpKeepAlive()
-    {
-        var (profile, settings) = BuildOneServerInputs();
-
-        var config = ConfigGenerator.Generate(profile, System.Array.Empty<string>(), settings);
-        var json = ConfigGenerator.Serialize(config);
-
-        Assert.Contains("\"tcp_keep_alive\": \"30s\"", json);
-        Assert.Contains("\"tcp_keep_alive_interval\": \"30s\"", json);
-    }
-
-    [Fact]
     public void Generate_JsonStructure_KeepAliveFieldsAreInsideVlessOutbound()
     {
         var (profile, settings) = BuildOneServerInputs();

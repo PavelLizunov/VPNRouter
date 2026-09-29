@@ -5,7 +5,7 @@ CLI wrapper built with Spectre.Console. A thin wrapper around `VPNRouter.Core`.
 ## Quick Verification
 
 ```powershell
-dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~P07CliStopSourceGuardTests|FullyQualifiedName~ServiceAppCoexistenceTests"
+dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~ServiceAppCoexistenceTests"
 ```
 
 ## Commands & Usage

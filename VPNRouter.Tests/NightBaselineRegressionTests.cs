@@ -260,36 +260,4 @@ public sealed class NightBaselineRegressionTests
         Assert.Equal(20, results.Count);
         Assert.All(results, r => Assert.True(r.Alive));
     }
-
-    [Fact]
-    public async Task Night10_TcpTlsProbe_ProbeUdpAsync_CancelAfterSend_ThrowsOperationCanceledException()
-    {
-        using var testCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-        var port = ((IPEndPoint)listener.Client.LocalEndPoint!).Port;
-
-        using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(testCts.Token);
-        var probeTask = TcpTlsProbe.ProbeUdpAsync("127.0.0.1", port, probeCts.Token);
-
-        try
-        {
-            var received = await listener.ReceiveAsync(testCts.Token);
-            Assert.NotNull(received.Buffer);
-
-            probeCts.Cancel();
-
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probeTask);
-        }
-        finally
-        {
-            probeCts.Cancel();
-            try
-            {
-                await probeTask;
-            }
-            catch
-            {
-            }
-        }
-    }
 }

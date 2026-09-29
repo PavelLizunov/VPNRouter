@@ -126,13 +126,6 @@ public class CustomConfigInjectorTests
     }
 
     [Fact]
-    public void Inject_LegacyConfig_NoActionField()
-    {
-        var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "test.exe" }, CreateSettings());
-        Assert.Contains("\"process_name\"", result);
-    }
-
-    [Fact]
     public void Inject_ActionConfig_HasActionField()
     {
         var result = CustomConfigInjector.Inject(ActionConfig, new[] { "test.exe" }, CreateSettings());

@@ -71,20 +71,6 @@ public sealed class TgProxyOneButtonMvpTests
     }
 
     [Fact]
-    public void IsTelegramSchemeRegistered_IsPubliclyCallable()
-    {
-        var method = typeof(TgProxyManager).GetMethod(
-            "IsTelegramSchemeRegistered",
-            BindingFlags.Public | BindingFlags.Static);
-        Assert.NotNull(method);
-        Assert.Equal(typeof(bool), method!.ReturnType);
-        Assert.Empty(method.GetParameters());
-
-        var result = (bool)method.Invoke(null, null)!;
-        Assert.True(result || !result);
-    }
-
-    [Fact]
     public void TgProxySecret_RoundTrips_AcrossSaveAndLoad()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-tg-test-{Guid.NewGuid():N}");

@@ -164,18 +164,6 @@ public class ServerHealthProbeTests
     }
 
     [Fact]
-    public void MaxConcurrency_ConstantIsEight()
-    {
-        Assert.Equal(8, ServerHealthProbe.MaxConcurrency);
-
-        var field = typeof(ServerHealthProbe).GetField(
-            "MaxConcurrency",
-            BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-        Assert.NotNull(field);
-        Assert.Equal(8, field!.GetValue(null));
-    }
-
-    [Fact]
     public async Task ProbeAllAsync_MoreThanEightCandidates_BlockingTcsObservesMaxEight_AllEventuallyProcessed_FastestTailChosen()
     {
         var servers = Enumerable.Range(1, 12).Select(i => Srv($"S{i:D2}", $"host{i}")).ToList();

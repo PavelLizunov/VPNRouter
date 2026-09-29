@@ -40,20 +40,6 @@ public sealed class NightConnectionsFreshnessTests
     }
 
     [Fact]
-    public void ConnectionsSnapshot_DefaultIsValid_IsTrue()
-    {
-        var snapshot = new ConnectionsSnapshot(0, 0L, 0L, DateTimeOffset.UtcNow);
-        Assert.True(snapshot.IsValid);
-    }
-
-    [Fact]
-    public void ConnectionsSnapshot_ExplicitIsValidFalse_IsFalse()
-    {
-        var snapshot = new ConnectionsSnapshot(0, 0L, 0L, DateTimeOffset.UtcNow) { IsValid = false };
-        Assert.False(snapshot.IsValid);
-    }
-
-    [Fact]
     public async Task GetConnectionsAsync_ValidZero_ReturnsValidSnapshot()
     {
         var handler = new FakeHttpMessageHandler

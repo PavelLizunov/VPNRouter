@@ -712,16 +712,6 @@ public class MainWindowViewModelAppsModeTests
 public class AppItemViewModelBridgeTests
 {
     [Fact]
-    public void IsChecked_FallsBackToLocalField_WhenBridgeNotWired()
-    {
-        var item = new AppItemViewModel("a.exe", isChecked: true);
-        Assert.True(item.IsChecked);
-
-        item.IsChecked = false;
-        Assert.False(item.IsChecked);
-    }
-
-    [Fact]
     public void IsChecked_RoutesToBridge_WhenWired()
     {
         var backing = new Dictionary<string, bool>(System.StringComparer.OrdinalIgnoreCase);

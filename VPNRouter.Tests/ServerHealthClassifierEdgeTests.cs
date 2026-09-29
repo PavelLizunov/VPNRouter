@@ -134,8 +134,4 @@ public class ServerHealthClassifierEdgeTests
         Assert.Equal(PhaseOutcome.Pass, agg.BlockedTargetCanary);
         Assert.False(agg.StaleOrAmbiguous);
     }
-
-    [Fact]
-    public void DirectBlockedTargetProbes_AreOffByDefault()
-        => Assert.False(CanaryPolicy.DirectProbesDefaultEnabled);
 }

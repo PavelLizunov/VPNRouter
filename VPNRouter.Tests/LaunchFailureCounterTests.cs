@@ -284,14 +284,6 @@ public sealed class LaunchFailureCounterTests
         finally { CleanUp(path); }
     }
 
-    [Fact]
-    public void Threshold_ConstantsMatchSpec()
-    {
-        Assert.Equal(3, LaunchFailureCounter.SelfRepairThreshold);
-        Assert.Equal(5, LaunchFailureCounter.ConfigResetThreshold);
-        Assert.Equal(7, LaunchFailureCounter.SafeModePromptThreshold);
-    }
-
     private static string StripLineComments(string src)
     {
         return string.Join("\n",

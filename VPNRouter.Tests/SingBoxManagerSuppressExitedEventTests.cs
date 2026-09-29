@@ -14,15 +14,6 @@ namespace VPNRouter.Tests;
 public sealed class SingBoxManagerSuppressExitedEventTests
 {
     [Fact]
-    public void IProcessHandle_HasSuppressExitedEventMethod()
-    {
-        var method = typeof(IProcessHandle).GetMethod(nameof(IProcessHandle.SuppressExitedEvent));
-        Assert.NotNull(method);
-        Assert.Equal(typeof(void), method!.ReturnType);
-        Assert.Empty(method.GetParameters());
-    }
-
-    [Fact]
     public async Task Behavioural_AfterSuppress_SignalExit_DoesNotFireExited()
     {
         var handle = new FakeProcessHandle(pid: 99001);

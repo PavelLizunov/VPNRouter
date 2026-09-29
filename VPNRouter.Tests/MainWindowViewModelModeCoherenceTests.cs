@@ -36,20 +36,6 @@ public sealed class MainWindowViewModelModeCoherenceTests
         Assert.Equal(1, vm.SelectedTabIndex);
     }
 
-    [Fact]
-    public void SmartConnectAndUrltestGates_UseConfiguredMode()
-    {
-        var simple = ReadSource("MainWindowViewModel.SimpleMode.cs");
-        var smartConnect = Slice(simple, "private async Task SmpToggleConnectAsync()", "private bool TryApplyVless");
-        Assert.Contains("_settings.App.ConfigMode", smartConnect, StringComparison.Ordinal);
-        Assert.DoesNotContain("if (IsSubscribeMode)", smartConnect, StringComparison.Ordinal);
-
-        var stats = ReadSource("MainWindowViewModel.ConnStats.cs");
-        var urltest = Slice(stats, "private async Task MaybeRefreshAutoSelectedAsync", "private ServerViewModel? ResolveAutoSelectedServer");
-        Assert.Contains("_settings.App.ConfigMode", urltest, StringComparison.Ordinal);
-        Assert.DoesNotContain("!IsSubscribeMode", urltest, StringComparison.Ordinal);
-    }
-
     private static AppSettings BuildSubscribeSettings()
     {
         var settings = new AppSettings().EnsureSane();

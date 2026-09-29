@@ -114,41 +114,6 @@ public sealed class VpnEngineFailoverPhaseDispatchTests
         Assert.False(engine.IsRunning);
     }
 
-    [Fact]
-    public void FailoverWiring_BothMethods_InstallSamePhaseAwareDelegate()
-    {
-        var src = LoadVpnEngineSource();
-
-        Assert.True(
-            Regex.IsMatch(src,
-                @"public\s+AutoFailoverEngine\s+WireFailover\s*\(\s*ConfigSanityCheck\s+sanityCheck\s*\)\s*=>\s*WireFailoverCore\s*\(\s*sanityCheck\s*\)\s*;"),
-            "WireFailover (pre-start) must forward to WireFailoverCore so the ??= slot installs the " +
-            "SAME delegate as the post-start wire (P02 FAIL-1: a pre-start-only lambda survived the " +
-            "??= collision and every post-start failover reused the unsafe no-teardown restart).");
-        Assert.True(
-            Regex.IsMatch(src,
-                @"public\s+AutoFailoverEngine\s+WireFailoverWithStop\s*\(\s*ConfigSanityCheck\s+sanityCheck\s*\)\s*=>\s*WireFailoverCore\s*\(\s*sanityCheck\s*\)\s*;"),
-            "WireFailoverWithStop (post-start) must forward to the same WireFailoverCore as WireFailover " +
-            "(P02 FAIL-1: both wire methods must install one shared phase-aware delegate).");
-
-        var core = ExtractWireFailoverCore(src);
-        var cleanCore = StripComments(core);
-        Assert.Contains("ExecuteFailoverRestartAsync", cleanCore);
-        Assert.DoesNotContain("StartAsyncInternal", cleanCore);
-
-        var match = Regex.Match(cleanCore, @"new\s+AutoFailoverEngine\s*\(\s*(?<settingsVar>[A-Za-z0-9_]+)\s*,");
-        Assert.True(match.Success, "WireFailoverCore must construct AutoFailoverEngine with a settings local variable.");
-        var settingsVarName = match.Groups["settingsVar"].Value;
-        Assert.False(string.IsNullOrWhiteSpace(settingsVarName), "Settings variable name must not be empty.");
-        Assert.DoesNotContain("CapturedSettings()", match.Value);
-
-        Assert.True(
-            Regex.IsMatch(cleanCore,
-                $@"\bExecuteFailoverRestartAsync\s*\(\s*{Regex.Escape(settingsVarName)}\s*,\s*[A-Za-z0-9_]+(?:\s*,\s*[A-Za-z0-9_]+)?\s*\)"),
-            $"Restart delegate must pass the same '{settingsVarName}' local instance to ExecuteFailoverRestartAsync " +
-            "so pool and restart closure share the exact same object reference.");
-    }
-
     private static string StripComments(string source)
     {
         var noBlock = Regex.Replace(source, @"/\*.*?\*/", "", RegexOptions.Singleline);

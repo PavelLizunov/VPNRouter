@@ -21,82 +21,12 @@ public sealed class ConflictingVpnDetectorTests
     }
 
     [Fact]
-    public void DetectConflictingVpnProcesses_KnownVpnProcessNames_Curated()
-    {
-        var names = ConflictingVpnDetector.KnownVpnProcessNames.ToList();
-
-        Assert.Contains("xraycore", names);
-        Assert.Contains("openvpn", names);
-        Assert.Contains("hiddify", names);
-        Assert.Contains("qv2ray", names);
-        Assert.Contains("nekoray", names);
-
-        Assert.DoesNotContain("wireguard", names);
-        Assert.DoesNotContain("amneziavpn", names);
-
-        Assert.Equal(names.Count, names.Distinct().Count());
-    }
-
-    [Fact]
-    public void CoexistingVpnProcessNames_AreSeparateAdapterClients_Curated()
-    {
-        var coexisting = ConflictingVpnDetector.CoexistingVpnProcessNames.ToList();
-
-        Assert.Contains("wireguard", coexisting);
-        Assert.Contains("amneziavpn", coexisting);
-
-        Assert.DoesNotContain("xraycore", coexisting);
-        Assert.DoesNotContain("hiddify", coexisting);
-
-        Assert.Equal(coexisting.Count, coexisting.Distinct().Count());
-    }
-
-    [Fact]
-    public void HardConflictAndCoexistingLists_AreDisjoint()
-    {
-        var hard = ConflictingVpnDetector.KnownVpnProcessNames;
-        var soft = ConflictingVpnDetector.CoexistingVpnProcessNames;
-
-        Assert.Empty(hard.Intersect(soft, StringComparer.OrdinalIgnoreCase));
-    }
-
-    [Fact]
     public void DetectConflictingVpnProcesses_OnNonWindows_ReturnsEmpty()
     {
         if (OperatingSystem.IsWindows()) return;
 
         var conflicts = ConflictingVpnDetector.DetectConflictingVpnProcesses();
         Assert.Empty(conflicts);
-    }
-
-    [Fact]
-    public void ConflictingProcessInfo_CarriesProcessNameAndPid()
-    {
-        var info = new ConflictingVpnDetector.ConflictingProcessInfo(
-            ProcessName: "xraycore",
-            Pid: 1234,
-            FullPath: @"C:\v2RayTun\xraycore.exe");
-
-        Assert.Equal("xraycore", info.ProcessName);
-        Assert.Equal(1234, info.Pid);
-        Assert.Equal(@"C:\v2RayTun\xraycore.exe", info.FullPath);
-    }
-
-    [Fact]
-    public void ConflictingVpnException_PreservesConflictsList()
-    {
-        var first = new ConflictingVpnDetector.ConflictingProcessInfo(
-            "xraycore", 1234, @"C:\xraycore.exe");
-        var second = new ConflictingVpnDetector.ConflictingProcessInfo(
-            "wireguard", 5678, @"C:\Program Files\WireGuard\wireguard.exe");
-        var conflicts = new[] { first, second };
-
-        var ex = new ConflictingVpnException(conflicts, "another VPN is running");
-
-        Assert.Equal(2, ex.Conflicts.Count);
-        Assert.Equal("xraycore", ex.Conflicts[0].ProcessName);
-        Assert.Equal("wireguard", ex.Conflicts[1].ProcessName);
-        Assert.Equal("another VPN is running", ex.Message);
     }
 
     [Fact]

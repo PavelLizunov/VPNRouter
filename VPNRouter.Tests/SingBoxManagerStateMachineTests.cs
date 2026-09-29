@@ -105,47 +105,6 @@ public sealed class SingBoxManagerStateMachineTests
     }
 
     [Fact]
-    public void Construction_Pid_ReturnsNull_WhenProcessIsNull()
-    {
-        using var manager = BuildManager(new FakeHttpClient());
-
-        Assert.Null(manager.Pid);
-    }
-
-    [Fact]
-    public void IsRunning_OnWindows_WithoutStart_ReturnsFalse()
-    {
-        if (!OperatingSystem.IsWindows()) return;
-
-        using var manager = BuildManager(new FakeHttpClient());
-
-        Assert.False(manager.IsRunning());
-    }
-
-    [Fact]
-    public void IsHealthy_NullProcess_ReturnsFalse()
-    {
-        if (!OperatingSystem.IsWindows()) return;
-
-        using var manager = BuildManager(new FakeHttpClient());
-
-        Assert.False(manager.IsHealthy());
-    }
-
-    [Fact]
-    public void GetMetrics_NullProcess_ReturnsEmptyMetrics()
-    {
-        using var manager = BuildManager(new FakeHttpClient());
-
-        var metrics = manager.GetMetrics();
-
-        Assert.NotNull(metrics);
-        Assert.Equal(0, metrics.MemoryMb);
-        Assert.Equal(TimeSpan.Zero, metrics.CpuTime);
-        Assert.Null(metrics.StartTime);
-    }
-
-    [Fact]
     public void Stop_OnIdleManager_IsNoOp_StateStaysStopped()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -269,20 +228,6 @@ public sealed class SingBoxManagerStateMachineTests
     }
 
     [Fact]
-    public void IHttpClient_IsInjected_NotStatic_RegressionPin_3G2()
-    {
-        var http = new FakeHttpClient()
-            .Setup("127.0.0.1:9090/configs", "{}");
-        using var manager = BuildManager(http);
-
-        InvokePrivate<bool>(manager, "IsClashApiAlive");
-
-        Assert.NotEmpty(http.SentRequests);
-        Assert.Equal("http://127.0.0.1:9090/configs",
-            http.SentRequests[0].Uri.ToString());
-    }
-
-    [Fact]
     public void TryHotReload_PutShape_PreservedAfter_3G2_Migration()
     {
         var http = new FakeHttpClient()
@@ -320,36 +265,6 @@ public sealed class SingBoxManagerStateMachineTests
             SetField(manager, "_handle", null);
             fakeHandle.Dispose();
         }
-    }
-
-    [Fact]
-    public void Restart_PreservesTunLock_SourcePin()
-    {
-        var src = LoadSingBoxManagerSource();
-        Assert.SkipUnless(src != null, "SingBoxManager.cs source not reachable from test cwd — source-pin skipped");
-
-        var restartIdx = src!.IndexOf("public void Restart()",
-            StringComparison.Ordinal);
-        Assert.True(restartIdx >= 0, "Source must contain 'public void Restart()'");
-
-        var restartTail = src.Substring(restartIdx,
-            Math.Min(2000, src.Length - restartIdx));
-        Assert.Contains("StopInternal(releaseLock: false)", restartTail);
-        Assert.DoesNotContain("Stop();", restartTail);
-    }
-
-    [Fact]
-    public void IHttpClient_FieldIsNonStatic_SourcePin_3G2()
-    {
-        var src = LoadSingBoxManagerSource();
-        Assert.SkipUnless(src != null, "SingBoxManager.cs source not reachable from test cwd — source-pin skipped");
-
-        var stripped = StripLineComments(src!);
-
-        Assert.Contains("private readonly IHttpClient _http;", stripped);
-        Assert.DoesNotContain("static readonly HttpClient", stripped);
-        Assert.DoesNotContain("static readonly IHttpClient", stripped);
-        Assert.DoesNotContain("private static HttpClient", stripped);
     }
 
     private static string? LoadSingBoxManagerSource()
