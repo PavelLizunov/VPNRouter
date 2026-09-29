@@ -11,6 +11,7 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class HealthMonitorTunOrphanRestartTests
 {
     private sealed class StubProcessScanner : VPNRouter.Core.Interfaces.IProcessScanner

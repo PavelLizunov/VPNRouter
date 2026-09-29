@@ -6,6 +6,7 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class TunAdapterPnpSettleGateTests
 {
     private const string InstanceId = @"ROOT\NET\VPNROUTER_R3";

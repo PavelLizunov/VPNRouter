@@ -21,4 +21,11 @@ tests here instead of merging; do not weaken assertions to get green.
 
 ## Outcome
 
-Pending CI.
+- First full run: 6 failing `ZapretActionsTests` (stale `sc` executable matcher after
+  the product began resolving the system path; two fixtures used directory names
+  Windows forbids) and a hang of about 10 minutes.
+- Second run with `--blame-hang-timeout`: 1,465 passed, 15 skipped, 0 failed, then
+  the host hung in `TunAdapterPnpSettleGateTests.Restart_DoesNotSpawnUntilQueuedRemovalCompletes`.
+  Cause: nine test classes replace the same static `TunAdapterDiagnostics` seams and
+  ran in parallel. They now share the serial `SafeModeStateCollection`.
+- Third run: pending. The hang guard stays in the workflow.
