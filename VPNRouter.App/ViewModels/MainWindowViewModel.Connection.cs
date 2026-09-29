@@ -2,25 +2,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
 using VPNRouter.Core;
-using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using System.Collections.ObjectModel;
-using System.Diagnostics;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Input.Platform;
-using Avalonia.Layout;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
-using Avalonia.Platform.Storage;
-using Avalonia.Styling;
-using CommunityToolkit.Mvvm.ComponentModel;
-using Serilog;
-using VPNRouter.Core.Platform;
-using VPNRouter.Core.Services.FreeConfigs;
-using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -188,20 +170,7 @@ public partial class MainWindowViewModel
                     catch (Exception ex) { _logger.Debug(ex, "[VM] OrphanCleanup on stop"); }
 
 #if PLATFORM_WINDOWS
-                    try
-                    {
-                        var psi = new System.Diagnostics.ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
-                        {
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true
-                        };
-                        psi.ArgumentList.Add("stop");
-                        psi.ArgumentList.Add("VPNRouter");
-                        using var proc = System.Diagnostics.Process.Start(psi);
-                        proc?.WaitForExit(5000);
-                    }
+                    try { TryStopVpnRouterService(); }
                     catch (Exception ex) { _logger.Debug(ex, "[VM] sc stop on disconnect"); }
 #endif
                 });
@@ -254,21 +223,7 @@ public partial class MainWindowViewModel
                 try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
 
 #if PLATFORM_WINDOWS
-                try
-                {
-                    var psi = new System.Diagnostics.ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
-                    {
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true
-                    };
-                    psi.ArgumentList.Add("stop");
-                    psi.ArgumentList.Add("VPNRouter");
-                    using var proc = System.Diagnostics.Process.Start(psi);
-                    proc?.WaitForExit(5000);
-                    if (proc?.ExitCode == 0) Thread.Sleep(2000);
-                }
+                try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
                 catch { }
 #endif
             });
@@ -299,25 +254,7 @@ public partial class MainWindowViewModel
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
                 var skipConflictCheck = _skipVpnConflictThisSession;
 
-                var startTask = Task.Run(
-                    () => _engine.StartAsync(_settings, cts.Token, skipConflictCheck),
-                    cts.Token);
-
-                var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
-                    startTask: startTask,
-                    subscribeStarted: handler =>
-                    {
-                        void Wrapper(int pid) => handler(pid);
-                        _engine.SingBoxStarted += Wrapper;
-                        return () => _engine.SingBoxStarted -= Wrapper;
-                    },
-                    subscribeConnected: handler =>
-                    {
-                        void Wrapper(int pid) => handler(pid);
-                        _engine.Connected += Wrapper;
-                        return () => _engine.Connected -= Wrapper;
-                    },
-                    cancellationToken: cts.Token);
+                var (startTask, outcome) = await RunTwoPhaseStartAsync(cts.Token, () => skipConflictCheck);
 
                 if (outcome == Internals.TwoPhaseStartOutcome.Connected)
                 {
@@ -342,32 +279,20 @@ public partial class MainWindowViewModel
                 {
                     _logger.Error("[VM] Phase A (sing-box launch) timed out after {N}s — sing-box never reported started. Possible cause: slow firewall rule creation, missing NetAdapter PowerShell module (Windows 10 LTSC / Server SKUs), or pre-start TUN cleanup hang. Stopping engine.",
                         (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds);
-                    try { await Task.Run(() => _engine.Stop()); } catch { }
-                    IsConnecting = false;
-                    IsConnected = false;
-                    StatusText = Strings.StartTimeoutPhaseA;
-                    ConnectButtonText = Strings.StartVPN;
+                    await AbortStartAsync(Strings.StartTimeoutPhaseA);
                     return;
                 }
                 else if (outcome == Internals.TwoPhaseStartOutcome.PhaseBTimeout)
                 {
                     _logger.Error("[VM] Phase B (TUN warm-up) timed out after {N}s — sing-box started but Connected event never fired. Possible cause: wintun driver issue, network interface gone, or warmup probe blocked. Stopping engine.",
                         (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds);
-                    try { await Task.Run(() => _engine.Stop()); } catch { }
-                    IsConnecting = false;
-                    IsConnected = false;
-                    StatusText = Strings.StartTimeoutPhaseB;
-                    ConnectButtonText = Strings.StartVPN;
+                    await AbortStartAsync(Strings.StartTimeoutPhaseB);
                     return;
                 }
                 else
                 {
                     _logger.Error("[VM] Two-phase start cancelled by outer CTS");
-                    try { await Task.Run(() => _engine.Stop()); } catch { }
-                    IsConnecting = false;
-                    IsConnected = false;
-                    StatusText = Strings.StartTimeoutPhaseA;
-                    ConnectButtonText = Strings.StartVPN;
+                    await AbortStartAsync(Strings.StartTimeoutPhaseA);
                     return;
                 }
             }
@@ -404,11 +329,7 @@ public partial class MainWindowViewModel
             catch (OperationCanceledException)
             {
                 _logger.Error("[VM] OperationCanceledException out of two-phase start path — treating as Phase A timeout. Stopping engine.");
-                try { await Task.Run(() => _engine.Stop()); } catch { }
-                IsConnecting = false;
-                IsConnected = false;
-                StatusText = Strings.StartTimeoutPhaseA;
-                ConnectButtonText = Strings.StartVPN;
+                await AbortStartAsync(Strings.StartTimeoutPhaseA);
                 return;
             }
             catch (Exception ex)
@@ -432,6 +353,58 @@ public partial class MainWindowViewModel
         }
     }
 
+
+#if PLATFORM_WINDOWS
+    private static bool TryStopVpnRouterService()
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        psi.ArgumentList.Add("stop");
+        psi.ArgumentList.Add("VPNRouter");
+        using var proc = System.Diagnostics.Process.Start(psi);
+        proc?.WaitForExit(5000);
+        return proc is { HasExited: true, ExitCode: 0 };
+    }
+#endif
+
+    private async Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)> RunTwoPhaseStartAsync(
+        CancellationToken ct, Func<bool> skipConflictCheck)
+    {
+        var startTask = Task.Run(
+            () => _engine.StartAsync(_settings, ct, skipConflictCheck()),
+            ct);
+
+        var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
+            startTask: startTask,
+            subscribeStarted: handler =>
+            {
+                void Wrapper(int pid) => handler(pid);
+                _engine.SingBoxStarted += Wrapper;
+                return () => _engine.SingBoxStarted -= Wrapper;
+            },
+            subscribeConnected: handler =>
+            {
+                void Wrapper(int pid) => handler(pid);
+                _engine.Connected += Wrapper;
+                return () => _engine.Connected -= Wrapper;
+            },
+            cancellationToken: ct);
+        return (startTask, outcome);
+    }
+
+    private async Task AbortStartAsync(string statusText)
+    {
+        try { await Task.Run(() => _engine.Stop()); } catch { }
+        IsConnecting = false;
+        IsConnected = false;
+        StatusText = statusText;
+        ConnectButtonText = Strings.StartVPN;
+    }
 
     private System.Collections.Generic.IReadOnlyList<VPNRouter.Core.Services.ConflictingVpnDetector.ConflictingProcessInfo>
         _lastConflicts = System.Array.Empty<VPNRouter.Core.Services.ConflictingVpnDetector.ConflictingProcessInfo>();
@@ -741,25 +714,7 @@ public partial class MainWindowViewModel
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                    var startTask = Task.Run(
-                        () => _engine.StartAsync(_settings, cts.Token, _skipVpnConflictThisSession),
-                        cts.Token);
-
-                    var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
-                        startTask: startTask,
-                        subscribeStarted: handler =>
-                        {
-                            void Wrapper(int pid) => handler(pid);
-                            _engine.SingBoxStarted += Wrapper;
-                            return () => _engine.SingBoxStarted -= Wrapper;
-                        },
-                        subscribeConnected: handler =>
-                        {
-                            void Wrapper(int pid) => handler(pid);
-                            _engine.Connected += Wrapper;
-                            return () => _engine.Connected -= Wrapper;
-                        },
-                        cancellationToken: cts.Token);
+                    var (startTask, outcome) = await RunTwoPhaseStartAsync(cts.Token, () => _skipVpnConflictThisSession);
 
                     if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout)
                     {

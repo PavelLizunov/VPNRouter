@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.IO.Compression;
-using System.Net.Http;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Localization;
 using VPNRouter.Core.Services.UpdateSources;

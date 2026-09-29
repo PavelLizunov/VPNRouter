@@ -410,100 +410,8 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         return sb.ToString();
     }
 
-    internal List<string> ParseServerIps(string configJson)
-    {
-        var ips = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void AddCandidate(string? raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) return;
-            var candidate = raw.Trim();
-            if (IPAddress.TryParse(candidate, out var parsedIp))
-            {
-                var canonical = parsedIp.ToString();
-                if (seen.Add(canonical))
-                {
-                    ips.Add(canonical);
-                }
-                return;
-            }
-
-            try
-            {
-                var resolved = _resolveHost(candidate);
-                if (resolved != null)
-                {
-                    foreach (var rip in resolved)
-                    {
-                        if (string.IsNullOrWhiteSpace(rip)) continue;
-                        var ripTrimmed = rip.Trim();
-                        if (IPAddress.TryParse(ripTrimmed, out var resolvedIp))
-                        {
-                            var canonical = resolvedIp.ToString();
-                            if (seen.Add(canonical))
-                            {
-                                ips.Add(canonical);
-                            }
-                        }
-                        else
-                        {
-                            _logger.Debug("[MacFirewall] ignored invalid resolver literal for {Host}", candidate);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[MacFirewall] could not resolve server hostname {Host} — kill-switch reconnect may need manual cleanup", candidate);
-            }
-        }
-
-        using var doc = JsonDocument.Parse(configJson);
-        var root = doc.RootElement;
-        if (root.ValueKind != JsonValueKind.Object)
-            throw new JsonException($"Expected JSON object root, got {root.ValueKind}.");
-
-        if (root.TryGetProperty("outbounds", out var obs) && obs.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var ob in obs.EnumerateArray())
-            {
-                if (ob.ValueKind == JsonValueKind.Object &&
-                    ob.TryGetProperty("server", out var srv) &&
-                    srv.ValueKind == JsonValueKind.String)
-                {
-                    AddCandidate(srv.GetString());
-                }
-            }
-        }
-
-        if (root.TryGetProperty("endpoints", out var eps) && eps.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var ep in eps.EnumerateArray())
-            {
-                if (ep.ValueKind != JsonValueKind.Object) continue;
-                if (!ep.TryGetProperty("type", out var typeProp) || typeProp.ValueKind != JsonValueKind.String) continue;
-
-                var endpointType = typeProp.GetString();
-                if (!string.Equals(endpointType, "wireguard", StringComparison.OrdinalIgnoreCase)) continue;
-
-                if (!ep.TryGetProperty("peers", out var peersProp) || peersProp.ValueKind != JsonValueKind.Array)
-                    continue;
-
-                foreach (var peer in peersProp.EnumerateArray())
-                {
-                    if (peer.ValueKind == JsonValueKind.Object &&
-                        peer.TryGetProperty("address", out var addrProp) &&
-                        addrProp.ValueKind == JsonValueKind.String)
-                    {
-                        AddCandidate(addrProp.GetString());
-                    }
-                }
-            }
-        }
-
-        return ips;
-    }
+    internal List<string> ParseServerIps(string configJson) =>
+        UnixFirewallServerIps.Parse(configJson, _resolveHost, _logger, "MacFirewall");
 
     internal List<string> ReadServerIps()
     {
@@ -519,29 +427,8 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    private IReadOnlyList<string> DefaultResolveHost(string host)
-    {
-        try
-        {
-            var task = Dns.GetHostAddressesAsync(host);
-            if (!task.Wait(TimeSpan.FromSeconds(3)))
-            {
-                _logger.Warning("[MacFirewall] DNS resolve of {Host} timed out — kill-switch reconnect may need manual cleanup", host);
-                return Array.Empty<string>();
-            }
-            return task.Result
-                .Where(a => a.AddressFamily == AddressFamily.InterNetwork ||
-                            a.AddressFamily == AddressFamily.InterNetworkV6)
-                .Select(a => a.ToString())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[MacFirewall] could not resolve server hostname {Host} — kill-switch reconnect may need manual cleanup", host);
-            return Array.Empty<string>();
-        }
-    }
+    private IReadOnlyList<string> DefaultResolveHost(string host) =>
+        UnixFirewallServerIps.ResolveHost(host, _logger, "MacFirewall");
 
     private void WriteMarker(string mode)
     {

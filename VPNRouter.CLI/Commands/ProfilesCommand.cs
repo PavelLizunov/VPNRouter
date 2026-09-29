@@ -19,7 +19,7 @@ public class ProfilesListCommand : AsyncCommand
     public override async Task<int> ExecuteAsync(CommandContext context)
     {
         var appSettings = _settingsStore.Load();
-        var sources = ProfileSourceFactory.Create(appSettings);
+        var sources = VpnEngine.BuildProfileSources(appSettings);
         var manager = new ProfileManager(sources);
 
         await AnsiConsole.Status()
@@ -87,7 +87,7 @@ public class ProfilesShowCommand : AsyncCommand<ProfilesShowSettings>
     public override async Task<int> ExecuteAsync(CommandContext context, ProfilesShowSettings settings)
     {
         var appSettings = _settingsStore.Load();
-        var sources = ProfileSourceFactory.Create(appSettings);
+        var sources = VpnEngine.BuildProfileSources(appSettings);
         var manager = new ProfileManager(sources);
         await manager.LoadAsync();
 
