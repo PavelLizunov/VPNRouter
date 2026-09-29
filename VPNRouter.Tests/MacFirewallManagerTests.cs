@@ -236,6 +236,9 @@ public class MacFirewallManagerTests : IDisposable
         Assert.Contains("172.16.0.0/12", rules);
         Assert.Contains("192.168.0.0/16", rules);
         Assert.Contains("169.254.0.0/16", rules);
+        Assert.Contains("pass out quick inet from any to 100.64.0.0/10", rules);
+        Assert.Contains("pass out quick inet6 from any to fe80::/10", rules);
+        Assert.Contains("pass out quick inet6 from any to fc00::/7", rules);
         Assert.Contains("pass out quick inet from any to 1.2.3.4", rules);
         Assert.DoesNotContain("set block-policy", rules);
     }

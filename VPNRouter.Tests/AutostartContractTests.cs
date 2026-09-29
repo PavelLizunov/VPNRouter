@@ -72,14 +72,6 @@ public sealed class AutostartContractTests
         return path == null ? null : File.ReadAllText(path);
     }
 
-    private static string? ReadMainWindowViewModelSourceOrSkip()
-    {
-        var path = FindSource(
-            Path.Combine("VPNRouter.App", "ViewModels"),
-            "MainWindowViewModel.cs");
-        return path == null ? null : File.ReadAllText(path);
-    }
-
     private static string? FindSource(string relativeProjectDir, string fileName)
     {
         var dir = new DirectoryInfo(Directory.GetCurrentDirectory());

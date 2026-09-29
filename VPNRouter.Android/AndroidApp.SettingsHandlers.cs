@@ -41,7 +41,6 @@ public partial class AndroidApp
             if (_settingsSplitRadio is not null) _settingsSplitRadio.IsChecked = routing == "split";
             if (_settingsFullRadio is not null) _settingsFullRadio.IsChecked = routing == "full";
             if (_settingsBypassRu is not null) _settingsBypassRu.IsChecked = AndroidStorage.GetBypassRussianTraffic();
-            if (_settingsBlockOnVpnFail is not null) _settingsBlockOnVpnFail.IsChecked = AndroidStorage.GetBlockOnVpnFail();
             if (_settingsBlockAds is not null) _settingsBlockAds.IsChecked = AndroidStorage.GetBlockAds();
             if (_settingsDnsStrategy is not null)
             {
@@ -95,13 +94,6 @@ public partial class AndroidApp
     {
         if (_settingsLoading || _settingsBypassRu is null) return;
         AndroidStorage.SetBypassRussianTraffic(_settingsBypassRu.IsChecked == true);
-        MarkSettingsDirty();
-    }
-
-    private void OnSettingsBlockOnVpnFailChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_settingsLoading || _settingsBlockOnVpnFail is null) return;
-        AndroidStorage.SetBlockOnVpnFail(_settingsBlockOnVpnFail.IsChecked == true);
         MarkSettingsDirty();
     }
 
