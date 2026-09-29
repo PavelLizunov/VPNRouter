@@ -86,6 +86,18 @@ public static class LeakProtection
         if (settings != null)
             ValidateOutboundServersScopeAware(config, settings, errors, warnings);
 
+        ValidateDnsStrategyAndInbounds(config, errors);
+        WarnAboutProxyProcessDnsPaths(config, warnings);
+        WarnAboutRealityWithoutFlow(config, warnings);
+        WarnAboutFullTunnelAndRoutingMode(config, settings, warnings);
+        ValidateRequiredOutbounds(config, warnings, errors);
+        ValidateProxyOutbounds(config, errors);
+
+        return new ValidationResult { Errors = errors, Warnings = warnings };
+    }
+
+    private static void ValidateDnsStrategyAndInbounds(SingBoxConfig config, List<string> errors)
+    {
         if (config.Dns.Strategy != "ipv4_only")
             errors.Add($"dns.strategy must be 'ipv4_only', got '{config.Dns.Strategy}'");
 
@@ -97,7 +109,10 @@ public static class LeakProtection
             if (inbound.Address == null || inbound.Address.Count == 0)
                 errors.Add($"inbound '{inbound.Tag}': address is missing");
         }
+    }
 
+    private static void WarnAboutProxyProcessDnsPaths(SingBoxConfig config, List<string> warnings)
+    {
         var processesInRouteRules = config.Route.Rules
             .Where(r => r.ProcessName != null && r.ProcessName.Count > 0
                      && (r.Outbound == "proxy" || r.Outbound == "proxy-udp"))
@@ -125,7 +140,10 @@ public static class LeakProtection
                      .Distinct())
             warnings.Add($"Process '{proc}' resolves DNS via local DoH (smart mode) — its DNS path " +
                          "leaves the tunnel (encrypted, but the resolver sees your real IP)");
+    }
 
+    private static void WarnAboutRealityWithoutFlow(SingBoxConfig config, List<string> warnings)
+    {
         foreach (var o in config.Outbounds)
         {
             if ((o.Type ?? string.Empty).Equals("vless", StringComparison.OrdinalIgnoreCase)
@@ -134,7 +152,11 @@ public static class LeakProtection
                 warnings.Add($"VLESS+Reality outbound '{o.Tag}' has no flow — if the server expects " +
                              "xtls-rprx-vision the handshake will fail; verify the share-link includes &flow=");
         }
+    }
 
+    private static void WarnAboutFullTunnelAndRoutingMode(
+        SingBoxConfig config, AppSettings? settings, List<string> warnings)
+    {
         var isFullTunnel = config.Route.Final == "proxy";
         if (isFullTunnel)
         {
@@ -156,7 +178,11 @@ public static class LeakProtection
                     $"({routingMode}/{(isExclude ? "exclude" : "include")}) expects " +
                     $"'{expectedFinal}' — possible routing inversion (traffic/DNS may leak)");
         }
+    }
 
+    private static void ValidateRequiredOutbounds(
+        SingBoxConfig config, List<string> warnings, List<string> errors)
+    {
         var hasProxy = config.Outbounds.Any(o => o.Tag == "proxy")
             || (config.Endpoints?.Any(e => e.Tag == "proxy") ?? false);
         if (!hasProxy)
@@ -168,7 +194,10 @@ public static class LeakProtection
         var hasDnsHijack = config.Route.Rules.Any(r => r.Action == "hijack-dns");
         if (!hasDnsHijack)
             warnings.Add("No 'hijack-dns' route rule — DNS traffic may not be handled correctly");
+    }
 
+    private static void ValidateProxyOutbounds(SingBoxConfig config, List<string> errors)
+    {
         foreach (var proxyTag in new[] { "proxy", "proxy-udp" })
         {
             var proxyOutbound = config.Outbounds.FirstOrDefault(o => o.Tag == proxyTag);
@@ -180,8 +209,6 @@ public static class LeakProtection
         var proxyEndpoint = config.Endpoints?.FirstOrDefault(e => e.Tag == "proxy");
         if (proxyEndpoint != null)
             ValidateProxyEndpoint(proxyEndpoint, errors);
-
-        return new ValidationResult { Errors = errors, Warnings = warnings };
     }
 
     private static void ValidateProxyEndpoint(SingBoxEndpoint ep, List<string> errors)
