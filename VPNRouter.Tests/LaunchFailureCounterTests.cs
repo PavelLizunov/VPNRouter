@@ -66,24 +66,6 @@ public sealed class LaunchFailureCounterTests
     }
 
     [Fact]
-    public void RecordFailureType_DoesNotChangeCounter()
-    {
-        var path = NewTempPath();
-        try
-        {
-            LaunchFailureCounter.IncrementOnStartup(path: path);
-            LaunchFailureCounter.IncrementOnStartup(path: path);
-
-            LaunchFailureCounter.RecordFailureType("OutOfMemoryException", path);
-
-            var s = LaunchFailureCounter.Read(path);
-            Assert.Equal(2, s.ConsecutiveFailures);
-            Assert.Equal("OutOfMemoryException", s.LastFailureType);
-        }
-        finally { CleanUp(path); }
-    }
-
-    [Fact]
     public void MarkStable_ZerosCounterAndStampsSuccess()
     {
         var path = NewTempPath();

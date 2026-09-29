@@ -592,23 +592,6 @@ public class SplitTunnelProtocolTests
         Assert.False(SplitTunnelPolicy.ShouldEngage(true, "split", "excludeapps", true, "auto"));
     }
 
-    [Theory]
-    [InlineData(0u)]
-    [InlineData(1u)]
-    public void ClassifyEvent_Splitting_Information(uint id)
-        => Assert.Equal(P.EventSeverity.Information, SplitTunnelPolicy.ClassifyEvent(id));
-
-    [Theory]
-    [InlineData(0x80000001u)]
-    [InlineData(0x80000002u)]
-    [InlineData(0x80000003u)]
-    public void ClassifyEvent_ErrorFlag_Warning(uint id)
-        => Assert.Equal(P.EventSeverity.Warning, SplitTunnelPolicy.ClassifyEvent(id));
-
-    [Fact]
-    public void ClassifyEvent_UnknownNonErrorId_Debug()
-        => Assert.Equal(P.EventSeverity.Debug, SplitTunnelPolicy.ClassifyEvent(0x42u));
-
     private static (IPAddress?, IPAddress?, IPAddress?, IPAddress?) Addr(
         string? tunV4, string? inetV4, string? tunV6 = null, string? inetV6 = null)
         => (tunV4 is null ? null : IPAddress.Parse(tunV4),

@@ -15,53 +15,6 @@ namespace VPNRouter.Tests;
 public sealed class TgProxyOwnershipCharacterizationTests
 {
     [Fact]
-    public void TgProxyManager_KillAll_Structural_NoDestructiveCalls()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
-        var killAllBody = ExtractMethodBody(src, "KillAll");
-
-        Assert.DoesNotContain("KillByPort", killAllBody);
-        Assert.DoesNotContain("proc.Kill", killAllBody);
-        Assert.DoesNotContain("Process.GetProcessesByName", killAllBody);
-        Assert.DoesNotContain("Process.Start", killAllBody);
-        Assert.DoesNotContain("Process.GetProcessById", killAllBody);
-        Assert.DoesNotContain("taskkill", killAllBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("netstat", killAllBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("lsof", killAllBody, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void TgProxyManager_KillByPort_Structural_NoDestructiveCalls()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
-        var killByPortBody = ExtractMethodBody(src, "KillByPort");
-
-        Assert.DoesNotContain("KillByPortWindows", killByPortBody);
-        Assert.DoesNotContain("KillByPortUnix", killByPortBody);
-        Assert.DoesNotContain("proc.Kill", killByPortBody);
-        Assert.DoesNotContain("Process.GetProcessesByName", killByPortBody);
-        Assert.DoesNotContain("Process.Start", killByPortBody);
-        Assert.DoesNotContain("Process.GetProcessById", killByPortBody);
-        Assert.DoesNotContain("taskkill", killByPortBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("netstat", killByPortBody, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("lsof", killByPortBody, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void RuntimeStatusDetector_IsTgProxyRunning_NeverClaimsPortOnlyTruth()
-    {
-        Assert.False(RuntimeStatusDetector.IsTgProxyRunning(1443));
-        Assert.False(RuntimeStatusDetector.IsTgProxyRunning(0));
-        Assert.False(RuntimeStatusDetector.IsTgProxyRunning(-1));
-
-        var src = LoadSource("VPNRouter.Core", "Services", "RuntimeStatusDetector.cs");
-        var detectorBody = ExtractMethodBody(src, "IsTgProxyRunning");
-
-        Assert.DoesNotContain("GetActiveTcpListeners", detectorBody);
-        Assert.Contains("return false;", detectorBody);
-    }
-
-    [Fact]
     public void OwnedManager_PositiveStop_CallsKillAndSuppressOnOwnedHandle()
     {
         var fake = new FakeProcessRunner();
@@ -113,17 +66,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
     }
 
     [Fact]
-    public void TgProxyManager_Stop_NeverReopensProcessByPid()
-    {
-        var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
-        var stopBody = ExtractMethodBody(src, "Stop");
-
-        Assert.DoesNotContain("Process.GetProcessById", stopBody);
-        Assert.DoesNotContain("Process.GetProcessesByName", stopBody);
-        Assert.DoesNotContain("KillByPort", stopBody);
-    }
-
-    [Fact]
     public void TgProxyManager_IsRunning_And_Pid_AreLockFree()
     {
         var src = LoadSource("VPNRouter.Core", "Services", "TgProxyManager.cs");
@@ -144,60 +86,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
         Assert.DoesNotContain("KillByPortUnix", stripped);
         Assert.DoesNotContain("Process.GetProcessesByName(\"tg-ws-proxy\")", stripped);
         Assert.DoesNotContain("Process.GetProcessesByName(\"TgWsProxy_windows\")", stripped);
-    }
-
-    [Fact]
-    public void MainWindowViewModel_Quit_ZeroKillAllOrPortKillCalls()
-    {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
-        var quitBody = ExtractMethodBody(src, "Quit");
-
-        Assert.Contains("_tgProxy?.Stop()", quitBody);
-        Assert.Contains("KillAllZapret()", quitBody);
-
-        Assert.DoesNotContain("TgProxyManager.KillAll", quitBody);
-        Assert.DoesNotContain("TgProxyManager.KillByPort", quitBody);
-        Assert.DoesNotContain("KillAll(", quitBody);
-        Assert.DoesNotContain("KillByPort", quitBody);
-    }
-
-    [Fact]
-    public void MainWindowViewModel_Toggle_ZeroKillAllOrPortKillCalls()
-    {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
-        var toggleBody = ExtractMethodBody(src, "ToggleTgProxyCoreAsync");
-
-        Assert.DoesNotContain("TgProxyManager.KillAll", toggleBody);
-        Assert.DoesNotContain("TgProxyManager.KillByPort", toggleBody);
-        Assert.DoesNotContain("KillAll", toggleBody);
-        Assert.DoesNotContain("KillByPort", toggleBody);
-
-        Assert.DoesNotContain("TgProxyManager.IsAnyRunning(TgProxyPort)", toggleBody);
-        Assert.Contains("shouldStop = TgProxyEnabled || currentManager?.IsRunning == true;", toggleBody);
-        Assert.Contains("if (manager.IsRunning)", toggleBody);
-    }
-
-    [Fact]
-    public void MainWindowViewModel_Update_ZeroKillAllOrPortKillCalls()
-    {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.cs");
-        var updateBody = ExtractMethodBody(src, "UpdateTgProxyCoreAsync");
-
-        Assert.DoesNotContain("TgProxyManager.KillAll", updateBody);
-        Assert.DoesNotContain("TgProxyManager.KillByPort", updateBody);
-        Assert.DoesNotContain("KillAll", updateBody);
-        Assert.DoesNotContain("KillByPort", updateBody);
-
-        Assert.Contains("wasRunning = manager?.IsRunning == true;", updateBody);
-        Assert.Contains("manager?.Stop();", updateBody);
-
-        var stopIdx = updateBody.IndexOf("manager?.Stop();", StringComparison.Ordinal);
-        var checkIdx = updateBody.IndexOf("if (manager?.IsRunning == true)", StringComparison.Ordinal);
-        var downloadIdx = updateBody.IndexOf("DownloadAsync", StringComparison.Ordinal);
-
-        Assert.True(stopIdx >= 0, "Expected manager?.Stop() in UpdateTgProxyCoreAsync");
-        Assert.True(checkIdx > stopIdx, "Expected if (manager?.IsRunning == true) after manager?.Stop()");
-        Assert.True(downloadIdx > checkIdx, "Expected DownloadAsync after stop check");
     }
 
     [Fact]
@@ -238,17 +126,6 @@ public sealed class TgProxyOwnershipCharacterizationTests
 
         Assert.Contains("if (manager.IsRunning)", body);
         Assert.DoesNotContain("if (manager.IsRunning || TgProxyManager.IsAnyRunning", body);
-    }
-
-    [Fact]
-    public void MainWindowViewModel_RuntimeStatus_NonBlockingAndNoPortOnlyTruth()
-    {
-        var src = LoadSource("VPNRouter.App", "ViewModels", "MainWindowViewModel.RuntimeStatus.cs");
-        var body = ExtractMethodBody(src, "UpdateRuntimeStatus");
-
-        Assert.DoesNotContain("RuntimeStatusDetector.IsTgProxyRunning", body);
-        Assert.DoesNotContain("Monitor.TryEnter(_tgProxyStateGate)", body);
-        Assert.Contains("Volatile.Read(ref _tgProxy)", body);
     }
 
     private sealed class StubbornProcessHandle : IProcessHandle

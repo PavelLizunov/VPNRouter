@@ -53,9 +53,4 @@ public static class RuntimeStatusDetector
         => AnyProcessAlive("winws");
 
     private static bool AnyProcessAlive(string processName) => ProcessQuery.AnyAlive(processName);
-
-    public static bool IsTgProxyRunning(int port)
-    {
-        return false;
-    }
 }
