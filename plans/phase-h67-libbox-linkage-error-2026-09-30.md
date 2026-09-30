@@ -21,8 +21,16 @@ broken install, not a fix for a reported user crash.
 ## Verification
 
 Android compile check in CI. On the emulator: an `android-x64` build of this branch must show the error text on the main
-screen after Connect, keep the process alive and show the tile in an error/off state without a restart loop. Result is
-recorded below once run.
+screen after Connect, keep the process alive and show the tile in an error/off state without a restart loop.
+
+Result (2026-09-30, Android 14 x86_64 emulator on the Linux worker, `android-x64` build of head f547f1bc): a subscription
+served from the worker was fetched and parsed, the first server was picked, `startTunnel failed:
+java.lang.UnsatisfiedLinkError: dlopen failed: library "libbox.so" not found` was caught, `ACTION_TUNNEL_ERROR` reached the
+main screen ("Error: UnsatisfiedLinkError: dlopen failed: library \"libbox.so\" not found", status "Not connected"), the
+app process kept its PID, the crash buffer has no entry for the package, and the tile shows "VPNRouter / Error". The same
+scenario before the fix (build of ce05a87d on an API 34 x86_64 emulator) ended in a process death and a service restart.
+Not verified: the success path (the tunnel itself needs an arm64 device; the arm64 build under ARM translation on an
+x86_64 emulator is too slow to use).
 
 ## Outcome
 
