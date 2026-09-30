@@ -727,11 +727,11 @@ public partial class AndroidApp : Avalonia.Application
         _statusHealthCheck = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 12,
+            FontSize = UiScale.Fs(10),
             TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
             Margin = new Thickness(8, 0, 8, 0),
-            LineHeight = 16,
+            LineHeight = UiScale.Lh(14),
             IsVisible = false,
         };
         _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -739,12 +739,12 @@ public partial class AndroidApp : Avalonia.Application
         _statusErrorOneLiner = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 12,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
             Margin = new Thickness(8, 0, 8, 0),
-            LineHeight = 16,
+            LineHeight = UiScale.Lh(14),
             IsVisible = false,
         };
         _statusErrorOneLiner.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
@@ -781,7 +781,7 @@ public partial class AndroidApp : Avalonia.Application
         _configRowLabel = new TextBlock
         {
             Text = Localization.SmpConfigRowLabel,
-            FontSize = 11,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
         };
         _configRowLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -789,7 +789,7 @@ public partial class AndroidApp : Avalonia.Application
         _configRowValue = new TextBlock
         {
             Text = Localization.SimpleConfigSummary,
-            FontSize = 13,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
         };
         _configRowValue.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
@@ -1040,7 +1040,7 @@ public partial class AndroidApp : Avalonia.Application
             VerticalContentAlignment = VerticalAlignment.Center,
             MinHeight = ctaMinHeight,
             Padding = new Thickness(0, 12),
-            FontSize = 16,
+            FontSize = UiScale.Fs(14),
             FontWeight = FontWeight.Bold,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(ctaRadius),
@@ -1058,7 +1058,7 @@ public partial class AndroidApp : Avalonia.Application
             VerticalContentAlignment = VerticalAlignment.Center,
             MinHeight = ctaMinHeight,
             Padding = new Thickness(0, 12),
-            FontSize = 16,
+            FontSize = UiScale.Fs(14),
             FontWeight = FontWeight.Bold,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(ctaRadius),
@@ -1076,7 +1076,7 @@ public partial class AndroidApp : Avalonia.Application
             VerticalContentAlignment = VerticalAlignment.Center,
             MinHeight = ctaMinHeight,
             Padding = new Thickness(0, 12),
-            FontSize = 16,
+            FontSize = UiScale.Fs(14),
             FontWeight = FontWeight.Bold,
             BorderThickness = new Thickness(1.5),
             CornerRadius = new CornerRadius(ctaRadius),

@@ -64,7 +64,7 @@ public class StatusCard : UserControl
 
         _titleText = new TextBlock
         {
-            FontSize = 22,
+            FontSize = VPNRouter.Android.UiScale.Fs(20),
             FontWeight = FontWeight.Bold,
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -74,8 +74,8 @@ public class StatusCard : UserControl
 
         _subtitleText = new TextBlock
         {
-            FontSize = 13,
-            LineHeight = 18,
+            FontSize = VPNRouter.Android.UiScale.Fs(11),
+            LineHeight = VPNRouter.Android.UiScale.Lh(16),
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
             TextWrapping = TextWrapping.Wrap,
