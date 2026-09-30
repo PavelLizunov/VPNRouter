@@ -40,6 +40,8 @@ reconnect. Non-Windows listener startup is inactive.
   universal fail-closed guarantee from a validator's name.
 - `VlessServersResolver.cs`, `SubscriptionResolver.cs`, `SubscriptionFetcher.cs`,
   `VlessUriParser.cs` and `ServerUriParser.cs`: subscription and URI inputs.
+  `ClashYamlParser.cs` and `SingBoxJsonSubscription.cs` convert Clash YAML and raw sing-box JSON
+  subscriptions into the share links those parsers read.
 - [SuffixMatch.cs](SuffixMatch.cs): `LongestSuffixIndex` scans candidates
   linearly and compares `EndsWith(..., StringComparison.Ordinal)`, retaining
   the longest matching name. It maps urltest member tags back to subscription
