@@ -34,7 +34,7 @@ public partial class AndroidApp
     {
         var stack = new StackPanel
         {
-            Orientation = Orientation.Horizontal,
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
             Spacing = 6,
             Margin = new Thickness(10, 8, 10, 8),
         };
