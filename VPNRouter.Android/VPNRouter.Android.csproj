@@ -43,6 +43,12 @@
     <!-- Android-only define so VPNRouter.Core's Android branches compile. -->
     <DefineConstants>$(DefineConstants);PLATFORM_ANDROID</DefineConstants>
 
+    <!-- Test-only adb hook (plans/phase-h68-*): compiled in ONLY when a build is started with
+         -p:VpnRouterTestHook=true. Release and CI builds never set it (guarded by AndroidTestHookGuardTests).
+         The versionName gets a +testhook suffix so such a build is recognisable on the device. -->
+    <DefineConstants Condition="'$(VpnRouterTestHook)' == 'true'">$(DefineConstants);VPNROUTER_TESTHOOK</DefineConstants>
+    <ApplicationDisplayVersion Condition="'$(VpnRouterTestHook)' == 'true'">$(VpnRouterVersion)+testhook</ApplicationDisplayVersion>
+
     <!-- Android-specific build flags. -->
     <RuntimeIdentifiers>android-arm64;android-arm;android-x64;android-x86</RuntimeIdentifiers>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
