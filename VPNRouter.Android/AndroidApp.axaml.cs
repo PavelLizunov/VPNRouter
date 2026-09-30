@@ -431,7 +431,7 @@ public partial class AndroidApp : Avalonia.Application
         _menuFeedback = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Padding = new Thickness(12, 8),
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
@@ -540,7 +540,7 @@ public partial class AndroidApp : Avalonia.Application
         _brandTitle = new TextBlock
         {
             Text = Localization.BrandTitle,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.Bold,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -568,7 +568,7 @@ public partial class AndroidApp : Avalonia.Application
         _kebabMenuButton = new Avalonia.Controls.Button
         {
             Content = "⋮",
-            FontSize = 22,
+            FontSize = UiScale.Fs(22),
             FontWeight = FontWeight.Bold,
             Width = 32,
             Height = 32,
@@ -613,14 +613,14 @@ public partial class AndroidApp : Avalonia.Application
         _menuAboutLabel = new TextBlock
         {
             Text = Localization.SmpMenuAbout,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             VerticalAlignment = VerticalAlignment.Center,
         };
         _menuAboutLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         _menuVersionPill = new TextBlock
         {
             Text = VPNRouter.Core.AppVersion.Version,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontFamily = new FontFamily("Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"),
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -671,7 +671,7 @@ public partial class AndroidApp : Avalonia.Application
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 8),
             Margin = new Thickness(0, 6, 0, 0),
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -774,7 +774,7 @@ public partial class AndroidApp : Avalonia.Application
         var flagGlyph = new TextBlock
         {
             Text = "⚑",
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -808,7 +808,7 @@ public partial class AndroidApp : Avalonia.Application
         _configRowChevron = new TextBlock
         {
             Text = _formExpanded ? "⌄" : "›",
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             VerticalAlignment = VerticalAlignment.Center,
         };
         _configRowChevron.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -853,14 +853,14 @@ public partial class AndroidApp : Avalonia.Application
         _serverInputLabel = new TextBlock
         {
             Text = Localization.SmpInputLabel,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
         };
         _serverInputLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         _serverInput = new TextBox
         {
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Padding = new Thickness(10, 7),
             AcceptsReturn = false,
             CornerRadius = new CornerRadius(radiusXs),
@@ -873,7 +873,7 @@ public partial class AndroidApp : Avalonia.Application
         var smpQrButton = new Avalonia.Controls.Button
         {
             Content = "📷",
-            FontSize = 14,
+            FontSize = UiScale.Fs(14),
             Width = 44,
             Padding = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Stretch,
@@ -898,14 +898,14 @@ public partial class AndroidApp : Avalonia.Application
         _serverInputHint = new TextBlock
         {
             Text = Localization.SmpInputHint,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             TextWrapping = TextWrapping.Wrap,
         };
         _serverInputHint.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         _serverInputError = new TextBlock
         {
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
@@ -931,7 +931,7 @@ public partial class AndroidApp : Avalonia.Application
         _tunnelModeLabel = new TextBlock
         {
             Text = Localization.SmpTunnelModeLabel,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
         };
         _tunnelModeLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
@@ -939,7 +939,7 @@ public partial class AndroidApp : Avalonia.Application
         _splitLabel = new TextBlock
         {
             Text = Localization.SmpSplitOption,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -949,7 +949,7 @@ public partial class AndroidApp : Avalonia.Application
             GroupName = "TunnelMode",
             IsChecked = AndroidStorage.GetPerAppMode() != "off",
             Content = _splitLabel,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             MinHeight = 0,
             Padding = new Thickness(4, 0),
@@ -958,7 +958,7 @@ public partial class AndroidApp : Avalonia.Application
         _splitHint = new TextBlock
         {
             Text = Localization.SmpSplitHint,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(24, 0, 0, 0),
         };
@@ -966,7 +966,7 @@ public partial class AndroidApp : Avalonia.Application
         _fullLabel = new TextBlock
         {
             Text = Localization.SmpFullOption,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -976,7 +976,7 @@ public partial class AndroidApp : Avalonia.Application
             GroupName = "TunnelMode",
             IsChecked = AndroidStorage.GetPerAppMode() == "off",
             Content = _fullLabel,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             MinHeight = 0,
             Padding = new Thickness(4, 0),
@@ -985,7 +985,7 @@ public partial class AndroidApp : Avalonia.Application
         _fullHint = new TextBlock
         {
             Text = Localization.SmpFullHint,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(24, 0, 0, 0),
         };
@@ -1004,7 +1004,7 @@ public partial class AndroidApp : Avalonia.Application
         _perAppCountLabel = new TextBlock
         {
             Text = string.Format(initialCountFmt, initialPerAppCount),
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Margin = new Thickness(24, 2, 0, 0),
         };
         _perAppCountLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -1104,21 +1104,21 @@ public partial class AndroidApp : Avalonia.Application
         _advCardTitle = new TextBlock
         {
             Text = Localization.SmpAdvCardTitle,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.SemiBold,
         };
         _advCardTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         _advCardSubtitle = new TextBlock
         {
             Text = Localization.SmpAdvCardSubtitle,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             TextWrapping = TextWrapping.Wrap,
         };
         _advCardSubtitle.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
         var chevronGlyph = new TextBlock
         {
             Text = "›",
-            FontSize = 15,
+            FontSize = UiScale.Fs(15),
             FontWeight = FontWeight.Bold,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -1292,7 +1292,7 @@ public partial class AndroidApp : Avalonia.Application
         var tb = new TextBlock
         {
             Text = label,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(7, 2),
             VerticalAlignment = VerticalAlignment.Center,
@@ -1307,7 +1307,7 @@ public partial class AndroidApp : Avalonia.Application
         var btn = new Avalonia.Controls.Button
         {
             Content = label,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.Medium,
             Padding = new Thickness(14, 7),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),

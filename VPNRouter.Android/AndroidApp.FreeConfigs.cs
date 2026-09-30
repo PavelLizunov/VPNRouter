@@ -95,7 +95,7 @@ public partial class AndroidApp
         var searchHint = new TextBlock
         {
             Text = Localization.FcSearchHint,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = successFg,
             Opacity = 0.85,
             TextWrapping = TextWrapping.Wrap,
@@ -104,7 +104,7 @@ public partial class AndroidApp
         _fcFindButton = new Avalonia.Controls.Button
         {
             Content = Localization.FcFindButton,
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(0, 10),
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -119,7 +119,7 @@ public partial class AndroidApp
         _fcStopButton = new Avalonia.Controls.Button
         {
             Content = Localization.FcStopButton,
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(0, 10),
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -135,7 +135,7 @@ public partial class AndroidApp
         _fcAdvancedToggle = new Avalonia.Controls.Button
         {
             Content = Localization.FcAdvancedSettings,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
@@ -184,7 +184,7 @@ public partial class AndroidApp
         _fcSearchEmptyHint = new TextBlock
         {
             Text = Localization.FcSearchListEmptyHint,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Opacity = 0.55,
             Foreground = textM,
             TextWrapping = TextWrapping.Wrap,
@@ -225,7 +225,7 @@ public partial class AndroidApp
         _fcSavedHint = new TextBlock
         {
             Text = Localization.FcSavedEmptyHint,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Opacity = 0.55,
             Foreground = textM,
             TextWrapping = TextWrapping.Wrap,
@@ -235,7 +235,7 @@ public partial class AndroidApp
         _fcClearAllButton = new Avalonia.Controls.Button
         {
             Content = Localization.FcSavedClearAll,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(radiusSm),
             Background = Brushes.Transparent,
@@ -273,7 +273,7 @@ public partial class AndroidApp
         _fcSavedEmptyHint = new TextBlock
         {
             Text = Localization.FcSavedEmptyHint,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Opacity = 0.55,
             Foreground = textM,
             TextWrapping = TextWrapping.Wrap,
@@ -320,7 +320,7 @@ public partial class AndroidApp
         _fcStatusText = new TextBlock
         {
             Text = Localization.FcStatusEmpty,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Opacity = 0.7,
             Foreground = textS,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -328,7 +328,7 @@ public partial class AndroidApp
         };
         _fcProgressLabel = new TextBlock
         {
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Opacity = 0.7,
             Foreground = textM,
             VerticalAlignment = VerticalAlignment.Center,
@@ -356,7 +356,7 @@ public partial class AndroidApp
         _fcConnectHint = new TextBlock
         {
             Text = Localization.FcConnectHint,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Opacity = 0.55,
             Foreground = textM,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -367,7 +367,7 @@ public partial class AndroidApp
         _fcUseButton = new Avalonia.Controls.Button
         {
             Content = Localization.FcUseSelected,
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(0, 10),
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -416,7 +416,7 @@ public partial class AndroidApp
         var targetLabel = new TextBlock
         {
             Text = Localization.FcTargetNLabel,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = successFg,
         };
@@ -427,7 +427,7 @@ public partial class AndroidApp
         var configsWord = new TextBlock
         {
             Text = Localization.FcConfigsWord,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Opacity = 0.75,
             Foreground = successFg,
             VerticalAlignment = VerticalAlignment.Center,
@@ -443,7 +443,7 @@ public partial class AndroidApp
         var pingLabel = new TextBlock
         {
             Text = Localization.FcWithPingUnder,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = successFg,
         };
@@ -454,7 +454,7 @@ public partial class AndroidApp
         var msUnit = new TextBlock
         {
             Text = Localization.FcMsUnit,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Opacity = 0.75,
             Foreground = successFg,
             VerticalAlignment = VerticalAlignment.Center,
@@ -473,7 +473,7 @@ public partial class AndroidApp
             Content = new TextBlock
             {
                 Text = Localization.FcExcludeRu,
-                FontSize = 11,
+                FontSize = UiScale.Fs(11),
                 Foreground = successFg,
                 TextWrapping = TextWrapping.Wrap,
             },
@@ -509,7 +509,7 @@ public partial class AndroidApp
         {
             Text = Localization.FcColCountry,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Opacity = 0.55,
             Foreground = textM,
             VerticalAlignment = VerticalAlignment.Center,
@@ -519,7 +519,7 @@ public partial class AndroidApp
         {
             Text = Localization.FcColEndpoint,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Opacity = 0.55,
             Foreground = textM,
             VerticalAlignment = VerticalAlignment.Center,
@@ -529,7 +529,7 @@ public partial class AndroidApp
         {
             Text = Localization.FcColLatency,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Opacity = 0.55,
             Foreground = textM,
             VerticalAlignment = VerticalAlignment.Center,
@@ -540,7 +540,7 @@ public partial class AndroidApp
         {
             Text = Localization.FcColTransport,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Opacity = 0.55,
             Foreground = textM,
             VerticalAlignment = VerticalAlignment.Center,
@@ -566,7 +566,7 @@ public partial class AndroidApp
         display = new TextBlock
         {
             Text = current.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -603,7 +603,7 @@ public partial class AndroidApp
         var btn = new Avalonia.Controls.Button
         {
             Content = glyph,
-            FontSize = 16,
+            FontSize = UiScale.Fs(16),
             FontWeight = FontWeight.SemiBold,
             Width = 44,
             Height = 44,
@@ -628,7 +628,7 @@ public partial class AndroidApp
             Text = string.IsNullOrEmpty(entry.CountryCode)
                 ? "—"
                 : $"{FlagFor(entry.CountryCode)} {entry.CountryCode}",
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = textP,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -637,7 +637,7 @@ public partial class AndroidApp
         var endpoint = new TextBlock
         {
             Text = $"{entry.Host}:{entry.Port}",
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = textP,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(8, 0, 0, 0),
@@ -682,7 +682,7 @@ public partial class AndroidApp
             {
                 Text = latencyText,
                 Foreground = Brushes.White,
-                FontSize = 9,
+                FontSize = UiScale.Fs(9),
                 FontWeight = FontWeight.SemiBold,
             }
         };
@@ -690,7 +690,7 @@ public partial class AndroidApp
         var transport = new TextBlock
         {
             Text = entry.Transport ?? "tcp",
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Opacity = 0.6,
             Foreground = textM,
             VerticalAlignment = VerticalAlignment.Center,
@@ -718,7 +718,7 @@ public partial class AndroidApp
             var removeBtn = new Avalonia.Controls.Button
             {
                 Content = Localization.FcSavedRemoveOne,
-                FontSize = 11,
+                FontSize = UiScale.Fs(11),
                 Padding = new Thickness(8),
                 MinWidth = 48,
                 MinHeight = 48,

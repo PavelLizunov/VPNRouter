@@ -97,14 +97,14 @@ public partial class AndroidApp
         {
             Text = Localization.AdvToolsSubTabZapret,
             FontWeight = FontWeight.Bold,
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             Foreground = textP,
         };
         var explainerText = new TextBlock
         {
             Text = Localization.AdvToolsZapretAndroidExplainer,
-            FontSize = 11,
-            LineHeight = 16,
+            FontSize = UiScale.Fs(11),
+            LineHeight = UiScale.Lh(16),
             Opacity = 0.8,
             Foreground = textS,
             TextWrapping = TextWrapping.Wrap,
@@ -181,7 +181,7 @@ public partial class AndroidApp
         _toolsZapretFooterText = new TextBlock
         {
             Text = ZapretStatusLabelForCurrentMode(),
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Foreground = textS,
             VerticalAlignment = VerticalAlignment.Center,
@@ -197,7 +197,7 @@ public partial class AndroidApp
 
         _toolsZapretFooterToggleBtn = new Avalonia.Controls.Button
         {
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 5),
             CornerRadius = new CornerRadius(radiusSm),
@@ -250,7 +250,7 @@ public partial class AndroidApp
             Content = new TextBlock
             {
                 Text = label,
-                FontSize = 11,
+                FontSize = UiScale.Fs(11),
                 Foreground = textP,
                 TextWrapping = TextWrapping.Wrap,
             },
@@ -272,14 +272,14 @@ public partial class AndroidApp
         {
             Text = Localization.AdvToolsSubTabTelegram,
             FontWeight = FontWeight.Bold,
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             Foreground = textP,
         };
         var explainerText = new TextBlock
         {
             Text = Localization.AdvToolsTelegramAndroidExplainer,
-            FontSize = 11,
-            LineHeight = 16,
+            FontSize = UiScale.Fs(11),
+            LineHeight = UiScale.Lh(16),
             Opacity = 0.8,
             Foreground = textS,
             TextWrapping = TextWrapping.Wrap,
@@ -301,7 +301,7 @@ public partial class AndroidApp
         var openTgBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvToolsOpenTelegram,
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(0, 10),
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -316,7 +316,7 @@ public partial class AndroidApp
         var githubBtn = new Avalonia.Controls.Button
         {
             Content = "GitHub: Flowseal/tg-ws-proxy",
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 8),

@@ -308,7 +308,7 @@ public partial class AndroidApp
         var label = new TextBlock
         {
             Text = app.Label,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -316,7 +316,7 @@ public partial class AndroidApp
         var pkgLine = new TextBlock
         {
             Text = app.PackageName,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -407,7 +407,7 @@ public partial class AndroidApp
         var nameTb = new TextBlock
         {
             Text = label,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -417,7 +417,7 @@ public partial class AndroidApp
         var countTb = new TextBlock
         {
             Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(4, 0, 0, 0),
@@ -458,7 +458,7 @@ public partial class AndroidApp
         _advAppsNewCategoryInput = new TextBox
         {
             Watermark = Localization.AdvAppsCategoryNamePlaceholder,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Padding = new Thickness(8, 6),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             BorderThickness = new Thickness(1),
@@ -469,7 +469,7 @@ public partial class AndroidApp
         _advAppsAddCategoryBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvAppsAddCategoryButton,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(12, 6),
@@ -515,7 +515,7 @@ public partial class AndroidApp
         _appPickerModeLabel = new TextBlock
         {
             Text = Localization.PerAppPickerModeLabel,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextMutedBrush"),
             Margin = new Thickness(8, 6, 8, 2),
@@ -543,7 +543,7 @@ public partial class AndroidApp
             Text = _appPickerMode == "exclude"
                 ? Localization.PerAppHintExclude
                 : Localization.PerAppHintInclude,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(8, 0, 8, 6),
@@ -552,7 +552,7 @@ public partial class AndroidApp
         _appPickerSearch = new TextBox
         {
             Watermark = Localization.PerAppSearchHint,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             Padding = new Thickness(10, 6),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             BorderThickness = new Thickness(1),
@@ -564,7 +564,7 @@ public partial class AndroidApp
         var systemToggleLabel = new TextBlock
         {
             Text = Localization.PerAppSystemAppsToggle,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             TextWrapping = TextWrapping.Wrap,
         };
         systemToggleLabel.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
@@ -582,7 +582,7 @@ public partial class AndroidApp
         _appPickerCount = new TextBlock
         {
             Text = string.Format(Localization.PerAppCount, 0),
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -591,7 +591,7 @@ public partial class AndroidApp
         _appPickerShowingCount = new TextBlock
         {
             Text = string.Format(Localization.PerAppShowingCount, 0),
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -628,7 +628,7 @@ public partial class AndroidApp
         _appPickerSaveBtn = new Avalonia.Controls.Button
         {
             Content = Localization.PerAppSaveButton,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
@@ -702,7 +702,7 @@ public partial class AndroidApp
         var nameTb = new TextBlock
         {
             Text = displayName,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -712,7 +712,7 @@ public partial class AndroidApp
         var countTb = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(4, 0, 0, 0),

@@ -50,7 +50,7 @@ public partial class AndroidApp
         _logViewerTitle = new TextBlock
         {
             Text = "singbox.log",
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -59,7 +59,7 @@ public partial class AndroidApp
         _logViewerCloseBtn = new Avalonia.Controls.Button
         {
             Content = "✕",
-            FontSize = 16,
+            FontSize = UiScale.Fs(16),
             Width = 36,
             Height = 36,
             Padding = new Thickness(0),
@@ -74,7 +74,7 @@ public partial class AndroidApp
         _logViewerRefreshBtn = new Avalonia.Controls.Button
         {
             Content = "⟳",
-            FontSize = 16,
+            FontSize = UiScale.Fs(16),
             Width = 36,
             Height = 36,
             Padding = new Thickness(0),
@@ -111,7 +111,7 @@ public partial class AndroidApp
         _logViewerContent = new TextBlock
         {
             FontFamily = new FontFamily("monospace"),
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             TextWrapping = TextWrapping.NoWrap,
             Padding = new Thickness(8),
         };
@@ -119,7 +119,7 @@ public partial class AndroidApp
 
         _logViewerEmptyState = new TextBlock
         {
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             Text = string.Empty,
             TextWrapping = TextWrapping.Wrap,
             HorizontalAlignment = HorizontalAlignment.Center,
