@@ -34,4 +34,4 @@ already running so `ZapretManager.WinwsPid` cannot change the outcome).
 
 ## Outcome
 
-Merged after green exact-head CI (`test` and `characterization-windows` both run the 1 new test methods). ProbeAndStartZapretAsync is now pinned and can be split in a later step; the ledger entry LONG-FUNCTIONS-REMAINING still lists it until that split.
+Merged after green exact-head CI (`test` and `characterization-windows` both run the new suite: 27 test methods, 23 `AvaloniaFact`, 3 `AvaloniaTheory` and 1 `Fact`, the theories with 9 data rows in total). ProbeAndStartZapretAsync is now pinned and can be split in a later step; the ledger entry LONG-FUNCTIONS-REMAINING still lists it until that split.
