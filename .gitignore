@@ -69,6 +69,8 @@ tools/*
 # Refactor equivalence harness (worker-run corpus check for behaviour-preserving changes).
 !tools/refactor-equivalence/
 !tools/refactor-equivalence/**
+# Windows installer builder (Inno Setup script: packaging/windows/vpnrouter.iss).
+!tools/build-installer.ps1
 # v2.32.2: methodology self-checker — runs 10 meta-tests.
 !tools/check-methodology.sh
 # v2.37.0-r19: CI gate verifier (pre-push hook). Re-add per contract rule #11.
