@@ -380,6 +380,9 @@ public partial class AndroidApp : Avalonia.Application
         var radiusSm = GetRadius("RadiusSm");
         var radiusMd = GetRadius("RadiusMd");
 
+        _formExpanded = string.IsNullOrWhiteSpace(AndroidStorage.GetSubscriptionUrl())
+                        && string.IsNullOrWhiteSpace(AndroidStorage.GetVlessUri());
+
         var headerRow = BuildSimpleHeaderRow();
 
         var statusCard = BuildSimpleStatusCard();
@@ -778,7 +781,7 @@ public partial class AndroidApp : Avalonia.Application
         _configRowLabel = new TextBlock
         {
             Text = Localization.SmpConfigRowLabel,
-            FontSize = 9,
+            FontSize = 11,
             FontWeight = FontWeight.SemiBold,
         };
         _configRowLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -786,9 +789,8 @@ public partial class AndroidApp : Avalonia.Application
         _configRowValue = new TextBlock
         {
             Text = Localization.SimpleConfigSummary,
-            FontSize = 11,
+            FontSize = 13,
             FontWeight = FontWeight.SemiBold,
-            FontFamily = new FontFamily("monospace"),
         };
         _configRowValue.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
