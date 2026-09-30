@@ -100,9 +100,9 @@ public sealed class SystemCleanup
         // The firewall goes first so DNS is reachable again before the DNS settings are restored.
         Step(actions, "firewall", () => CleanFirewall(dryRun, actions));
         Step(actions, "dns", () => CleanDns(dryRun, actions));
-        Step(actions, "driver", () => CleanService(SplitTunnelService, dryRun, actions, "split-tunnel driver", requireOwnDriverPath: true));
+        Step(actions, "driver", () => CleanService("driver", SplitTunnelService, dryRun, actions, "split-tunnel driver", requireOwnDriverPath: true));
         foreach (var name in ZapretServices)
-            Step(actions, "zapret", () => CleanService(name, dryRun, actions, "Zapret/WinDivert driver", requireOwnDriverPath: false));
+            Step(actions, "zapret", () => CleanService("zapret", name, dryRun, actions, "Zapret/WinDivert driver", requireOwnDriverPath: false));
         Step(actions, "autostart", () => CleanAutostart(dryRun, actions));
 
         return new CleanupReport(dryRun, actions);
@@ -181,12 +181,12 @@ public sealed class SystemCleanup
             : new CleanupAction("autostart", "current user's Run value", CleanupOutcome.Removed));
     }
 
-    private void CleanService(string name, bool dryRun, List<CleanupAction> actions, string what, bool requireOwnDriverPath)
+    private void CleanService(string area, string name, bool dryRun, List<CleanupAction> actions, string what, bool requireOwnDriverPath)
     {
         var query = RunSc("query", name);
         if (!ServiceExists(query))
         {
-            actions.Add(new CleanupAction("service", name, CleanupOutcome.NotPresent));
+            actions.Add(new CleanupAction(area, name, CleanupOutcome.NotPresent));
             return;
         }
 
@@ -195,25 +195,25 @@ public sealed class SystemCleanup
         var binPath = ParseBinaryPath(RunSc("qc", name).Stdout);
         if (!IsOwnBinaryPath(binPath, requireOwnDriverPath))
         {
-            actions.Add(new CleanupAction("service", name, CleanupOutcome.Skipped,
+            actions.Add(new CleanupAction(area, name, CleanupOutcome.Skipped,
                 string.IsNullOrEmpty(binPath) ? "cannot read its binary path, left alone" : $"{what} belongs to another program: {binPath}"));
             return;
         }
 
         if (dryRun)
         {
-            actions.Add(new CleanupAction("service", name, CleanupOutcome.WouldRemove, $"stop and delete the {what}"));
+            actions.Add(new CleanupAction(area, name, CleanupOutcome.WouldRemove, $"stop and delete the {what}"));
             return;
         }
 
         RunSc("stop", name);
         var delete = RunSc("delete", name);
         if (delete.ExitCode == 0)
-            actions.Add(new CleanupAction("service", name, CleanupOutcome.Removed));
+            actions.Add(new CleanupAction(area, name, CleanupOutcome.Removed));
         else if (delete.ExitCode == 1072)
-            actions.Add(new CleanupAction("service", name, CleanupOutcome.Removed, "marked for deletion, it disappears when nothing holds it open"));
+            actions.Add(new CleanupAction(area, name, CleanupOutcome.Removed, "marked for deletion, it disappears when nothing holds it open"));
         else
-            actions.Add(new CleanupAction("service", name, CleanupOutcome.Failed, $"sc delete exit {delete.ExitCode}"));
+            actions.Add(new CleanupAction(area, name, CleanupOutcome.Failed, $"sc delete exit {delete.ExitCode}"));
     }
 
     private ProcessResult RunSc(params string[] args) =>
