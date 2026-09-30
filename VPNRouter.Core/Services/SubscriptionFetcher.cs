@@ -133,6 +133,12 @@ public static class SubscriptionFetcher
                     decoded = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
                     logger?.Debug("[Subscription] Parsed JSON wrapper, config decoded ({Len} chars)", decoded.Length);
                 }
+                else if (SingBoxJsonSubscription.LooksLikeSingBoxConfig(doc.RootElement))
+                {
+                    var uris = SingBoxJsonSubscription.ParseOutboundsToUris(doc.RootElement, logger);
+                    logger?.Information("[Subscription] sing-box JSON detected — {N} proxy outbounds mapped to share URIs", uris.Count);
+                    decoded = string.Join('\n', uris);
+                }
                 else
                 {
                     logger?.Warning("[Subscription] JSON response has no 'config' field");
