@@ -109,8 +109,10 @@ public partial class AndroidApp
             Padding = new Thickness(0, 10),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            Background = successSolid,
-            Foreground = Brushes.White,
+            MinHeight = 48,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = GetBrush("AccentSolidBrush"),
+            Foreground = GetBrush("AccentOnSolidBrush"),
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(radiusSm),
         };

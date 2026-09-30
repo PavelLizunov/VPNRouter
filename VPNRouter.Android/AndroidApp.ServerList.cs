@@ -190,7 +190,7 @@ public partial class AndroidApp
         ToolTip.SetTip(_srvColPing, Localization.ColPingTooltip);
         var headerGrid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("14,*,Auto,24"),
+            ColumnDefinitions = new ColumnDefinitions("14,*,Auto,40"),
             ColumnSpacing = 8,
             Margin = new Thickness(8, 2, 8, 4),
         };
@@ -355,9 +355,11 @@ public partial class AndroidApp
             Content = Localization.AdvServersTestAll,
             FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(10, 4),
-            Background = GetBrush("SuccessSolidBrush"),
-            Foreground = Brushes.White,
+            Padding = new Thickness(12, 6),
+            MinHeight = 36,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = GetBrush("AccentBgMutedBrush"),
+            Foreground = GetBrush("AccentFgBrush"),
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
         };
@@ -369,9 +371,11 @@ public partial class AndroidApp
             Content = Localization.AdvServersDeepVerify,
             FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(10, 4),
-            Background = GetBrush("AccentSolidBrush"),
-            Foreground = GetBrush("AccentOnSolidBrush"),
+            Padding = new Thickness(12, 6),
+            MinHeight = 36,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = GetBrush("AccentBgMutedBrush"),
+            Foreground = GetBrush("AccentFgBrush"),
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
         };
@@ -862,8 +866,8 @@ public partial class AndroidApp
         {
             Content = "⟳",
             FontSize = UiScale.Fs(13),
-            Width = 24,
-            Height = 24,
+            Width = 40,
+            Height = 40,
             Padding = new Thickness(0),
             MinHeight = 0,
             HorizontalContentAlignment = HorizontalAlignment.Center,
@@ -879,7 +883,7 @@ public partial class AndroidApp
 
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("14,*,Auto,24"),
+            ColumnDefinitions = new ColumnDefinitions("14,*,Auto,40"),
             ColumnSpacing = 8,
             VerticalAlignment = VerticalAlignment.Center,
         };

@@ -16,6 +16,7 @@ target defined in the "Release and WINBRAT contract" section of `docs/agent-cont
 
 ## Tracked payloads and generated caches
 
+- `tools/icons/` holds the SVG masters of the app icon and the script that renders every icon (Android adaptive and legacy, Windows `.ico`, macOS `.icns`, in-app PNGs). Edit `tools/icons/src/*.svg`, run `python3 tools/icons/make-icons.py` (needs `rsvg-convert` and ImageMagick) and commit the generated files.
 - Generated source/build caches such as `tools/singbox-cache/` remain untracked. Do not commit or broadly clean generated caches without exact owner approval.
 
 ## Zone checks
