@@ -165,6 +165,10 @@ public class MainActivity : AvaloniaMainActivity
 
         base.OnCreate(savedInstanceState);
         Instance = this;
+#if VPNROUTER_TESTHOOK
+        global::Android.Util.Log.Warn("VpnRouterTest",
+            "TEST HOOK BUILD: an exported adb test receiver is present; never distribute this APK");
+#endif
         HandleTileIntent(Intent);
 
         _tunnelReceiver = new TunnelStateReceiver();
