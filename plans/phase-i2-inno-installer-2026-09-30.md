@@ -45,6 +45,9 @@ a folder, language, autostart or service choice. The owner chose Inno Setup and 
   installed user-locally into `C:\android-build\tools\innosetup`, the script compiled with ISCC, then a scratch install and
   uninstall into a temporary folder with `/NOSYSTEMCHANGES`, the real `VPNRouter.CLI.exe cleanup --dry-run` from the
   I3 build as the payload, services, Defender, autostart, Program Files and the real data folder untouched.
+- Known limit: the autostart task writes `HKCU\...\Run`, i.e. for the account that runs Setup elevated. On a normal PC that
+  is the signed-in user; if a standard user types another admin account's password at the UAC prompt it is that admin's
+  hive (ISCC warns about it, `UsedUserAreasWarning=no` acknowledges it). The in-app autostart switch fixes it per user.
 - Not verified: a real install into Program Files, the service task, the Defender task, upgrade over a live install,
   compatibility with an actual in-app update, SmartScreen behaviour on the unsigned `.exe` (I4 and I6 need a clean VM
   and the owner's explicit permission because they touch a real installation).

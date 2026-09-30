@@ -48,6 +48,9 @@ CloseApplications=no
 RestartApplications=no
 UsePreviousAppDir=yes
 UsePreviousTasks=yes
+; Autostart writes HKCU\...\Run, i.e. for the account that runs Setup elevated (the signed-in user on a normal PC; another admin
+; account's hive if a standard user types that account's password at the UAC prompt). Known limit, documented in the I2 brief.
+UsedUserAreasWarning=no
 #ifdef IconFile
 SetupIconFile={#IconFile}
 #endif
