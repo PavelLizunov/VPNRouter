@@ -399,6 +399,16 @@ public partial class AndroidApp : Avalonia.Application
 
         var autostartCard = BuildAutostartInlineCard(radiusSm);
 
+        var inputCard = new Border
+        {
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(radiusSm),
+            Padding = new Thickness(10),
+            Child = inputSection,
+        };
+        inputCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
+        inputCard.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
+
         _formCard = new Border
         {
             IsVisible = _formExpanded,
@@ -408,7 +418,7 @@ public partial class AndroidApp : Avalonia.Application
             Child = new StackPanel
             {
                 Spacing = 11,
-                Children = { inputSection, tunnelSection, autostartCard }
+                Children = { tunnelSection, autostartCard }
             }
         };
         _formCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
@@ -442,6 +452,7 @@ public partial class AndroidApp : Avalonia.Application
                 _ctaConnect,
                 _ctaConnecting,
                 _ctaDisconnect,
+                inputCard,
                 configRowButton,
                 _formCard,
                 advCardButton,
