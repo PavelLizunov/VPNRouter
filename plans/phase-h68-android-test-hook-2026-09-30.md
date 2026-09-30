@@ -27,9 +27,35 @@ Not in this step: an MCP server or any other channel; a hook in release builds; 
 ## Verification
 
 CI (`compile` job builds the Android project without the switch, `test` runs the guard tests). Then a hand build with
-`-p:VpnRouterTestHook=true` (android-x64) on the Windows worker and a check on the Linux worker's emulator; the result is
-recorded below.
+`-p:VpnRouterTestHook=true` (android-x64) on the Windows worker and a check on the Linux worker's emulator.
+
+Result, head 48c16aec (2026-09-30):
+
+- CI on the exact head: `compile`, `test` (the five guard tests), `grep`, `characterization-windows`, `go-test-windows` green.
+- Windows worker build of the head with `-p:VpnRouterTestHook=true`, android-x64, Release: load preflight freeRAM 13.3 GB,
+  cpu 6%, disk free 19.3 GB, no other job; 0 errors, 81 warnings (same count as before, none in the new files), 4 min.
+  versionName of the APK: `2.50.0-r10+testhook`.
+- Android 14 x86_64 emulator on the Linux worker (booted from the saved snapshot in 11 s):
+  - `TEST_DUMP_STATE` answers even before the UI exists (`uiReady:false`) and after start (`uiReady:true`); state
+    `disconnected`, mode `manual`, no config, `abis:[x86_64,arm64-v8a]`.
+  - `TEST_SET_CONFIG` with a share link -> `kind:share-link, mode:manual`; with an `http` URL -> `kind:subscription-url,
+    mode:subscribe`; with `{"outbounds":[]}` -> `kind:custom-json, mode:custom, valid:false`; with `notalink` ->
+    `ok:false, error:unsupported-value`.
+  - Leak check: a random uuid, the host of a fake link, and a fake subscription token were sent; none of them appears in the
+    `VpnRouterTest` log or in any reply (0 hits each).
+  - `TEST_CONNECT` (one call) shows the system VPN consent dialog; after OK the dump reads `consentGranted:true` and
+    `state:error, reason:"UnsatisfiedLinkError: dlopen failed: library \"libbox.so\" not found"` (libbox is arm64-only, so
+    the x86_64 build cannot start the tunnel; this also exercises H-67). A second `TEST_CONNECT` with consent granted ends in
+    `state:error, reason:"NoClassDefFoundError: io.nekohasekai.libbox.SetupOptions"`; the process stayed alive and the
+    crash buffer has no entry.
+  - `TEST_DISCONNECT` and `TEST_RESET` return `ok:true`; the dump afterwards shows `hasShareLink:false`, state `disconnected`.
+  - Negative check: the H-67 build (no hook) installed on the same emulator has 0 `TestHookReceiver` entries in its package
+    dump, the same broadcast gets no answer and no `VpnRouterTest` log line appears.
+- Observation, not investigated: two `TEST_CONNECT` calls a few seconds apart while the consent dialog was still open left
+  the state `disconnected` after OK (a single call works). It may be the same behaviour a double tap on Connect has;
+  `RequestConnect` was not changed here.
+- Not verified: the successful tunnel path (needs an arm64 device), an arm64 hook build, and the hook on Android older than 14.
 
 ## Outcome
 
-Merged after green exact-head CI. See the emulator result below.
+Merged after green exact-head CI. The hook exists only in hand-built APKs; nothing in the release path changed.
