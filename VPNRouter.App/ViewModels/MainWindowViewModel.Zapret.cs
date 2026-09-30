@@ -963,6 +963,14 @@ public partial class MainWindowViewModel
     }
 #if PLATFORM_WINDOWS
 
+    internal static Func<
+        string,
+        IProgress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>?,
+        Serilog.ILogger?,
+        CancellationToken,
+        Task<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealSweepResult>> FlowsealProbe { get; set; } =
+            VPNRouter.Core.Services.ZapretAutoStrategy.RunFlowsealProbeAsync;
+
     private async Task ProbeAndStartZapretAsync()
     {
         if (_zapret == null)
@@ -1055,7 +1063,7 @@ public partial class MainWindowViewModel
             ZapretAutoStrategy.FlowsealSweepResult sweep;
             try
             {
-                sweep = await VPNRouter.Core.Services.ZapretAutoStrategy.RunFlowsealProbeAsync(
+                sweep = await FlowsealProbe(
                     zapretDir, flowsealProgress, _logger, _zapretProbeCts.Token);
             }
             finally
