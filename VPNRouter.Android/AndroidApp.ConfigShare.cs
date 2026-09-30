@@ -113,8 +113,8 @@ public partial class AndroidApp
         {
             Content = "✕",
             FontSize = UiScale.Fs(16),
-            Width = 36,
-            Height = 36,
+            Width = 44,
+            Height = 44,
             Padding = new Thickness(0),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
@@ -290,8 +290,8 @@ public partial class AndroidApp
         {
             Content = "✕",
             FontSize = UiScale.Fs(16),
-            Width = 36,
-            Height = 36,
+            Width = 44,
+            Height = 44,
             Padding = new Thickness(0),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
