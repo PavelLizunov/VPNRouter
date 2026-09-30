@@ -34,4 +34,4 @@ already running so `ZapretManager.WinwsPid` cannot change the outcome).
 
 ## Outcome
 
-Filled in after the first green run.
+Merged after green exact-head CI (`test` and `characterization-windows` both run the 1 new test methods). ProbeAndStartZapretAsync is now pinned and can be split in a later step; the ledger entry LONG-FUNCTIONS-REMAINING still lists it until that split.
