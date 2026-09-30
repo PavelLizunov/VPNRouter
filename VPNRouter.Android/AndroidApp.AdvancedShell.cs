@@ -140,7 +140,7 @@ public partial class AndroidApp
         _advBrandTitle = new TextBlock
         {
             Text = Localization.BrandTitle,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.Bold,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -172,7 +172,7 @@ public partial class AndroidApp
             Content = Localization.AdvSimpleToggle,
             Padding = new Thickness(8, 4),
             MinHeight = 0,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
@@ -186,7 +186,7 @@ public partial class AndroidApp
         _advKebabMenuBtn = new Avalonia.Controls.Button
         {
             Content = "⋮",
-            FontSize = 22,
+            FontSize = UiScale.Fs(22),
             FontWeight = FontWeight.Bold,
             Width = 32,
             Height = 32,
@@ -240,7 +240,7 @@ public partial class AndroidApp
         _advFooterStatusText = new TextBlock
         {
             Text = Localization.SimpleStatusTitleOff,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -257,7 +257,7 @@ public partial class AndroidApp
         _advFooterConnectBtn = new Avalonia.Controls.Button
         {
             Content = Localization.StartVPN,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(14, 5),
             MinHeight = 0,
@@ -418,7 +418,7 @@ public partial class AndroidApp
         var btn = new Avalonia.Controls.Button
         {
             Content = label,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(0, 8),
             MinHeight = 44,
@@ -459,7 +459,7 @@ public partial class AndroidApp
         var btn = new Avalonia.Controls.Button
         {
             Content = label,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),

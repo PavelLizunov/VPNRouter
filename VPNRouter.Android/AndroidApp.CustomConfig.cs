@@ -68,14 +68,14 @@ public partial class AndroidApp
                 var name = new TextBlock
                 {
                     Text = string.IsNullOrEmpty(item?.Name) ? (item?.Server ?? "?") : item.Name,
-                    FontSize = 12,
+                    FontSize = UiScale.Fs(12),
                     FontWeight = FontWeight.Medium,
                 };
                 name.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
                 var sub = new TextBlock
                 {
                     Text = $"{item?.Server}:{item?.Port}  ·  {item?.Protocol ?? "vless"}",
-                    FontSize = 10,
+                    FontSize = UiScale.Fs(10),
                 };
                 sub.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
                 return new StackPanel
@@ -109,7 +109,7 @@ public partial class AndroidApp
         _autostartCardTitleText = new TextBlock
         {
             Text = Localization.SmpAutostartCardTitle,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
         };
         _autostartCardTitleText.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
@@ -117,7 +117,7 @@ public partial class AndroidApp
         _autostartCardSubText = new TextBlock
         {
             Text = Localization.SmpAutostartCardSubtitle,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             TextWrapping = TextWrapping.Wrap,
         };
         _autostartCardSubText.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -125,7 +125,7 @@ public partial class AndroidApp
         var chevron = new TextBlock
         {
             Text = "›",
-            FontSize = 14,
+            FontSize = UiScale.Fs(14),
             FontWeight = FontWeight.Bold,
             VerticalAlignment = VerticalAlignment.Center,
         };

@@ -62,7 +62,7 @@ public partial class AndroidApp
         _subsSectionLabel = new TextBlock
         {
             Text = Localization.SubscriptionsSection,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.Bold,
             Foreground = GetBrush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
@@ -70,7 +70,7 @@ public partial class AndroidApp
         _subsRefreshAllStatus = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
@@ -98,7 +98,7 @@ public partial class AndroidApp
         _subsEmptyHint = new TextBlock
         {
             Text = Localization.LblAddSubscriptionHint,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -122,7 +122,7 @@ public partial class AndroidApp
         _subsNewName = new TextBox
         {
             Watermark = Localization.AdvSubscribeNameLabel,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(6, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             Background = GetBrush("SurfaceSunkenBrush"),
@@ -132,7 +132,7 @@ public partial class AndroidApp
         _subsNewUrl = new TextBox
         {
             Watermark = Localization.AdvSubscribeUrlLabel,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontFamily = new FontFamily("monospace"),
             Padding = new Thickness(6, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
@@ -143,7 +143,7 @@ public partial class AndroidApp
         _subsAddBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AddSubscription,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(12, 5),
             Background = GetBrush("AccentSolidBrush"),
@@ -156,7 +156,7 @@ public partial class AndroidApp
         var subsQrBtn = new Avalonia.Controls.Button
         {
             Content = "📷",
-            FontSize = 14,
+            FontSize = UiScale.Fs(14),
             Padding = new Thickness(0),
             Width = 40,
             Background = GetBrush("AccentBgSubtleBrush"),
@@ -195,7 +195,7 @@ public partial class AndroidApp
         {
             IsChecked = AndroidStorage.GetAutoSelectBestServer(),
             Content = Localization.AutoSelectBestServer,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -236,7 +236,7 @@ public partial class AndroidApp
         _subsAggColServer = new TextBlock
         {
             Text = Localization.ColServer,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center,
@@ -244,7 +244,7 @@ public partial class AndroidApp
         _subsAggColPing = new TextBlock
         {
             Text = Localization.ColPing,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center,
@@ -272,7 +272,7 @@ public partial class AndroidApp
         _subsAggEmptyHint = new TextBlock
         {
             Text = Localization.AdvSubscribeAggregatedEmpty,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -312,7 +312,7 @@ public partial class AndroidApp
         _subsAggTestAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersTestAll,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 4),
             Background = GetBrush("SuccessSolidBrush"),
@@ -326,7 +326,7 @@ public partial class AndroidApp
         _subsAggDeepVerifyBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersDeepVerify,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 4),
             Background = GetBrush("AccentSolidBrush"),
@@ -340,7 +340,7 @@ public partial class AndroidApp
         _subsAggStatusText = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -349,7 +349,7 @@ public partial class AndroidApp
         _subsRefreshAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvSubscribeRefreshAll,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(8, 3),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = GetBrush("SurfaceRaisedBrush"),
@@ -601,7 +601,7 @@ public partial class AndroidApp
         var nameText = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(sub.Name) ? "(no name)" : sub.Name,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             FontFamily = new FontFamily("monospace"),
             Foreground = GetBrush("TextPrimaryBrush"),
@@ -610,7 +610,7 @@ public partial class AndroidApp
         var metadataText = new TextBlock
         {
             Text = FormatSubMetadata(sub),
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontFamily = new FontFamily("monospace"),
             Foreground = GetBrush("TextMutedBrush"),
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -633,7 +633,7 @@ public partial class AndroidApp
                 infoPanel.Children.Add(new TextBlock
                 {
                     Text = summary,
-                    FontSize = 9,
+                    FontSize = UiScale.Fs(9),
                     FontWeight = FontWeight.SemiBold,
                     FontFamily = new FontFamily("monospace"),
                     Foreground = GetBrush("AccentFgBrush"),
@@ -701,14 +701,14 @@ public partial class AndroidApp
             var nameBox = new TextBox
             {
                 Text = sub.Name,
-                FontSize = 11,
+                FontSize = UiScale.Fs(11),
                 Padding = new Thickness(8, 6),
                 CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             };
             var urlBox = new TextBox
             {
                 Text = sub.Url,
-                FontSize = 11,
+                FontSize = UiScale.Fs(11),
                 FontFamily = new FontFamily("monospace"),
                 Padding = new Thickness(8, 6),
                 CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
@@ -786,7 +786,7 @@ public partial class AndroidApp
         var btn = new Avalonia.Controls.Button
         {
             Content = glyph,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Padding = new Thickness(2),
             MinWidth = 0,
             MinHeight = 0,

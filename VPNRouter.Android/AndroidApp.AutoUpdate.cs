@@ -49,7 +49,7 @@ public partial class AndroidApp
         _updateBannerTitle = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.SemiBold,
             TextWrapping = TextWrapping.Wrap,
         };
@@ -58,7 +58,7 @@ public partial class AndroidApp
         _updateBannerSubtitle = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 4, 0, 0),
         };
@@ -67,7 +67,7 @@ public partial class AndroidApp
         _updateBannerAction = new Avalonia.Controls.Button
         {
             Content = Localization.UpdateButtonDownload,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(14, 6),
             CornerRadius = new CornerRadius(radiusMd),
@@ -80,7 +80,7 @@ public partial class AndroidApp
         _updateBannerDismiss = new Avalonia.Controls.Button
         {
             Content = Localization.UpdateButtonDismiss,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             Padding = new Thickness(10, 6),
             CornerRadius = new CornerRadius(radiusMd),
             Background = Avalonia.Media.Brushes.Transparent,
