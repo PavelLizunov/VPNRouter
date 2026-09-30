@@ -61,7 +61,7 @@ public partial class AndroidApp
         {
             Columns = visibleTabs.Count,
             Rows = 1,
-            Margin = new Thickness(6, 6, 6, 6),
+            Margin = new Thickness(6, 4, 6, 4),
         };
         foreach (var tab in visibleTabs)
         {
@@ -69,18 +69,12 @@ public partial class AndroidApp
             _advShellTabButtons[tab] = btn;
             tabPanel.Children.Add(btn);
         }
-        var tabScroll = new ScrollViewer
-        {
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-            Content = tabPanel,
-        };
         var tabStripBorder = new Border
         {
-            Background = Brushes.Transparent,
+            Background = GetBrush("SurfaceBaseBrush"),
             BorderBrush = defaultB,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = tabScroll,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Child = tabPanel,
         };
 
         _advShellContentHost = new Grid
@@ -93,7 +87,7 @@ public partial class AndroidApp
 
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(headerBorder, Dock.Top);
-        DockPanel.SetDock(tabStripBorder, Dock.Top);
+        DockPanel.SetDock(tabStripBorder, Dock.Bottom);
         DockPanel.SetDock(footerBorder, Dock.Bottom);
         dock.Children.Add(headerBorder);
         dock.Children.Add(tabStripBorder);
@@ -404,30 +398,65 @@ public partial class AndroidApp
 
     private Control BuildSettingsTabContent() => BuildNetworkTabContent();
 
+    private sealed class AdvTabVisual
+    {
+        public AdvTabVisual(Avalonia.Controls.Shapes.Path icon, TextBlock label) { Icon = icon; Label = label; }
+        public Avalonia.Controls.Shapes.Path Icon { get; }
+        public TextBlock Label { get; }
+    }
+
+    // 24 x 24 stroke icons of the bottom navigation bar, drawn for this app (no third-party icon set)
+    private static string AdvancedTabIconData(AdvancedTab tab) => tab switch
+    {
+        AdvancedTab.Servers => "M5,4 h14 a2,2 0 0 1 2,2 v2 a2,2 0 0 1 -2,2 h-14 a2,2 0 0 1 -2,-2 v-2 a2,2 0 0 1 2,-2 z M5,14 h14 a2,2 0 0 1 2,2 v2 a2,2 0 0 1 -2,2 h-14 a2,2 0 0 1 -2,-2 v-2 a2,2 0 0 1 2,-2 z M7,7 h0.01 M7,17 h0.01",
+        AdvancedTab.Subscribe => "M4,11 a9,9 0 0 1 9,9 M4,4 a16,16 0 0 1 16,16 M5,19 h0.01",
+        AdvancedTab.Settings => "M4,6 H7 M11,6 H20 M4,12 H13 M17,12 H20 M4,18 H6 M10,18 H20 M11,6 a2,2 0 1 0 -4,0 a2,2 0 1 0 4,0 M17,12 a2,2 0 1 0 -4,0 a2,2 0 1 0 4,0 M10,18 a2,2 0 1 0 -4,0 a2,2 0 1 0 4,0",
+        AdvancedTab.Applications => "M4,4 h6 v6 h-6 z M14,4 h6 v6 h-6 z M4,14 h6 v6 h-6 z M14,14 h6 v6 h-6 z",
+        AdvancedTab.Public => "M12,3 a9,9 0 1 0 0,18 a9,9 0 1 0 0,-18 M3,12 h18 M12,3 c3,3 3,15 0,18 c-3,-3 -3,-15 0,-18",
+        _ => "M12,3 a9,9 0 1 0 0,18 a9,9 0 1 0 0,-18",
+    };
+
     private Avalonia.Controls.Button MakeAdvShellTabButton(AdvancedTab tab)
     {
+        var icon = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse(AdvancedTabIconData(tab)),
+            StrokeThickness = 1.8,
+            StrokeLineCap = PenLineCap.Round,
+            StrokeJoin = PenLineJoin.Round,
+            Stretch = Stretch.Uniform,
+            Width = 24,
+            Height = 24,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
         var label = new TextBlock
         {
             Text = AdvancedTabLabel(tab),
+            FontSize = UiScale.Fs(9),
+            FontWeight = FontWeight.SemiBold,
             TextAlignment = TextAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Center,
         };
         var btn = new Avalonia.Controls.Button
         {
-            Content = label,
-            FontSize = UiScale.Fs(10),
-            FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(0, 8),
-            MinHeight = 44,
-            MinWidth = 62,
-            Margin = new Thickness(1, 0),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-            BorderThickness = new Thickness(1),
+            Content = new StackPanel
+            {
+                Spacing = 2,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children = { icon, label },
+            },
+            Tag = new AdvTabVisual(icon, label),
+            Padding = new Thickness(2, 6),
+            MinHeight = 56,
+            MinWidth = 56,
+            Margin = new Thickness(2, 0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusLg")),
+            BorderThickness = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
         };
         btn.Click += (_, _) => SelectAdvancedTab(tab);
@@ -437,17 +466,13 @@ public partial class AndroidApp
 
     private void StyleAdvShellTab(Avalonia.Controls.Button btn, bool active)
     {
-        if (active)
+        var fg = GetBrush(active ? "AccentFgBrush" : "TextSecondaryBrush");
+        btn.Background = active ? GetBrush("AccentBgMutedBrush") : Brushes.Transparent;
+        btn.Foreground = fg;
+        if (btn.Tag is AdvTabVisual visual)
         {
-            btn.Background = GetBrush("AccentBgSubtleBrush");
-            btn.Foreground = GetBrush("AccentFgBrush");
-            btn.BorderBrush = GetBrush("BorderAccentBrush");
-        }
-        else
-        {
-            btn.Background = GetBrush("SurfaceSunkenBrush");
-            btn.Foreground = GetBrush("TextSecondaryBrush");
-            btn.BorderBrush = GetBrush("BorderSubtleBrush");
+            visual.Icon.Stroke = fg;
+            visual.Label.Foreground = fg;
         }
     }
 
@@ -492,10 +517,8 @@ public partial class AndroidApp
             _advSimpleToggleBtn.Content = Localization.AdvSimpleToggle;
         foreach (var kv in _advShellTabButtons)
         {
-            if (kv.Value.Content is TextBlock tb)
-                tb.Text = AdvancedTabLabel(kv.Key);
-            else
-                kv.Value.Content = AdvancedTabLabel(kv.Key);
+            if (kv.Value.Tag is AdvTabVisual visual)
+                visual.Label.Text = AdvancedTabLabel(kv.Key);
         }
         ApplyAdvancedFooterConnectionState(MainActivity.IntendedConnected);
 
