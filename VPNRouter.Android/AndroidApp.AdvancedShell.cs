@@ -504,7 +504,7 @@ public partial class AndroidApp
             for (int i = 0; i < _settingsSubSectionButtons.Length; i++)
             {
                 var btn = _settingsSubSectionButtons[i];
-                if (btn is not null) btn.Content = SettingsSubSectionLabel(i);
+                if (btn is not null) btn.Content = MakeSettingsSubSectionLabel(SettingsSubSectionLabel(i));
             }
         }
         if (_settingsApplyButton is not null)

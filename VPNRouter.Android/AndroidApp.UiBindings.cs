@@ -70,7 +70,7 @@ public partial class AndroidApp
     {
         var btn = new Avalonia.Controls.Button
         {
-            Content = SettingsSubSectionLabel(index),
+            Content = MakeSettingsSubSectionLabel(SettingsSubSectionLabel(index)),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 7),
@@ -83,6 +83,9 @@ public partial class AndroidApp
         StyleSettingsSubSectionButton(btn, index == _settingsSelectedSubSection);
         return btn;
     }
+
+    private static TextBlock MakeSettingsSubSectionLabel(string text) =>
+        new() { Text = text, TextWrapping = TextWrapping.Wrap };
 
     private static string SettingsSubSectionLabel(int index) => index switch
     {
@@ -740,6 +743,7 @@ public partial class AndroidApp
             FontWeight = FontWeight.SemiBold,
             FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextPrimaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
         };
         var subText = new TextBlock
         {
