@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- status-bar icon of the VPN notification: single-colour penguin silhouette, tinted by the system (generated from tools/icons/src/mark-mono.svg) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        android:width="24dp"
+        android:height="24dp"
+        android:viewportWidth="512"
+        android:viewportHeight="512">
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M256,62C168,62 116,134 116,228C116,330 150,410 256,448C362,410 396,330 396,228C396,134 344,62 256,62z M124,268C86,292 82,356 112,392C128,362 146,322 140,282z M388,268C426,292 430,356 400,392C384,362 366,322 372,282z M176,336a80,92 0 1,0 160,0a80,92 0 1,0 -160,0z M176,210a80,62 0 1,0 160,0a80,62 0 1,0 -160,0z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M172,452a40,18 0 1,0 80,0a40,18 0 1,0 -80,0z M260,452a40,18 0 1,0 80,0a40,18 0 1,0 -80,0z M204,204a16,16 0 1,0 32,0a16,16 0 1,0 -32,0z M276,204a16,16 0 1,0 32,0a16,16 0 1,0 -32,0z M232,236Q256,224 280,236Q256,266 232,236z M120,178h0a26,26 0 0,1 26,26v50a26,26 0 0,1 -26,26h0a26,26 0 0,1 -26,-26v-50a26,26 0 0,1 26,-26z M392,178h0a26,26 0 0,1 26,26v50a26,26 0 0,1 -26,26h0a26,26 0 0,1 -26,-26v-50a26,26 0 0,1 26,-26z"/>
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="30" android:strokeLineCap="round" android:pathData="M132,214C132,92 380,92 380,214"/>
+</vector>
