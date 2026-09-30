@@ -17,8 +17,9 @@ system text size did, while the system clock did).
   connecting, cancelled when the state changes or the control leaves the visual tree.
 - `AndroidApp.axaml.cs`: the three connect buttons are 52 dp tall, 16 dp bold, rounded 14; Connect is the filled accent
   button, Connecting a quiet disabled state, Disconnect an outlined button. They now sit directly under the hero, above the
-  config summary row. The form with the config field, routing and autostart is collapsed when a subscription or link is
-  already saved (expanded on first run). The health and error lines under the hero are centred and 12 dp.
+  config summary row. The routing options and autostart are collapsed when a subscription or link is already saved
+  (expanded on first run). The config field and the QR scan button stay visible on the main screen: a first version of
+  this step collapsed them too, the owner could not find where to paste or scan a config, and they were brought back. The health and error lines under the hero are centred and 12 dp.
 - `UiScale` (Android) and `UiTypeScale` (Core, unit-tested): the shared type scale, `source size + 2` times the system font
   scale (clamped to 1.0 to 1.4), read once when the UI is built. Only the new sites use it in this step; U2 applies it to
   the rest of the UI.
