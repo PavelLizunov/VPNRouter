@@ -29,8 +29,18 @@ Output artifact: `bin\Release\net10.0-android36.0\com.ninitux.vpnrouter-Signed.a
 
 ## Layout & Mapped Directories
 
-- `VPNRouter.Android/`: Project root. `MainActivity.cs` and `MainApplication.cs` own Android lifecycle bootstrap; `AndroidStorage.cs` and `AndroidUpdater.cs` own persisted state and update flow. `AndroidApp.axaml.cs` plus sibling partials (`AdvancedShell`, `AutoUpdate`, `ConfigShare`, `CustomConfig`, `DpiBypass`, `FreeConfigs`, `KebabMenu`, `Notifications`, `PerAppFilter`, `Permissions`, `Profiles`, `QrScanApply`, `ServerList`, `SettingsHandlers`, `SubscribePage`, `TileMenu`, `Tools`, `UiBindings`, `VpnLifecycle`) own Avalonia UI/runtime orchestration.
+- `VPNRouter.Android/`: Project root. `MainActivity.cs` and `MainApplication.cs` own Android lifecycle bootstrap; `AndroidStorage.cs` and `AndroidUpdater.cs` own persisted state and update flow. `AndroidApp.axaml.cs` plus sibling partials (`AdvancedShell`, `AutoUpdate`, `ConfigShare`, `CustomConfig`, `DpiBypass`, `FreeConfigs`, `KebabMenu`, `Notifications`, `PerAppFilter`, `Permissions`, `Profiles`, `QrScanApply`, `ServerList`, `SettingsHandlers`, `SubscribePage`, `TestHook`, `TileMenu`, `Tools`, `UiBindings`, `VpnLifecycle`) own Avalonia UI/runtime orchestration.
 - `VpnTileService.cs` and `VpnRouterService.java`: the quick-settings tile reads the single connection-state record (`vpn_state`, `vpn_state_reason`, `vpn_state_pid`, `vpn_state_at_ms` in the `vpnrouter_settings` preferences) that `VpnRouterService` writes on every transition; the rules for staleness, tap actions and tile texts live in `VPNRouter.Core/Services/VpnTileLogic.cs` and are unit-tested there. The tile is registered by attributes on its class, not in `AndroidManifest.xml`.
+- `TestHookReceiver.cs` and `AndroidApp.TestHook.cs`: an exported adb test receiver, compiled ONLY into builds made with `-p:VpnRouterTestHook=true` (define `VPNROUTER_TESTHOOK`, versionName gets `+testhook`). Release and CI builds never set it; `AndroidTestHookGuardTests` enforces that. Never distribute such an APK.
+  Usage (start the app first; UI actions need it in the foreground process; the answer is one JSON line in the broadcast result and in `adb logcat -s VpnRouterTest`; URLs, uuids and tokens are never printed):
+  ```
+  H="-n com.ninitux.vpnrouter/com.ninitux.vpnrouter.TestHookReceiver"
+  adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_DUMP_STATE
+  adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_SET_CONFIG --es value "<share link | http(s) subscription URL | custom JSON>"
+  adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_CONNECT      # same handler as the Connect button; consent stays the system dialog
+  adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_DISCONNECT
+  adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_RESET        # clears saved config, servers, subscriptions and the state record
+  ```
 - `VPNRouter.Android/Controls/`: Custom Avalonia controls for Android UI (`StatusCard.cs`).
 - `VPNRouter.Android/Json/`: STJ JSON contexts (`AndroidJsonContext.cs`).
 - `VPNRouter.Android/Lib/`: Local AAR and JAR libraries (`libbox.aar`, `zxing-android-embedded-4.3.0.aar`, `zxing-core-3.5.3.jar`).
