@@ -37,7 +37,7 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Padding = new Thickness(10, 7),
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
@@ -59,7 +59,7 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 6),
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
@@ -91,7 +91,7 @@ public partial class AndroidApp
         var header = new TextBlock
         {
             Text = headerText,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(8, 6, 8, 4),
         };
@@ -119,7 +119,7 @@ public partial class AndroidApp
         var header = new TextBlock
         {
             Text = headerText,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(8, 6, 8, 4),
         };

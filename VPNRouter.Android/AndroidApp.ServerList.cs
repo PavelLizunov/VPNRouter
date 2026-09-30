@@ -93,7 +93,7 @@ public partial class AndroidApp
         _srvSubTabServersBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersSubTabServers,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -104,7 +104,7 @@ public partial class AndroidApp
         _srvSubTabCustomJsonBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersSubTabCustomJson,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -127,7 +127,7 @@ public partial class AndroidApp
         _srvTitle = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
@@ -138,7 +138,7 @@ public partial class AndroidApp
         _srvSortToggle = new Avalonia.Controls.Button
         {
             Content = Localization.SrvSortByOriginal,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(8, 5),
             Background = GetBrush("SurfaceSunkenBrush"),
             BorderBrush = GetBrush("BorderSubtleBrush"),
@@ -152,7 +152,7 @@ public partial class AndroidApp
         _srvStatusText = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.NoWrap,
@@ -173,7 +173,7 @@ public partial class AndroidApp
         _srvColServer = new TextBlock
         {
             Text = Localization.ColServer,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center,
@@ -181,7 +181,7 @@ public partial class AndroidApp
         _srvColPing = new TextBlock
         {
             Text = Localization.ColPing,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center,
@@ -212,7 +212,7 @@ public partial class AndroidApp
         _srvEmptyHint = new TextBlock
         {
             Text = Localization.SrvEmptyHint,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -259,10 +259,10 @@ public partial class AndroidApp
         _srvCustomJsonExplainer = new TextBlock
         {
             Text = Localization.AdvServersCustomJsonExplainer,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextSecondaryBrush"),
             TextWrapping = TextWrapping.Wrap,
-            LineHeight = 16,
+            LineHeight = UiScale.Lh(16),
             Margin = new Thickness(0, 0, 0, 8),
         };
 
@@ -270,7 +270,7 @@ public partial class AndroidApp
         {
             Watermark = Localization.CcCustomWatermark,
             FontFamily = new FontFamily("monospace"),
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             AcceptsReturn = true,
             AcceptsTab = true,
             TextWrapping = TextWrapping.NoWrap,
@@ -285,7 +285,7 @@ public partial class AndroidApp
         _srvCustomJsonValidateBtn = new Avalonia.Controls.Button
         {
             Content = Localization.CcValidateButton,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Padding = new Thickness(12, 6),
             Background = GetBrush("SurfaceRaisedBrush"),
             BorderBrush = GetBrush("BorderDefaultBrush"),
@@ -298,7 +298,7 @@ public partial class AndroidApp
         _srvCustomJsonSaveBtn = new Avalonia.Controls.Button
         {
             Content = Localization.CcSaveButton,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(14, 6),
             Background = GetBrush("AccentSolidBrush"),
@@ -311,7 +311,7 @@ public partial class AndroidApp
         _srvCustomJsonClearBtn = new Avalonia.Controls.Button
         {
             Content = Localization.CcClearButton,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Padding = new Thickness(12, 6),
             Background = GetBrush("SurfaceRaisedBrush"),
             BorderBrush = GetBrush("BorderDefaultBrush"),
@@ -332,7 +332,7 @@ public partial class AndroidApp
         _srvCustomJsonStatus = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 8, 0, 0),
@@ -353,7 +353,7 @@ public partial class AndroidApp
         _srvTestAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersTestAll,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 4),
             Background = GetBrush("SuccessSolidBrush"),
@@ -367,7 +367,7 @@ public partial class AndroidApp
         _srvDeepVerifyBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersDeepVerify,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 4),
             Background = GetBrush("AccentSolidBrush"),
@@ -382,7 +382,7 @@ public partial class AndroidApp
         {
             Watermark = Localization.WmVlessUri,
             FontFamily = new FontFamily("monospace"),
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(6, 4),
             AcceptsReturn = false,
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
@@ -394,7 +394,7 @@ public partial class AndroidApp
         _srvRemoveBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersRemove,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Padding = new Thickness(14, 5),
             Background = GetBrush("SurfaceRaisedBrush"),
             BorderBrush = GetBrush("BorderDefaultBrush"),
@@ -409,7 +409,7 @@ public partial class AndroidApp
         _srvAddBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersAddServers,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(14, 5),
             Background = GetBrush("AccentSolidBrush"),
@@ -797,7 +797,7 @@ public partial class AndroidApp
         var nameText = new TextBlock
         {
             Text = displayName,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = isActive ? FontWeight.Bold : FontWeight.SemiBold,
             Foreground = isActive ? GetBrush("AccentFgBrush") : GetBrush("TextPrimaryBrush"),
             FontFamily = new FontFamily("monospace"),
@@ -811,7 +811,7 @@ public partial class AndroidApp
         var hostText = new TextBlock
         {
             Text = string.Join(" · ", metaParts),
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             Foreground = GetBrush("TextMutedBrush"),
             FontFamily = new FontFamily("monospace"),
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -837,7 +837,7 @@ public partial class AndroidApp
         var pingTextInside = new TextBlock
         {
             Text = pingDisplay,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.Bold,
             FontFamily = new FontFamily("monospace"),
             Foreground = pingHasData ? Brushes.White : GetBrush("TextMutedBrush"),
@@ -861,7 +861,7 @@ public partial class AndroidApp
         var testBtn = new Avalonia.Controls.Button
         {
             Content = "⟳",
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             Width = 24,
             Height = 24,
             Padding = new Thickness(0),

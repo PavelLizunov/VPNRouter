@@ -70,8 +70,8 @@ public partial class AndroidApp
     {
         var btn = new Avalonia.Controls.Button
         {
-            Content = SettingsSubSectionLabel(index),
-            FontSize = 11,
+            Content = MakeSettingsSubSectionLabel(SettingsSubSectionLabel(index)),
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 7),
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -83,6 +83,9 @@ public partial class AndroidApp
         StyleSettingsSubSectionButton(btn, index == _settingsSelectedSubSection);
         return btn;
     }
+
+    private static TextBlock MakeSettingsSubSectionLabel(string text) =>
+        new() { Text = text, TextWrapping = TextWrapping.Wrap };
 
     private static string SettingsSubSectionLabel(int index) => index switch
     {
@@ -178,14 +181,14 @@ public partial class AndroidApp
         var checkGlyph = new TextBlock
         {
             Text = "✓",
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = GetBrush("SuccessSolidBrush"),
         };
         var badgeText = new TextBlock
         {
             Text = Localization.SettingsAutosaved,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = GetBrush("SuccessFgBrush"),
@@ -206,7 +209,7 @@ public partial class AndroidApp
         _settingsApplyButton = new Avalonia.Controls.Button
         {
             Content = Localization.ApplyNowReloadVpn,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 5),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -244,7 +247,7 @@ public partial class AndroidApp
         var description = new TextBlock
         {
             Text = Localization.RoutingDescription,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextSecondaryBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
@@ -304,7 +307,7 @@ public partial class AndroidApp
         var note = new TextBlock
         {
             Text = Localization.AdvSettingsRulesAndroidNote,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextSecondaryBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
@@ -334,14 +337,14 @@ public partial class AndroidApp
         var blockHint = new TextBlock
         {
             Text = Localization.BlockOnVpnFailHint,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
         var lockdownBtn = new Avalonia.Controls.Button
         {
             Content = Localization.ReliabilityAlwaysOnButton,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(10, 5),
             MinHeight = 0,
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -366,7 +369,7 @@ public partial class AndroidApp
         _settingsDnsStrategy = new Avalonia.Controls.ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             ItemsSource = new[]
             {
                 Localization.DnsStrategyIpv4Only,
@@ -386,14 +389,14 @@ public partial class AndroidApp
         {
             Text = Localization.DnsStrategyHeader,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Opacity = 0.8,
             TextWrapping = TextWrapping.Wrap,
         };
         var dnsHint = new TextBlock
         {
             Text = Localization.DnsStrategyHint,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
@@ -453,7 +456,7 @@ public partial class AndroidApp
         {
             Text = Localization.UpdateChannelHeader,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Opacity = 0.8,
             TextWrapping = TextWrapping.Wrap,
         };
@@ -467,7 +470,7 @@ public partial class AndroidApp
             {
                 Text = Localization.ReceivePrereleasesLabel,
                 TextWrapping = TextWrapping.Wrap,
-                FontSize = 11,
+                FontSize = UiScale.Fs(11),
             }
         };
         _settingsReceivePrereleases.IsCheckedChanged += OnSettingsChannelChanged;
@@ -489,14 +492,14 @@ public partial class AndroidApp
         _settingsCurrentVersion = new TextBlock
         {
             Text = VPNRouter.Core.AppVersion.Version,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextPrimaryBrush"),
         };
         var versionLabel = new TextBlock
         {
             Text = Localization.CurrentVersionLabel,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Opacity = 0.7,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -510,7 +513,7 @@ public partial class AndroidApp
         var checkBtn = new Avalonia.Controls.Button
         {
             Content = Localization.CheckForUpdatesButton,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(10, 5),
             MinHeight = 0,
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -553,7 +556,7 @@ public partial class AndroidApp
         var androidIntro = new TextBlock
         {
             Text = Localization.AdvSettingsAutostartAndroidIntro,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextSecondaryBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
@@ -562,20 +565,20 @@ public partial class AndroidApp
         {
             Text = Localization.ReliabilityAlwaysOnTitle,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextPrimaryBrush"),
         };
         var alwaysOnHint = new TextBlock
         {
             Text = Localization.ReliabilityAlwaysOnHint,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
         var alwaysOnBtn = new Avalonia.Controls.Button
         {
             Content = Localization.ReliabilityAlwaysOnButton,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(10, 5),
             MinHeight = 0,
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -592,24 +595,24 @@ public partial class AndroidApp
         {
             Text = Localization.ReliabilityBatteryOptTitle,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextPrimaryBrush"),
         };
         _reliabilityBatteryStatusLabel = new TextBlock
         {
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             TextWrapping = TextWrapping.Wrap,
         };
         var batteryHint = new TextBlock
         {
             Text = Localization.ReliabilityBatteryOptHint,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
         _reliabilityBatteryButton = new Avalonia.Controls.Button
         {
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Padding = new Thickness(10, 5),
             MinHeight = 0,
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -675,7 +678,7 @@ public partial class AndroidApp
     {
         Text = text,
         FontWeight = FontWeight.Bold,
-        FontSize = 13,
+        FontSize = UiScale.Fs(13),
         Foreground = GetBrush("TextPrimaryBrush"),
     };
 
@@ -695,13 +698,13 @@ public partial class AndroidApp
         {
             Text = title,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextPrimaryBrush"),
         };
         var subText = new TextBlock
         {
             Text = subtitle,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextSecondaryBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
@@ -738,13 +741,14 @@ public partial class AndroidApp
         {
             Text = title,
             FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextPrimaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
         };
         var subText = new TextBlock
         {
             Text = subtitle,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             Foreground = GetBrush("TextSecondaryBrush"),
             TextWrapping = TextWrapping.Wrap,
         };

@@ -48,7 +48,7 @@ public partial class AndroidApp
         _cfgExportTitle = new TextBlock
         {
             Text = Localization.ExportTitle,
-            FontSize = 16,
+            FontSize = UiScale.Fs(16),
             FontWeight = FontWeight.Bold,
         };
         _cfgExportTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
@@ -56,16 +56,16 @@ public partial class AndroidApp
         _cfgExportDesc = new TextBlock
         {
             Text = Localization.ExportDescription,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             TextWrapping = TextWrapping.Wrap,
-            LineHeight = 18,
+            LineHeight = UiScale.Lh(18),
         };
         _cfgExportDesc.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
         _cfgExportIncludeSettings = new Avalonia.Controls.CheckBox
         {
             Content = Localization.ExportIncludeSettings,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             IsChecked = false,
         };
         _cfgExportIncludeSettings.BindToken(Avalonia.Controls.CheckBox.ForegroundProperty, "TextPrimaryBrush");
@@ -73,7 +73,7 @@ public partial class AndroidApp
         _cfgExportIncludePerApp = new Avalonia.Controls.CheckBox
         {
             Content = Localization.ExportIncludePerApp,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             IsChecked = false,
         };
         _cfgExportIncludePerApp.BindToken(Avalonia.Controls.CheckBox.ForegroundProperty, "TextPrimaryBrush");
@@ -81,9 +81,9 @@ public partial class AndroidApp
         _cfgExportSecretBanner = new TextBlock
         {
             Text = Localization.ExportSecretBanner,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             TextWrapping = TextWrapping.Wrap,
-            LineHeight = 16,
+            LineHeight = UiScale.Lh(16),
         };
         _cfgExportSecretBanner.BindToken(TextBlock.ForegroundProperty, "WarningFgBrush");
 
@@ -93,7 +93,7 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 10),
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.SemiBold,
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
@@ -103,7 +103,7 @@ public partial class AndroidApp
 
         _cfgExportStatus = new TextBlock
         {
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
@@ -112,7 +112,7 @@ public partial class AndroidApp
         _cfgExportCloseBtn = new Avalonia.Controls.Button
         {
             Content = "✕",
-            FontSize = 16,
+            FontSize = UiScale.Fs(16),
             Width = 36,
             Height = 36,
             Padding = new Thickness(0),
@@ -174,7 +174,7 @@ public partial class AndroidApp
         _cfgImportTitle = new TextBlock
         {
             Text = Localization.ImportTitle,
-            FontSize = 16,
+            FontSize = UiScale.Fs(16),
             FontWeight = FontWeight.Bold,
         };
         _cfgImportTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
@@ -182,9 +182,9 @@ public partial class AndroidApp
         _cfgImportDesc = new TextBlock
         {
             Text = Localization.ImportDescription,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             TextWrapping = TextWrapping.Wrap,
-            LineHeight = 18,
+            LineHeight = UiScale.Lh(18),
         };
         _cfgImportDesc.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
@@ -194,7 +194,7 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 10),
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.SemiBold,
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
@@ -207,7 +207,7 @@ public partial class AndroidApp
         _cfgImportPreviewLabel = new TextBlock
         {
             Text = Localization.ImportPreviewLabel,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             IsVisible = false,
         };
@@ -215,7 +215,7 @@ public partial class AndroidApp
 
         _cfgImportPreview = new TextBlock
         {
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
@@ -224,7 +224,7 @@ public partial class AndroidApp
         _cfgImportApplySettings = new Avalonia.Controls.CheckBox
         {
             Content = Localization.ImportApplySettings,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             IsChecked = false,
             IsVisible = false,
         };
@@ -233,7 +233,7 @@ public partial class AndroidApp
         _cfgImportApplyPerApp = new Avalonia.Controls.CheckBox
         {
             Content = Localization.ImportApplyPerApp,
-            FontSize = 12,
+            FontSize = UiScale.Fs(12),
             IsChecked = false,
             IsVisible = false,
         };
@@ -242,9 +242,9 @@ public partial class AndroidApp
         _cfgImportConfirmBanner = new TextBlock
         {
             Text = Localization.ImportConfirmReplace,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             TextWrapping = TextWrapping.Wrap,
-            LineHeight = 16,
+            LineHeight = UiScale.Lh(16),
             IsVisible = false,
         };
         _cfgImportConfirmBanner.BindToken(TextBlock.ForegroundProperty, "WarningFgBrush");
@@ -255,7 +255,7 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 10),
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.SemiBold,
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             IsVisible = false,
@@ -270,7 +270,7 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 10),
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             IsVisible = false,
         };
@@ -280,7 +280,7 @@ public partial class AndroidApp
 
         _cfgImportStatus = new TextBlock
         {
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
@@ -289,7 +289,7 @@ public partial class AndroidApp
         _cfgImportCloseBtn = new Avalonia.Controls.Button
         {
             Content = "✕",
-            FontSize = 16,
+            FontSize = UiScale.Fs(16),
             Width = 36,
             Height = 36,
             Padding = new Thickness(0),
