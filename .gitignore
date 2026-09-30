@@ -63,6 +63,9 @@ tools/*
 # Re-include: VpnRouterTestMcp (in-tree MCP server — agent GUI testing).
 !tools/VpnRouterTestMcp/
 !tools/VpnRouterTestMcp/**
+# Icon generator and the original mascot art it composes (tools/icons/README via make-icons.py).
+!tools/icons/
+!tools/icons/**
 # Refactor equivalence harness (worker-run corpus check for behaviour-preserving changes).
 !tools/refactor-equivalence/
 !tools/refactor-equivalence/**
