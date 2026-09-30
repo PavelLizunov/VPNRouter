@@ -500,7 +500,7 @@ public final class VpnRouterService extends VpnService {
             sendBroadcast(new Intent(ACTION_TUNNEL_UP).setPackage(getPackageName()));
             setTunnelLive(true);
             startStatsPoller();
-        } catch (Exception e) {
+        } catch (Exception | LinkageError e) {
             String safeMsg = scrubSecrets(e.getMessage());
             Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + safeMsg);
             try {
