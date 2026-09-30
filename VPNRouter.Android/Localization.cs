@@ -883,6 +883,11 @@ internal static class Localization
     public static string MenuItemHealthCheck => global::VPNRouter.Core.Localization.Strings.MenuItemHealthCheck;
     public static string MenuItemSafeMode => global::VPNRouter.Core.Localization.Strings.MenuItemSafeMode;
 
+    public static string MenuItemAddTile => global::VPNRouter.Core.Localization.Strings.MenuItemAddTile;
+    public static string TileAddInstruction => global::VPNRouter.Core.Localization.Strings.TileAddInstruction;
+    public static string TileAddResultAdded => global::VPNRouter.Core.Localization.Strings.TileAddResultAdded;
+    public static string TileAddResultAlready => global::VPNRouter.Core.Localization.Strings.TileAddResultAlready;
+    public static string TileAddResultDeclined => global::VPNRouter.Core.Localization.Strings.TileAddResultDeclined;
     public static string TileSetupNeeded => global::VPNRouter.Core.Localization.Strings.TileSetupNeeded;
     public static string TipMenuItemHealthCheck => global::VPNRouter.Core.Localization.Strings.TipMenuItemHealthCheck;
     public static string TipMenuItemSafeMode => global::VPNRouter.Core.Localization.Strings.TipMenuItemSafeMode;

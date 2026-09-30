@@ -216,6 +216,18 @@ public static partial class Strings
     public static string MenuItemHealthCheck => SmpMenuHealthCheck;
     public static string MenuItemSafeMode => SmpMenuSafeMode;
 
+    public static string MenuItemAddTile => Ru
+        ? "Добавить кнопку VPN в шторку"
+        : "Add VPN button to the shade";
+
+    public static string TileAddInstruction => Ru
+        ? "Проведите вниз от верха экрана двумя пальцами, нажмите значок карандаша (изменить) и перетащите плитку «VPNRouter» в верхнюю часть."
+        : "Swipe down from the top of the screen with two fingers, tap the pencil (edit) icon and drag the \"VPNRouter\" tile into the active area.";
+
+    public static string TileAddResultAdded => Ru ? "Кнопка VPN добавлена в шторку." : "The VPN button was added to the shade.";
+    public static string TileAddResultAlready => Ru ? "Кнопка VPN уже есть в шторке." : "The VPN button is already in the shade.";
+    public static string TileAddResultDeclined => Ru ? "Кнопка не добавлена." : "The button was not added.";
+
     public static string TileSetupNeeded => Ru
         ? "Сначала настройте подключение в приложении: после этого кнопка в шторке заработает."
         : "Set up a connection in the app first; then the button in the shade works.";
