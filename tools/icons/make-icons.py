@@ -31,12 +31,12 @@ def tile(size, path, art, colors, scale=0.80, radius=0.22, disc=False):
         run("magick", "-size", f"{size}x{size}", "xc:black", "-fill", "white", "-draw", f"roundrectangle 0,0 {size-1},{size-1} {r},{r}", mask)
     inner = int(round(size * scale))
     run("magick", bg, "(", art, "-resize", f"{inner}x{inner}", ")", "-gravity", "center", "-compose", "over", "-composite",
-        mask, "-alpha", "off", "-compose", "CopyOpacity", "-composite", path)
+        mask, "-alpha", "off", "-compose", "CopyOpacity", "-composite", "-depth", "8", "PNG32:" + path)
 
 def art_layer(size, path, art, pad):
     """the art alone on a transparent square canvas (Android adaptive layers)"""
     inner = int(round(size * (1 - 2 * pad)))
-    run("magick", "-size", f"{size}x{size}", "xc:none", "(", art, "-resize", f"{inner}x{inner}", ")", "-gravity", "center", "-composite", path)
+    run("magick", "-size", f"{size}x{size}", "xc:none", "(", art, "-resize", f"{inner}x{inner}", ")", "-gravity", "center", "-composite", "-depth", "8", "PNG32:" + path)
 
 def ico(sizes, art, colors, path):
     frames = []
@@ -66,7 +66,7 @@ def mac_png(size, path):
     t = os.path.join(TMP, f"mac_t{size}.png")
     tile(int(round(size * 824 / 1024)), t, BLACK, LIGHT)
     run("magick", "-size", f"{size}x{size}", "xc:none", "(", t, "-background", "black", "-shadow", f"35x{max(1, size//60)}+0+{max(1, size//120)}", ")",
-        "-gravity", "center", "-compose", "over", "-composite", t, "-gravity", "center", "-composite", path)
+        "-gravity", "center", "-compose", "over", "-composite", t, "-gravity", "center", "-composite", "-depth", "8", "PNG32:" + path)
 mac = []
 for kind, size in (("icp4", 16), ("icp5", 32), ("icp6", 64), ("ic07", 128), ("ic08", 256), ("ic09", 512), ("ic10", 1024),
                    ("ic11", 32), ("ic12", 64), ("ic13", 256), ("ic14", 512)):
