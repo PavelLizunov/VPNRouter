@@ -13,6 +13,7 @@ This directory owns repository contracts, worker guidance and review prompts.
 - [release-strategy.md](release-strategy.md) and [cut-stable-checklist.md](cut-stable-checklist.md):
   rolling-candidate policy and the fixed-WINBRAT live-update gate.
 - [code-signing-signpath-runbook.md](code-signing-signpath-runbook.md): Windows signing enrollment.
+- [code-signing-application.md](code-signing-application.md): SignPath Foundation application answers, system-change list and eligibility risks (the owner submits).
 - [interaction-contracts/README.md](interaction-contracts/README.md): Free Configs and Applications contracts.
 - [android-development-methodology.md](android-development-methodology.md) and
   [android-keystore-backup.md](android-keystore-backup.md): Android workflow and signing-key backup.

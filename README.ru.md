@@ -262,6 +262,17 @@ Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VP
 
 Нашли security-issue? Сообщите **приватно** — см. [`SECURITY.md`](SECURITY.md). Не открывайте публичный issue по security-проблемам.
 
+## Политика подписи кода (Code signing policy)
+
+**Статус: пока без подписи.** Windows-файлы текущих релизов не имеют подписи Authenticode; проверяйте загрузки по файлам `.sha256`. Проект подаёт заявку в SignPath Foundation на бесплатную подпись кода. Этот раздел — политика, которая действует для подписанных релизов со дня одобрения заявки.
+
+Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+- **Что подписывается.** Только файлы, собранные из исходников этого репозитория workflow GitHub Actions [`sign-windows.yml`](.github/workflows/sign-windows.yml) из неизменяемого тега релиза; каждый релиз подтверждается вручную в SignPath: исполняемые файлы и библиотеки VPNRouter (`VPNRouter.App`, `VPNRouter.GUI`, `VPNRouter.CLI`, `VPNRouter.Service`, `VPNRouter.Core`) и, позже, установщик Windows. Сторонние компоненты (драйвер split-tunnel от Mullvad, libcronet, загружаемые Zapret/WinDivert и другие чужие бинарники) этим сертификатом не подписываются; см. [`NOTICE.md`](NOTICE.md).
+- **Роли в команде.** Автор, рецензент и утверждающий: [@PavelLizunov](https://github.com/PavelLizunov), владелец проекта и единственный мейнтейнер. Любое изменение, включая подготовленные с помощью ИИ-ассистентов и ботов зависимостей, попадает в `main` только через pull request с обязательными проверками (`test`, `grep`) на актуальной ветке; мейнтейнер вливает его и подтверждает каждый запрос на подпись.
+- **Политика конфиденциальности.** См. [`PRIVACY.md`](PRIVACY.md): нет телеметрии и аналитики; программа обращается только к настроенным вами серверам, к GitHub (проверка обновлений и пул Free Configs) и, как запасной вариант, к `ip-api.com`.
+- **Изменения в системе и удаление.** Что VPNRouter меняет в Windows (правила брандмауэра, настройки DNS, драйверы, необязательные служба и автозапуск) и как это убирается, перечислено в [`docs/code-signing-application.md`](docs/code-signing-application.md#what-the-software-changes-on-the-system).
+
 ## Благодарности
 
 Стоим на плечах гигантов:
