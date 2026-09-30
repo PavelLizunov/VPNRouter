@@ -3,7 +3,7 @@
 ; Command line for IT: VPNRouter-Setup-vX.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART [/DIR="..."] [/TASKS="service,defender"]
 ;   Extra switches (Setup and uninstaller): /NOCLEANUP (skip the system cleanup on uninstall), /DELETEDATA (also delete
 ;   %ProgramData%\VPNRouter on uninstall), /NOSYSTEMCHANGES (scratch or staging installs: no ACL change on the data folder,
-;   no change to the old script-installer's registry entry, no service/Defender changes, no data deletion),
+;   no change to the old script-installer's registry entry or the Start Menu shortcut, no service/Defender changes, no data deletion),
 ;   /CLEANUPARGS=--dry-run and /CLEANUPLOG=<file> (used by the tests of the uninstaller).
 
 #ifndef AppVersion
@@ -84,7 +84,7 @@ Source: "installer\stop-vpnrouter.ps1"; DestDir: "{app}\installer"; Flags: ignor
 Source: "installer\stop-vpnrouter.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 
 [Icons]
-Name: "{commonprograms}\VPNRouter"; Filename: "{app}\app\VPNRouter.GUI.exe"; WorkingDir: "{app}\app"; IconFilename: "{app}\app\VPNRouter.App.exe"; Comment: "Virtual Penguin Network - split-tunnel VPN router"
+Name: "{commonprograms}\VPNRouter"; Filename: "{app}\app\VPNRouter.GUI.exe"; WorkingDir: "{app}\app"; IconFilename: "{app}\app\VPNRouter.App.exe"; Comment: "Virtual Penguin Network - split-tunnel VPN router"; Check: SystemChangesAllowed
 Name: "{autodesktop}\VPNRouter"; Filename: "{app}\app\VPNRouter.GUI.exe"; WorkingDir: "{app}\app"; IconFilename: "{app}\app\VPNRouter.App.exe"; Tasks: desktopicon
 
 [Registry]

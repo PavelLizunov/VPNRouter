@@ -64,6 +64,8 @@ public sealed class WindowsInstallerContractTests
         var icons = Section("Icons");
         Assert.Contains("Name: \"{commonprograms}\\VPNRouter\"; Filename: \"{app}\\app\\VPNRouter.GUI.exe\"", icons);
         Assert.Contains("WorkingDir: \"{app}\\app\"", icons);
+        // A staging or scratch install must not overwrite the shared Start Menu shortcut of a real install.
+        Assert.Matches(new Regex(@"\{commonprograms\}\\VPNRouter[^\r\n]*Check: SystemChangesAllowed"), icons);
     }
 
     [Fact]

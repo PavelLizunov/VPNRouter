@@ -30,7 +30,9 @@ a folder, language, autostart or service choice. The owner chose Inno Setup and 
   `%ProgramData%\VPNRouter` unless the user answers yes (default no) or `/DELETEDATA` is given.
 - Silent mode: `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, `/DIR=`, `/TASKS=`; extra switches `/NOCLEANUP`,
   `/DELETEDATA`, `/CLEANUPARGS=--dry-run`, `/CLEANUPLOG=` and `/NOSYSTEMCHANGES` (scratch or staging installs: no ACL change,
-  no registry migration, no service or Defender change, no data deletion, the stop script is limited to the install folder).
+  no registry migration, no shared Start Menu shortcut, no service or Defender change, no data deletion, the stop script is
+  limited to the install folder). The switch exists because the Windows worker also hosts a real VPNRouter install whose
+  shortcut, data folder and services a test must not touch.
 - `tools/build-installer.ps1 -Version X -PackageZip <win.zip>` (or `-PackageDir`): finds ISCC.exe, compiles, writes the `.exe`
   and a `.sha256` sidecar. Not signed, not uploaded; the release asset contract (16 files) and `build.ps1` are unchanged.
 - `.gitignore` re-includes `tools/build-installer.ps1` (`tools/*` is ignored).
