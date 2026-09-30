@@ -31,7 +31,7 @@ public partial class AndroidApp
         _profilesOverlayTitle = new TextBlock
         {
             Text = Localization.ProfilesOverlayTitle,
-            FontSize = 13,
+            FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -40,7 +40,7 @@ public partial class AndroidApp
         _profilesCloseBtn = new Avalonia.Controls.Button
         {
             Content = "✕",
-            FontSize = 16,
+            FontSize = UiScale.Fs(16),
             Width = 36,
             Height = 36,
             Padding = new Thickness(0),
@@ -74,7 +74,7 @@ public partial class AndroidApp
         _profilesOverlayIntro = new TextBlock
         {
             Text = Localization.ProfilesIntro,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 12),
         };
