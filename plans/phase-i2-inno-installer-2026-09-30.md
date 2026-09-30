@@ -54,4 +54,49 @@ a folder, language, autostart or service choice. The owner chose Inno Setup and 
 
 ## Outcome
 
-To be filled in after the green CI run and the worker compile and scratch install.
+CI: `test` (with the contract tests), `grep`, `go-test-windows` and `characterization-windows` were green on head
+`02a5baf9` before the rebase onto newer `main`; the final head is listed in the pull request checks (the commits after
+it only add a compile directive, this brief, or rebase).
+
+Windows worker (`tester@100.115.182.0`, the machine that also hosts a real VPNRouter install), 2026-10-01, everything from
+exact SHAs fetched shallowly from GitHub (installer files `aa689cce`, CLI payload built from the I3 head `db4ac21f`):
+
+- Load preflight (read-only): 13.3 GB of 16.0 GB RAM free, CPU 0 to 2 %, C: 17.8 GB free, no `dotnet`, `VBCSCompiler`,
+  `MSBuild`, `java` or `ISCC` process.
+- Tooling: official Inno Setup 6.7.3 (`innosetup-6.7.3.exe` from the `jrsoftware/issrc` GitHub release that
+  jrsoftware.org/isdl.php links to), SHA256 `9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732`, equal to
+  the digest GitHub publishes for that asset; Authenticode `Valid`, signer `CN=Pyrsys B.V.` (the publisher the download
+  page names), issuer Sectigo. Installed user-locally (`/CURRENTUSER /VERYSILENT /DIR=C:\android-build\tools\innosetup`,
+  33 MB, kept as task-owned tooling); `Languages\Russian.isl` present; compiler engine "Inno Setup 6.7.3".
+- Compile: `tools\build-installer.ps1 -Version 2.50.0 -PackageDir <scratch payload>` exit 0 in 43 s, `VPNRouter-Setup-v2.50.0.exe`
+  31.5 MB, `.sha256` sidecar written, file version 2.50.0.0, `NotSigned`. A second compile without `/Q` first printed one
+  warning (HKCU Run value under `PrivilegesRequired=admin`), acknowledged with `UsedUserAreasWarning=no`; the final head
+  compiles with no warnings.
+  The payload was the real CLI from the I3 head plus stand-ins (a copy of `ping.exe` as `app\VPNRouter.App.exe` so that a
+  process can run from the install folder, a text file as `app\VPNRouter.GUI.exe`, `Start VPN.cmd`, `README.txt`); it is
+  not a release build.
+- Scratch cycle in `C:\android-build\i2\inst`, all with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOSYSTEMCHANGES
+  /TASKS=`:
+  1. Install (`/LANG=russian`): exit 0, 273 files (`app\`, `installer\stop-vpnrouter.ps1`, `Start VPN.cmd`, `README.txt`,
+     `unins000.exe/.dat`), Uninstall key `{BAAAEA6C-...}_is1` with DisplayName VPNRouter, DisplayVersion 2.50.0,
+     InstallLocation the scratch folder; no `HKCU\...\Run` value; shared Start Menu shortcut untouched.
+  2. Upgrade over it (`/LANG=english`) while a stand-in app ran from the install folder and a second stand-in ran from
+     another folder: exit 0; the stand-in in the install folder was stopped, the one in the other folder and the real
+     `VPNRouter.App.exe` (PID 9572) kept running; `app.bak\old.txt`, `.update-backup.lock` and a user file stayed; still
+     exactly one Uninstall key.
+  3. Uninstall (`/CLEANUPARGS=--dry-run /CLEANUPLOG=...`, `ProgramData` redirected to a scratch folder): exit 0; the
+     cleanup step ran the real CLI and its log shows the dry-run report (8 "not present" lines, "Dry run: 0 item(s) would
+     be removed, nothing was changed."); a stand-in running from the install folder was stopped; the Uninstall key was
+     removed; `app\`, `app.bak`, `.update-backup.lock`, `installer\` and `unins000.*` were deleted; only the user file stayed
+     (Inno logged "Failed to delete directory (145)" for the non-empty folder, as intended).
+  4. Read-only snapshots before and after the whole cycle (12 items, see the I3 brief, including all files under
+     `Program Files\VPNRouter`, the shared shortcut, Defender exclusions, services, firewall rules, Run keys, Uninstall
+     keys, data-folder ACL and entries, DNS servers): identical.
+- Cleanup: no process left running from the scratch folder, `C:\android-build\i2` (420 MB) and every helper script
+  deleted, the scratch Uninstall key absent, disk 17.8 GB free again. Kept: `C:\android-build\tools\innosetup`.
+- Not verified: a real install into Program Files; the service, Defender and autostart tasks (and therefore their removal);
+  the data-folder ACL step, the registry migration of the old script install and the shared Start Menu shortcut (all
+  skipped by `/NOSYSTEMCHANGES`); an upgrade over a live install; compatibility with a real in-app update from the
+  updater zip; that the Russian wizard text shows (silent mode only; the `.isl` compiled); the interactive wizard;
+  SmartScreen and antivirus behaviour of the unsigned `.exe`; a real `cleanup` removing something (I3 covers it with fakes).
+  These need a clean VM and the owner's permission (I4, I6).
