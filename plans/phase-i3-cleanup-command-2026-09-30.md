@@ -46,4 +46,41 @@ command the first step, independent of the installer itself, so the uninstaller 
 
 ## Outcome
 
-To be filled in after the green CI run and the worker dry run.
+CI: the first run failed `test` on three cases (`Run_LeavesAnotherVpnsSplitTunnelDriverAlone`,
+`Run_CountsAServiceMarkedForDeletionAsRemoved`, `Run_StopsThenDeletesTheServicesThatAreTheirs`): the code labelled the
+service lines `service`, the tests and the brief say `driver` and `zapret`. Fixed by passing the area name
+(`CleanService(area, ...)`). A later run on that fix failed `characterization-windows` on
+`PostShipVerifierContractTests.PostShipVerifier_GreenCiChildContinuesThroughDeployCyclesAndCleanup` ("Mocked post-ship
+verifier timed out", 31 s); that test does not touch this change and passed on the rebased head (timing flake, not
+investigated). Rebased head `db4ac21f`: `test`, `grep`, `compile`, `test-update`, `go-test-windows` and
+`characterization-windows` all green. Later commits only change this file or rebase onto newer `main`.
+
+Windows worker (`tester@100.115.182.0`, the machine that also hosts a real VPNRouter install), 2026-10-01:
+
+- Load preflight (read-only): 13.3 GB of 16.0 GB RAM free, CPU 0 to 2 %, C: 17.8 GB free, no `dotnet`, `VBCSCompiler`,
+  `MSBuild`, `java` or `ISCC` process. The real `VPNRouter.App.exe` (PID 9572) was running and stayed untouched.
+- Built from the exact SHA `db4ac21f` (shallow `git fetch` of that commit): `dotnet publish VPNRouter.CLI -c Release
+  -r win-x64 --self-contained --disable-build-servers` with the private toolchain, 249 files, exit 0, about 25 s.
+- `VPNRouter.CLI.exe cleanup --dry-run`, run twice with `ProgramData` pointing at a scratch folder (so the CLI's own log
+  folder is not the real data directory), elevated session, exit code 0 both times, identical output:
+  ```
+  [not present] firewall: VPNRouter rules
+  [not present] dns: saved DNS settings
+  [not present] driver: mullvad-split-tunnel
+  [not present] zapret: zapret
+  [not present] zapret: WinDivert
+  [not present] zapret: WinDivert14
+  [not present] zapret: WinDivert15
+  [not present] autostart: current user's Run value
+  Dry run: 0 item(s) would be removed, nothing was changed.
+  ```
+  The CLI wrote no file in the scratch folder. `cleanup --help` lists `--dry-run`.
+- Read-only snapshots before and after (12 items: hash of all 425 firewall rules, hash of all 252 services, the five
+  driver services, HKCU and HKLM `Run`, Defender exclusions, Uninstall keys, the shared Start Menu shortcut, name, size and
+  time of all 570 files under `Program Files\VPNRouter`, data-folder ACL and top-level entries, DNS client servers):
+  identical.
+- Not verified: that machine was already clean (no VPNRouter firewall rule, no saved DNS state, no driver or WinDivert
+  service, no Run value), so the run proves the read path (`netsh` and `sc` output of a real Windows is parsed without
+  error, 425 rules listed, none matched) and the "nothing to do" report, not the "would remove" lines or any real removal.
+  Those paths are covered by the unit tests with fakes only; a real removal was not run anywhere (the worker hosts a real
+  install and the owner's standing rule forbids touching its firewall, DNS and drivers).
