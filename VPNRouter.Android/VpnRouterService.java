@@ -1047,10 +1047,15 @@ public final class VpnRouterService extends VpnService {
         return new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle("VPNRouter")
                 .setContentText(notifText)
-                .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
+                .setSmallIcon(statusIconResource())
                 .setOngoing(true)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, notifDisconnect, stopPi)
                 .build();
+    }
+
+    private int statusIconResource() {
+        int id = getResources().getIdentifier("ic_stat_vpn", "drawable", getPackageName());
+        return id != 0 ? id : android.R.drawable.ic_lock_idle_lock;
     }
 
     int openTun(TunOptions options) throws Exception {
