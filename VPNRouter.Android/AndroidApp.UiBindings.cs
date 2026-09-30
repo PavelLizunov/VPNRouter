@@ -17,17 +17,12 @@ public partial class AndroidApp
 
         var body = new Grid
         {
-            RowDefinitions = new RowDefinitions("*,Auto"),
-            ColumnDefinitions = new ColumnDefinitions("140,*"),
+            RowDefinitions = new RowDefinitions("Auto,*,Auto"),
             Background = GetBrush("SurfaceAppBrush"),
         };
         Grid.SetRow(sideNav, 0);
-        Grid.SetColumn(sideNav, 0);
-        Grid.SetRow(contentPane, 0);
-        Grid.SetColumn(contentPane, 1);
-        Grid.SetRow(footerBar, 1);
-        Grid.SetColumn(footerBar, 0);
-        Grid.SetColumnSpan(footerBar, 2);
+        Grid.SetRow(contentPane, 1);
+        Grid.SetRow(footerBar, 2);
         body.Children.Add(sideNav);
         body.Children.Add(contentPane);
         body.Children.Add(footerBar);
@@ -39,8 +34,9 @@ public partial class AndroidApp
     {
         var stack = new StackPanel
         {
-            Spacing = 0,
-            Margin = new Thickness(0, 6, 0, 6),
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            Margin = new Thickness(10, 8, 10, 8),
         };
         for (int i = 0; i < 6; i++)
         {
@@ -52,16 +48,16 @@ public partial class AndroidApp
         var scroller = new ScrollViewer
         {
             Content = stack,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Background = Brushes.Transparent,
         };
 
         return new Border
         {
             BorderBrush = GetBrush("BorderDefaultBrush"),
-            BorderThickness = new Thickness(0, 0, 1, 0),
-            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Background = GetBrush("SurfaceBaseBrush"),
             Child = scroller,
         };
     }
@@ -73,11 +69,12 @@ public partial class AndroidApp
             Content = MakeSettingsSubSectionLabel(SettingsSubSectionLabel(index)),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(10, 7),
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(14, 8),
+            MinHeight = 40,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
             BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(0),
+            CornerRadius = new CornerRadius(20),
         };
         btn.Click += (_, _) => SelectSettingsSubSection(index);
         StyleSettingsSubSectionButton(btn, index == _settingsSelectedSubSection);
@@ -85,7 +82,7 @@ public partial class AndroidApp
     }
 
     private static TextBlock MakeSettingsSubSectionLabel(string text) =>
-        new() { Text = text, TextWrapping = TextWrapping.Wrap };
+        new() { Text = text, TextWrapping = TextWrapping.NoWrap };
 
     private static string SettingsSubSectionLabel(int index) => index switch
     {
@@ -102,13 +99,13 @@ public partial class AndroidApp
     {
         if (active)
         {
-            btn.Background = GetBrush("AccentBgSubtleBrush");
+            btn.Background = GetBrush("AccentBgMutedBrush");
             btn.Foreground = GetBrush("AccentFgBrush");
         }
         else
         {
-            btn.Background = Brushes.Transparent;
-            btn.Foreground = GetBrush("TextMutedBrush");
+            btn.Background = GetBrush("SurfaceSunkenBrush");
+            btn.Foreground = GetBrush("TextSecondaryBrush");
         }
     }
 
