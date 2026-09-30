@@ -1,8 +1,11 @@
+using System.Threading;
 using Avalonia;
+using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 
 namespace VPNRouter.UI.Controls;
 
@@ -25,54 +28,82 @@ public class StatusCard : UserControl
     public string? Title { get => GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public string? Subtitle { get => GetValue(SubtitleProperty); set => SetValue(SubtitleProperty, value); }
 
-    private readonly Ellipse _dotOn;
-    private readonly Ellipse _dotWarn;
-    private readonly Ellipse _dotOff;
+    private const double RingSize = 112;
+    private const double RingThickness = 6;
+
+    private readonly Border _ring;
+    private readonly Avalonia.Controls.Shapes.Path _glyph;
     private readonly TextBlock _titleText;
     private readonly TextBlock _subtitleText;
+    private CancellationTokenSource? _pulseCts;
 
     public StatusCard()
     {
-        _dotOn = new Ellipse { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };
-        _dotWarn = new Ellipse { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };
-        _dotOff = new Ellipse { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };
-        BindBrush(_dotOn, Shape.FillProperty, "SuccessSolidBrush");
-        BindBrush(_dotWarn, Shape.FillProperty, "WarningSolidBrush");
-        BindBrush(_dotOff, Shape.FillProperty, "TextMutedBrush");
+        _glyph = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse("M12,3 L12,12 M7,6.5 A8,8 0 1 0 17,6.5"),
+            StrokeThickness = 2.4,
+            StrokeLineCap = PenLineCap.Round,
+            StrokeJoin = PenLineJoin.Round,
+            Stretch = Stretch.Uniform,
+            Width = 44,
+            Height = 44,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
 
-        _titleText = new TextBlock { FontSize = 14, FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center };
+        _ring = new Border
+        {
+            Width = RingSize,
+            Height = RingSize,
+            CornerRadius = new CornerRadius(RingSize / 2),
+            BorderThickness = new Thickness(RingThickness),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Child = _glyph,
+        };
+
+        _titleText = new TextBlock
+        {
+            FontSize = VPNRouter.Android.UiScale.Fs(20),
+            FontWeight = FontWeight.Bold,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+        };
         BindBrush(_titleText, TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
-        _subtitleText = new TextBlock { FontSize = 10, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(18, 0, 0, 0), LineHeight = 13 };
+        _subtitleText = new TextBlock
+        {
+            FontSize = VPNRouter.Android.UiScale.Fs(11),
+            LineHeight = VPNRouter.Android.UiScale.Lh(16),
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+        };
         BindBrush(_subtitleText, TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
-        var headerRow = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-        headerRow.Children.Add(_dotOn);
-        headerRow.Children.Add(_dotWarn);
-        headerRow.Children.Add(_dotOff);
-        headerRow.Children.Add(_titleText);
-
-        var stack = new StackPanel { Spacing = 6 };
-        stack.Children.Add(headerRow);
+        var stack = new StackPanel { Spacing = 10 };
+        stack.Children.Add(_ring);
+        stack.Children.Add(_titleText);
         stack.Children.Add(_subtitleText);
 
-        var border = new Border
+        var card = new Border
         {
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12, 11),
+            CornerRadius = new CornerRadius(20),
+            Padding = new Thickness(18, 22),
             Child = stack,
         };
-        BindBrush(border, Border.BorderBrushProperty, "BorderDefaultBrush");
-        BindBrush(border, Border.BackgroundProperty, "SurfaceBaseBrush");
+        BindBrush(card, Border.BorderBrushProperty, "BorderSubtleBrush");
+        BindBrush(card, Border.BackgroundProperty, "SurfaceBaseBrush");
 
-        Content = border;
+        Content = card;
 
-        SyncDots();
+        ApplyState();
         PropertyChanged += (_, e) =>
         {
             if (e.Property == IsOnProperty || e.Property == IsWarnProperty || e.Property == IsOffProperty)
-                SyncDots();
+                ApplyState();
             else if (e.Property == TitleProperty)
                 _titleText.Text = Title ?? string.Empty;
             else if (e.Property == SubtitleProperty)
@@ -80,11 +111,74 @@ public class StatusCard : UserControl
         };
     }
 
-    private void SyncDots()
+    private void ApplyState()
     {
-        _dotOn.IsVisible = IsOn;
-        _dotWarn.IsVisible = IsWarn;
-        _dotOff.IsVisible = IsOff;
+        string ringKey, fillKey, glyphKey;
+        if (IsOn)
+        {
+            ringKey = "SuccessSolidBrush";
+            fillKey = "SuccessBgBrush";
+            glyphKey = "SuccessFgBrush";
+        }
+        else if (IsWarn)
+        {
+            ringKey = "WarningSolidBrush";
+            fillKey = "WarningBgBrush";
+            glyphKey = "WarningFgBrush";
+        }
+        else
+        {
+            ringKey = "BorderStrongBrush";
+            fillKey = "SurfaceSunkenBrush";
+            glyphKey = "TextMutedBrush";
+        }
+
+        BindBrush(_ring, Border.BorderBrushProperty, ringKey);
+        BindBrush(_ring, Border.BackgroundProperty, fillKey);
+        BindBrush(_glyph, Shape.StrokeProperty, glyphKey);
+
+        StopPulse();
+        if (IsWarn && !IsOn) StartPulse();
+    }
+
+    private void StartPulse()
+    {
+        var cts = new CancellationTokenSource();
+        _pulseCts = cts;
+        var pulse = new Animation
+        {
+            Duration = System.TimeSpan.FromMilliseconds(900),
+            IterationCount = IterationCount.Infinite,
+            PlaybackDirection = PlaybackDirection.Alternate,
+            Children =
+            {
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 1.0) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 0.45) } },
+            },
+        };
+        _ = pulse.RunAsync(_ring, cts.Token);
+    }
+
+    private void StopPulse()
+    {
+        var cts = _pulseCts;
+        _pulseCts = null;
+        if (cts is null) return;
+        try { cts.Cancel(); } catch { }
+        cts.Dispose();
+        _ring.Opacity = 1.0;
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        ApplyState();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        StopPulse();
+        base.OnDetachedFromVisualTree(e);
     }
 
     private static void BindBrush(Control target, AvaloniaProperty property, string resourceKey)

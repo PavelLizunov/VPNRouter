@@ -380,6 +380,9 @@ public partial class AndroidApp : Avalonia.Application
         var radiusSm = GetRadius("RadiusSm");
         var radiusMd = GetRadius("RadiusMd");
 
+        _formExpanded = string.IsNullOrWhiteSpace(AndroidStorage.GetSubscriptionUrl())
+                        && string.IsNullOrWhiteSpace(AndroidStorage.GetVlessUri());
+
         var headerRow = BuildSimpleHeaderRow();
 
         var statusCard = BuildSimpleStatusCard();
@@ -411,7 +414,7 @@ public partial class AndroidApp : Avalonia.Application
         _formCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
         _formCard.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
 
-        BuildConnectButtons(radiusSm);
+        BuildConnectButtons();
 
         var advCardButton = BuildAdvancedCardButton(radiusSm, radiusMd);
 
@@ -436,11 +439,11 @@ public partial class AndroidApp : Avalonia.Application
                 headerRow,
                 statusCard,
                 _menuFeedback,
-                configRowButton,
-                _formCard,
                 _ctaConnect,
                 _ctaConnecting,
                 _ctaDisconnect,
+                configRowButton,
+                _formCard,
                 advCardButton,
             }
         };
@@ -724,10 +727,11 @@ public partial class AndroidApp : Avalonia.Application
         _statusHealthCheck = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(20, 0, 0, 0),
-            LineHeight = 14,
+            TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(8, 0, 8, 0),
+            LineHeight = UiScale.Lh(14),
             IsVisible = false,
         };
         _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -735,11 +739,12 @@ public partial class AndroidApp : Avalonia.Application
         _statusErrorOneLiner = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 10,
+            FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(20, 0, 0, 0),
-            LineHeight = 14,
+            TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(8, 0, 8, 0),
+            LineHeight = UiScale.Lh(14),
             IsVisible = false,
         };
         _statusErrorOneLiner.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
@@ -776,7 +781,7 @@ public partial class AndroidApp : Avalonia.Application
         _configRowLabel = new TextBlock
         {
             Text = Localization.SmpConfigRowLabel,
-            FontSize = 9,
+            FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
         };
         _configRowLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -784,9 +789,8 @@ public partial class AndroidApp : Avalonia.Application
         _configRowValue = new TextBlock
         {
             Text = Localization.SimpleConfigSummary,
-            FontSize = 11,
+            FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
-            FontFamily = new FontFamily("monospace"),
         };
         _configRowValue.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
@@ -1023,23 +1027,27 @@ public partial class AndroidApp : Avalonia.Application
         return tunnelSection;
     }
 
-    private void BuildConnectButtons(double radiusSm)
+    private void BuildConnectButtons()
     {
+        const double ctaRadius = 14;
+        const double ctaMinHeight = 52;
+
         _ctaConnect = new Avalonia.Controls.Button
         {
             Content = Localization.ButtonConnect,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 10),
-            FontSize = 12,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            MinHeight = ctaMinHeight,
+            Padding = new Thickness(0, 12),
+            FontSize = UiScale.Fs(14),
             FontWeight = FontWeight.Bold,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(radiusSm),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(ctaRadius),
             IsVisible = true,
         };
-        _ctaConnect.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceBaseBrush");
-        _ctaConnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentFgBrush");
-        _ctaConnect.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "AccentBorderBrush");
+        _ctaConnect.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
+        _ctaConnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _ctaConnect.Click += OnConnectClicked;
 
         _ctaConnecting = new Avalonia.Controls.Button
@@ -1047,11 +1055,13 @@ public partial class AndroidApp : Avalonia.Application
             Content = Localization.ButtonConnecting,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 10),
-            FontSize = 12,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            MinHeight = ctaMinHeight,
+            Padding = new Thickness(0, 12),
+            FontSize = UiScale.Fs(14),
             FontWeight = FontWeight.Bold,
             BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(radiusSm),
+            CornerRadius = new CornerRadius(ctaRadius),
             IsEnabled = false,
             IsVisible = false,
         };
@@ -1063,15 +1073,18 @@ public partial class AndroidApp : Avalonia.Application
             Content = Localization.ButtonDisconnect,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 10),
-            FontSize = 12,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            MinHeight = ctaMinHeight,
+            Padding = new Thickness(0, 12),
+            FontSize = UiScale.Fs(14),
             FontWeight = FontWeight.Bold,
-            BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(radiusSm),
+            BorderThickness = new Thickness(1.5),
+            CornerRadius = new CornerRadius(ctaRadius),
             IsVisible = false,
         };
-        _ctaDisconnect.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
-        _ctaDisconnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
+        _ctaDisconnect.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceBaseBrush");
+        _ctaDisconnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextPrimaryBrush");
+        _ctaDisconnect.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderStrongBrush");
         _ctaDisconnect.Click += OnConnectClicked;
     }
 
