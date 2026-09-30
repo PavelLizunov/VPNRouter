@@ -16,7 +16,7 @@ target defined in the "Release and WINBRAT contract" section of `docs/agent-cont
 
 ## Tracked payloads and generated caches
 
-- `tools/icons/` holds the SVG masters of the app icon and the script that renders every icon (Android adaptive and legacy, Windows `.ico`, macOS `.icns`, in-app PNGs). Edit `tools/icons/src/*.svg`, run `python3 tools/icons/make-icons.py` (needs `rsvg-convert` and ImageMagick) and commit the generated files.
+- `tools/icons/` holds the ORIGINAL mascot art (`src/mascot-black.png`, `src/mascot-white.png`, byte-identical to `VPNRouter.App/Assets/penguin_mascot*.png`) and the script that places it on light or dark tiles for every icon (Android adaptive and legacy, Windows `.ico`, macOS `.icns`, in-app tile and logo). The mascot itself must not be redrawn or altered (owner rule, 2026-09-30). Run `python3 tools/icons/make-icons.py` (needs ImageMagick) and commit the generated files.
 - Generated source/build caches such as `tools/singbox-cache/` remain untracked. Do not commit or broadly clean generated caches without exact owner approval.
 
 ## Zone checks
