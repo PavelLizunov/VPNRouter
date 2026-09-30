@@ -45,6 +45,11 @@ app.Configure(config =>
     config.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Health check: config, catalogue, binaries, state. Exit 0 = OK, 1 = warnings, 2 = errors");
 
+    config.AddCommand<CleanupCommand>("cleanup")
+        .WithDescription("Remove firewall rules, DNS settings, driver services and the autostart value that VPNRouter left in Windows (used by the uninstaller)")
+        .WithExample("cleanup", "--dry-run")
+        .WithExample("cleanup");
+
     config.AddCommand<TestUpdateCommand>("test-update")
         .WithDescription("CI-only: trigger the auto-update flow programmatically (gated by VPNROUTER_CI=1)")
         .IsHidden();
