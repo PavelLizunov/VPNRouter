@@ -715,6 +715,7 @@ public partial class AndroidApp
         var activeName = AndroidStorage.GetSelectedServerName();
         if (servers.Count == 0)
         {
+            _srvEmptyHint.Text = SrvEmptyHintFor(_srvCurrentSub);
             _srvEmptyHint.IsVisible = true;
             UpdateRemoveButtonEnabled(servers, activeName);
             return;
@@ -1170,6 +1171,10 @@ public partial class AndroidApp
         RebuildServerList();
     }
 
+    /// <summary>The built-in manual list has no address to refresh: its empty hint says to add a server link instead.</summary>
+    private static string SrvEmptyHintFor(SubscriptionEntry? sub) =>
+        sub is null || string.IsNullOrEmpty(sub.Url) ? Localization.SrvManualEmptyHint : Localization.SrvEmptyHint;
+
     /// <summary>The name of a subscription as shown to the user: the built-in "Manual" list follows the language.</summary>
     private static string SubscriptionDisplayName(SubscriptionEntry sub)
     {
@@ -1189,7 +1194,7 @@ public partial class AndroidApp
         {
             _srvSortToggle.Content = SortToggleContent(_srvSortByLatency);
         }
-        if (_srvEmptyHint is not null) _srvEmptyHint.Text = Localization.SrvEmptyHint;
+        if (_srvEmptyHint is not null) _srvEmptyHint.Text = SrvEmptyHintFor(_srvCurrentSub);
         if (_srvColServer is not null) _srvColServer.Text = Localization.ColServer;
         if (_srvColPing is not null)
         {

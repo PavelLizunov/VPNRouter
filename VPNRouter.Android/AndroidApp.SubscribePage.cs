@@ -27,6 +27,10 @@ public partial class AndroidApp
     private TextBlock? _subsSectionLabel;
     private TextBlock? _subsRefreshAllStatus;
     private Avalonia.Controls.CheckBox? _subsAutoSelectChk;
+    private Control? _subsIntro;
+    private TextBlock? _subsIntroTitle;
+    private TextBlock? _subsIntroBody;
+    private Control[] _subsListOnlyParts = System.Array.Empty<Control>();
 
     private StackPanel? _subsAggListStack;
     private TextBlock? _subsAggEmptyHint;
@@ -224,6 +228,12 @@ public partial class AndroidApp
             Child = _subsAutoSelectChk,
         };
 
+        // Without any subscription the server box, the test buttons and the list header have nothing to show: a short
+        // instruction takes their place above the form.
+        _subsIntro = BuildSubscribeIntro();
+        _subsListOnlyParts = new Control[] { aggServerSection, autoSelectBorder, middleActionRow, sectionHeaderBorder, subsListScroller };
+        var fill = new Grid { Children = { aggServerSection, _subsIntro } };
+
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(addFormBorder, Dock.Bottom);
         DockPanel.SetDock(subsListScroller, Dock.Bottom);
@@ -235,13 +245,83 @@ public partial class AndroidApp
         dock.Children.Add(sectionHeaderBorder);
         dock.Children.Add(middleActionRow);
         dock.Children.Add(autoSelectBorder);
-        dock.Children.Add(aggServerSection);
+        dock.Children.Add(fill);
 
         return new Border
         {
             Background = GetBrush("SurfaceAppBrush"),
             Child = dock,
         };
+    }
+
+    private Control BuildSubscribeIntro()
+    {
+        var icon = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse(AdvancedTabIconData(AdvancedTab.Subscribe)),
+            StrokeThickness = 1.8,
+            StrokeLineCap = PenLineCap.Round,
+            StrokeJoin = PenLineJoin.Round,
+            Stretch = Stretch.Uniform,
+            Width = 28,
+            Height = 28,
+        };
+        icon.BindToken(Avalonia.Controls.Shapes.Shape.StrokeProperty, "AccentFgBrush");
+        var iconTile = new Border
+        {
+            Width = 56,
+            Height = 56,
+            CornerRadius = new CornerRadius(GetRadius("RadiusLg")),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Child = icon,
+        };
+        iconTile.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
+        _subsIntroTitle = new TextBlock
+        {
+            Text = Localization.SubsIntroTitle,
+            FontSize = UiScale.Fs(14),
+            FontWeight = FontWeight.Bold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        _subsIntroTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+        _subsIntroBody = new TextBlock
+        {
+            Text = Localization.SubsIntroBody,
+            FontSize = UiScale.Fs(11),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 320,
+        };
+        _subsIntroBody.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+        return new StackPanel
+        {
+            Spacing = 10,
+            Margin = new Thickness(24, 16),
+            VerticalAlignment = VerticalAlignment.Center,
+            IsVisible = false,
+            Children = { iconTile, _subsIntroTitle, _subsIntroBody },
+        };
+    }
+
+    private void UpdateSubscribeEmptyState()
+    {
+        var none = _subs.Count == 0;
+        if (_subsIntro is not null) _subsIntro.IsVisible = none;
+        foreach (var part in _subsListOnlyParts) part.IsVisible = !none;
+    }
+
+    /// <summary>The system Back key closes an open subscription editor or delete confirmation before it leaves the screen.</summary>
+    private bool CloseSubscriptionEditor()
+    {
+        if (_advShellOverlay is not { IsVisible: true } || _advShellSelectedTab != AdvancedTab.Subscribe) return false;
+        if (_editingId is null && _pendingDeleteId is null) return false;
+        _editingId = null;
+        _pendingDeleteId = null;
+        RebuildSubsList();
+        return true;
     }
 
     private DockPanel BuildSubscribeAggregatedServerSection()
@@ -367,12 +447,14 @@ public partial class AndroidApp
         {
             Content = Localization.AdvSubscribeRefreshAll,
             FontSize = UiScale.Fs(10),
-            Padding = new Thickness(8, 3),
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(12, 6),
+            MinHeight = 44,
+            VerticalContentAlignment = VerticalAlignment.Center,
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-            Background = GetBrush("SurfaceRaisedBrush"),
-            BorderBrush = GetBrush("BorderDefaultBrush"),
-            BorderThickness = new Thickness(1),
-            Foreground = GetBrush("TextPrimaryBrush"),
+            Background = GetBrush("AccentBgMutedBrush"),
+            BorderThickness = new Thickness(0),
+            Foreground = GetBrush("AccentFgBrush"),
         };
         _subsRefreshAllBtn.Click += OnSubsRefreshAllClicked;
 
@@ -582,6 +664,7 @@ public partial class AndroidApp
     {
         if (_subsListStack is null || _subsEmptyHint is null) return;
         _subsListStack.Children.Clear();
+        UpdateSubscribeEmptyState();
 
         if (_subs.Count == 0)
         {
@@ -718,19 +801,41 @@ public partial class AndroidApp
             var nameBox = new TextBox
             {
                 Text = sub.Name,
-                FontSize = UiScale.Fs(11),
-                Padding = new Thickness(8, 6),
-                CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+                FontSize = UiScale.Fs(12),
+                MinHeight = 44,
+                Padding = new Thickness(10, 8),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+                Background = GetBrush("SurfaceSunkenBrush"),
+                BorderBrush = GetBrush("BorderSubtleBrush"),
+                BorderThickness = new Thickness(1),
             };
             var urlBox = new TextBox
             {
                 Text = sub.Url,
                 FontSize = UiScale.Fs(11),
                 FontFamily = new FontFamily("monospace"),
-                Padding = new Thickness(8, 6),
-                CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+                MinHeight = 44,
+                Padding = new Thickness(10, 8),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+                Background = GetBrush("SurfaceSunkenBrush"),
+                BorderBrush = GetBrush("BorderSubtleBrush"),
+                BorderThickness = new Thickness(1),
             };
-            var saveBtn = StyledSecondaryButton(Localization.SubsSaveEdit);
+            var saveBtn = new Avalonia.Controls.Button
+            {
+                Content = Localization.SubsSaveEdit,
+                FontSize = UiScale.Fs(12),
+                FontWeight = FontWeight.SemiBold,
+                Padding = new Thickness(16, 7),
+                MinHeight = 44,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+                BorderThickness = new Thickness(0),
+            };
+            saveBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
+            saveBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
             saveBtn.Click += (s, e) =>
             {
                 var newUrl = (urlBox.Text ?? string.Empty).Trim();
@@ -743,6 +848,8 @@ public partial class AndroidApp
                 RebuildSubsList();
             };
             var cancelBtn = StyledSecondaryButton(Localization.SubsCancelEdit);
+            cancelBtn.MinHeight = 44;
+            cancelBtn.VerticalContentAlignment = VerticalAlignment.Center;
             cancelBtn.Click += (s, e) =>
             {
                 _editingId = null;
@@ -751,14 +858,14 @@ public partial class AndroidApp
             var btnRow = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Spacing = 6,
+                Spacing = 8,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Margin = new Thickness(0, 6, 0, 0),
                 Children = { cancelBtn, saveBtn },
             };
             editorRow = new StackPanel
             {
-                Spacing = 4,
+                Spacing = 8,
                 Margin = new Thickness(32, 6, 0, 0),
                 Children = { nameBox, urlBox, btnRow },
             };
@@ -978,6 +1085,8 @@ public partial class AndroidApp
         if (_subsNewName is not null) _subsNewName.Watermark = Localization.AdvSubscribeNameLabel;
         if (_subsNewUrl is not null) _subsNewUrl.Watermark = Localization.AdvSubscribeUrlLabel;
         if (_subsEmptyHint is not null) _subsEmptyHint.Text = Localization.LblAddSubscriptionHint;
+        if (_subsIntroTitle is not null) _subsIntroTitle.Text = Localization.SubsIntroTitle;
+        if (_subsIntroBody is not null) _subsIntroBody.Text = Localization.SubsIntroBody;
         if (_subsAutoSelectChk is not null)
         {
             _subsAutoSelectChk.Content = Localization.AutoSelectBestServer;

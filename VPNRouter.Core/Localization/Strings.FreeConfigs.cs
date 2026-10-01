@@ -171,7 +171,7 @@ public static partial class Strings
 
     public static string FcSearchListEmptyHint => Ru
         ? "Нажмите кнопку выше, чтобы найти конфиги."
-        : "Click the button above to find configs.";
+        : "Use the button above to find configs.";
 
     public static string FcFastScanLabel => Ru ? "Fast scan (только TCP, без TLS)" : "Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru
@@ -235,7 +235,7 @@ public static partial class Strings
     public static string FcPageDescription    => Ru
         ? "Публичные VLESS-конфиги. Проверка: TCP + TLS handshake с валидацией сертификата. ✓ = сервер живой и TLS-валидный."
         : "Public VLESS configs. Tests: TCP + TLS handshake with cert validation. ✓ = server alive and TLS-valid.";
-    public static string FcStatusEmpty        => Ru ? "Кэш пуст — нажмите «Обновить»" : "Cache is empty — click 'Refresh'";
+    public static string FcStatusEmpty        => Ru ? "Конфигов пока нет." : "No configs yet.";
     public static string FcStatusCancelled    => Ru ? "Отменено" : "Cancelled";
     public static string FcStatusApplyFailed  => Ru ? "Не удалось подключиться" : "Apply failed";
     public static string FcStatusCacheAge(string age) => Ru
