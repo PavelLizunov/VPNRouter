@@ -69,6 +69,19 @@ foreach ($p in $targets) {
 
 if ($targets) { Start-Sleep -Milliseconds 800 }
 
+# The split-tunnel kernel driver that VPNRouter installs from <InstallDir>\app\driver stays loaded after the app is killed and
+# locks its .sys file, so the installer could neither delete nor replace it ("DeleteFile: code 5, access denied"). Stop it
+# (only when its file lives in the install folder: a Mullvad client or another copy keeps its own driver); it starts on demand.
+$driver = Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'"
+if ($driver -and $driver.State -ne 'Stopped' -and (Test-InRoots (([string]$driver.PathName) -replace '^\\\?\?\\', ''))) {
+    Write-Output 'Stopping the split-tunnel driver'
+    Stop-Service -Name 'mullvad-split-tunnel' -Force
+    for ($i = 0; $i -lt 20; $i++) {
+        if ((Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'").State -eq 'Stopped') { break }
+        Start-Sleep -Milliseconds 500
+    }
+}
+
 if ($RemoveService -and $svc -and (Test-InRoots (Get-ServiceBinary $svc.PathName))) {
     Write-Output 'Deleting the VPNRouter service'
     & (Join-Path $env:SystemRoot 'System32\sc.exe') delete VPNRouter | Out-Null
