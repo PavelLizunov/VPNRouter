@@ -13,6 +13,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using VPNRouter.Core.Services.FreeConfigs;
+using UiIcons = VPNRouter.Core.Services.UiIcons;
+using IconView = VPNRouter.UI.Controls.IconView;
+using IconLabel = VPNRouter.UI.Controls.IconLabel;
 
 namespace VPNRouter.Android;
 
@@ -77,7 +80,7 @@ public partial class AndroidApp
         var radiusXs = GetRadius("RadiusXs");
         var radiusSm = GetRadius("RadiusSm");
 
-        _fcTabSearch = MakeAdvancedSubTabButton(Localization.FcTabSearch,
+        _fcTabSearch = MakeAdvancedSubTabButton(UiIcons.StripSymbols(Localization.FcTabSearch),
                                                 _fcSelectedTab == 0,
                                                 (_, _) => SelectFreeConfigsTab(0));
         _fcTabSaved = MakeAdvancedSubTabButton(SavedTabHeaderText(),
@@ -103,7 +106,7 @@ public partial class AndroidApp
 
         _fcFindButton = new Avalonia.Controls.Button
         {
-            Content = Localization.FcFindButton,
+            Content = IconText(UiIcons.SearchCheck, Localization.FcFindButton, 18),
             FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(0, 10),
@@ -120,7 +123,7 @@ public partial class AndroidApp
 
         _fcStopButton = new Avalonia.Controls.Button
         {
-            Content = Localization.FcStopButton,
+            Content = IconText(UiIcons.Square, Localization.FcStopButton, 16),
             FontSize = UiScale.Fs(13),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(0, 10),
@@ -136,7 +139,7 @@ public partial class AndroidApp
 
         _fcAdvancedToggle = new Avalonia.Controls.Button
         {
-            Content = Localization.FcAdvancedSettings,
+            Content = IconText(UiIcons.ChevronRight, Localization.FcAdvancedSettings, 14),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -152,6 +155,7 @@ public partial class AndroidApp
 
         _fcAdvancedPanel = BuildAdvancedSettingsPanel(successFg);
         _fcAdvancedPanel.IsVisible = _fcAdvancedExpanded;
+        if (_fcAdvancedToggle.Content is IconLabel advLabel) SetChevronOpen(advLabel.IconView, _fcAdvancedExpanded);
 
         var greenCardStack = new StackPanel
         {
@@ -236,7 +240,7 @@ public partial class AndroidApp
 
         _fcClearAllButton = new Avalonia.Controls.Button
         {
-            Content = Localization.FcSavedClearAll,
+            Content = IconText(UiIcons.Trash, Localization.FcSavedClearAll, 14),
             FontSize = UiScale.Fs(10),
             Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(radiusSm),
@@ -577,8 +581,8 @@ public partial class AndroidApp
             Foreground = successFg,
         };
         var displayLocal = display;
-        var minus = MakeSpinnerStepButton("−");
-        var plus  = MakeSpinnerStepButton("+");
+        var minus = MakeSpinnerStepButton(UiIcons.Minus);
+        var plus  = MakeSpinnerStepButton(UiIcons.Plus);
         minus.Click += (_, _) =>
         {
             current = System.Math.Max(min, current - step);
@@ -600,13 +604,11 @@ public partial class AndroidApp
         };
     }
 
-    private Avalonia.Controls.Button MakeSpinnerStepButton(string glyph)
+    private Avalonia.Controls.Button MakeSpinnerStepButton(string icon)
     {
         var btn = new Avalonia.Controls.Button
         {
-            Content = glyph,
-            FontSize = UiScale.Fs(16),
-            FontWeight = FontWeight.SemiBold,
+            Content = IconContent(icon, 18),
             Width = 44,
             Height = 44,
             Padding = new Thickness(0),
@@ -629,7 +631,7 @@ public partial class AndroidApp
         {
             Text = string.IsNullOrEmpty(entry.CountryCode)
                 ? "—"
-                : $"{FlagFor(entry.CountryCode)} {entry.CountryCode}",
+                : $"{FlagFor(entry.CountryCode)} {entry.CountryCode}".Trim(),
             FontSize = UiScale.Fs(10),
             Foreground = textP,
             VerticalAlignment = VerticalAlignment.Center,
@@ -648,10 +650,8 @@ public partial class AndroidApp
 
         var latencyText = entry.Status switch
         {
-            FreeConfigStatus.Verified when entry.LatencyMs <= 0 => "— ✓✓",
-            FreeConfigStatus.Verified                            => $"{entry.LatencyMs} ms ✓✓",
-            FreeConfigStatus.Ok       when entry.LatencyMs <= 0 => "— ✓",
-            FreeConfigStatus.Ok                                  => $"{entry.LatencyMs} ms ✓",
+            FreeConfigStatus.Verified or FreeConfigStatus.Ok when entry.LatencyMs <= 0 => "—",
+            FreeConfigStatus.Verified or FreeConfigStatus.Ok => $"{entry.LatencyMs} ms",
             FreeConfigStatus.Slow                                => $"{entry.LatencyMs} ms slow",
             FreeConfigStatus.Implausible                         => "fake (<5ms)",
             FreeConfigStatus.TlsFailed                           => "TLS failed",
@@ -680,13 +680,29 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 0, 4, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
+            Child = new StackPanel
             {
-                Text = latencyText,
-                Foreground = Brushes.White,
-                FontSize = UiScale.Fs(9),
-                FontWeight = FontWeight.SemiBold,
-            }
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 2,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = latencyText,
+                        Foreground = Brushes.White,
+                        FontSize = UiScale.Fs(9),
+                        FontWeight = FontWeight.SemiBold,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    },
+                    new IconView
+                    {
+                        Icon = entry.Status == FreeConfigStatus.Verified ? UiIcons.CheckCheck : UiIcons.Check,
+                        Size = UiScale.Ic(12),
+                        Foreground = Brushes.White,
+                        IsVisible = entry.Status is FreeConfigStatus.Verified or FreeConfigStatus.Ok,
+                    },
+                },
+            },
         };
 
         var transport = new TextBlock
@@ -719,7 +735,7 @@ public partial class AndroidApp
         {
             var removeBtn = new Avalonia.Controls.Button
             {
-                Content = Localization.FcSavedRemoveOne,
+                Content = IconContent(UiIcons.Trash, UiScale.Ic(18)),
                 FontSize = UiScale.Fs(11),
                 Padding = new Thickness(8),
                 MinWidth = 48,
@@ -751,7 +767,8 @@ public partial class AndroidApp
 
     private static string FlagFor(string? cc)
     {
-        if (string.IsNullOrEmpty(cc) || cc.Length != 2) return "🌐";
+        if (string.IsNullOrEmpty(cc) || cc.Length != 2 || !char.IsAsciiLetter(cc[0]) || !char.IsAsciiLetter(cc[1]))
+            return string.Empty;
         var upper = cc.ToUpperInvariant();
         var c0 = 0x1F1E6 + (upper[0] - 'A');
         var c1 = 0x1F1E6 + (upper[1] - 'A');
@@ -798,7 +815,7 @@ public partial class AndroidApp
         if (_fcTabSearch is not null)
         {
             StyleAdvShellTab(_fcTabSearch, index == 0);
-            _fcTabSearch.Content = Localization.FcTabSearch;
+            _fcTabSearch.Content = UiIcons.StripSymbols(Localization.FcTabSearch);
         }
         if (_fcTabSaved is not null)
         {
@@ -866,6 +883,7 @@ public partial class AndroidApp
     {
         _fcAdvancedExpanded = !_fcAdvancedExpanded;
         if (_fcAdvancedPanel is not null) _fcAdvancedPanel.IsVisible = _fcAdvancedExpanded;
+        if (_fcAdvancedToggle?.Content is IconLabel advLabel) SetChevronOpen(advLabel.IconView, _fcAdvancedExpanded);
     }
 
     private bool ApplyFcConnectGate()

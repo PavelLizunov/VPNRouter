@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using Orientation = Avalonia.Layout.Orientation;
+using IconLabel = VPNRouter.UI.Controls.IconLabel;
 
 namespace VPNRouter.Android;
 
@@ -155,8 +156,7 @@ public partial class AndroidApp
 
         var subsQrBtn = new Avalonia.Controls.Button
         {
-            Content = "📷",
-            FontSize = UiScale.Fs(14),
+            Content = IconContent(UiIcons.ScanQrCode, 20),
             Padding = new Thickness(0),
             Width = 40,
             Background = GetBrush("AccentBgSubtleBrush"),
@@ -664,17 +664,17 @@ public partial class AndroidApp
             Foreground = GetBrush("AccentSolidBrush"),
         };
 
-        var editBtn = StyledRowActionButton("✎", Localization.TipEditSubscription);
+        var editBtn = StyledRowActionButton(UiIcons.Pencil, Localization.TipEditSubscription);
         editBtn.Click += (s, e) => StartEditUrl(sub);
 
-        var refreshBtn = StyledRowActionButton("↻", Localization.TipRefreshSubscription);
+        var refreshBtn = StyledRowActionButton(UiIcons.RefreshCw, Localization.TipRefreshSubscription);
         refreshBtn.IsEnabled = !_refreshingIds.Contains(sub.Id);
         refreshBtn.Click += async (s, e) => await RefreshOneAsync(sub);
 
-        var deleteBtn = StyledRowActionButton("✕", Localization.TipRemoveSubscription);
+        var deleteBtn = StyledRowActionButton(UiIcons.Trash, Localization.TipRemoveSubscription);
         if (_pendingDeleteId == sub.Id)
         {
-            deleteBtn.Content = "✕?";
+            deleteBtn.Content = new IconLabel(UiIcons.Trash, "?", UiScale.Ic(18)) { Spacing = 2 };
             deleteBtn.Foreground = GetBrush("DangerFgBrush");
             ToolTip.SetTip(deleteBtn, Localization.SubsRemoveConfirm);
         }
@@ -785,11 +785,11 @@ public partial class AndroidApp
         return $"{url} · {nFmt} · {time}";
     }
 
-    private Avalonia.Controls.Button StyledRowActionButton(string glyph, string? tooltip)
+    private Avalonia.Controls.Button StyledRowActionButton(string icon, string? tooltip)
     {
         var btn = new Avalonia.Controls.Button
         {
-            Content = glyph,
+            Content = IconContent(icon, UiScale.Ic(18)),
             FontSize = UiScale.Fs(11),
             Padding = new Thickness(2),
             MinWidth = 40,

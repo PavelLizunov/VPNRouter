@@ -25,8 +25,8 @@ public static partial class Strings
         : "Battery optimization";
 
     public static string ReliabilityBatteryOptStatusExempt => Ru
-        ? "✓ VPNRouter исключён из энергосбережения"
-        : "✓ VPNRouter is excluded from battery optimization";
+        ? "VPNRouter исключён из энергосбережения"
+        : "VPNRouter is excluded from battery optimization";
 
     public static string ReliabilityBatteryOptStatusOptimized => Ru
         ? "VPNRouter в обычном энергосбережении — Android может прибить туннель в Doze"
@@ -133,16 +133,16 @@ public static partial class Strings
     public static string CcSourceCustom => Ru ? "свой JSON" : "custom JSON";
 
     public static string CcValidationOk => Ru
-        ? "✓ JSON корректен. Найдено протоколов: {0}. Сервер: {1}."
-        : "✓ JSON is valid. Protocols: {0}. Server: {1}.";
+        ? "JSON корректен. Найдено протоколов: {0}. Сервер: {1}."
+        : "JSON is valid. Protocols: {0}. Server: {1}.";
 
     public static string CcValidationFailed => Ru
-        ? "✗ Некорректно: {0}"
-        : "✗ Invalid: {0}";
+        ? "Некорректно: {0}"
+        : "Invalid: {0}";
 
     public static string CcValidationParseError => Ru
-        ? "✗ Не удалось разобрать JSON: {0}"
-        : "✗ Could not parse JSON: {0}";
+        ? "Не удалось разобрать JSON: {0}"
+        : "Could not parse JSON: {0}";
 
     public static string CcSaveStatusEmpty => Ru
         ? "Вставьте sing-box JSON или нажмите «Очистить»."
@@ -298,8 +298,8 @@ public static partial class Strings
         : "On Android, Deep verify equals an extended TCP+TLS probe — spawning a separate sing-box process from the app isn't available.";
 
     public static string AdvSubscribeAggregatedEmpty => Ru
-        ? "В подписках пока нет серверов — добавьте подписку ниже и нажмите ↻."
-        : "No servers in any subscription yet — add one below and click ↻.";
+        ? "В подписках пока нет серверов — добавьте подписку ниже и обновите её."
+        : "No servers in any subscription yet — add one below and refresh it.";
 
     public static string SettingsSectionRules => Ru ? "Правила" : "Rules";
 

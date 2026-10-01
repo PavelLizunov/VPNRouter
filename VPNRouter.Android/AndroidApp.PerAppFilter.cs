@@ -839,7 +839,7 @@ public partial class AndroidApp
         _pendingDeleteCategoryId = id;
         if (_advAppsCategoryNameMap.TryGetValue(id, out var tb) && tb is not null)
         {
-            tb.Text = "✗ " + Localization.AndroidDeleteCategoryConfirm;
+            tb.Text = Localization.AndroidDeleteCategoryConfirm;
             tb.Foreground = GetBrush("DangerFgBrush");
         }
     }

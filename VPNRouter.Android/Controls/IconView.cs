@@ -107,7 +107,6 @@ public sealed class IconLabel : StackPanel
     {
         Orientation = Avalonia.Layout.Orientation.Horizontal;
         Spacing = 6;
-        HorizontalAlignment = HorizontalAlignment.Center;
         VerticalAlignment = VerticalAlignment.Center;
         IconView = new IconView(icon, iconSize);
         _text = new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center };

@@ -111,8 +111,7 @@ public partial class AndroidApp
 
         _cfgExportCloseBtn = new Avalonia.Controls.Button
         {
-            Content = "✕",
-            FontSize = UiScale.Fs(16),
+            Content = IconContent(UiIcons.X, 22),
             Width = 44,
             Height = 44,
             Padding = new Thickness(0),
@@ -288,8 +287,7 @@ public partial class AndroidApp
 
         _cfgImportCloseBtn = new Avalonia.Controls.Button
         {
-            Content = "✕",
-            FontSize = UiScale.Fs(16),
+            Content = IconContent(UiIcons.X, 22),
             Width = 44,
             Height = 44,
             Padding = new Thickness(0),
