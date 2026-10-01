@@ -121,6 +121,8 @@ function Assert-ExactReleaseAssets {
         "VPNRouter-v$Version-win.zip.sha256",
         "VPNRouter-update-v$Version-win.zip",
         "VPNRouter-update-v$Version-win.zip.sha256",
+        "VPNRouter-Setup-v$Version.exe",
+        "VPNRouter-Setup-v$Version.exe.sha256",
         "VPNRouter-v$Version-mac.dmg",
         "VPNRouter-v$Version-mac.dmg.sha256",
         "VPNRouter-v$Version-mac.zip",
@@ -146,7 +148,7 @@ function Assert-ExactReleaseAssets {
     $missing = @($expected | Where-Object { $actual -notcontains $_ })
     $unexpected = @($actual | Where-Object { $expected -notcontains $_ })
     if ($actual.Count -ne $expected.Count -or $missing.Count -gt 0 -or $unexpected.Count -gt 0) {
-        throw 'The published release does not contain the exact expected 16 assets.'
+        throw 'The published release does not contain the exact expected 18 assets.'
     }
     return (($release.assets | Sort-Object name | ForEach-Object {
         if (-not $_.id -or -not $_.updatedAt -or $_.size -le 0) { throw 'Incomplete release asset identity.' }
@@ -251,6 +253,8 @@ try {
         $artifact = Join-Path $ReleaseRoot "VPNRouter-v$Version-$suffix"
         Get-VerifiedArtifactHash -ArtifactPath $artifact -SidecarPath "$artifact.sha256" | Out-Null
     }
+    $setupArtifact = Join-Path $ReleaseRoot "VPNRouter-Setup-v$Version.exe"
+    Get-VerifiedArtifactHash -ArtifactPath $setupArtifact -SidecarPath "$setupArtifact.sha256" | Out-Null
     if ((Assert-ExactReleaseAssets) -cne $inventoryBefore) { throw 'Release inventory changed during download.' }
     $installHash = Get-VerifiedArtifactHash -ArtifactPath $FreshZipPath -SidecarPath $FreshHashPath
     $updateHash = Get-VerifiedArtifactHash -ArtifactPath $FreshUpdateZipPath -SidecarPath $FreshUpdateHashPath

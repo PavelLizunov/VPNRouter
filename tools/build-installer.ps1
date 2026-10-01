@@ -6,8 +6,8 @@
 .DESCRIPTION
   Takes either the install zip produced by build.ps1 (-PackageZip) or the unpacked package folder (-PackageDir, the one
   that holds Start VPN.cmd, README.txt and app\), compiles packaging\windows\vpnrouter.iss with ISCC.exe, and writes
-  VPNRouter-Setup-v<Version>.exe plus a .sha256 sidecar to -OutputDir. The installer is NOT signed and NOT uploaded to
-  any release (release wiring is a later, owner-commanded step).
+  VPNRouter-Setup-v<Version>.exe plus a .sha256 sidecar to -OutputDir. The installer is NOT signed. build.ps1 -Upload (or
+  -Installer) calls this script and stages the result with the other Windows release assets.
 
   Inno Setup 6 (ISCC.exe) is looked up in -IsccPath, $env:ISCC, $env:INNO_SETUP, C:\android-build\tools\innosetup and the
   usual Program Files folders. It is not installed by this script.
@@ -108,4 +108,4 @@ $hash = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToLowerInvariant()
 
 Write-Host ("Built {0} ({1:N1} MB)" -f $exe, ((Get-Item $exe).Length / 1MB))
 Write-Host "SHA256: $hash"
-Write-Host 'Not signed, not uploaded (release wiring is a separate step).'
+Write-Host 'Not signed. build.ps1 -Upload stages it with the other release assets.'

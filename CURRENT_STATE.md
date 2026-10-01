@@ -16,7 +16,7 @@ When release or platform facts change, update this file.
   and the native release skills under `.dsh/skills/`.
 - Publication order: accepted main commit -> immutable tag with verified SHA ->
   draft (`--verify-tag --latest=false`, also `--prerelease` for candidates) ->
-  all platform staging and tag tests/update -> exact 16 assets/all hashes ->
+  all platform staging and tag tests/update -> exact 18 assets/all hashes ->
   explicit tag-ref integrity dispatch with `auto_draft_on_failure=false` ->
   separately authorized publication. APT and full fixed-WINBRAT verification
   follow publication; dispatch missing integrity/APT runs at the release tag.

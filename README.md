@@ -56,6 +56,8 @@ Apple Silicon. Auto-strips Gatekeeper quarantine. First launch prompts once for 
 iwr -useb https://vpn.ninitux.com/install.ps1 | iex
 ```
 Windows 10/11 x64. Auto-elevates via UAC. Registers Start Menu + Add/Remove Programs. Updates: re-run the same command. Uninstall: Settings → Apps → VPNRouter.
+
+Prefer a regular setup wizard? Download `VPNRouter-Setup-v{version}.exe` from [Releases](https://github.com/PavelLizunov/VPNRouter/releases). It asks for administrator rights, installs to `Program Files`, adds a Start Menu entry and an uninstaller; desktop icon, autostart, the background service and Defender exclusions are optional checkboxes, all off by default. The installer is not code-signed, so Windows SmartScreen may warn: compare its hash with the `.sha256` file first.
 </td>
 </tr>
 <tr>
@@ -149,6 +151,7 @@ Published version tags are permanent source references; older candidate download
 |---|---|---|
 | `VPNRouter-v{version}-win.zip` | 🪟 Windows | Full installer (first install) |
 | `VPNRouter-update-v{version}-win.zip` | 🪟 Windows | DLL-only update (if you're already on a recent version) |
+| `VPNRouter-Setup-v{version}.exe` | 🪟 Windows | Setup wizard (Inno Setup, not code-signed): installs the same files as the install zip, with an uninstaller and optional autostart/service checkboxes |
 | `VPNRouter-*-win.zip.sha256` | 🪟 Windows | SHA256 companion file — auto-updater verifies the download against this before extracting (v2.15.8+) |
 | `VPNRouter-v{version}-mac.dmg` | 🍎 macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
 | `VPNRouter-v{version}-mac.zip` | 🍎 macOS | Raw `.app` bundle (for manual install) |
@@ -156,7 +159,7 @@ Published version tags are permanent source references; older candidate download
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
 | `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Signed ARM64 APK, API 23+. Built and signed by `build-android.yml` for every release tag, then published at Releases and [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). An in-app updater delivers future APKs. |
-| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Compare `sha256sum <file>` on Linux, `shasum -a 256 <file>` on macOS, or `Get-FileHash -Algorithm SHA256 <file>` on Windows with the 64-character hash in its sidecar. Some sidecars contain only the hash and cannot be used directly with `sha256sum -c`. |
+| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip` + `*-Setup-*.exe`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Compare `sha256sum <file>` on Linux, `shasum -a 256 <file>` on macOS, or `Get-FileHash -Algorithm SHA256 <file>` on Windows with the 64-character hash in its sidecar. Some sidecars contain only the hash and cannot be used directly with `sha256sum -c`. |
 
 The scheduled pool job publishes this separate artifact when it succeeds:
 

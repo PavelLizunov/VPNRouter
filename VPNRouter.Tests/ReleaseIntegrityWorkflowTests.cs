@@ -36,22 +36,23 @@ public sealed class ReleaseIntegrityWorkflowTests
     }
 
     [Fact]
-    public void Inventory_RequiresExactlyAllSixteenNamesBeforeUnfilteredDownload()
+    public void Inventory_RequiresExactlyAllEighteenNamesBeforeUnfilteredDownload()
     {
         var script = Script("Require exact inventory and download release assets");
         var names = Regex.Matches(script, "\"(VPNRouter-[^\"]+)\"").Select(m => m.Groups[1].Value).ToArray();
-        Assert.Equal(16, names.Length);
-        Assert.Equal(16, names.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(18, names.Length);
+        Assert.Equal(18, names.Distinct(StringComparer.Ordinal).Count());
         var binaries = new[]
         {
             "VPNRouter-v${EXPECTED_VERSION}-win.zip", "VPNRouter-update-v${EXPECTED_VERSION}-win.zip",
+            "VPNRouter-Setup-v${EXPECTED_VERSION}.exe",
             "VPNRouter-v${EXPECTED_VERSION}-mac.dmg", "VPNRouter-v${EXPECTED_VERSION}-mac.zip",
             "VPNRouter-v${EXPECTED_VERSION}-linux-amd64.deb", "VPNRouter-v${EXPECTED_VERSION}-linux-x86_64.AppImage",
             "VPNRouter-v${EXPECTED_VERSION}-linux.tar.gz", "VPNRouter-v${EXPECTED_VERSION}-android-arm64.apk"
         };
         Assert.Equal(binaries.SelectMany(n => new[] { n, n + ".sha256" }).OrderBy(n => n, StringComparer.Ordinal),
             names.OrderBy(n => n, StringComparer.Ordinal));
-        Assert.Equal(8, names.Count(n => n.EndsWith(".sha256", StringComparison.Ordinal)));
+        Assert.Equal(9, names.Count(n => n.EndsWith(".sha256", StringComparison.Ordinal)));
         foreach (var name in names.Where(n => !n.EndsWith(".sha256", StringComparison.Ordinal)))
             Assert.Contains(name + ".sha256", names);
         Assert.Contains("jq -r '.assets[].name' release-before.json", script);

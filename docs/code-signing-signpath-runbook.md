@@ -89,7 +89,7 @@ fails, no public release is modified. Uploads never overwrite existing assets;
 inspect partial results and explicitly recover only missing exact-tag files,
 or STOP if provenance or consistency cannot be proven.
 
-Wait for all platform staging and tag-bound test/update jobs, all 16 canonical
+Wait for all platform staging and tag-bound test/update jobs, all 18 canonical
 assets and every matching sidecar, then dispatch and await:
 
 ```

@@ -54,7 +54,7 @@ AppVersion must match the complete tag version, including `-rN`.
    offered. Test workflows take `--ref TAG` without a version input.
    Legacy `sign-android.yml` is disabled; use `build-android.yml`.
 6. Before publication, require all platform staging and tag-bound test/update
-   jobs green, exactly the 16 canonical assets below, all hashes matching and
+   jobs green, exactly the 18 canonical assets below, all hashes matching and
    both Windows True Split bundles. Explicitly dispatch and await:
 
    ```sh
@@ -126,7 +126,7 @@ A published candidate is ready for a separately authorized cut only after:
    authorized preflighted exact-SHA worker.
 2. Canonical tag-bound macOS/Linux/Android, tests, Windows update, integrity and
    postpublication APT runs succeed.
-3. Exactly 16 canonical assets with matching hashes and both True Split bundles.
+3. Exactly 18 canonical assets with matching hashes and both True Split bundles.
 4. Full fixed-WINBRAT post-ship verification passes, including two connection
    cycles and strict sanitized lifecycle/log checks.
 5. Previous-stable -> candidate real live-update gate passes, including helper
@@ -137,15 +137,16 @@ A published candidate is ready for a separately authorized cut only after:
 Any failure blocks stable. Fix it in a new candidate and repeat the gates;
 rebuild and verify the final no-suffix stable tag after the authorized cut.
 
-## Canonical inventory: 16 assets
+## Canonical inventory: 18 assets
 
-Each binary has a same-name `.sha256` sidecar, for eight binaries and eight
+Each binary has a same-name `.sha256` sidecar, for nine binaries and nine
 sidecars. Replace `X.Y.Z` with the full version, including `-rN` when applicable.
 
 | Platform | Binary | Producer |
 |---|---|---|
 | Windows | `VPNRouter-vX.Y.Z-win.zip` | unsigned `build.ps1` or exact-tag `sign-windows.yml` |
 | Windows | `VPNRouter-update-vX.Y.Z-win.zip` | unsigned `build.ps1` or exact-tag `sign-windows.yml` |
+| Windows | `VPNRouter-Setup-vX.Y.Z.exe` | unsigned Inno Setup installer from `build.ps1 -Upload` (`tools/build-installer.ps1`) |
 | macOS | `VPNRouter-vX.Y.Z-mac.dmg` | `build-mac.yml` |
 | macOS | `VPNRouter-vX.Y.Z-mac.zip` | `build-mac.yml` |
 | Linux | `VPNRouter-vX.Y.Z-linux-amd64.deb` | `build-linux.yml` |
