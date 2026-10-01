@@ -43,6 +43,8 @@ public partial class AndroidApp
         for (int i = 0; i < 6; i++)
         {
             var button = MakeSettingsSubSectionButton(i);
+            // Custom routing rules are not wired into the Android tunnel: that page only holds a note, so no chip for it.
+            if (i == 1) button.IsVisible = false;
             _settingsSubSectionButtons[i] = button;
             stack.Children.Add(button);
         }
@@ -347,6 +349,7 @@ public partial class AndroidApp
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
+        StyleTonalButton(lockdownBtn);
         lockdownBtn.Click += OnReliabilityAlwaysOnClicked;
 
         var leakInner = new Border
@@ -516,6 +519,7 @@ public partial class AndroidApp
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        StyleTonalButton(checkBtn);
         checkBtn.Click += OnSettingsCheckUpdatesClicked;
 
         var versionRow = new Grid
@@ -581,6 +585,7 @@ public partial class AndroidApp
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
+        StyleTonalButton(alwaysOnBtn);
         alwaysOnBtn.Click += OnReliabilityAlwaysOnClicked;
         var alwaysOnRow = new StackPanel
         {
@@ -617,6 +622,7 @@ public partial class AndroidApp
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
+        StyleTonalButton(_reliabilityBatteryButton);
         _reliabilityBatteryButton.Click += OnReliabilityBatteryClicked;
         UpdateBatteryOptimizationStatus();
         var batteryRow = new StackPanel
