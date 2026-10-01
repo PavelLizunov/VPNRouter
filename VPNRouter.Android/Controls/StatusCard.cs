@@ -1,6 +1,7 @@
 using System.Threading;
 using Avalonia;
 using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
@@ -14,6 +15,8 @@ namespace VPNRouter.UI.Controls;
 /// The state hero of the main screen: a ring with the Lucide power icon, a title and a subtitle. States: off (grey),
 /// connecting (amber, an arc turns around the ring), connected (green), error (red). The ring and the icon use the same
 /// stroke weight; the icon is centred on the ring and lifted by 1 dp because its arc is lower than its line.
+/// Colours fade between states and the ring settles with a short scale when it turns green; no motion when Android
+/// animations are off.
 /// </summary>
 public class StatusCard : UserControl
 {
@@ -53,6 +56,7 @@ public class StatusCard : UserControl
     private readonly TextBlock _titleText;
     private readonly TextBlock _subtitleText;
     private CancellationTokenSource? _spinCts;
+    private bool _wasOn;
     private bool _spinning;
     private bool _attached;
 
@@ -81,8 +85,17 @@ public class StatusCard : UserControl
             Width = RingSize,
             Height = RingSize,
             HorizontalAlignment = HorizontalAlignment.Center,
+            RenderTransformOrigin = RelativePoint.Center,
+            RenderTransform = new ScaleTransform(1, 1),
             Children = { _ringFill, _ringTrack, _spinner, _glyph },
         };
+        if (VPNRouter.Android.UiMotion.Enabled)
+        {
+            var fade = System.TimeSpan.FromMilliseconds(250);
+            _ringTrack.Transitions = new Transitions { new BrushTransition { Property = Shape.StrokeProperty, Duration = fade } };
+            _ringFill.Transitions = new Transitions { new BrushTransition { Property = Shape.FillProperty, Duration = fade } };
+            _glyph.Transitions = new Transitions { new BrushTransition { Property = IconView.ForegroundProperty, Duration = fade } };
+        }
 
         _titleText = new TextBlock
         {
@@ -172,6 +185,27 @@ public class StatusCard : UserControl
         _spinner.IsVisible = connecting;
         if (connecting) StartSpin();
         else StopSpin();
+
+        if (IsOn && !_wasOn && _attached) Settle();
+        _wasOn = IsOn;
+    }
+
+    // One short scale of the ring when the state turns green: 0.94 -> 1.03 -> 1.
+    private void Settle()
+    {
+        if (!VPNRouter.Android.UiMotion.Enabled) return;
+        var settle = new Animation
+        {
+            Duration = System.TimeSpan.FromMilliseconds(420),
+            Easing = new CubicEaseOut(),
+            Children =
+            {
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(ScaleTransform.ScaleXProperty, 0.94), new Setter(ScaleTransform.ScaleYProperty, 0.94) } },
+                new KeyFrame { Cue = new Cue(0.55d), Setters = { new Setter(ScaleTransform.ScaleXProperty, 1.03), new Setter(ScaleTransform.ScaleYProperty, 1.03) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(ScaleTransform.ScaleXProperty, 1.0), new Setter(ScaleTransform.ScaleYProperty, 1.0) } },
+            },
+        };
+        _ = settle.RunAsync(_ringHost, CancellationToken.None);
     }
 
     private void StartSpin()

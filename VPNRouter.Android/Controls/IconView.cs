@@ -1,9 +1,12 @@
 using System.Collections.Generic;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.UI.Controls;
@@ -85,6 +88,24 @@ public sealed class IconView : Control
         }
         using var clip = context.PushClip(new Rect(-2, -2, 28 * Reveal, 28));
         context.DrawGeometry(null, pen, geometry);
+    }
+
+    /// <summary>Draws the icon in from left to right once (a check mark that writes itself). Skipped when Android
+    /// animations are off.</summary>
+    public void PlayReveal(int milliseconds = 320)
+    {
+        if (!VPNRouter.Android.UiMotion.Enabled) return;
+        var reveal = new Animation
+        {
+            Duration = System.TimeSpan.FromMilliseconds(milliseconds),
+            Easing = new CubicEaseOut(),
+            Children =
+            {
+                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(RevealProperty, 0d) } },
+                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(RevealProperty, 1d) } },
+            },
+        };
+        _ = reveal.RunAsync(this, System.Threading.CancellationToken.None);
     }
 
     internal static Geometry? GetGeometry(string? name)
