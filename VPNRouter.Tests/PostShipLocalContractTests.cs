@@ -57,6 +57,6 @@ public sealed class PostShipLocalContractTests
         var bytes = File.ReadAllBytes(path);
         Assert.True(bytes.Length > 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF,
             "tools/brat-verify.ps1 holds Cyrillic literals and needs a UTF-8 BOM for Windows PowerShell 5.1.");
-        Assert.True(Encoding.UTF8.GetString(bytes).Any(c => c > 0x7F));
+        Assert.Contains(Encoding.UTF8.GetString(bytes), c => c > 0x7F);
     }
 }
