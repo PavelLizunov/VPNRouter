@@ -93,17 +93,21 @@ public class PageScreenshotDesignTests
     });
 
     [AvaloniaTheory]
-    [InlineData(true, false, 0)]
-    [InlineData(true, true, 0)]
-    [InlineData(false, false, 0)]
-    [InlineData(false, false, 1)]
-    [InlineData(false, false, 5)]
-    [InlineData(false, true, 0)]
-    public void Window(bool simple, bool dark, int tab) => WithTheme(dark, false, vm =>
+    [InlineData(true, false, 0, 520)]
+    [InlineData(true, true, 0, 520)]
+    [InlineData(false, false, 0, 520)]
+    [InlineData(false, false, 1, 520)]
+    [InlineData(false, false, 5, 520)]
+    [InlineData(false, true, 0, 520)]
+    [InlineData(false, true, 2, 520)]
+    [InlineData(false, false, 0, 360)]
+    [InlineData(false, true, 5, 360)]
+    public void Window(bool simple, bool dark, int tab, int width) => WithTheme(dark, false, vm =>
     {
         vm.IsSimpleMode = simple;
         if (!simple) vm.SelectedTabIndex = tab;
-        var window = new MainWindow { Width = 520, Height = 760, DataContext = vm };
-        ScreenshotHelper.Capture(window, $"design-window-{(simple ? "simple" : "advanced" + tab)}-{(dark ? "dark" : "light")}");
+        var window = new MainWindow { Width = width, Height = 760, DataContext = vm };
+        var suffix = width == 520 ? string.Empty : $"-{width}";
+        ScreenshotHelper.Capture(window, $"design-window-{(simple ? "simple" : "advanced" + tab)}-{(dark ? "dark" : "light")}{suffix}");
     });
 }
