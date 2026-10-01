@@ -2,15 +2,19 @@
 namespace VPNRouter.Core.Services;
 
 /// <summary>
-/// Path data of the Lucide icons (ISC licence, see NOTICE.md) used by the Android UI, on the 24 x 24 grid of the
+/// Path data of the Lucide icons (ISC licence, see NOTICE.md) used by the Android and desktop UI, on the 24 x 24 grid of the
 /// source files. Draw them as strokes with round caps and joins, no fill.
 /// </summary>
 public static partial class UiIcons
 {
     public const string Activity = "activity";
+    public const string ArrowDownUp = "arrow-down-up";
     public const string ArrowDown = "arrow-down";
+    public const string ArrowLeft = "arrow-left";
+    public const string ArrowRight = "arrow-right";
     public const string ArrowUpNarrowWide = "arrow-up-narrow-wide";
     public const string ArrowUp = "arrow-up";
+    public const string Ban = "ban";
     public const string CheckCheck = "check-check";
     public const string Check = "check";
     public const string ChevronDown = "chevron-down";
@@ -18,9 +22,14 @@ public static partial class UiIcons
     public const string ChevronRight = "chevron-right";
     public const string CircleAlert = "circle-alert";
     public const string CircleCheck = "circle-check";
+    public const string CircleDashed = "circle-dashed";
+    public const string CircleMinus = "circle-minus";
+    public const string CirclePlus = "circle-plus";
     public const string CircleX = "circle-x";
+    public const string Circle = "circle";
     public const string Download = "download";
     public const string EllipsisVertical = "ellipsis-vertical";
+    public const string Ellipsis = "ellipsis";
     public const string FileText = "file-text";
     public const string Flag = "flag";
     public const string Globe = "globe";
@@ -36,19 +45,28 @@ public static partial class UiIcons
     public const string ScanQrCode = "scan-qr-code";
     public const string SearchCheck = "search-check";
     public const string Search = "search";
+    public const string Send = "send";
     public const string ShieldCheck = "shield-check";
+    public const string Shield = "shield";
     public const string SquarePlus = "square-plus";
     public const string Square = "square";
+    public const string Timer = "timer";
+    public const string ToggleRight = "toggle-right";
     public const string Trash = "trash";
+    public const string TriangleAlert = "triangle-alert";
     public const string Upload = "upload";
     public const string X = "x";
 
     public static readonly IReadOnlyDictionary<string, string> PathData = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         [Activity] = "M22,12 L19.52,12 A2,2 0 0 0 17.59,13.46 L15.24,21.82 A0.25,0.25 0 0 1 14.76,21.82 L9.24,2.18 A0.25,0.25 0 0 0 8.76,2.18 L6.41,10.54 A2,2 0 0 1 4.49,12 L2,12",
+        [ArrowDownUp] = "M3,16 L7,20 L11,16 M7,20 L7,4 M21,8 L17,4 L13,8 M17,4 L17,20",
         [ArrowDown] = "M12,5 L12,19 M19,12 L12,19 L5,12",
+        [ArrowLeft] = "M12,19 L5,12 L12,5 M19,12 L5,12",
+        [ArrowRight] = "M5,12 L19,12 M12,5 L19,12 L12,19",
         [ArrowUpNarrowWide] = "M3,8 L7,4 L11,8 M7,4 L7,20 M11,12 L15,12 M11,16 L18,16 M11,20 L21,20",
         [ArrowUp] = "M5,12 L12,5 L19,12 M12,19 L12,5",
+        [Ban] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M4.929,4.929 L19.07,19.071",
         [CheckCheck] = "M18,6 L7,17 L2,12 M22,10 L14.5,17.5 L13,16",
         [Check] = "M20,6 L9,17 L4,12",
         [ChevronDown] = "M6,9 L12,15 L18,9",
@@ -56,9 +74,14 @@ public static partial class UiIcons
         [ChevronRight] = "M9,18 L15,12 L9,6",
         [CircleAlert] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,8 L12,12 M12,16 L12.01,16",
         [CircleCheck] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M16,9 L10.5,14.5 L8,12",
+        [CircleDashed] = "M10.1,2.182 A10,10 0 0 1 13.9,2.182 M13.9,21.818 A10,10 0 0 1 10.1,21.818 M17.609,3.721 A10,10 0 0 1 20.299,6.421 M2.182,13.9 A10,10 0 0 1 2.182,10.1 M20.279,17.609 A10,10 0 0 1 17.579,20.299 M21.818,10.1 A10,10 0 0 1 21.818,13.9 M3.721,6.391 A10,10 0 0 1 6.421,3.701 M6.391,20.279 A10,10 0 0 1 3.701,17.579",
+        [CircleMinus] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M8,12 L16,12",
+        [CirclePlus] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M8,12 L16,12 M12,8 L12,16",
         [CircleX] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M15,9 L9,15 M9,9 L15,15",
+        [Circle] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z",
         [Download] = "M12,15 L12,3 M21,15 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,15 M7,10 L12,15 L17,10",
         [EllipsisVertical] = "M11,12 A1,1 0 1 0 13,12 A1,1 0 1 0 11,12 Z M11,5 A1,1 0 1 0 13,5 A1,1 0 1 0 11,5 Z M11,19 A1,1 0 1 0 13,19 A1,1 0 1 0 11,19 Z",
+        [Ellipsis] = "M11,12 A1,1 0 1 0 13,12 A1,1 0 1 0 11,12 Z M18,12 A1,1 0 1 0 20,12 A1,1 0 1 0 18,12 Z M4,12 A1,1 0 1 0 6,12 A1,1 0 1 0 4,12 Z",
         [FileText] = "M6,22 A2,2 0 0 1 4,20 L4,4 A2,2 0 0 1 6,2 L14,2 A2.4,2.4 0 0 1 15.704,2.706 L19.292,6.294 A2.4,2.4 0 0 1 20,8 L20,20 A2,2 0 0 1 18,22 Z M14,2 L14,7 A1,1 0 0 0 15,8 L20,8 M10,9 L8,9 M16,13 L8,13 M16,17 L8,17",
         [Flag] = "M4,22 L4,4 A1,1 0 0 1 4.4,3.2 A6,6 0 0 1 8,2 C11,2 13,4 15.333,4 Q17.333,4 18.4,3.2 A1,1 0 0 1 20,4 L20,14 A1,1 0 0 1 19.6,14.8 A6,6 0 0 1 16,16 C13,16 11,14 8,14 A6,6 0 0 0 4,15.528",
         [Globe] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,2 A14.5,14.5 0 0 0 12,22 A14.5,14.5 0 0 0 12,2 M2,12 L22,12",
@@ -74,10 +97,15 @@ public static partial class UiIcons
         [ScanQrCode] = "M17,12 L17,16 A1,1 0 0 1 16,17 L12,17 M17,3 L19,3 A2,2 0 0 1 21,5 L21,7 M17,8 L17,7 M21,17 L21,19 A2,2 0 0 1 19,21 L17,21 M3,7 L3,5 A2,2 0 0 1 5,3 L7,3 M7,17 L7.01,17 M7,21 L5,21 A2,2 0 0 1 3,19 L3,17 M8,7 L11,7 A1,1 0 0 1 12,8 L12,11 A1,1 0 0 1 11,12 L8,12 A1,1 0 0 1 7,11 L7,8 A1,1 0 0 1 8,7 Z",
         [SearchCheck] = "M8,11 L10,13 L14,9 M3,11 A8,8 0 1 0 19,11 A8,8 0 1 0 3,11 Z M21,21 L16.7,16.7",
         [Search] = "M21,21 L16.66,16.66 M3,11 A8,8 0 1 0 19,11 A8,8 0 1 0 3,11 Z",
+        [Send] = "M14.536,21.686 A0.5,0.5 0 0 0 15.473,21.662 L21.973,2.662 A0.496,0.496 0 0 0 21.338,2.027 L2.338,8.527 A0.5,0.5 0 0 0 2.314,9.464 L10.244,12.644 A2,2 0 0 1 11.356,13.754 Z M21.854,2.147 L10.914,13.086",
         [ShieldCheck] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z M9,12 L11,14 L15,10",
+        [Shield] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z",
         [SquarePlus] = "M5,3 L19,3 A2,2 0 0 1 21,5 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,5 A2,2 0 0 1 5,3 Z M8,12 L16,12 M12,8 L12,16",
         [Square] = "M5,3 L19,3 A2,2 0 0 1 21,5 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,5 A2,2 0 0 1 5,3 Z",
+        [Timer] = "M10,2 L14,2 M12,14 L15,11 M4,14 A8,8 0 1 0 20,14 A8,8 0 1 0 4,14 Z",
+        [ToggleRight] = "M12,12 A3,3 0 1 0 18,12 A3,3 0 1 0 12,12 Z M9,5 L15,5 A7,7 0 0 1 22,12 L22,12 A7,7 0 0 1 15,19 L9,19 A7,7 0 0 1 2,12 L2,12 A7,7 0 0 1 9,5 Z",
         [Trash] = "M10,11 L10,17 M14,11 L14,17 M19,6 L19,20 A2,2 0 0 1 17,22 L7,22 A2,2 0 0 1 5,20 L5,6 M3,6 L21,6 M8,6 L8,4 A2,2 0 0 1 10,2 L14,2 A2,2 0 0 1 16,4 L16,6",
+        [TriangleAlert] = "M21.73,18 L13.73,4 A2,2 0 0 0 10.27,4 L2.27,18 A2,2 0 0 0 4,21 L20,21 A2,2 0 0 0 21.73,18 M12,9 L12,13 M11.995,17 L12.005,17",
         [Upload] = "M12,3 L12,15 M17,8 L12,3 L7,8 M21,15 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,15",
         [X] = "M18,6 L6,18 M6,6 L18,18",
     };

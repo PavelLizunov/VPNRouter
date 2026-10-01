@@ -93,11 +93,9 @@ public sealed class PictogramText : AvaloniaObject
                 (source.StartsWith("Connected [", StringComparison.Ordinal) ||
                  source.StartsWith("Подключено [", StringComparison.Ordinal)) &&
                 i == source.IndexOf("] → ", StringComparison.Ordinal) + 2 && i > 1;
-            var verifiedSummary = allowed.Contains("verified") &&
-                (source.StartsWith("Готово: найдено ", StringComparison.Ordinal) ||
-                 source.StartsWith("Done: ", StringComparison.Ordinal)) &&
-                source.EndsWith("(\u2713\u2713)", StringComparison.Ordinal) && i == source.Length - 3;
-            if (!GetPrefixOnly(control) || i == 0 || connectionArrow || verifiedSummary)
+            var verifiedMark = allowed.Contains("verified") && i > 0 && source[i - 1] == '(' &&
+                source.AsSpan(i).StartsWith("\u2713\u2713)", StringComparison.Ordinal);
+            if (!GetPrefixOnly(control) || i == 0 || connectionArrow || verifiedMark)
                 foreach (var candidate in allowed)
                     if (Symbols.TryGetValue(candidate, out var symbols))
                         foreach (var symbol in symbols)
