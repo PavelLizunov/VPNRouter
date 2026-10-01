@@ -143,7 +143,7 @@ public partial class AndroidApp
         };
         _subsAddBtn = new Avalonia.Controls.Button
         {
-            Content = Localization.AddSubscription,
+            Content = IconText(UiIcons.Plus, Localization.AddSubscription, 14),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(12, 5),
@@ -961,7 +961,7 @@ public partial class AndroidApp
     {
         if (_subsSectionLabel is not null) _subsSectionLabel.Text = Localization.SubscriptionsSection;
         if (_subsRefreshAllBtn is not null) _subsRefreshAllBtn.Content = Localization.AdvSubscribeRefreshAll;
-        if (_subsAddBtn is not null) _subsAddBtn.Content = Localization.AddSubscription;
+        if (_subsAddBtn is not null) _subsAddBtn.Content = IconText(UiIcons.Plus, Localization.AddSubscription, 14);
         if (_subsNewName is not null) _subsNewName.Watermark = Localization.AdvSubscribeNameLabel;
         if (_subsNewUrl is not null) _subsNewUrl.Watermark = Localization.AdvSubscribeUrlLabel;
         if (_subsEmptyHint is not null) _subsEmptyHint.Text = Localization.LblAddSubscriptionHint;

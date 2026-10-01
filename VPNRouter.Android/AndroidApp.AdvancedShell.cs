@@ -250,7 +250,7 @@ public partial class AndroidApp
 
         _advFooterConnectBtn = new Avalonia.Controls.Button
         {
-            Content = Localization.StartVPN,
+            Content = IconText(UiIcons.Play, Localization.StartVPN, 14),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(14, 5),
@@ -572,8 +572,8 @@ public partial class AndroidApp
         if (_advFooterConnectBtn is not null)
         {
             _advFooterConnectBtn.Content = connected
-                ? Localization.StopVPN
-                : Localization.StartVPN;
+                ? IconText(UiIcons.Square, Localization.StopVPN, 14)
+                : IconText(UiIcons.Play, Localization.StartVPN, 14);
         }
     }
 

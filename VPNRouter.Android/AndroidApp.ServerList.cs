@@ -416,7 +416,7 @@ public partial class AndroidApp
 
         _srvAddBtn = new Avalonia.Controls.Button
         {
-            Content = Localization.AdvServersAddServers,
+            Content = IconText(UiIcons.Plus, Localization.AdvServersAddServers, 14),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(14, 5),
@@ -1198,7 +1198,7 @@ public partial class AndroidApp
             _srvRemoveBtn.Content = Localization.AdvServersRemove;
             ToolTip.SetTip(_srvRemoveBtn, Localization.TipDeleteServer);
         }
-        if (_srvAddBtn is not null) _srvAddBtn.Content = Localization.AdvServersAddServers;
+        if (_srvAddBtn is not null) _srvAddBtn.Content = IconText(UiIcons.Plus, Localization.AdvServersAddServers, 14);
         if (_srvCustomJsonExplainer is not null)
             _srvCustomJsonExplainer.Text = Localization.AdvServersCustomJsonExplainer;
         if (_srvCustomJsonInput is not null)
