@@ -31,4 +31,24 @@ Exact-head CI on this PR; the release steps above are recorded in the Outcome as
 
 ## Outcome
 
-Pending.
+Published 2026-10-01 as prerelease `v2.50.0-r11` (`--latest=false`; Latest stays `v2.49.3`), annotated tag on
+main `fb1194f9`, 18 assets.
+
+- Preconditions: `verify-last-commit-ci.ps1` OK on `fb1194f9`; `check-open-p0.ps1` reported 3 open owner-gated P1
+  lines (VPNCTL-04 deferred to API 24, Ox Alpha provider-side credential revocation, Tcpip 4266 measurement-gated)
+  and was run with `-Waive` (same lines as r10; the owner mandated r11 and autonomous decisions); no SignPath
+  secret or variable exists, so the unsigned path applied.
+- Windows (6 files) built on `windows-worker` with `relbuild2.ps1` (`build.ps1 -BundleSplitDriver -Installer`;
+  preflight: CPU 15 percent, 13.3 GB free RAM, 17.7 GB free disk, nothing heavy running). Copied back, each file
+  matched its sidecar; both zips carry the split-tunnel driver and `2.50.0-r11` in `VPNRouter.Core.dll`;
+  uploaded to the draft without clobber (digests equal the local files). macOS, Linux and Android came from the
+  tag workflows.
+- Tag CI green: macOS, Linux, Android, Windows update test, `dotnet test`. Draft integrity run (dispatched,
+  `auto_draft_on_failure=false`) passed with 18 assets; its only warnings are the Android APK assembly store and
+  the AppImage (as for r10). Strict `verify-last-commit-ci.ps1` for the exact commit: 8 green, 0 red.
+- After publication the `release: published` integrity, APT and Windows update test runs succeeded without a manual dispatch.
+- Installer: built unsigned; the integrity workflow checks the `MZ` header and the version text.
+- Post-ship gate (`tools/post-ship-verify.ps1`): NOT run. It needs the owner's offline Windows PC (WinRM credential
+  file, local .NET SDK). The candidate is published but not verified; run
+  `tools/post-ship-verify.ps1 -Version 2.50.0-r11 -Cycles 2` from that PC. The Android tunnel on a real phone
+  is also still to be tested on the tester's phone.
