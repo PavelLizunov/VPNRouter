@@ -262,6 +262,10 @@ Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VP
 
 Нашли security-issue? Сообщите **приватно** — см. [`SECURITY.md`](SECURITY.md). Не открывайте публичный issue по security-проблемам.
 
+## Подпись кода
+
+Windows-файлы релизов **не подписаны** (нет подписи Authenticode), поэтому Windows SmartScreen или антивирус могут выдавать предупреждение. Проверяйте каждую загрузку по файлу `.sha256` рядом с ней. Подпись кода пока не планируется (решение владельца, 2026-10-01); шаги на случай изменения решения сохранены в [`docs/code-signing-signpath-runbook.md`](docs/code-signing-signpath-runbook.md).
+
 ## Благодарности
 
 Стоим на плечах гигантов:
