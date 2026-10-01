@@ -69,4 +69,18 @@ Shared strings keep their symbols because the desktop UI still shows them; the A
 
 ## Outcome
 
-Steps 1 and 2 merged after green exact-head CI. Device screenshots: see the final section below once taken.
+Steps 1 to 3 merged after green exact-head CI (#430, #431, #432). A device pass on the Android 15 emulator (Linux worker,
+1080x2400, light and dark, English) with test-hook APKs built on the Windows worker found two things, fixed in a
+follow-up PR: after a connect error the ring kept turning amber (the VPN chip stays in "connecting" on that path, see
+ANDROID-CONSENT-DENIED-CONNECTING-STATE), and "+ New category" on the Apps page was still a text plus. A reported error
+now ends the connecting look and a new connect clears the error look.
+
+Seen on the device: the ring in all four states (off, connecting behind the consent dialog, connected, error) and off in
+dark; the main screen (QR icon, flag, turning chevron), both kebab menus, the Advanced header (chevron Simple), Servers
+(row refresh icons, Add, Start VPN), Subscribe (pencil, refresh, trash and the trash-? confirm, QR, Add), Settings
+(autosaved check), Public (search-check button, turning Settings chevron, minus and plus steppers) and Apps. On-device
+mirror check of the off ring: 32 of 115600 pixels differ at 15 % fuzz (anti-aliasing at the crop edge).
+
+Not seen: the motion itself (screenshots only; animations were reviewed in code), the free configs latency badge with
+a check (needs a real search), the custom JSON validation icons, the battery status icon, Russian, font scale 1.3,
+and a real phone.

@@ -468,7 +468,7 @@ public partial class AndroidApp
 
         _advAppsAddCategoryBtn = new Avalonia.Controls.Button
         {
-            Content = Localization.AdvAppsAddCategoryButton,
+            Content = IconText(UiIcons.Plus, Localization.AdvAppsAddCategoryButton, 14),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             HorizontalContentAlignment = HorizontalAlignment.Center,

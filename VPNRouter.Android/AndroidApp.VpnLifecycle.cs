@@ -48,6 +48,11 @@ public partial class AndroidApp
                 }
             }
 
+            if (_statusCard is not null)
+            {
+                _statusCard.IsError = false;
+                _statusCard.IsWarn = true;
+            }
             SetVpnChipState(ChipState.Connecting);
             UpdateZapretChipFromState();
             activity.RequestConnect();
@@ -311,6 +316,8 @@ public partial class AndroidApp
             if (string.IsNullOrWhiteSpace(message)) return;
             _lastError = message.Trim();
             _lastErrorAt = DateTime.UtcNow;
+            // a reported error ends the attempt: the ring shows the error, not "connecting", even if the chip still pulses
+            if (_statusCard is not null) _statusCard.IsWarn = false;
             ApplyErrorOneLinerDisplay();
             StartDiagnosticsTimer();
         });

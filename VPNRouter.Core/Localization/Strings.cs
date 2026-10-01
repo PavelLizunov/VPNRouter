@@ -871,8 +871,8 @@ public static partial class Strings
         ? "Имя категории"
         : "Category name";
     public static string AdvAppsAddCategoryButton => Ru
-        ? "+ Новая категория"
-        : "+ New category";
+        ? "Новая категория"
+        : "New category";
     public static string AdvAppsSelectCategoryHint => SelectCategoryHint;
     public static string AdvAppsCategoryCustom => Ru ? "Свои" : "Custom";
 
