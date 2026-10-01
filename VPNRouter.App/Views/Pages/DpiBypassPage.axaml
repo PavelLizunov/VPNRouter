@@ -589,7 +589,7 @@
                                             Foreground="{DynamicResource AccentSolidBrush}"/>
                                 </StackPanel>
                                 <TextBlock Text="Flowseal/zapret-discord-youtube"
-                                           FontSize="9" Opacity="0.4"
+                                           FontSize="9"
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            HorizontalAlignment="Left"/>
 
