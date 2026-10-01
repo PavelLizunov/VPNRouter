@@ -43,6 +43,7 @@ public partial class AndroidApp
     private Border? _advFooterActionsHost;
     private Border? _advHeaderBorder;
     private Border? _advFooterBorder;
+    private Border? _advTabStripBorder;
 
     private Border BuildAdvancedShellOverlay()
     {
@@ -77,6 +78,7 @@ public partial class AndroidApp
             BorderThickness = new Thickness(0, 1, 0, 0),
             Child = tabPanel,
         };
+        _advTabStripBorder = tabStripBorder;
 
         _advShellContentHost = new Grid
         {
@@ -585,10 +587,8 @@ public partial class AndroidApp
             _advHeaderBorder.Padding = new Thickness(0, topPad, 0, 0);
         }
 
-        if (_advFooterBorder is not null)
-        {
-            var bottomPad = Math.Max(7.0, insets.Bottom + 6.0);
-            _advFooterBorder.Padding = new Thickness(12, 7, 12, bottomPad);
-        }
+        // The tab strip is docked lowest, so it carries the bottom inset (the gesture bar); the status footer sits above it.
+        if (_advTabStripBorder is not null)
+            _advTabStripBorder.Padding = new Thickness(0, 0, 0, Math.Max(0.0, insets.Bottom));
     }
 }
