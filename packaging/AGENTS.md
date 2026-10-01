@@ -4,7 +4,7 @@
 
 ## Scope and structure
 
-- `windows/`: Installation (`install.ps1`), uninstallation (`uninstall.ps1`), and self-repair (`repair.cmd`) scripts.
+- `windows/`: Installation (`install.ps1`), uninstallation (`uninstall.ps1`), and self-repair (`repair.cmd`) scripts, plus the Inno Setup installer script `vpnrouter.iss` (with `installer/stop-vpnrouter.ps1`), built by `tools/build-installer.ps1` into `VPNRouter-Setup-vX.Y.Z.exe`. The installer is not yet part of the release asset contract (owner-commanded wiring comes later) and is not signed.
 - `linux/`: Debian/Ubuntu package maintainer scripts (`postinst`, `postrm`), update helper (`vpnrouter-update-helper`), desktop entries, and launcher wrapper.
 - `apt-repo/`: APT repository setup script (`install.sh`), reprepro configuration, and public signing key.
 - `winget/`: Package manifests (`manifests/`) and submission guidelines for winget.
