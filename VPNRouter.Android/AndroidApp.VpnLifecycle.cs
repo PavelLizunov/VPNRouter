@@ -278,10 +278,12 @@ public partial class AndroidApp
     private System.Threading.CancellationTokenSource StartChipPulse(Visual target)
     {
         var cts = new System.Threading.CancellationTokenSource();
+        if (!UiMotion.Enabled) return cts;
         var anim = new Avalonia.Animation.Animation
         {
             Duration = System.TimeSpan.FromMilliseconds(1200),
-            IterationCount = Avalonia.Animation.IterationCount.Infinite,
+            // about 43 s, then the chip stands still even if the state never leaves "connecting"
+            IterationCount = new Avalonia.Animation.IterationCount(36),
             PlaybackDirection = Avalonia.Animation.PlaybackDirection.Alternate,
             Easing = new Avalonia.Animation.Easings.QuadraticEaseInOut(),
             Children =

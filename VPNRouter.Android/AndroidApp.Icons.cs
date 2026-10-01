@@ -1,6 +1,10 @@
+using System;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media.Transformation;
 using VPNRouter.Core.Services;
 using VPNRouter.UI.Controls;
 
@@ -60,13 +64,38 @@ public partial class AndroidApp
     private static void SetChevronOpen(IconView? chevron, bool open)
     {
         if (chevron is null) return;
-        chevron.RenderTransform = new Avalonia.Media.RotateTransform(open ? 90 : 0);
+        if (chevron.Transitions is null && UiMotion.Enabled)
+        {
+            chevron.Transitions = new Transitions
+            {
+                new TransformOperationsTransition
+                {
+                    Property = Visual.RenderTransformProperty,
+                    Duration = TimeSpan.FromMilliseconds(180),
+                    Easing = new CubicEaseOut(),
+                },
+            };
+        }
+        chevron.RenderTransform = TransformOperations.Parse(open ? "rotate(90deg)" : "rotate(0deg)");
+    }
+
+    /// <summary>Colour changes of a status chip fade instead of jumping (not when Android animations are off).</summary>
+    private static void AddChipTransitions(TextBlock chip)
+    {
+        if (!UiMotion.Enabled) return;
+        chip.Transitions = new Transitions
+        {
+            new BrushTransition { Property = TextBlock.BackgroundProperty, Duration = TimeSpan.FromMilliseconds(220) },
+            new BrushTransition { Property = TextBlock.ForegroundProperty, Duration = TimeSpan.FromMilliseconds(220) },
+        };
     }
 
     private static void SetStatusIcon(IconView? icon, string? name)
     {
         if (icon is null) return;
+        var changed = icon.Icon != name;
         icon.Icon = name;
         icon.IsVisible = name is not null;
+        if (changed && name == UiIcons.CircleCheck) icon.PlayReveal();
     }
 }

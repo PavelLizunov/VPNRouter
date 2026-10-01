@@ -46,9 +46,15 @@ Shared strings keep their symbols because the desktop UI still shows them; the A
 
 ## Steps
 
-1. Icon set, registry, `IconView`, status ring (this record, first PR).
-2. Replace the symbols page by page.
-3. Animations: state transitions of the ring and the chips, press feedback, check mark drawing in.
+1. Icon set, registry, `IconView`, status ring (#430).
+2. Replace the symbols page by page (#431): icon buttons (kebabs, close, refresh, QR scan, row actions, stepper,
+   remove), icon plus text (Simple / Advanced, Apply, Start / Stop VPN, Add, Find working configs, Stop, Clear all,
+   the Settings expander), status icons next to text (health check, custom JSON validation, battery status, autosaved,
+   latency badge). After it the scan finds 124 symbols on 78 lines; the rest are text arrows, log lines, desktop-only
+   strings, country flags and the free-config name prefix.
+3. Motion (this PR): ring colours fade and the ring settles once when it turns green, chevrons turn, chips fade, an
+   appearing check draws in, the chip pulse stops after about 43 s. The Fluent button theme already scales a pressed
+   button, so no press effect was added.
 
 ## Verification
 
@@ -56,9 +62,11 @@ Shared strings keep their symbols because the desktop UI still shows them; the A
   icons that must be symmetric (the unfixed Lucide power fails it with 117 pixels, the fixed one passes with 0), checks
   that no icon leaves the 24 grid, and writes light and dark contact sheets, which were looked at.
 - CI: Android compile, the new `UiIconsTests` (unique names, every path parses with Avalonia's parser and stays on the
-  grid, `StripSymbols` cases), the existing suite.
-- Emulator (Linux worker, Android 14): before and after screenshots of the main screen and the pages with icons.
+  grid, `StripSymbols` cases), the existing suite; green on #430 and #431.
+- APK: Release build with the test hook of all three steps together on the Windows worker (preflight: CPU 1 %, 12.5 GB
+  free RAM, 16.7 GB free disk, no other build running): exit code 0, 0 errors.
+- Emulator (Linux worker, Android 14): see Outcome.
 
 ## Outcome
 
-In progress.
+Steps 1 and 2 merged after green exact-head CI. Device screenshots: see the final section below once taken.
