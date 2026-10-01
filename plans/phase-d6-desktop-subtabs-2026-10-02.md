@@ -32,4 +32,7 @@ so two tab styles sat on top of each other.
 
 ## Outcome
 
-(filled in at delivery)
+Windows worker (preflight CPU 2 %, 13.2 GB free RAM, 12.6 GB free disk, no dotnet or java running), exact SHA
+`b4446228`: 67 of 67 (`PageScreenshotDesignTests`, `HeadlessGuiTests`, `VisualDiffTests`; no baseline changed). Read:
+Servers / Custom Config under the main strip (light), Search / Saved and Zapret / Telegram proxy (dark), the Settings
+side list (light). Not seen: hover and press with a real pointer.
