@@ -171,6 +171,7 @@ public partial class AndroidApp : Avalonia.Application
 
     private bool _settingsDirty = false;
     private Border? _settingsAutoSavedBadge;
+    private IconView? _settingsAutoSavedCheck;
     private Avalonia.Controls.Button? _settingsApplyButton;
 
     private Border? _profilesOverlay;
@@ -1297,6 +1298,7 @@ public partial class AndroidApp : Avalonia.Application
         };
         tb.BindToken(TextBlock.ForegroundProperty, fgKey);
         tb.BindToken(TextBlock.BackgroundProperty, bgKey);
+        AddChipTransitions(tb);
         return tb;
     }
 

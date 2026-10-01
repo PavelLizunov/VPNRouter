@@ -153,7 +153,11 @@ public partial class AndroidApp
     private void UpdateSettingsFooterVisibility()
     {
         if (_settingsAutoSavedBadge is not null)
+        {
+            var appears = !_settingsAutoSavedBadge.IsVisible && !_settingsDirty;
             _settingsAutoSavedBadge.IsVisible = !_settingsDirty;
+            if (appears) _settingsAutoSavedCheck?.PlayReveal();
+        }
         if (_settingsApplyButton is not null)
             _settingsApplyButton.IsVisible = _settingsDirty;
     }
