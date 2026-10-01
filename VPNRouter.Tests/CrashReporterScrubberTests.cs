@@ -322,4 +322,14 @@ public sealed class CrashReporterScrubberTests
         Assert.Contains("benign line", report);
         Assert.Contains("last line", report);
     }
+
+    [Fact]
+    public void ScrubSecrets_RedactsExceptionMessageWithSensitiveUri()
+    {
+        var ex = new InvalidOperationException("Failed to access https://sub.provider.com/config?token=secret12345");
+        var scrubbed = CrashReporter.ScrubSecrets(ex.Message);
+
+        Assert.DoesNotContain("secret12345", scrubbed);
+        Assert.Contains("[redacted]", scrubbed);
+    }
 }
