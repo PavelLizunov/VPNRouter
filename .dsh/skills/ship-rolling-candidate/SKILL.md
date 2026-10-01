@@ -75,6 +75,9 @@ STOP. There is no unsigned fallback when signing fails.
 powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version -Upload
 ```
 
+`build.ps1 -Upload` also builds the unsigned Inno Setup installer
+(`VPNRouter-Setup-vX.Y.Z.exe` plus sidecar), so the Windows set is six files and
+the worker needs Inno Setup 6 (`docs/test-workers.md`).
 Unsigned staging requires `HEAD == accepted main == tag SHA`, an existing
 correct-channel draft, and no conflicting assets. It never clobbers assets.
 Wait for tag-triggered `build-mac.yml`, `build-linux.yml`, `build-android.yml`,
