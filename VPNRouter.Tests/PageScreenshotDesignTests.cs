@@ -38,15 +38,18 @@ public class PageScreenshotDesignTests
         _ => throw new ArgumentOutOfRangeException(nameof(name))
     };
 
-    private static void WithTheme(bool dark, bool russian, Action action)
+    // The view model applies the saved theme when it is built, so the theme is set after it.
+    private static void WithTheme(bool dark, bool russian, Action<MainWindowViewModel> action)
     {
         var app = Avalonia.Application.Current!;
         var previousTheme = app.RequestedThemeVariant;
         var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
         try
         {
+            using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+            if (russian) vm.SetLanguageRussianCommand.Execute(null);
             app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
-            action();
+            action(vm);
         }
         finally
         {
@@ -57,9 +60,8 @@ public class PageScreenshotDesignTests
 
     [AvaloniaTheory]
     [MemberData(nameof(Pages))]
-    public void Page_InBothThemes(string page, bool dark, int width) => WithTheme(dark, false, () =>
+    public void Page_InBothThemes(string page, bool dark, int width) => WithTheme(dark, false, vm =>
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
         var control = Page(page);
         control.DataContext = vm;
         ScreenshotHelper.CapturePage(control, $"design-{page}-{(dark ? "dark" : "light")}-{width}", width, 1400);
@@ -72,9 +74,8 @@ public class PageScreenshotDesignTests
     [InlineData(3)]
     [InlineData(4)]
     [InlineData(5)]
-    public void Settings_SubTabs(int index) => WithTheme(false, false, () =>
+    public void Settings_SubTabs(int index) => WithTheme(false, false, vm =>
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
         vm.SelectedSettingsIndex = index;
         ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, $"design-settings{index}-light-520", 520, 1400);
     });
@@ -84,10 +85,8 @@ public class PageScreenshotDesignTests
     [InlineData("simple", true)]
     [InlineData("free", false)]
     [InlineData("subscribe", false)]
-    public void Page_Russian360(string page, bool dark) => WithTheme(dark, true, () =>
+    public void Page_Russian360(string page, bool dark) => WithTheme(dark, true, vm =>
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
-        vm.SetLanguageRussianCommand.Execute(null);
         var control = Page(page);
         control.DataContext = vm;
         ScreenshotHelper.CapturePage(control, $"design-{page}-ru-{(dark ? "dark" : "light")}-360", 360, 1400);
@@ -100,9 +99,8 @@ public class PageScreenshotDesignTests
     [InlineData(false, false, 1)]
     [InlineData(false, false, 5)]
     [InlineData(false, true, 0)]
-    public void Window(bool simple, bool dark, int tab) => WithTheme(dark, false, () =>
+    public void Window(bool simple, bool dark, int tab) => WithTheme(dark, false, vm =>
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
         vm.IsSimpleMode = simple;
         if (!simple) vm.SelectedTabIndex = tab;
         var window = new MainWindow { Width = 520, Height = 760, DataContext = vm };
