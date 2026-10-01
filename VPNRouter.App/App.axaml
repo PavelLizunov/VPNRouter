@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="VPNRouter.App.App"
              xmlns:local="using:VPNRouter.App"
+             xmlns:icons="using:VPNRouter.App.Controls"
              RequestedThemeVariant="Default">
 
     <Application.DataTemplates>
@@ -12,6 +13,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://VPNRouter.App/Styles/Tokens.axaml"/>
+                <ResourceInclude Source="avares://VPNRouter.App/Styles/ButtonRoles.axaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <FontFamily x:Key="EmojiFlagFont">avares://VPNRouter.App/Assets/Fonts/Twemoji.Mozilla.ttf#Twemoji Mozilla</FontFamily>
@@ -19,7 +21,51 @@
     </Application.Resources>
 
     <Application.Styles>
-        <FluentTheme />
+        <FluentTheme>
+            <FluentTheme.Palettes>
+                <ColorPaletteResources x:Key="Light" Accent="#FF0EA5E9"/>
+                <ColorPaletteResources x:Key="Dark" Accent="#FF38BDF8"/>
+            </FluentTheme.Palettes>
+        </FluentTheme>
+
+        <Style Selector="Button.solid:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{Binding $parent[Button].Background}"/>
+            <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}"/>
+            <Setter Property="Opacity" Value="0.88"/>
+        </Style>
+        <Style Selector="Button.solid:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{Binding $parent[Button].Background}"/>
+            <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}"/>
+            <Setter Property="Opacity" Value="0.76"/>
+        </Style>
+
+        <Style Selector="Border.disclosure-pill">
+            <Setter Property="Padding" Value="10,4,8,4"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Border.disclosure-pill TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="icons|Pictogram.disclosure">
+            <Setter Property="Width" Value="12"/>
+            <Setter Property="Height" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+            <Setter Property="RenderTransform" Value="rotate(0deg)"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="icons|Pictogram.disclosure.open">
+            <Setter Property="RenderTransform" Value="rotate(180deg)"/>
+        </Style>
 
         <Style Selector="ToggleButton.TabStripPill">
             <Setter Property="Background" Value="Transparent"/>

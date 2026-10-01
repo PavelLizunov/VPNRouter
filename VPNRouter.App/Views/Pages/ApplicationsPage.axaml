@@ -119,7 +119,7 @@
                    TextWrapping="Wrap"
                    VerticalAlignment="Center"
                    Foreground="{DynamicResource WarningFgBrush}"/>
-        <Button Grid.Column="1"
+        <Button Classes="solid" Grid.Column="1"
                 Content="{Binding L_AppsFullTunnelBannerAction}"
                 Command="{Binding SwitchToSplitTunnelCommand}"
                 FontSize="11" FontWeight="SemiBold"
@@ -179,7 +179,7 @@
                    TextWrapping="Wrap"
                    VerticalAlignment="Center"
                    Foreground="{DynamicResource WarningFgBrush}"/>
-        <Button Grid.Column="1"
+        <Button Classes="solid" Grid.Column="1"
                 Content="{Binding L_TrueSplitRetry}"
                 Command="{Binding RestartTrueSplitCommand}"
                 IsVisible="{Binding IsTrueSplitRetryVisible}"
@@ -229,7 +229,7 @@
                  Text="{Binding NewCategoryName}"
                  PlaceholderText="{Binding L_CategoryNamePrompt}"
                  FontSize="10" Padding="6,4" Margin="4,4,4,2"/>
-        <Button Grid.Row="2"
+        <Button Classes="solid" Grid.Row="2"
                 icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddCategory}"
                 Command="{Binding AddCategoryCommand}"
                 HorizontalAlignment="Stretch"
@@ -342,7 +342,7 @@
                      TextWrapping="Wrap"
                      FontSize="10"
                      Foreground="{DynamicResource WarningFgBrush}"/>
-          <Button icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}"
+          <Button Classes="solid" icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}"
                   Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
                   IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
                   IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).CanApplyAppChanges}"
@@ -380,7 +380,7 @@
                   <MenuFlyout Placement="TopEdgeAlignedRight"/>
                 </Button.Flyout>
               </Button>
-              <Button Grid.Column="2" x:Name="AddCustomAppButton"
+              <Button Classes="solid" Grid.Column="2" x:Name="AddCustomAppButton"
                       icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
                       Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
                       CommandParameter="{Binding #CustomAppInput.Text}"

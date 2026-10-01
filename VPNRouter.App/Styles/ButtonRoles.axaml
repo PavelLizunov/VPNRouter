@@ -1,0 +1,40 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Desktop only. The default Fluent button (light grey) looked disabled. A button without its own colour gets the
+         tonal role of the Android app instead: accent text on an accent tint. Disabled buttons stay grey with muted
+         text. The values are the Tokens.axaml colours: AccentBgMuted, AccentBorder, AccentFg, SurfaceSunken and
+         TextMuted (light); AccentBgMuted, AccentBorder, AccentFg, BorderDefault and TextMuted (dark); hover is
+         a step between AccentBgMuted and AccentBorder. -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="ButtonBackground" Color="#FFCFFAFE"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#FFA5F3FC"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#FF67E8F9"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#FFEBEEF3"/>
+            <SolidColorBrush x:Key="ButtonForeground" Color="#FF0369A1"/>
+            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FF0369A1"/>
+            <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#FF0369A1"/>
+            <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#FF667287"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent"/>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="ButtonBackground" Color="#2938BDF8"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#4438BDF8"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#6638BDF8"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#14FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonForeground" Color="#FF67E8F9"/>
+            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FF67E8F9"/>
+            <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#FF67E8F9"/>
+            <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="#FF8791A6"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent"/>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>

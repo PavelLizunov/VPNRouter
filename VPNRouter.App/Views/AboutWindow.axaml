@@ -96,7 +96,7 @@
         </StackPanel>
       </Button>
 
-      <Button Grid.Row="4"
+      <Button Classes="solid" Grid.Row="4"
               Content="{Binding L_AboutCloseBtn}"
               Click="OnCloseClick"
               HorizontalAlignment="Center"
