@@ -84,7 +84,7 @@ Name: "service"; Description: "{cm:TaskService}"; GroupDescription: "{cm:TaskGro
 Name: "defender"; Description: "{cm:TaskDefender}"; GroupDescription: "{cm:TaskGroupSecurity}"; Flags: unchecked
 
 [Files]
-Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion restartreplace
 Source: "installer\stop-vpnrouter.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "installer\stop-vpnrouter.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 
