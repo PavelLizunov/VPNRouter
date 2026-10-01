@@ -22,7 +22,13 @@ files; 42 of them are the symbol table of `PictogramText.cs` itself. Most of the
 ## Scope
 
 1. `Pictogram` draws the Lucide path data from `UiIcons` for every id that has a Lucide counterpart; the ids and the
-   API stay. New Lucide files copied unchanged from the pinned tag (`tools/icons/lucide/VERSION`).
+   API stay. 14 Lucide files copied unchanged from the pinned tag 1.49.0 with curl (`ban`, `circle`, `circle-plus`,
+   `circle-minus`, `circle-dashed`, `ellipsis`, `shield`, `arrow-down-up`, `arrow-left`, `arrow-right`, `toggle-right`,
+   `send`, `timer`, `triangle-alert`). Mapping follows Android where it already chose: apply, refresh and retest use
+   `refresh-cw`, delete uses `trash`, stop uses `square`. Kept as plain circles: the status dots and the filled centre
+   of the selected radio mark. `triangle-alert` is 0.02 units off mirror symmetry in Lucide (and its dot is drawn
+   from 12 to 12.01); it is snapped in `lucide-to-cs.py` like `power`. Strokes stay 1.8 grid units but never thinner
+   than 1.2 px, because inline icons are drawn at 8 to 12 px where 1.8 units is under 1 px.
 2. The two remaining text symbols above become icons.
 3. `PageScreenshotDesignTests`: captures of every page, light and dark, 360 and 520 px, Settings sub-tabs, Russian and
    the whole window, for review. Excluded from CI by name, like the other page screenshot tests.
@@ -42,4 +48,10 @@ files; 42 of them are the symbol table of `PictogramText.cs` itself. Most of the
 
 ## Outcome
 
-(filled in at delivery)
+Windows worker (`windows-worker`, private toolchain, preflight: CPU 1 %, 13.2 GB free RAM, 13.5 GB free disk, no
+dotnet or java running), exact SHA `d8d10c97`: 80 tests, 76 passed; `PictogramTextTests` (4, one new), `UiIconsTests`,
+`DesktopPictogramScreenshotTests` and all three `VisualDiffTests` baselines pass (the icon change stays under the 2 %
+threshold, so no baseline was re-pinned). The 4 failures are the four ApplicationsPage captures of the new design test,
+the known `PAGESCREENSHOT-RENDER-INVALIDATION` defect (same exception as the excluded `PageScreenshotTests`).
+`check-icons.py`: all mirror and grid checks pass; contact sheets looked at. Before and after captures compared by eye
+(DPI bypass hero and legend, Telegram, Free configs, Settings, window header).
