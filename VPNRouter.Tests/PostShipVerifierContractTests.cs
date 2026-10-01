@@ -439,6 +439,10 @@ public sealed class PostShipVerifierContractTests
         Assert.DoesNotContain("Hits =", lifecycle, StringComparison.Ordinal);
         Assert.DoesNotContain("File =", lifecycle, StringComparison.Ordinal);
         Assert.Contains("$oldestTimestamp -ge $since", lifecycle, StringComparison.Ordinal);
+        // An INF/DBG line that only names an exception type (a cancelled probe) is not an error signal.
+        Assert.Contains("\\[(INF|DBG|VRB)\\]", lifecycle, StringComparison.Ordinal);
+        Assert.Contains("\\[FTL\\]", lifecycle, StringComparison.Ordinal);
+        Assert.DoesNotContain("-match '\\[ERR\\]|Exception|FATAL'", source, StringComparison.Ordinal);
     }
 
     [Fact]

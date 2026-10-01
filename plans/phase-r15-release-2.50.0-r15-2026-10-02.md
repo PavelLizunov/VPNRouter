@@ -26,4 +26,11 @@ Exact-head CI on this PR; the steps above are recorded in the Outcome as they co
 
 ## Outcome
 
-Pending.
+Published 2026-10-01 as a prerelease (tag on `01e70644`, 18 assets, integrity, APT and update runs green, strict CI 8 green).
+
+Post-ship on WINBRAT with `tools/post-ship-local.ps1` failed twice and did not pass at the time of this note:
+
+1. Attempt 1: both cold cycles connected and every probe passed, but the whole-run lifecycle check counted one error-level line. The line was an `[INF]` `TcpTlsProbe` entry whose text contained `OperationCanceledException`; the verifier matched the bare word `Exception` at any level. Verifier defect, fixed in the follow-up PR (an exception name on an INF/DBG/VRB line is no longer an error signal; `[FTL]` is now counted).
+2. Attempt 2: sing-box crashed 0.5 s after start (access violation inside Windows CryptoAPI via Go `crypto/x509`), the health monitor restarted it, but the 20 s warm-up gave up first, so the UI went back to Connect and the verifier could not find the Disconnect button. Not an r15 UI regression: the app process stayed alive and the render-pass crash did not recur. Recorded as `SINGBOX-WIN-CRYPT32-AV-ON-START` (P2, observed once) in `plans/OPEN-DEFECTS.md`.
+
+Attempt 3 is run with the fixed verifier; its result is added below.
