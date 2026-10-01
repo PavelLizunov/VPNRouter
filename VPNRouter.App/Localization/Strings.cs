@@ -553,6 +553,11 @@ public static class Strings
     public static string FcDeepStopTooltip => global::VPNRouter.Core.Localization.Strings.FcDeepStopTooltip;
 
     public static string FcAdvancedSettings => global::VPNRouter.Core.Localization.Strings.FcAdvancedSettings;
+    public static string SmpConfigRowChange => global::VPNRouter.Core.Localization.Strings.SmpConfigRowChange;
+    public static string SmpConfigRowHide => global::VPNRouter.Core.Localization.Strings.SmpConfigRowHide;
+    public static string SectionShow => global::VPNRouter.Core.Localization.Strings.SectionShow;
+    public static string SectionHide => global::VPNRouter.Core.Localization.Strings.SectionHide;
+    public static string SrvManualEmptyHint => global::VPNRouter.Core.Localization.Strings.SrvManualEmptyHint;
 
     public static string FcTabSearch => global::VPNRouter.Core.Localization.Strings.FcTabSearch;
     public static string FcTabSaved => global::VPNRouter.Core.Localization.Strings.FcTabSaved;

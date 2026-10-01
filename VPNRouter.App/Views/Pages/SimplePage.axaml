@@ -2,7 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:loc="using:VPNRouter.App.Localization"
-             xmlns:conv="using:VPNRouter.App"
              xmlns:icons="using:VPNRouter.App.Controls"
              x:Class="VPNRouter.App.Views.Pages.SimplePage"
              x:CompileBindings="True"
@@ -133,13 +132,13 @@
                                            TextWrapping="Wrap"/>
                             </StackPanel>
                         </StackPanel>
-                        <TextBlock Grid.Column="2"
-                                   icons:PictogramText.Icons="chevron-down,chevron-right" icons:PictogramText.Text="{Binding SmpFormExpanded,
-                                          Converter={x:Static conv:BoolToChevronConverter.Instance},
-                                          ConverterParameter=▽|›}"
-                                   FontSize="13"
-                                   Foreground="{DynamicResource TextMutedBrush}"
-                                   VerticalAlignment="Center"/>
+                        <Border Grid.Column="2" Classes="disclosure-pill">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{Binding L_SmpConfigRowToggle}"/>
+                                <icons:Pictogram Id="chevron-down" Classes="disclosure"
+                                                 Classes.open="{Binding SmpFormExpanded}"/>
+                            </StackPanel>
+                        </Border>
                     </Grid>
                 </Button>
 
@@ -230,7 +229,7 @@
                     </StackPanel>
                 </Border>
 
-                <Button Command="{Binding SmpToggleConnectCommand}"
+                <Button Classes="solid" Command="{Binding SmpToggleConnectCommand}"
                         Content="{Binding SimpleCtaText}"
                         IsVisible="{Binding SimpleCtaIsConnected}"
                         HorizontalAlignment="Stretch"

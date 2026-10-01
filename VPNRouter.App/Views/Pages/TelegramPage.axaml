@@ -88,7 +88,7 @@
                                                Margin="0,3,0,0"/>
                                 </Grid>
 
-                                <Button Command="{Binding TgProxyMainActionCommand}"
+                                <Button Classes="solid" Command="{Binding TgProxyMainActionCommand}"
                                         IsEnabled="{Binding !IsTgProxyDownloading}"
                                         Background="{DynamicResource AccentSolidBrush}"
                                         Foreground="{DynamicResource AccentOnSolidBrush}"

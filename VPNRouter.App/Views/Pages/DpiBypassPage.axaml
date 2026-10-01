@@ -144,7 +144,7 @@
                                                Margin="0,3,0,0"/>
                                 </Grid>
 
-                                <Button Command="{Binding ZapretOneClickCommand}"
+                                <Button Classes="solid" Command="{Binding ZapretOneClickCommand}"
                                         IsEnabled="{Binding IsZapretMagicButtonEnabled}"
                                         Background="{DynamicResource AccentSolidBrush}"
                                         Foreground="{DynamicResource AccentOnSolidBrush}"
@@ -224,28 +224,28 @@
 
                                 <WrapPanel IsVisible="{Binding HasZapretStrategiesForQuickStart}"
                                            HorizontalAlignment="Center"
-                                           ItemSpacing="6"
+                                           ItemSpacing="10"
                                            Margin="0,2,0,0"
                                            MaxWidth="380">
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.Text="✓" FontSize="8" Classes="zglyph-success"/>
-                                        <TextBlock Text="{Binding LblLegendWorking}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.Text="✓" FontSize="10" Classes="zglyph-success"/>
+                                        <TextBlock Text="{Binding LblLegendWorking}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock icons:PictogramText.Icons="warning" icons:PictogramText.Text="⚠" FontSize="8" Classes="zglyph-warning"/>
-                                        <TextBlock Text="{Binding LblLegendPartial}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <TextBlock icons:PictogramText.Icons="warning" icons:PictogramText.Text="⚠" FontSize="10" Classes="zglyph-warning"/>
+                                        <TextBlock Text="{Binding LblLegendPartial}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock icons:PictogramText.Icons="error" icons:PictogramText.Text="✗" FontSize="8" Classes="zglyph-danger"/>
-                                        <TextBlock Text="{Binding LblLegendFailed}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <TextBlock icons:PictogramText.Icons="error" icons:PictogramText.Text="✗" FontSize="10" Classes="zglyph-danger"/>
+                                        <TextBlock Text="{Binding LblLegendFailed}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock icons:PictogramText.Icons="untested" icons:PictogramText.Text="◌" FontSize="8" Classes="zglyph-muted"/>
-                                        <TextBlock Text="{Binding LblLegendUntested}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <TextBlock icons:PictogramText.Icons="untested" icons:PictogramText.Text="◌" FontSize="10" Classes="zglyph-muted"/>
+                                        <TextBlock Text="{Binding LblLegendUntested}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock icons:PictogramText.Icons="timer" icons:PictogramText.Text="⏱" FontSize="8" Classes="zglyph-stale"/>
-                                        <TextBlock Text="{Binding LblLegendStale}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                        <TextBlock icons:PictogramText.Icons="timer" icons:PictogramText.Text="⏱" FontSize="10" Classes="zglyph-stale"/>
+                                        <TextBlock Text="{Binding LblLegendStale}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                 </WrapPanel>
 

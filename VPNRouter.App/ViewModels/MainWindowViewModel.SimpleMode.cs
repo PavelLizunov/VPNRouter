@@ -14,7 +14,22 @@ public partial class MainWindowViewModel
 
     [ObservableProperty] private string _smpErrorText = string.Empty;
 
-    [ObservableProperty] private bool _smpFormExpanded = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(L_SmpConfigRowToggle))]
+    private bool _smpFormExpanded = true;
+
+    public string L_SmpConfigRowToggle => SmpFormExpanded ? Strings.SmpConfigRowHide : Strings.SmpConfigRowChange;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(L_FcSettingsToggle))]
+    private bool _fcSettingsExpanded;
+
+    public string L_FcSettingsToggle => FcSettingsExpanded ? Strings.SectionHide : Strings.SectionShow;
+    public string L_FcSettingsLabel => UiIcons.StripSymbols(Strings.FcAdvancedSettings);
+    public string L_SrvManualEmptyHint => Strings.SrvManualEmptyHint;
+
+    [RelayCommand]
+    private void ToggleFcSettings() => FcSettingsExpanded = !FcSettingsExpanded;
 
     public bool SmpAutostartChecked
     {

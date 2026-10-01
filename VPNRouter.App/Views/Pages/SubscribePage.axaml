@@ -179,10 +179,12 @@
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 Spacing="6">
       <TextBlock Text="{Binding L_LblNoServers}"
-                 FontSize="13" FontWeight="SemiBold" Opacity="0.6"
+                 FontSize="13" FontWeight="SemiBold"
+                 Foreground="{DynamicResource TextSecondaryBrush}"
                  HorizontalAlignment="Center"/>
       <TextBlock Text="{Binding L_LblAddSubscriptionHint}"
-                 FontSize="11" Opacity="0.4"
+                 FontSize="11"
+                 Foreground="{DynamicResource TextMutedBrush}"
                  HorizontalAlignment="Center"/>
     </StackPanel>
 
@@ -192,14 +194,14 @@
       <StackPanel Spacing="4">
         <StackPanel Spacing="2">
           <StackPanel Orientation="Horizontal" Spacing="6">
-            <Button Content="{Binding ServerTestButtonText}"
+            <Button Classes="solid" Content="{Binding ServerTestButtonText}"
                     Command="{Binding TestAllSubscriptionServersCommand}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
                     ToolTip.Tip="{Binding L_TipTestAllServers}"
                     AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
-            <Button Content="{Binding ServerDeepButtonText}"
+            <Button Classes="solid" Content="{Binding ServerDeepButtonText}"
                     Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
@@ -335,7 +337,7 @@
                  FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                  FontSize="10" Padding="6,4"
                  AutomationProperties.Name="{Binding LblSubscriptionUrlHint}"/>
-        <Button Grid.Column="2"
+        <Button Classes="solid" Grid.Column="2"
                 icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddSubscription}"
                 Command="{Binding AddSubscriptionCommand}"
                 Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
