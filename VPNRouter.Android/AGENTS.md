@@ -40,6 +40,7 @@ Output artifact: `bin\Release\net10.0-android36.0\com.ninitux.vpnrouter-Signed.a
   adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_CONNECT      # same handler as the Connect button; consent stays the system dialog
   adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_DISCONNECT
   adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_RESET        # clears saved config, servers, subscriptions and the state record
+  adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_SET_HERO --es value off|connecting|connected|error   # status ring look only, no state change
   ```
 - `VPNRouter.Android/Controls/`: Custom Avalonia controls for Android UI: `StatusCard.cs` (state hero) and `IconView.cs` (`IconView` draws a Lucide icon from `VPNRouter.Core/Services/UiIcons.cs`; `IconLabel` is icon plus text for buttons). Use them instead of text symbols or emoji; see `tools/AGENTS.md` for adding icons.
 - `VPNRouter.Android/Json/`: STJ JSON contexts (`AndroidJsonContext.cs`).

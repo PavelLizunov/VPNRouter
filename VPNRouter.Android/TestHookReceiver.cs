@@ -22,6 +22,7 @@ namespace VPNRouter.Android;
     "com.ninitux.vpnrouter.TEST_DISCONNECT",
     "com.ninitux.vpnrouter.TEST_RESET",
     "com.ninitux.vpnrouter.TEST_SET_VPN_STATE",
+    "com.ninitux.vpnrouter.TEST_SET_HERO",
 })]
 public sealed class TestHookReceiver : BroadcastReceiver
 {
@@ -33,6 +34,7 @@ public sealed class TestHookReceiver : BroadcastReceiver
     private const string ActDisconnect = "com.ninitux.vpnrouter.TEST_DISCONNECT";
     private const string ActReset = "com.ninitux.vpnrouter.TEST_RESET";
     private const string ActSetVpnState = "com.ninitux.vpnrouter.TEST_SET_VPN_STATE";
+    private const string ActSetHero = "com.ninitux.vpnrouter.TEST_SET_HERO";
 
     public override void OnReceive(Context? context, Intent? intent)
     {
@@ -50,6 +52,7 @@ public sealed class TestHookReceiver : BroadcastReceiver
                 ActDisconnect => OnUi(AndroidApp.TestHookDisconnect),
                 ActReset => OnUi(AndroidApp.TestHookReset),
                 ActSetVpnState => SetVpnState(context, intent.GetStringExtra("value"), intent.GetStringExtra("reason")),
+                ActSetHero => OnUi(() => AndroidApp.TestHookSetHero(intent.GetStringExtra("value"))),
                 _ => TestHookJson.Result(action, false, w => w.WriteString("error", "unknown-action")),
             };
         }
