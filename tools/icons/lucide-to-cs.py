@@ -23,8 +23,11 @@ OUT = os.path.join(HERE, "..", "..", "VPNRouter.Core", "Services", "UiIcons.cs")
 # Measured corrections of the source, applied after conversion. Keep this list short and explain every entry.
 # power: the arc in Lucide ends at (5.63, 6.64), which is not the mirror of its start (18.4, 6.6) about x = 12 by 0.03
 # and 0.04 units. The ring of the status card makes that visible as a tilt, so the end point is snapped to (5.6, 6.6).
+# triangle-alert: the left side starts 0.02 units further out than the mirror of the right side (10.25 and 2.25 against
+# 13.73 and 21.73 about x = 12), and the dot is drawn from x = 12 to 12.01; both are made symmetric about x = 12.
 FIXES = {
     "power": [("5.63,6.64", "5.6,6.6")],
+    "triangle-alert": [("10.25,4", "10.27,4"), ("2.25,18", "2.27,18"), ("M12,17 L12.01,17", "M11.995,17 L12.005,17")],
 }
 
 NUMBER = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
@@ -289,7 +292,7 @@ def main():
         "namespace VPNRouter.Core.Services;",
         "",
         "/// <summary>",
-        "/// Path data of the Lucide icons (ISC licence, see NOTICE.md) used by the Android UI, on the 24 x 24 grid of the",
+        "/// Path data of the Lucide icons (ISC licence, see NOTICE.md) used by the Android and desktop UI, on the 24 x 24 grid of the",
         "/// source files. Draw them as strokes with round caps and joins, no fill.",
         "/// </summary>",
         "public static partial class UiIcons",

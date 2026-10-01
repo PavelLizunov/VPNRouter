@@ -41,6 +41,21 @@ public class PictogramTextTests
     }
 
     [AvaloniaFact]
+    public void PrefixOnlyStillDrawsTheVerifiedMarkInParentheses()
+    {
+        var text = new TextBlock();
+        PictogramText.SetIcons(text, "verified,check,warning,error");
+        PictogramText.SetPrefixOnly(text, true);
+        PictogramText.SetText(text, "Wait for the config to be verified (\u2713\u2713) before connecting.");
+        Assert.Equal(new[] { "verified" }, Ids(text));
+        Assert.Equal("Wait for the config to be verified () before connecting.", Runs(text));
+        PictogramText.SetText(text, "Done: 3 truly working found (\u2713\u2713)");
+        Assert.Equal(new[] { "verified" }, Ids(text));
+        PictogramText.SetText(text, "Server \u2713\u2713 ok");
+        Assert.Empty(Ids(text));
+    }
+
+    [AvaloniaFact]
     public void UnmappedTextAndExplicitAccessibleNameRemainUntouched()
     {
         var text = new TextBlock();
