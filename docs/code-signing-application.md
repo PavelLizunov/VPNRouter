@@ -1,5 +1,7 @@
 # SignPath Foundation application package
 
+> **On hold.** The owner decided on 2026-10-01 not to pursue code signing for now (too complex). Nothing here is submitted. The README says the releases are not signed.
+
 Ready-to-paste answers for the free OSS code signing program of the SignPath Foundation, plus the honest list of what
 the program may object to. The enrollment itself is **the owner's step**: the application needs the owner's identity and
 contact details, a captcha and the owner's acceptance of the terms, so it cannot be submitted by an agent. The form is
