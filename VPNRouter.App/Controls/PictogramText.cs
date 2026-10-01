@@ -107,6 +107,11 @@ public sealed class PictogramText : AvaloniaObject
             if (id is null) continue;
             if (i > start) inlines.Add(new Run(source[start..i]));
             var icon = new Pictogram { Id = id, Width = control.FontSize, Height = control.FontSize };
+            // TextBlock measures its inline controls while it renders. The first measure of a fresh icon there changes its
+            // DesiredSize (0 to the icon size), which makes the parent invalidate itself during the render pass, and Avalonia
+            // throws "Visual was invalidated during the render pass": the app crashed on the Applications tab. Settle the
+            // desired size here, before the TextBlock ever sees the icon.
+            icon.Measure(new Size(control.FontSize, control.FontSize));
             icon.Bind(Pictogram.ForegroundProperty, control.GetObservable(TextBlock.ForegroundProperty));
             inlines.Add(new InlineUIContainer { Child = icon, BaselineAlignment = BaselineAlignment.Center });
             i += length - 1;
@@ -115,5 +120,9 @@ public sealed class PictogramText : AvaloniaObject
         }
         if (start < source.Length) inlines.Add(new Run(source[start..]));
         control.Inlines = inlines;
+        // A TextBlock that is rendered with a zero width constraint would measure its icons at zero width and change their
+        // desired size again: never give it less room than one icon.
+        if (inlines.OfType<InlineUIContainer>().Any() && control.MinWidth < control.FontSize)
+            control.MinWidth = control.FontSize;
     }
 }

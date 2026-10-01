@@ -13,6 +13,20 @@ public class PictogramTextTests
     private static string Runs(TextBlock text) => string.Concat(text.Inlines!.OfType<Run>().Select(x => x.Text));
 
     [AvaloniaFact]
+    public void InlineIconsHaveTheirDesiredSizeBeforeTheTextBlockMeasuresThem()
+    {
+        // A fresh icon whose first measure happens inside TextBlock.RenderCore changes its DesiredSize there and Avalonia
+        // throws "Visual was invalidated during the render pass" (the crash on the Applications tab).
+        var text = new TextBlock { FontSize = 11 };
+        PictogramText.SetIcons(text, "check,warning");
+        PictogramText.SetText(text, "\u2713 ok \u26a0");
+        var icons = text.Inlines!.OfType<InlineUIContainer>().Select(x => Assert.IsType<Pictogram>(x.Child)).ToArray();
+        Assert.Equal(2, icons.Length);
+        Assert.All(icons, icon => Assert.Equal(new Avalonia.Size(11, 11), icon.DesiredSize));
+        Assert.True(text.MinWidth >= 11);
+    }
+
+    [AvaloniaFact]
     public void ExplicitSemanticsKeepOriginalAccessibleNameAndUpdate()
     {
         var text = new TextBlock();
