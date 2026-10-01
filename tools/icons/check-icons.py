@@ -25,7 +25,7 @@ SYMMETRIC = {
     "ellipsis-vertical": "hv", "chevron-down": "h", "chevron-right": "v", "chevron-left": "v", "arrow-up": "h",
     "arrow-down": "h", "info": "h", "circle-alert": "h", "trash": "h", "circle-check": "", "search": "",
     "circle": "hv", "circle-plus": "hv", "circle-minus": "hv", "ellipsis": "hv", "shield": "h",
-    "triangle-alert": "h", "arrow-left": "v", "arrow-right": "v",
+    "triangle-alert": "h", "arrow-left": "v", "arrow-right": "v", "server": "v", "layout-grid": "hv",
 }
 
 
