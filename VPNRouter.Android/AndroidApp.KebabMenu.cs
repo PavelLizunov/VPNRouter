@@ -26,17 +26,32 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
+    private readonly Dictionary<Avalonia.Controls.Button, string> _menuItemIcons = new();
+
+    /// <summary>Sets the label of a menu item and keeps its icon (the label is replaced on language change and by the reset confirmation).</summary>
+    private void SetMenuItemText(Avalonia.Controls.Button? btn, string text)
+    {
+        if (btn is null) return;
+        if (!_menuItemIcons.TryGetValue(btn, out var icon)) { btn.Content = text; return; }
+        if (btn.Content is IconLabel label) label.Text = text;
+        else btn.Content = IconText(icon, text, UiScale.Ic(16));
+    }
+
     private Avalonia.Controls.Button MakeMenuItem(
         string label,
         string foregroundKey,
-        EventHandler<Avalonia.Interactivity.RoutedEventArgs>? onClick)
+        EventHandler<Avalonia.Interactivity.RoutedEventArgs>? onClick,
+        string? icon = null,
+        bool closeMenu = true)
     {
         var btn = new Avalonia.Controls.Button
         {
             Content = label,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(10, 7),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            MinHeight = 44,
+            Padding = new Thickness(12, 8),
             FontSize = UiScale.Fs(11),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
@@ -44,7 +59,20 @@ public partial class AndroidApp
             IsHitTestVisible = onClick is not null,
         };
         btn.BindToken(Avalonia.Controls.Button.ForegroundProperty, foregroundKey);
-        if (onClick is not null) btn.Click += onClick;
+        if (icon is not null)
+        {
+            _menuItemIcons[btn] = icon;
+            SetMenuItemText(btn, label);
+        }
+        if (onClick is not null)
+        {
+            // The menu closes when an action starts, so its feedback line and the screens it opens are not hidden behind it.
+            btn.Click += (s, e) =>
+            {
+                if (closeMenu && _kebabPopup is not null) _kebabPopup.IsOpen = false;
+                onClick(s, e);
+            };
+        }
         return btn;
     }
 
@@ -171,7 +199,7 @@ public partial class AndroidApp
         {
             _resetConfirmPending = false;
             if (_menuResetSettingsItem is not null)
-                _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+                SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
         }
     }
 

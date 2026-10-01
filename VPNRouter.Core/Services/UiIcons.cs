@@ -7,6 +7,7 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static partial class UiIcons
 {
+    public const string Activity = "activity";
     public const string ArrowDown = "arrow-down";
     public const string ArrowUp = "arrow-up";
     public const string CheckCheck = "check-check";
@@ -17,10 +18,13 @@ public static partial class UiIcons
     public const string CircleAlert = "circle-alert";
     public const string CircleCheck = "circle-check";
     public const string CircleX = "circle-x";
+    public const string Download = "download";
     public const string EllipsisVertical = "ellipsis-vertical";
+    public const string FileText = "file-text";
     public const string Flag = "flag";
     public const string Globe = "globe";
     public const string Info = "info";
+    public const string LifeBuoy = "life-buoy";
     public const string Minus = "minus";
     public const string Pencil = "pencil";
     public const string Play = "play";
@@ -30,12 +34,16 @@ public static partial class UiIcons
     public const string ScanQrCode = "scan-qr-code";
     public const string SearchCheck = "search-check";
     public const string Search = "search";
+    public const string ShieldCheck = "shield-check";
+    public const string SquarePlus = "square-plus";
     public const string Square = "square";
     public const string Trash = "trash";
+    public const string Upload = "upload";
     public const string X = "x";
 
     public static readonly IReadOnlyDictionary<string, string> PathData = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        [Activity] = "M22,12 L19.52,12 A2,2 0 0 0 17.59,13.46 L15.24,21.82 A0.25,0.25 0 0 1 14.76,21.82 L9.24,2.18 A0.25,0.25 0 0 0 8.76,2.18 L6.41,10.54 A2,2 0 0 1 4.49,12 L2,12",
         [ArrowDown] = "M12,5 L12,19 M19,12 L12,19 L5,12",
         [ArrowUp] = "M5,12 L12,5 L19,12 M12,19 L12,5",
         [CheckCheck] = "M18,6 L7,17 L2,12 M22,10 L14.5,17.5 L13,16",
@@ -46,10 +54,13 @@ public static partial class UiIcons
         [CircleAlert] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,8 L12,12 M12,16 L12.01,16",
         [CircleCheck] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M16,9 L10.5,14.5 L8,12",
         [CircleX] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M15,9 L9,15 M9,9 L15,15",
+        [Download] = "M12,15 L12,3 M21,15 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,15 M7,10 L12,15 L17,10",
         [EllipsisVertical] = "M11,12 A1,1 0 1 0 13,12 A1,1 0 1 0 11,12 Z M11,5 A1,1 0 1 0 13,5 A1,1 0 1 0 11,5 Z M11,19 A1,1 0 1 0 13,19 A1,1 0 1 0 11,19 Z",
+        [FileText] = "M6,22 A2,2 0 0 1 4,20 L4,4 A2,2 0 0 1 6,2 L14,2 A2.4,2.4 0 0 1 15.704,2.706 L19.292,6.294 A2.4,2.4 0 0 1 20,8 L20,20 A2,2 0 0 1 18,22 Z M14,2 L14,7 A1,1 0 0 0 15,8 L20,8 M10,9 L8,9 M16,13 L8,13 M16,17 L8,17",
         [Flag] = "M4,22 L4,4 A1,1 0 0 1 4.4,3.2 A6,6 0 0 1 8,2 C11,2 13,4 15.333,4 Q17.333,4 18.4,3.2 A1,1 0 0 1 20,4 L20,14 A1,1 0 0 1 19.6,14.8 A6,6 0 0 1 16,16 C13,16 11,14 8,14 A6,6 0 0 0 4,15.528",
         [Globe] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,2 A14.5,14.5 0 0 0 12,22 A14.5,14.5 0 0 0 12,2 M2,12 L22,12",
         [Info] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,16 L12,12 M12,8 L12.01,8",
+        [LifeBuoy] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M4.93,4.93 L9.17,9.17 M14.83,9.17 L19.07,4.93 M14.83,14.83 L19.07,19.07 M9.17,14.83 L4.93,19.07 M8,12 A4,4 0 1 0 16,12 A4,4 0 1 0 8,12 Z",
         [Minus] = "M5,12 L19,12",
         [Pencil] = "M21.174,6.812 A1,1 0 0 0 17.188,2.825 L3.842,16.174 A2,2 0 0 0 3.342,17.004 L2.021,21.356 A0.5,0.5 0 0 0 2.644,21.978 L6.997,20.658 A2,2 0 0 0 7.827,20.161 Z M15,5 L19,9",
         [Play] = "M5,5 A2,2 0 0 1 8.008,3.272 L20.005,10.27 A2,2 0 0 1 20.008,13.728 L8.008,20.728 A2,2 0 0 1 5,19 Z",
@@ -59,8 +70,11 @@ public static partial class UiIcons
         [ScanQrCode] = "M17,12 L17,16 A1,1 0 0 1 16,17 L12,17 M17,3 L19,3 A2,2 0 0 1 21,5 L21,7 M17,8 L17,7 M21,17 L21,19 A2,2 0 0 1 19,21 L17,21 M3,7 L3,5 A2,2 0 0 1 5,3 L7,3 M7,17 L7.01,17 M7,21 L5,21 A2,2 0 0 1 3,19 L3,17 M8,7 L11,7 A1,1 0 0 1 12,8 L12,11 A1,1 0 0 1 11,12 L8,12 A1,1 0 0 1 7,11 L7,8 A1,1 0 0 1 8,7 Z",
         [SearchCheck] = "M8,11 L10,13 L14,9 M3,11 A8,8 0 1 0 19,11 A8,8 0 1 0 3,11 Z M21,21 L16.7,16.7",
         [Search] = "M21,21 L16.66,16.66 M3,11 A8,8 0 1 0 19,11 A8,8 0 1 0 3,11 Z",
+        [ShieldCheck] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z M9,12 L11,14 L15,10",
+        [SquarePlus] = "M5,3 L19,3 A2,2 0 0 1 21,5 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,5 A2,2 0 0 1 5,3 Z M8,12 L16,12 M12,8 L12,16",
         [Square] = "M5,3 L19,3 A2,2 0 0 1 21,5 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,5 A2,2 0 0 1 5,3 Z",
         [Trash] = "M10,11 L10,17 M14,11 L14,17 M19,6 L19,20 A2,2 0 0 1 17,22 L7,22 A2,2 0 0 1 5,20 L5,6 M3,6 L21,6 M8,6 L8,4 A2,2 0 0 1 10,2 L14,2 A2,2 0 0 1 16,4 L16,6",
+        [Upload] = "M12,3 L12,15 M17,8 L12,3 L7,8 M21,15 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,15",
         [X] = "M18,6 L6,18 M6,6 L18,18",
     };
 }

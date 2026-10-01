@@ -613,23 +613,23 @@ public partial class AndroidApp : Avalonia.Application
 
         _menuSettingsItem = null;
         _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
-                                         "TextPrimaryBrush", OnMenuOpenLogClicked);
+                                         "TextPrimaryBrush", OnMenuOpenLogClicked, UiIcons.FileText);
         _menuExportDiagItem = MakeMenuItem(Localization.MenuItemExportDiag,
-                                           "TextPrimaryBrush", OnMenuExportDiagClicked);
+                                           "TextPrimaryBrush", OnMenuExportDiagClicked, UiIcons.Upload);
         _menuCopyLogPathItem = null;
         _menuViewCrashLogItem = null;
         _menuUpdateCheckItem = MakeMenuItem(Localization.MenuItemUpdateCheck,
-                                            "TextPrimaryBrush", OnMenuUpdateCheckClicked);
+                                            "TextPrimaryBrush", OnMenuUpdateCheckClicked, UiIcons.RefreshCw);
         _menuExportConfigItem = null;
         _menuImportConfigItem = null;
         _menuResetSettingsItem = MakeMenuItem(Localization.MenuItemResetSettings,
-                                              "DangerSolidBrush", OnMenuResetSettingsClicked);
+                                              "DangerSolidBrush", OnMenuResetSettingsClicked, UiIcons.Trash, closeMenu: false);
         _menuCheckLeaksItem = MakeMenuItem(Localization.MenuItemCheckLeaks,
-                                           "TextPrimaryBrush", OnMenuCheckLeaksClicked);
+                                           "TextPrimaryBrush", OnMenuCheckLeaksClicked, UiIcons.ShieldCheck);
         _menuHealthCheckItem = MakeMenuItem(Localization.MenuItemHealthCheck,
-                                            "TextPrimaryBrush", OnMenuHealthCheckClicked);
+                                            "TextPrimaryBrush", OnMenuHealthCheckClicked, UiIcons.Activity);
         _menuRestartSafeModeItem = MakeMenuItem(Localization.MenuItemSafeMode,
-                                                "TextPrimaryBrush", OnMenuRestartSafeModeClicked);
+                                                "TextPrimaryBrush", OnMenuRestartSafeModeClicked, UiIcons.LifeBuoy);
         _menuAboutLabel = new TextBlock
         {
             Text = Localization.SmpMenuAbout,
@@ -645,13 +645,18 @@ public partial class AndroidApp : Avalonia.Application
             VerticalAlignment = VerticalAlignment.Center,
         };
         _menuVersionPill.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        var aboutIcon = IconContent(UiIcons.Info, UiScale.Ic(16));
+        aboutIcon.BindToken(IconView.ForegroundProperty, "TextPrimaryBrush");
+        aboutIcon.VerticalAlignment = VerticalAlignment.Center;
         var aboutGrid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            ColumnSpacing = 16,
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnSpacing = 6,
         };
-        Grid.SetColumn(_menuAboutLabel, 0);
-        Grid.SetColumn(_menuVersionPill, 1);
+        Grid.SetColumn(aboutIcon, 0);
+        Grid.SetColumn(_menuAboutLabel, 1);
+        Grid.SetColumn(_menuVersionPill, 2);
+        aboutGrid.Children.Add(aboutIcon);
         aboutGrid.Children.Add(_menuAboutLabel);
         aboutGrid.Children.Add(_menuVersionPill);
         _menuVersionItem = new Avalonia.Controls.Button
@@ -659,12 +664,18 @@ public partial class AndroidApp : Avalonia.Application
             Content = aboutGrid,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(10, 7),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            MinHeight = 44,
+            Padding = new Thickness(12, 8),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
-        _menuVersionItem.Click += OnMenuRepoClicked;
+        _menuVersionItem.Click += (s, e) =>
+        {
+            if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+            OnMenuRepoClicked(s, e);
+        };
 
         var menuStack = new StackPanel
         {
@@ -680,7 +691,7 @@ public partial class AndroidApp : Avalonia.Application
                           new[] { _menuHealthCheckItem, _menuRestartSafeModeItem,
                                   _menuResetSettingsItem });
         _menuAddTileItem = MakeMenuItem(Localization.MenuItemAddTile,
-                                        "TextPrimaryBrush", OnMenuAddTileClicked);
+                                        "TextPrimaryBrush", OnMenuAddTileClicked, UiIcons.SquarePlus);
         menuStack.Children.Add(_menuAddTileItem);
         menuStack.Children.Add(_menuVersionItem);
 
@@ -1612,14 +1623,14 @@ public partial class AndroidApp : Avalonia.Application
         if (_brandTitle is not null) _brandTitle.Text = Localization.BrandTitle;
         if (_menuThemeLight is not null) _menuThemeLight.Content = Localization.MenuSegLight;
         if (_menuThemeDark is not null) _menuThemeDark.Content = Localization.MenuSegDark;
-        if (_menuSettingsItem is not null) _menuSettingsItem.Content = Localization.MenuItemSettings;
-        if (_menuOpenLogItem is not null) _menuOpenLogItem.Content = Localization.MenuItemOpenLogs;
-        if (_menuExportDiagItem is not null) _menuExportDiagItem.Content = Localization.MenuItemExportDiag;
-        if (_menuCopyLogPathItem is not null) _menuCopyLogPathItem.Content = Localization.MenuItemCopyLogPath;
-        if (_menuViewCrashLogItem is not null) _menuViewCrashLogItem.Content = Localization.MenuItemViewCrashLog;
-        if (_menuUpdateCheckItem is not null) _menuUpdateCheckItem.Content = Localization.MenuItemUpdateCheck;
+        if (_menuSettingsItem is not null) SetMenuItemText(_menuSettingsItem, Localization.MenuItemSettings);
+        if (_menuOpenLogItem is not null) SetMenuItemText(_menuOpenLogItem, Localization.MenuItemOpenLogs);
+        if (_menuExportDiagItem is not null) SetMenuItemText(_menuExportDiagItem, Localization.MenuItemExportDiag);
+        if (_menuCopyLogPathItem is not null) SetMenuItemText(_menuCopyLogPathItem, Localization.MenuItemCopyLogPath);
+        if (_menuViewCrashLogItem is not null) SetMenuItemText(_menuViewCrashLogItem, Localization.MenuItemViewCrashLog);
+        if (_menuUpdateCheckItem is not null) SetMenuItemText(_menuUpdateCheckItem, Localization.MenuItemUpdateCheck);
         if (_menuResetSettingsItem is not null && !_resetConfirmPending)
-            _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+            SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
         if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
         if (_menuAdvancedToggleBtn is not null)
             _menuAdvancedToggleBtn.Content = IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true);
@@ -1634,10 +1645,10 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSectionTroubleshooting is not null) _menuSectionTroubleshooting.Text = Localization.MenuSectionTroubleshooting;
         if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
         RefreshAdvancedShellStrings();
-        if (_menuCheckLeaksItem is not null) _menuCheckLeaksItem.Content = Localization.MenuItemCheckLeaks;
-        if (_menuHealthCheckItem is not null) _menuHealthCheckItem.Content = Localization.MenuItemHealthCheck;
-        if (_menuAddTileItem is not null) _menuAddTileItem.Content = Localization.MenuItemAddTile;
-        if (_menuRestartSafeModeItem is not null) _menuRestartSafeModeItem.Content = Localization.MenuItemSafeMode;
+        if (_menuCheckLeaksItem is not null) SetMenuItemText(_menuCheckLeaksItem, Localization.MenuItemCheckLeaks);
+        if (_menuHealthCheckItem is not null) SetMenuItemText(_menuHealthCheckItem, Localization.MenuItemHealthCheck);
+        if (_menuAddTileItem is not null) SetMenuItemText(_menuAddTileItem, Localization.MenuItemAddTile);
+        if (_menuRestartSafeModeItem is not null) SetMenuItemText(_menuRestartSafeModeItem, Localization.MenuItemSafeMode);
         if (_profilesOverlayTitle is not null) _profilesOverlayTitle.Text = Localization.ProfilesOverlayTitle;
         if (_profilesOverlayIntro is not null) _profilesOverlayIntro.Text = Localization.ProfilesIntro;
         RefreshConfigShareLocalization();

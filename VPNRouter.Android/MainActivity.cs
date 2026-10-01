@@ -332,6 +332,25 @@ public class MainActivity : AvaloniaMainActivity
         }
     }
 
+    // Predictive back keeps calling this for apps that do not register their own callback (the activity's
+    // OnBackPressedDispatcher falls back to it), so one override covers the button, the gesture and the adb key.
+#pragma warning disable CA1422, CS0672
+    public override void OnBackPressed()
+    {
+        try
+        {
+            if (AndroidApp.TryHandleBack())
+                return;
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter", $"back handling failed: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        base.OnBackPressed();
+    }
+#pragma warning restore CA1422, CS0672
+
     protected override void OnDestroy()
     {
         if (_tunnelReceiver is not null)
