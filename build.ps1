@@ -7,12 +7,14 @@ param(
     [switch]$Upload,
     [string]$GitHubRepo = "PavelLizunov/VPNRouter",
     [switch]$AndroidAlso,
-    [switch]$BundleSplitDriver
+    [switch]$BundleSplitDriver,
+    [switch]$Installer
 )
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 $bundleSplitDriver = $BundleSplitDriver -or $Upload
+$buildInstaller = $Installer -or $Upload
 
 if ($Upload) {
     if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-r[1-9][0-9]*)?$') {
@@ -530,6 +532,19 @@ Write-Host "SHA256 (install): $(Get-Content $InstallShaPath)" -ForegroundColor G
 Write-Host "SHA256 (update):  $(Get-Content $UpdateShaPath)" -ForegroundColor Gray
 Write-Host ""
 
+$InstallerPath = $null
+$InstallerShaPath = $null
+if ($buildInstaller) {
+    Write-Host "=== Windows installer (Inno Setup, unsigned) ===" -ForegroundColor Cyan
+    & (Join-Path $Root "tools\build-installer.ps1") -Version $Version -PackageZip $InstallZipPath -OutputDir (Split-Path $InstallZipPath -Parent)
+    $InstallerPath = Join-Path (Split-Path $InstallZipPath -Parent) "VPNRouter-Setup-v$Version.exe"
+    $InstallerShaPath = "$InstallerPath.sha256"
+    if (-not (Test-Path $InstallerPath) -or -not (Test-Path $InstallerShaPath)) {
+        throw "The installer or its SHA256 sidecar was not produced: $InstallerPath"
+    }
+    Write-Host ""
+}
+
 Write-Host "Package contents:" -ForegroundColor Gray
 Get-ChildItem $DistDir -Recurse | ForEach-Object {
     $rel = $_.FullName.Replace($DistDir, "").TrimStart("\")
@@ -686,6 +701,7 @@ if ($Upload) {
         $tag = "v$Version"
 
         $releaseAssets = @($InstallZipPath, $UpdateZipPath, $InstallShaPath, $UpdateShaPath)
+        if ($InstallerPath) { $releaseAssets += @($InstallerPath, $InstallerShaPath) }
         if ($AndroidBuilt) {
             $releaseAssets += @($ApkPath, $ApkShaPath)
             Write-Host "       Including local Android APK in release assets" -ForegroundColor Gray

@@ -76,6 +76,8 @@ jobs:
             "VPNRouter-v${EXPECTED_VERSION}-win.zip.sha256"
             "VPNRouter-update-v${EXPECTED_VERSION}-win.zip"
             "VPNRouter-update-v${EXPECTED_VERSION}-win.zip.sha256"
+            "VPNRouter-Setup-v${EXPECTED_VERSION}.exe"
+            "VPNRouter-Setup-v${EXPECTED_VERSION}.exe.sha256"
             "VPNRouter-v${EXPECTED_VERSION}-mac.dmg"
             "VPNRouter-v${EXPECTED_VERSION}-mac.dmg.sha256"
             "VPNRouter-v${EXPECTED_VERSION}-mac.zip"
@@ -96,14 +98,14 @@ jobs:
           jq -r '.assets[].name' release-before.json | LC_ALL=C sort > actual-assets.txt
           jq -S '{id, tag_name, draft, prerelease, assets: [.assets[] | {id,name,size,updated_at,digest,state}] | sort_by(.name)}' release-before.json > inventory-before.json
           if ! diff -u expected-assets.txt actual-assets.txt; then
-            echo '::error::Release inventory must be exactly the expected 16 assets; complete the draft and rerun'
+            echo '::error::Release inventory must be exactly the expected 18 assets; complete the draft and rerun'
             exit 1
           fi
           mkdir assets
           while IFS=$'\t' read -r asset_id asset_name; do
             gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "assets/$asset_name"
           done < <(jq -r '.assets[] | [.id,.name] | @tsv' release-before.json)
-          echo 'All 16 expected assets present'
+          echo 'All 18 expected assets present'
 
       - name: Verify integrity
         id: verify
@@ -139,7 +141,7 @@ jobs:
 
           # Recheck local inventory after download; reject races and non-regular files.
           if sorted(p.name for p in root.iterdir()) != sorted(expected):
-              raise SystemExit('Downloaded inventory is not exactly the expected 16 assets')
+              raise SystemExit('Downloaded inventory is not exactly the expected 18 assets')
           if any(not (root / name).is_file() or (root / name).is_symlink() for name in expected):
               raise SystemExit('Downloaded assets must be regular files')
 
@@ -183,9 +185,18 @@ jobs:
               if name.endswith('.sha256'):
                   continue
               path = root / name
-              hard = name.endswith('-win.zip')
+              hard = name.endswith(('-win.zip', '.exe'))
               sink = errors if hard else warnings
               try:
+                  if name.endswith('.exe'):
+                      # The Inno Setup payload is compressed. Check the PE signature and the version text that
+                      # tools/build-installer.ps1 writes into the file version resource.
+                      exe = path.read_bytes()
+                      if exe[:2] != b'MZ':
+                          sink.append(f'{name}: not a Windows executable')
+                      elif version not in versions(exe):
+                          sink.append(f'{name}: embedded version text missing or mismatch; expected {version}')
+                      continue
                   if name.endswith('.AppImage'):
                       warnings.append(f'{name}: embedded version inspection unavailable; hash verified; payload never executed')
                       continue

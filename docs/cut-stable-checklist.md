@@ -20,7 +20,7 @@ candidate before a stable tag is created.
 - Release commit matches the candidate tag and the checkout is clean.
 - Release build, regression tests and exact-SHA CI are green.
 - macOS, Linux, Android and Windows update workflows are green.
-- The candidate contains exactly 16 canonical assets with valid SHA sidecars.
+- The candidate contains exactly 18 canonical assets with valid SHA sidecars.
 - `tools/post-ship-verify.ps1` passed on the candidate.
 - No open P0/P1 entry remains in `plans/OPEN-DEFECTS.md`.
 

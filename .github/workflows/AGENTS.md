@@ -9,7 +9,7 @@
 
 ## Release asset contract
 
-- A complete release requires 16 total assets: 4 Windows, 4 macOS, 6 Linux, and 2 Android files.
+- A complete release requires 18 total assets: 6 Windows (zip, update zip, installer), 4 macOS, 6 Linux, and 2 Android files.
 - Every binary release artifact must be accompanied by its `.sha256` sidecar.
 
 ## Safety and guidelines

@@ -1,6 +1,6 @@
 ---
 name: cut-stable
-description: Promote a fully verified rolling -rN candidate to stable vX.Y.Z. Uses branch/PR/CI, exact 16-asset validation, fixed-WINBRAT update and connection gates, and never touches the development workstation's VPN installation.
+description: Promote a fully verified rolling -rN candidate to stable vX.Y.Z. Uses branch/PR/CI, exact 18-asset validation, fixed-WINBRAT update and connection gates, and never touches the development workstation's VPN installation.
 whenToUse: The latest -rN passed all hard gates and the user explicitly said cut, ok, promote, or otherwise authorized the stable release. Stable cut is never autonomous.
 ---
 
@@ -26,7 +26,7 @@ provisioning SDKs, resizing resources, or cleaning shared caches.
    authorized preflighted build worker.
 3. Exact candidate commit CI is green for tests, Windows update integration,
    macOS, Linux, Android, APT and release integrity.
-4. The published candidate has exactly 16 canonical files: 4 Windows,
+4. The published candidate has exactly 18 canonical files: 6 Windows,
    4 macOS, 6 Linux and 2 Android ARM64 assets.
 5. `tools/post-ship-verify.ps1 -Version X.Y.Z-rN` returns PASS.
 6. The mandatory previous-stable to candidate live-update gate below returns
@@ -148,7 +148,7 @@ or launch a local VPN to reach them.
 Require successful canonical macOS/Linux/Android staging, Windows signing when
 configured, `test.yml` and Windows update runs at this stable tag and SHA, then:
 
-- exactly 16 canonical assets and every SHA sidecar matching;
+- exactly 18 canonical assets and every SHA sidecar matching;
 - full Windows ZIP True Split bundle under `app/driver/`;
 - update Windows ZIP True Split bundle under `_bootstrap/driver/`;
 - Android asset `VPNRouter-vX.Y.Z-android-arm64.apk`.

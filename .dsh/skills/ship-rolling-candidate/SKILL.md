@@ -93,7 +93,7 @@ STOP; published corrections require a new version and immutable tag.
 ## Prepublication gate and authorized publication
 
 Require all platform staging jobs and tag-bound tests/Windows update jobs green
-at the exact tag SHA, exactly 16 canonical assets (4 Windows, 4 macOS, 6 Linux,
+at the exact tag SHA, exactly 18 canonical assets (6 Windows, 4 macOS, 6 Linux,
 2 Android), every sidecar matching, and both Windows True Split driver bundles.
 Then explicitly dispatch and await the completed-draft integrity gate:
 
@@ -152,7 +152,7 @@ There is no developer-machine fallback. A Core-only change is labelled not
 UI-testable but still runs every applicable binary/dataplane/log gate.
 
 Only after this PASS may the report call the candidate verified. Report the
-exact commit, 16 assets, workflow status, WINBRAT cycles, log scan, cleanup and
+exact commit, 18 assets, workflow status, WINBRAT cycles, log scan, cleanup and
 any owner-blocked external step. Candidate PASS is readiness evidence only; it
 does not authorize stable.
 
