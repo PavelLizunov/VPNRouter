@@ -17,6 +17,9 @@ internal static class UiScale
 
     internal static double Lh(double sourceLineHeight) => UiTypeScale.LineHeight(sourceLineHeight, SystemFontScale);
 
+    /// <summary>Icon size in dp next to text: the size times the same clamped system font scale as the text.</summary>
+    internal static double Ic(double size) => Math.Round(size * UiTypeScale.ClampFactor(SystemFontScale), 1);
+
     private static double Read()
     {
         try

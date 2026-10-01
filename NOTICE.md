@@ -38,6 +38,12 @@ Authoritative license + version are in each package and in the `.csproj` files.
 | Xamarin.AndroidX.* | MIT / Apache-2.0 |
 | zxing-android-embedded 4.3.0, ZXing core 3.5.3 (bundled Android jars in `VPNRouter.Android/Lib/`) | Apache-2.0 |
 
+## Icons
+
+| Component | Used for | Source | License |
+|---|---|---|---|
+| Lucide 1.49.0 (selected icons) | Android UI icons: path data in `VPNRouter.Core/Services/UiIcons.cs`, generated from the unchanged SVG files in `tools/icons/lucide/` | https://github.com/lucide-icons/lucide | ISC; parts derived from Feather, MIT (full text in `tools/icons/lucide/LICENSE`) |
+
 ## Notes
 
 - VPNRouter does not modify these components; it downloads or bundles released

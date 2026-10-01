@@ -134,6 +134,7 @@ public partial class AndroidApp
             _lastHealthOk = false;
             _lastError = null;
             if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
+            _statusCard.IsError = false;
             StartDiagnosticsTimer();
             ApplyHealthCheckDisplay();
 
@@ -175,6 +176,7 @@ public partial class AndroidApp
         if (_vpnChip is null) return;
         if (_vpnChipState == state && !force) return;
         _vpnChipState = state;
+        if (_statusCard is not null) _statusCard.IsWarn = state == ChipState.Connecting;
 
         var prevVpnCts = _vpnPulseCts;
         _vpnPulseCts = null;
@@ -376,6 +378,7 @@ public partial class AndroidApp
                 {
                     _lastError = null;
                     if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
+                    if (_statusCard is not null) _statusCard.IsError = false;
                     if (_connectionStartedAt is null) StopDiagnosticsTimer();
                 }
             }
@@ -461,10 +464,12 @@ public partial class AndroidApp
         if (string.IsNullOrEmpty(_lastError))
         {
             _statusErrorOneLiner.IsVisible = false;
+            if (_statusCard is not null) _statusCard.IsError = false;
             return;
         }
         _statusErrorOneLiner.Text = string.Format(Localization.DiagErrorOneLiner, _lastError);
         _statusErrorOneLiner.IsVisible = true;
+        if (_statusCard is not null) _statusCard.IsError = true;
     }
 
     private static string FormatUptime(TimeSpan elapsed)
