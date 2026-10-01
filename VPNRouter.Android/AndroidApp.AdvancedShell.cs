@@ -8,6 +8,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
 using UiIcons = VPNRouter.Core.Services.UiIcons;
 
 namespace VPNRouter.Android;
@@ -44,6 +45,13 @@ public partial class AndroidApp
     private Border? _advHeaderBorder;
     private Border? _advFooterBorder;
     private Border? _advTabStripBorder;
+    private bool _advNavCompact;
+
+    // A tab page is never laid out lower than this. Below it (landscape, small phones, an open keyboard) the page scrolls
+    // as a whole instead of squeezing its lists to nothing and drawing rows over each other.
+    private const double AdvMinPageHeight = 520;
+    // Below this shell height (landscape) the navigation bar puts the label next to the icon and gets 20 dp lower.
+    private const double AdvCompactNavBelow = 600;
 
     private Border BuildAdvancedShellOverlay()
     {
@@ -84,6 +92,7 @@ public partial class AndroidApp
         {
             Background = bg,
         };
+        _advShellContentHost.SizeChanged += (_, _) => SizeAdvTabPages();
 
         _advFooterBorder = BuildAdvancedFooter();
         var footerBorder = _advFooterBorder;
@@ -99,12 +108,53 @@ public partial class AndroidApp
 
         ApplyAdvancedFooterConnectionState(MainActivity.IntendedConnected);
 
-        return new Border
+        var overlay = new Border
         {
             Background = bg,
             IsVisible = false,
             Child = dock,
         };
+        overlay.SizeChanged += (_, e) => SetAdvNavCompact(e.NewSize.Height < AdvCompactNavBelow);
+        return overlay;
+    }
+
+    private void SizeAdvTabPages()
+    {
+        if (_advShellContentHost is null) return;
+        var h = _advShellContentHost.Bounds.Height;
+        if (h <= 0) return;
+        foreach (var page in _advShellTabContent.Values)
+            if (page is ScrollViewer { Content: Control content })
+                content.Height = Math.Max(h, AdvMinPageHeight);
+        // When the keyboard makes the page scroll, keep the field being typed into in view.
+        var host = _advShellContentHost;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (TopLevel.GetTopLevel(host)?.FocusManager?.GetFocusedElement() is Control focused &&
+                focused.IsVisible && host.IsVisualAncestorOf(focused))
+                focused.BringIntoView();
+        });
+    }
+
+    private void SetAdvNavCompact(bool compact)
+    {
+        if (compact == _advNavCompact) return;
+        _advNavCompact = compact;
+        foreach (var btn in _advShellTabButtons.Values)
+            StyleAdvShellTabLayout(btn, compact);
+    }
+
+    private static void StyleAdvShellTabLayout(Avalonia.Controls.Button btn, bool compact)
+    {
+        btn.MinHeight = compact ? 44 : 56;
+        btn.Padding = compact ? new Thickness(2, 4) : new Thickness(2, 6);
+        if (btn.Content is StackPanel stack)
+        {
+            stack.Orientation = compact ? Avalonia.Layout.Orientation.Horizontal : Avalonia.Layout.Orientation.Vertical;
+            stack.Spacing = compact ? 8 : 2;
+        }
+        if (btn.Tag is AdvTabVisual visual)
+            visual.Label.VerticalAlignment = VerticalAlignment.Center;
     }
 
     private Border BuildAdvancedHeader()
@@ -393,9 +443,16 @@ public partial class AndroidApp
             AdvancedTab.Public       => BuildPublicTabContent(),
             _                        => new TextBlock { Text = "?" },
         };
-        content.IsVisible = false;
-        _advShellTabContent[tab] = content;
-        _advShellContentHost.Children.Add(content);
+        var page = new ScrollViewer
+        {
+            Content = content,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            IsVisible = false,
+        };
+        _advShellTabContent[tab] = page;
+        _advShellContentHost.Children.Add(page);
+        SizeAdvTabPages();
     }
 
     private Control BuildSettingsTabContent() => BuildNetworkTabContent();
@@ -463,6 +520,7 @@ public partial class AndroidApp
         };
         btn.Click += (_, _) => SelectAdvancedTab(tab);
         StyleAdvShellTab(btn, tab == _advShellSelectedTab);
+        StyleAdvShellTabLayout(btn, _advNavCompact);
         return btn;
     }
 
@@ -590,5 +648,11 @@ public partial class AndroidApp
         // The tab strip is docked lowest, so it carries the bottom inset (the gesture bar); the status footer sits above it.
         if (_advTabStripBorder is not null)
             _advTabStripBorder.Padding = new Thickness(0, 0, 0, Math.Max(0.0, insets.Bottom));
+
+        // While the keyboard is open the status footer and the navigation step aside, so the page keeps the room (in
+        // landscape they would otherwise take all of it).
+        var typing = _imeBottom > 0;
+        if (_advTabStripBorder is not null) _advTabStripBorder.IsVisible = !typing;
+        if (_advFooterBorder is not null) _advFooterBorder.IsVisible = !typing;
     }
 }

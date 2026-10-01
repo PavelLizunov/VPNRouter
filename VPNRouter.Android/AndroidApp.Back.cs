@@ -23,6 +23,7 @@ public partial class AndroidApp
         if (_cfgExportOverlay is { IsVisible: true }) { HideExportOverlay(); return true; }
         if (_cfgImportOverlay is { IsVisible: true }) { HideImportOverlay(); return true; }
         if (_profilesOverlay is { IsVisible: true }) { _profilesOverlay.IsVisible = false; return true; }
+        if (CloseSubscriptionEditor()) return true;
         if (_advShellOverlay is { IsVisible: true }) { CloseAdvancedShell(); return true; }
         return false;
     }

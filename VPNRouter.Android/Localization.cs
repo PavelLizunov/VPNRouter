@@ -923,6 +923,11 @@ internal static class Localization
     public static string AdvPublicSubTabSaved => global::VPNRouter.Core.Localization.Strings.AdvPublicSubTabSaved;
     public static string AdvPublicFindButton => global::VPNRouter.Core.Localization.Strings.AdvPublicFindButton;
     public static string AdvPublicSettingsExpand => global::VPNRouter.Core.Localization.Strings.AdvPublicSettingsExpand;
+    public static string SectionShow => global::VPNRouter.Core.Localization.Strings.SectionShow;
+    public static string SectionHide => global::VPNRouter.Core.Localization.Strings.SectionHide;
+    public static string SubsIntroTitle => global::VPNRouter.Core.Localization.Strings.SubsIntroTitle;
+    public static string SubsIntroBody => global::VPNRouter.Core.Localization.Strings.SubsIntroBody;
+    public static string SrvManualEmptyHint => global::VPNRouter.Core.Localization.Strings.SrvManualEmptyHint;
     public static string AdvPublicConnect => global::VPNRouter.Core.Localization.Strings.AdvPublicConnect;
     public static string AdvPublicCacheEmpty => global::VPNRouter.Core.Localization.Strings.AdvPublicCacheEmpty;
     public static string AdvPublicSelectRow => global::VPNRouter.Core.Localization.Strings.AdvPublicSelectRow;

@@ -15,7 +15,6 @@ using System.Linq;
 using VPNRouter.Core.Services.FreeConfigs;
 using UiIcons = VPNRouter.Core.Services.UiIcons;
 using IconView = VPNRouter.UI.Controls.IconView;
-using IconLabel = VPNRouter.UI.Controls.IconLabel;
 
 namespace VPNRouter.Android;
 
@@ -40,13 +39,14 @@ public partial class AndroidApp
     private Border? _fcAdvancedPanel;
     private Avalonia.Controls.Button? _fcAdvancedToggle;
     private bool _fcAdvancedExpanded;
+    private IconView? _fcAdvancedChevron;
+    private TextBlock? _fcAdvancedToggleText;
     private ListBox? _fcSearchList;
     private TextBlock? _fcSearchEmptyHint;
 
     private ListBox? _fcSavedList;
     private TextBlock? _fcSavedEmptyHint;
     private Avalonia.Controls.Button? _fcClearAllButton;
-    private TextBlock? _fcSavedHint;
 
     private TextBlock? _fcStatusText;
     private Avalonia.Controls.ProgressBar? _fcProgress;
@@ -137,13 +137,50 @@ public partial class AndroidApp
         };
         _fcStopButton.Click += OnFreeConfigsStopClicked;
 
+        // A labelled toggle like the config row of the main screen: "Settings" on the left, a "Show" or "Hide" pill with a
+        // chevron that flips on the right, so the row reads as something that opens and closes.
+        _fcAdvancedChevron = IconContent(UiIcons.ChevronDown, UiScale.Ic(14));
+        _fcAdvancedChevron.Foreground = successFg;
+        _fcAdvancedToggleText = new TextBlock
+        {
+            FontSize = UiScale.Fs(10),
+            FontWeight = FontWeight.SemiBold,
+            Foreground = successFg,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var advPill = new Border
+        {
+            Padding = new Thickness(10, 5, 8, 5),
+            CornerRadius = new CornerRadius(radiusSm),
+            Background = GetBrush("SurfaceBaseBrush"),
+            BorderBrush = GetBrush("SuccessBorderBrush"),
+            BorderThickness = new Thickness(1),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 4,
+                Children = { _fcAdvancedToggleText, _fcAdvancedChevron },
+            },
+        };
+        var advLabel = new TextBlock
+        {
+            Text = UiIcons.StripSymbols(Localization.FcAdvancedSettings),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var advRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        Grid.SetColumn(advPill, 1);
+        advRow.Children.Add(advLabel);
+        advRow.Children.Add(advPill);
         _fcAdvancedToggle = new Avalonia.Controls.Button
         {
-            Content = IconText(UiIcons.ChevronRight, Localization.FcAdvancedSettings, 14),
+            Content = advRow,
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            MinHeight = 44,
             Padding = new Thickness(0, 6),
             Background = Brushes.Transparent,
             Foreground = successFg,
@@ -155,7 +192,7 @@ public partial class AndroidApp
 
         _fcAdvancedPanel = BuildAdvancedSettingsPanel(successFg);
         _fcAdvancedPanel.IsVisible = _fcAdvancedExpanded;
-        if (_fcAdvancedToggle.Content is IconLabel advLabel) SetChevronOpen(advLabel.IconView, _fcAdvancedExpanded);
+        UpdateFcAdvancedToggle();
 
         var greenCardStack = new StackPanel
         {
@@ -228,21 +265,13 @@ public partial class AndroidApp
         searchGrid.Children.Add(searchListBorder);
         _fcSearchBody = searchGrid;
 
-        _fcSavedHint = new TextBlock
-        {
-            Text = Localization.FcSavedEmptyHint,
-            FontSize = UiScale.Fs(9),
-            Opacity = 0.55,
-            Foreground = textM,
-            TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
         _fcClearAllButton = new Avalonia.Controls.Button
         {
             Content = IconText(UiIcons.Trash, Localization.FcSavedClearAll, 14),
             FontSize = UiScale.Fs(10),
             Padding = new Thickness(10, 4),
+            MinHeight = 44,
+            VerticalContentAlignment = VerticalAlignment.Center,
             CornerRadius = new CornerRadius(radiusSm),
             Background = Brushes.Transparent,
             BorderBrush = defaultB,
@@ -258,9 +287,7 @@ public partial class AndroidApp
             ColumnSpacing = 6,
             Margin = new Thickness(2, 0, 2, 8),
         };
-        Grid.SetColumn(_fcSavedHint, 0);
         Grid.SetColumn(_fcClearAllButton, 1);
-        savedToolbar.Children.Add(_fcSavedHint);
         savedToolbar.Children.Add(_fcClearAllButton);
 
         var savedHeaderRow = BuildFcListHeader(textM, sunken);
@@ -883,7 +910,14 @@ public partial class AndroidApp
     {
         _fcAdvancedExpanded = !_fcAdvancedExpanded;
         if (_fcAdvancedPanel is not null) _fcAdvancedPanel.IsVisible = _fcAdvancedExpanded;
-        if (_fcAdvancedToggle?.Content is IconLabel advLabel) SetChevronOpen(advLabel.IconView, _fcAdvancedExpanded);
+        UpdateFcAdvancedToggle();
+    }
+
+    private void UpdateFcAdvancedToggle()
+    {
+        SetDisclosureChevron(_fcAdvancedChevron, _fcAdvancedExpanded);
+        if (_fcAdvancedToggleText is not null)
+            _fcAdvancedToggleText.Text = _fcAdvancedExpanded ? Localization.SectionHide : Localization.SectionShow;
     }
 
     private bool ApplyFcConnectGate()
@@ -1109,8 +1143,6 @@ public partial class AndroidApp
 
         if (_fcSavedEmptyHint is not null)
             _fcSavedEmptyHint.IsVisible = _fcSavedResults.Count == 0;
-        if (_fcSavedHint is not null)
-            _fcSavedHint.IsVisible = _fcSavedResults.Count == 0;
         if (_fcSavedList is not null)
             _fcSavedList.IsVisible = _fcSavedResults.Count > 0;
         if (_fcClearAllButton is not null)
