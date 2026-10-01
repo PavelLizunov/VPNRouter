@@ -648,5 +648,11 @@ public partial class AndroidApp
         // The tab strip is docked lowest, so it carries the bottom inset (the gesture bar); the status footer sits above it.
         if (_advTabStripBorder is not null)
             _advTabStripBorder.Padding = new Thickness(0, 0, 0, Math.Max(0.0, insets.Bottom));
+
+        // While the keyboard is open the status footer and the navigation step aside, so the page keeps the room (in
+        // landscape they would otherwise take all of it).
+        var typing = _imeBottom > 0;
+        if (_advTabStripBorder is not null) _advTabStripBorder.IsVisible = !typing;
+        if (_advFooterBorder is not null) _advFooterBorder.IsVisible = !typing;
     }
 }

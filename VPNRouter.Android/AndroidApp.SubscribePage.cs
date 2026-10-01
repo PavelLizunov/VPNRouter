@@ -28,6 +28,7 @@ public partial class AndroidApp
     private TextBlock? _subsRefreshAllStatus;
     private Avalonia.Controls.CheckBox? _subsAutoSelectChk;
     private Control? _subsIntro;
+    private ScrollViewer? _subsListScroller;
     private TextBlock? _subsIntroTitle;
     private TextBlock? _subsIntroBody;
     private Control[] _subsListOnlyParts = System.Array.Empty<Control>();
@@ -115,7 +116,7 @@ public partial class AndroidApp
             Spacing = 0,
             Children = { _subsListStack, _subsEmptyHint },
         };
-        var subsListScroller = new ScrollViewer
+        var subsListScroller = _subsListScroller = new ScrollViewer
         {
             Content = listRoot,
             MaxHeight = 180,
@@ -674,10 +675,16 @@ public partial class AndroidApp
         }
         _subsEmptyHint.IsVisible = false;
 
+        // The inline editor needs more room than a list row: the list grows while it is open and shows it whole.
+        if (_subsListScroller is not null) _subsListScroller.MaxHeight = _editingId is null ? 180 : 360;
+        Control? editing = null;
         foreach (var sub in _subs)
         {
-            _subsListStack.Children.Add(BuildSubCard(sub));
+            var card = BuildSubCard(sub);
+            if (sub.Id == _editingId) editing = card;
+            _subsListStack.Children.Add(card);
         }
+        if (editing is not null) Dispatcher.UIThread.Post(() => editing.BringIntoView(), DispatcherPriority.Background);
         RebuildAggregatedServerList();
     }
 

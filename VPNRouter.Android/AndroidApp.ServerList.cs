@@ -713,6 +713,9 @@ public partial class AndroidApp
 
         var servers = _srvCurrentSub?.Servers ?? new List<VlessServerEntry>();
         var activeName = AndroidStorage.GetSelectedServerName();
+        // Nothing to test in an empty list: the test buttons read as disabled instead of doing nothing.
+        if (_srvTestAllBtn is not null && _srvTestAllCts is null) _srvTestAllBtn.IsEnabled = servers.Count > 0;
+        if (_srvDeepVerifyBtn is not null && _srvTestAllCts is null) _srvDeepVerifyBtn.IsEnabled = servers.Count > 0;
         if (servers.Count == 0)
         {
             _srvEmptyHint.Text = SrvEmptyHintFor(_srvCurrentSub);

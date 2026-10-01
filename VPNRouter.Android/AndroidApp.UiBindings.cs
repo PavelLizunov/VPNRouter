@@ -34,6 +34,9 @@ public partial class AndroidApp
 
     private Border BuildSettingsSideNav()
     {
+        // The chips are built before the pages: load the saved section first, or after a restart the "Routing" chip is
+        // highlighted over another section's page.
+        _settingsSelectedSubSection = AndroidStorage.GetSettingsActiveSubSection();
         var stack = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
