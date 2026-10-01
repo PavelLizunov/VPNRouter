@@ -488,6 +488,8 @@ public class MainActivity : AvaloniaMainActivity
         }
     }
 
+    private readonly VPNRouter.Core.Services.ConnectConsentGate _consentGate = new();
+
     public void RequestConnect()
     {
         global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: Connect requested by UI");
@@ -499,8 +501,21 @@ public class MainActivity : AvaloniaMainActivity
         }
         else
         {
+            if (!_consentGate.TryOpen())
+            {
+                global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: consent dialog is already open, ignoring the repeated request");
+                return;
+            }
             global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: presenting system VPN consent dialog");
-            StartActivityForResult(prepareIntent, RequestVpnConsent);
+            try
+            {
+                StartActivityForResult(prepareIntent, RequestVpnConsent);
+            }
+            catch
+            {
+                _consentGate.Close();
+                throw;
+            }
         }
     }
 
@@ -539,6 +554,8 @@ public class MainActivity : AvaloniaMainActivity
         {
             return;
         }
+
+        _consentGate.Close();
 
         if (resultCode == Result.Ok)
         {
