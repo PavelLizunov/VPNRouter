@@ -7,13 +7,15 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r14 (prerelease, 2026-10-01), not
+- **Latest published candidate:** v2.50.0-r15 (prerelease, 2026-10-01), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
-  on WINBRAT (`tools/post-ship-local.ps1`); the screenshot gate and the
-  live-update gate were not run
-  (see `plans/phase-r14-release-2.50.0-r14-2026-10-01.md`). It carries the
-  design work: Android leftovers, vector icons and button/toggle/empty-state
-  rules on the PC app. Main declares `AppVersion` 2.50.0-r14.
+  on WINBRAT on the third attempt (`tools/post-ship-local.ps1`; see the brief for
+  the two failed attempts); the screenshot gate and the live-update gate were
+  not run (see `plans/phase-r15-release-2.50.0-r15-2026-10-02.md`). It is the
+  hotfix over r14: the desktop render-pass crash on the Applications tab (D-3)
+  and the update/installer failure on the locked split-tunnel driver file (D-4).
+  The owner's next real update is the check of D-4. Main declares `AppVersion`
+  2.50.0-r15.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
