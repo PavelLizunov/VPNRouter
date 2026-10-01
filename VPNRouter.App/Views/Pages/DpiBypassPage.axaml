@@ -416,7 +416,7 @@
                                         Command="{Binding UpdateIpSetListCommand}"
                                         IsEnabled="{Binding !IsZapretActionRunning}"
                                         HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
+                                        HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <CheckBox IsChecked="{Binding ZapretAutoUpdateCheck}"
@@ -443,7 +443,7 @@
                                         <Button Content="{Binding LblDiscordHosts}"
                                                 Command="{Binding ToggleDiscordHostsCommand}"
                                                 HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Left"
+                                                HorizontalContentAlignment="Center"
                                                 FontSize="10" Padding="8,4"
                                                 CornerRadius="{StaticResource RadiusSm}"
                                                 Foreground="{Binding DiscordHostsInstalled,
@@ -459,7 +459,7 @@
                                         <Button Content="{Binding LblFlowsealHosts}"
                                                 Command="{Binding ToggleFlowsealHostsCommand}"
                                                 HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Left"
+                                                HorizontalContentAlignment="Center"
                                                 FontSize="10" Padding="8,4"
                                                 CornerRadius="{StaticResource RadiusSm}"
                                                 Foreground="{Binding FlowsealHostsInstalled,
