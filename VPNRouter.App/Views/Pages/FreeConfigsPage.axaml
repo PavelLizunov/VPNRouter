@@ -77,9 +77,8 @@
                     <StackPanel Orientation="Horizontal" Spacing="4"/>
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
-            <ListBoxItem icons:PictogramText.Icons="search-tab" icons:PictogramText.Content="{Binding L_FcTabSearch}" Padding="10,4" FontSize="11"/>
-            <ListBoxItem Content="{Binding FreeConfigsVm.SavedTabHeaderText}"
-                         Padding="10,4" FontSize="11"/>
+            <ListBoxItem Classes="sub-tab" Content="{Binding L_FcTabSearchLabel}"/>
+            <ListBoxItem Classes="sub-tab" Content="{Binding FreeConfigsVm.SavedTabHeaderText}"/>
         </ListBox>
 
         <Grid Grid.Row="1">
