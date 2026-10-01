@@ -822,8 +822,8 @@ public partial class AndroidApp : Avalonia.Application
         _configRowValue.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         // A pill with a word and a chevron instead of a bare grey arrow, so the row reads as something to open and close.
-        _configRowChevron = IconContent(UiIcons.ChevronRight, UiScale.Ic(14));
-        SetChevronOpen(_configRowChevron, _formExpanded);
+        _configRowChevron = IconContent(UiIcons.ChevronDown, UiScale.Ic(14));
+        SetDisclosureChevron(_configRowChevron, _formExpanded);
         _configRowChevron.BindToken(IconView.ForegroundProperty, "AccentFgBrush");
         _configRowToggleText = new TextBlock
         {
@@ -1346,11 +1346,30 @@ public partial class AndroidApp : Avalonia.Application
         return btn;
     }
 
+    /// <summary>A down chevron that points up while its section is open (the "Hide" state).</summary>
+    private static void SetDisclosureChevron(IconView? chevron, bool open)
+    {
+        if (chevron is null) return;
+        if (chevron.Transitions is null && UiMotion.Enabled)
+        {
+            chevron.Transitions = new Avalonia.Animation.Transitions
+            {
+                new Avalonia.Animation.TransformOperationsTransition
+                {
+                    Property = Visual.RenderTransformProperty,
+                    Duration = TimeSpan.FromMilliseconds(180),
+                    Easing = new Avalonia.Animation.Easings.CubicEaseOut(),
+                },
+            };
+        }
+        chevron.RenderTransform = Avalonia.Media.Transformation.TransformOperations.Parse(open ? "rotate(180deg)" : "rotate(0deg)");
+    }
+
     private void OnConfigRowClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         _formExpanded = !_formExpanded;
         if (_formCard is not null) _formCard.IsVisible = _formExpanded;
-        SetChevronOpen(_configRowChevron, _formExpanded);
+        SetDisclosureChevron(_configRowChevron, _formExpanded);
         if (_configRowToggleText is not null)
             _configRowToggleText.Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange;
     }
