@@ -735,7 +735,7 @@ public partial class AndroidApp : Avalonia.Application
 
         var menuPanel = new Border
         {
-            Width = 232,
+            Width = 288,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(GetRadius("RadiusMd")),
             Padding = new Thickness(6),

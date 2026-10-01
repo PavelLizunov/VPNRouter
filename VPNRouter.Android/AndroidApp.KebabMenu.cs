@@ -34,7 +34,12 @@ public partial class AndroidApp
         if (btn is null) return;
         if (!_menuItemIcons.TryGetValue(btn, out var icon)) { btn.Content = text; return; }
         if (btn.Content is IconLabel label) label.Text = text;
-        else btn.Content = IconText(icon, text, UiScale.Ic(16));
+        else
+        {
+            var content = IconText(icon, text, UiScale.Ic(16));
+            content.TextBlock.TextWrapping = TextWrapping.Wrap;
+            btn.Content = content;
+        }
     }
 
     private Avalonia.Controls.Button MakeMenuItem(
@@ -290,6 +295,8 @@ public partial class AndroidApp
         var fresh = BuildAdvancedShellOverlay();
         rootPanel.Children[idx] = fresh;
         _advShellOverlay = fresh;
+        // The new header and tab strip start without the status-bar and gesture-bar room: give it to them again.
+        ApplySafeArea(_currentSafeArea);
 
         if (advancedWasOpen)
         {

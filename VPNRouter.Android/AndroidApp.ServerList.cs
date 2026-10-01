@@ -682,8 +682,7 @@ public partial class AndroidApp
         {
             _srvTitle.Text = _srvCurrentSub is null
                 ? string.Empty
-                : string.Format(Localization.ServerListTitleFmt,
-                    string.IsNullOrWhiteSpace(_srvCurrentSub.Name) ? "(no name)" : _srvCurrentSub.Name);
+                : string.Format(Localization.ServerListTitleFmt, SubscriptionDisplayName(_srvCurrentSub));
         }
         if (_srvStatusText is not null)
             _srvStatusText.Text = string.Empty;
@@ -1159,12 +1158,18 @@ public partial class AndroidApp
         RebuildServerList();
     }
 
+    /// <summary>The name of a subscription as shown to the user: the built-in "Manual" list follows the language.</summary>
+    private static string SubscriptionDisplayName(SubscriptionEntry sub)
+    {
+        if (string.IsNullOrWhiteSpace(sub.Name)) return Localization.Ru ? "(без имени)" : "(no name)";
+        return string.Equals(sub.Name, "Manual", StringComparison.OrdinalIgnoreCase) ? Localization.ModeManual : sub.Name;
+    }
+
     private void RefreshServerListLocalizedStrings()
     {
         if (_srvCurrentSub is not null && _srvTitle is not null)
         {
-            _srvTitle.Text = string.Format(Localization.ServerListTitleFmt,
-                string.IsNullOrWhiteSpace(_srvCurrentSub.Name) ? "(no name)" : _srvCurrentSub.Name);
+            _srvTitle.Text = string.Format(Localization.ServerListTitleFmt, SubscriptionDisplayName(_srvCurrentSub));
         }
         if (_srvTestAllBtn is not null && _srvTestAllCts is null)
             _srvTestAllBtn.Content = Localization.AdvServersTestAll;
