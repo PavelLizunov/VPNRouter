@@ -44,6 +44,11 @@ landscape) found more.
    exactly the viewport). When the keyboard makes a page scroll, the focused field is brought into view. Below a
    600 dp shell height the navigation puts labels next to the icons and is 20 dp lower.
 9. Fluent accent palette pinned to the token accent (`AccentSolid`, light #0EA5E9, dark #38BDF8).
+10. Found during verification and fixed: the inline editor did not fit the 180 dp subscription list (Save hidden);
+    the list grows to 360 dp while the editor is open and scrolls it into view. In landscape with the keyboard open
+    the footer and navigation covered the whole page: both step aside while the keyboard is open (portrait too).
+    "Test all" and "Deep verify" are disabled on an empty server list. After an app restart the Settings chips
+    highlighted "Routing" over another section's page (the chips were built before the saved section was loaded).
 
 Not touched (main thread): `AndroidApp.axaml.cs`, `AndroidApp.KebabMenu.cs`, `MainActivity.cs`.
 
@@ -56,4 +61,15 @@ Not touched (main thread): `AndroidApp.axaml.cs`, `AndroidApp.KebabMenu.cs`, `Ma
 
 ## Outcome
 
-(filled in at delivery)
+Test-hook APKs of this branch (`9d467ad3`, then `f8d65ae2`) built on the Windows worker (preflight CPU 3 %, 12.7 GB
+free RAM, 13.7 GB free disk); Android 15 emulator `pixel8-api35` on the Linux worker, 1080x2400. Seen: Public toggle in
+both states (English light, Russian dark); Subscribe with the local 3-server subscription, editor open (Save and
+Cancel fully visible), Back closes the editor and stays on the tab; Subscribe empty state after deleting the
+subscription; Manual list empty hint with disabled test buttons; Saved tab single hint; Settings chip after a
+restart; landscape on Servers, Subscribe, Settings, Apps and Public (pages scroll, nothing overlaps, compact
+navigation), keyboard in landscape and portrait (focused field visible, footer and navigation hidden while typing);
+checkboxes in the app accent. Not verified: free-config rows with real results (the emulator has no internet:
+"Pool empty or unreachable"), the owner's Pixel (Android 16).
+
+Seen in passing, not in this scope (main thread area): inside the Advanced screens the menu's big mode button still
+reads "Advanced >" (A-5 item 13 says it should read "Simple" there).
