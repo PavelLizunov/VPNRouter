@@ -197,4 +197,55 @@ public sealed class VpnTileLogicTests
 
         Assert.Equal("Timed out", TileAppearanceFactory.For(resolved, russian: false).Subtitle);
     }
+
+    // ---- the tile refreshes itself -------------------------------------------------------------
+
+    [Fact]
+    public void NextChangeIn_ConnectingExpiresAfterTheTimeoutPlusAMargin()
+    {
+        var resolved = VpnStateResolver.Resolve(Stored(VpnConnectionState.Connecting, age: TimeSpan.FromSeconds(30)), Pid, Now);
+
+        Assert.Equal(TimeSpan.FromSeconds(61), VpnStateResolver.NextChangeIn(resolved, Now));
+    }
+
+    [Theory]
+    [InlineData(VpnConnectionState.Disconnected)]
+    [InlineData(VpnConnectionState.Connected)]
+    [InlineData(VpnConnectionState.Error)]
+    public void NextChangeIn_OtherStatesHaveNothingPending(VpnConnectionState state)
+    {
+        var resolved = VpnStateResolver.Resolve(Stored(state), Pid, Now);
+
+        Assert.Null(VpnStateResolver.NextChangeIn(resolved, Now));
+    }
+
+    [Fact]
+    public void NextChangeIn_NeverWaitsLongerThanTheTimeoutAndNeverLessThanTheMargin()
+    {
+        var justStarted = Stored(VpnConnectionState.Connecting, age: TimeSpan.Zero);
+        var aheadOfTheClock = Stored(VpnConnectionState.Connecting, age: TimeSpan.FromSeconds(-60));
+        var almostDue = Stored(VpnConnectionState.Connecting, age: TimeSpan.FromSeconds(89.5));
+
+        Assert.Equal(TimeSpan.FromSeconds(91), VpnStateResolver.NextChangeIn(justStarted, Now));
+        Assert.Equal(TimeSpan.FromSeconds(91), VpnStateResolver.NextChangeIn(aheadOfTheClock, Now));
+        Assert.Equal(TimeSpan.FromSeconds(1.5), VpnStateResolver.NextChangeIn(almostDue, Now));
+    }
+
+    [Fact]
+    public void NextChangeIn_AConnectAttemptPastTheTimeoutIsAlreadyAnErrorSoNothingIsPending()
+    {
+        var resolved = VpnStateResolver.Resolve(Stored(VpnConnectionState.Connecting, age: TimeSpan.FromMinutes(5)), Pid, Now);
+
+        Assert.Equal(VpnConnectionState.Error, resolved.State);
+        Assert.Null(VpnStateResolver.NextChangeIn(resolved, Now));
+    }
+
+    [Theory]
+    [InlineData(VpnConnectionState.Connected, false, "VPNRouter, Connected")]
+    [InlineData(VpnConnectionState.Connected, true, "VPNRouter, Подключён")]
+    [InlineData(VpnConnectionState.Disconnected, true, "VPNRouter, Выключен")]
+    public void Spoken_CarriesTheStatusForScreenReadersAndTheOneCellTile(VpnConnectionState state, bool russian, string expected)
+    {
+        Assert.Equal(expected, TileAppearanceFactory.Spoken(TileAppearanceFactory.For(Stored(state), russian)));
+    }
 }
