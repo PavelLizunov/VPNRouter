@@ -83,6 +83,22 @@ public static class VpnStateResolver
 
         return stored;
     }
+
+    /// <summary>
+    /// How long until the resolved state changes meaning without anything being written: a connect attempt that
+    /// never finishes turns into a timeout error. Null when nothing is pending. The tile uses it to refresh itself
+    /// once more, so a stuck "connecting" tile (which ignores taps) cannot stay frozen.
+    /// </summary>
+    public static TimeSpan? NextChangeIn(VpnStateSnapshot resolved, DateTimeOffset now)
+    {
+        if (resolved.State != VpnConnectionState.Connecting)
+            return null;
+
+        var margin = TimeSpan.FromSeconds(1);
+        var left = ConnectingTimeout - (now - resolved.UpdatedAt) + margin;
+        if (left < margin) return margin;
+        return left > ConnectingTimeout + margin ? ConnectingTimeout + margin : left;
+    }
 }
 
 public enum TileClickAction
@@ -145,6 +161,12 @@ public static class TileAppearanceFactory
         VpnConnectionState.Error => new(TileVisual.Error, ReasonText(resolved.Reason, russian)),
         _ => new(TileVisual.Off, russian ? "Выключен" : "Off"),
     };
+
+    /// <summary>
+    /// The text a screen reader says for the tile, and what carries the status when the tile is shown one cell wide
+    /// (Android 16 hides the subtitle there).
+    /// </summary>
+    public static string Spoken(TileAppearance appearance) => $"VPNRouter, {appearance.Subtitle}";
 
     /// <summary>A short, human reason for a failed connect; unknown reasons stay generic so no raw error text leaks.</summary>
     public static string ReasonText(string? reason, bool russian) => reason switch
