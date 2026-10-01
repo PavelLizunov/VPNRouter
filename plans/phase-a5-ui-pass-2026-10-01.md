@@ -32,14 +32,25 @@ screenshots read one by one; numbers from the `layout` block of the hook state d
 9. On Android 15 and newer the on-screen keyboard covered the bottom of the page (the Add form of the Subscribe tab was
    hidden while typing), because the enforced edge-to-edge window no longer shrinks. The page now ends above the keyboard.
 
+10. After a theme change inside the Advanced screens the rebuilt header and tab strip lost the status-bar and gesture-bar
+    room (the clock overlapped the title). The safe area is applied again after the rebuild.
+11. "Servers - Manual" stayed English in Russian: the built-in Manual list name now follows the language.
+12. The menu was 232 dp wide: Russian labels and larger font scales were cut off. It is 288 dp and labels wrap.
+13. The menu's big mode button said "Advanced" even inside the Advanced screens and jumped to the Servers tab; it now
+    reads "Simple" there and returns to the main screen.
+14. The Servers tab had a tiny address field squeezed between two buttons (about 80 dp at font scale 1.3); the field has
+    its own row now.
+
 ## Seen, not fixed yet
 
 - Public tab: the "Settings" expander in the green card is a bare arrow.
 - Several screens still show desktop wording on touch ("double-click", "click"); U6 (#438) covers the free-config texts.
 - The Subscribe tab keeps a large empty server box above the subscription controls when no subscription exists.
-- Dark theme, system font scale 1.3 and landscape were not walked through yet.
+- Landscape was not walked through. Dark theme, Russian and font scale 1.3 were (main, menu, every Advanced tab).
+- Back inside an open inline editor (subscription edit) leaves the Advanced screens instead of only closing the editor.
 - Desktop (VPNRouter.App): only the token contrast change is carried over so far.
 
 ## Outcome
 
-Pending.
+Verified on the Android 15 emulator with test-hook builds of this branch (last: `e9f6135b`, includes U6 #438), in English
+and Russian, light and dark, font scale 1.0 and 1.3. Not verified on the owner's Pixel (Android 16).
