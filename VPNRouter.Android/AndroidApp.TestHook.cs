@@ -17,6 +17,59 @@ public partial class AndroidApp
 
     internal static bool TestHookUiReady() => TestHookApp?._serverInput is not null && MainActivity.Instance is not null;
 
+    /// <summary>Window and layout numbers for the inset checks (read-only, no secrets).</summary>
+    internal static void TestHookWriteLayout(System.Text.Json.Utf8JsonWriter w)
+    {
+        w.WriteStartObject("layout");
+        try
+        {
+            var app = TestHookApp;
+            var scroller = app?._mainScroller;
+            if (app is null || scroller is null)
+            {
+                w.WriteString("error", "ui-not-ready");
+            }
+            else
+            {
+                static string T(Avalonia.Thickness t) => $"{t.Left:0.#},{t.Top:0.#},{t.Right:0.#},{t.Bottom:0.#}";
+                static string R(Avalonia.Rect r) => $"x{r.X:0.#} y{r.Y:0.#} w{r.Width:0.#} h{r.Height:0.#}";
+                w.WriteString("activitySafeArea", T(MainActivity.CurrentSafeArea));
+                w.WriteString("appliedSafeArea", T(app._currentSafeArea));
+                w.WriteString("scrollerPadding", T(scroller.Padding));
+                w.WriteString("scrollerBounds", R(scroller.Bounds));
+                var top = Avalonia.VisualTree.VisualExtensions.GetVisualRoot(scroller) as Avalonia.Controls.TopLevel;
+                if (top is not null)
+                {
+                    w.WriteString("topLevelSize", $"{top.Bounds.Width:0.#}x{top.Bounds.Height:0.#}");
+                    w.WriteNumber("renderScaling", top.RenderScaling);
+                    var mgr = top.InsetsManager;
+                    if (mgr is not null)
+                    {
+                        w.WriteString("avaloniaSafeArea", T(mgr.SafeAreaPadding));
+                        foreach (var name in new[] { "DisplayEdgeToEdgePreference", "DisplayEdgeToEdge" })
+                        {
+                            var prop = mgr.GetType().GetProperty(name);
+                            if (prop is not null) w.WriteString(name, prop.GetValue(mgr)?.ToString());
+                        }
+                    }
+                }
+                if (scroller.Content is Avalonia.Controls.Control content)
+                {
+                    w.WriteString("contentBounds", R(content.Bounds));
+                    if (content is Avalonia.Controls.Panel panel && panel.Children.Count > 0)
+                        w.WriteString("wrapperBounds", R(panel.Children[0].Bounds));
+                }
+                var metrics = MainActivity.Instance?.Resources?.DisplayMetrics;
+                if (metrics is not null) w.WriteNumber("density", metrics.Density);
+            }
+        }
+        catch (Exception ex)
+        {
+            w.WriteString("error", ex.GetType().Name);
+        }
+        w.WriteEndObject();
+    }
+
     internal static string TestHookSetConfig(string? value)
     {
         const string action = "TEST_SET_CONFIG";
