@@ -123,6 +123,24 @@ public partial class AndroidApp
         });
     }
 
+    /// <summary>Shows one look of the status ring on the main screen (off, connecting, connected, error) without
+    /// touching the connection state, so every look can be checked on an emulator where the tunnel cannot start.</summary>
+    internal static string TestHookSetHero(string? value)
+    {
+        const string action = "TEST_SET_HERO";
+        var card = TestHookApp?._statusCard;
+        if (card is null)
+            return TestHookJson.Result(action, false, w => w.WriteString("error", "ui-not-ready"));
+        var look = (value ?? string.Empty).Trim().ToLowerInvariant();
+        if (look is not ("off" or "connecting" or "connected" or "error"))
+            return TestHookJson.Result(action, false, w => w.WriteString("error", "unknown-look"));
+        card.IsOn = look == "connected";
+        card.IsWarn = look == "connecting";
+        card.IsError = look == "error";
+        card.IsOff = look == "off";
+        return TestHookJson.Result(action, true, w => w.WriteString("look", look));
+    }
+
     internal static string TestHookConnect()
     {
         const string action = "TEST_CONNECT";

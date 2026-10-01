@@ -9,6 +9,7 @@ public static partial class UiIcons
 {
     public const string Activity = "activity";
     public const string ArrowDown = "arrow-down";
+    public const string ArrowUpNarrowWide = "arrow-up-narrow-wide";
     public const string ArrowUp = "arrow-up";
     public const string CheckCheck = "check-check";
     public const string Check = "check";
@@ -25,6 +26,7 @@ public static partial class UiIcons
     public const string Globe = "globe";
     public const string Info = "info";
     public const string LifeBuoy = "life-buoy";
+    public const string List = "list";
     public const string Minus = "minus";
     public const string Pencil = "pencil";
     public const string Play = "play";
@@ -45,6 +47,7 @@ public static partial class UiIcons
     {
         [Activity] = "M22,12 L19.52,12 A2,2 0 0 0 17.59,13.46 L15.24,21.82 A0.25,0.25 0 0 1 14.76,21.82 L9.24,2.18 A0.25,0.25 0 0 0 8.76,2.18 L6.41,10.54 A2,2 0 0 1 4.49,12 L2,12",
         [ArrowDown] = "M12,5 L12,19 M19,12 L12,19 L5,12",
+        [ArrowUpNarrowWide] = "M3,8 L7,4 L11,8 M7,4 L7,20 M11,12 L15,12 M11,16 L18,16 M11,20 L21,20",
         [ArrowUp] = "M5,12 L12,5 L19,12 M12,19 L12,5",
         [CheckCheck] = "M18,6 L7,17 L2,12 M22,10 L14.5,17.5 L13,16",
         [Check] = "M20,6 L9,17 L4,12",
@@ -61,6 +64,7 @@ public static partial class UiIcons
         [Globe] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,2 A14.5,14.5 0 0 0 12,22 A14.5,14.5 0 0 0 12,2 M2,12 L22,12",
         [Info] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,16 L12,12 M12,8 L12.01,8",
         [LifeBuoy] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M4.93,4.93 L9.17,9.17 M14.83,9.17 L19.07,4.93 M14.83,14.83 L19.07,19.07 M9.17,14.83 L4.93,19.07 M8,12 A4,4 0 1 0 16,12 A4,4 0 1 0 8,12 Z",
+        [List] = "M3,5 L3.01,5 M3,12 L3.01,12 M3,19 L3.01,19 M8,5 L21,5 M8,12 L21,12 M8,19 L21,19",
         [Minus] = "M5,12 L19,12",
         [Pencil] = "M21.174,6.812 A1,1 0 0 0 17.188,2.825 L3.842,16.174 A2,2 0 0 0 3.342,17.004 L2.021,21.356 A0.5,0.5 0 0 0 2.644,21.978 L6.997,20.658 A2,2 0 0 0 7.827,20.161 Z M15,5 L19,9",
         [Play] = "M5,5 A2,2 0 0 1 8.008,3.272 L20.005,10.27 A2,2 0 0 1 20.008,13.728 L8.008,20.728 A2,2 0 0 1 5,19 Z",

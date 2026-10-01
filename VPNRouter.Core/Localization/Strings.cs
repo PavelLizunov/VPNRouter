@@ -1431,7 +1431,7 @@ public static partial class Strings
 
     public static string SrvTesting => Ru ? "Проверка…" : "Testing…";
 
-    public static string SrvSortByLatencyAsc => Ru ? "по пингу ↑" : "by ping ↑";
+    public static string SrvSortByLatencyAsc => Ru ? "по пингу" : "by ping";
 
     public static string SrvSortByOriginal => Ru ? "по списку" : "as listed";
 

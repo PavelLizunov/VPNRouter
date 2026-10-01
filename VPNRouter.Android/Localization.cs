@@ -286,6 +286,8 @@ internal static class Localization
     public static string FcRefreshSources => global::VPNRouter.Core.Localization.Strings.FcRefreshSources;
     public static string FcRetestAll => global::VPNRouter.Core.Localization.Strings.FcRetestAll;
     public static string FcConnectHint => global::VPNRouter.Core.Localization.Strings.FcConnectHint;
+    public static string FcConnectHintTouch => global::VPNRouter.Core.Localization.Strings.FcConnectHintTouch;
+    public static string FcConnectNeedsVerifyTouch => global::VPNRouter.Core.Localization.Strings.FcConnectNeedsVerifyTouch;
     public static string FcTipVpnActive => global::VPNRouter.Core.Localization.Strings.FcTipVpnActive;
     public static string FcCancel => global::VPNRouter.Core.Localization.Strings.FcCancel;
     public static string FcApplySelected => global::VPNRouter.Core.Localization.Strings.FcApplySelected;
