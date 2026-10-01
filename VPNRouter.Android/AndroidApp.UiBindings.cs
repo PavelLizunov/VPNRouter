@@ -181,6 +181,7 @@ public partial class AndroidApp
         {
             Foreground = GetBrush("SuccessSolidBrush"),
         };
+        _settingsAutoSavedCheck = checkGlyph;
         var badgeText = new TextBlock
         {
             Text = Localization.SettingsAutosaved,
