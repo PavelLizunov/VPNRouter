@@ -366,4 +366,12 @@ public static partial class Strings
           @"Whitelist: C:\ProgramData\VPNRouter\zapret\ (whole folder).";
 
     public static string ZapretAvBlockCopyPath => Ru ? "Скопировать путь" : "Copy path";
+
+    // Android versions of desktop strings: touch wording, and no text symbols (the Android UI draws icons).
+    public static string FcConnectHintTouch => Ru
+        ? "Выберите строку и нажмите «Подключить к выбранному»"
+        : "Tap a row, then Connect to selected";
+    public static string FcConnectNeedsVerifyTouch => Ru
+        ? "Дождитесь, пока конфиг пройдёт проверку, и подключайтесь."
+        : "Wait until the config is verified, then connect.";
 }

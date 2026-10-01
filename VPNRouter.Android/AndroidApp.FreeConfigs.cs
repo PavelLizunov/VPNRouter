@@ -361,7 +361,7 @@ public partial class AndroidApp
 
         _fcConnectHint = new TextBlock
         {
-            Text = Localization.FcConnectHint,
+            Text = Localization.FcConnectHintTouch,
             FontSize = UiScale.Fs(10),
             Opacity = 0.55,
             Foreground = textM,
@@ -925,7 +925,7 @@ public partial class AndroidApp
         }
         if (entry.Status != FreeConfigStatus.Verified)
         {
-            ShowMenuFeedback(Localization.FcConnectNeedsVerify);
+            ShowMenuFeedback(Localization.FcConnectNeedsVerifyTouch);
             return;
         }
         if (string.IsNullOrEmpty(entry.RawUri)) return;

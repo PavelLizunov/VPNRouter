@@ -139,7 +139,7 @@ public partial class AndroidApp
 
         _srvSortToggle = new Avalonia.Controls.Button
         {
-            Content = Localization.SrvSortByOriginal,
+            Content = SortToggleContent(false),
             FontSize = UiScale.Fs(10),
             Padding = new Thickness(8, 5),
             Background = GetBrush("SurfaceSunkenBrush"),
@@ -675,9 +675,7 @@ public partial class AndroidApp
         _srvResults = AndroidStorage.GetServerTestResults();
         _srvTestingKeys.Clear();
         if (_srvSortToggle is not null)
-            _srvSortToggle.Content = _srvSortByLatency
-                ? Localization.SrvSortByLatencyAsc
-                : Localization.SrvSortByOriginal;
+            _srvSortToggle.Content = SortToggleContent(_srvSortByLatency);
         if (_srvTitle is not null)
         {
             _srvTitle.Text = _srvCurrentSub is null
@@ -1147,14 +1145,16 @@ public partial class AndroidApp
         _srvStatusText.Text = string.Format(Localization.SrvProgressFmt, done, total);
     }
 
+    private static Control SortToggleContent(bool byLatency) => byLatency
+        ? IconText(UiIcons.ArrowUpNarrowWide, Localization.SrvSortByLatencyAsc, 14)
+        : IconText(UiIcons.List, Localization.SrvSortByOriginal, 14);
+
     private void OnSrvSortToggleClicked()
     {
         _srvSortByLatency = !_srvSortByLatency;
         if (_srvSortToggle is not null)
         {
-            _srvSortToggle.Content = _srvSortByLatency
-                ? Localization.SrvSortByLatencyAsc
-                : Localization.SrvSortByOriginal;
+            _srvSortToggle.Content = SortToggleContent(_srvSortByLatency);
         }
         RebuildServerList();
     }
@@ -1170,9 +1170,7 @@ public partial class AndroidApp
             _srvTestAllBtn.Content = Localization.AdvServersTestAll;
         if (_srvSortToggle is not null)
         {
-            _srvSortToggle.Content = _srvSortByLatency
-                ? Localization.SrvSortByLatencyAsc
-                : Localization.SrvSortByOriginal;
+            _srvSortToggle.Content = SortToggleContent(_srvSortByLatency);
         }
         if (_srvEmptyHint is not null) _srvEmptyHint.Text = Localization.SrvEmptyHint;
         if (_srvColServer is not null) _srvColServer.Text = Localization.ColServer;
