@@ -41,7 +41,7 @@ Output artifact: `bin\Release\net10.0-android36.0\com.ninitux.vpnrouter-Signed.a
   adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_DISCONNECT
   adb shell am broadcast $H -a com.ninitux.vpnrouter.TEST_RESET        # clears saved config, servers, subscriptions and the state record
   ```
-- `VPNRouter.Android/Controls/`: Custom Avalonia controls for Android UI (`StatusCard.cs`).
+- `VPNRouter.Android/Controls/`: Custom Avalonia controls for Android UI: `StatusCard.cs` (state hero) and `IconView.cs` (`IconView` draws a Lucide icon from `VPNRouter.Core/Services/UiIcons.cs`; `IconLabel` is icon plus text for buttons). Use them instead of text symbols or emoji; see `tools/AGENTS.md` for adding icons.
 - `VPNRouter.Android/Json/`: STJ JSON contexts (`AndroidJsonContext.cs`).
 - `VPNRouter.Android/Lib/`: Local AAR and JAR libraries (`libbox.aar`, `zxing-android-embedded-4.3.0.aar`, `zxing-core-3.5.3.jar`).
 - `VPNRouter.Android/Resources/`: Android XML configs (`xml/file_paths.xml`) and launcher drawables (`mipmap-*/`).
