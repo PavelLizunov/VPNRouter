@@ -40,6 +40,7 @@ public partial class AndroidApp : Avalonia.Application
 
     private TextBlock? _statusHealthCheck;
     private TextBlock? _statusErrorOneLiner;
+    private IconView? _statusHealthIcon;
     private DispatcherTimer? _diagnosticsTimer;
     private DateTime? _connectionStartedAt;
     private string? _lastError;
@@ -56,7 +57,7 @@ public partial class AndroidApp : Avalonia.Application
 
     private TextBlock? _configRowLabel;
     private TextBlock? _configRowValue;
-    private TextBlock? _configRowChevron;
+    private IconView? _configRowChevron;
 
     private Border? _formCard;
     private TextBox? _serverInput;
@@ -158,6 +159,7 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _settingsCurrentVersion;
     private Avalonia.Controls.Button? _menuSettingsItem;
     private TextBlock? _reliabilityBatteryStatusLabel;
+    private IconView? _reliabilityBatteryStatusIcon;
     private Avalonia.Controls.Button? _reliabilityBatteryButton;
     private Avalonia.Controls.CheckBox? _reliabilityAutoReconnect;
     private Avalonia.Controls.CheckBox? _externalControlToggle;
@@ -567,11 +569,10 @@ public partial class AndroidApp : Avalonia.Application
 
         _kebabMenuButton = new Avalonia.Controls.Button
         {
-            Content = "⋮",
-            FontSize = UiScale.Fs(22),
-            FontWeight = FontWeight.Bold,
-            Width = 32,
-            Height = 32,
+            Content = IconContent(UiIcons.EllipsisVertical, 22),
+            Width = 44,
+            Height = 44,
+            Margin = new Thickness(0, -6, -8, -6),
             Padding = new Thickness(0),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
@@ -666,7 +667,7 @@ public partial class AndroidApp : Avalonia.Application
 
         var advancedToggleBtn = new Avalonia.Controls.Button
         {
-            Content = Localization.SmpToggleToAdvanced,
+            Content = IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 8),
@@ -746,6 +747,8 @@ public partial class AndroidApp : Avalonia.Application
             IsVisible = false,
         };
         _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        var healthRow = WithStatusIcon(_statusHealthCheck, out var healthIcon, centered: true);
+        _statusHealthIcon = healthIcon;
 
         _statusErrorOneLiner = new TextBlock
         {
@@ -763,7 +766,7 @@ public partial class AndroidApp : Avalonia.Application
         var statusCard = new StackPanel
         {
             Spacing = 6,
-            Children = { _statusCard, _statusHealthCheck, _statusErrorOneLiner },
+            Children = { _statusCard, healthRow, _statusErrorOneLiner },
         };
 
         return statusCard;
@@ -771,14 +774,8 @@ public partial class AndroidApp : Avalonia.Application
 
     private Avalonia.Controls.Button BuildConfigRowButton(double radiusXs, double radiusSm)
     {
-        var flagGlyph = new TextBlock
-        {
-            Text = "⚑",
-            FontSize = UiScale.Fs(12),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        flagGlyph.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
+        var flagGlyph = IconContent(UiIcons.Flag, 14);
+        flagGlyph.BindToken(IconView.ForegroundProperty, "AccentFgBrush");
         var flagIcon = new Border
         {
             Width = 24,
@@ -805,13 +802,9 @@ public partial class AndroidApp : Avalonia.Application
         };
         _configRowValue.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
-        _configRowChevron = new TextBlock
-        {
-            Text = _formExpanded ? "⌄" : "›",
-            FontSize = UiScale.Fs(13),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        _configRowChevron.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        _configRowChevron = IconContent(UiIcons.ChevronRight, UiScale.Ic(16));
+        SetChevronOpen(_configRowChevron, _formExpanded);
+        _configRowChevron.BindToken(IconView.ForegroundProperty, "TextMutedBrush");
 
         var configRowGrid = new Grid
         {
@@ -872,8 +865,7 @@ public partial class AndroidApp : Avalonia.Application
 
         var smpQrButton = new Avalonia.Controls.Button
         {
-            Content = "📷",
-            FontSize = UiScale.Fs(14),
+            Content = IconContent(UiIcons.ScanQrCode, 22),
             Width = 44,
             Padding = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Stretch,
@@ -1115,15 +1107,8 @@ public partial class AndroidApp : Avalonia.Application
             TextWrapping = TextWrapping.Wrap,
         };
         _advCardSubtitle.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-        var chevronGlyph = new TextBlock
-        {
-            Text = "›",
-            FontSize = UiScale.Fs(15),
-            FontWeight = FontWeight.Bold,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        chevronGlyph.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
+        var chevronGlyph = IconContent(UiIcons.ChevronRight, 18);
+        chevronGlyph.BindToken(IconView.ForegroundProperty, "AccentFgBrush");
         var chevronCircle = new Border
         {
             Width = 28,
@@ -1323,7 +1308,7 @@ public partial class AndroidApp : Avalonia.Application
     {
         _formExpanded = !_formExpanded;
         if (_formCard is not null) _formCard.IsVisible = _formExpanded;
-        if (_configRowChevron is not null) _configRowChevron.Text = _formExpanded ? "⌄" : "›";
+        SetChevronOpen(_configRowChevron, _formExpanded);
     }
 
     private void OnSimpleQrScanClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1574,7 +1559,7 @@ public partial class AndroidApp : Avalonia.Application
             _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
         if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
         if (_menuAdvancedToggleBtn is not null)
-            _menuAdvancedToggleBtn.Content = Localization.SmpToggleToAdvanced;
+            _menuAdvancedToggleBtn.Content = IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true);
         if (_autostartCardTitleText is not null)
             _autostartCardTitleText.Text = Localization.SmpAutostartCardTitle;
         if (_autostartCardSubText is not null)

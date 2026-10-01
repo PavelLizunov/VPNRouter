@@ -1,4 +1,5 @@
 using System;
+using UiIcons = VPNRouter.Core.Services.UiIcons;
 
 namespace VPNRouter.Android;
 
@@ -134,6 +135,8 @@ public partial class AndroidApp
                 : Localization.ReliabilityBatteryOptStatusOptimized;
             _reliabilityBatteryStatusLabel.Foreground = GetBrush(
                 isExempt ? "SuccessFgBrush" : "WarningFgBrush");
+            SetStatusIcon(_reliabilityBatteryStatusIcon,
+                isExempt ? UiIcons.CircleCheck : UiIcons.CircleAlert);
         }
         if (_reliabilityBatteryButton is not null)
         {

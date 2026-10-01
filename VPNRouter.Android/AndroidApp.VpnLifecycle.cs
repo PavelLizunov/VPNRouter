@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
 using System;
+using UiIcons = VPNRouter.Core.Services.UiIcons;
 
 namespace VPNRouter.Android;
 
@@ -442,19 +443,22 @@ public partial class AndroidApp
         {
             _statusHealthCheck.Text = Localization.DiagHealthCheckPending;
             _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+            SetStatusIcon(_statusHealthIcon, null);
             return;
         }
 
         if (_lastHealthOk)
         {
             var ago = (int)Math.Max(0, (DateTime.UtcNow - _lastHealthProbeAt).TotalSeconds);
-            _statusHealthCheck.Text = string.Format(Localization.DiagHealthCheckOk, ago);
+            _statusHealthCheck.Text = string.Format(UiIcons.StripSymbols(Localization.DiagHealthCheckOk), ago);
             _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+            SetStatusIcon(_statusHealthIcon, UiIcons.CircleCheck);
         }
         else
         {
             _statusHealthCheck.Text = Localization.DiagHealthCheckStale;
             _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "WarningFgBrush");
+            SetStatusIcon(_statusHealthIcon, UiIcons.CircleAlert);
         }
     }
 

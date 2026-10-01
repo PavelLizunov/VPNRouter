@@ -58,6 +58,8 @@ public sealed class UiIconsTests
     [InlineData("Wi-Fi ↔ cellular", "Wi-Fi ↔ cellular")]
     [InlineData("VPN → gear", "VPN → gear")]
     [InlineData("✕", "")]
+    [InlineData("+ Add Server(s)", "Add Server(s)")]
+    [InlineData("\u2b1b  Stop VPN", "Stop VPN")]
     [InlineData("", "")]
     [InlineData(null, "")]
     public void StripSymbols_RemovesOnlyEdgeSymbols(string? input, string expected)

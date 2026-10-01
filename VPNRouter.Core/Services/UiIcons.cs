@@ -14,6 +14,7 @@ public static partial class UiIcons
     public const string ChevronDown = "chevron-down";
     public const string ChevronLeft = "chevron-left";
     public const string ChevronRight = "chevron-right";
+    public const string CircleAlert = "circle-alert";
     public const string CircleCheck = "circle-check";
     public const string CircleX = "circle-x";
     public const string EllipsisVertical = "ellipsis-vertical";
@@ -42,6 +43,7 @@ public static partial class UiIcons
         [ChevronDown] = "M6,9 L12,15 L18,9",
         [ChevronLeft] = "M15,18 L9,12 L15,6",
         [ChevronRight] = "M9,18 L15,12 L9,6",
+        [CircleAlert] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,8 L12,12 M12,16 L12.01,16",
         [CircleCheck] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M16,9 L10.5,14.5 L8,12",
         [CircleX] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M15,9 L9,15 M9,9 L15,15",
         [EllipsisVertical] = "M11,12 A1,1 0 1 0 13,12 A1,1 0 1 0 11,12 Z M11,5 A1,1 0 1 0 13,5 A1,1 0 1 0 11,5 Z M11,19 A1,1 0 1 0 13,19 A1,1 0 1 0 11,19 Z",

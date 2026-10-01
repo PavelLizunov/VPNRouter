@@ -23,7 +23,7 @@ STROKE = 1.8
 SYMMETRIC = {
     "power": "h", "x": "hv", "plus": "hv", "minus": "hv", "globe": "hv", "square": "hv", "circle-x": "hv",
     "ellipsis-vertical": "hv", "chevron-down": "h", "chevron-right": "v", "chevron-left": "v", "arrow-up": "h",
-    "arrow-down": "h", "info": "h", "trash": "h", "circle-check": "", "search": "",
+    "arrow-down": "h", "info": "h", "circle-alert": "h", "trash": "h", "circle-check": "", "search": "",
 }
 
 
