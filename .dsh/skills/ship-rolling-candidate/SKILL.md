@@ -154,6 +154,21 @@ proxy HTTPS/UDP connection cycles, lifecycle/log classification and cleanup.
 There is no developer-machine fallback. A Core-only change is labelled not
 UI-testable but still runs every applicable binary/dataplane/log gate.
 
+On the maintainer PC this is the whole gate. An agent without that PC (no credential file, no local SDK) runs the
+binary/dataplane part on WINBRAT itself and reports the rest separately:
+
+```powershell
+# on windows-worker (WINBRAT), Windows PowerShell 5.1, as the user that owns the interactive desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\post-ship-local.ps1 -Version X.Y.Z-rN
+```
+
+It checks out the tag commit, downloads the published zip, then runs identity, clean deploy, two cold UI connect
+cycles and the lifecycle check with the unchanged verifier scripts (the output ends in `POSTSHIP-LOCAL: PASS` or
+`FAILED`; the transcript is `post-<version>.log`). It replaces the installed VPNRouter on that VM. The report must
+list what it did not run: the screenshot gate (known failing, `PAGESCREENSHOT-RENDER-INVALIDATION`), the strict commit
+CI gate and the 18-asset inventory/hash checks (run `tools/verify-last-commit-ci.ps1 -Strict` and the integrity
+workflow as in the publication steps).
+
 Only after this PASS may the report call the candidate verified. Report the
 exact commit, 18 assets, workflow status, WINBRAT cycles, log scan, cleanup and
 any owner-blocked external step. Candidate PASS is readiness evidence only; it
