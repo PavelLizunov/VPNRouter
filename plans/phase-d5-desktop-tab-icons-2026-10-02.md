@@ -29,4 +29,8 @@ of its label.
 
 ## Outcome
 
-(filled in at delivery)
+Windows worker (preflight CPU 0 %, 12.9 GB free RAM, 12.9 GB free disk, no dotnet or java running), exact SHA
+`88f01a7e`: 84 of 84 (`PageScreenshotDesignTests`, `HeadlessGuiTests`, `VisualDiffTests`, `PictogramTextTests`,
+`UiIconsTests`); no baseline changed. Captures read: strip in light and dark at 520 px with Servers, Settings and Public
+selected, and at 360 px (the strip scrolls; the selected Public tab is scrolled into view in dark). `check-icons.py`
+passes. Not seen: hover with a real pointer, a live UI automation run against the new tab items.
