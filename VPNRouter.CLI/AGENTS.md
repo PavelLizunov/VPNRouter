@@ -20,6 +20,7 @@ VPNRouter.CLI profiles list
 VPNRouter.CLI profiles show <name>
 VPNRouter.CLI profiles update
 VPNRouter.CLI service install / uninstall / start / stop / status
+VPNRouter.CLI cleanup [--dry-run]                    (Windows: remove firewall rules, saved DNS settings, own driver services, autostart value; used by the uninstaller)
 VPNRouter.CLI --version                              (version from VPNRouter.Core.AppVersion.Version)
 ```
 
@@ -34,6 +35,7 @@ VPNRouter.CLI --version                              (version from VPNRouter.Cor
   - `DoctorCommand.cs`: Config, catalogue, binary, and state health check.
   - `ProfilesCommand.cs`: Profiles list, show, and update actions.
   - `ServiceCommand.cs`: Service install, uninstall, start, stop, status (wraps `ServiceInstaller`).
+  - `CleanupCommand.cs`: `cleanup [--dry-run]`, a thin wrapper over `VPNRouter.Core.Services.SystemCleanup` (all logic and tests live in Core); needs elevation unless `--dry-run`.
   - `TestUpdateCommand.cs`: CI auto-update driver (`VPNROUTER_CI=1`).
 - `Helpers/`:
   - `AdminHelper.cs`: `IsAdmin()` check.

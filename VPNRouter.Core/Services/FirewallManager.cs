@@ -33,6 +33,8 @@ public class FirewallManager : IFirewallManager
         "0_VPNRouter-DnsLockdown-",
     };
 
+    internal static IReadOnlyList<string> ManagedRulePrefixes => AllPrefixes;
+
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
     private readonly List<string> _managedRules = new();
@@ -242,6 +244,9 @@ public class FirewallManager : IFirewallManager
 
         _logger.Information("[Firewall] Cleaned up {Count} orphaned rules", orphaned.Count);
     }
+
+    internal bool DeleteRuleByName(string ruleName) =>
+        RunNetsh($"advfirewall firewall delete rule name=\"{ruleName}\"");
 
     internal List<string> FindRulesByPrefixes(IEnumerable<string> prefixes)
     {

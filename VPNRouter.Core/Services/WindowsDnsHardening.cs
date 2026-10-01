@@ -120,6 +120,8 @@ public static class WindowsDnsHardening
         }
     }
 
+    internal static bool HasSavedState() => File.Exists(StatePath);
+
     public static void Restore(ILogger? logger = null)
     {
         var log = logger ?? Log.Logger;
