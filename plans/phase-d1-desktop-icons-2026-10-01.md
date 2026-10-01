@@ -51,7 +51,8 @@ files; 42 of them are the symbol table of `PictogramText.cs` itself. Most of the
 Windows worker (`windows-worker`, private toolchain, preflight: CPU 1 %, 13.2 GB free RAM, 13.5 GB free disk, no
 dotnet or java running), exact SHA `d8d10c97`: 80 tests, 76 passed; `PictogramTextTests` (4, one new), `UiIconsTests`,
 `DesktopPictogramScreenshotTests` and all three `VisualDiffTests` baselines pass (the icon change stays under the 2 %
-threshold, so no baseline was re-pinned). The 4 failures are the four ApplicationsPage captures of the new design test,
-the known `PAGESCREENSHOT-RENDER-INVALIDATION` defect (same exception as the excluded `PageScreenshotTests`).
+threshold, so no baseline was re-pinned). The 4 failures were the four ApplicationsPage captures of the new design test,
+the known `PAGESCREENSHOT-RENDER-INVALIDATION` defect (same exception as the excluded `PageScreenshotTests`); the
+design test leaves that page out now.
 `check-icons.py`: all mirror and grid checks pass; contact sheets looked at. Before and after captures compared by eye
 (DPI bypass hero and legend, Telegram, Free configs, Settings, window header).
