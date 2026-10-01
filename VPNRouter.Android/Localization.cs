@@ -533,6 +533,8 @@ internal static class Localization
     public static string SmpStatusConnectingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectingHint;
     public static string SmpStatusDisconnectedHint => global::VPNRouter.Core.Localization.Strings.SmpStatusDisconnectedHint;
     public static string SmpConfigRowLabel => global::VPNRouter.Core.Localization.Strings.SmpConfigRowLabel;
+    public static string SmpConfigRowChange => global::VPNRouter.Core.Localization.Strings.SmpConfigRowChange;
+    public static string SmpConfigRowHide => global::VPNRouter.Core.Localization.Strings.SmpConfigRowHide;
     public static string SmpCfgSubscribe => global::VPNRouter.Core.Localization.Strings.SmpCfgSubscribe;
     public static string SmpCfgManual => global::VPNRouter.Core.Localization.Strings.SmpCfgManual;
     public static string SmpCfgCustom => global::VPNRouter.Core.Localization.Strings.SmpCfgCustom;

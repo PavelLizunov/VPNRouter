@@ -58,6 +58,7 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _configRowLabel;
     private TextBlock? _configRowValue;
     private IconView? _configRowChevron;
+    private TextBlock? _configRowToggleText;
 
     private Border? _formCard;
     private TextBox? _serverInput;
@@ -130,6 +131,7 @@ public partial class AndroidApp : Avalonia.Application
 
     private Thickness _currentSafeArea;
     private ScrollViewer? _mainScroller;
+    private Grid? _mainContentGrid;
     private Grid? _updateBannerFloating;
 
     private Border? _updateBanner;
@@ -324,11 +326,11 @@ public partial class AndroidApp : Avalonia.Application
     internal void ApplySafeArea(Thickness insets)
     {
         _currentSafeArea = insets;
-        if (_mainScroller is not null)
+        if (_mainContentGrid is not null)
         {
             var top = Math.Max(12.0, insets.Top + 6.0);
             var bottom = Math.Max(16.0, insets.Bottom + 16.0);
-            _mainScroller.Padding = new Thickness(0, top, 0, bottom);
+            _mainContentGrid.Margin = new Thickness(16, top, 16, bottom);
         }
 
         if (_updateBannerFloating is not null)
@@ -482,19 +484,22 @@ public partial class AndroidApp : Avalonia.Application
             Children = { innerStack }
         };
 
+        // The vertical room for the system bars is a margin of the content, not the ScrollViewer's Padding: the
+        // scroll extent includes a child's margin but not the viewer's padding, so with Padding the last cards could
+        // not be scrolled into view.
         var outerGrid = new Grid
         {
-            Margin = new Thickness(16, 0, 16, 0),
+            Margin = new Thickness(16, 12, 16, 16),
             Background = Brushes.Transparent,
             Children = { innerWrapper }
         };
+        _mainContentGrid = outerGrid;
 
         _mainScroller = new ScrollViewer
         {
             Content = outerGrid,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Padding = new Thickness(0, 12, 0, 16),
             Focusable = true,
         };
         _mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
@@ -816,9 +821,31 @@ public partial class AndroidApp : Avalonia.Application
         };
         _configRowValue.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
-        _configRowChevron = IconContent(UiIcons.ChevronRight, UiScale.Ic(16));
+        // A pill with a word and a chevron instead of a bare grey arrow, so the row reads as something to open and close.
+        _configRowChevron = IconContent(UiIcons.ChevronRight, UiScale.Ic(14));
         SetChevronOpen(_configRowChevron, _formExpanded);
-        _configRowChevron.BindToken(IconView.ForegroundProperty, "TextMutedBrush");
+        _configRowChevron.BindToken(IconView.ForegroundProperty, "AccentFgBrush");
+        _configRowToggleText = new TextBlock
+        {
+            Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange,
+            FontSize = UiScale.Fs(10),
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _configRowToggleText.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
+        var togglePill = new Border
+        {
+            Padding = new Thickness(10, 5, 8, 5),
+            CornerRadius = new CornerRadius(radiusSm),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 4,
+                Children = { _configRowToggleText, _configRowChevron },
+            },
+        };
+        togglePill.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
 
         var configRowGrid = new Grid
         {
@@ -836,8 +863,8 @@ public partial class AndroidApp : Avalonia.Application
         };
         Grid.SetColumn(configRowText, 1);
         configRowGrid.Children.Add(configRowText);
-        Grid.SetColumn(_configRowChevron, 2);
-        configRowGrid.Children.Add(_configRowChevron);
+        Grid.SetColumn(togglePill, 2);
+        configRowGrid.Children.Add(togglePill);
 
         var configRowButton = new Avalonia.Controls.Button
         {
@@ -1324,6 +1351,8 @@ public partial class AndroidApp : Avalonia.Application
         _formExpanded = !_formExpanded;
         if (_formCard is not null) _formCard.IsVisible = _formExpanded;
         SetChevronOpen(_configRowChevron, _formExpanded);
+        if (_configRowToggleText is not null)
+            _configRowToggleText.Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange;
     }
 
     private void OnSimpleQrScanClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1601,6 +1630,8 @@ public partial class AndroidApp : Avalonia.Application
         ApplyHealthCheckDisplay();
         ApplyErrorOneLinerDisplay();
         if (_configRowLabel is not null) _configRowLabel.Text = Localization.SmpConfigRowLabel;
+        if (_configRowToggleText is not null)
+            _configRowToggleText.Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange;
         if (_serverInputLabel is not null) _serverInputLabel.Text = Localization.SmpInputLabel;
         if (_serverInput is not null) _serverInput.Watermark = Localization.SmpInputWatermark;
         if (_serverInputHint is not null) _serverInputHint.Text = Localization.SmpInputHint;
