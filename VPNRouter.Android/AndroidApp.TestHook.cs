@@ -37,7 +37,7 @@ public partial class AndroidApp
                 w.WriteString("appliedSafeArea", T(app._currentSafeArea));
                 w.WriteString("scrollerPadding", T(scroller.Padding));
                 w.WriteString("scrollerBounds", R(scroller.Bounds));
-                var top = Avalonia.VisualTree.VisualExtensions.GetVisualRoot(scroller) as Avalonia.Controls.TopLevel;
+                var top = Avalonia.Controls.TopLevel.GetTopLevel(scroller);
                 if (top is not null)
                 {
                     w.WriteString("topLevelSize", $"{top.Bounds.Width:0.#}x{top.Bounds.Height:0.#}");
