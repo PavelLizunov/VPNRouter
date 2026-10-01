@@ -7,11 +7,11 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r11 (prerelease, 2026-10-01), not
+- **Latest published candidate:** v2.50.0-r12 (prerelease, 2026-10-01), not
   promoted to stable and not yet through the full fixed-WINBRAT post-ship gate
-  (see `plans/phase-r11-release-2.50.0-r11-2026-10-01.md`). It is the first
-  candidate that carries the Windows installer. Main declares
-  `AppVersion` 2.50.0-r11.
+  (see `plans/phase-r12-release-2.50.0-r12-2026-10-01.md`). It carries the
+  Android fixes from the first Pixel test of r11 (safe area, tile status, double
+  connect, vector icons). Main declares `AppVersion` 2.50.0-r12.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
