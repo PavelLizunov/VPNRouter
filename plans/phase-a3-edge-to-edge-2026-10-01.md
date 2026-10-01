@@ -33,4 +33,7 @@ scratchpad. The API 36 emulator images crash surfaceflinger headless (not usable
 
 ## Outcome
 
-Pending.
+Verified on the Android 15 emulator with the final build (`e610cc82`): first display after install, applied safe area
+0,48.8,0,24, header directly under the status bar, Advanced shell tab strip clear of the gesture bar. Not yet seen
+on the owner's Pixel (Android 16): the one-off collapsed screen is explained only by the shrink-to-content column and
+is covered by the stretch change; if it returns, the `layout` block of the state dump will show the numbers.
