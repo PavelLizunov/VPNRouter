@@ -140,6 +140,7 @@ public partial class MainWindowViewModel
     public string L_FcMsUnit => Strings.FcMsUnit;
 
     public string L_FcTabSearch              => Strings.FcTabSearch;
+    public string L_FcTabSearchLabel         => VPNRouter.Core.Services.UiIcons.StripSymbols(Strings.FcTabSearch);
     public string L_FcSavedTabHint           => Strings.FcSavedTabHint;
     public string L_FcSavedClearAllBtn       => Strings.FcSavedClearAllBtn;
     public string L_FcSavedColStatus         => Strings.FcSavedColStatus;

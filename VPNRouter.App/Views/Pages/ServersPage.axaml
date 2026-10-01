@@ -101,8 +101,8 @@
           <StackPanel Orientation="Horizontal" Spacing="4"/>
         </ItemsPanelTemplate>
       </ListBox.ItemsPanel>
-      <ListBoxItem Content="{Binding LblServerModeVless}"  Padding="10,4" FontSize="11"/>
-      <ListBoxItem Content="{Binding LblServerModeCustom}" Padding="10,4" FontSize="11"/>
+      <ListBoxItem Classes="sub-tab" Content="{Binding LblServerModeVless}"/>
+      <ListBoxItem Classes="sub-tab" Content="{Binding LblServerModeCustom}"/>
     </ListBox>
 
     <Grid Grid.Row="1"

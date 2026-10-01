@@ -98,30 +98,6 @@
             <Setter Property="MinHeight" Value="0"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-        </Style>
-        <Style Selector="ListBoxItem.main-tab /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
-        </Style>
-        <Style Selector="ListBoxItem.main-tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-        </Style>
-        <Style Selector="ListBoxItem.main-tab:selected /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
-        </Style>
-        <Style Selector="ListBoxItem.main-tab:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
-        </Style>
-        <Style Selector="ListBoxItem.main-tab:selected:focus /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
-        </Style>
-        <Style Selector="ListBoxItem.main-tab:pressed /template/ ContentPresenter#PART_ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
         </Style>
 
         <Style Selector="Button.primary-cta">

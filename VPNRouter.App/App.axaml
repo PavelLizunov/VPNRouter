@@ -28,6 +28,34 @@
             </FluentTheme.Palettes>
         </FluentTheme>
 
+        <!-- Tab strips (the main tabs and the inner tabs of a page): secondary text when idle, an accent tint on hover
+             and the accent role when selected, in both themes through the tokens. -->
+        <Style Selector="ListBoxItem.main-tab, ListBoxItem.sub-tab">
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.sub-tab">
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:pressed /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:focus /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected:focus /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:focus:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected:focus:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:pressed /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+
         <Style Selector="Button.solid:pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{Binding $parent[Button].Background}"/>
             <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}"/>

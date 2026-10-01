@@ -149,14 +149,15 @@
       <ListBox SelectedIndex="{Binding SelectedSettingsIndex}"
                Background="Transparent"
                BorderThickness="0"
+               Padding="6"
                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                ScrollViewer.VerticalScrollBarVisibility="Auto">
-        <ListBoxItem Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblSettingsRules}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblSettingsUpdates}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblAutostartSection}"   Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsRules}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsUpdates}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblAutostartSection}"   Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
       </ListBox>
     </Border>
 
