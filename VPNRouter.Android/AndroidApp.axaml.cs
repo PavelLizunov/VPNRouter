@@ -270,11 +270,19 @@ public partial class AndroidApp : Avalonia.Application
                     var topLevel = TopLevel.GetTopLevel(sender as Visual);
                     if (topLevel?.InsetsManager is { } insetsMgr)
                     {
-                        insetsMgr.SafeAreaChanged += (_, args) =>
+                        // SafeAreaPadding is in dp only once the top level has its real render scaling. At attach time
+                        // it is still 1.0, so the first value is in pixels and no insets event follows to correct it
+                        // (a Pixel on Android 15+ showed a 134 dp gap at the top). Always read the property again when
+                        // the insets, the scaling or the size change.
+                        _avaloniaInsetsActive = true;
+                        void Reapply() => ApplySafeArea(insetsMgr.SafeAreaPadding);
+                        insetsMgr.SafeAreaChanged += (_, _) => Reapply();
+                        topLevel.ScalingChanged += (_, _) => Reapply();
+                        topLevel.PropertyChanged += (_, e) =>
                         {
-                            ApplySafeArea(args.SafeAreaPadding);
+                            if (e.Property == TopLevel.ClientSizeProperty) Reapply();
                         };
-                        ApplySafeArea(insetsMgr.SafeAreaPadding);
+                        Reapply();
                     }
                 }
                 catch { }
@@ -305,8 +313,11 @@ public partial class AndroidApp : Avalonia.Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    private bool _avaloniaInsetsActive;
+
     private void OnMainActivitySafeAreaChanged(Thickness insets)
     {
+        if (_avaloniaInsetsActive) return;
         Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplySafeArea(insets));
     }
 
@@ -462,10 +473,12 @@ public partial class AndroidApp : Avalonia.Application
             }
         };
 
+        // Stretch with a maximum width is centered by the layout system; unlike Center it does not shrink the column to
+        // the natural width of its content, which collapsed to a narrow strip once (all texts measured empty).
         var innerWrapper = new Grid
         {
             MaxWidth = 420,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             Children = { innerStack }
         };
 

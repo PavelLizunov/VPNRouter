@@ -115,6 +115,22 @@ public sealed class TestHookReceiver : BroadcastReceiver
             w.WriteBoolean("externalControl", AndroidStorage.GetExternalControlEnabled());
             w.WriteBoolean("uiReady", AndroidApp.TestHookUiReady());
             w.WriteEndObject();
+
+            if (Dispatcher.UIThread.CheckAccess()) AndroidApp.TestHookWriteLayout(w);
+            else
+            {
+                var buffer = new MemoryStream();
+                Dispatcher.UIThread.Invoke(() =>
+                {
+                    using var inner = new Utf8JsonWriter(buffer);
+                    inner.WriteStartObject();
+                    AndroidApp.TestHookWriteLayout(inner);
+                    inner.WriteEndObject();
+                });
+                using var doc = System.Text.Json.JsonDocument.Parse(buffer.ToArray());
+                w.WritePropertyName("layout");
+                doc.RootElement.GetProperty("layout").WriteTo(w);
+            }
         });
     }
 }
