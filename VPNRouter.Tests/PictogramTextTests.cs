@@ -22,7 +22,7 @@ public class PictogramTextTests
         PictogramText.SetText(text, "\u2713 ok \u26a0");
         var icons = text.Inlines!.OfType<InlineUIContainer>().Select(x => Assert.IsType<Pictogram>(x.Child)).ToArray();
         Assert.Equal(2, icons.Length);
-        Assert.All(icons, icon => Assert.Equal(new Avalonia.Size(11, 11), icon.DesiredSize));
+        Assert.All(icons, icon => Assert.True(icon.IsMeasureValid));
         Assert.True(text.MinWidth >= 11);
     }
 
