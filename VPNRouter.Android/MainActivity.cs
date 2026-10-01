@@ -38,6 +38,11 @@ public class MainActivity : AvaloniaMainActivity
     public static Thickness CurrentSafeArea { get; private set; }
     public static event Action<Thickness>? SafeAreaChanged;
 
+    /// <summary>Height of the on-screen keyboard in dp (0 when it is hidden). With the enforced edge-to-edge windows of
+    /// Android 15 and newer the window no longer shrinks for the keyboard, so the app has to make room itself.</summary>
+    public static double CurrentImeBottom { get; private set; }
+    public static event Action<double>? ImeChanged;
+
     private const int RequestCodeCameraQr = 0x4711;
     private const int RequestCodePostNotifications = 0x4712;
 
@@ -251,6 +256,8 @@ public class MainActivity : AvaloniaMainActivity
             if (decor != null)
             {
                 AndroidX.Core.View.ViewCompat.SetOnApplyWindowInsetsListener(decor, new InsetsListener(this));
+                if (decor.ViewTreeObserver is { } observer)
+                    observer.GlobalLayout += (_, _) => ReportImeInset();
                 SetSystemBarsAppearance(AndroidStorage.GetTheme() == "dark");
             }
         }
@@ -288,6 +295,29 @@ public class MainActivity : AvaloniaMainActivity
         }
     }
 
+    private void ReportImeInset()
+    {
+        try
+        {
+            var decor = Window?.DecorView;
+            if (decor is null) return;
+            var root = AndroidX.Core.View.ViewCompat.GetRootWindowInsets(decor);
+            var density = Resources?.DisplayMetrics?.Density ?? 1.0f;
+            if (density <= 0.001f) density = 1.0f;
+            var ime = root is null
+                ? 0.0
+                : root.GetInsets(AndroidX.Core.View.WindowInsetsCompat.Type.Ime()).Bottom / (double)density;
+            if (Math.Abs(ime - CurrentImeBottom) < 0.5) return;
+            CurrentImeBottom = ime;
+            ImeChanged?.Invoke(ime);
+        }
+        catch (Exception ex)
+        {
+            try { global::Android.Util.Log.Warn("VpnRouter.Insets", $"ReportImeInset failed: {ex.GetType().Name}: {ex.Message}"); }
+            catch { }
+        }
+    }
+
     private sealed class InsetsListener : Java.Lang.Object, AndroidX.Core.View.IOnApplyWindowInsetsListener
     {
         private readonly MainActivity _activity;
@@ -317,6 +347,7 @@ public class MainActivity : AvaloniaMainActivity
                     CurrentSafeArea = safeArea;
                     SafeAreaChanged?.Invoke(safeArea);
                 }
+                _activity.ReportImeInset();
             }
             catch (Exception ex)
             {
@@ -331,6 +362,25 @@ public class MainActivity : AvaloniaMainActivity
             return insets;
         }
     }
+
+    // Predictive back keeps calling this for apps that do not register their own callback (the activity's
+    // OnBackPressedDispatcher falls back to it), so one override covers the button, the gesture and the adb key.
+#pragma warning disable CA1422, CS0672
+    public override void OnBackPressed()
+    {
+        try
+        {
+            if (AndroidApp.TryHandleBack())
+                return;
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter", $"back handling failed: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        base.OnBackPressed();
+    }
+#pragma warning restore CA1422, CS0672
 
     protected override void OnDestroy()
     {

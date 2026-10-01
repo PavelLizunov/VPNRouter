@@ -632,7 +632,7 @@ public partial class AndroidApp
         if (_cfgImportApplyBtn is not null) _cfgImportApplyBtn.Content = Localization.ImportApplyButton;
         if (_cfgImportCancelBtn is not null) _cfgImportCancelBtn.Content = Localization.ImportCancelButton;
 
-        if (_menuExportConfigItem is not null) _menuExportConfigItem.Content = Localization.MenuItemExportConfig;
-        if (_menuImportConfigItem is not null) _menuImportConfigItem.Content = Localization.MenuItemImportConfig;
+        if (_menuExportConfigItem is not null) SetMenuItemText(_menuExportConfigItem, Localization.MenuItemExportConfig);
+        if (_menuImportConfigItem is not null) SetMenuItemText(_menuImportConfigItem, Localization.MenuItemImportConfig);
     }
 }

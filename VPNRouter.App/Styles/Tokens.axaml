@@ -19,12 +19,12 @@
 
             <Color x:Key="TextPrimary">#FF0F1320</Color>
             <Color x:Key="TextSecondary">#FF475067</Color>
-            <Color x:Key="TextMuted">#FF94A0B2</Color>
+            <Color x:Key="TextMuted">#FF667287</Color>
             <Color x:Key="TextInverse">#FFFFFFFF</Color>
             <Color x:Key="TextAccent">#FF0369A1</Color>
             <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FF0F1320"/>
             <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FF475067"/>
-            <SolidColorBrush x:Key="TextMutedBrush" Color="#FF94A0B2"/>
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#FF667287"/>
             <SolidColorBrush x:Key="TextInverseBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="TextAccentBrush" Color="#FF0369A1"/>
 
@@ -135,12 +135,12 @@
 
             <Color x:Key="TextPrimary">#FFEEF1F6</Color>
             <Color x:Key="TextSecondary">#FFA6B0C2</Color>
-            <Color x:Key="TextMuted">#FF6C788F</Color>
+            <Color x:Key="TextMuted">#FF8791A6</Color>
             <Color x:Key="TextInverse">#FF0F1320</Color>
             <Color x:Key="TextAccent">#FF67E8F9</Color>
             <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFEEF1F6"/>
             <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FFA6B0C2"/>
-            <SolidColorBrush x:Key="TextMutedBrush" Color="#FF6C788F"/>
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#FF8791A6"/>
             <SolidColorBrush x:Key="TextInverseBrush" Color="#FF0F1320"/>
             <SolidColorBrush x:Key="TextAccentBrush" Color="#FF67E8F9"/>
 

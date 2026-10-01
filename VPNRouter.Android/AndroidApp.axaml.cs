@@ -58,6 +58,7 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _configRowLabel;
     private TextBlock? _configRowValue;
     private IconView? _configRowChevron;
+    private TextBlock? _configRowToggleText;
 
     private Border? _formCard;
     private TextBox? _serverInput;
@@ -130,6 +131,9 @@ public partial class AndroidApp : Avalonia.Application
 
     private Thickness _currentSafeArea;
     private ScrollViewer? _mainScroller;
+    private Grid? _mainContentGrid;
+    private Grid? _pageRoot;
+    private double _imeBottom;
     private Grid? _updateBannerFloating;
 
     private Border? _updateBanner;
@@ -261,6 +265,7 @@ public partial class AndroidApp : Avalonia.Application
             _ = Task.Run(() => RunUpdateCheckAsync(manual: false));
 
             MainActivity.SafeAreaChanged += OnMainActivitySafeAreaChanged;
+            MainActivity.ImeChanged += ime => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyImeInset(ime));
             ApplySafeArea(MainActivity.CurrentSafeArea);
 
             view.AttachedToVisualTree += (sender, _) =>
@@ -321,14 +326,26 @@ public partial class AndroidApp : Avalonia.Application
         Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplySafeArea(insets));
     }
 
-    internal void ApplySafeArea(Thickness insets)
+    /// <summary>
+    /// Makes room for the on-screen keyboard: the whole page ends above it, and the bottom system-bar inset (which the
+    /// keyboard covers) is not added on top of that.
+    /// </summary>
+    internal void ApplyImeInset(double imeBottom)
     {
-        _currentSafeArea = insets;
-        if (_mainScroller is not null)
+        _imeBottom = Math.Max(0.0, imeBottom);
+        if (_pageRoot is not null) _pageRoot.Margin = new Thickness(0, 0, 0, _imeBottom);
+        ApplySafeArea(_currentSafeArea);
+    }
+
+    internal void ApplySafeArea(Thickness rawInsets)
+    {
+        _currentSafeArea = rawInsets;
+        var insets = new Thickness(rawInsets.Left, rawInsets.Top, rawInsets.Right, _imeBottom > 0 ? 0.0 : rawInsets.Bottom);
+        if (_mainContentGrid is not null)
         {
             var top = Math.Max(12.0, insets.Top + 6.0);
             var bottom = Math.Max(16.0, insets.Bottom + 16.0);
-            _mainScroller.Padding = new Thickness(0, top, 0, bottom);
+            _mainContentGrid.Margin = new Thickness(16, top, 16, bottom);
         }
 
         if (_updateBannerFloating is not null)
@@ -482,19 +499,22 @@ public partial class AndroidApp : Avalonia.Application
             Children = { innerStack }
         };
 
+        // The vertical room for the system bars is a margin of the content, not the ScrollViewer's Padding: the
+        // scroll extent includes a child's margin but not the viewer's padding, so with Padding the last cards could
+        // not be scrolled into view.
         var outerGrid = new Grid
         {
-            Margin = new Thickness(16, 0, 16, 0),
+            Margin = new Thickness(16, 12, 16, 16),
             Background = Brushes.Transparent,
             Children = { innerWrapper }
         };
+        _mainContentGrid = outerGrid;
 
         _mainScroller = new ScrollViewer
         {
             Content = outerGrid,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Padding = new Thickness(0, 12, 0, 16),
             Focusable = true,
         };
         _mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
@@ -521,13 +541,14 @@ public partial class AndroidApp : Avalonia.Application
         };
         var updateBannerFloating = _updateBannerFloating;
 
-        return new Grid
+        _pageRoot = new Grid
         {
             Children = { mainScroller, _logOverlay,
                          _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
                          _advShellOverlay,
                          updateBannerFloating }
         };
+        return _pageRoot;
     }
 
     private Grid BuildSimpleHeaderRow()
@@ -608,23 +629,23 @@ public partial class AndroidApp : Avalonia.Application
 
         _menuSettingsItem = null;
         _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
-                                         "TextPrimaryBrush", OnMenuOpenLogClicked);
+                                         "TextPrimaryBrush", OnMenuOpenLogClicked, UiIcons.FileText);
         _menuExportDiagItem = MakeMenuItem(Localization.MenuItemExportDiag,
-                                           "TextPrimaryBrush", OnMenuExportDiagClicked);
+                                           "TextPrimaryBrush", OnMenuExportDiagClicked, UiIcons.Upload);
         _menuCopyLogPathItem = null;
         _menuViewCrashLogItem = null;
         _menuUpdateCheckItem = MakeMenuItem(Localization.MenuItemUpdateCheck,
-                                            "TextPrimaryBrush", OnMenuUpdateCheckClicked);
+                                            "TextPrimaryBrush", OnMenuUpdateCheckClicked, UiIcons.RefreshCw);
         _menuExportConfigItem = null;
         _menuImportConfigItem = null;
         _menuResetSettingsItem = MakeMenuItem(Localization.MenuItemResetSettings,
-                                              "DangerSolidBrush", OnMenuResetSettingsClicked);
+                                              "DangerSolidBrush", OnMenuResetSettingsClicked, UiIcons.Trash, closeMenu: false);
         _menuCheckLeaksItem = MakeMenuItem(Localization.MenuItemCheckLeaks,
-                                           "TextPrimaryBrush", OnMenuCheckLeaksClicked);
+                                           "TextPrimaryBrush", OnMenuCheckLeaksClicked, UiIcons.ShieldCheck);
         _menuHealthCheckItem = MakeMenuItem(Localization.MenuItemHealthCheck,
-                                            "TextPrimaryBrush", OnMenuHealthCheckClicked);
+                                            "TextPrimaryBrush", OnMenuHealthCheckClicked, UiIcons.Activity);
         _menuRestartSafeModeItem = MakeMenuItem(Localization.MenuItemSafeMode,
-                                                "TextPrimaryBrush", OnMenuRestartSafeModeClicked);
+                                                "TextPrimaryBrush", OnMenuRestartSafeModeClicked, UiIcons.LifeBuoy);
         _menuAboutLabel = new TextBlock
         {
             Text = Localization.SmpMenuAbout,
@@ -640,13 +661,18 @@ public partial class AndroidApp : Avalonia.Application
             VerticalAlignment = VerticalAlignment.Center,
         };
         _menuVersionPill.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        var aboutIcon = IconContent(UiIcons.Info, UiScale.Ic(16));
+        aboutIcon.BindToken(IconView.ForegroundProperty, "TextPrimaryBrush");
+        aboutIcon.VerticalAlignment = VerticalAlignment.Center;
         var aboutGrid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            ColumnSpacing = 16,
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnSpacing = 6,
         };
-        Grid.SetColumn(_menuAboutLabel, 0);
-        Grid.SetColumn(_menuVersionPill, 1);
+        Grid.SetColumn(aboutIcon, 0);
+        Grid.SetColumn(_menuAboutLabel, 1);
+        Grid.SetColumn(_menuVersionPill, 2);
+        aboutGrid.Children.Add(aboutIcon);
         aboutGrid.Children.Add(_menuAboutLabel);
         aboutGrid.Children.Add(_menuVersionPill);
         _menuVersionItem = new Avalonia.Controls.Button
@@ -654,12 +680,18 @@ public partial class AndroidApp : Avalonia.Application
             Content = aboutGrid,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(10, 7),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            MinHeight = 44,
+            Padding = new Thickness(12, 8),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
-        _menuVersionItem.Click += OnMenuRepoClicked;
+        _menuVersionItem.Click += (s, e) =>
+        {
+            if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+            OnMenuRepoClicked(s, e);
+        };
 
         var menuStack = new StackPanel
         {
@@ -675,7 +707,7 @@ public partial class AndroidApp : Avalonia.Application
                           new[] { _menuHealthCheckItem, _menuRestartSafeModeItem,
                                   _menuResetSettingsItem });
         _menuAddTileItem = MakeMenuItem(Localization.MenuItemAddTile,
-                                        "TextPrimaryBrush", OnMenuAddTileClicked);
+                                        "TextPrimaryBrush", OnMenuAddTileClicked, UiIcons.SquarePlus);
         menuStack.Children.Add(_menuAddTileItem);
         menuStack.Children.Add(_menuVersionItem);
 
@@ -696,14 +728,15 @@ public partial class AndroidApp : Avalonia.Application
         advancedToggleBtn.Click += (_, _) =>
         {
             if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-            OpenAdvancedShell(AdvancedTab.Servers);
+            if (_advShellOverlay is { IsVisible: true }) CloseAdvancedShell();
+            else OpenAdvancedShell(AdvancedTab.Servers);
         };
         _menuAdvancedToggleBtn = advancedToggleBtn;
         menuStack.Children.Add(advancedToggleBtn);
 
         var menuPanel = new Border
         {
-            Width = 232,
+            Width = 288,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(GetRadius("RadiusMd")),
             Padding = new Thickness(6),
@@ -816,9 +849,31 @@ public partial class AndroidApp : Avalonia.Application
         };
         _configRowValue.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
-        _configRowChevron = IconContent(UiIcons.ChevronRight, UiScale.Ic(16));
-        SetChevronOpen(_configRowChevron, _formExpanded);
-        _configRowChevron.BindToken(IconView.ForegroundProperty, "TextMutedBrush");
+        // A pill with a word and a chevron instead of a bare grey arrow, so the row reads as something to open and close.
+        _configRowChevron = IconContent(UiIcons.ChevronDown, UiScale.Ic(14));
+        SetDisclosureChevron(_configRowChevron, _formExpanded);
+        _configRowChevron.BindToken(IconView.ForegroundProperty, "AccentFgBrush");
+        _configRowToggleText = new TextBlock
+        {
+            Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange,
+            FontSize = UiScale.Fs(10),
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _configRowToggleText.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
+        var togglePill = new Border
+        {
+            Padding = new Thickness(10, 5, 8, 5),
+            CornerRadius = new CornerRadius(radiusSm),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 4,
+                Children = { _configRowToggleText, _configRowChevron },
+            },
+        };
+        togglePill.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
 
         var configRowGrid = new Grid
         {
@@ -836,8 +891,8 @@ public partial class AndroidApp : Avalonia.Application
         };
         Grid.SetColumn(configRowText, 1);
         configRowGrid.Children.Add(configRowText);
-        Grid.SetColumn(_configRowChevron, 2);
-        configRowGrid.Children.Add(_configRowChevron);
+        Grid.SetColumn(togglePill, 2);
+        configRowGrid.Children.Add(togglePill);
 
         var configRowButton = new Avalonia.Controls.Button
         {
@@ -1319,11 +1374,32 @@ public partial class AndroidApp : Avalonia.Application
         return btn;
     }
 
+    /// <summary>A down chevron that points up while its section is open (the "Hide" state).</summary>
+    private static void SetDisclosureChevron(IconView? chevron, bool open)
+    {
+        if (chevron is null) return;
+        if (chevron.Transitions is null && UiMotion.Enabled)
+        {
+            chevron.Transitions = new Avalonia.Animation.Transitions
+            {
+                new Avalonia.Animation.TransformOperationsTransition
+                {
+                    Property = Visual.RenderTransformProperty,
+                    Duration = TimeSpan.FromMilliseconds(180),
+                    Easing = new Avalonia.Animation.Easings.CubicEaseOut(),
+                },
+            };
+        }
+        chevron.RenderTransform = Avalonia.Media.Transformation.TransformOperations.Parse(open ? "rotate(180deg)" : "rotate(0deg)");
+    }
+
     private void OnConfigRowClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         _formExpanded = !_formExpanded;
         if (_formCard is not null) _formCard.IsVisible = _formExpanded;
-        SetChevronOpen(_configRowChevron, _formExpanded);
+        SetDisclosureChevron(_configRowChevron, _formExpanded);
+        if (_configRowToggleText is not null)
+            _configRowToggleText.Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange;
     }
 
     private void OnSimpleQrScanClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1564,17 +1640,17 @@ public partial class AndroidApp : Avalonia.Application
         if (_brandTitle is not null) _brandTitle.Text = Localization.BrandTitle;
         if (_menuThemeLight is not null) _menuThemeLight.Content = Localization.MenuSegLight;
         if (_menuThemeDark is not null) _menuThemeDark.Content = Localization.MenuSegDark;
-        if (_menuSettingsItem is not null) _menuSettingsItem.Content = Localization.MenuItemSettings;
-        if (_menuOpenLogItem is not null) _menuOpenLogItem.Content = Localization.MenuItemOpenLogs;
-        if (_menuExportDiagItem is not null) _menuExportDiagItem.Content = Localization.MenuItemExportDiag;
-        if (_menuCopyLogPathItem is not null) _menuCopyLogPathItem.Content = Localization.MenuItemCopyLogPath;
-        if (_menuViewCrashLogItem is not null) _menuViewCrashLogItem.Content = Localization.MenuItemViewCrashLog;
-        if (_menuUpdateCheckItem is not null) _menuUpdateCheckItem.Content = Localization.MenuItemUpdateCheck;
+        if (_menuSettingsItem is not null) SetMenuItemText(_menuSettingsItem, Localization.MenuItemSettings);
+        if (_menuOpenLogItem is not null) SetMenuItemText(_menuOpenLogItem, Localization.MenuItemOpenLogs);
+        if (_menuExportDiagItem is not null) SetMenuItemText(_menuExportDiagItem, Localization.MenuItemExportDiag);
+        if (_menuCopyLogPathItem is not null) SetMenuItemText(_menuCopyLogPathItem, Localization.MenuItemCopyLogPath);
+        if (_menuViewCrashLogItem is not null) SetMenuItemText(_menuViewCrashLogItem, Localization.MenuItemViewCrashLog);
+        if (_menuUpdateCheckItem is not null) SetMenuItemText(_menuUpdateCheckItem, Localization.MenuItemUpdateCheck);
         if (_menuResetSettingsItem is not null && !_resetConfirmPending)
-            _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+            SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
         if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
         if (_menuAdvancedToggleBtn is not null)
-            _menuAdvancedToggleBtn.Content = IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true);
+            UpdateMenuAdvancedToggle();
         if (_autostartCardTitleText is not null)
             _autostartCardTitleText.Text = Localization.SmpAutostartCardTitle;
         if (_autostartCardSubText is not null)
@@ -1586,10 +1662,10 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSectionTroubleshooting is not null) _menuSectionTroubleshooting.Text = Localization.MenuSectionTroubleshooting;
         if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
         RefreshAdvancedShellStrings();
-        if (_menuCheckLeaksItem is not null) _menuCheckLeaksItem.Content = Localization.MenuItemCheckLeaks;
-        if (_menuHealthCheckItem is not null) _menuHealthCheckItem.Content = Localization.MenuItemHealthCheck;
-        if (_menuAddTileItem is not null) _menuAddTileItem.Content = Localization.MenuItemAddTile;
-        if (_menuRestartSafeModeItem is not null) _menuRestartSafeModeItem.Content = Localization.MenuItemSafeMode;
+        if (_menuCheckLeaksItem is not null) SetMenuItemText(_menuCheckLeaksItem, Localization.MenuItemCheckLeaks);
+        if (_menuHealthCheckItem is not null) SetMenuItemText(_menuHealthCheckItem, Localization.MenuItemHealthCheck);
+        if (_menuAddTileItem is not null) SetMenuItemText(_menuAddTileItem, Localization.MenuItemAddTile);
+        if (_menuRestartSafeModeItem is not null) SetMenuItemText(_menuRestartSafeModeItem, Localization.MenuItemSafeMode);
         if (_profilesOverlayTitle is not null) _profilesOverlayTitle.Text = Localization.ProfilesOverlayTitle;
         if (_profilesOverlayIntro is not null) _profilesOverlayIntro.Text = Localization.ProfilesIntro;
         RefreshConfigShareLocalization();
@@ -1601,6 +1677,8 @@ public partial class AndroidApp : Avalonia.Application
         ApplyHealthCheckDisplay();
         ApplyErrorOneLinerDisplay();
         if (_configRowLabel is not null) _configRowLabel.Text = Localization.SmpConfigRowLabel;
+        if (_configRowToggleText is not null)
+            _configRowToggleText.Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange;
         if (_serverInputLabel is not null) _serverInputLabel.Text = Localization.SmpInputLabel;
         if (_serverInput is not null) _serverInput.Watermark = Localization.SmpInputWatermark;
         if (_serverInputHint is not null) _serverInputHint.Text = Localization.SmpInputHint;

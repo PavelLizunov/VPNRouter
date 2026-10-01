@@ -26,17 +26,42 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
+    private readonly Dictionary<Avalonia.Controls.Button, string> _menuItemIcons = new();
+
+    /// <summary>Sets the label of a menu item and keeps its icon (the label is replaced on language change and by the reset confirmation).</summary>
+    private void SetMenuItemText(Avalonia.Controls.Button? btn, string text)
+    {
+        if (btn is null) return;
+        if (!_menuItemIcons.TryGetValue(btn, out var icon)) { btn.Content = text; return; }
+        if (btn.Tag is TextBlock existing) { existing.Text = text; return; }
+
+        // A grid with a star column for the text, so a long label wraps inside the menu instead of being cut off.
+        var iconView = IconContent(icon, UiScale.Ic(16));
+        iconView.VerticalAlignment = VerticalAlignment.Center;
+        var textBlock = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 6 };
+        Grid.SetColumn(textBlock, 1);
+        grid.Children.Add(iconView);
+        grid.Children.Add(textBlock);
+        btn.Tag = textBlock;
+        btn.Content = grid;
+    }
+
     private Avalonia.Controls.Button MakeMenuItem(
         string label,
         string foregroundKey,
-        EventHandler<Avalonia.Interactivity.RoutedEventArgs>? onClick)
+        EventHandler<Avalonia.Interactivity.RoutedEventArgs>? onClick,
+        string? icon = null,
+        bool closeMenu = true)
     {
         var btn = new Avalonia.Controls.Button
         {
             Content = label,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(10, 7),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            MinHeight = 44,
+            Padding = new Thickness(12, 8),
             FontSize = UiScale.Fs(11),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
@@ -44,7 +69,20 @@ public partial class AndroidApp
             IsHitTestVisible = onClick is not null,
         };
         btn.BindToken(Avalonia.Controls.Button.ForegroundProperty, foregroundKey);
-        if (onClick is not null) btn.Click += onClick;
+        if (icon is not null)
+        {
+            _menuItemIcons[btn] = icon;
+            SetMenuItemText(btn, label);
+        }
+        if (onClick is not null)
+        {
+            // The menu closes when an action starts, so its feedback line and the screens it opens are not hidden behind it.
+            btn.Click += (s, e) =>
+            {
+                if (closeMenu && _kebabPopup is not null) _kebabPopup.IsOpen = false;
+                onClick(s, e);
+            };
+        }
         return btn;
     }
 
@@ -163,15 +201,25 @@ public partial class AndroidApp
         }
     }
 
+    /// <summary>The big menu button goes to the other mode: "Advanced" on the main screen, "Simple" inside the Advanced screens.</summary>
+    private void UpdateMenuAdvancedToggle()
+    {
+        if (_menuAdvancedToggleBtn is null) return;
+        _menuAdvancedToggleBtn.Content = _advShellOverlay is { IsVisible: true }
+            ? IconText(UiIcons.ChevronLeft, Localization.SmpToggleToSimple, 14)
+            : IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true);
+    }
+
     private void OnKebabMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is null) return;
         _kebabPopup.IsOpen = !_kebabPopup.IsOpen;
         if (_kebabPopup.IsOpen)
         {
+            UpdateMenuAdvancedToggle();
             _resetConfirmPending = false;
             if (_menuResetSettingsItem is not null)
-                _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+                SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
         }
     }
 
@@ -262,6 +310,8 @@ public partial class AndroidApp
         var fresh = BuildAdvancedShellOverlay();
         rootPanel.Children[idx] = fresh;
         _advShellOverlay = fresh;
+        // The new header and tab strip start without the status-bar and gesture-bar room: give it to them again.
+        ApplySafeArea(_currentSafeArea);
 
         if (advancedWasOpen)
         {

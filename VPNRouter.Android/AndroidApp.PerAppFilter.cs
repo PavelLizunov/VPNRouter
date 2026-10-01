@@ -909,7 +909,7 @@ public partial class AndroidApp
             if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
             _resetConfirmPending = false;
             if (_menuResetSettingsItem is not null)
-                _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+                SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
 
             try
             {
@@ -928,7 +928,7 @@ public partial class AndroidApp
 
         _resetConfirmPending = true;
         if (_menuResetSettingsItem is not null)
-            _menuResetSettingsItem.Content = Localization.MenuItemResetConfirm;
+            SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetConfirm);
     }
 
     private void OnMenuRepoClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

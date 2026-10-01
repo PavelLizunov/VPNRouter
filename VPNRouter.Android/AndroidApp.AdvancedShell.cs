@@ -317,7 +317,7 @@ public partial class AndroidApp
         _kebabPopup.IsOpen = true;
         _resetConfirmPending = false;
         if (_menuResetSettingsItem is not null)
-            _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+            SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
     }
 
     private void OpenAdvancedShell(AdvancedTab tab)
