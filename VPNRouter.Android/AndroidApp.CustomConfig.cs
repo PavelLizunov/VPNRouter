@@ -122,14 +122,8 @@ public partial class AndroidApp
         };
         _autostartCardSubText.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
-        var chevron = new TextBlock
-        {
-            Text = "›",
-            FontSize = UiScale.Fs(14),
-            FontWeight = FontWeight.Bold,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        chevron.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
+        var chevron = IconContent(UiIcons.ChevronRight, 18);
+        chevron.BindToken(IconView.ForegroundProperty, "AccentFgBrush");
 
         var inner = new Grid
         {

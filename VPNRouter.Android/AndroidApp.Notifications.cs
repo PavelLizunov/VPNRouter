@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using System;
 using System.Linq;
+using UiIcons = VPNRouter.Core.Services.UiIcons;
 
 namespace VPNRouter.Android;
 
@@ -58,8 +59,7 @@ public partial class AndroidApp
 
         _logViewerCloseBtn = new Avalonia.Controls.Button
         {
-            Content = "✕",
-            FontSize = UiScale.Fs(16),
+            Content = IconContent(UiIcons.X, 22),
             Width = 44,
             Height = 44,
             Padding = new Thickness(0),
@@ -73,8 +73,7 @@ public partial class AndroidApp
 
         _logViewerRefreshBtn = new Avalonia.Controls.Button
         {
-            Content = "⟳",
-            FontSize = UiScale.Fs(16),
+            Content = IconContent(UiIcons.RefreshCw, 20),
             Width = 44,
             Height = 44,
             Padding = new Thickness(0),

@@ -2,9 +2,9 @@ namespace VPNRouter.Core.Services;
 
 public static partial class UiIcons
 {
-    // Text symbols that some shared strings carry as a button glyph ("↻ Apply", "Advanced ▸"). The desktop UI still
-    // shows them; the Android UI draws a vector icon instead and removes the symbol from the ends of the label.
-    private const string LabelSymbols = "✓✔✕✗↻⟳▶⏹▾▸◂●⋮";
+    // Text symbols that some shared strings carry as a button glyph ("↻ Apply", "Advanced ▸", "+ Add"). The desktop
+    // UI still shows them; the Android UI draws a vector icon instead and removes the symbol from the ends of the label.
+    private const string LabelSymbols = "✓✔✕✗↻⟳▶⏹⬛▾▸◂●⋮+";
 
     /// <summary>Removes button symbols and the spaces next to them from both ends of a label. Symbols in the middle of
     /// the text (arrows in a sentence, "Wi-Fi ↔ cellular") stay.</summary>

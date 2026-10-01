@@ -42,7 +42,7 @@ public static partial class Strings
         : (OperatingSystem.IsAndroid() ? "Apps" : "Applications");
     public static string TabAdvTools => Ru ? "Инструменты" : "Tools";
     public static string TabAdvPublic => Ru ? "Публичные" : "Public";
-    public static string AdvSimpleToggle => Ru ? "◂ Простой" : "◂ Simple";
+    public static string AdvSimpleToggle => Ru ? "Простой" : "Simple";
 
     public static string VlessServers => Ru ? "Серверы" : "Servers";
     public static string CustomConfigJson => Ru ? "Свой конфиг (JSON)" : "Custom Config (JSON)";
@@ -1037,8 +1037,8 @@ public static partial class Strings
         : "Connected · {0}";
 
     public static string DiagHealthCheckOk => Ru
-        ? "✓ Проверка {0} с назад"
-        : "✓ Last check {0}s ago";
+        ? "Проверка {0} с назад"
+        : "Last check {0}s ago";
 
     public static string DiagHealthCheckStale => Ru
         ? "Проверка не отвечает"
@@ -1446,8 +1446,8 @@ public static partial class Strings
         : "{0} reachable of {1}";
 
     public static string SrvEmptyHint => Ru
-        ? "В этой подписке пока нет серверов. Обнови подписку (↻) чтобы получить список."
-        : "This subscription has no servers yet. Refresh (↻) to fetch the list.";
+        ? "В этой подписке пока нет серверов. Обнови подписку, чтобы получить список."
+        : "This subscription has no servers yet. Refresh it to fetch the list.";
 
     public static string SrvNeverTested => "—";
 
@@ -1485,9 +1485,9 @@ public static partial class Strings
         ? "Соберём список из публичных источников и проверим доступность каждого узла. Нажмите «Найти» для отбора рабочих серверов. Конфигурации сохраняются автоматически во вкладке «Сохранённые»."
         : "We'll pull the list below from public sources and run TCP+TLS to each. Tap Find — we'll pick the fastest. Verified configs are saved automatically — open the Saved tab to see them.";
 
-    public static string FcFindButton => Ru ? "✓✓ Найти рабочие конфиги" : "✓✓ Find working configs";
+    public static string FcFindButton => Ru ? "Найти рабочие конфиги" : "Find working configs";
 
-    public static string FcStopButton => Ru ? "✕ Остановить" : "✕ Stop";
+    public static string FcStopButton => Ru ? "Остановить" : "Stop";
 
     public static string FcExcludeRu => Ru
         ? "Исключить серверы в России"
@@ -1499,7 +1499,7 @@ public static partial class Strings
         ? "Сохранённых конфигов пока нет. Нажмите «Найти» для добавления проверенных серверов."
         : "No saved configs yet. Run «Find» — results will be saved here.";
 
-    public static string FcSavedClearAll => Ru ? "✕ Удалить всё" : "✕ Clear all";
+    public static string FcSavedClearAll => Ru ? "Удалить всё" : "Clear all";
 
     public static string FcSavedRemoveOne => "✕";
 

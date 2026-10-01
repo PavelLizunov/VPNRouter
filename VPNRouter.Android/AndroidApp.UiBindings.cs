@@ -4,6 +4,8 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using System;
+using UiIcons = VPNRouter.Core.Services.UiIcons;
+using IconView = VPNRouter.UI.Controls.IconView;
 
 namespace VPNRouter.Android;
 
@@ -175,11 +177,8 @@ public partial class AndroidApp
 
     private Border BuildSettingsFooterBar()
     {
-        var checkGlyph = new TextBlock
+        var checkGlyph = new IconView(UiIcons.Check, UiScale.Ic(14))
         {
-            Text = "✓",
-            FontSize = UiScale.Fs(11),
-            VerticalAlignment = VerticalAlignment.Center,
             Foreground = GetBrush("SuccessSolidBrush"),
         };
         var badgeText = new TextBlock
@@ -205,7 +204,7 @@ public partial class AndroidApp
 
         _settingsApplyButton = new Avalonia.Controls.Button
         {
-            Content = Localization.ApplyNowReloadVpn,
+            Content = IconText(UiIcons.RefreshCw, Localization.ApplyNowReloadVpn, 14),
             FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(10, 5),
@@ -600,6 +599,8 @@ public partial class AndroidApp
             FontSize = UiScale.Fs(10),
             TextWrapping = TextWrapping.Wrap,
         };
+        var batteryStatusRow = WithStatusIcon(_reliabilityBatteryStatusLabel, out var batteryStatusIcon);
+        _reliabilityBatteryStatusIcon = batteryStatusIcon;
         var batteryHint = new TextBlock
         {
             Text = Localization.ReliabilityBatteryOptHint,
@@ -623,7 +624,7 @@ public partial class AndroidApp
             Children =
             {
                 batteryTitle,
-                _reliabilityBatteryStatusLabel,
+                batteryStatusRow,
                 batteryHint,
                 _reliabilityBatteryButton,
             },

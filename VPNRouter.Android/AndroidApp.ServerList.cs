@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using IconView = VPNRouter.UI.Controls.IconView;
 
 namespace VPNRouter.Android;
 
@@ -40,6 +41,7 @@ public partial class AndroidApp
 
     private TextBox? _srvCustomJsonInput;
     private TextBlock? _srvCustomJsonStatus;
+    private IconView? _srvCustomJsonStatusIcon;
     private Avalonia.Controls.Button? _srvCustomJsonSaveBtn;
     private Avalonia.Controls.Button? _srvCustomJsonClearBtn;
     private Avalonia.Controls.Button? _srvCustomJsonValidateBtn;
@@ -338,12 +340,14 @@ public partial class AndroidApp
             Margin = new Thickness(0, 8, 0, 0),
             IsVisible = false,
         };
+        var customJsonStatusRow = WithStatusIcon(_srvCustomJsonStatus, out var customJsonStatusIcon);
+        _srvCustomJsonStatusIcon = customJsonStatusIcon;
 
         var stack = new StackPanel
         {
             Spacing = 0,
             Margin = new Thickness(12, 4, 12, 12),
-            Children = { _srvCustomJsonExplainer, _srvCustomJsonInput, btnRow, _srvCustomJsonStatus },
+            Children = { _srvCustomJsonExplainer, _srvCustomJsonInput, btnRow, customJsonStatusRow },
         };
         return stack;
     }
@@ -412,7 +416,7 @@ public partial class AndroidApp
 
         _srvAddBtn = new Avalonia.Controls.Button
         {
-            Content = Localization.AdvServersAddServers,
+            Content = IconText(UiIcons.Plus, Localization.AdvServersAddServers, 14),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(14, 5),
@@ -500,6 +504,7 @@ public partial class AndroidApp
         {
             _srvCustomJsonStatus.Text = Localization.CcSaveStatusEmpty;
             _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+            SetStatusIcon(_srvCustomJsonStatusIcon, UiIcons.CircleX);
             return;
         }
 
@@ -512,16 +517,19 @@ public partial class AndroidApp
                     Localization.CcValidationFailed,
                     string.Join("; ", errors));
                 _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+                SetStatusIcon(_srvCustomJsonStatusIcon, UiIcons.CircleX);
                 return;
             }
             var (protocols, server) = VPNRouter.Core.Services.CustomConfigInjector.ParseConfigInfo(raw);
             _srvCustomJsonStatus.Text = string.Format(Localization.CcValidationOk, protocols, server);
             _srvCustomJsonStatus.Foreground = GetBrush("SuccessFgBrush");
+            SetStatusIcon(_srvCustomJsonStatusIcon, UiIcons.CircleCheck);
         }
         catch (Exception ex)
         {
             _srvCustomJsonStatus.Text = string.Format(Localization.CcValidationParseError, ex.Message);
             _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+            SetStatusIcon(_srvCustomJsonStatusIcon, UiIcons.CircleX);
         }
     }
 
@@ -535,6 +543,7 @@ public partial class AndroidApp
         {
             _srvCustomJsonStatus.Text = Localization.CcSaveStatusEmpty;
             _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+            SetStatusIcon(_srvCustomJsonStatusIcon, UiIcons.CircleX);
             return;
         }
 
@@ -550,10 +559,12 @@ public partial class AndroidApp
                 Localization.CcSaveStatusInvalid + " ({0})",
                 string.Join("; ", errors));
             _srvCustomJsonStatus.Foreground = GetBrush("WarningFgBrush");
+            SetStatusIcon(_srvCustomJsonStatusIcon, UiIcons.CircleAlert);
             return;
         }
         _srvCustomJsonStatus.Text = Localization.CcSaveStatusOk;
         _srvCustomJsonStatus.Foreground = GetBrush("SuccessFgBrush");
+        SetStatusIcon(_srvCustomJsonStatusIcon, UiIcons.CircleCheck);
     }
 
     private void OnSrvCustomJsonClearClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -864,8 +875,7 @@ public partial class AndroidApp
 
         var testBtn = new Avalonia.Controls.Button
         {
-            Content = "⟳",
-            FontSize = UiScale.Fs(13),
+            Content = IconContent(UiIcons.RefreshCw, 18),
             Width = 40,
             Height = 40,
             Padding = new Thickness(0),
@@ -1188,7 +1198,7 @@ public partial class AndroidApp
             _srvRemoveBtn.Content = Localization.AdvServersRemove;
             ToolTip.SetTip(_srvRemoveBtn, Localization.TipDeleteServer);
         }
-        if (_srvAddBtn is not null) _srvAddBtn.Content = Localization.AdvServersAddServers;
+        if (_srvAddBtn is not null) _srvAddBtn.Content = IconText(UiIcons.Plus, Localization.AdvServersAddServers, 14);
         if (_srvCustomJsonExplainer is not null)
             _srvCustomJsonExplainer.Text = Localization.AdvServersCustomJsonExplainer;
         if (_srvCustomJsonInput is not null)

@@ -8,6 +8,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using UiIcons = VPNRouter.Core.Services.UiIcons;
 
 namespace VPNRouter.Android;
 
@@ -165,7 +166,7 @@ public partial class AndroidApp
 
         _advSimpleToggleBtn = new Avalonia.Controls.Button
         {
-            Content = Localization.AdvSimpleToggle,
+            Content = IconText(UiIcons.ChevronLeft, Localization.AdvSimpleToggle, 14),
             Padding = new Thickness(8, 4),
             MinHeight = 0,
             FontSize = UiScale.Fs(11),
@@ -181,11 +182,10 @@ public partial class AndroidApp
 
         _advKebabMenuBtn = new Avalonia.Controls.Button
         {
-            Content = "⋮",
-            FontSize = UiScale.Fs(22),
-            FontWeight = FontWeight.Bold,
-            Width = 32,
-            Height = 32,
+            Content = IconContent(UiIcons.EllipsisVertical, 22),
+            Width = 44,
+            Height = 44,
+            Margin = new Thickness(0, -6, -8, -6),
             Padding = new Thickness(0),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
@@ -252,7 +252,7 @@ public partial class AndroidApp
 
         _advFooterConnectBtn = new Avalonia.Controls.Button
         {
-            Content = Localization.StartVPN,
+            Content = IconText(UiIcons.Play, Localization.StartVPN, 14),
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.Bold,
             Padding = new Thickness(14, 5),
@@ -516,7 +516,7 @@ public partial class AndroidApp
         if (_advBrandTitle is not null)
             _advBrandTitle.Text = Localization.BrandTitle;
         if (_advSimpleToggleBtn is not null)
-            _advSimpleToggleBtn.Content = Localization.AdvSimpleToggle;
+            _advSimpleToggleBtn.Content = IconText(UiIcons.ChevronLeft, Localization.AdvSimpleToggle, 14);
         foreach (var kv in _advShellTabButtons)
         {
             if (kv.Value.Tag is AdvTabVisual visual)
@@ -533,7 +533,7 @@ public partial class AndroidApp
             }
         }
         if (_settingsApplyButton is not null)
-            _settingsApplyButton.Content = Localization.ApplyNowReloadVpn;
+            _settingsApplyButton.Content = IconText(UiIcons.RefreshCw, Localization.ApplyNowReloadVpn, 14);
         try
         {
             if (_advShellContentHost is not null)
@@ -574,8 +574,8 @@ public partial class AndroidApp
         if (_advFooterConnectBtn is not null)
         {
             _advFooterConnectBtn.Content = connected
-                ? Localization.StopVPN
-                : Localization.StartVPN;
+                ? IconText(UiIcons.Square, Localization.StopVPN, 14)
+                : IconText(UiIcons.Play, Localization.StartVPN, 14);
         }
     }
 
