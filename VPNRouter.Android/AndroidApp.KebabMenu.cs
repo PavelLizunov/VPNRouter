@@ -33,13 +33,18 @@ public partial class AndroidApp
     {
         if (btn is null) return;
         if (!_menuItemIcons.TryGetValue(btn, out var icon)) { btn.Content = text; return; }
-        if (btn.Content is IconLabel label) label.Text = text;
-        else
-        {
-            var content = IconText(icon, text, UiScale.Ic(16));
-            content.TextBlock.TextWrapping = TextWrapping.Wrap;
-            btn.Content = content;
-        }
+        if (btn.Tag is TextBlock existing) { existing.Text = text; return; }
+
+        // A grid with a star column for the text, so a long label wraps inside the menu instead of being cut off.
+        var iconView = IconContent(icon, UiScale.Ic(16));
+        iconView.VerticalAlignment = VerticalAlignment.Center;
+        var textBlock = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 6 };
+        Grid.SetColumn(textBlock, 1);
+        grid.Children.Add(iconView);
+        grid.Children.Add(textBlock);
+        btn.Tag = textBlock;
+        btn.Content = grid;
     }
 
     private Avalonia.Controls.Button MakeMenuItem(

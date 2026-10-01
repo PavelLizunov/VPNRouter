@@ -389,11 +389,12 @@ public partial class AndroidApp
         _srvVlessUriInput = new TextBox
         {
             Watermark = Localization.WmVlessUri,
-            FontFamily = new FontFamily("monospace"),
-            FontSize = UiScale.Fs(10),
-            Padding = new Thickness(6, 4),
+            FontSize = UiScale.Fs(12),
+            MinHeight = 44,
+            Padding = new Thickness(10, 8),
+            VerticalContentAlignment = VerticalAlignment.Center,
             AcceptsReturn = false,
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = GetBrush("SurfaceSunkenBrush"),
             BorderBrush = GetBrush("BorderSubtleBrush"),
             BorderThickness = new Thickness(1),
@@ -403,7 +404,9 @@ public partial class AndroidApp
         {
             Content = Localization.AdvServersRemove,
             FontSize = UiScale.Fs(11),
-            Padding = new Thickness(14, 5),
+            MinHeight = 48,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(16, 8),
             Background = GetBrush("SurfaceRaisedBrush"),
             BorderBrush = GetBrush("BorderDefaultBrush"),
             BorderThickness = new Thickness(1),
@@ -416,10 +419,14 @@ public partial class AndroidApp
 
         _srvAddBtn = new Avalonia.Controls.Button
         {
-            Content = IconText(UiIcons.Plus, Localization.AdvServersAddServers, 14),
-            FontSize = UiScale.Fs(11),
+            Content = IconText(UiIcons.Plus, Localization.AdvServersAddServers, 16),
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(14, 5),
+            MinHeight = 48,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(14, 8),
             Background = GetBrush("AccentSolidBrush"),
             Foreground = GetBrush("AccentOnSolidBrush"),
             BorderThickness = new Thickness(0),
@@ -433,18 +440,23 @@ public partial class AndroidApp
             Spacing = 6,
             Children = { _srvTestAllBtn, _srvDeepVerifyBtn },
         };
-        var actionBottomRow = new Grid
+        // The address gets a full-width row of its own (a narrow field next to two buttons could not hold a link),
+        // then Remove and Add side by side.
+        var actionButtons = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
-            ColumnSpacing = 6,
-            Margin = new Thickness(0, 6, 0, 0),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            ColumnSpacing = 8,
         };
-        Grid.SetColumn(_srvVlessUriInput, 0);
-        Grid.SetColumn(_srvRemoveBtn, 1);
-        Grid.SetColumn(_srvAddBtn, 2);
-        actionBottomRow.Children.Add(_srvVlessUriInput);
-        actionBottomRow.Children.Add(_srvRemoveBtn);
-        actionBottomRow.Children.Add(_srvAddBtn);
+        Grid.SetColumn(_srvRemoveBtn, 0);
+        Grid.SetColumn(_srvAddBtn, 1);
+        actionButtons.Children.Add(_srvRemoveBtn);
+        actionButtons.Children.Add(_srvAddBtn);
+        var actionBottomRow = new StackPanel
+        {
+            Spacing = 8,
+            Margin = new Thickness(0, 8, 0, 0),
+            Children = { _srvVlessUriInput, actionButtons },
+        };
 
         var stack = new StackPanel
         {
