@@ -364,6 +364,7 @@ public partial class AndroidApp
             return;
         }
         _kebabPopup.PlacementTarget = _advKebabMenuBtn;
+        UpdateMenuAdvancedToggle();
         _kebabPopup.IsOpen = true;
         _resetConfirmPending = false;
         if (_menuResetSettingsItem is not null)
