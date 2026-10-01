@@ -989,88 +989,12 @@ public partial class MainWindowViewModel
         {
             var zapretDir = VPNRouter.Core.Services.ZapretUpdater.ZapretDir;
 
-            try
-            {
-                if (VPNRouter.Core.Services.ZapretAutoStrategy.HasOrphanedIpsetFlag(zapretDir))
-                {
-                    VPNRouter.Core.Services.ZapretAutoStrategy.RestoreIpsetAfterKill(zapretDir, _logger);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[VM] Pre-probe ipset cleanup failed (continuing anyway)");
-            }
+            RestoreOrphanedIpsetBeforeProbe(zapretDir);
 
-            var cached = _forceFreshProbe
-                ? null
-                : VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
-            if (cached != null && cached.IsRecentAndReliable())
-            {
-                _logger.Information(
-                    "[VM] ZapretOneTap cache hit: trying {Strategy} (success count {N})",
-                    cached.Strategy, cached.SuccessRunCount);
+            if (await TryStartFromProbeCacheAsync())
+                return;
 
-                ZapretProbeStrategy = cached.Strategy;
-                ZapretProbeIndex = 0;
-                ZapretProbeTotal = 1;
-                var hit = await TryApplyCachedWinnerAsync(cached.Strategy);
-                if (hit)
-                {
-                    VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(
-                        cached.Strategy, cached.TargetsPassed, cached.TargetsTotal, _logger);
-                    return;
-                }
-                else
-                {
-                    VPNRouter.Core.Services.ZapretProbeCache.RecordFailure(cached.Strategy, _logger);
-                    _logger.Information("[VM] Cache miss path — running full sweep");
-                }
-            }
-            else if (cached != null)
-            {
-                _logger.Information(
-                    "[VM] Cache entry stale or unreliable (last sweep {LastSweep}, fails {Fails}) — running full sweep",
-                    cached.LastSweepAt, cached.LastFailureCount);
-            }
-
-            var flowsealProgress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>(p =>
-            {
-                if (!string.IsNullOrEmpty(p.StrategyName))
-                {
-                    ZapretProbeIndex = p.CurrentIndex - 1;
-                    ZapretProbeTotal = p.TotalCount;
-                    ZapretProbeStrategy = p.StrategyName;
-                    ZapretProbePassCount = 0;
-                    ZapretProbeTotalCount = 0;
-                    _logger.Information("[VM] ZapretOneTap Flowseal probe: {Index}/{Total} {Name}",
-                        p.CurrentIndex, p.TotalCount, p.StrategyName);
-                }
-                else if (p.TotalChecks > 0)
-                {
-                    ZapretProbePassCount = p.OkCount;
-                    ZapretProbeTotalCount = p.TotalChecks;
-                    if (p.TotalChecks % 6 == 0)
-                    {
-                        _logger.Information(
-                            "[VM] ZapretOneTap Flowseal score: {Ok}/{Total} on {Strategy}",
-                            p.OkCount, p.TotalChecks, ZapretProbeStrategy);
-                    }
-                }
-            });
-
-            _zapretProbeCts?.Dispose();
-            _zapretProbeCts = new CancellationTokenSource();
-            ZapretAutoStrategy.FlowsealSweepResult sweep;
-            try
-            {
-                sweep = await FlowsealProbe(
-                    zapretDir, flowsealProgress, _logger, _zapretProbeCts.Token);
-            }
-            finally
-            {
-                _zapretProbeCts.Dispose();
-                _zapretProbeCts = null;
-            }
+            var sweep = await RunFlowsealSweepAsync(zapretDir);
 
             LastProbeLogPath = sweep.ProbeLogPath;
             if (sweep.EarlyWinner)
@@ -1082,102 +1006,9 @@ public partial class MainWindowViewModel
             }
 
             if (sweep.Winner != null)
-            {
-                static string NormStrategy(string? s) =>
-                    (s ?? string.Empty).Trim().TrimEnd().Replace(".bat", "",
-                        StringComparison.OrdinalIgnoreCase).Trim();
-                var winnerNorm = NormStrategy(sweep.Winner);
-                var parsed = _parsedStrategies.FirstOrDefault(s =>
-                        string.Equals(NormStrategy(s.Name), winnerNorm, StringComparison.OrdinalIgnoreCase));
-                if (parsed != null)
-                {
-                    try
-                    {
-                        if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
-                            _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
-                        else
-                            _zapret!.Start(parsed.Arguments);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Error(ex, "[VM] Failed to start winning strategy {Name}", sweep.Winner);
-                        IsZapretFallback = true;
-                        ZapretEnabled = false;
-                        ZapretStatus = $"Error starting {sweep.Winner}: {ex.Message}";
-                        return;
-                    }
-
-                    await Task.Delay(1500);
-                    var winwsPid = ZapretManager.WinwsPid;
-                    if (_zapret.IsRunning || winwsPid != null)
-                    {
-                        ZapretWinningStrategy = sweep.Winner;
-                        ZapretEnabled = true;
-                        var pid = winwsPid ?? _zapret.Pid;
-                        ZapretStatus = IsRussian
-                            ? $"Работает [{sweep.Winner}] (PID {pid})"
-                            : $"Running [{sweep.Winner}] (PID {pid})";
-
-                        var idx = ZapretStrategies.IndexOf(sweep.Winner);
-                        if (idx >= 0) ZapretStrategyIndex = idx;
-                        var perStrategy = sweep.PerStrategyResults != null
-                            ? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(
-                                sweep.PerStrategyResults, StringComparer.Ordinal)
-                            : new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(StringComparer.Ordinal);
-                        VPNRouter.Core.Services.ZapretProbeCache.RecordSweepResults(
-                            sweep.Winner,
-                            ZapretProbePassCount,
-                            ZapretProbeTotalCount,
-                            perStrategy,
-                            _logger);
-                        RefreshZapretStrategiesDisplay();
-                        NotifyZapretSummaryChanged();
-                        SaveSettings();
-                    }
-                    else
-                    {
-                        IsZapretFallback = true;
-                        ZapretEnabled = false;
-                        ZapretStatus = IsRussian
-                            ? $"Стратегия {sweep.Winner} не запустилась"
-                            : $"Strategy {sweep.Winner} failed to start";
-                    }
-                }
-                else
-                {
-                    _logger.Warning("[VM] Flowseal winner {Name} not in parsed list", sweep.Winner);
-                    IsZapretFallback = true;
-                    ZapretEnabled = false;
-                    ZapretStatus = $"Winner {sweep.Winner} not found in strategy list";
-                }
-            }
+                await StartSweepWinnerAsync(sweep);
             else
-            {
-                IsZapretFallback = true;
-                ZapretEnabled = false;
-                ZapretStatus = sweep.Diagnostic switch
-                {
-                    "not_admin" => IsRussian
-                        ? "Нужны права администратора для подбора стратегии. Перезапустите VPNRouter от админа."
-                        : "Administrator rights required to probe strategies. Restart VPNRouter as admin.",
-                    "sweep_timeout" => IsRussian
-                        ? "Подбор стратегии превысил 10 минут. Проверьте интернет и попробуйте ещё раз."
-                        : "Strategy probe exceeded 10 min cap. Check network and retry.",
-                    "missing_script" => IsRussian
-                        ? "Скрипт Flowseal не найден. Обнови Zapret через «Тонкую настройку»."
-                        : "Flowseal script missing. Update Zapret via Advanced settings.",
-                    "canceled" => IsRussian
-                        ? "Подбор отменён."
-                        : "Probe canceled.",
-                    _ => Strings.ZapretOneTapAllFailedToast,
-                };
-
-                if (sweep.ErrorLines is { Count: > 0 })
-                {
-                    foreach (var errLine in sweep.ErrorLines)
-                        _logger.Warning("[VM] Flowseal script: {Line}", errLine);
-                }
-            }
+                ReportSweepWithoutWinner(sweep);
         }
         catch (Exception ex)
         {
@@ -1205,6 +1036,202 @@ public partial class MainWindowViewModel
             ZapretProbeStrategy = string.Empty;
             StopZapretProbeElapsedTimer();
         }
+    }
+
+
+    private void RestoreOrphanedIpsetBeforeProbe(string zapretDir)
+    {
+    try
+    {
+        if (VPNRouter.Core.Services.ZapretAutoStrategy.HasOrphanedIpsetFlag(zapretDir))
+        {
+            VPNRouter.Core.Services.ZapretAutoStrategy.RestoreIpsetAfterKill(zapretDir, _logger);
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.Warning(ex, "[VM] Pre-probe ipset cleanup failed (continuing anyway)");
+    }
+    }
+
+    private async Task<bool> TryStartFromProbeCacheAsync()
+    {
+    var cached = _forceFreshProbe
+        ? null
+        : VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+    if (cached != null && cached.IsRecentAndReliable())
+    {
+        _logger.Information(
+            "[VM] ZapretOneTap cache hit: trying {Strategy} (success count {N})",
+            cached.Strategy, cached.SuccessRunCount);
+
+        ZapretProbeStrategy = cached.Strategy;
+        ZapretProbeIndex = 0;
+        ZapretProbeTotal = 1;
+        var hit = await TryApplyCachedWinnerAsync(cached.Strategy);
+        if (hit)
+        {
+            VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(
+                cached.Strategy, cached.TargetsPassed, cached.TargetsTotal, _logger);
+            return true;
+        }
+        else
+        {
+            VPNRouter.Core.Services.ZapretProbeCache.RecordFailure(cached.Strategy, _logger);
+            _logger.Information("[VM] Cache miss path — running full sweep");
+        }
+    }
+    else if (cached != null)
+    {
+        _logger.Information(
+            "[VM] Cache entry stale or unreliable (last sweep {LastSweep}, fails {Fails}) — running full sweep",
+            cached.LastSweepAt, cached.LastFailureCount);
+    }
+
+        return false;
+    }
+
+    private async Task<ZapretAutoStrategy.FlowsealSweepResult> RunFlowsealSweepAsync(string zapretDir)
+    {
+    var flowsealProgress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>(p =>
+    {
+        if (!string.IsNullOrEmpty(p.StrategyName))
+        {
+            ZapretProbeIndex = p.CurrentIndex - 1;
+            ZapretProbeTotal = p.TotalCount;
+            ZapretProbeStrategy = p.StrategyName;
+            ZapretProbePassCount = 0;
+            ZapretProbeTotalCount = 0;
+            _logger.Information("[VM] ZapretOneTap Flowseal probe: {Index}/{Total} {Name}",
+                p.CurrentIndex, p.TotalCount, p.StrategyName);
+        }
+        else if (p.TotalChecks > 0)
+        {
+            ZapretProbePassCount = p.OkCount;
+            ZapretProbeTotalCount = p.TotalChecks;
+            if (p.TotalChecks % 6 == 0)
+            {
+                _logger.Information(
+                    "[VM] ZapretOneTap Flowseal score: {Ok}/{Total} on {Strategy}",
+                    p.OkCount, p.TotalChecks, ZapretProbeStrategy);
+            }
+        }
+    });
+
+    _zapretProbeCts?.Dispose();
+    _zapretProbeCts = new CancellationTokenSource();
+    ZapretAutoStrategy.FlowsealSweepResult sweep;
+    try
+    {
+        sweep = await FlowsealProbe(
+            zapretDir, flowsealProgress, _logger, _zapretProbeCts.Token);
+    }
+    finally
+    {
+        _zapretProbeCts.Dispose();
+        _zapretProbeCts = null;
+    }
+
+        return sweep;
+    }
+
+    private async Task StartSweepWinnerAsync(ZapretAutoStrategy.FlowsealSweepResult sweep)
+    {
+    static string NormStrategy(string? s) =>
+        (s ?? string.Empty).Trim().TrimEnd().Replace(".bat", "",
+            StringComparison.OrdinalIgnoreCase).Trim();
+    var winnerNorm = NormStrategy(sweep.Winner);
+    var parsed = _parsedStrategies.FirstOrDefault(s =>
+            string.Equals(NormStrategy(s.Name), winnerNorm, StringComparison.OrdinalIgnoreCase));
+    if (parsed != null)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
+                _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
+            else
+                _zapret!.Start(parsed.Arguments);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] Failed to start winning strategy {Name}", sweep.Winner);
+            IsZapretFallback = true;
+            ZapretEnabled = false;
+            ZapretStatus = $"Error starting {sweep.Winner}: {ex.Message}";
+            return;
+        }
+
+        await Task.Delay(1500);
+        var winwsPid = ZapretManager.WinwsPid;
+        if (_zapret.IsRunning || winwsPid != null)
+        {
+            ZapretWinningStrategy = sweep.Winner;
+            ZapretEnabled = true;
+            var pid = winwsPid ?? _zapret.Pid;
+            ZapretStatus = IsRussian
+                ? $"Работает [{sweep.Winner}] (PID {pid})"
+                : $"Running [{sweep.Winner}] (PID {pid})";
+
+            var idx = ZapretStrategies.IndexOf(sweep.Winner);
+            if (idx >= 0) ZapretStrategyIndex = idx;
+            var perStrategy = sweep.PerStrategyResults != null
+                ? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(
+                    sweep.PerStrategyResults, StringComparer.Ordinal)
+                : new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(StringComparer.Ordinal);
+            VPNRouter.Core.Services.ZapretProbeCache.RecordSweepResults(
+                sweep.Winner,
+                ZapretProbePassCount,
+                ZapretProbeTotalCount,
+                perStrategy,
+                _logger);
+            RefreshZapretStrategiesDisplay();
+            NotifyZapretSummaryChanged();
+            SaveSettings();
+        }
+        else
+        {
+            IsZapretFallback = true;
+            ZapretEnabled = false;
+            ZapretStatus = IsRussian
+                ? $"Стратегия {sweep.Winner} не запустилась"
+                : $"Strategy {sweep.Winner} failed to start";
+        }
+    }
+    else
+    {
+        _logger.Warning("[VM] Flowseal winner {Name} not in parsed list", sweep.Winner);
+        IsZapretFallback = true;
+        ZapretEnabled = false;
+        ZapretStatus = $"Winner {sweep.Winner} not found in strategy list";
+    }
+    }
+
+    private void ReportSweepWithoutWinner(ZapretAutoStrategy.FlowsealSweepResult sweep)
+    {
+    IsZapretFallback = true;
+    ZapretEnabled = false;
+    ZapretStatus = sweep.Diagnostic switch
+    {
+        "not_admin" => IsRussian
+            ? "Нужны права администратора для подбора стратегии. Перезапустите VPNRouter от админа."
+            : "Administrator rights required to probe strategies. Restart VPNRouter as admin.",
+        "sweep_timeout" => IsRussian
+            ? "Подбор стратегии превысил 10 минут. Проверьте интернет и попробуйте ещё раз."
+            : "Strategy probe exceeded 10 min cap. Check network and retry.",
+        "missing_script" => IsRussian
+            ? "Скрипт Flowseal не найден. Обнови Zapret через «Тонкую настройку»."
+            : "Flowseal script missing. Update Zapret via Advanced settings.",
+        "canceled" => IsRussian
+            ? "Подбор отменён."
+            : "Probe canceled.",
+        _ => Strings.ZapretOneTapAllFailedToast,
+    };
+
+    if (sweep.ErrorLines is { Count: > 0 })
+    {
+        foreach (var errLine in sweep.ErrorLines)
+            _logger.Warning("[VM] Flowseal script: {Line}", errLine);
+    }
     }
 
     private async Task<bool> TryApplyCachedWinnerAsync(string strategy)
