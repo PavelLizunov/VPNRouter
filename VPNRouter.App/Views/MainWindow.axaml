@@ -93,6 +93,37 @@
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         </Style>
 
+        <Style Selector="ListBoxItem.main-tab">
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:selected:focus /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+        </Style>
+
         <Style Selector="Button.primary-cta">
             <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -583,13 +614,43 @@
                             <StackPanel Orientation="Horizontal" Spacing="2"/>
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
-                    <ListBoxItem Content="{Binding LblTabManual}"      Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabApps}"        Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabTools}"       Padding="5,5" FontSize="12" FontWeight="SemiBold"
-                                 IsVisible="{Binding IsToolsAvailable}"/>
-                    <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="5,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabManual}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <icons:Pictogram Id="tab-servers" Width="14" Height="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding LblTabManual}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabSubscribe}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <icons:Pictogram Id="tab-subscribe" Width="14" Height="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding LblTabSubscribe}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabNetwork}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <icons:Pictogram Id="tab-settings" Width="14" Height="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding LblTabNetwork}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabApps}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <icons:Pictogram Id="tab-apps" Width="14" Height="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding LblTabApps}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabTools}"
+                                 IsVisible="{Binding IsToolsAvailable}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <icons:Pictogram Id="tab-tools" Width="14" Height="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding LblTabTools}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListBoxItem>
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabFreeConfigs}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <icons:Pictogram Id="tab-public" Width="14" Height="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding LblTabFreeConfigs}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ListBoxItem>
                 </ListBox>
             </ScrollViewer>
 
