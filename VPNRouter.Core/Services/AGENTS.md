@@ -54,6 +54,10 @@ reconnect. Non-Windows listener startup is inactive.
 - [Platform instructions](../Platform/AGENTS.md): firewall mode boundaries and
   DNS adapter navigation. `FirewallManager.cs` is the Windows implementation;
   the split-driver seam is separate in `SplitTunnelDriverManager.cs`.
+- `SystemCleanup.cs`: the uninstall-time cleanup behind `VPNRouter.CLI cleanup` (firewall rules by the project prefixes,
+  saved DNS hardening, VPNRouter's own split-tunnel and WinDivert driver services, the current user's Run value). It only
+  touches a service whose binary lives in a `\vpnrouter\` folder, so another VPN's drivers are left alone. All system
+  calls go through `IProcessRunner` and `ICleanupRegistry` so the tests use fakes.
 - `SettingsLoader.cs`, `SettingsMigrator.cs` and `ProfileManager.cs`: persisted
   settings, migrations and profile loading.
 - `FreeConfigs/`: aggregation, cache and verification pipeline.

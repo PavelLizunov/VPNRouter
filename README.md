@@ -262,16 +262,9 @@ This is a VPN client — you should verify the code before trusting it.
 
 Found a security issue? Please report it **privately** — see [`SECURITY.md`](SECURITY.md). Don't open a public issue for security problems.
 
-## Code signing policy
+## Code signing
 
-**Status: not signed yet.** The Windows binaries of the current releases carry no Authenticode signature; verify downloads with the `.sha256` files. The project is applying to the SignPath Foundation for free code signing. This section is the policy that applies to signed releases from the day the application is approved.
-
-Free code signing provided by [SignPath.io](https://signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
-- **What is signed.** Only files built from this repository's own source by the GitHub Actions workflow [`sign-windows.yml`](.github/workflows/sign-windows.yml) from an immutable release tag, each release approved manually in SignPath: the VPNRouter executables and libraries (`VPNRouter.App`, `VPNRouter.GUI`, `VPNRouter.CLI`, `VPNRouter.Service`, `VPNRouter.Core`) and, later, the Windows installer. Third-party components (the Mullvad split-tunnel driver, libcronet, Zapret/WinDivert downloads and other upstream binaries) are not signed with this certificate; see [`NOTICE.md`](NOTICE.md).
-- **Team roles.** Author, reviewer and approver: [@PavelLizunov](https://github.com/PavelLizunov), the project owner and only maintainer. Every change, including changes prepared with AI coding assistants and dependency bots, reaches `main` through a pull request that must pass the required checks (`test`, `grep`) on an up-to-date branch; the maintainer merges it and approves each signing request.
-- **Privacy policy.** See [`PRIVACY.md`](PRIVACY.md): no telemetry or analytics; the program connects only to the servers you configure, to GitHub for update checks and the Free Configs pool, and, as a fallback, to `ip-api.com`.
-- **System changes and uninstall.** What VPNRouter changes in Windows (firewall rules, DNS settings, drivers, optional service and autostart) and how it is removed is listed in [`docs/code-signing-application.md`](docs/code-signing-application.md#what-the-software-changes-on-the-system).
+The Windows binaries of the releases are **not code-signed** (no Authenticode signature), so Windows SmartScreen or an antivirus may warn about them. Verify every download with the `.sha256` file next to it. Code signing is not planned for now (owner decision, 2026-10-01); [`docs/code-signing-signpath-runbook.md`](docs/code-signing-signpath-runbook.md) keeps the steps in case that changes.
 
 ## Credits
 
