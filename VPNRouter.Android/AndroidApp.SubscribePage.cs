@@ -120,12 +120,16 @@ public partial class AndroidApp
             Background = GetBrush("SurfaceAppBrush"),
         };
 
+        // Two stacked rows instead of four cramped columns: name, then the address with its scan button, then Add as a
+        // full-width button. Every control is at least 44 dp high.
         _subsNewName = new TextBox
         {
             Watermark = Localization.AdvSubscribeNameLabel,
-            FontSize = UiScale.Fs(10),
-            Padding = new Thickness(6, 4),
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            FontSize = UiScale.Fs(12),
+            MinHeight = 44,
+            Padding = new Thickness(10, 8),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = GetBrush("SurfaceSunkenBrush"),
             BorderBrush = GetBrush("BorderSubtleBrush"),
             BorderThickness = new Thickness(1),
@@ -133,20 +137,25 @@ public partial class AndroidApp
         _subsNewUrl = new TextBox
         {
             Watermark = Localization.AdvSubscribeUrlLabel,
-            FontSize = UiScale.Fs(10),
-            FontFamily = new FontFamily("monospace"),
-            Padding = new Thickness(6, 4),
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            FontSize = UiScale.Fs(12),
+            MinHeight = 44,
+            Padding = new Thickness(10, 8),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = GetBrush("SurfaceSunkenBrush"),
             BorderBrush = GetBrush("BorderSubtleBrush"),
             BorderThickness = new Thickness(1),
         };
         _subsAddBtn = new Avalonia.Controls.Button
         {
-            Content = IconText(UiIcons.Plus, Localization.AddSubscription, 14),
-            FontSize = UiScale.Fs(11),
+            Content = IconText(UiIcons.Plus, Localization.AddSubscription, 16),
+            FontSize = UiScale.Fs(12),
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(12, 5),
+            MinHeight = 48,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(12, 8),
             Background = GetBrush("AccentSolidBrush"),
             Foreground = GetBrush("AccentOnSolidBrush"),
             BorderThickness = new Thickness(0),
@@ -156,31 +165,35 @@ public partial class AndroidApp
 
         var subsQrBtn = new Avalonia.Controls.Button
         {
-            Content = IconContent(UiIcons.ScanQrCode, 20),
+            Content = IconContent(UiIcons.ScanQrCode, UiScale.Ic(22)),
             Padding = new Thickness(0),
-            Width = 40,
+            Width = 48,
+            MinHeight = 44,
             Background = GetBrush("AccentBgSubtleBrush"),
             Foreground = GetBrush("AccentFgBrush"),
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
         };
         ToolTip.SetTip(subsQrBtn, Localization.SmpScanQrButton);
         subsQrBtn.Click += OnSubscribeQrScanClicked;
 
-        var addFormRow = new Grid
+        var urlRow = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("100,*,Auto,Auto"),
-            ColumnSpacing = 4,
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
         };
-        Grid.SetColumn(_subsNewName, 0);
-        Grid.SetColumn(_subsNewUrl, 1);
-        Grid.SetColumn(subsQrBtn, 2);
-        Grid.SetColumn(_subsAddBtn, 3);
-        addFormRow.Children.Add(_subsNewName);
-        addFormRow.Children.Add(_subsNewUrl);
-        addFormRow.Children.Add(subsQrBtn);
-        addFormRow.Children.Add(_subsAddBtn);
+        Grid.SetColumn(_subsNewUrl, 0);
+        Grid.SetColumn(subsQrBtn, 1);
+        urlRow.Children.Add(_subsNewUrl);
+        urlRow.Children.Add(subsQrBtn);
+
+        var addFormRow = new StackPanel
+        {
+            Spacing = 8,
+            Children = { _subsNewName, urlRow, _subsAddBtn },
+        };
 
         var addFormBorder = new Border
         {
@@ -315,7 +328,7 @@ public partial class AndroidApp
             FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(12, 6),
-            MinHeight = 36,
+            MinHeight = 44,
             VerticalContentAlignment = VerticalAlignment.Center,
             Background = GetBrush("AccentBgMutedBrush"),
             Foreground = GetBrush("AccentFgBrush"),
@@ -331,7 +344,7 @@ public partial class AndroidApp
             FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(12, 6),
-            MinHeight = 36,
+            MinHeight = 44,
             VerticalContentAlignment = VerticalAlignment.Center,
             Background = GetBrush("AccentBgMutedBrush"),
             Foreground = GetBrush("AccentFgBrush"),
@@ -792,8 +805,8 @@ public partial class AndroidApp
             Content = IconContent(icon, UiScale.Ic(18)),
             FontSize = UiScale.Fs(11),
             Padding = new Thickness(2),
-            MinWidth = 40,
-            MinHeight = 40,
+            MinWidth = 44,
+            MinHeight = 44,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,

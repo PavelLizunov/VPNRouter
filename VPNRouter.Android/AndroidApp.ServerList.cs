@@ -360,7 +360,7 @@ public partial class AndroidApp
             FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(12, 6),
-            MinHeight = 36,
+            MinHeight = 44,
             VerticalContentAlignment = VerticalAlignment.Center,
             Background = GetBrush("AccentBgMutedBrush"),
             Foreground = GetBrush("AccentFgBrush"),
@@ -376,7 +376,7 @@ public partial class AndroidApp
             FontSize = UiScale.Fs(10),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(12, 6),
-            MinHeight = 36,
+            MinHeight = 44,
             VerticalContentAlignment = VerticalAlignment.Center,
             Background = GetBrush("AccentBgMutedBrush"),
             Foreground = GetBrush("AccentFgBrush"),
@@ -876,8 +876,8 @@ public partial class AndroidApp
         var testBtn = new Avalonia.Controls.Button
         {
             Content = IconContent(UiIcons.RefreshCw, 18),
-            Width = 40,
-            Height = 40,
+            Width = 44,
+            Height = 44,
             Padding = new Thickness(0),
             MinHeight = 0,
             HorizontalContentAlignment = HorizontalAlignment.Center,

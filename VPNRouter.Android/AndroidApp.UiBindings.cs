@@ -74,7 +74,7 @@ public partial class AndroidApp
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             Padding = new Thickness(14, 8),
-            MinHeight = 40,
+            MinHeight = 44,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
             BorderThickness = new Thickness(0),
