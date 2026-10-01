@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('identity', 'deploy', 'uia', 'state', 'diagnose', 'probe', 'lifecycle', 'logs', 'emergencycleanup', 'tuninventory', 'updateprobe', 'liveupdate')]

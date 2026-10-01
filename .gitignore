@@ -56,6 +56,8 @@ tools/*
 !tools/brat-route-plan.ps1
 !tools/brat-stability.ps1
 !tools/post-ship-verify.ps1
+!tools/post-ship-local.ps1
+!tools/brat-local-shim.ps1
 # Re-include: build-singbox-lx.ps1 (reproducible AmneziaWG sing-box-lx builder).
 !tools/build-singbox-lx.ps1
 # Re-include: build-singbox-lx.sh (darwin/linux port — Mac/Linux AWG+XHTTP core).

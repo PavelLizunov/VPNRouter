@@ -8,7 +8,9 @@ When release or platform facts change, update this file.
 
 - **Current stable:** v2.49.3.
 - **Latest published candidate:** v2.50.0-r13 (prerelease, 2026-10-01), not
-  promoted to stable and not yet through the full fixed-WINBRAT post-ship gate
+  promoted to stable. Its Windows binary passed the cold-cycle post-ship check
+  on WINBRAT (`tools/post-ship-local.ps1`); the screenshot gate and the
+  live-update gate were not run
   (see `plans/phase-r13-release-2.50.0-r13-2026-10-01.md`). It carries the
   Android fixes from the Pixel tests of r11 and r12 (safe area, tile status,
   scrolling, Back button, keyboard room, vector icons). Main declares
