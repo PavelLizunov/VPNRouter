@@ -41,6 +41,10 @@ Published 2026-10-01 as prerelease `v2.50.0-r13` (`--latest=false`; Latest stays
 - Tag CI green (macOS, Linux, Android, Windows update test, `dotnet test`). The dispatched draft integrity run passed with
   18 assets; strict `verify-last-commit-ci.ps1`: 8 green, 0 red.
 - After publication the `release: published` integrity, APT and Windows update test runs succeeded without a manual dispatch.
-- Post-ship gate (`tools/post-ship-verify.ps1`): NOT run (needs the owner's offline Windows PC). Run
-  `tools/post-ship-verify.ps1 -Version 2.50.0-r13 -Cycles 2` from that PC. The Pixel fixes are to be confirmed on the
+- Post-ship on WINBRAT (the owner lifted the ban on touching its VPN on 2026-10-01): the maintainer-PC verifier cannot be
+  used from a worker (credential file, local SDK), so the binary/dataplane part ran on the VM itself with
+  `tools/post-ship-local.ps1` (plans/phase-p1-post-ship-local-2026-10-01.md): identity, clean deploy of the published zip,
+  two cold UI connect/disconnect cycles (core started twice, TUN ready twice, no health failure, restart or failover),
+  `Status: PASS`, final state one GUI, no core, TUN absent. NOT run: the screenshot gate (6 known failing tests), the
+  previous-stable to candidate live-update gate (needed for a stable cut only). The Pixel fixes are to be confirmed on the
   owner's phone.

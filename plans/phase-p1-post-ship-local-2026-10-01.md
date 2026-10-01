@@ -34,4 +34,6 @@ on the missing BOM; both are fixed here.
 
 ## Outcome
 
-Pending (second run from the merged script, then merge).
+The committed driver was run once more from this branch against `v2.50.0-r13`: it resolved the tag commit, downloaded the
+zip (sha256 `56c387ec...`), deployed, ran two cold cycles and ended with `POSTSHIP-LOCAL: PASS`. The r13 brief and
+`CURRENT_STATE.md` now record the WINBRAT result.
