@@ -241,6 +241,7 @@ public sealed class PostShipVerifierContractTests
             var expectedAssets = new[]
             {
                 zipName, hashName, updateZipName, updateHashName,
+                $"VPNRouter-Setup-v{version}.exe", $"VPNRouter-Setup-v{version}.exe.sha256",
                 $"VPNRouter-v{version}-mac.dmg", $"VPNRouter-v{version}-mac.dmg.sha256",
                 $"VPNRouter-v{version}-mac.zip", $"VPNRouter-v{version}-mac.zip.sha256",
                 $"VPNRouter-v{version}-linux.tar.gz", $"VPNRouter-v{version}-linux.tar.gz.sha256",
@@ -288,6 +289,8 @@ public sealed class PostShipVerifierContractTests
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.sha256') -Destination (Join-Path $destination '{{hashName}}') -Force
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-update.zip') -Destination (Join-Path $destination '{{updateZipName}}') -Force
                 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-update.sha256') -Destination (Join-Path $destination '{{updateHashName}}') -Force
+                Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.zip') -Destination (Join-Path $destination "VPNRouter-Setup-v{{version}}.exe") -Force
+                Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.sha256') -Destination (Join-Path $destination "VPNRouter-Setup-v{{version}}.exe.sha256") -Force
                 foreach ($suffix in @('mac.dmg','mac.zip','linux.tar.gz','linux-amd64.deb','linux-x86_64.AppImage','android-arm64.apk')) {
                   Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.zip') -Destination (Join-Path $destination "VPNRouter-v{{version}}-$suffix") -Force
                   Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'source-install.sha256') -Destination (Join-Path $destination "VPNRouter-v{{version}}-$suffix.sha256") -Force
@@ -517,7 +520,7 @@ public sealed class PostShipVerifierContractTests
         Assert.Contains("$prefix/driver/mullvad-split-tunnel.inf", source, StringComparison.Ordinal);
         Assert.Contains("Assert-TrueSplitBundle -Path $FreshZipPath -ArchivePrefix 'app'", source, StringComparison.Ordinal);
         Assert.Contains("Assert-TrueSplitBundle -Path $FreshUpdateZipPath -ArchivePrefix '_bootstrap'", source, StringComparison.Ordinal);
-        Assert.Contains("The published release does not contain the exact expected 16 assets", source, StringComparison.Ordinal);
+        Assert.Contains("The published release does not contain the exact expected 18 assets", source, StringComparison.Ordinal);
         Assert.Contains("[System.Security.Cryptography.SHA256]::Create()", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Get-FileHash", source, StringComparison.Ordinal);
         Assert.Contains("$rootHash.Actual -ne $freshActual", source, StringComparison.Ordinal);

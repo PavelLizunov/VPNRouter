@@ -156,7 +156,7 @@ Use the release skills; do not reproduce their commands from memory.
   exact expected asset set.
 - `cut-stable`: only after an explicit `cut`, `ok` or `promote` command. Readiness
   requires a clean Release build, full green tests, exact-SHA CI, macOS/Linux/
-  Android/Windows-update gates, 16 expected assets, remote verification and the
+  Android/Windows-update gates, 18 expected assets, remote verification and the
   previous-stable -> candidate live-update test.
 - After every candidate ship, immediately run `post-ship-mcp-verify`. A tiny or
   Core-only change is not an exemption; mark it explicitly not UI-testable and

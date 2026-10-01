@@ -63,9 +63,9 @@ public sealed class ReleaseSafetyBehaviorTests
     [InlineData("candidate-wrong-channel", "published release with the exact tag and channel")]
     [InlineData("stable-wrong-channel", "published release with the exact tag and channel")]
     [InlineData("wrong-tag", "published release with the exact tag and channel")]
-    [InlineData("missing", "exact expected 16 assets")]
-    [InlineData("extra", "exact expected 16 assets")]
-    [InlineData("duplicate", "exact expected 16 assets")]
+    [InlineData("missing", "exact expected 18 assets")]
+    [InlineData("extra", "exact expected 18 assets")]
+    [InlineData("duplicate", "exact expected 18 assets")]
     [InlineData("missing-id", "Incomplete release asset identity")]
     [InlineData("missing-timestamp", "Incomplete release asset identity")]
     [InlineData("zero-size", "Incomplete release asset identity")]
@@ -77,7 +77,7 @@ public sealed class ReleaseSafetyBehaviorTests
             . (Read-Definition 'tools/post-ship-verify.ps1' 'Assert-ExactReleaseAssets')
             $Version = if ($Scenario.StartsWith('stable')) { '9.9.9' } else { '9.9.9-r1' }
             $Repo = 'fixture/no-network'
-            $names = @("VPNRouter-v$Version-win.zip", "VPNRouter-update-v$Version-win.zip",
+            $names = @("VPNRouter-v$Version-win.zip", "VPNRouter-update-v$Version-win.zip", "VPNRouter-Setup-v$Version.exe",
                 "VPNRouter-v$Version-mac.dmg", "VPNRouter-v$Version-mac.zip",
                 "VPNRouter-v$Version-linux.tar.gz", "VPNRouter-v$Version-linux-amd64.deb",
                 "VPNRouter-v$Version-linux-x86_64.AppImage", "VPNRouter-v$Version-android-arm64.apk")

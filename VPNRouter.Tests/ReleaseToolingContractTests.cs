@@ -31,7 +31,7 @@ public sealed class ReleaseToolingContractTests
 
         Assert.Contains("VPNRouter-v${EXPECTED_VERSION}-mac.dmg.sha256", workflow);
         Assert.Contains("VPNRouter-v${EXPECTED_VERSION}-mac.zip.sha256", workflow);
-        Assert.Contains("All 16 expected assets present", workflow);
+        Assert.Contains("All 18 expected assets present", workflow);
         Assert.DoesNotContain("All 14 expected assets present", workflow);
     }
 

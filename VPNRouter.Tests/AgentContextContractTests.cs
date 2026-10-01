@@ -109,7 +109,7 @@ public sealed class AgentContextContractTests
         Assert.Contains("git push -u origin HEAD", rolling);
         Assert.Contains("Do not push `HEAD:main`", rolling);
         Assert.Contains("Merge requires explicit owner authorization", rolling);
-        Assert.Contains("exactly 16 canonical assets", rolling);
+        Assert.Contains("exactly 18 canonical assets", rolling);
         Assert.Contains("tools/post-ship-verify.ps1", rolling);
         Assert.Contains("-Cycles 2", rolling);
         Assert.Contains("harness-test", rolling);
@@ -117,7 +117,7 @@ public sealed class AgentContextContractTests
         Assert.DoesNotContain("ship autonomously", rolling, StringComparison.OrdinalIgnoreCase);
 
         Assert.Contains("user explicitly authorizes", stable, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("exactly 16 canonical files", stable);
+        Assert.Contains("exactly 18 canonical files", stable);
         Assert.Contains("Mandatory WINBRAT live-update gate", stable);
         Assert.Contains("tools/check-open-p0.ps1", stable);
         Assert.Contains("harness-test", stable);

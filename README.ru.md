@@ -56,6 +56,8 @@ Apple Silicon. Авто-снимает Gatekeeper quarantine. При перво�
 iwr -useb https://vpn.ninitux.com/install.ps1 | iex
 ```
 Windows 10/11 x64. Авто-поднимается через UAC. Регистрирует Start Menu + Add/Remove Programs. Обновление: запустить ту же команду повторно. Удалить: Settings → Приложения → VPNRouter.
+
+Нужен обычный мастер установки? Скачайте `VPNRouter-Setup-v{version}.exe` со страницы [Releases](https://github.com/PavelLizunov/VPNRouter/releases). Он просит права администратора, ставит в `Program Files`, добавляет пункт в меню Пуск и деинсталлятор; ярлык на рабочем столе, автозапуск, фоновая служба и исключения Defender — необязательные галочки, по умолчанию все выключены. Установщик не подписан цифровой подписью, поэтому SmartScreen может предупредить: сначала сверьте его хеш с файлом `.sha256`.
 </td>
 </tr>
 <tr>
@@ -149,6 +151,7 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 |---|---|---|
 | `VPNRouter-v{version}-win.zip` | 🪟 Windows | Полный установщик (первая установка) |
 | `VPNRouter-update-v{version}-win.zip` | 🪟 Windows | Обновление только DLL (если уже на свежей версии) |
+| `VPNRouter-Setup-v{version}.exe` | 🪟 Windows | Мастер установки (Inno Setup, без цифровой подписи): ставит те же файлы, что и install-zip, с деинсталлятором и необязательными галочками автозапуска и службы |
 | `VPNRouter-*-win.zip.sha256` | 🪟 Windows | Компаньон-файл SHA256 — автоапдейтер проверяет хеш перед распаковкой (v2.15.8+) |
 | `VPNRouter-v{version}-mac.dmg` | 🍎 macOS | Drag-install DMG (Apple Silicon) с `InstallGuide.html` для одноразовой настройки sudoers |
 | `VPNRouter-v{version}-mac.zip` | 🍎 macOS | Сырой `.app`-бандл (для ручной установки) |
@@ -156,7 +159,7 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Портативный single-file билд. `chmod +x`, запуск, установка не нужна |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Сырой tarball (для ручной установки или упаковки в другие форматы) |
 | `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Подписанный ARM64 APK, API 23+. Собирается и подписывается в `build-android.yml` для каждого release-тега, затем публикуется в Releases и на [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). In-app апдейтер доставляет будущие APK. |
-| `*.sha256` для каждого бинарника | All | SHA256-сайдкары рядом с каждым артефактом (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Авто-апдейтер + CI integrity check проверяют hash перед распаковкой. Сравните результат `sha256sum <file>` на Linux, `shasum -a 256 <file>` на macOS или `Get-FileHash -Algorithm SHA256 <file>` на Windows с 64-символьным хешем из сайдкара. Часть сайдкаров содержит только хеш и не подходит для прямого вызова `sha256sum -c`. |
+| `*.sha256` для каждого бинарника | All | SHA256-сайдкары рядом с каждым артефактом (Windows `*-win.zip` + `*-update-win.zip` + `*-Setup-*.exe`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Авто-апдейтер + CI integrity check проверяют hash перед распаковкой. Сравните результат `sha256sum <file>` на Linux, `shasum -a 256 <file>` на macOS или `Get-FileHash -Algorithm SHA256 <file>` на Windows с 64-символьным хешем из сайдкара. Часть сайдкаров содержит только хеш и не подходит для прямого вызова `sha256sum -c`. |
 
 При успешном выполнении серверное задание публикует отдельный артефакт:
 
