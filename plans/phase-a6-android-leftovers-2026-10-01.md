@@ -27,7 +27,7 @@ landscape) found more.
 ## Changes
 
 1. Public "Settings" row: label on the left, a "Show" / "Hide" pill with a chevron that flips on the right (same
-   pattern as the main-screen config row); 44 dp. New keys `AdvPublicSettingsShow`, `AdvPublicSettingsHide`.
+   pattern as the main-screen config row); 44 dp. New shared keys `SectionShow`, `SectionHide` (the desktop uses them too).
 2. Subscribe tab without subscriptions: an empty state (the navigation's subscription icon, "No subscriptions yet",
    one sentence on what a subscription is and what to do) replaces the server box, the test row and the list header;
    they come back with the first subscription. Keys `SubsIntroTitle`, `SubsIntroBody`.

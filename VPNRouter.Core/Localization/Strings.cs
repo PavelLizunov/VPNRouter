@@ -1449,6 +1449,13 @@ public static partial class Strings
         ? "В этой подписке пока нет серверов. Обнови подписку, чтобы получить список."
         : "This subscription has no servers yet. Refresh it to fetch the list.";
 
+    public static string SrvManualEmptyHint => Ru
+        ? "Серверов пока нет. Вставьте ссылку на сервер в поле ниже и добавьте её."
+        : "No servers yet. Paste a server link into the field below and add it.";
+
+    public static string SectionShow => Ru ? "Показать" : "Show";
+    public static string SectionHide => Ru ? "Свернуть" : "Hide";
+
     public static string SrvNeverTested => "—";
 
     public static string SrvUnreachable => "×";

@@ -917,7 +917,7 @@ public partial class AndroidApp
     {
         SetDisclosureChevron(_fcAdvancedChevron, _fcAdvancedExpanded);
         if (_fcAdvancedToggleText is not null)
-            _fcAdvancedToggleText.Text = _fcAdvancedExpanded ? Localization.AdvPublicSettingsHide : Localization.AdvPublicSettingsShow;
+            _fcAdvancedToggleText.Text = _fcAdvancedExpanded ? Localization.SectionHide : Localization.SectionShow;
     }
 
     private bool ApplyFcConnectGate()

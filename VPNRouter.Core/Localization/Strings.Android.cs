@@ -336,17 +336,11 @@ public static partial class Strings
         : "✓✓ Find working configs";
 
     public static string AdvPublicSettingsExpand => Ru ? "▾ Настройки" : "▾ Settings";
-    public static string AdvPublicSettingsShow => Ru ? "Показать" : "Show";
-    public static string AdvPublicSettingsHide => Ru ? "Свернуть" : "Hide";
 
     public static string SubsIntroTitle => Ru ? "Подписок пока нет" : "No subscriptions yet";
     public static string SubsIntroBody => Ru
         ? "Подписка — это ссылка от вашего VPN-провайдера со списком серверов. Вставьте её ниже или отсканируйте QR-код и нажмите «Добавить»."
         : "A subscription is a link from your VPN provider with its list of servers. Paste it below or scan its QR code, then tap Add.";
-
-    public static string SrvManualEmptyHint => Ru
-        ? "Серверов пока нет. Вставьте ссылку на сервер в поле ниже и добавьте её."
-        : "No servers yet. Paste a server link into the field below and add it.";
 
     public static string AdvPublicConnect => Ru ? "Подключить" : "Connect";
 
