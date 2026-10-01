@@ -99,7 +99,7 @@
                                    FontSize="10" TextWrapping="Wrap"
                                    Foreground="{DynamicResource SuccessFgBrush}"
                                    Opacity="0.85"/>
-                        <Button icons:PictogramText.Icons="find-working" icons:PictogramText.Content="{Binding L_FcDeepVerify}"
+                        <Button Classes="solid" icons:PictogramText.Icons="find-working" icons:PictogramText.Content="{Binding L_FcDeepVerify}"
                                 Command="{Binding FreeConfigsVm.RefreshCommand}"
                                 IsVisible="{Binding !FreeConfigsVm.IsBusy}"
                                 Padding="0,10" FontSize="13" FontWeight="Bold"
@@ -110,7 +110,7 @@
                                 Foreground="White"
                                 ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"
                                 AutomationProperties.Name="{Binding L_FcDeepVerify}"/>
-                        <Button icons:PictogramText.Icons="stop" icons:PictogramText.Content="{Binding L_FcDeepStop}"
+                        <Button Classes="solid" icons:PictogramText.Icons="stop" icons:PictogramText.Content="{Binding L_FcDeepStop}"
                                 Command="{Binding FreeConfigsVm.CancelCommand}"
                                 IsVisible="{Binding FreeConfigsVm.IsBusy}"
                                 Padding="0,10" FontSize="13" FontWeight="Bold"
@@ -121,17 +121,31 @@
                                 Foreground="White"
                                 ToolTip.Tip="{Binding L_FcDeepStopTooltip}"
                                 AutomationProperties.Name="{Binding L_FcDeepStop}"/>
-                        <Expander
-                                  Background="Transparent"
-                                  BorderBrush="{DynamicResource SuccessBorderBrush}"
-                                  BorderThickness="0,1,0,0"
-                                  Padding="0,4,0,0"
-                                  Margin="0,4,0,0"
-                                  Foreground="{DynamicResource SuccessFgBrush}"
-                                  FontSize="11" FontWeight="SemiBold">
-                            <Expander.Header>
-                                <TextBlock icons:PictogramText.Icons="chevron-down" icons:PictogramText.Text="{Binding L_FcAdvancedSettings}"/>
-                            </Expander.Header>
+                        <Button Command="{Binding ToggleFcSettingsCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Background="Transparent"
+                                BorderBrush="{DynamicResource SuccessBorderBrush}"
+                                BorderThickness="0,1,0,0"
+                                CornerRadius="0"
+                                Padding="0,8,0,0"
+                                Margin="0,4,0,0"
+                                AutomationProperties.Name="{Binding L_FcSettingsLabel}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="{Binding L_FcSettingsLabel}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SuccessFgBrush}"
+                                           VerticalAlignment="Center"/>
+                                <Border Grid.Column="1" Classes="disclosure-pill">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="{Binding L_FcSettingsToggle}"/>
+                                        <icons:Pictogram Id="chevron-down" Classes="disclosure"
+                                                         Classes.open="{Binding FcSettingsExpanded}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Button>
+                        <Border IsVisible="{Binding FcSettingsExpanded}">
                             <StackPanel Spacing="8" Margin="0,6,0,2">
                                 <WrapPanel Orientation="Horizontal" ItemWidth="NaN" ItemHeight="NaN">
                                     <StackPanel Orientation="Horizontal" Spacing="4"
@@ -179,7 +193,7 @@
                                                Foreground="{DynamicResource SuccessFgBrush}"/>
                                 </Grid>
                             </StackPanel>
-                        </Expander>
+                        </Border>
                     </StackPanel>
                 </Border>
 
@@ -443,7 +457,7 @@
                            FontSize="10" Opacity="0.55"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap"/>
-                <Button Content="{Binding L_FcApplySelected}"
+                <Button Classes="solid" Content="{Binding L_FcApplySelected}"
                         Command="{Binding FreeConfigsVm.ApplySelectedCommand}"
                         IsEnabled="{Binding FreeConfigsVm.HasSelection}"
                         FontSize="13" FontWeight="Bold"

@@ -716,8 +716,8 @@ public static partial class Strings
         : "Custom routing rules for specific domains / IPs / ports / processes. ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.";
 
     public static string CustomRulesEmpty => Ru
-        ? "Нет правил. Добавьте через форму ниже или раскройте «Расширенный режим» для редактирования через текст."
-        : "No rules yet. Add via the form below or expand «Advanced mode» for text editing.";
+        ? "Правил пока нет. Добавьте правило формой выше или впишите правила текстом на вкладке «Текст»."
+        : "No rules yet. Add one with the form above, or type them as text on the «Edit» tab.";
 
     public static string CustomRulesAddTitle => Ru ? "Добавить правило:" : "Add rule:";
     public static string CustomRulesAddBtn => Ru ? "+ Добавить" : "+ Add";

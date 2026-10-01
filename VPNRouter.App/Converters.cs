@@ -39,21 +39,6 @@ public class BoolToFontWeightConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-public class BoolToChevronConverter : IValueConverter
-{
-    public static readonly BoolToChevronConverter Instance = new();
-
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        var glyphs = (parameter as string)?.Split('|', 2) ?? new[] { "▲", "▼" };
-        var trueGlyph = glyphs.Length > 0 ? glyphs[0] : "▲";
-        var falseGlyph = glyphs.Length > 1 ? glyphs[1] : "▼";
-        return value is bool b && b ? trueGlyph : falseGlyph;
-    }
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
-}
-
 public class BoolTo10or05Converter : IValueConverter
 {
     public static readonly BoolTo10or05Converter Instance = new();

@@ -260,7 +260,7 @@
                                 ToolTip.Tip="{Binding L_TipDismiss}" AutomationProperties.Name="{Binding L_TipDismiss}"/>
                     </Grid>
                     <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="22,0,0,0">
-                        <Button Content="{Binding L_ConflictKillButton}"
+                        <Button Classes="solid" Content="{Binding L_ConflictKillButton}"
                                 Command="{Binding KillConflictingVpnCommand}"
                                 ToolTip.Tip="{Binding L_ConflictKillTooltip}"
                                 Padding="10,3" Margin="0,0,6,4" MinHeight="0" FontSize="11"
@@ -545,7 +545,7 @@
                 BorderThickness="0,0,0,1"
                 Padding="16,10">
             <DockPanel>
-                <Button DockPanel.Dock="Right"
+                <Button Classes="solid" DockPanel.Dock="Right"
                         Content="{Binding L_UpdateButton}"
                         Command="{Binding UpdateVm.DownloadAndApplyCommand}"
                         IsVisible="{Binding !UpdateVm.IsDownloading}"
@@ -635,7 +635,7 @@
                     </Border>
                 </Grid>
 
-                <Button Grid.Column="1"
+                <Button Classes="solid" Grid.Column="1"
                         icons:PictogramText.Icons="play,stop" icons:PictogramText.Content="{Binding ConnectButtonText}"
                         Command="{Binding ToggleConnectionCommand}"
                         IsEnabled="{Binding CanToggleConnection}"

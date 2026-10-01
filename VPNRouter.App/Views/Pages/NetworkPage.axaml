@@ -470,7 +470,7 @@
                            FontSize="11" Padding="6,3" MinHeight="0"/>
                   <TextBlock Text=" " FontSize="9" MinHeight="11"/>
                 </StackPanel>
-                <Button Grid.Column="4"
+                <Button Classes="solid" Grid.Column="4"
                         icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
                         Command="{Binding AddCustomRuleFromFormCommand}"
                         FontSize="11" FontWeight="SemiBold"
@@ -533,7 +533,7 @@
               <TextBox Text="{Binding NewRuleComment}"
                        PlaceholderText="{Binding L_CustomRulesCommentLabel}"
                        FontSize="11" Padding="6,3" MinHeight="0"/>
-              <Button icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
+              <Button Classes="solid" icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
                       Command="{Binding AddCustomRuleFromFormCommand}"
                       FontSize="11" FontWeight="SemiBold"
                       Padding="14,5" MinHeight="0"
@@ -931,7 +931,7 @@
                       BorderThickness="1"
                       Foreground="{DynamicResource DangerFgBrush}"
                       CornerRadius="{StaticResource RadiusXs}"/>
-              <Button Grid.Column="2"
+              <Button Classes="solid" Grid.Column="2"
                       Content="{Binding L_RulesClearAllConfirm}"
                       Command="{Binding ConfirmClearAllCustomRulesCommand}"
                       FontSize="10" FontWeight="SemiBold"
@@ -1455,7 +1455,7 @@
                       Command="{Binding RevertEditedRulesCommand}"
                       FontSize="10" Padding="8,3" MinHeight="0"
                       IsEnabled="{Binding RulesEditorIsDirty}"/>
-              <Button Grid.Column="3"
+              <Button Classes="solid" Grid.Column="3"
                       Content="{Binding RulesEditorApplyText}"
                       Command="{Binding ApplyEditedRulesCommand}"
                       FontSize="10" FontWeight="SemiBold"
@@ -1730,7 +1730,7 @@
                              TextWrapping="Wrap"
                              Foreground="{DynamicResource WarningFgBrush}"/>
                   <StackPanel Spacing="6">
-                    <Button Command="{Binding UpdateVm.ConfirmRollbackCommand}"
+                    <Button Classes="solid" Command="{Binding UpdateVm.ConfirmRollbackCommand}"
                             Background="{DynamicResource WarningSolidBrush}"
                             Foreground="White"
                             HorizontalAlignment="Stretch"
@@ -2001,7 +2001,7 @@
                      VerticalAlignment="Center"
                      TextTrimming="CharacterEllipsis"/>
         </StackPanel>
-        <Button Grid.Column="1"
+        <Button Classes="solid" Grid.Column="1"
                 icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding L_ApplyNowReloadVpn}"
                 Command="{Binding ApplyPendingChangesCommand}"
                 IsEnabled="{Binding IsConnected}"
