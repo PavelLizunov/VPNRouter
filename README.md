@@ -262,6 +262,10 @@ This is a VPN client — you should verify the code before trusting it.
 
 Found a security issue? Please report it **privately** — see [`SECURITY.md`](SECURITY.md). Don't open a public issue for security problems.
 
+## Code signing
+
+The Windows binaries of the releases are **not code-signed** (no Authenticode signature), so Windows SmartScreen or an antivirus may warn about them. Verify every download with the `.sha256` file next to it. Code signing is not planned for now (owner decision, 2026-10-01); [`docs/code-signing-signpath-runbook.md`](docs/code-signing-signpath-runbook.md) keeps the steps in case that changes.
+
 ## Credits
 
 Standing on the shoulders of giants:
