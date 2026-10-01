@@ -196,12 +196,22 @@ public partial class AndroidApp
         }
     }
 
+    /// <summary>The big menu button goes to the other mode: "Advanced" on the main screen, "Simple" inside the Advanced screens.</summary>
+    private void UpdateMenuAdvancedToggle()
+    {
+        if (_menuAdvancedToggleBtn is null) return;
+        _menuAdvancedToggleBtn.Content = _advShellOverlay is { IsVisible: true }
+            ? IconText(UiIcons.ChevronLeft, Localization.SmpToggleToSimple, 14)
+            : IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true);
+    }
+
     private void OnKebabMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is null) return;
         _kebabPopup.IsOpen = !_kebabPopup.IsOpen;
         if (_kebabPopup.IsOpen)
         {
+            UpdateMenuAdvancedToggle();
             _resetConfirmPending = false;
             if (_menuResetSettingsItem is not null)
                 SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);

@@ -728,7 +728,8 @@ public partial class AndroidApp : Avalonia.Application
         advancedToggleBtn.Click += (_, _) =>
         {
             if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-            OpenAdvancedShell(AdvancedTab.Servers);
+            if (_advShellOverlay is { IsVisible: true }) CloseAdvancedShell();
+            else OpenAdvancedShell(AdvancedTab.Servers);
         };
         _menuAdvancedToggleBtn = advancedToggleBtn;
         menuStack.Children.Add(advancedToggleBtn);
@@ -1649,7 +1650,7 @@ public partial class AndroidApp : Avalonia.Application
             SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
         if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
         if (_menuAdvancedToggleBtn is not null)
-            _menuAdvancedToggleBtn.Content = IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true);
+            UpdateMenuAdvancedToggle();
         if (_autostartCardTitleText is not null)
             _autostartCardTitleText.Text = Localization.SmpAutostartCardTitle;
         if (_autostartCardSubText is not null)
