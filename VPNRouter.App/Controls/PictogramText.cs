@@ -123,9 +123,5 @@ public sealed class PictogramText : AvaloniaObject
         }
         if (start < source.Length) inlines.Add(new Run(source[start..]));
         control.Inlines = inlines;
-        // A TextBlock that is rendered with a zero width constraint would measure its icons at zero width and change their
-        // desired size again: never give it less room than one icon.
-        if (inlines.OfType<InlineUIContainer>().Any() && control.MinWidth < control.FontSize)
-            control.MinWidth = control.FontSize;
     }
 }
