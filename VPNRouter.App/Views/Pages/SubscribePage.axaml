@@ -196,6 +196,7 @@
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Classes="solid" Content="{Binding ServerTestButtonText}"
                     Command="{Binding TestAllSubscriptionServersCommand}"
+                    IsEnabled="{Binding !!SubscriptionServers.Count}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
@@ -203,6 +204,7 @@
                     AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
             <Button Classes="solid" Content="{Binding ServerDeepButtonText}"
                     Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
+                    IsEnabled="{Binding !!SubscriptionServers.Count}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
@@ -250,6 +252,7 @@
           <Button Grid.Column="1"
                   Content="{Binding L_RefreshAll}"
                   Command="{Binding RefreshAllSubscriptionsCommand}"
+                  IsEnabled="{Binding !!Subscriptions.Count}"
                   FontSize="10" Padding="8,3" CornerRadius="{StaticResource RadiusSm}"
                   AutomationProperties.Name="{Binding L_RefreshAll}"/>
         </Grid>

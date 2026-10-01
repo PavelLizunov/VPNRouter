@@ -321,6 +321,7 @@
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Classes="solid" Content="{Binding ServerTestButtonText}"
                     Command="{Binding TestAllServersCommand}"
+                    IsEnabled="{Binding !!Servers.Count}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
@@ -328,6 +329,7 @@
                     AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
             <Button Classes="solid" Content="{Binding ServerDeepButtonText}"
                     Command="{Binding DeepVerifyAllServersCommand}"
+                    IsEnabled="{Binding !!Servers.Count}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"

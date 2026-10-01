@@ -40,7 +40,9 @@ the Lucide set; this pass carries the design rules. Findings come from the D-1 d
 8. Dead `BoolToChevronConverter` removed.
 9. Found in the first captures of this branch and fixed: "Update IPSet list" and the two hosts toggles are stretched
    buttons with left-aligned labels (centred now); the servers empty state said "No servers" twice (one line now).
-10. `VisualDiffTests` baselines for DPI bypass and Tools re-pinned: the change of the default button role, the accent
+10. No dead controls: "Test all" and "Deep verify" (Servers, Subscribe) are disabled while their list is empty,
+    "Refresh all" while there is no subscription (same as A-6 on Android).
+11. `VisualDiffTests` baselines for DPI bypass and Tools re-pinned: the change of the default button role, the accent
     checkbox and the legend size is intended, and the old baselines still showed the removed Emergency Channel tab.
 
 Built on top of A-6 (#443) for the shared keys; rebased onto `main` after A-6 merges.
@@ -59,7 +61,7 @@ Built on top of A-6 (#443) for the shared keys; rebased onto `main` after A-6 me
 ## Outcome
 
 Windows worker, exact SHAs (preflight: CPU 1 to 3 %, 12.6 GB free RAM, 13.5 GB free disk, three idle dotnet/java
-processes left by the APK build): `fd87f73d` 67 of 69 (the two visual baselines, see 10), `14a792be` captures read,
+processes left by the APK build): `fd87f73d` 67 of 69 (the two visual baselines, see 11), `14a792be` captures read,
 `8eaaad94` 112 of 112 (`VisualDiffTests`, `HeadlessGuiTests`, every `MainWindowViewModel*` test). Captures read before
 (`main`) and after: window simple and advanced, every tab, Settings sub-tabs, light and dark, 360 and 520 px, Russian.
 Not seen: mouse hover and pressed states (headless captures have no pointer), the real Windows accent colour, a live
