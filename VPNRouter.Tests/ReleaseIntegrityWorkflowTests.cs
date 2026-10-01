@@ -78,7 +78,7 @@ public sealed class ReleaseIntegrityWorkflowTests
         var stop = script.IndexOf("if errors:\n    finish()", hashes, StringComparison.Ordinal);
         var parse = script.IndexOf("with zipfile.ZipFile", StringComparison.Ordinal);
         Assert.True(hashes >= 0 && stop > hashes && parse > stop);
-        Assert.Contains("hard = name.endswith('-win.zip')", script);
+        Assert.Contains("hard = name.endswith(('-win.zip', '.exe'))", script);
         Assert.Contains("sink = errors if hard else warnings", script);
         Assert.Contains("not all(version in versions(data) for data in blobs)", script);
         Assert.Contains("raise SystemExit(1)", script);

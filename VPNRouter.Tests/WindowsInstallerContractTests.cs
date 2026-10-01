@@ -140,13 +140,16 @@ public sealed class WindowsInstallerContractTests
     }
 
     [Fact]
-    public void ReleaseTooling_DoesNotShipTheInstallerYet()
+    public void ReleaseTooling_ShipsTheInstallerWithItsSidecar()
     {
-        // Release wiring (two more release files) is a separate, owner-commanded step; until then the asset contract is unchanged.
         var buildPs1 = File.ReadAllText(Path.Combine(Root, "build.ps1"));
-        Assert.DoesNotContain("VPNRouter-Setup", buildPs1);
-        foreach (var workflow in Directory.EnumerateFiles(Path.Combine(Root, ".github", "workflows"), "*.y*ml"))
-            Assert.DoesNotContain("VPNRouter-Setup", File.ReadAllText(workflow));
+        Assert.Contains("tools\\build-installer.ps1", buildPs1);
+        Assert.Contains("[switch]$Installer", buildPs1);
+        Assert.Contains("$releaseAssets += @($InstallerPath, $InstallerShaPath)", buildPs1);
+        var integrity = File.ReadAllText(Path.Combine(Root, ".github", "workflows", "verify-release-integrity.yml"));
+        Assert.Contains("VPNRouter-Setup-v${EXPECTED_VERSION}.exe\"", integrity);
+        Assert.Contains("VPNRouter-Setup-v${EXPECTED_VERSION}.exe.sha256\"", integrity);
+        Assert.Contains("VersionInfoTextVersion={#AppVersion}", File.ReadAllText(Path.Combine(Root, "packaging", "windows", "vpnrouter.iss")));
     }
 
     private static string FindRepoRoot()
