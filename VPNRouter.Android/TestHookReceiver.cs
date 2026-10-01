@@ -21,6 +21,7 @@ namespace VPNRouter.Android;
     "com.ninitux.vpnrouter.TEST_CONNECT",
     "com.ninitux.vpnrouter.TEST_DISCONNECT",
     "com.ninitux.vpnrouter.TEST_RESET",
+    "com.ninitux.vpnrouter.TEST_SET_VPN_STATE",
 })]
 public sealed class TestHookReceiver : BroadcastReceiver
 {
@@ -31,6 +32,7 @@ public sealed class TestHookReceiver : BroadcastReceiver
     private const string ActConnect = "com.ninitux.vpnrouter.TEST_CONNECT";
     private const string ActDisconnect = "com.ninitux.vpnrouter.TEST_DISCONNECT";
     private const string ActReset = "com.ninitux.vpnrouter.TEST_RESET";
+    private const string ActSetVpnState = "com.ninitux.vpnrouter.TEST_SET_VPN_STATE";
 
     public override void OnReceive(Context? context, Intent? intent)
     {
@@ -47,6 +49,7 @@ public sealed class TestHookReceiver : BroadcastReceiver
                 ActConnect => OnUi(AndroidApp.TestHookConnect),
                 ActDisconnect => OnUi(AndroidApp.TestHookDisconnect),
                 ActReset => OnUi(AndroidApp.TestHookReset),
+                ActSetVpnState => SetVpnState(context, intent.GetStringExtra("value"), intent.GetStringExtra("reason")),
                 _ => TestHookJson.Result(action, false, w => w.WriteString("error", "unknown-action")),
             };
         }
@@ -57,6 +60,31 @@ public sealed class TestHookReceiver : BroadcastReceiver
 
         Log.Info(LogTag, json);
         if (IsOrderedBroadcast) ResultData = json;
+    }
+
+    /// <summary>
+    /// Writes the shared state record the way the VPN service does (same keys, this process id) and asks the system to
+    /// bind the quick-settings tile, so tile and screen can be checked through every state without a working tunnel.
+    /// </summary>
+    private static string SetVpnState(Context context, string? value, string? reason)
+    {
+        var state = (value ?? string.Empty).Trim().ToLowerInvariant();
+        if (state is not ("connected" or "connecting" or "error" or "disconnected"))
+            return TestHookJson.Result(ActSetVpnState, false, w => w.WriteString("error", "unknown-state"));
+
+        var prefs = context.GetSharedPreferences("vpnrouter_settings", FileCreationMode.Private);
+        prefs?.Edit()?
+            .PutString("vpn_state", state)?
+            .PutString("vpn_state_reason", reason)?
+            .PutInt("vpn_state_pid", global::Android.OS.Process.MyPid())?
+            .PutLong("vpn_state_at_ms", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())?
+            .Apply();
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(24))
+            global::Android.Service.QuickSettings.TileService.RequestListeningState(
+                context, new ComponentName(context.PackageName!, "com.ninitux.vpnrouter.VpnTileService"));
+
+        return TestHookJson.Result(ActSetVpnState, true, w => w.WriteString("state", state));
     }
 
     private static string OnUi(Func<string> work) =>
