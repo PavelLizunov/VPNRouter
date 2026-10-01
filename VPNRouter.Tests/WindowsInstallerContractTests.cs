@@ -140,6 +140,18 @@ public sealed class WindowsInstallerContractTests
     }
 
     [Fact]
+    public void Upgrade_StopsTheSplitTunnelDriverThatLocksItsFile()
+    {
+        // The owner saw "DeleteFile: code 5" on app\driver\mullvad-split-tunnel.sys: a loaded kernel driver locks its file.
+        Assert.Contains("mullvad-split-tunnel", StopScript);
+        Assert.Contains("Stop-Service -Name 'mullvad-split-tunnel'", StopScript);
+        Assert.Contains("Test-InRoots", StopScript);
+        Assert.Contains("restartreplace", File.ReadAllText(Path.Combine(Root, "packaging", "windows", "vpnrouter.iss")));
+        var updater = File.ReadAllText(Path.Combine(Root, "VPNRouter.Core", "Services", "UpdateChecker.Apply.cs"));
+        Assert.Contains("sc stop mullvad-split-tunnel", updater);
+    }
+
+    [Fact]
     public void ReleaseTooling_ShipsTheInstallerWithItsSidecar()
     {
         var buildPs1 = File.ReadAllText(Path.Combine(Root, "build.ps1"));
