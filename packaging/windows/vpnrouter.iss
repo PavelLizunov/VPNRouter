@@ -100,7 +100,7 @@ Root: HKLM; Subkey: "Software\VPNRouter\Installer"; ValueType: dword; ValueName:
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Add-MpPreference -ExclusionPath '{app}','{commonappdata}\VPNRouter'"""; Flags: runhidden; Tasks: defender
 Filename: "{app}\app\VPNRouter.CLI.exe"; Parameters: "service install"; Flags: runhidden; Tasks: service
 Filename: "{app}\app\VPNRouter.CLI.exe"; Parameters: "service start"; Flags: runhidden; Tasks: service
-Filename: "{app}\app\VPNRouter.GUI.exe"; Description: "{cm:LaunchProgram,VPNRouter}"; WorkingDir: "{app}\app"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\app\VPNRouter.GUI.exe"; Description: "{cm:LaunchProgram,VPNRouter}"; WorkingDir: "{app}\app"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\app"
