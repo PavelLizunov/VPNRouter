@@ -15,10 +15,15 @@ public partial class SubscriptionViewModel : ObservableObject
     [ObservableProperty] private bool _enabled;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LastRefreshedDisplay))]
+    [NotifyPropertyChangedFor(nameof(HasLastRefreshed))]
     [NotifyPropertyChangedFor(nameof(UserInfoDisplay))]
     [NotifyPropertyChangedFor(nameof(HasUserInfo))]
     private DateTimeOffset? _lastRefreshedAt;
-    [ObservableProperty] private int _lastServerCount;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServerCountText))]
+    private int _lastServerCount;
+
+    public string ServerCountText => string.Format(VPNRouter.Core.Localization.Strings.SubsServersFormat, LastServerCount);
     [ObservableProperty] private bool _isRefreshing;
 
     [ObservableProperty]
@@ -41,6 +46,8 @@ public partial class SubscriptionViewModel : ObservableObject
             return LastRefreshedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         }
     }
+
+    public bool HasLastRefreshed => LastRefreshedAt is { } at && at.Year >= 2000;
 
     public string UserInfoDisplay
     {
