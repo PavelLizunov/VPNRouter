@@ -122,6 +122,10 @@ public static partial class Strings
 
     public static string SmpStatusConnectedVia      => Ru ? "через" : "via";
     public static string SmpStatusConnectedNoDetails=> Ru ? "Туннель активен." : "Tunnel is active.";
+    public static string SmpStatusApplying          => Ru ? "Применяю настройки…" : "Applying settings…";
+    public static string SmpStatusApplyingHint      => Ru
+        ? "Переключаю маршрутизацию — несколько секунд."
+        : "Switching routing — a few seconds.";
     public static string SmpStatusConnectingHint    => Ru
         ? "Рукопожатие с сервером — пара секунд."
         : "Handshaking with the server — a moment.";
