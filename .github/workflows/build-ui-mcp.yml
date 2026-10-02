@@ -43,13 +43,16 @@ jobs:
 
       - name: Smoke session
         run: |
+          set -o pipefail
           mkdir -p smoke
           python3 tools/ui-mcp/mcpcall.py --out smoke --server ./publish/ui-mcp/vpnrouter-ui-mcp -- \
             ui_catalog '{}' \
             ui_render '{"surface":"apps","width":520,"height":1100}' \
             ui_render '{"surface":"window-advanced","width":520,"height":900,"theme":"dark","language":"ru"}' \
             ui_sweep '{"surface":"window-advanced","speed_ms":0,"mode":"monkey","max_steps":150,"render_every":7,"seed":7}' \
-            | tee smoke/session.txt
+            2>&1 | tee smoke/session.txt
+          grep -q "failures: 0" smoke/session.txt
+          test "$(ls smoke/*.png | wc -l)" -ge 3
 
       - name: Pack
         run: tar -C publish -czf vpnrouter-ui-mcp-linux-x64.tar.gz ui-mcp
