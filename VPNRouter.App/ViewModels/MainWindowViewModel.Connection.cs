@@ -144,7 +144,6 @@ public partial class MainWindowViewModel
         await Task.Run(() => _engine.RestartTrueSplitAsync(_settings, CancellationToken.None));
     }
 
-    [RelayCommand]
     // The window lost track of a tunnel that is running (a routing change restarts sing-box). Show the truth instead of
     // letting the next press of "Connect" stop it.
     private void AdoptRunningEngine()
@@ -157,6 +156,7 @@ public partial class MainWindowViewModel
         RestoreConnectedStatus();
     }
 
+    [RelayCommand]
     private async Task ToggleConnectionAsync()
     {
         var toggle = ConnectionSyncPolicy.DecideToggle(
