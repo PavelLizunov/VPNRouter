@@ -1,6 +1,6 @@
 namespace VPNRouter.App.ViewModels;
 
-internal enum RuntimeSyncAction
+public enum RuntimeSyncAction
 {
     None,
     AdoptRunningEngine,
@@ -9,7 +9,7 @@ internal enum RuntimeSyncAction
     MarkDisconnected,
 }
 
-internal enum ToggleAction
+public enum ToggleAction
 {
     Ignore,
     Stop,
