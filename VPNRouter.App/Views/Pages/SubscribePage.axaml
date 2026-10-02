@@ -108,7 +108,7 @@
                 IsEnabled="{Binding !!SubscriptionServers.Count}"
                 Padding="12,5" CornerRadius="{StaticResource RadiusSm}"
                 FontSize="11" FontWeight="SemiBold"
-                Background="{DynamicResource SuccessSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                Background="{DynamicResource SuccessSolidBrush}" Foreground="{DynamicResource SuccessOnSolidBrush}"
                 ToolTip.Tip="{Binding L_TipTestAllServers}"
                 AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
         <Button Grid.Column="1" Content="{Binding ServerDeepButtonText}"

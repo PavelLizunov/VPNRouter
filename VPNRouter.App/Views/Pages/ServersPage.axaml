@@ -237,7 +237,7 @@
                     IsEnabled="{Binding !!Servers.Count}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
-                    Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
+                    Background="{DynamicResource SuccessSolidBrush}" Foreground="{DynamicResource SuccessOnSolidBrush}"
                     ToolTip.Tip="{Binding L_TipTestAllServers}"
                     AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
             <Button Classes="solid" Content="{Binding ServerDeepButtonText}"
