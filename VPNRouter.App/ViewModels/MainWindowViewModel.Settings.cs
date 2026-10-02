@@ -909,6 +909,12 @@ public partial class MainWindowViewModel
 
     private void ApplyConfigModeToSettings()
     {
+        // On the home screen IsVlessMode/IsSubscribeMode are leftovers of the last Advanced tab, not a choice: saving a routing change
+        // from there turned a subscription into "server link" (tester log 01:03:31). The home screen changes the mode only by
+        // setting it itself (TryApplyVless / TryApplySubscriptionUrl).
+        if (IsSimpleMode && !string.IsNullOrWhiteSpace(_settings.App.ConfigMode))
+            return;
+
         var wantsCustomMode = !IsSubscribeMode && !IsVlessMode;
         var hasCustomConfig = !string.IsNullOrWhiteSpace(_settings.App.ActiveCustomConfig)
                               || !string.IsNullOrWhiteSpace(_settings.App.CustomConfig)
