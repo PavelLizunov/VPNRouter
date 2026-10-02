@@ -78,24 +78,16 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(SelectedActiveAppGroup));
     }
 
-    // A segment pressed while selected writes false; the model keeps its value, so the buttons must be told to show it again after the write.
-    private void ReannounceAppsModeSegments() =>
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            OnPropertyChanged(nameof(IsRoutingAppsModeInclude));
-            OnPropertyChanged(nameof(IsRoutingAppsModeExclude));
-        });
-
     public bool IsRoutingAppsModeInclude
     {
         get => string.Equals(RoutingAppsMode, "include", StringComparison.OrdinalIgnoreCase);
-        set { if (value) RoutingAppsMode = "include"; else ReannounceAppsModeSegments(); }
+        set { if (value) RoutingAppsMode = "include"; else OnPropertyChanged(); }
     }
 
     public bool IsRoutingAppsModeExclude
     {
         get => string.Equals(RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
-        set { if (value) RoutingAppsMode = "exclude"; else ReannounceAppsModeSegments(); }
+        set { if (value) RoutingAppsMode = "exclude"; else OnPropertyChanged(); }
     }
 
     partial void OnRoutingAppsModeChanged(string value)
