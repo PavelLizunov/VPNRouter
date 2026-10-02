@@ -61,7 +61,119 @@ public static class LayoutLint
                 Add("info", "lint-error", c, ex.GetType().Name + ": " + ex.Message);
             }
         }
+        try
+        {
+            CheckWindowLevel(window, Add);
+        }
+        catch (Exception ex)
+        {
+            findings.Add(new Finding("info", "lint-error", "(window)", ex.GetType().Name + ": " + ex.Message));
+        }
         return findings;
+    }
+
+    private static Rect? RectIn(Window window, Control c)
+    {
+        var origin = c.TranslatePoint(new Point(0, 0), window);
+        return origin.HasValue ? new Rect(origin.Value, c.Bounds.Size) : null;
+    }
+
+    private static bool EffectivelyTransparent(Control c)
+    {
+        for (Visual? v = c; v != null; v = v.GetVisualParent())
+            if (v.Opacity < 0.05) return true;
+        return false;
+    }
+
+    // Checks that look at the laid-out window as a whole: what is cut off by a container, what overlaps, what touches the edge, uneven card insets.
+    private static void CheckWindowLevel(Window window, Action<string, string, Control, string, string?> add)
+    {
+        var width = window.ClientSize.Width;
+        var visible = window.GetVisualDescendants().OfType<Control>()
+            .Where(c => c.IsEffectivelyVisible && c.Bounds.Width > 0 && c.Bounds.Height > 0 && !EffectivelyTransparent(c))
+            .ToList();
+
+        var atoms = new List<(Control Control, Rect Rect)>();
+        foreach (var c in visible)
+        {
+            var isAtom = (c is TextBlock && !string.IsNullOrWhiteSpace(Describe.TextOf(c))) || c is TextBox;
+            if (!isAtom) continue;
+            var rect = RectIn(window, c);
+            if (rect.HasValue) atoms.Add((c, rect.Value));
+        }
+
+        // 1. Cut off by a container (a clipping panel, or a scroll viewer that does not scroll sideways).
+        foreach (var (c, rect) in atoms.Concat(visible.Where(Describe.IsInteractive).Select(c => (c, RectIn(window, c) ?? default))))
+        {
+            if (rect.Width <= 0) continue;
+            foreach (var ancestor in c.GetVisualAncestors().OfType<Control>())
+            {
+                bool horizontalOnly;
+                if (ancestor is ScrollViewer sv)
+                {
+                    if (sv.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled) continue;
+                    horizontalOnly = true;
+                }
+                else if (ancestor.ClipToBounds)
+                {
+                    horizontalOnly = false;
+                }
+                else
+                {
+                    continue;
+                }
+
+                var box = RectIn(window, ancestor);
+                if (!box.HasValue || box.Value.Width <= 0) continue;
+                var left = box.Value.Left - rect.Left;
+                var right = rect.Right - box.Value.Right;
+                var top = box.Value.Top - rect.Top;
+                var bottom = rect.Bottom - box.Value.Bottom;
+                var cut = Math.Max(Math.Max(left, right), horizontalOnly ? 0 : Math.Max(top, bottom));
+                if (cut > 1.5)
+                {
+                    add("warn", "cut-off", c,
+                        $"cut off by {ancestor.GetType().Name}{(string.IsNullOrEmpty(ancestor.Name) ? string.Empty : "#" + ancestor.Name)} by {cut:0} px",
+                        $"{ancestor.GetType().Name}|{(int)(cut / 4)}");
+                    break;
+                }
+            }
+        }
+
+        // 2. Two pieces of text (or a text box) on top of each other.
+        for (var i = 0; i < atoms.Count; i++)
+        {
+            for (var j = i + 1; j < atoms.Count; j++)
+            {
+                var (a, ra) = atoms[i];
+                var (b, rb) = atoms[j];
+                var inter = ra.Intersect(rb);
+                if (inter.Width <= 1 || inter.Height <= 1) continue;
+                var smaller = Math.Min(ra.Width * ra.Height, rb.Width * rb.Height);
+                if (smaller <= 0 || inter.Width * inter.Height < smaller * 0.25) continue;
+                if (a.IsVisualAncestorOf(b) || b.IsVisualAncestorOf(a)) continue;
+                add("warn", "overlap", a, $"overlaps \"{Describe.Trim(Describe.TextOf(b) ?? b.GetType().Name, 30)}\" by {inter.Width * inter.Height / smaller:P0}", null);
+            }
+        }
+
+        // 3. Text glued to the edge of the window.
+        foreach (var (c, rect) in atoms)
+        {
+            if (width > 300 && (rect.Left < 6 || rect.Right > width - 6) && c is TextBlock)
+                add("info", "text-at-edge", c, $"text spans x {rect.Left:0}..{rect.Right:0} of a {width:0} px window", null);
+        }
+
+        // 4. Cards that are not centred between the window edges (flush ones, like a side pane, are on purpose).
+        foreach (var border in visible.OfType<Border>())
+        {
+            if (border.Background == null && border.BorderBrush == null) continue;
+            var rect = RectIn(window, border);
+            if (!rect.HasValue || rect.Value.Width < width * 0.5) continue;
+            var gapLeft = rect.Value.Left;
+            var gapRight = width - rect.Value.Right;
+            if (gapLeft >= 3 && gapRight >= 3 && Math.Abs(gapLeft - gapRight) > 3)
+                add("info", "uneven-gutter", border, $"card inset is {gapLeft:0} px on the left and {gapRight:0} px on the right", null);
+        }
     }
 
     private static void Check(Window window, Control c, bool dark, Action<string, string, Control, string, string?> add)
