@@ -75,12 +75,12 @@ public class PageScreenshotDesignTests
     [InlineData("wizard1", false)]
     [InlineData("wizard2", true)]
     [InlineData("wizard3", false)]
-    public void Windows(string name, bool dark) => WithTheme(dark, false, _ =>
+    public void Windows(string name, bool dark) => WithTheme(dark, false, vm =>
     {
         Window window;
         if (name == "about")
         {
-            window = new AboutWindow();
+            window = new AboutWindow { DataContext = vm };
         }
         else
         {
@@ -91,6 +91,75 @@ public class PageScreenshotDesignTests
             window = new SetupWizardWindow(wizard);
         }
         ScreenshotHelper.Capture(window, $"design-{name}-{(dark ? "dark" : "light")}");
+    });
+
+    // Pages with content and their inner tabs: servers with probe results, a subscription, custom rules in the three
+    // views, the Zapret and Telegram inner tabs, the saved free configs.
+    [AvaloniaTheory]
+    [InlineData("servers-list", false)]
+    [InlineData("servers-list", true)]
+    [InlineData("servers-custom", false)]
+    [InlineData("subscribe-list", false)]
+    [InlineData("subscribe-list", true)]
+    [InlineData("rules-cards", false)]
+    [InlineData("rules-read", true)]
+    [InlineData("rules-edit", false)]
+    [InlineData("dpi-tab1", false)]
+    [InlineData("dpi-tab2", true)]
+    [InlineData("dpi-tab3", false)]
+    [InlineData("tg-tab1", false)]
+    [InlineData("tg-tab2", true)]
+    [InlineData("free-saved", false)]
+    public void States(string state, bool dark) => WithTheme(dark, false, vm =>
+    {
+        UserControl page;
+        switch (state)
+        {
+            case "servers-list":
+            case "subscribe-list":
+                var list = state == "servers-list" ? vm.Servers : vm.SubscriptionServers;
+                string[] names = ["Frankfurt-01", "Amsterdam-02", "Helsinki-very-long-server-name-03"];
+                for (var i = 0; i < names.Length; i++)
+                {
+                    var s = new ServerViewModel(new VPNRouter.Core.Models.VlessServerEntry
+                        { Name = names[i], Server = $"10.0.0.{i + 1}", Port = 443 + i });
+                    s.IsActive = i == 0;
+                    list.Add(s);
+                }
+                if (state == "subscribe-list")
+                    vm.Subscriptions.Add(new SubscriptionViewModel(new VPNRouter.Core.Models.SubscriptionEntry
+                        { Name = "Provider", Url = "https://example.invalid/sub" }));
+                page = state == "servers-list" ? new ServersPage() : new SubscribePage();
+                break;
+            case "servers-custom":
+                vm.SelectedServerModeIndex = 1;
+                page = new ServersPage();
+                break;
+            case "free-saved":
+                vm.FreeConfigsVm.SelectedFreeTabIndex = 1;
+                page = new FreeConfigsPage();
+                break;
+            case var r when r.StartsWith("rules-"):
+                vm.SelectedSettingsIndex = 1;
+                foreach (var value in new[] { ".example.com", "10.0.0.0/8", "steam.exe" })
+                {
+                    vm.NewRuleValue = value;
+                    vm.AddCustomRuleFromFormCommand.Execute(null);
+                }
+                vm.RulesViewMode = r[6..];
+                page = new NetworkPage();
+                break;
+            case var d when d.StartsWith("dpi-tab"):
+                vm.SetZapretTabCommand.Execute(d[^1..]);
+                page = new DpiBypassPage();
+                break;
+            default:
+                vm.SetTgProxyTabCommand.Execute(state[^1..]);
+                page = new TelegramPage();
+                break;
+        }
+        page.DataContext = vm;
+        ScreenshotHelper.CapturePage(page, $"design-state-{state}-{(dark ? "dark" : "light")}", 520, 1000);
     });
 
     // Applications with a category open (default apps plus one custom app), in full-tunnel mode and in the bypass list.
