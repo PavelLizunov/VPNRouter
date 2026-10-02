@@ -332,6 +332,8 @@
                 <Border Grid.Column="0" Width="40" Height="40"
                         CornerRadius="{StaticResource RadiusLg}"
                         BoxShadow="{DynamicResource ShadowSm}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        BorderThickness="1"
                         ClipToBounds="True"
                         VerticalAlignment="Center">
                     <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
