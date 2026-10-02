@@ -28,4 +28,6 @@ Exact-head CI on this PR; the steps above are recorded in the Outcome as they co
 
 ## Outcome
 
-Pending.
+Published 2026-10-02 as prerelease `v2.50.0-r17` (`--latest=false`; Latest stays `v2.49.3`), annotated tag on main `78596140`, 18 assets. The six Windows files (unsigned: no SignPath secret exists) were built on `windows-worker` and uploaded only after size, SHA-256 and sidecar matched the worker's copies; macOS, Linux and Android came from the tag workflows. Before publication: tag-bound `test`, `test-update`, three platform builds and the dispatched integrity run green, strict CI gate `OK` (8 green, 0 red), `check-open-p0.ps1` with the recorded waiver (same three owner-gated P1 lines).
+
+Post-ship on WINBRAT with `tools/post-ship-local.ps1`: `POSTSHIP-LOCAL: PASS` on the first attempt (version 2.50.0-r17, commit `78596140`, 2 cold cycles). A further 600 fast UI Automation selects (about 8 per second, all tabs, sub-tabs and the Simple/Advanced toggle) on the deployed r17 left the app alive and wrote no crash report.
