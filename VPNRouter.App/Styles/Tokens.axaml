@@ -54,12 +54,13 @@
 
             <Color x:Key="SuccessBg">#FFDCFCE7</Color>
             <Color x:Key="SuccessBorder">#FF86EFAC</Color>
-            <Color x:Key="SuccessFg">#FF15803D</Color>
+            <Color x:Key="SuccessFg">#FF166534</Color>
             <Color x:Key="SuccessSolid">#FF15803D</Color>
             <SolidColorBrush x:Key="SuccessBgBrush" Color="#FFDCFCE7"/>
             <SolidColorBrush x:Key="SuccessBorderBrush" Color="#FF86EFAC"/>
-            <SolidColorBrush x:Key="SuccessFgBrush" Color="#FF15803D"/>
+            <SolidColorBrush x:Key="SuccessFgBrush" Color="#FF166534"/>
             <SolidColorBrush x:Key="SuccessSolidBrush" Color="#FF15803D"/>
+            <SolidColorBrush x:Key="SuccessOnSolidBrush" Color="#FFFFFFFF"/>
 
             <Color x:Key="WarningBg">#FFFEF3C7</Color>
             <Color x:Key="WarningBorder">#FFFCD34D</Color>
@@ -187,6 +188,7 @@
             <SolidColorBrush x:Key="SuccessBorderBrush" Color="#5922C55E"/>
             <SolidColorBrush x:Key="SuccessFgBrush" Color="#FF4ADE80"/>
             <SolidColorBrush x:Key="SuccessSolidBrush" Color="#FF22C55E"/>
+            <SolidColorBrush x:Key="SuccessOnSolidBrush" Color="#FF052E16"/>
 
             <Color x:Key="WarningBg">#1FF59E0B</Color>
             <Color x:Key="WarningBorder">#59F59E0B</Color>

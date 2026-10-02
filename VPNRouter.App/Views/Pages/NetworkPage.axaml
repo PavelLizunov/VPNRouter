@@ -503,14 +503,15 @@
               <TextBlock Text="{Binding L_CustomRulesAddTitle}"
                          FontSize="9" FontWeight="SemiBold"
                          Foreground="{DynamicResource TextMutedBrush}"/>
-              <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-                <ComboBox Grid.Column="0"
+              <!-- Stacked: side by side each box was ~85 px wide at 360 px and clipped "domain_suffix". -->
+              <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
+                <ComboBox Grid.Row="0"
                           ItemsSource="{Binding AvailableRuleActions}"
                           SelectedItem="{Binding NewRuleAction}"
                           HorizontalAlignment="Stretch"
                           FontSize="11" Padding="6,3" MinHeight="0"
                           ToolTip.Tip="{Binding NewRuleActionHint}"/>
-                <ComboBox Grid.Column="1"
+                <ComboBox Grid.Row="1"
                           ItemsSource="{Binding AvailableRuleTypes}"
                           SelectedItem="{Binding NewRuleType}"
                           HorizontalAlignment="Stretch"
