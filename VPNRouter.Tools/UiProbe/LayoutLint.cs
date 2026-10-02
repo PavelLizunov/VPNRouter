@@ -96,6 +96,8 @@ public static class LayoutLint
         var atoms = new List<(Control Control, Rect Rect)>();
         foreach (var c in visible)
         {
+            // A placeholder is clipped by its own text box on purpose.
+            if (c.Name is "PART_Placeholder" or "PART_Watermark") continue;
             var isAtom = (c is TextBlock && !string.IsNullOrWhiteSpace(Describe.TextOf(c))) || c is TextBox;
             if (!isAtom) continue;
             var rect = RectIn(window, c);
