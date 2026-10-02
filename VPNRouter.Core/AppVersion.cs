@@ -2,5 +2,5 @@ namespace VPNRouter.Core;
 
 public static class AppVersion
 {
-    public static readonly string Version = "2.50.0-r15";
+    public static readonly string Version = "2.50.0-r16";
 }
