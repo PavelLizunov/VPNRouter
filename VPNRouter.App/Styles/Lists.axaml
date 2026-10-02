@@ -1,0 +1,208 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="using:VPNRouter.App.Controls">
+
+    <!-- Desktop only. Lists of servers and subscriptions (Servers and Subscribe pages): a card with its column header, rows
+         with a name, an endpoint, protocol chips and a semantic ping pill, icon buttons, a designed empty state and a form
+         card. All colours come from Tokens.axaml. -->
+
+    <Style Selector="Border.list-card">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+    </Style>
+    <Style Selector="Border.list-head">
+        <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="Padding" Value="14,6"/>
+    </Style>
+    <Style Selector="Border.list-head TextBlock">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="ListBox.server-list">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <Style Selector="ListBox.server-list ListBoxItem">
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="Margin" Value="0,0,0,2"/>
+    </Style>
+    <Style Selector="ListBox.server-list ListBoxItem /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBox.server-list ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBox.server-list ListBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBox.server-list ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBox.server-list ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBox.server-list ListBoxItem:selected:focus /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+
+    <Style Selector="Border.server-row">
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="ListBox.server-list ListBoxItem:pointerover Border.server-row">
+        <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+    </Style>
+    <Style Selector="ListBox.server-list ListBoxItem:selected Border.server-row">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}"/>
+    </Style>
+    <Style Selector="Border.server-row.active">
+        <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+    </Style>
+
+    <Style Selector="TextBlock.server-name">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.server-row.active TextBlock.server-name">
+        <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.server-endpoint">
+        <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="Border.chip">
+        <Setter Property="Background" Value="{DynamicResource PillNeutralBgBrush}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="Padding" Value="7,1"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.chip TextBlock">
+        <Setter Property="FontSize" Value="9"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource PillNeutralFgBrush}"/>
+    </Style>
+    <Style Selector="Border.chip.warn">
+        <Setter Property="Background" Value="{DynamicResource WarningBgBrush}"/>
+    </Style>
+    <Style Selector="Border.chip.warn TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/>
+    </Style>
+
+    <Style Selector="Border.ping-pill">
+        <Setter Property="Background" Value="{DynamicResource PillNeutralBgBrush}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="Padding" Value="8,2"/>
+        <Setter Property="MinWidth" Value="58"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.ping-pill TextBlock">
+        <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{DynamicResource PillNeutralFgBrush}"/>
+    </Style>
+    <Style Selector="Border.ping-pill.good">
+        <Setter Property="Background" Value="{DynamicResource PillFastBgBrush}"/>
+    </Style>
+    <Style Selector="Border.ping-pill.good TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource PillFastFgBrush}"/>
+    </Style>
+    <Style Selector="Border.ping-pill.slow">
+        <Setter Property="Background" Value="{DynamicResource PillSlowBgBrush}"/>
+    </Style>
+    <Style Selector="Border.ping-pill.slow TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource PillSlowFgBrush}"/>
+    </Style>
+    <Style Selector="Border.ping-pill.bad">
+        <Setter Property="Background" Value="{DynamicResource PillDangerBgBrush}"/>
+    </Style>
+    <Style Selector="Border.ping-pill.bad TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource PillDangerFgBrush}"/>
+    </Style>
+
+    <Style Selector="Button.row-icon">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Width" Value="30"/>
+        <Setter Property="Height" Value="30"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusSm}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+    </Style>
+    <Style Selector="Button.row-icon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+    </Style>
+    <Style Selector="Button.row-icon.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+    <Style Selector="Button.row-icon icons|Pictogram">
+        <Setter Property="Width" Value="15"/>
+        <Setter Property="Height" Value="15"/>
+    </Style>
+
+    <Style Selector="StackPanel.empty-state">
+        <Setter Property="Spacing" Value="10"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="MaxWidth" Value="300"/>
+        <Setter Property="Margin" Value="20"/>
+    </Style>
+    <Style Selector="Border.empty-icon">
+        <Setter Property="Width" Value="56"/>
+        <Setter Property="Height" Value="56"/>
+        <Setter Property="CornerRadius" Value="28"/>
+        <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.empty-icon icons|Pictogram">
+        <Setter Property="Width" Value="26"/>
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.empty-title">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.empty-text">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <Style Selector="Border.form-card">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}"/>
+        <Setter Property="Padding" Value="12"/>
+    </Style>
+    <Style Selector="TextBlock.form-title">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+</Styles>

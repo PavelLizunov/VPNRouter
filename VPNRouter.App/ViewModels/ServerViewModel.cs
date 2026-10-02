@@ -12,8 +12,14 @@ public partial class ServerViewModel : ViewModelBase
     private VlessServerEntry _originalEntry;
 
     [ObservableProperty] private string _name = string.Empty;
-    [ObservableProperty] private string _server = string.Empty;
-    [ObservableProperty] private int _port = 443;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Endpoint))]
+    private string _server = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Endpoint))]
+    private int _port = 443;
+
+    public string Endpoint => Port > 0 ? $"{Server}:{Port}" : Server;
     [ObservableProperty] private string _uuid = string.Empty;
     [ObservableProperty] private string _flow = "xtls-rprx-vision";
     [ObservableProperty] private string _security = "reality";
@@ -38,7 +44,15 @@ public partial class ServerViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(StatusDot))]
     [NotifyPropertyChangedFor(nameof(StatusDotBrush))]
     [NotifyPropertyChangedFor(nameof(HasTestResult))]
+    [NotifyPropertyChangedFor(nameof(IsPingGood))]
+    [NotifyPropertyChangedFor(nameof(IsPingSlow))]
+    [NotifyPropertyChangedFor(nameof(IsPingBad))]
     private ServerProbeStatus _testStatus = ServerProbeStatus.Unknown;
+
+    // The ping pill of a server row: green when the probe passed, amber when slow or implausible, red when it failed.
+    public bool IsPingGood => TestStatus == ServerProbeStatus.Ok;
+    public bool IsPingSlow => TestStatus is ServerProbeStatus.Slow or ServerProbeStatus.Implausible;
+    public bool IsPingBad => TestStatus is ServerProbeStatus.TlsFailed or ServerProbeStatus.Unreachable or ServerProbeStatus.Timeout;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PingDisplay))]

@@ -1459,6 +1459,15 @@ public static partial class Strings
         ? "Серверов пока нет. Вставьте ссылку на сервер в поле ниже и добавьте её."
         : "No servers yet. Paste a server link into the field below and add it.";
 
+    public static string SrvEmptyTitle => Ru ? "Серверов пока нет" : "No servers yet";
+    public static string SrvEmptyBody => Ru
+        ? "Вставьте ссылку на сервер (vless://, hy2://, tuic://, ss://) в поле ниже и нажмите «Добавить сервер(ы)»."
+        : "Paste a server link (vless://, hy2://, tuic://, ss://) into the field below and press Add Server(s).";
+    public static string SubsEmptyTitle => Ru ? "Подписок пока нет" : "No subscriptions yet";
+    public static string SubsEmptyBody => Ru
+        ? "Подписка — это ссылка от VPN-провайдера со списком серверов. Вставьте её ниже и нажмите «Добавить»."
+        : "A subscription is a link from your VPN provider with its list of servers. Paste it below and press Add.";
+
     public static string SectionShow => Ru ? "Показать" : "Show";
     public static string SectionHide => Ru ? "Свернуть" : "Hide";
 
