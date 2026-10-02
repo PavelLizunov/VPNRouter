@@ -24,6 +24,17 @@ public static class Scenarios
             vm.IsConnected = false;
             vm.IsConnecting = true;
         }),
+        new("configured", "One saved server link, not connected (add state IsConnected / IsConnecting / SmpErrorText)", AddOneServer),
+        new("alert", "One saved server, the tunnel reported a failover alert (the dead-config warning of the home screen)", vm =>
+        {
+            AddOneServer(vm);
+            vm.IsConnecting = false;
+            vm.IsConnected = true;
+            typeof(MainWindowViewModel).GetField("_lastConnectionAlert", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(vm, "⚠ The server does not respond and the subscription has no other servers.");
+            typeof(MainWindowViewModel).GetMethod("RaiseSimpleAlertProps", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.Invoke(vm, null);
+        }),
         new("many-servers", "200 servers, every tenth with a very long name", vm =>
         {
             for (var i = 0; i < 200; i++)
@@ -40,6 +51,18 @@ public static class Scenarios
             }
         }),
     };
+
+    private static void AddOneServer(MainWindowViewModel vm)
+    {
+        var server = new ServerViewModel(new VlessServerEntry
+        {
+            Name = "Frankfurt 1",
+            Server = "203.0.113.10",
+            Port = 443,
+        });
+        vm.Servers.Add(server);
+        vm.SelectedServer = server;
+    }
 
     public static Scenario? Find(string? name) =>
         All.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));

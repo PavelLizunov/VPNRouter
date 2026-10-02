@@ -853,6 +853,18 @@ public static class Strings
     public static string SmpCfgSplit => global::VPNRouter.Core.Localization.Strings.SmpCfgSplit;
     public static string SmpCfgFull => global::VPNRouter.Core.Localization.Strings.SmpCfgFull;
 
+    public static string SmpHeroAddConfigTitle => global::VPNRouter.Core.Localization.Strings.SmpHeroAddConfigTitle;
+    public static string SmpHeroAddConfigHint => global::VPNRouter.Core.Localization.Strings.SmpHeroAddConfigHint;
+    public static string SmpHeroWarnTitle => global::VPNRouter.Core.Localization.Strings.SmpHeroWarnTitle;
+    public static string SmpCtaWait => global::VPNRouter.Core.Localization.Strings.SmpCtaWait;
+    public static string SmpHeroErrorTitle => global::VPNRouter.Core.Localization.Strings.SmpHeroErrorTitle;
+    public static string SmpSegSplit => global::VPNRouter.Core.Localization.Strings.SmpSegSplit;
+    public static string SmpSegFull => global::VPNRouter.Core.Localization.Strings.SmpSegFull;
+    public static string SmpKindServer => global::VPNRouter.Core.Localization.Strings.SmpKindServer;
+    public static string SmpKindSubscription => global::VPNRouter.Core.Localization.Strings.SmpKindSubscription;
+    public static string SmpKindCustom => global::VPNRouter.Core.Localization.Strings.SmpKindCustom;
+    public static string SmpKindServers(int n) => global::VPNRouter.Core.Localization.Strings.SmpKindServers(n);
+
     public static string SmpCtaConnect => global::VPNRouter.Core.Localization.Strings.SmpCtaConnect;
     public static string SmpCtaDisconnect => global::VPNRouter.Core.Localization.Strings.SmpCtaDisconnect;
     public static string SmpCtaCancel => global::VPNRouter.Core.Localization.Strings.SmpCtaCancel;
