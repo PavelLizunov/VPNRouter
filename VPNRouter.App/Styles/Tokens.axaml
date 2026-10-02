@@ -118,6 +118,17 @@
             <BoxShadows x:Key="ShadowMd">0 4 12 0 #120F1320, 0 1 2 0 #0A0F1320</BoxShadows>
             <BoxShadows x:Key="ShadowLg">0 12 28 0 #1A0F1320, 0 2 6 0 #0D0F1320</BoxShadows>
 
+            <!-- Fluent text box resources, so that every input follows the tokens (rounded by the page, a quiet border, an accent border on focus). -->
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFC2C9D5"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#FF9AA5B8"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FF0276B4"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#FF5B6A7F"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#FF5B6A7F"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#FF5B6A7F"/>
+
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -233,6 +244,16 @@
             <BoxShadows x:Key="ShadowSm">0 1 2 0 #80000000, 0 1 1 0 #66000000</BoxShadows>
             <BoxShadows x:Key="ShadowMd">0 4 14 0 #8C000000, 0 1 2 0 #66000000</BoxShadows>
             <BoxShadows x:Key="ShadowLg">0 16 32 0 #A5000000, 0 2 6 0 #80000000</BoxShadows>
+
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FF3A4560"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#FF56627F"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FF38BDF8"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#FF8791A6"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#FF8791A6"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#FF8791A6"/>
 
         </ResourceDictionary>
 

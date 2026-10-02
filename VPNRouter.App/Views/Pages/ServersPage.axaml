@@ -358,25 +358,26 @@
           </Border>
         </StackPanel>
 
-        <DockPanel IsVisible="{Binding IsVlessMode}" LastChildFill="True">
-          <Button Classes="solid" DockPanel.Dock="Right" Content="{Binding LblAddServers}"
-                  Command="{Binding AddServerCommand}"
-                  Margin="6,0,0,0"
-                  Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"
-                  AutomationProperties.Name="{Binding LblAddServers}"/>
-          <Button DockPanel.Dock="Right" Content="{Binding LblRemove}"
-                  Command="{Binding RemoveServerCommand}"
-                  Margin="6,0,0,0"
-                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}"
-                  AutomationProperties.Name="{Binding L_TipDeleteServer}"/>
-          <TextBox Text="{Binding VlessUri}"
+        <!-- The link box takes the full width on its own row (a link is long and was squeezed between two buttons at 360 px); the buttons sit below it. -->
+        <Grid IsVisible="{Binding IsVlessMode}" RowDefinitions="Auto,Auto" RowSpacing="6">
+          <TextBox Grid.Row="0" Text="{Binding VlessUri}"
                    PlaceholderText="{Binding L_WmVlessUri}"
                    FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                    FontSize="10" Padding="6,4"
                    AcceptsReturn="False"
                    AutomationProperties.Name="{Binding L_WmVlessUri}"/>
-        </DockPanel>
+          <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+            <Button Content="{Binding LblRemove}"
+                    Command="{Binding RemoveServerCommand}"
+                    Padding="14,5" CornerRadius="{StaticResource RadiusSm}"
+                    AutomationProperties.Name="{Binding L_TipDeleteServer}"/>
+            <Button Classes="solid" Content="{Binding LblAddServers}"
+                    Command="{Binding AddServerCommand}"
+                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                    Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"
+                    AutomationProperties.Name="{Binding LblAddServers}"/>
+          </StackPanel>
+        </Grid>
         <StackPanel Orientation="Horizontal" Spacing="8"
                     IsVisible="{Binding !IsVlessMode}">
           <Button Classes="solid" Content="{Binding LblAddConfig}"

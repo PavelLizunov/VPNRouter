@@ -19,7 +19,7 @@ public static partial class Strings
     public static string ZapretSecFilters      => Ru ? "Фильтры" : "Filters";
     public static string ZapretSecUpdates      => Ru ? "Обновления" : "Updates";
     public static string ZapretSecDiagnostics  => Ru ? "Диагностика" : "Diagnostics";
-    public static string ZapretSecAdvanced     => Ru ? "Дополнительно" : "Advanced";
+    public static string ZapretSecAdvanced     => Ru ? "Прочее" : "Advanced";
 
     public static string ZapretSecStrategyDesc => Ru
         ? "Технология обхода DPI. Если одна не работает — попробуйте другую."
