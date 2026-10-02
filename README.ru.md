@@ -193,12 +193,12 @@ Release-сборка + упаковка:
 
 ```powershell
 # Windows (PowerShell) — производит full + update ZIP'ы + их .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.50.0-r18"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.50.0-r20"
 ```
 
 ```bash
 # macOS DMG — запускается на любом Mac с .NET 10 SDK
-./build-mac.sh 2.50.0-r18
+./build-mac.sh 2.50.0-r20
 ```
 
 ```bash

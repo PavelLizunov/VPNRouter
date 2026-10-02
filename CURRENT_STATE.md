@@ -7,17 +7,19 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r18 (prerelease, 2026-10-02), not
+- **Latest published candidate:** v2.50.0-r20 (prerelease, 2026-10-03), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
   on WINBRAT on the first attempt (`tools/post-ship-local.ps1`); the screenshot
   gate and the live-update gate were not run
-  (see `plans/phase-r18-release-2.50.0-r18-2026-10-02.md`). It carries the
-  findings of the every-page-every-size audit: main tabs that stay reachable in a
-  narrow window, one text box look, 4.5:1 contrast on filled buttons, and
-  layout fixes on Servers, Settings and Applications. Earlier candidates: r17
-  (Applications page redone, safe web installer, UI exception guard, crash
-  reports in the diagnostics bundle), r16, r15. The owner's next real update is
-  the check of the driver-lock fix. Main declares `AppVersion` 2.50.0-r18.
+  (see `plans/phase-r20-release-2.50.0-r20-2026-10-03.md`). r19 was the visible
+  redesign (home screen with a status emblem and one dominant Connect button,
+  brand area and tabs, Servers and Subscribe lists, one look for inputs); r20
+  makes the default window tall enough for it and loads the mascot lazily so a
+  plain unit test cannot poison the view model type. Earlier candidates: r18
+  (every-page-every-size audit fixes), r17 (Applications page redone, safe web
+  installer, UI exception guard, crash reports in the diagnostics bundle), r16,
+  r15. The owner's next real update is the check of the driver-lock fix. Main
+  declares `AppVersion` 2.50.0-r20.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
