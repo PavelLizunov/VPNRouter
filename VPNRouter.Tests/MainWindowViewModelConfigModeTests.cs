@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using VPNRouter.App.ViewModels;
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
