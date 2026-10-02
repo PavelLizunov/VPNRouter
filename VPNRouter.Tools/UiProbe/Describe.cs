@@ -31,19 +31,49 @@ public static class Describe
         }
     }
 
+    private static readonly HashSet<string> Chrome = new(StringComparer.Ordinal)
+    {
+        "ContentPresenter", "ScrollContentPresenter", "ItemsPresenter", "VirtualizingStackPanel", "StackPanel", "Grid", "Border",
+        "Panel", "DockPanel", "WrapPanel", "ScrollViewer", "Decorator", "VisualLayerManager", "AdornerDecorator", "LayoutTransformControl",
+        "TransitioningContentControl", "Canvas", "UniformGrid", "RelativePanel", "ContentControl",
+    };
+
+    // A readable name for a control: its own text, else the first text or icon inside it, else its automation name.
+    public static string? Label(Control c)
+    {
+        var own = TextOf(c);
+        if (!string.IsNullOrWhiteSpace(own)) return Trim(own!, 40);
+        foreach (var d in c.GetVisualDescendants())
+        {
+            if (d is TextBlock tb && !string.IsNullOrWhiteSpace(TextOf(tb))) return Trim(TextOf(tb)!, 40);
+        }
+        foreach (var d in c.GetVisualDescendants())
+        {
+            if (d is VPNRouter.App.Controls.Pictogram { Id: { Length: > 0 } id }) return "icon:" + id;
+        }
+        var automation = Avalonia.Automation.AutomationProperties.GetName(c);
+        return string.IsNullOrWhiteSpace(automation) ? null : Trim(automation, 40);
+    }
+
+    // Short stable path: the meaningful ancestors only (layout containers and template parts are left out), then the control and its label.
     public static string Path(Control c)
     {
         var parts = new List<string>();
-        for (Visual? v = c; v != null && parts.Count < 7; v = v.GetVisualParent())
+        for (Visual? v = c.GetVisualParent(); v != null && parts.Count < 3; v = v.GetVisualParent())
         {
             if (v is Window) break;
-            var name = v.GetType().Name;
-            if (v is Control ctl && !string.IsNullOrEmpty(ctl.Name)) name += "#" + ctl.Name;
-            parts.Add(name);
+            var type = v.GetType().Name;
+            var name = (v as Control)?.Name;
+            var isPart = name != null && name.StartsWith("PART_", StringComparison.Ordinal);
+            if (Chrome.Contains(type) && string.IsNullOrEmpty(name)) continue;
+            if (isPart) continue;
+            parts.Add(string.IsNullOrEmpty(name) ? type : type + "#" + name);
         }
         parts.Reverse();
-        var text = TextOf(c);
-        return string.Join(">", parts) + (string.IsNullOrWhiteSpace(text) ? "" : $" \"{Trim(text!, 40)}\"");
+        var self = c.GetType().Name + (string.IsNullOrEmpty(c.Name) ? string.Empty : "#" + c.Name);
+        var label = Label(c);
+        var text = label == null ? string.Empty : $" \"{label}\"";
+        return (parts.Count == 0 ? string.Empty : string.Join(">", parts) + ">") + self + text;
     }
 
     public static string Trim(string s, int max)

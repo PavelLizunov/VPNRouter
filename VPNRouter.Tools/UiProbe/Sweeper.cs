@@ -204,7 +204,8 @@ public static class Sweeper
         if (OperatingSystem.IsWindows() && !o.AllowSideEffects && c is not (TabItem or ListBoxItem or Expander))
             return "windows host: only navigation is clicked without allow_side_effects";
 
-        if (!o.AllowSideEffects && (Dangerous.IsMatch(text) || (command != null && Dangerous.IsMatch(command))))
+        var navigation = c is TabItem or ListBoxItem or Expander;
+        if (!o.AllowSideEffects && !navigation && (Dangerous.IsMatch(text) || (command != null && Dangerous.IsMatch(command))))
             return "acts on the machine";
 
         if (c is Button && c is not ToggleButton)
