@@ -250,7 +250,7 @@
                                                LetterSpacing="0.5"/>
                                     <TextBox Text="{Binding TgProxyPort}"
                                              PlaceholderText="{Binding L_WmTgProxyPort}"
-                                             FontSize="11" Padding="6,4"
+                                             FontSize="11" Padding="8,5"
                                              HorizontalContentAlignment="Center"
                                              AutomationProperties.Name="{Binding L_TgProxyPort}"/>
                                 </StackPanel>
@@ -265,7 +265,7 @@
                                         <TextBox Grid.Column="0"
                                                  Text="{Binding TgProxySecret}"
                                                  PlaceholderText="{Binding L_WmTgProxySecret}"
-                                                 FontSize="10" Padding="6,4"
+                                                 FontSize="10" Padding="8,5"
                                                  FontFamily="Consolas,Courier New,monospace"
                                                  IsReadOnly="True"
                                                  AutomationProperties.Name="{Binding L_TgProxySecret}"/>

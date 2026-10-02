@@ -150,21 +150,6 @@
             <Setter Property="CornerRadius" Value="0"/>
         </Style>
 
-        <Style Selector="icons|Pictogram.pulse">
-            <Style.Animations>
-                <Animation Duration="0:0:1.2" IterationCount="INFINITE">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="1"/>
-                    </KeyFrame>
-                    <KeyFrame Cue="50%">
-                        <Setter Property="Opacity" Value="0.55"/>
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1"/>
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
 
         <!-- Narrow window: only the selected main tab keeps its label, the others show their icon (the label is the tooltip), so all six stay reachable. -->
         <Style Selector="ListBox.compact ListBoxItem.main-tab:not(:selected) TextBlock">
