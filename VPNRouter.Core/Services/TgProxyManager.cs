@@ -264,6 +264,14 @@ public class TgProxyManager : IDisposable
 
     public static void OpenInTelegram(string host, int port, string secret)
     {
+        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(secret) ||
+            host.Any(c => c is '\r' or '\n' or '"' or '\'' or ' ' || char.IsControl(c)) ||
+            secret.Any(c => c is '\r' or '\n' or '"' or '\'' or ' ' || char.IsControl(c)))
+        {
+            Log.Warning("[TgProxy] Refusing to open tg:// link with invalid host or secret parameters");
+            return;
+        }
+
         var url = BuildProxyLink(host, port, secret);
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             !string.Equals(uri.Scheme, "tg", StringComparison.OrdinalIgnoreCase))
