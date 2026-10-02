@@ -56,6 +56,16 @@
             <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
         </Style>
 
+        <!-- A destructive action that is not the main one: danger text on a danger tint, a stronger tint on hover. -->
+        <Style Selector="Button.danger-soft">
+            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        </Style>
+        <Style Selector="Button.danger-soft:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.danger-soft:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerBorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        </Style>
+
         <Style Selector="Button.solid:pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{Binding $parent[Button].Background}"/>
             <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}"/>

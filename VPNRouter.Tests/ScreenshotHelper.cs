@@ -54,7 +54,7 @@ public static class ScreenshotHelper
         }
     }
 
-    public static string CapturePage(UserControl page, string name, int width = 1200, int height = 800)
+    public static string CapturePage(UserControl page, string name, int width = 1200, int height = 800, bool appBackground = false)
     {
         if (page == null) throw new ArgumentNullException(nameof(page));
 
@@ -64,6 +64,9 @@ public static class ScreenshotHelper
             Height = height,
             Content = page
         };
+        // The app window paints SurfaceApp behind its pages; design captures do the same so cards read as in the app.
+        if (appBackground)
+            window.Bind(Window.BackgroundProperty, window.GetResourceObservable("SurfaceAppBrush"));
         return Capture(window, name);
     }
 }

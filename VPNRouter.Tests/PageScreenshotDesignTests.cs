@@ -64,7 +64,7 @@ public class PageScreenshotDesignTests
     {
         var control = Page(page);
         control.DataContext = vm;
-        ScreenshotHelper.CapturePage(control, $"design-{page}-{(dark ? "dark" : "light")}-{width}", width, 1400);
+        ScreenshotHelper.CapturePage(control, $"design-{page}-{(dark ? "dark" : "light")}-{width}", width, 1400, appBackground: true);
     });
 
     // The About window and the four steps of the setup wizard.
@@ -159,7 +159,7 @@ public class PageScreenshotDesignTests
                 break;
         }
         page.DataContext = vm;
-        ScreenshotHelper.CapturePage(page, $"design-state-{state}-{(dark ? "dark" : "light")}", 520, 1000);
+        ScreenshotHelper.CapturePage(page, $"design-state-{state}-{(dark ? "dark" : "light")}", 520, 1000, appBackground: true);
     });
 
     // Applications with a category open (default apps plus one custom app), in full-tunnel mode and in the bypass list.
@@ -182,7 +182,7 @@ public class PageScreenshotDesignTests
             vm.SelectedActiveAppGroup = group;
         }
         var page = new ApplicationsPage { DataContext = vm };
-        ScreenshotHelper.CapturePage(page, $"design-apps-{state}-{(dark ? "dark" : "light")}-{width}", width, 900);
+        ScreenshotHelper.CapturePage(page, $"design-apps-{state}-{(dark ? "dark" : "light")}-{width}", width, 900, appBackground: true);
     });
 
     [AvaloniaTheory]
@@ -201,7 +201,7 @@ public class PageScreenshotDesignTests
     public void Settings_SubTabs(int index, bool dark) => WithTheme(dark, false, vm =>
     {
         vm.SelectedSettingsIndex = index;
-        ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, $"design-settings{index}-{(dark ? "dark" : "light")}-520", 520, 1400);
+        ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, $"design-settings{index}-{(dark ? "dark" : "light")}-520", 520, 1400, appBackground: true);
     });
 
     [AvaloniaTheory]
@@ -218,7 +218,7 @@ public class PageScreenshotDesignTests
     {
         var control = Page(page);
         control.DataContext = vm;
-        ScreenshotHelper.CapturePage(control, $"design-{page}-ru-{(dark ? "dark" : "light")}-360", 360, 1400);
+        ScreenshotHelper.CapturePage(control, $"design-{page}-ru-{(dark ? "dark" : "light")}-360", 360, 1400, appBackground: true);
     });
 
     [AvaloniaTheory]

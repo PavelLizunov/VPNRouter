@@ -968,10 +968,11 @@
                   <Grid ColumnDefinitions="74,110,*,Auto,Auto,Auto"
                         ColumnSpacing="12" VerticalAlignment="Center">
                     <Border Grid.Column="0"
-                            CornerRadius="{StaticResource RadiusXs}"
-                            Padding="10,5"
-                            Width="74"
+                            CornerRadius="10"
+                            Padding="10,2"
+                            MinWidth="58"
                             BorderThickness="1"
+                            VerticalAlignment="Center"
                             HorizontalAlignment="Left"
                             Background="{Binding Action,
                                          Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
@@ -1070,10 +1071,11 @@
                         RowDefinitions="Auto,Auto,Auto"
                         ColumnSpacing="10" RowSpacing="3">
                     <Border Grid.Row="0" Grid.Column="0"
-                            CornerRadius="{StaticResource RadiusXs}"
-                            Padding="10,5"
-                            Width="74"
+                            CornerRadius="10"
+                            Padding="10,2"
+                            MinWidth="58"
                             BorderThickness="1"
+                            VerticalAlignment="Center"
                             HorizontalAlignment="Left"
                             Background="{Binding Action,
                                          Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
@@ -1655,7 +1657,7 @@
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
                   BorderThickness="1">
             <StackPanel Spacing="3">
-              <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"
+              <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold"
                          TextWrapping="Wrap"/>
               <CheckBox IsChecked="{Binding ReceivePrereleases}"
                         AutomationProperties.Name="{Binding ReceivePrereleasesLabel}"
@@ -1671,8 +1673,8 @@
                   BorderThickness="1">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
               <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="{Binding L_CurrentVersion}"
-                           FontSize="10" Opacity="0.7"/>
+                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding L_CurrentVersion}"
+                           FontSize="10"/>
                 <TextBlock Text="{Binding AppVersionShortText}"
                            FontSize="12" FontWeight="SemiBold"/>
               </StackPanel>
@@ -1767,9 +1769,9 @@
                         Background="{DynamicResource SurfaceRaisedBrush}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
                         AutomationProperties.Name="{Binding L_DiagExportButton}"/>
-                <TextBlock Text="{Binding L_DiagExporting}"
+                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding L_DiagExporting}"
                            IsVisible="{Binding IsExportingDiagnostics}"
-                           VerticalAlignment="Center" Opacity="0.7" FontSize="11"/>
+                           VerticalAlignment="Center" FontSize="11"/>
               </StackPanel>
             </StackPanel>
           </Border>
