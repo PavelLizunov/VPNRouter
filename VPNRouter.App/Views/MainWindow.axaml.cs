@@ -8,15 +8,19 @@ namespace VPNRouter.App.Views;
 
 public partial class MainWindow : Window
 {
+    // Set after InitializeComponent: the window base class raises ClientSize changes from its own constructor, before the name scope exists.
+    private ListBox? _mainTabs;
+
     public MainWindow()
     {
         InitializeComponent();
+        _mainTabs = this.FindControl<ListBox>("MainTabs");
 
         Opened += (_, _) =>
         {
             ApplyCompactTabs();
-            if (this.FindControl<ListBox>("MainTabs") is { } tabs)
-                tabs.SizeChanged += (_, _) => ApplyCompactTabs();
+            if (_mainTabs != null)
+                _mainTabs.SizeChanged += (_, _) => ApplyCompactTabs();
             try { LaunchFailureCounter.MarkStable(); }
             catch { }
         };
@@ -53,7 +57,7 @@ public partial class MainWindow : Window
 
     private void ApplyCompactTabs()
     {
-        if (this.FindControl<ListBox>("MainTabs") is not { } tabs) return;
+        if (_mainTabs is not { } tabs) return;
         var available = ClientSize.Width;
         if (available <= 0) return;
 
