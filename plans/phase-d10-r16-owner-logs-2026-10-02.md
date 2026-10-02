@@ -47,3 +47,8 @@
 ## Outcome
 
 Pending.
+
+## Update after the `crashes` folder (2026-10-02)
+
+See the brief's Outcome: no unhandled-exception report exists for 11:42 on r16; the abrupt exits coincide with the setup's stop script (two setup runs in a row). The only
+crash report is the r14 Applications-tab exception already fixed in D-3.
