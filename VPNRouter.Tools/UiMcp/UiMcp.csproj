@@ -10,6 +10,13 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- Self-contained build for one runtime: -p:UiMcpRid=linux-x64. Set here, not as a global property, so it does not flow into
+       the referenced VPNRouter.App (an Exe), whose apphost and deps files would otherwise collide in the publish output (NETSDK1152). -->
+  <PropertyGroup Condition="'$(UiMcpRid)' != ''">
+    <RuntimeIdentifier>$(UiMcpRid)</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\UiProbe\UiProbe.csproj" />
   </ItemGroup>
