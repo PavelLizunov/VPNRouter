@@ -27,4 +27,6 @@ Exact-head CI on this PR; the steps above are recorded in the Outcome as they co
 
 ## Outcome
 
-Pending.
+Published 2026-10-02 as prerelease `v2.50.0-r16` (`--latest=false`; Latest stays `v2.49.3`), annotated tag on main `0308b044`, 18 assets. The six Windows files (unsigned: no SignPath secret or variable exists) were built on `windows-worker` and uploaded only after size, SHA-256 and sidecar matched the worker's copies; macOS, Linux and Android came from the tag workflows. Before publication: tag-bound `test`, `test-update`, three platform builds and the dispatched integrity run green, strict CI gate `OK` (8 green, 0 red), `check-open-p0.ps1` run with the recorded waiver (same three owner-gated P1 lines as r10 to r15). After publication: the integrity and APT runs of the release event are green.
+
+Post-ship on WINBRAT with `tools/post-ship-local.ps1`: `POSTSHIP-LOCAL: PASS` on the first attempt (version 2.50.0-r16, commit `0308b044`, 2 cold cycles), with the verifier scripts of this tag, which contain the lifecycle fix of #455.

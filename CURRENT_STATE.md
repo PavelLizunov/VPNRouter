@@ -7,15 +7,17 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r15 (prerelease, 2026-10-01), not
+- **Latest published candidate:** v2.50.0-r16 (prerelease, 2026-10-02), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
-  on WINBRAT on the third attempt (`tools/post-ship-local.ps1`; see the brief for
-  the two failed attempts); the screenshot gate and the live-update gate were
-  not run (see `plans/phase-r15-release-2.50.0-r15-2026-10-02.md`). It is the
-  hotfix over r14: the desktop render-pass crash on the Applications tab (D-3)
-  and the update/installer failure on the locked split-tunnel driver file (D-4).
-  The owner's next real update is the check of D-4. Main declares `AppVersion`
-  2.50.0-r15.
+  on WINBRAT on the first attempt (`tools/post-ship-local.ps1`); the screenshot
+  gate and the live-update gate were not run
+  (see `plans/phase-r16-release-2.50.0-r16-2026-10-02.md`). It carries the PC
+  half of the design work: navigation icons in the tab strip and inner tab
+  strips that follow the main tab roles. The previous candidate r15 (hotfix
+  for the Applications-tab render crash and the locked driver file during
+  update) is covered by `plans/phase-r15-release-2.50.0-r15-2026-10-02.md`; the
+  owner's next real update is the check of the driver-lock fix. Main declares
+  `AppVersion` 2.50.0-r16.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
