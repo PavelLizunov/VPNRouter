@@ -19,8 +19,6 @@ public partial class MainWindow : Window
         Opened += (_, _) =>
         {
             ApplyCompactTabs();
-            if (_mainTabs != null)
-                _mainTabs.SizeChanged += (_, _) => ApplyCompactTabs();
             try { LaunchFailureCounter.MarkStable(); }
             catch { }
         };
@@ -46,23 +44,40 @@ public partial class MainWindow : Window
         };
     }
 
-    // When the main tabs do not fit with their labels (a narrow window, or longer Russian labels), only the selected one keeps its label and the
-    // others show their icon (the label is their tooltip), so all of them stay reachable without sideways scrolling.
+    // Widths at which the six main tabs still fit with their labels (measured on the real labels: about 500 px in English and about 630 px in Russian,
+    // with the Tools tab). Below them only the selected tab keeps its label and the others show their icon (the label is their tooltip), so all of them stay
+    // reachable without sideways scrolling. A fixed rule on purpose: deciding by measuring the strip from inside layout left stale item widths, and
+    // deciding from a posted job could loop.
+    internal const double CompactTabsBelowEnglish = 510;
+    internal const double CompactTabsBelowRussian = 650;
+
+    internal static bool ShouldCompactTabs(double width, bool russian) =>
+        width > 0 && width < (russian ? CompactTabsBelowRussian : CompactTabsBelowEnglish);
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == ClientSizeProperty)
+        if (change.Property == ClientSizeProperty || change.Property == DataContextProperty)
+        {
+            if (change.Property == DataContextProperty)
+            {
+                if (change.OldValue is MainWindowViewModel old) old.PropertyChanged -= OnViewModelPropertyChanged;
+                if (change.NewValue is MainWindowViewModel current) current.PropertyChanged += OnViewModelPropertyChanged;
+            }
+            ApplyCompactTabs();
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.IsRussian))
             ApplyCompactTabs();
     }
 
     private void ApplyCompactTabs()
     {
         if (_mainTabs is not { } tabs) return;
-        var available = ClientSize.Width;
-        if (available <= 0) return;
-
-        tabs.Classes.Set("compact", false);
-        tabs.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        tabs.Classes.Set("compact", tabs.DesiredSize.Width > available);
+        var russian = (DataContext as MainWindowViewModel)?.IsRussian == true;
+        tabs.Classes.Set("compact", ShouldCompactTabs(ClientSize.Width, russian));
     }
 }
