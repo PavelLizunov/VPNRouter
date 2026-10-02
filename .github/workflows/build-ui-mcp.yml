@@ -1,0 +1,73 @@
+name: Build UI MCP
+
+# Builds the UI exploration MCP server (VPNRouter.Tools/UiMcp) for Linux, runs it once against the real XAML as a smoke test and
+# keeps it as an artifact, so a workstation can run the binary without a .NET SDK. See plans/phase-m1-ui-mcp-2026-10-02.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'VPNRouter.Tools/UiMcp/**'
+      - 'VPNRouter.Tools/UiProbe/**'
+      - 'VPNRouter.App/**'
+      - 'VPNRouter.Core/**'
+      - 'tools/ui-mcp/**'
+      - '.github/workflows/build-ui-mcp.yml'
+  pull_request:
+    paths:
+      - 'VPNRouter.Tools/UiMcp/**'
+      - 'VPNRouter.Tools/UiProbe/**'
+      - 'tools/ui-mcp/**'
+      - '.github/workflows/build-ui-mcp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Publish (linux-x64, self-contained)
+        run: dotnet publish VPNRouter.Tools/UiMcp/UiMcp.csproj -c Release -p:UiMcpRid=linux-x64 -o publish/ui-mcp
+
+      - name: Smoke session
+        run: |
+          set -o pipefail
+          mkdir -p smoke
+          python3 tools/ui-mcp/mcpcall.py --out smoke --server ./publish/ui-mcp/vpnrouter-ui-mcp -- \
+            ui_catalog '{}' \
+            ui_render '{"surface":"apps","width":520,"height":1100}' \
+            ui_render '{"surface":"window-advanced","width":520,"height":900,"theme":"dark","language":"ru"}' \
+            ui_sweep '{"surface":"window-advanced","speed_ms":0,"mode":"monkey","max_steps":150,"render_every":7,"seed":7}' \
+            2>&1 | tee smoke/session.txt
+          grep -q "failures: 0" smoke/session.txt
+          test "$(ls smoke/*.png | wc -l)" -ge 3
+
+      - name: Pack
+        run: tar -C publish -czf vpnrouter-ui-mcp-linux-x64.tar.gz ui-mcp
+
+      - name: Upload server
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: vpnrouter-ui-mcp-linux-x64
+          path: vpnrouter-ui-mcp-linux-x64.tar.gz
+          retention-days: 30
+
+      - name: Upload smoke output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ui-mcp-smoke
+          path: smoke
+          retention-days: 14
