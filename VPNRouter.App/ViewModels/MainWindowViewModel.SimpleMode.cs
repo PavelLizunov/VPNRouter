@@ -103,6 +103,9 @@ public partial class MainWindowViewModel
 
     private string? _lastConnectionAlert;
 
+    // Why the connected server is not the one that was selected (set by the pre-flight, cleared on the next Connect).
+    private string? _smpChoiceNote;
+
     private bool HasConnectionAlert => !string.IsNullOrEmpty(_lastConnectionAlert);
 
     private void RaiseSimpleAlertProps()
@@ -147,8 +150,9 @@ public partial class MainWindowViewModel
             {
                 var (name, ip) = DeriveConnectedServerLabel();
                 var via = Strings.SmpStatusConnectedVia;
-                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(ip)) return $"{via} {name} · {ip}";
-                if (!string.IsNullOrEmpty(name)) return $"{via} {name}";
+                var note = string.IsNullOrEmpty(_smpChoiceNote) ? string.Empty : $"\n{_smpChoiceNote}";
+                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(ip)) return $"{via} {name} · {ip}{note}";
+                if (!string.IsNullOrEmpty(name)) return $"{via} {name}{note}";
                 if (!string.IsNullOrEmpty(ip))   return $"{via} {ip}";
                 return Strings.SmpStatusConnectedNoDetails;
             }
@@ -272,6 +276,8 @@ public partial class MainWindowViewModel
             return;
         }
 
+        _smpChoiceNote = null;
+
         if (IsConnecting || IsApplying || _isReconnecting) return;
         if (_engine.IsRunning)
         {
@@ -377,6 +383,9 @@ public partial class MainWindowViewModel
                         {
                             _logger.Information(
                                 "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
+                            var previousServer = _settings.App.ActiveSubscriptionServer;
+                            if (!string.IsNullOrWhiteSpace(previousServer))
+                                _smpChoiceNote = Strings.SmpServerSwitchedNote(previousServer);
                             _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
 
                             var winnerVm = SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name);

@@ -66,7 +66,7 @@ public sealed class ServerHealthProbe
                     var r = await _probe(s, token).ConfigureAwait(false);
                     token.ThrowIfCancellationRequested();
                     var alive = r?.IsReachable == true;
-                    results[index] = new ServerLiveness(s, alive, alive ? r!.LatencyMs : int.MaxValue);
+                    results[index] = new ServerLiveness(s, alive, alive ? r!.LatencyMs : int.MaxValue, Verified: r!.IsVerified);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -106,7 +106,8 @@ public sealed class ServerHealthProbe
     public static VlessServerEntry? PickBest(IEnumerable<ServerLiveness> results)
         => results?
             .Where(r => r.Alive)
-            .OrderBy(r => r.LatencyMs)
+            .OrderByDescending(r => r.Verified)
+            .ThenBy(r => r.LatencyMs)
             .Select(r => r.Server)
             .FirstOrDefault();
 
@@ -125,4 +126,4 @@ public sealed class ServerHealthProbe
     }
 }
 
-public sealed record ServerLiveness(VlessServerEntry Server, bool Alive, int LatencyMs);
+public sealed record ServerLiveness(VlessServerEntry Server, bool Alive, int LatencyMs, bool Verified = true);

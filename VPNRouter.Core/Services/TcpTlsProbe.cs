@@ -35,6 +35,9 @@ public sealed record ServerProbeResult(
 {
     public bool IsReachable => Status is ServerProbeStatus.Ok or ServerProbeStatus.Slow;
 
+    // A UDP port that stayed silent proves nothing about the server (QUIC based protocols never answer a blind datagram).
+    public bool IsVerified => IsReachable && !string.Equals(Error, TcpTlsProbe.UdpNoReplyNote, StringComparison.Ordinal);
+
     public static ServerProbeResult Unknown { get; } = new(ServerProbeStatus.Unknown, 0, null);
 }
 
@@ -42,6 +45,7 @@ public static class TcpTlsProbe
 {
     public const int SlowThresholdMs = 800;
     public const int ImplausibleThresholdMs = 5;
+    public const string UdpNoReplyNote = "udp open (no reply)";
 
     public static TimeSpan TcpConnectTimeout { get; set; } = TimeSpan.FromSeconds(3);
     public static TimeSpan TlsHandshakeTimeout { get; set; } = TimeSpan.FromSeconds(3);
@@ -418,7 +422,7 @@ public static class TcpTlsProbe
         catch (OperationCanceledException)
         {
             var elapsedMs = Math.Min((int)sw.ElapsedMilliseconds, (int)UdpProbeTimeout.TotalMilliseconds);
-            return new ServerProbeResult(ServerProbeStatus.Ok, elapsedMs, "udp open (no reply)");
+            return new ServerProbeResult(ServerProbeStatus.Ok, elapsedMs, UdpNoReplyNote);
         }
         catch (SocketException sx) when (
             sx.SocketErrorCode is SocketError.ConnectionRefused
