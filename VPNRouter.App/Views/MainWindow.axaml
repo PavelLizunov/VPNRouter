@@ -146,6 +146,13 @@
             </Style.Animations>
         </Style>
 
+        <!-- Narrow window: only the selected main tab keeps its label, the others show their icon (the label is the tooltip), so all six stay reachable. -->
+        <Style Selector="ListBox.compact ListBoxItem.main-tab:not(:selected) TextBlock">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="ListBox.compact ListBoxItem.main-tab:not(:selected) StackPanel">
+            <Setter Property="Spacing" Value="0"/>
+        </Style>
     </Window.Styles>
 
     <Design.DataContext>
@@ -580,7 +587,8 @@
                           HorizontalAlignment="Stretch"
                           BorderThickness="0,0,0,1"
                           BorderBrush="{DynamicResource BorderDefaultBrush}">
-                <ListBox SelectedIndex="{Binding SelectedTabIndex}"
+                <ListBox x:Name="MainTabs"
+                         SelectedIndex="{Binding SelectedTabIndex}"
                          Background="Transparent"
                          BorderThickness="0"
                          HorizontalAlignment="Left"
@@ -590,38 +598,38 @@
                             <StackPanel Orientation="Horizontal" Spacing="2"/>
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabManual}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabManual}" ToolTip.Tip="{Binding LblTabManual}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <icons:Pictogram Id="tab-servers" Width="14" Height="14" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding LblTabManual}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabSubscribe}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabSubscribe}" ToolTip.Tip="{Binding LblTabSubscribe}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <icons:Pictogram Id="tab-subscribe" Width="14" Height="14" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding LblTabSubscribe}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabNetwork}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabNetwork}" ToolTip.Tip="{Binding LblTabNetwork}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <icons:Pictogram Id="tab-settings" Width="14" Height="14" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding LblTabNetwork}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabApps}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabApps}" ToolTip.Tip="{Binding LblTabApps}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <icons:Pictogram Id="tab-apps" Width="14" Height="14" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding LblTabApps}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabTools}"
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabTools}" ToolTip.Tip="{Binding LblTabTools}"
                                  IsVisible="{Binding IsToolsAvailable}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <icons:Pictogram Id="tab-tools" Width="14" Height="14" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding LblTabTools}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabFreeConfigs}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabFreeConfigs}" ToolTip.Tip="{Binding LblTabFreeConfigs}">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <icons:Pictogram Id="tab-public" Width="14" Height="14" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding LblTabFreeConfigs}" VerticalAlignment="Center"/>
