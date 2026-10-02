@@ -22,6 +22,14 @@ public class MainWindowCompactTabsTests
     public void Rule_DependsOnWidthAndLanguage(double width, bool russian, bool expected) =>
         Assert.Equal(expected, MainWindow.ShouldCompactTabs(width, russian));
 
+    [Theory]
+    [InlineData(760, 1080, 760)]
+    [InlineData(760, 768, 720)]
+    [InlineData(760, 600, 552)]
+    [InlineData(760, 300, 360)]
+    public void WindowHeight_FitsTheWorkArea(double preferred, double workArea, double expected) =>
+        Assert.Equal(expected, MainWindow.FittedHeight(preferred, workArea, 360));
+
     [AvaloniaTheory]
     [InlineData(360, true)]
     [InlineData(900, false)]
