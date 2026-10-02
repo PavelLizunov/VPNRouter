@@ -94,9 +94,29 @@
         </Style>
 
         <Style Selector="ListBoxItem.main-tab">
-            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Padding" Value="11,7"/>
             <Setter Property="MinHeight" Value="0"/>
             <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab StackPanel">
+            <Setter Property="Spacing" Value="6"/>
+        </Style>
+        <Style Selector="icons|Pictogram.tab-icon">
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style Selector="Button.status-chip">
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="MinHeight" Value="20"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.status-chip TextBlock">
+            <Setter Property="FontSize" Value="10"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
 
@@ -304,30 +324,32 @@
             </Border>
         </StackPanel>
 
-        <Border Grid.Row="1" Padding="12,8" BorderThickness="0,0,0,1"
-                BorderBrush="{DynamicResource BorderDefaultBrush}"
+        <Border Grid.Row="1" Padding="14,10,10,10" BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
-            <Grid ColumnDefinitions="28,*,Auto,Auto" ColumnSpacing="10">
-                <Border Grid.Column="0" Width="28" Height="28"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource AccentBgSubtleBrush}"
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
+                <!-- The brand tile: the mascot art placed on its light tile by tools/icons/make-icons.py (art unchanged); it reads in both themes. -->
+                <Border Grid.Column="0" Width="40" Height="40"
+                        CornerRadius="{StaticResource RadiusLg}"
+                        BoxShadow="{DynamicResource ShadowSm}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        BorderThickness="1"
                         ClipToBounds="True"
                         VerticalAlignment="Center">
-                    <Image Source="{Binding LogoSource}"
-                           Width="26" Height="26" Stretch="Uniform"
-                           RenderOptions.BitmapInterpolationMode="HighQuality"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
+                           Width="40" Height="40" Stretch="UniformToFill"
+                           RenderOptions.BitmapInterpolationMode="HighQuality"/>
                 </Border>
 
-                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                     <TextBlock Text="Virtual Penguin Network"
-                               FontSize="12" FontWeight="Bold"
+                               FontSize="14" FontWeight="Bold"
                                Foreground="{DynamicResource TextPrimaryBrush}"
                                TextTrimming="CharacterEllipsis"/>
-                    <StackPanel Orientation="Horizontal" Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
                         <Button Command="{Binding NavigateToVpnCommand}"
                                 ToolTip.Tip="{Binding VpnBadgeTooltip}"
-                                Padding="5,1" MinHeight="0"
+                                Classes="status-chip"
                                 Background="{DynamicResource SuccessBgBrush}"
                                 BorderThickness="0"
                                 CornerRadius="{StaticResource RadiusPill}"
@@ -336,13 +358,13 @@
                             <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
                                 <icons:Pictogram Id="status" Width="8" Height="8" VerticalAlignment="Center"
                                          Foreground="{DynamicResource SuccessSolidBrush}"/>
-                                <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                <TextBlock Text="VPN"
                                            Foreground="{DynamicResource SuccessFgBrush}"/>
                             </StackPanel>
                         </Button>
                         <Button Command="{Binding NavigateToVpnCommand}"
                                 ToolTip.Tip="{Binding VpnBadgeTooltip}"
-                                Padding="5,1" MinHeight="0"
+                                Classes="status-chip"
                                 Background="{DynamicResource WarningBgBrush}"
                                 BorderThickness="0"
                                 CornerRadius="{StaticResource RadiusPill}"
@@ -352,13 +374,13 @@
                                 <icons:Pictogram Id="status" Classes="pulse"
                                          Width="8" Height="8" VerticalAlignment="Center"
                                          Foreground="{DynamicResource WarningSolidBrush}"/>
-                                <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                <TextBlock Text="VPN"
                                            Foreground="{DynamicResource WarningFgBrush}"/>
                             </StackPanel>
                         </Button>
                         <Button Command="{Binding NavigateToVpnCommand}"
                                 ToolTip.Tip="{Binding VpnBadgeTooltip}"
-                                Padding="5,1" MinHeight="0"
+                                Classes="status-chip"
                                 Background="{DynamicResource SurfaceSunkenBrush}"
                                 BorderThickness="0"
                                 CornerRadius="{StaticResource RadiusPill}"
@@ -367,7 +389,7 @@
                             <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
                                 <icons:Pictogram Id="status" Width="8" Height="8" VerticalAlignment="Center"
                                          Foreground="{DynamicResource TextMutedBrush}"/>
-                                <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                <TextBlock Text="VPN"
                                            Foreground="{DynamicResource TextMutedBrush}"/>
                             </StackPanel>
                         </Button>
@@ -375,24 +397,24 @@
                         <Button Command="{Binding NavigateToZapretCommand}"
                                 ToolTip.Tip="{Binding ZapretBadgeTooltip}"
                                 IsVisible="{Binding IsZapretAvailable}"
-                                Padding="5,1" MinHeight="0"
+                                Classes="status-chip"
                                 Background="{Binding ZapretBadgeBrush}"
                                 BorderThickness="0"
                                 CornerRadius="{StaticResource RadiusPill}"
                                 Cursor="Hand">
-                            <TextBlock Text="Zapret" FontSize="9" FontWeight="SemiBold"
+                            <TextBlock Text="Zapret"
                                        Foreground="White"/>
                         </Button>
 
                         <Button Command="{Binding NavigateToTgProxyCommand}"
                                 ToolTip.Tip="{Binding TgProxyBadgeTooltip}"
                                 IsVisible="{Binding IsTgProxyAvailable}"
-                                Padding="5,1" MinHeight="0"
+                                Classes="status-chip"
                                 Background="{Binding TgProxyBadgeBrush}"
                                 BorderThickness="0"
                                 CornerRadius="{StaticResource RadiusPill}"
                                 Cursor="Hand">
-                            <TextBlock Text="TG" FontSize="9" FontWeight="SemiBold"
+                            <TextBlock Text="TG"
                                        Foreground="White"/>
                         </Button>
                     </StackPanel>
@@ -403,17 +425,18 @@
                         icons:PictogramText.Icons="chevron-left,chevron-right" icons:PictogramText.Content="{Binding UiModeToggleText}"
                         ToolTip.Tip="{Binding UiModeToggleTooltip}"
                         IsVisible="{Binding !IsSimpleMode}"
-                        Padding="8,4" MinHeight="0"
+                        Padding="10,5" MinHeight="0"
                         FontSize="11" FontWeight="SemiBold"
-                        Background="Transparent"
+                        Background="{DynamicResource AccentBgSubtleBrush}"
                         BorderThickness="0"
                         Foreground="{DynamicResource AccentFgBrush}"
-                        CornerRadius="{StaticResource RadiusSm}"
+                        CornerRadius="{StaticResource RadiusPill}"
                         VerticalAlignment="Center"
                         Cursor="Hand">
                     <Button.Styles>
                         <Style Selector="Button:pointerover /template/ ContentPresenter">
-                            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+                            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
                         </Style>
                     </Button.Styles>
                 </Button>
@@ -581,62 +604,64 @@
 
         <Grid Grid.Row="3" RowDefinitions="Auto,*"
               IsVisible="{Binding !IsSimpleMode}">
-            <ScrollViewer Grid.Row="0"
-                          HorizontalScrollBarVisibility="Hidden"
+            <Border Grid.Row="0"
+                    Background="{DynamicResource SurfaceBaseBrush}"
+                    BorderThickness="0,0,0,1"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}">
+            <ScrollViewer HorizontalScrollBarVisibility="Hidden"
                           VerticalScrollBarVisibility="Disabled"
-                          HorizontalAlignment="Stretch"
-                          BorderThickness="0,0,0,1"
-                          BorderBrush="{DynamicResource BorderDefaultBrush}">
+                          HorizontalAlignment="Stretch">
                 <ListBox x:Name="MainTabs"
                          SelectedIndex="{Binding SelectedTabIndex}"
                          Background="Transparent"
                          BorderThickness="0"
                          HorizontalAlignment="Left"
-                         Padding="6,2">
+                         Padding="8,6">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="2"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4"/>
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
                     <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabManual}" ToolTip.Tip="{Binding LblTabManual}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <icons:Pictogram Id="tab-servers" Width="14" Height="14" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal">
+                            <icons:Pictogram Classes="tab-icon" Id="tab-servers"/>
                             <TextBlock Text="{Binding LblTabManual}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabSubscribe}" ToolTip.Tip="{Binding LblTabSubscribe}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <icons:Pictogram Id="tab-subscribe" Width="14" Height="14" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal">
+                            <icons:Pictogram Classes="tab-icon" Id="tab-subscribe"/>
                             <TextBlock Text="{Binding LblTabSubscribe}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabNetwork}" ToolTip.Tip="{Binding LblTabNetwork}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <icons:Pictogram Id="tab-settings" Width="14" Height="14" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal">
+                            <icons:Pictogram Classes="tab-icon" Id="tab-settings"/>
                             <TextBlock Text="{Binding LblTabNetwork}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabApps}" ToolTip.Tip="{Binding LblTabApps}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <icons:Pictogram Id="tab-apps" Width="14" Height="14" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal">
+                            <icons:Pictogram Classes="tab-icon" Id="tab-apps"/>
                             <TextBlock Text="{Binding LblTabApps}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabTools}" ToolTip.Tip="{Binding LblTabTools}"
                                  IsVisible="{Binding IsToolsAvailable}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <icons:Pictogram Id="tab-tools" Width="14" Height="14" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal">
+                            <icons:Pictogram Classes="tab-icon" Id="tab-tools"/>
                             <TextBlock Text="{Binding LblTabTools}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabFreeConfigs}" ToolTip.Tip="{Binding LblTabFreeConfigs}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <icons:Pictogram Id="tab-public" Width="14" Height="14" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal">
+                            <icons:Pictogram Classes="tab-icon" Id="tab-public"/>
                             <TextBlock Text="{Binding LblTabFreeConfigs}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
                 </ListBox>
             </ScrollViewer>
+            </Border>
 
             <Grid Grid.Row="1">
                 <ctrl:DeferredPage IsActive="{Binding IsServersTabSelected}" PageType="{x:Type pages:ServersPage}"/>
