@@ -32,6 +32,7 @@ public static partial class UiIcons
     public const string Ellipsis = "ellipsis";
     public const string FileText = "file-text";
     public const string Flag = "flag";
+    public const string FolderOpen = "folder-open";
     public const string Globe = "globe";
     public const string Info = "info";
     public const string LayoutGrid = "layout-grid";
@@ -89,6 +90,7 @@ public static partial class UiIcons
         [Ellipsis] = "M11,12 A1,1 0 1 0 13,12 A1,1 0 1 0 11,12 Z M18,12 A1,1 0 1 0 20,12 A1,1 0 1 0 18,12 Z M4,12 A1,1 0 1 0 6,12 A1,1 0 1 0 4,12 Z",
         [FileText] = "M6,22 A2,2 0 0 1 4,20 L4,4 A2,2 0 0 1 6,2 L14,2 A2.4,2.4 0 0 1 15.704,2.706 L19.292,6.294 A2.4,2.4 0 0 1 20,8 L20,20 A2,2 0 0 1 18,22 Z M14,2 L14,7 A1,1 0 0 0 15,8 L20,8 M10,9 L8,9 M16,13 L8,13 M16,17 L8,17",
         [Flag] = "M4,22 L4,4 A1,1 0 0 1 4.4,3.2 A6,6 0 0 1 8,2 C11,2 13,4 15.333,4 Q17.333,4 18.4,3.2 A1,1 0 0 1 20,4 L20,14 A1,1 0 0 1 19.6,14.8 A6,6 0 0 1 16,16 C13,16 11,14 8,14 A6,6 0 0 0 4,15.528",
+        [FolderOpen] = "M6,14 L7.5,11.1 A2,2 0 0 1 9.24,10 L20,10 A2,2 0 0 1 21.94,12.5 L20.4,18.5 A2,2 0 0 1 18.45,20 L4,20 A2,2 0 0 1 2,18 L2,5 A2,2 0 0 1 4,3 L7.9,3 A2,2 0 0 1 9.59,3.9 L10.4,5.1 A2,2 0 0 0 12.07,6 L18,6 A2,2 0 0 1 20,8 L20,10",
         [Globe] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,2 A14.5,14.5 0 0 0 12,22 A14.5,14.5 0 0 0 12,2 M2,12 L22,12",
         [Info] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,16 L12,12 M12,8 L12.01,8",
         [LayoutGrid] = "M4,3 L9,3 A1,1 0 0 1 10,4 L10,9 A1,1 0 0 1 9,10 L4,10 A1,1 0 0 1 3,9 L3,4 A1,1 0 0 1 4,3 Z M15,3 L20,3 A1,1 0 0 1 21,4 L21,9 A1,1 0 0 1 20,10 L15,10 A1,1 0 0 1 14,9 L14,4 A1,1 0 0 1 15,3 Z M15,14 L20,14 A1,1 0 0 1 21,15 L21,20 A1,1 0 0 1 20,21 L15,21 A1,1 0 0 1 14,20 L14,15 A1,1 0 0 1 15,14 Z M4,14 L9,14 A1,1 0 0 1 10,15 L10,20 A1,1 0 0 1 9,21 L4,21 A1,1 0 0 1 3,20 L3,15 A1,1 0 0 1 4,14 Z",

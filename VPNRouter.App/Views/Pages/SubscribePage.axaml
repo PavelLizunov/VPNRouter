@@ -210,12 +210,12 @@
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                     ToolTip.Tip="{Binding L_TipDeepVerifyServers}"
                     AutomationProperties.Name="{Binding L_TipDeepVerifyServers}"/>
-            <TextBlock Text="{Binding SubscriptionTestProgressText}"
+            <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding SubscriptionTestProgressText}"
                        VerticalAlignment="Center"
-                       FontSize="10" Opacity="0.7"/>
+                       FontSize="10"/>
           </StackPanel>
-          <TextBlock Text="{Binding SubscriptionDeepProgressText}"
-                     FontSize="10" Opacity="0.7"
+          <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding SubscriptionDeepProgressText}"
+                     FontSize="10"
                      IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
           <Border IsVisible="{Binding SubscriptionTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                   Padding="8,5" CornerRadius="{StaticResource RadiusSm}"

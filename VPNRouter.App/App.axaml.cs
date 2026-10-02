@@ -149,17 +149,17 @@ public partial class App : Application
     {
         var menu = new NativeMenu();
 
-        var showItem = new NativeMenuItem("Settings...");
+        var showItem = new NativeMenuItem(Localization.Strings.TraySettings);
         showItem.Click += (_, _) =>
         {
             desktop.MainWindow?.Show();
             desktop.MainWindow?.Activate();
         };
 
-        var connectItem = new NativeMenuItem("Connect");
+        var connectItem = new NativeMenuItem(Localization.Strings.TrayStart);
         connectItem.Click += (_, _) => _viewModel?.ToggleConnectionCommand.Execute(null);
 
-        var quitItem = new NativeMenuItem("Quit");
+        var quitItem = new NativeMenuItem(Localization.Strings.TrayExit);
         quitItem.Click += (_, _) => _viewModel?.QuitCommand.Execute(null);
 
         menu.Items.Add(showItem);
@@ -192,9 +192,12 @@ public partial class App : Application
         {
             _viewModel.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(MainWindowViewModel.IsConnected))
+                // The tray menu follows the connection state and the language (a language switch raises "" or IsRussian).
+                if (e.PropertyName is nameof(MainWindowViewModel.IsConnected) or nameof(MainWindowViewModel.IsRussian) or "" or null)
                 {
-                    connectItem.Header = _viewModel.IsConnected ? "Disconnect" : "Connect";
+                    showItem.Header = Localization.Strings.TraySettings;
+                    quitItem.Header = Localization.Strings.TrayExit;
+                    connectItem.Header = _viewModel.IsConnected ? Localization.Strings.TrayStop : Localization.Strings.TrayStart;
                     _trayIcon.ToolTipText = _viewModel.IsConnected
                         ? "VPNRouter - Connected" : "VPNRouter";
                 }

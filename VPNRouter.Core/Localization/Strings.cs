@@ -473,8 +473,8 @@ public static partial class Strings
         ? $"Конфиг '{name}' уже существует."
         : $"Config '{name}' already exists.";
 
-    public static string TrayStart => Ru ? "\u25b6 Запустить VPN" : "\u25b6 Start VPN";
-    public static string TrayStop => Ru ? "\u2b1b Остановить VPN" : "\u2b1b Stop VPN";
+    public static string TrayStart => Ru ? "Запустить VPN" : "Start VPN";
+    public static string TrayStop => Ru ? "Остановить VPN" : "Stop VPN";
     public static string TraySettings => Ru ? "Настройки..." : "Settings...";
     public static string TrayExit => Ru ? "Выход" : "Exit";
 
@@ -648,6 +648,12 @@ public static partial class Strings
         "Privacy_Shell"   => Ru ? "Приватность" : "Privacy",
         "Terminal"        => Ru ? "Терминал" : "Terminal",
         "Custom Apps"     => Ru ? "Свои" : "Custom",
+        "Russian_Desktop_Apps" => Ru ? "Российские приложения" : "Russian apps",
+        "Game_Launchers"  => Ru ? "Игровые лаунчеры" : "Game launchers",
+        "Game_AntiCheats" => Ru ? "Античиты" : "Anti-cheats",
+        "Remote_LAN"      => Ru ? "Удалённый доступ и LAN" : "Remote access and LAN",
+        "Work_Calls"      => Ru ? "Рабочие звонки" : "Work calls",
+        "Dev_Local_Mirrors" => Ru ? "Зеркала для разработки" : "Dev mirrors",
         _                 => internalName
     };
 
