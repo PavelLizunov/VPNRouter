@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using VPNRouter.Tests.Fakes;
 using VPNRouter.Tools.UiProbe;
 
 namespace VPNRouter.Tests;
