@@ -77,6 +77,12 @@
             <Setter Property="Opacity" Value="0.76"/>
         </Style>
 
+        <!-- Fluent draws the placeholder in the text colour at half opacity, which is too faint on both themes: use the muted token. -->
+        <Style Selector="TextBox /template/ TextBlock#PART_Watermark">
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+
         <Style Selector="Border.disclosure-pill">
             <Setter Property="Padding" Value="10,4,8,4"/>
             <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
