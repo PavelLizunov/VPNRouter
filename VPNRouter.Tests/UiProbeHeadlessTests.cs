@@ -87,6 +87,52 @@ public class UiProbeHeadlessTests
     }
 
     [AvaloniaFact]
+    public void Steps_ClickAnInnerTabBeforeTheCapture()
+    {
+        var tree = Probe.Tree(new ProbeOptions { Surface = "window-advanced", Height = 900, Steps = new List<string> { "Settings" } }, 400);
+        // After the click the Settings page is on screen: its section list ("Routing", "Rules", ...) is part of the tree.
+        Assert.Contains("Routing", tree);
+        var missing = Probe.Render(new ProbeOptions { Surface = "window-advanced", Height = 900, Steps = new List<string> { "No such tab" } });
+        Assert.Contains(missing.Notes, n => n.Contains("No such tab", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
+    public void Lint_FlagsTextCutOffByAClippingContainerAndOverlappingText()
+    {
+        var canvas = new Canvas { Width = 200, Height = 100 };
+        var clipper = new Border { Width = 80, Height = 30, ClipToBounds = true };
+        clipper.Child = new TextBlock
+        {
+            Text = "A label that is much wider than its box",
+            TextWrapping = Avalonia.Media.TextWrapping.NoWrap,
+            Width = 300,
+        };
+        Canvas.SetLeft(clipper, 10);
+        Canvas.SetTop(clipper, 10);
+        canvas.Children.Add(clipper);
+        var first = new TextBlock { Text = "First line of text" };
+        var second = new TextBlock { Text = "Second line of text" };
+        Canvas.SetLeft(first, 10); Canvas.SetTop(first, 60);
+        Canvas.SetLeft(second, 14); Canvas.SetTop(second, 62);
+        canvas.Children.Add(first);
+        canvas.Children.Add(second);
+
+        var window = new Window { Width = 400, Height = 200, Content = canvas };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            var findings = LayoutLint.Run(window);
+            Assert.Contains(findings, f => f.Rule == "cut-off");
+            Assert.Contains(findings, f => f.Rule == "overlap");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
     public void Matrix_BuildsOneSheet()
     {
         var matrix = Probe.Matrix(

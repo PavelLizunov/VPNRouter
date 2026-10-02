@@ -48,6 +48,7 @@ public static class Tools
             ["type"] = "object",
             ["description"] = "View model properties to set by name before rendering, e.g. {\"SelectedSettingsIndex\":5,\"IsConnected\":true}. See ui_state_properties.",
         },
+        ["steps"] = StrList("Clicks made before rendering, to reach inner tabs and expanders: the visible label of each control, in order (\"Label#2\" = second match), e.g. [\"Settings\",\"Autostart\"]. Labels come from ui_tree."),
     };
 
     public static JsonArray Definitions()
@@ -234,6 +235,9 @@ public static class Tools
         Width = Int(args, "width", 520),
         Height = Int(args, "height", 900),
         State = StateOf(args),
+        Steps = args["steps"] is JsonArray steps
+            ? steps.Select(n => n?.GetValue<string>() ?? string.Empty).Where(x => x.Length > 0).ToList()
+            : null,
     };
 
     private static Dictionary<string, JsonElement>? StateOf(JsonObject args)

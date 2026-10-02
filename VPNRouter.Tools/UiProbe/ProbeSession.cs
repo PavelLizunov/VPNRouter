@@ -1,10 +1,13 @@
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 
 namespace VPNRouter.Tools.UiProbe;
@@ -14,6 +17,10 @@ public sealed class ProbeOptions
     public string Surface { get; set; } = "simple";
     public string Scenario { get; set; } = "default";
     public Dictionary<string, JsonElement>? State { get; set; }
+
+    // Clicks made after the surface is laid out and before it is captured, to reach states a view model property cannot (inner tabs, expanders).
+    // Each step is the visible label (or control name) of an interactive control; "Label#2" picks the second match.
+    public List<string>? Steps { get; set; }
     public string Theme { get; set; } = "light";
     public string Language { get; set; } = "en";
     public int Width { get; set; } = 520;
@@ -21,7 +28,8 @@ public sealed class ProbeOptions
 
     public ProbeOptions Clone() => (ProbeOptions)MemberwiseClone();
 
-    public string Label => $"{Surface}/{Scenario}/{Theme}/{Language}/{Width}x{Height}";
+    public string Label => $"{Surface}/{Scenario}/{Theme}/{Language}/{Width}x{Height}" +
+                           (Steps is { Count: > 0 } ? " [" + string.Join(" > ", Steps) + "]" : string.Empty);
 }
 
 // One view model and one window for the length of an operation. Everything here must run on the Avalonia UI thread
@@ -79,6 +87,8 @@ public sealed class ProbeSession : IDisposable
             session.Notes.AddRange(problems.Select(p => "state: " + p));
             window.Show();
             session.Layout();
+            foreach (var step in o.Steps ?? new List<string>())
+                session.ClickByLabel(step);
             return session;
         }
         catch
@@ -96,6 +106,48 @@ public sealed class ProbeSession : IDisposable
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick(1);
         Window.UpdateLayout();
+    }
+
+    public bool ClickByLabel(string step)
+    {
+        var index = 1;
+        var label = step;
+        var hash = step.LastIndexOf('#');
+        if (hash > 0 && int.TryParse(step[(hash + 1)..], out var n) && n > 0)
+        {
+            label = step[..hash];
+            index = n;
+        }
+
+        var matches = Window.GetVisualDescendants()
+            .OfType<Control>()
+            .Where(c => Describe.IsInteractive(c) && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && c.Bounds.Width > 0 &&
+                        (string.Equals(Describe.Label(c), label, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(Describe.TextOf(c)?.Trim(), label, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(c.Name, label, StringComparison.Ordinal)))
+            .ToList();
+        if (matches.Count < index)
+        {
+            Notes.Add($"step '{step}': no visible interactive control with that label ({matches.Count} found)");
+            return false;
+        }
+
+        var target = matches[index - 1];
+        try { target.BringIntoView(); } catch { }
+        Layout();
+        var centre = target.TranslatePoint(new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), Window);
+        if (!centre.HasValue)
+        {
+            Notes.Add($"step '{step}': the control has no position");
+            return false;
+        }
+
+        Window.MouseMove(centre.Value, RawInputModifiers.None);
+        Window.MouseDown(centre.Value, MouseButton.Left, RawInputModifiers.None);
+        Window.MouseUp(centre.Value, MouseButton.Left, RawInputModifiers.None);
+        Pump(150);
+        Layout();
+        return true;
     }
 
     // Lets timers, bindings and animations run for roughly this long, one render tick at a time.
