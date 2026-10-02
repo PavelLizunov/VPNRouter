@@ -140,12 +140,6 @@
             <Setter Property="MaxWidth" Value="340"/>
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         </Style>
-        <Style Selector="TextBlock.subline.error">
-            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
-        </Style>
-        <Style Selector="TextBlock.subline.warn">
-            <Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/>
-        </Style>
 
         <!-- Primary action: one pill, 48 px high, the full width of the column. -->
         <Style Selector="Button.cta">
@@ -369,8 +363,6 @@
                            Margin="0,22,0,0"
                            Text="{Binding SmpHomeTitle}"/>
                 <TextBlock Classes="subline"
-                           Classes.error="{Binding SmpHeroIsError}"
-                           Classes.warn="{Binding SmpHeroIsWarn}"
                            Margin="0,6,0,0"
                            Text="{Binding SmpHomeSubline}"/>
                 <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding ConnectionStatsText}"
