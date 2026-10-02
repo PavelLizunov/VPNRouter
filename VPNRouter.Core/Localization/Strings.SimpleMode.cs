@@ -138,6 +138,26 @@ public static partial class Strings
     public static string SmpCfgSplit       => Ru ? "сплит"          : "split";
     public static string SmpCfgFull        => Ru ? "полный"         : "full";
 
+    public static string SmpHeroAddConfigTitle => Ru ? "Добавьте конфиг VPN" : "Add a VPN config";
+    public static string SmpHeroAddConfigHint  => Ru
+        ? "Вставьте ссылку на сервер или URL подписки, затем подключитесь."
+        : "Paste a server link or a subscription URL, then connect.";
+    public static string SmpHeroErrorTitle     => Ru ? "Не удалось подключиться" : "Connection problem";
+    public static string SmpKindServer         => Ru ? "Ссылка на сервер" : "Server link";
+    public static string SmpKindSubscription   => Ru ? "Подписка"         : "Subscription";
+    public static string SmpKindCustom         => Ru ? "Свой конфиг"      : "Custom config";
+    public static string SmpKindServers(int n) => Ru
+        ? $"{n} {RuPlural(n, "сервер", "сервера", "серверов")}"
+        : (n == 1 ? "1 server" : $"{n} servers");
+
+    private static string RuPlural(int n, string one, string few, string many)
+    {
+        var mod100 = n % 100;
+        var mod10 = n % 10;
+        if (mod100 is >= 11 and <= 14) return many;
+        return mod10 switch { 1 => one, >= 2 and <= 4 => few, _ => many };
+    }
+
     public static string SmpCtaConnect    => Ru ? "Подключить"   : "Connect";
     public static string SmpCtaDisconnect => Ru ? "Отключить"    : "Disconnect";
     public static string SmpCtaCancel     => Ru ? "Отмена"       : "Cancel";

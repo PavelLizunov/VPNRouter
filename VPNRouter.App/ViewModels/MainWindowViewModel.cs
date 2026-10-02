@@ -512,6 +512,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
         WireServersOrphanTracking();
+        WireSimpleHomeNotifications();
 
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
         ServiceVm = new ServiceViewModel(_logger);

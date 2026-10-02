@@ -16,7 +16,7 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(L_SmpConfigRowToggle))]
-    private bool _smpFormExpanded = true;
+    private bool _smpFormExpanded;
 
     public string L_SmpConfigRowToggle => SmpFormExpanded ? Strings.SmpConfigRowHide : Strings.SmpConfigRowChange;
 
@@ -102,6 +102,7 @@ public partial class MainWindowViewModel
 
     private void RaiseSimpleAlertProps()
     {
+        RaiseSimpleHomeProps();
         OnPropertyChanged(nameof(SimpleStatusIsOn));
         OnPropertyChanged(nameof(SimpleStatusIsWarn));
         OnPropertyChanged(nameof(SimpleStatusIsOff));
@@ -449,6 +450,112 @@ public partial class MainWindowViewModel
         IsSubscribeMode = true;
         IsVlessMode = false;
         return true;
+    }
+
+    // Home screen (Simple page) state. Read-only projections of the state above; the page binds to these so that it
+    // can show one status emblem, one sub-line and the right block for a fresh install without its own logic.
+    public bool SmpHasConfig =>
+        Servers.Count > 0 || SubscriptionServers.Count > 0 || Subscriptions.Count > 0 || CustomConfigs.Count > 0;
+
+    public bool SmpNeedsConfig => !SmpHasConfig && !IsConnected && !IsConnecting;
+
+    public bool SmpConfigEditorVisible => SmpNeedsConfig || SmpFormExpanded;
+
+    public bool SmpCanConnect => SmpHasConfig || !string.IsNullOrWhiteSpace(SmpInput);
+
+    public bool SmpHeroIsError => !IsConnecting && (HasConnectionAlert || !string.IsNullOrEmpty(SmpErrorText));
+    public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
+    public bool SmpHeroIsBusy => IsConnecting;
+    public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError;
+
+    public string SmpHomeTitle => SmpHeroIsError
+        ? Strings.SmpHeroErrorTitle
+        : SmpNeedsConfig
+            ? Strings.SmpHeroAddConfigTitle
+            : SimpleStatusTitle;
+
+    public string SmpHomeSubline
+    {
+        get
+        {
+            if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (!string.IsNullOrEmpty(SmpErrorText)) return SmpErrorText;
+            if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();
+            if (SmpNeedsConfig) return Strings.SmpHeroAddConfigHint;
+            return SimpleStatusDescription;
+        }
+    }
+
+    public string SmpConfigName
+    {
+        get
+        {
+            var (name, _) = DeriveConnectedServerLabel();
+            if (!string.IsNullOrWhiteSpace(name)) return name!;
+            var sub = Subscriptions.FirstOrDefault()?.Name;
+            return !string.IsNullOrWhiteSpace(sub) ? sub! : SmpConfigKind;
+        }
+    }
+
+    public string SmpConfigKind
+    {
+        get
+        {
+            var mode = _settings?.App.ConfigMode ?? "generated";
+            if (mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
+                return SubscriptionServers.Count > 0
+                    ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(SubscriptionServers.Count)}"
+                    : Strings.SmpKindSubscription;
+            return mode.Equals("generated", StringComparison.OrdinalIgnoreCase)
+                ? Strings.SmpKindServer
+                : Strings.SmpKindCustom;
+        }
+    }
+
+    public string L_SmpHeroChange => Strings.SmpConfigRowChange;
+    public string L_SmpTipSplitHome => Strings.SmpTipSplit;
+    public string L_SmpTipFullHome => Strings.SmpTipFull;
+
+    private static readonly string[] SmpHomeProps =
+    {
+        nameof(SmpHasConfig), nameof(SmpNeedsConfig), nameof(SmpConfigEditorVisible), nameof(SmpCanConnect),
+        nameof(SmpHeroIsError), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
+        nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
+    };
+
+    private void RaiseSimpleHomeProps()
+    {
+        foreach (var name in SmpHomeProps)
+            OnPropertyChanged(name);
+    }
+
+    // Called once from the constructor: the home projections follow the properties and collections they read.
+    private void WireSimpleHomeNotifications()
+    {
+        PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(IsConnected):
+                case nameof(IsConnecting):
+                case nameof(SimpleStatusTitle):
+                case nameof(SimpleStatusDescription):
+                case nameof(SmpErrorText):
+                case nameof(SmpInput):
+                case nameof(SmpFormExpanded):
+                case nameof(SelectedServer):
+                case nameof(SelectedSubscriptionServer):
+                case nameof(SelectedCustomConfig):
+                case nameof(IsSubscribeMode):
+                case nameof(IsVlessMode):
+                    RaiseSimpleHomeProps();
+                    break;
+            }
+        };
+        Servers.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
+        SubscriptionServers.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
+        Subscriptions.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
+        CustomConfigs.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
     }
 
     partial void OnIsSplitTunnelChanged(bool value)

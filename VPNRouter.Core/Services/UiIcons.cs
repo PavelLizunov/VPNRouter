@@ -37,6 +37,7 @@ public static partial class UiIcons
     public const string Info = "info";
     public const string LayoutGrid = "layout-grid";
     public const string LifeBuoy = "life-buoy";
+    public const string Link = "link";
     public const string List = "list";
     public const string Minus = "minus";
     public const string Pencil = "pencil";
@@ -50,6 +51,7 @@ public static partial class UiIcons
     public const string Search = "search";
     public const string Send = "send";
     public const string Server = "server";
+    public const string ShieldAlert = "shield-alert";
     public const string ShieldCheck = "shield-check";
     public const string Shield = "shield";
     public const string SlidersHorizontal = "sliders-horizontal";
@@ -95,6 +97,7 @@ public static partial class UiIcons
         [Info] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,16 L12,12 M12,8 L12.01,8",
         [LayoutGrid] = "M4,3 L9,3 A1,1 0 0 1 10,4 L10,9 A1,1 0 0 1 9,10 L4,10 A1,1 0 0 1 3,9 L3,4 A1,1 0 0 1 4,3 Z M15,3 L20,3 A1,1 0 0 1 21,4 L21,9 A1,1 0 0 1 20,10 L15,10 A1,1 0 0 1 14,9 L14,4 A1,1 0 0 1 15,3 Z M15,14 L20,14 A1,1 0 0 1 21,15 L21,20 A1,1 0 0 1 20,21 L15,21 A1,1 0 0 1 14,20 L14,15 A1,1 0 0 1 15,14 Z M4,14 L9,14 A1,1 0 0 1 10,15 L10,20 A1,1 0 0 1 9,21 L4,21 A1,1 0 0 1 3,20 L3,15 A1,1 0 0 1 4,14 Z",
         [LifeBuoy] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M4.93,4.93 L9.17,9.17 M14.83,9.17 L19.07,4.93 M14.83,14.83 L19.07,19.07 M9.17,14.83 L4.93,19.07 M8,12 A4,4 0 1 0 16,12 A4,4 0 1 0 8,12 Z",
+        [Link] = "M10,13 A5,5 0 0 0 17.54,13.54 L20.54,10.54 A5,5 0 0 0 13.47,3.47 L11.75,5.18 M14,11 A5,5 0 0 0 6.46,10.46 L3.46,13.46 A5,5 0 0 0 10.53,20.53 L12.24,18.82",
         [List] = "M3,5 L3.01,5 M3,12 L3.01,12 M3,19 L3.01,19 M8,5 L21,5 M8,12 L21,12 M8,19 L21,19",
         [Minus] = "M5,12 L19,12",
         [Pencil] = "M21.174,6.812 A1,1 0 0 0 17.188,2.825 L3.842,16.174 A2,2 0 0 0 3.342,17.004 L2.021,21.356 A0.5,0.5 0 0 0 2.644,21.978 L6.997,20.658 A2,2 0 0 0 7.827,20.161 Z M15,5 L19,9",
@@ -108,6 +111,7 @@ public static partial class UiIcons
         [Search] = "M21,21 L16.66,16.66 M3,11 A8,8 0 1 0 19,11 A8,8 0 1 0 3,11 Z",
         [Send] = "M14.536,21.686 A0.5,0.5 0 0 0 15.473,21.662 L21.973,2.662 A0.496,0.496 0 0 0 21.338,2.027 L2.338,8.527 A0.5,0.5 0 0 0 2.314,9.464 L10.244,12.644 A2,2 0 0 1 11.356,13.754 Z M21.854,2.147 L10.914,13.086",
         [Server] = "M4,2 L20,2 A2,2 0 0 1 22,4 L22,8 A2,2 0 0 1 20,10 L4,10 A2,2 0 0 1 2,8 L2,4 A2,2 0 0 1 4,2 Z M4,14 L20,14 A2,2 0 0 1 22,16 L22,20 A2,2 0 0 1 20,22 L4,22 A2,2 0 0 1 2,20 L2,16 A2,2 0 0 1 4,14 Z M6,6 L6.01,6 M6,18 L6.01,18",
+        [ShieldAlert] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z M12,8 L12,12 M12,16 L12.01,16",
         [ShieldCheck] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z M9,12 L11,14 L15,10",
         [Shield] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z",
         [SlidersHorizontal] = "M10,5 L3,5 M12,19 L3,19 M14,3 L14,7 M16,17 L16,21 M21,12 L12,12 M21,19 L16,19 M21,5 L14,5 M8,10 L8,14 M8,12 L3,12",
