@@ -365,4 +365,16 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         Assert.True(Uri.TryCreate(link, UriKind.Absolute, out var uri));
         Assert.Equal("tg", uri!.Scheme);
     }
+
+    [Theory]
+    [InlineData("127.0.0.1\r\n", "secret")]
+    [InlineData("127.0.0.1", "secret\"injected")]
+    [InlineData("127.0.0.1 ", "secret")]
+    [InlineData("", "secret")]
+    [InlineData("127.0.0.1", "secret\n")]
+    public void OpenInTelegram_RejectsInvalidHostOrSecret(string host, string secret)
+    {
+        var ex = Record.Exception(() => TgProxyManager.OpenInTelegram(host, 1443, secret));
+        Assert.Null(ex);
+    }
 }
