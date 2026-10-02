@@ -336,13 +336,13 @@
           x:DataType="vm:AppGroupViewModel"
           IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
 
-      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6"
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6"
             Margin="12,10,10,8">
         <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold"
                    Foreground="{DynamicResource TextPrimaryBrush}"
                    TextTrimming="CharacterEllipsis"
                    VerticalAlignment="Center"/>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="4">
           <Button Classes="small"
                   Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_SelectAllApps}"
                   Command="{Binding SelectAllCommand}"/>
@@ -350,7 +350,7 @@
                   Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ClearAllApps}"
                   Command="{Binding ClearAllCommand}"/>
         </StackPanel>
-        <Button Grid.Column="2" Classes="icon-btn"
+        <Button Grid.Column="1" Classes="icon-btn"
                 IsVisible="{Binding IsCustomCategory}"
                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCategoryCommand}"
                 CommandParameter="{Binding}"
