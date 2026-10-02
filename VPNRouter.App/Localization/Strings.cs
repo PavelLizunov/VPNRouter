@@ -852,6 +852,8 @@ public static class Strings
     public static string SmpHeroAddConfigTitle => global::VPNRouter.Core.Localization.Strings.SmpHeroAddConfigTitle;
     public static string SmpHeroAddConfigHint => global::VPNRouter.Core.Localization.Strings.SmpHeroAddConfigHint;
     public static string SmpHeroErrorTitle => global::VPNRouter.Core.Localization.Strings.SmpHeroErrorTitle;
+    public static string SmpSegSplit => global::VPNRouter.Core.Localization.Strings.SmpSegSplit;
+    public static string SmpSegFull => global::VPNRouter.Core.Localization.Strings.SmpSegFull;
     public static string SmpKindServer => global::VPNRouter.Core.Localization.Strings.SmpKindServer;
     public static string SmpKindSubscription => global::VPNRouter.Core.Localization.Strings.SmpKindSubscription;
     public static string SmpKindCustom => global::VPNRouter.Core.Localization.Strings.SmpKindCustom;

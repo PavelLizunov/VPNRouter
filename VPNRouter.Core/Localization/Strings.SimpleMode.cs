@@ -143,6 +143,8 @@ public static partial class Strings
         ? "Вставьте ссылку на сервер или URL подписки, затем подключитесь."
         : "Paste a server link or a subscription URL, then connect.";
     public static string SmpHeroErrorTitle     => Ru ? "Не удалось подключиться" : "Connection problem";
+    public static string SmpSegSplit           => Ru ? "Приложения"       : "Selected apps";
+    public static string SmpSegFull            => Ru ? "Весь трафик"      : "All traffic";
     public static string SmpKindServer         => Ru ? "Ссылка на сервер" : "Server link";
     public static string SmpKindSubscription   => Ru ? "Подписка"         : "Subscription";
     public static string SmpKindCustom         => Ru ? "Свой конфиг"      : "Custom config";

@@ -463,12 +463,15 @@ public partial class MainWindowViewModel
 
     public bool SmpCanConnect => SmpHasConfig || !string.IsNullOrWhiteSpace(SmpInput);
 
-    public bool SmpHeroIsError => !IsConnecting && (HasConnectionAlert || !string.IsNullOrEmpty(SmpErrorText));
+    // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
+    // alert). On / busy / idle are the plain connection states.
+    public bool SmpHeroIsError => !IsConnecting && !string.IsNullOrEmpty(SmpErrorText);
+    public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && HasConnectionAlert;
     public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
     public bool SmpHeroIsBusy => IsConnecting;
-    public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError;
+    public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError && !SmpHeroIsWarn;
 
-    public string SmpHomeTitle => SmpHeroIsError
+    public string SmpHomeTitle => SmpHeroIsError || SmpHeroIsWarn
         ? Strings.SmpHeroErrorTitle
         : SmpNeedsConfig
             ? Strings.SmpHeroAddConfigTitle
@@ -491,9 +494,7 @@ public partial class MainWindowViewModel
         get
         {
             var (name, _) = DeriveConnectedServerLabel();
-            if (!string.IsNullOrWhiteSpace(name)) return name!;
-            var sub = Subscriptions.FirstOrDefault()?.Name;
-            return !string.IsNullOrWhiteSpace(sub) ? sub! : SmpConfigKind;
+            return !string.IsNullOrWhiteSpace(name) ? name! : SmpConfigKind;
         }
     }
 
@@ -513,13 +514,15 @@ public partial class MainWindowViewModel
     }
 
     public string L_SmpHeroChange => Strings.SmpConfigRowChange;
+    public string L_SmpSegSplit => Strings.SmpSegSplit;
+    public string L_SmpSegFull => Strings.SmpSegFull;
     public string L_SmpTipSplitHome => Strings.SmpTipSplit;
     public string L_SmpTipFullHome => Strings.SmpTipFull;
 
     private static readonly string[] SmpHomeProps =
     {
         nameof(SmpHasConfig), nameof(SmpNeedsConfig), nameof(SmpConfigEditorVisible), nameof(SmpCanConnect),
-        nameof(SmpHeroIsError), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
+        nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
         nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
     };
 
