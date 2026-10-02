@@ -530,6 +530,9 @@ public partial class MainWindowViewModel
         get
         {
             var mode = _settings?.App.ConfigMode ?? "generated";
+            if (IsConnected && !mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase) &&
+                ActiveServerMatcher.FindName(_engine.ActiveServerAddress, SubscriptionServers.Select(s => (s.DisplayName, s.Server))) is not null)
+                mode = "subscribe";
             if (mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
                 return SubscriptionServers.Count > 0
                     ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(SubscriptionServers.Count)}"
