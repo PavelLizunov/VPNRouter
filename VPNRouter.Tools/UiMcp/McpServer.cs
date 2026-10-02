@@ -113,7 +113,7 @@ public sealed class McpServer
         var args = parameters["arguments"] as JsonObject ?? new JsonObject();
         try
         {
-            var content = _ui.Dispatch(() => Tools.Run(name, args), CancellationToken.None);
+            var content = _ui.Dispatch(() => Tools.Run(name, args), CancellationToken.None).GetAwaiter().GetResult();
             return new JsonObject { ["content"] = content, ["isError"] = false };
         }
         catch (Exception ex)
