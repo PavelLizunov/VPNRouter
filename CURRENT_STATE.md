@@ -7,17 +7,18 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r16 (prerelease, 2026-10-02), not
+- **Latest published candidate:** v2.50.0-r17 (prerelease, 2026-10-02), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
   on WINBRAT on the first attempt (`tools/post-ship-local.ps1`); the screenshot
   gate and the live-update gate were not run
-  (see `plans/phase-r16-release-2.50.0-r16-2026-10-02.md`). It carries the PC
-  half of the design work: navigation icons in the tab strip and inner tab
-  strips that follow the main tab roles. The previous candidate r15 (hotfix
-  for the Applications-tab render crash and the locked driver file during
-  update) is covered by `plans/phase-r15-release-2.50.0-r15-2026-10-02.md`; the
+  (see `plans/phase-r17-release-2.50.0-r17-2026-10-02.md`). It carries the
+  redone Applications page and the audit of every desktop page (D-7, D-8), the
+  safe web installer (D-9), the UI exception guard with crash reports in the
+  diagnostics bundle (D-10) and the installer launching the app elevated.
+  Earlier candidates: r16 (tab icons, inner tab strips), r15 (hotfix for the
+  Applications-tab render crash and the locked driver file during update). The
   owner's next real update is the check of the driver-lock fix. Main declares
-  `AppVersion` 2.50.0-r16.
+  `AppVersion` 2.50.0-r17.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
