@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views;
@@ -25,7 +26,10 @@ public static class Surfaces
             {
                 var page = make();
                 page.DataContext = vm;
-                return new Window { Content = page };
+                // The real main window sets these two; a bare window would draw a different background and a bigger default font.
+                var host = new Window { Content = page, FontSize = 10 };
+                host.Bind(Window.BackgroundProperty, host.GetResourceObservable("SurfaceAppBrush"));
+                return host;
             }));
 
         Page("simple", "Simple mode home page (status hero, connect button)", () => new SimplePage());
