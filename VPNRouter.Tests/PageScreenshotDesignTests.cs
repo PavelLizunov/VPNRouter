@@ -67,6 +67,29 @@ public class PageScreenshotDesignTests
         ScreenshotHelper.CapturePage(control, $"design-{page}-{(dark ? "dark" : "light")}-{width}", width, 1400);
     });
 
+    // Applications with a category open (default apps plus one custom app), in full-tunnel mode and in the bypass list.
+    [AvaloniaTheory]
+    [InlineData("group", false, 520)]
+    [InlineData("group", true, 520)]
+    [InlineData("group", false, 360)]
+    [InlineData("group-ru", false, 520)]
+    [InlineData("full", false, 520)]
+    [InlineData("exclude", true, 520)]
+    public void Applications_States(string state, bool dark, int width) => WithTheme(dark, state.EndsWith("-ru"), vm =>
+    {
+        if (state == "full") vm.IsFullTunnel = true;
+        if (state == "exclude") vm.AppsListEditorMode = "exclude";
+        var group = vm.ActiveAppGroups.FirstOrDefault(g => g.Apps.Count > 0) ?? vm.ActiveAppGroups.FirstOrDefault();
+        if (group is not null)
+        {
+            group.Apps.Add(new AppItemViewModel("MyGame.exe", isChecked: true, isCustom: true));
+            if (group.Apps.Count > 1) group.Apps[0].IsChecked = true;
+            vm.SelectedActiveAppGroup = group;
+        }
+        var page = new ApplicationsPage { DataContext = vm };
+        ScreenshotHelper.CapturePage(page, $"design-apps-{state}-{(dark ? "dark" : "light")}-{width}", width, 900);
+    });
+
     [AvaloniaTheory]
     [InlineData(0)]
     [InlineData(1)]
