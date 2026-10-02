@@ -22,7 +22,8 @@ public static class UiTree
             if (v is Control c)
             {
                 if (!c.IsEffectivelyVisible) return;
-                var text = Describe.TextOf(c);
+                // Interactive controls with composite content (an icon and a text) are named after the first text or icon inside them.
+                var text = Describe.TextOf(c) ?? (Describe.IsInteractive(c) ? Describe.Label(c) : null);
                 var keep = !string.IsNullOrEmpty(c.Name) || !string.IsNullOrWhiteSpace(text) ||
                            Describe.IsInteractive(c) || c is Pictogram;
                 if (keep)
