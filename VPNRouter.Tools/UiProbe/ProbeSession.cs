@@ -72,10 +72,12 @@ public sealed class ProbeSession : IDisposable
             else
                 vm.SetLanguageEnglishCommand.Execute(null);
 
-            // The view model applies the saved theme when it is built, so the theme is set after it.
-            app.RequestedThemeVariant = string.Equals(o.Theme, "dark", StringComparison.OrdinalIgnoreCase)
-                ? ThemeVariant.Dark
-                : ThemeVariant.Light;
+            // Switch the theme the way the app does (through the view model): it also swaps the mascot for the dark theme and refreshes the theme-bound brushes.
+            // Setting only the application theme variant left the dark-theme header with the light-theme mascot, black line art on a dark tile.
+            if (string.Equals(o.Theme, "dark", StringComparison.OrdinalIgnoreCase))
+                vm.SetThemeDarkCommand.Execute(null);
+            else
+                vm.SetThemeLightCommand.Execute(null);
 
             scenario.Apply(vm);
             var problems = Scenarios.ApplyState(vm, o.State);
