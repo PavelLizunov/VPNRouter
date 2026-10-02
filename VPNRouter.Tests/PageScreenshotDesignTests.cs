@@ -67,6 +67,32 @@ public class PageScreenshotDesignTests
         ScreenshotHelper.CapturePage(control, $"design-{page}-{(dark ? "dark" : "light")}-{width}", width, 1400);
     });
 
+    // The About window and the four steps of the setup wizard.
+    [AvaloniaTheory]
+    [InlineData("about", false)]
+    [InlineData("about", true)]
+    [InlineData("wizard0", false)]
+    [InlineData("wizard1", false)]
+    [InlineData("wizard2", true)]
+    [InlineData("wizard3", false)]
+    public void Windows(string name, bool dark) => WithTheme(dark, false, _ =>
+    {
+        Window window;
+        if (name == "about")
+        {
+            window = new AboutWindow();
+        }
+        else
+        {
+            var wizard = new SetupWizardViewModel(
+                VPNRouter.Core.Models.TunSettings.DefaultMtu, true, (_, _) => { }, () => [],
+                () => System.Threading.Tasks.Task.CompletedTask);
+            wizard.CurrentStep = name[^1] - '0';
+            window = new SetupWizardWindow(wizard);
+        }
+        ScreenshotHelper.Capture(window, $"design-{name}-{(dark ? "dark" : "light")}");
+    });
+
     // Applications with a category open (default apps plus one custom app), in full-tunnel mode and in the bypass list.
     [AvaloniaTheory]
     [InlineData("group", false, 520)]
@@ -91,16 +117,22 @@ public class PageScreenshotDesignTests
     });
 
     [AvaloniaTheory]
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    public void Settings_SubTabs(int index) => WithTheme(false, false, vm =>
+    [InlineData(0, false)]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(3, false)]
+    [InlineData(4, false)]
+    [InlineData(5, false)]
+    [InlineData(0, true)]
+    [InlineData(1, true)]
+    [InlineData(2, true)]
+    [InlineData(3, true)]
+    [InlineData(4, true)]
+    [InlineData(5, true)]
+    public void Settings_SubTabs(int index, bool dark) => WithTheme(dark, false, vm =>
     {
         vm.SelectedSettingsIndex = index;
-        ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, $"design-settings{index}-light-520", 520, 1400);
+        ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, $"design-settings{index}-{(dark ? "dark" : "light")}-520", 520, 1400);
     });
 
     [AvaloniaTheory]
@@ -108,6 +140,11 @@ public class PageScreenshotDesignTests
     [InlineData("simple", true)]
     [InlineData("free", false)]
     [InlineData("subscribe", false)]
+    [InlineData("servers", false)]
+    [InlineData("network", false)]
+    [InlineData("apps", false)]
+    [InlineData("dpi", true)]
+    [InlineData("telegram", false)]
     public void Page_Russian360(string page, bool dark) => WithTheme(dark, true, vm =>
     {
         var control = Page(page);
