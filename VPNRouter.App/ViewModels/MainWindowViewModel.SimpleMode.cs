@@ -124,12 +124,14 @@ public partial class MainWindowViewModel
         }
     }
 
-    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting && !HasConnectionAlert;
-    public bool SimpleStatusIsWarn => IsConnecting || HasConnectionAlert;
-    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting && !HasConnectionAlert;
+    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting && !IsApplying && !HasConnectionAlert;
+    public bool SimpleStatusIsWarn => IsConnecting || IsApplying || HasConnectionAlert;
+    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting && !IsApplying && !HasConnectionAlert;
 
     public string SimpleStatusTitle => IsConnecting
         ? Strings.SmpStatusConnecting
+        : IsApplying
+            ? Strings.SmpStatusApplying
         : (IsConnected && !HasConnectionAlert)
             ? Strings.SmpStatusProtected
             : Strings.SmpStatusNotConnected;
@@ -139,6 +141,7 @@ public partial class MainWindowViewModel
         get
         {
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (HasConnectionAlert) return _lastConnectionAlert!;
             if (IsConnected)
             {
@@ -242,13 +245,15 @@ public partial class MainWindowViewModel
 
     public string SimpleCtaText => IsConnecting
         ? Strings.SmpCtaCancel
+        : IsApplying
+            ? Strings.SmpCtaWait
         : IsConnected
             ? Strings.SmpCtaDisconnect
             : Strings.SmpCtaConnect;
 
-    public bool SimpleCtaIsConnected    => IsConnected && !IsConnecting;
-    public bool SimpleCtaIsConnecting   => IsConnecting;
-    public bool SimpleCtaIsDisconnected => !IsConnected && !IsConnecting;
+    public bool SimpleCtaIsConnected    => IsConnected && !IsConnecting && !IsApplying;
+    public bool SimpleCtaIsConnecting   => IsConnecting || IsApplying;
+    public bool SimpleCtaIsDisconnected => !IsConnected && !IsConnecting && !IsApplying;
 
     [RelayCommand]
     private void OpenConfigPicker()
@@ -267,7 +272,12 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (IsConnecting) return;
+        if (IsConnecting || IsApplying || _isReconnecting) return;
+        if (_engine.IsRunning)
+        {
+            AdoptRunningEngine();
+            return;
+        }
         IsConnecting = true;
         try
         {
@@ -473,7 +483,7 @@ public partial class MainWindowViewModel
     public bool SmpHeroIsError => !IsConnecting && !string.IsNullOrEmpty(SmpErrorText);
     public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && HasConnectionAlert;
     public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
-    public bool SmpHeroIsBusy => IsConnecting;
+    public bool SmpHeroIsBusy => IsConnecting || IsApplying;
     public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError && !SmpHeroIsWarn;
 
     public string SmpHomeTitle => SmpHeroIsError
@@ -489,6 +499,7 @@ public partial class MainWindowViewModel
         get
         {
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (!string.IsNullOrEmpty(SmpErrorText)) return SmpErrorText;
             if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();
             if (SmpNeedsConfig) return Strings.SmpHeroAddConfigHint;
@@ -549,6 +560,7 @@ public partial class MainWindowViewModel
             {
                 case nameof(IsConnected):
                 case nameof(IsConnecting):
+                case nameof(IsApplying):
                 case nameof(SimpleStatusTitle):
                 case nameof(SimpleStatusDescription):
                 case nameof(SmpErrorText):

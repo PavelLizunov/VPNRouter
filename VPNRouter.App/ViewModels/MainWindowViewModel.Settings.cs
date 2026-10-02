@@ -536,6 +536,15 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanApplyAppChanges))]
     [NotifyPropertyChangedFor(nameof(CanToggleConnection))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsWarn))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsOff))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusTitle))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusDescription))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaText))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnecting))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
     private bool _isApplying;
     private int _routingSettingsRevision;
     public bool CanApplyAppChanges => IsConnected && !IsConnecting && !IsApplying;
