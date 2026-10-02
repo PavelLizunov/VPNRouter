@@ -182,6 +182,8 @@ public partial class MainWindowViewModel
     public string L_RunDiagnostics => Strings.RunDiagnostics;
     public string L_RunTestsLabel => Strings.RunTestsLabel;
     public string L_SelectCategoryHint => Strings.SelectCategoryHint;
+    public string L_SelectCategoryLabel => VPNRouter.Core.Services.UiIcons.StripSymbols(Strings.SelectCategoryHint);
+    public string L_CategoryNameWatermark => Strings.CategoryNamePrompt.TrimEnd(':', ' ');
     public string L_ServiceComponentsHeader => Strings.ServiceComponentsHeader;
     public string L_ServiceMasterSubtitle => Strings.ServiceMasterSubtitle;
     public string L_ServiceMasterTitle => Strings.ServiceMasterTitle;

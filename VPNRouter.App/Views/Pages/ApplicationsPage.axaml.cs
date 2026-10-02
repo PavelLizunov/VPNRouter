@@ -65,19 +65,18 @@ public partial class ApplicationsPage : UserControl
 
     private void UpdateLocalizedStrings()
     {
-        var browseBtn = this.FindControl<Button>("BrowseExeButton");
-        if (browseBtn != null)
-        {
-            browseBtn.Content = Strings.BrowseExe;
-            ToolTip.SetTip(browseBtn, Strings.BrowseExeTooltip);
-        }
+        SetButtonLabel("BrowseExeButton", "BrowseExeLabel", Strings.BrowseExe, Strings.BrowseExeTooltip);
+        SetButtonLabel("RunningProcessesButton", "RunningProcessesLabel", Strings.RunningProcesses, Strings.RunningProcessesTooltip);
+    }
 
-        var runningBtn = this.FindControl<Button>("RunningProcessesButton");
-        if (runningBtn != null)
-        {
-            runningBtn.Content = Strings.RunningProcesses;
-            ToolTip.SetTip(runningBtn, Strings.RunningProcessesTooltip);
-        }
+    private void SetButtonLabel(string buttonName, string labelName, string text, string tip)
+    {
+        var button = this.FindControl<Button>(buttonName);
+        var label = this.FindControl<TextBlock>(labelName);
+        if (label != null) label.Text = text;
+        if (button == null) return;
+        ToolTip.SetTip(button, tip);
+        Avalonia.Automation.AutomationProperties.SetName(button, text);
     }
 
     private async void OnBrowseExeClicked(object? sender, RoutedEventArgs e)

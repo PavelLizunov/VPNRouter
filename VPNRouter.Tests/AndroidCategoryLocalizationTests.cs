@@ -69,6 +69,8 @@ public class AndroidCategoryLocalizationTests
     [InlineData("Virtualization",  "Virtualization", "Виртуализация")]
     [InlineData("Privacy_Shell",   "Privacy",  "Приватность")]
     [InlineData("Custom Apps",     "Custom",   "Свои")]
+    [InlineData("Russian_Desktop_Apps", "Russian apps", "Российские приложения")]
+    [InlineData("Remote_LAN",      "Remote access and LAN", "Удалённый доступ и LAN")]
     public void GroupDisplayName_LocksCanonicalTranslations(string id, string en, string ru)
     {
         Assert.Equal(en, LookupAs(id, ru: false));
