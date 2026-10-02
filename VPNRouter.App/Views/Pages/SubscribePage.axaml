@@ -194,7 +194,7 @@
                     </Grid>
                     <TextBlock Classes="server-endpoint" Text="{Binding Url}"
                                ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipSubscriptionMetadata}"/>
-                    <TextBlock Classes="server-endpoint" Text="{Binding LastRefreshedDisplay}"/>
+                    <TextBlock Classes="server-endpoint" Text="{Binding LastRefreshedDisplay}" IsVisible="{Binding HasLastRefreshed}"/>
                     <TextBlock Text="{Binding StatusBadge}"
                                IsVisible="{Binding LastRefreshFailed}"
                                FontSize="10"
