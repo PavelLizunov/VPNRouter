@@ -127,6 +127,7 @@ if ($shaAssets.Count -ne 1) {
 }
 $shaAsset = $shaAssets[0]
 
+$keepStaging = $false
 $stagingDir = Join-Path $ProgramFilesRoot ("VPNRouter-Installer-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $stagingDir -ErrorAction Stop | Out-Null
 try {
@@ -186,6 +187,38 @@ if ($stopped.Count -gt 0) { Say "Stopped running: $($stopped -join ', ')" }
 
 Start-Sleep -Milliseconds 500
 
+# The split-tunnel kernel driver that VPNRouter loads from <InstallRoot>\app\driver stays loaded after the app is killed and locks
+# its .sys file. Without stopping it, the folder wipe below leaves that file behind and the extraction then fails on it, which
+# used to leave a half-deleted installation behind (the shortcut said "the item has been moved or deleted"). Stop it only when its
+# image lives inside this install folder: a Mullvad client or another copy keeps its own driver.
+$driver = Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'" -ErrorAction SilentlyContinue
+if ($driver -and $driver.State -ne 'Stopped') {
+    $driverImage = ([string]$driver.PathName) -replace '^\\\?\?\\', ''
+    if ($driverImage.StartsWith(($InstallRoot.TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) {
+        Say "Stopping the split-tunnel driver (it locks its file inside $InstallRoot)"
+        Stop-Service -Name 'mullvad-split-tunnel' -Force -ErrorAction SilentlyContinue
+        for ($i = 0; $i -lt 20; $i++) {
+            if ((Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'").State -eq 'Stopped') { break }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
+
+# Unpack and check the new payload BEFORE touching the existing installation, so that a failed extraction cannot leave it gutted.
+$payloadDir = Join-Path $stagingDir "payload"
+Say "Unpacking $expectedZipName"
+try {
+    Expand-Archive -Path $zipPath -DestinationPath $payloadDir -Force
+} catch {
+    Err "Extraction failed (the existing installation was not touched): $_"
+    exit 1
+}
+
+if (-not (Test-Path (Join-Path $payloadDir "app\VPNRouter.App.exe"))) {
+    Err "Expected app\VPNRouter.App.exe not found in the archive. ZIP layout may have changed. The existing installation was not touched."
+    exit 1
+}
+
 Say "Installing to $InstallRoot"
 if (Test-Path $InstallRoot) {
     Get-ChildItem $InstallRoot -Force | ForEach-Object {
@@ -198,9 +231,11 @@ if (Test-Path $InstallRoot) {
 }
 
 try {
-    Expand-Archive -Path $zipPath -DestinationPath $InstallRoot -Force
+    Get-ChildItem $payloadDir -Force | Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop
 } catch {
-    Err "Extraction failed: $_"
+    Err "Copying the new files failed: $_"
+    Err "The unpacked payload is kept in $payloadDir; run the installer again once the file named above is no longer in use."
+    $keepStaging = $true
     exit 1
 }
 
@@ -209,7 +244,7 @@ if (-not (Test-Path (Join-Path $AppDir "VPNRouter.App.exe"))) {
     exit 1
 }
 } finally {
-    Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not $keepStaging) { Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 Ok "Installed $resolvedVersion to $InstallRoot"

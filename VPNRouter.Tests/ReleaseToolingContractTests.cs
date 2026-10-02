@@ -379,6 +379,25 @@ public sealed class ReleaseToolingContractTests
         AssertFailClosedBranch(script, "$actualSha -ne $expectedSha");
     }
 
+    [Fact]
+    public void WindowsInstaller_StopsTheDriverAndChecksThePayloadBeforeWipingTheInstallation()
+    {
+        // The web installer is also what SelfRepair and the launcher stub run to repair a broken install. It used to wipe the
+        // install folder first and extract afterwards; the loaded split-tunnel driver kept its .sys file locked, the extraction
+        // failed, and the folder was left half deleted (the Start Menu shortcut then pointed at nothing).
+        var script = Read("packaging", "windows", "install.ps1");
+        AssertOrder(
+            script,
+            "Get-CimInstance Win32_SystemDriver -Filter \"Name='mullvad-split-tunnel'\"",
+            "Stop-Service -Name 'mullvad-split-tunnel' -Force",
+            "Expand-Archive -Path $zipPath -DestinationPath $payloadDir",
+            "app\\VPNRouter.App.exe\"))) {",
+            "Get-ChildItem $InstallRoot -Force | ForEach-Object",
+            "Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop");
+        Assert.DoesNotContain("-DestinationPath $InstallRoot", script, StringComparison.Ordinal);
+        Assert.Contains("StartsWith(($InstallRoot.TrimEnd('\\') + '\\')", script, StringComparison.Ordinal);
+    }
+
     private static void AssertFailClosedBranch(string text, string condition)
     {
         var start = text.IndexOf($"if ({condition})", StringComparison.Ordinal);
