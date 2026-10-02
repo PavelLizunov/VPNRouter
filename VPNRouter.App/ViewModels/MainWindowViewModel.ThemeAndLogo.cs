@@ -25,10 +25,19 @@ public partial class MainWindowViewModel
     public bool IsLightThemePref  => string.Equals(ThemePreference, "light",  StringComparison.OrdinalIgnoreCase);
     public bool IsDarkThemePref   => string.Equals(ThemePreference, "dark",   StringComparison.OrdinalIgnoreCase);
 
-    private static readonly Bitmap _logoLight = LoadAsset("avares://VPNRouter.App/Assets/penguin_mascot.png");
-    private static readonly Bitmap _logoDark  = TryBuildInvertedLogo(_logoLight) ?? _logoLight;
-    public Bitmap LogoSource => IsDarkTheme ? _logoDark : _logoLight;
-    private static Bitmap LoadAsset(string uri) => new(AssetLoader.Open(new System.Uri(uri)));
+    // Loaded on first use and never from a static initializer: where no Avalonia platform exists yet (a plain unit test that builds the view model) a failing
+    // initializer would poison the type for the rest of the process, and every later test would fail with TypeInitializationException.
+    private static Bitmap? _logoLight;
+    private static Bitmap? _logoDark;
+    private static Bitmap? LogoLight => _logoLight ??= TryLoadAsset("avares://VPNRouter.App/Assets/penguin_mascot.png");
+    private static Bitmap? LogoDark => _logoDark ??= LogoLight is { } light ? TryBuildInvertedLogo(light) ?? light : null;
+    public Bitmap? LogoSource => IsDarkTheme ? LogoDark : LogoLight;
+
+    private static Bitmap? TryLoadAsset(string uri)
+    {
+        try { return new Bitmap(AssetLoader.Open(new System.Uri(uri))); }
+        catch { return null; }
+    }
 
     private static Bitmap? TryBuildInvertedLogo(Bitmap source)
     {
