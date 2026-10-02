@@ -103,6 +103,9 @@ public partial class MainWindowViewModel
 
     private string? _lastConnectionAlert;
 
+    // Why the connected server is not the one that was selected (set by the pre-flight, cleared on the next Connect).
+    private string? _smpChoiceNote;
+
     private bool HasConnectionAlert => !string.IsNullOrEmpty(_lastConnectionAlert);
 
     private void RaiseSimpleAlertProps()
@@ -124,12 +127,14 @@ public partial class MainWindowViewModel
         }
     }
 
-    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting && !HasConnectionAlert;
-    public bool SimpleStatusIsWarn => IsConnecting || HasConnectionAlert;
-    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting && !HasConnectionAlert;
+    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting && !IsApplying && !HasConnectionAlert;
+    public bool SimpleStatusIsWarn => IsConnecting || IsApplying || HasConnectionAlert;
+    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting && !IsApplying && !HasConnectionAlert;
 
     public string SimpleStatusTitle => IsConnecting
         ? Strings.SmpStatusConnecting
+        : IsApplying
+            ? Strings.SmpStatusApplying
         : (IsConnected && !HasConnectionAlert)
             ? Strings.SmpStatusProtected
             : Strings.SmpStatusNotConnected;
@@ -139,13 +144,15 @@ public partial class MainWindowViewModel
         get
         {
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (HasConnectionAlert) return _lastConnectionAlert!;
             if (IsConnected)
             {
                 var (name, ip) = DeriveConnectedServerLabel();
                 var via = Strings.SmpStatusConnectedVia;
-                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(ip)) return $"{via} {name} · {ip}";
-                if (!string.IsNullOrEmpty(name)) return $"{via} {name}";
+                var note = string.IsNullOrEmpty(_smpChoiceNote) ? string.Empty : $"\n{_smpChoiceNote}";
+                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(ip)) return $"{via} {name} · {ip}{note}";
+                if (!string.IsNullOrEmpty(name)) return $"{via} {name}{note}";
                 if (!string.IsNullOrEmpty(ip))   return $"{via} {ip}";
                 return Strings.SmpStatusConnectedNoDetails;
             }
@@ -242,13 +249,15 @@ public partial class MainWindowViewModel
 
     public string SimpleCtaText => IsConnecting
         ? Strings.SmpCtaCancel
+        : IsApplying
+            ? Strings.SmpCtaWait
         : IsConnected
             ? Strings.SmpCtaDisconnect
             : Strings.SmpCtaConnect;
 
-    public bool SimpleCtaIsConnected    => IsConnected && !IsConnecting;
-    public bool SimpleCtaIsConnecting   => IsConnecting;
-    public bool SimpleCtaIsDisconnected => !IsConnected && !IsConnecting;
+    public bool SimpleCtaIsConnected    => IsConnected && !IsConnecting && !IsApplying;
+    public bool SimpleCtaIsConnecting   => IsConnecting || IsApplying;
+    public bool SimpleCtaIsDisconnected => !IsConnected && !IsConnecting && !IsApplying;
 
     [RelayCommand]
     private void OpenConfigPicker()
@@ -267,7 +276,14 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (IsConnecting) return;
+        _smpChoiceNote = null;
+
+        if (IsConnecting || IsApplying || _isReconnecting) return;
+        if (_engine.IsRunning)
+        {
+            AdoptRunningEngine();
+            return;
+        }
         IsConnecting = true;
         try
         {
@@ -367,6 +383,9 @@ public partial class MainWindowViewModel
                         {
                             _logger.Information(
                                 "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
+                            var previousServer = _settings.App.ActiveSubscriptionServer;
+                            if (!string.IsNullOrWhiteSpace(previousServer))
+                                _smpChoiceNote = Strings.SmpServerSwitchedNote(previousServer);
                             _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
 
                             var winnerVm = SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name);
@@ -473,7 +492,7 @@ public partial class MainWindowViewModel
     public bool SmpHeroIsError => !IsConnecting && !string.IsNullOrEmpty(SmpErrorText);
     public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && HasConnectionAlert;
     public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
-    public bool SmpHeroIsBusy => IsConnecting;
+    public bool SmpHeroIsBusy => IsConnecting || IsApplying;
     public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError && !SmpHeroIsWarn;
 
     public string SmpHomeTitle => SmpHeroIsError
@@ -489,6 +508,7 @@ public partial class MainWindowViewModel
         get
         {
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (!string.IsNullOrEmpty(SmpErrorText)) return SmpErrorText;
             if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();
             if (SmpNeedsConfig) return Strings.SmpHeroAddConfigHint;
@@ -549,6 +569,7 @@ public partial class MainWindowViewModel
             {
                 case nameof(IsConnected):
                 case nameof(IsConnecting):
+                case nameof(IsApplying):
                 case nameof(SimpleStatusTitle):
                 case nameof(SimpleStatusDescription):
                 case nameof(SmpErrorText):
