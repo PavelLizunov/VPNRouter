@@ -37,13 +37,13 @@ public sealed class ApplicationsPageModeSegmentTests
         using (vm)
         {
             Assert.Equal(2, segments.Length);
-            Assert.True(segments[index].IsChecked, "Assert-pre: the segment of the current mode starts checked");
+            Assert.True(segments[index].IsChecked, "precondition: the segment of the current mode starts checked");
 
             segments[index].IsChecked = false;
             Dispatcher.UIThread.RunJobs();
 
-            Assert.True(segments[index].IsChecked, $"Assert-post1: segment {index} is checked again (mode={vm.RoutingAppsMode}, other={segments[1 - index].IsChecked})");
-            Assert.False(segments[1 - index].IsChecked, "Assert-post2: the other segment stays unchecked");
+            Assert.True(segments[index].IsChecked, $"after pressing: segment {index} is checked again (mode={vm.RoutingAppsMode}, other={segments[1 - index].IsChecked})");
+            Assert.False(segments[1 - index].IsChecked, "after pressing: the other segment stays unchecked");
             Assert.Equal(mode, vm.RoutingAppsMode);
             window.Close();
         }
