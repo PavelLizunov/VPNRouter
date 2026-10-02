@@ -18,6 +18,7 @@ public partial class MainWindow : Window
 
         Opened += (_, _) =>
         {
+            FitToScreen();
             ApplyCompactTabs();
             try { LaunchFailureCounter.MarkStable(); }
             catch { }
@@ -42,6 +43,31 @@ public partial class MainWindow : Window
                 catch { }
             }
         };
+    }
+
+    // The home screen needs about 760 px of height; on a smaller screen the window is shortened to what the work area allows (title bar and margin
+    // included) and kept on screen.
+    internal const double PreferredHeight = 760;
+    private const double FrameAllowance = 48;
+
+    internal static double FittedHeight(double preferred, double workAreaHeightDip, double minimum) =>
+        Math.Max(minimum, Math.Min(preferred, workAreaHeightDip - FrameAllowance));
+
+    private void FitToScreen()
+    {
+        try
+        {
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen == null) return;
+            var workArea = screen.WorkingArea;
+            var fitted = FittedHeight(Height, workArea.Height / screen.Scaling, MinHeight);
+            if (fitted < Height) Height = fitted;
+            if (Position.Y < workArea.Y) Position = new PixelPoint(Position.X, workArea.Y);
+        }
+        catch
+        {
+            // a window that could not be fitted is still usable
+        }
     }
 
     // Widths at which the six main tabs still fit with their labels (measured on the real labels: about 500 px in English and about 630 px in Russian,
