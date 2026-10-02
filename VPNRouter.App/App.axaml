@@ -55,6 +55,12 @@
             <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
         </Style>
+        <!-- The main tabs: the selected one is a solid accent pill, a clear step above the tinted inner tabs. -->
+        <Style Selector="ListBoxItem.main-tab:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:focus /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:focus:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+            <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
+        </Style>
 
         <!-- A destructive action that is not the main one: danger text on a danger tint, a stronger tint on hover. -->
         <Style Selector="Button.danger-soft">
