@@ -29,8 +29,7 @@
                                    Text="{Binding TgProxyDownloadStep}"
                                    TextWrapping="Wrap"
                                    FontSize="10"
-                                   Opacity="0.7"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
                     </StackPanel>
 
                     <Border CornerRadius="{StaticResource RadiusLg}"
@@ -310,13 +309,11 @@
                                         <TextBlock Text="{Binding TgProxyStatus}"
                                                    FontSize="11"
                                                    VerticalAlignment="Center"/>
-                                        <TextBlock Text="·"
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="·"
                                                    FontSize="11"
-                                                   Opacity="0.5"
                                                    VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding TgProxyVersionText}"
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding TgProxyVersionText}"
                                                    FontSize="11"
-                                                   Opacity="0.6"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <Button Grid.Column="2"
@@ -337,7 +334,7 @@
                                     Command="{Binding OpenTgProxyInTelegramCommand}"
                                     FontSize="10" Padding="10,5"
                                     HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
+                                    HorizontalContentAlignment="Center"
                                     CornerRadius="{StaticResource RadiusSm}"
                                     IsEnabled="{Binding TgProxyEnabled}"/>
                             </StackPanel>
@@ -352,9 +349,9 @@
                                     CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource SurfaceSunkenBrush}">
                                 <StackPanel Spacing="3">
-                                    <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
+                                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" FontSize="10"
                                                icons:PictogramText.Icons="arrow-right" icons:PictogramText.Text="{Binding LblTgProxySetupHint}"/>
-                                    <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.5"
+                                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" FontSize="10"
                                                FontStyle="Italic"
                                                Text="{Binding L_TgProxySetupOnce}"/>
                                 </StackPanel>

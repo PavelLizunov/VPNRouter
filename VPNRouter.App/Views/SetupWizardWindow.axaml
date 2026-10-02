@@ -177,6 +177,7 @@
           <Border Classes="wizard-card">
             <StackPanel Spacing="8">
               <TextBlock Text="{Binding OperationStatus}" FontWeight="SemiBold" TextWrapping="Wrap"
+                         IsVisible="{Binding OperationStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                          Foreground="{DynamicResource TextPrimaryBrush}"/>
               <TextBlock Text="{Binding CheckSummary}" FontSize="11" TextWrapping="Wrap"
                          Foreground="{DynamicResource TextSecondaryBrush}"/>
