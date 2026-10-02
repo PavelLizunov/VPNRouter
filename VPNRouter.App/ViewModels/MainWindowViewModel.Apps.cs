@@ -81,13 +81,13 @@ public partial class MainWindowViewModel
     public bool IsRoutingAppsModeInclude
     {
         get => string.Equals(RoutingAppsMode, "include", StringComparison.OrdinalIgnoreCase);
-        set { if (value) RoutingAppsMode = "include"; else OnPropertyChanged(); }
+        set { if (value) RoutingAppsMode = "include"; }
     }
 
     public bool IsRoutingAppsModeExclude
     {
         get => string.Equals(RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
-        set { if (value) RoutingAppsMode = "exclude"; else OnPropertyChanged(); }
+        set { if (value) RoutingAppsMode = "exclude"; }
     }
 
     partial void OnRoutingAppsModeChanged(string value)

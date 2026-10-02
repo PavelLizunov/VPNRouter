@@ -1,7 +1,9 @@
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using VPNRouter.App.ViewModels;
@@ -11,11 +13,11 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
-// The two segments are ToggleButtons bound to a pair of booleans; pressing the selected one used to uncheck it (the model ignores
-// "false"), leaving no segment highlighted although the mode was still set (tester screenshot 9).
+// The two segments used to be ToggleButtons bound to a pair of booleans: pressing the selected one unchecked it (the model ignores
+// "false"), leaving no segment highlighted although the mode was still set (tester screenshot 9). They are radio buttons now.
 public sealed class ApplicationsPageModeSegmentTests
 {
-    private static (MainWindowViewModel Vm, Window Window, ToggleButton[] Segments) Open(string mode)
+    private static (MainWindowViewModel Vm, Window Window, RadioButton[] Segments) Open(string mode)
     {
         var vm = new MainWindowViewModel(new InMemorySettingsStore());
         vm.IsSplitTunnel = true;
@@ -24,8 +26,16 @@ public sealed class ApplicationsPageModeSegmentTests
         var window = new Window { Width = 520, Height = 700, Content = page };
         window.Show();
         Dispatcher.UIThread.RunJobs();
-        var segments = page.GetLogicalDescendants().OfType<ToggleButton>().Where(t => t.Classes.Contains("apps-mode-seg")).ToArray();
+        var segments = page.GetLogicalDescendants().OfType<RadioButton>().Where(t => t.Classes.Contains("apps-mode-seg")).ToArray();
         return (vm, window, segments);
+    }
+
+    private static void Click(Window window, Control control)
+    {
+        var center = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(center, MouseButton.Left);
+        window.MouseUp(center, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
     }
 
     [AvaloniaTheory]
@@ -37,13 +47,12 @@ public sealed class ApplicationsPageModeSegmentTests
         using (vm)
         {
             Assert.Equal(2, segments.Length);
-            Assert.True(segments[index].IsChecked);
+            Assert.True(segments[index].IsChecked, "the segment of the current mode starts checked");
 
-            segments[index].IsChecked = false;
-            Dispatcher.UIThread.RunJobs();
+            Click(window, segments[index]);
 
-            Assert.True(segments[index].IsChecked);
-            Assert.False(segments[1 - index].IsChecked);
+            Assert.True(segments[index].IsChecked, "the pressed segment is still checked");
+            Assert.False(segments[1 - index].IsChecked, "the other segment stays unchecked");
             Assert.Equal(mode, vm.RoutingAppsMode);
             window.Close();
         }
@@ -55,8 +64,7 @@ public sealed class ApplicationsPageModeSegmentTests
         var (vm, window, segments) = Open("include");
         using (vm)
         {
-            segments[1].IsChecked = true;
-            Dispatcher.UIThread.RunJobs();
+            Click(window, segments[1]);
 
             Assert.Equal("exclude", vm.RoutingAppsMode);
             Assert.True(segments[1].IsChecked);
