@@ -473,8 +473,8 @@ public static partial class Strings
         ? $"Конфиг '{name}' уже существует."
         : $"Config '{name}' already exists.";
 
-    public static string TrayStart => Ru ? "\u25b6 Запустить VPN" : "\u25b6 Start VPN";
-    public static string TrayStop => Ru ? "\u2b1b Остановить VPN" : "\u2b1b Stop VPN";
+    public static string TrayStart => Ru ? "Запустить VPN" : "Start VPN";
+    public static string TrayStop => Ru ? "Остановить VPN" : "Stop VPN";
     public static string TraySettings => Ru ? "Настройки..." : "Settings...";
     public static string TrayExit => Ru ? "Выход" : "Exit";
 
