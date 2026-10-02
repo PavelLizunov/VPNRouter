@@ -80,9 +80,11 @@ public static class LayoutLint
                     add("warn", "text-clipped", c,
                         $"text needs {layout.WidthIncludingTrailingWhitespace:0} px but the block is {bounds.Width:0} px wide", null);
             }
-            if (tb.DesiredSize.Height > bounds.Height + 1 && bounds.Height > 0)
+            // DesiredSize includes the margin, which the bounds do not: compare the laid-out text itself.
+            var neededHeight = tb.TextLayout.Height + tb.Padding.Top + tb.Padding.Bottom;
+            if (neededHeight > bounds.Height + 1 && bounds.Height > 0)
                 add("warn", "text-clipped-height", c,
-                    $"text needs {tb.DesiredSize.Height:0} px of height but got {bounds.Height:0}", null);
+                    $"text needs {neededHeight:0} px of height but got {bounds.Height:0}", null);
         }
 
         if (hasText && (c is TextBlock || c is ContentControl))
