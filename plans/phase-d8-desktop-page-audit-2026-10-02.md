@@ -58,4 +58,7 @@ Telegram settings and help tabs, Tools tab strip, setup wizard steps 1 to 3.
 
 ## Outcome
 
-(filled in at delivery)
+Windows worker (preflight CPU 1 %, 12.1 GB free RAM, 11.7 GB free disk, two idle dotnet processes): `7bf7e774`
+104 of 104, `5cff0cc4` 105 of 105 (`PageScreenshotDesignTests`, `HeadlessGuiTests`, `VisualDiffTests`,
+`MainWindowViewModelTests`; no visual baseline changed). Captures read before (`3e2fa9d0`, D-7 branch) and after.
+Not seen: hover with a real pointer, the native tray menu (no headless capture), a live WINBRAT run.
