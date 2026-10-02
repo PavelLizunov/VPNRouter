@@ -471,7 +471,7 @@
                             Command="{Binding SmpToggleConnectCommand}"
                             IsVisible="{Binding SimpleCtaIsConnecting}"
                             IsEnabled="False"
-                            AutomationProperties.Name="{Binding SimpleStatusTitle}">
+                            AutomationProperties.Name="{Binding L_SmpCtaWait}">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Arc Classes="spinner"
                                  Classes.spin="{Binding SimpleCtaIsConnecting}"
@@ -481,7 +481,7 @@
                                     <RotateTransform/>
                                 </Arc.RenderTransform>
                             </Arc>
-                            <TextBlock Text="{Binding SimpleStatusTitle}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding L_SmpCtaWait}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </Panel>

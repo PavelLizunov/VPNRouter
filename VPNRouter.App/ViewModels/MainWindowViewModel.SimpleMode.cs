@@ -471,11 +471,13 @@ public partial class MainWindowViewModel
     public bool SmpHeroIsBusy => IsConnecting;
     public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError && !SmpHeroIsWarn;
 
-    public string SmpHomeTitle => SmpHeroIsError || SmpHeroIsWarn
+    public string SmpHomeTitle => SmpHeroIsError
         ? Strings.SmpHeroErrorTitle
-        : SmpNeedsConfig
-            ? Strings.SmpHeroAddConfigTitle
-            : SimpleStatusTitle;
+        : SmpHeroIsWarn
+            ? Strings.SmpHeroWarnTitle
+            : SmpNeedsConfig
+                ? Strings.SmpHeroAddConfigTitle
+                : SimpleStatusTitle;
 
     public string SmpHomeSubline
     {
@@ -514,6 +516,7 @@ public partial class MainWindowViewModel
     }
 
     public string L_SmpHeroChange => Strings.SmpConfigRowChange;
+    public string L_SmpCtaWait => Strings.SmpCtaWait;
     public string L_SmpSegSplit => Strings.SmpSegSplit;
     public string L_SmpSegFull => Strings.SmpSegFull;
     public string L_SmpTipSplitHome => Strings.SmpTipSplit;
