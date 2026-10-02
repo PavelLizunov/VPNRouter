@@ -153,17 +153,17 @@
                 DataContext="{Binding DetailServer}"
                 x:DataType="vm:ServerViewModel">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblName}"      VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
-            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"      FontSize="11" Padding="6,4" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
+            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"      FontSize="11" Padding="8,5" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblServer}"    VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
-            <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Server}"    FontSize="11" Padding="6,4" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
+            <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Server}"    FontSize="11" Padding="8,5" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblPort}"      VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
-            <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Port}"      FontSize="11" Padding="6,4" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
+            <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Port}"      FontSize="11" Padding="8,5" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
             <TextBlock Grid.Row="3" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblUuid}"      VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
-            <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Uuid}"      FontSize="11" Padding="6,4" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
+            <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Uuid}"      FontSize="11" Padding="8,5" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
             <TextBlock Grid.Row="4" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblPublicKey}" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
-            <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding PublicKey}" FontSize="11" Padding="6,4" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
+            <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding PublicKey}" FontSize="11" Padding="8,5" Margin="0,0,0,6" CornerRadius="{StaticResource RadiusSm}"/>
             <TextBlock Grid.Row="5" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblShortId}"   VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-            <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding ShortId}"   FontSize="11" Padding="6,4" CornerRadius="{StaticResource RadiusSm}"/>
+            <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding ShortId}"   FontSize="11" Padding="8,5" CornerRadius="{StaticResource RadiusSm}"/>
           </Grid>
         </DockPanel>
       </Border>

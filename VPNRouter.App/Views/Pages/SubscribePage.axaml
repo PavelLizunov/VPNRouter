@@ -148,8 +148,7 @@
           <ComboBox ItemsSource="{Binding ConnectionIntentChoices}"
                     SelectedIndex="{Binding ConnectionIntentIndex}"
                     FontSize="11"
-                    MinHeight="0"
-                    Padding="8,3"/>
+                    Padding="8,5"/>
         </StackPanel>
       </Grid>
     </StackPanel>

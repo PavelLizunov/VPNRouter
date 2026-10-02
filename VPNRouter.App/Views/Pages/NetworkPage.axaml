@@ -415,7 +415,7 @@
                   <ComboBox ItemsSource="{Binding AvailableRuleActions}"
                             SelectedItem="{Binding NewRuleAction}"
                             HorizontalAlignment="Stretch"
-                            FontSize="11" Padding="6,3" MinHeight="0"
+                            FontSize="11" Padding="8,5"
                             ToolTip.Tip="{Binding NewRuleActionHint}"/>
                   <TextBlock Text="{Binding NewRuleActionHint}"
                              FontSize="9"
@@ -430,7 +430,7 @@
                   <ComboBox ItemsSource="{Binding AvailableRuleTypes}"
                             SelectedItem="{Binding NewRuleType}"
                             HorizontalAlignment="Stretch"
-                            FontSize="11" Padding="6,3" MinHeight="0"
+                            FontSize="11" Padding="8,5"
                             ToolTip.Tip="{Binding NewRuleTypeHint}"/>
                   <TextBlock Text="{Binding NewRuleTypeHint}"
                              FontSize="9"
@@ -444,7 +444,7 @@
                              Foreground="{DynamicResource TextMutedBrush}"/>
                   <TextBox Text="{Binding NewRuleValue}"
                            PlaceholderText="{Binding NewRuleValuePlaceholder}"
-                           FontSize="11" Padding="6,3" MinHeight="0"
+                           FontSize="11" Padding="8,5"
                            FontFamily="Consolas, 'SF Mono', monospace"
                            BorderBrush="{Binding NewRuleValueBorderColor,
                                          Converter={x:Static conv:BoolToBrushConverter.Instance},
@@ -468,7 +468,7 @@
                   </TextBlock>
                   <TextBox Text="{Binding NewRuleComment}"
                            PlaceholderText="{Binding L_CustomRulesCommentLabel}"
-                           FontSize="11" Padding="6,3" MinHeight="0"/>
+                           FontSize="11" Padding="8,5"/>
                   <TextBlock Text=" " FontSize="9" MinHeight="11"/>
                 </StackPanel>
                 <Button Classes="solid" Grid.Column="4"
@@ -509,18 +509,18 @@
                           ItemsSource="{Binding AvailableRuleActions}"
                           SelectedItem="{Binding NewRuleAction}"
                           HorizontalAlignment="Stretch"
-                          FontSize="11" Padding="6,3" MinHeight="0"
+                          FontSize="11" Padding="8,5"
                           ToolTip.Tip="{Binding NewRuleActionHint}"/>
                 <ComboBox Grid.Row="1"
                           ItemsSource="{Binding AvailableRuleTypes}"
                           SelectedItem="{Binding NewRuleType}"
                           HorizontalAlignment="Stretch"
-                          FontSize="11" Padding="6,3" MinHeight="0"
+                          FontSize="11" Padding="8,5"
                           ToolTip.Tip="{Binding NewRuleTypeHint}"/>
               </Grid>
               <TextBox Text="{Binding NewRuleValue}"
                        PlaceholderText="{Binding NewRuleValuePlaceholder}"
-                       FontSize="11" Padding="6,3" MinHeight="0"
+                       FontSize="11" Padding="8,5"
                        FontFamily="Consolas, 'SF Mono', monospace"
                        BorderBrush="{Binding NewRuleValueBorderColor,
                                      Converter={x:Static conv:BoolToBrushConverter.Instance},
@@ -534,7 +534,7 @@
                                       ConverterParameter=SuccessFgBrush|DangerFgBrush}"/>
               <TextBox Text="{Binding NewRuleComment}"
                        PlaceholderText="{Binding L_CustomRulesCommentLabel}"
-                       FontSize="11" Padding="6,3" MinHeight="0"/>
+                       FontSize="11" Padding="8,5"/>
               <Button Classes="solid" icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
                       Command="{Binding AddCustomRuleFromFormCommand}"
                       FontSize="11" FontWeight="SemiBold"
@@ -575,7 +575,7 @@
             <TextBox Grid.Column="0"
                      Text="{Binding CustomRulesSearchText}"
                      PlaceholderText="{Binding L_CustomRulesSearchPlaceholder}"
-                     FontSize="11" Padding="6,3" MinHeight="0"/>
+                     FontSize="11" Padding="8,5"/>
             <Border Grid.Column="1"
                     Padding="2"
                     CornerRadius="{StaticResource RadiusSm}"
@@ -757,7 +757,7 @@
           <StackPanel IsVisible="{Binding IsRulesNarrow}" Spacing="6">
             <TextBox Text="{Binding CustomRulesSearchText}"
                      PlaceholderText="{Binding L_CustomRulesSearchPlaceholder}"
-                     FontSize="11" Padding="6,3" MinHeight="0"/>
+                     FontSize="11" Padding="8,5"/>
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
               <Border Grid.Column="0"
                       Padding="2"

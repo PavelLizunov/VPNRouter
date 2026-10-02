@@ -14,6 +14,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://VPNRouter.App/Styles/Tokens.axaml"/>
                 <ResourceInclude Source="avares://VPNRouter.App/Styles/ButtonRoles.axaml"/>
+                <ResourceInclude Source="avares://VPNRouter.App/Styles/ControlRoles.axaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <FontFamily x:Key="EmojiFlagFont">avares://VPNRouter.App/Assets/Fonts/Twemoji.Mozilla.ttf#Twemoji Mozilla</FontFamily>
@@ -82,6 +83,14 @@
             <Setter Property="Background" Value="{Binding $parent[Button].Background}"/>
             <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}"/>
             <Setter Property="Opacity" Value="0.76"/>
+        </Style>
+
+        <!-- Input controls share one height (the per-page MinHeight="0" overrides were removed). -->
+        <Style Selector="TextBox, ComboBox">
+            <Setter Property="MinHeight" Value="30"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="FontSize" Value="11"/>
         </Style>
 
         <!-- Fluent draws the placeholder in the text colour at half opacity, which is too faint on both themes: use the muted token. -->

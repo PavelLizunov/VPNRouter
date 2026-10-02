@@ -1,0 +1,48 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Desktop only. One look for the input controls on every page: text boxes and combo boxes on the base surface with
+         a visible border (about 3:1 against the surface), an accent border on hover and focus, a raised drop-down, and one
+         corner radius for all Fluent controls. Values follow Tokens.axaml (SurfaceBase, SurfaceRaised, AccentBorder,
+         AccentSolid, AccentBgSubtle, BorderDefault); the input border is a step darker than BorderStrong. -->
+    <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
+    <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FF8C96A8"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#FF38BDF8"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FF0276B4"/>
+
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#FFECFEFF"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#FFCFFAFE"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#FF8C96A8"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#FF38BDF8"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#FF0276B4"/>
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFDCE1E9"/>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FF1C2231"/>
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FF1C2231"/>
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FF1C2231"/>
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#9938BDF8"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FF38BDF8"/>
+
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#FF1C2231"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#FF232A3B"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#FF2B3347"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#59FFFFFF"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#9938BDF8"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#FF38BDF8"/>
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FF232A3B"/>
+            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#14FFFFFF"/>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>

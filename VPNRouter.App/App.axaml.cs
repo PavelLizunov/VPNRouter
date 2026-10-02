@@ -17,6 +17,11 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        if (VPNRouter.App.Services.UiMotion.Allowed())
+            Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(new System.Uri("avares://VPNRouter.App/"))
+            {
+                Source = new System.Uri("avares://VPNRouter.App/Styles/Motion.axaml")
+            });
     }
 
     public override void OnFrameworkInitializationCompleted()
