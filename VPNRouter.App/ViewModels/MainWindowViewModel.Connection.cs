@@ -50,6 +50,8 @@ public partial class MainWindowViewModel
 
     private static string FormatTrueSplitFallback(string reason)
     {
+        if (reason.Contains("needs a resolvable app path", StringComparison.OrdinalIgnoreCase))
+            return Strings.TrueSplitNoRunningApps;
         if (reason.Contains("err=5", StringComparison.OrdinalIgnoreCase)
             || reason.Contains("MULLVADSPLITTUNNEL", StringComparison.OrdinalIgnoreCase)
             || reason.Contains("0x80320009", StringComparison.OrdinalIgnoreCase))

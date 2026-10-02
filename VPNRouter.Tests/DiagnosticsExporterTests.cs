@@ -122,6 +122,60 @@ vless:
         }
     }
 
+    [Fact]
+    public void Export_IncludesCrashReportsAndAnIndexOfShutdownMarkers_WithoutSecrets()
+    {
+        var previous = AppPaths.DataDir;
+        var dataDir = Path.Combine(Path.GetTempPath(), "vpnrouter-diag-crash-" + Guid.NewGuid().ToString("N"));
+        var outDir = Path.Combine(Path.GetTempPath(), "vpnrouter-diag-crash-out-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            AppPaths.OverrideDataDir(dataDir);
+            AppPaths.EnsureDirectories();
+            File.WriteAllText(Path.Combine(AppPaths.LogsDir, "vpnrouter20261002.log"), "2026-10-02 00:00:00 [INF] started\n");
+
+            var crashes = Path.Combine(AppPaths.DataDir, "crashes");
+            Directory.CreateDirectory(crashes);
+            for (var i = 1; i <= 7; i++)
+            {
+                var report = Path.Combine(crashes, $"crash-2026100{i}-120000-000.txt");
+                File.WriteAllText(report, $"VPNRouter crash report {i}\nSystem.InvalidOperationException: Visual was invalidated during the render pass\nconnecting {LogSecret}\n");
+                File.SetLastWriteTimeUtc(report, new DateTime(2026, 10, i, 12, 0, 0, DateTimeKind.Utc));
+            }
+            File.WriteAllText(Path.Combine(crashes, "shutdown-20261001-120000-000.txt"), "graceful\n");
+
+            var result = DiagnosticsExporter.Export(new DateTime(2026, 10, 2, 11, 43, 52), connected: false, destinationDir: outDir);
+
+            var names = new List<string>();
+            var all = new System.Text.StringBuilder();
+            using (var zip = ZipFile.OpenRead(result.ZipPath))
+            {
+                foreach (var entry in zip.Entries)
+                {
+                    names.Add(entry.Name);
+                    using var sr = new StreamReader(entry.Open());
+                    all.Append(sr.ReadToEnd());
+                }
+            }
+
+            Assert.Contains("crash-index.txt", names);
+            Assert.Equal(DiagnosticsExporter.MaxCrashReports, names.Count(n => n.StartsWith("crash-2026", StringComparison.Ordinal)));
+            Assert.Contains("crash-20261007-120000-000.txt", names);
+            Assert.DoesNotContain("crash-20261001-120000-000.txt", names);
+            Assert.Contains("shutdown-20261001-120000-000.txt", all.ToString());
+            Assert.Contains("Visual was invalidated during the render pass", all.ToString());
+            Assert.DoesNotContain(LogSecret, all.ToString());
+            Assert.DoesNotContain(Uuid, all.ToString());
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            TryDelete(dataDir);
+            TryDelete(outDir);
+        }
+    }
+
     private static void TryDelete(string dir)
     {
         try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); } catch { }

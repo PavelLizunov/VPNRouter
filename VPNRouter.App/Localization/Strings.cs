@@ -82,6 +82,9 @@ public static class Strings
     public static string TrueSplitFallback => Ru
         ? "Обычный split активен; True Split не запустился."
         : "Ordinary split is active; True Split did not start.";
+    public static string TrueSplitNoRunningApps => Ru
+        ? "True Split не включён: ни одно из исключённых приложений сейчас не запущено. Работает обычный split; True Split включится при следующем подключении, если эти приложения уже запущены."
+        : "True Split is off: none of the excluded apps is running right now. Ordinary split is active; True Split engages on the next connect if those apps are already running.";
     public static string TrueSplitDeviceBusy => Ru
         ? "True Split не запустился: split-драйвер занят Amnezia/Mullvad/VPNRouter Service (err=5). VPNRouter не будет останавливать чужой kernel driver автоматически; закройте тот VPN, отключите его split tunneling и перезагрузите Windows."
         : "True Split did not start: the split driver is held by Amnezia/Mullvad/VPNRouter Service (err=5). VPNRouter will not stop another kernel driver automatically; close that VPN, disable its split tunneling, and reboot Windows.";

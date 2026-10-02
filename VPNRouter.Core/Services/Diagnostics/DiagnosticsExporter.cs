@@ -52,6 +52,9 @@ public static class DiagnosticsExporter
 
             AddLogTail(staging, Path.Combine(AppPaths.LogsDir, "update.log"), "update.log", entries, warnings);
 
+            AddCrashReports(staging, entries, warnings);
+            AddOptionalLogTail(staging, Path.Combine(Path.GetTempPath(), "vpnrouter-trampoline.log"), "trampoline.log", entries);
+
             AddLogTail(staging, AppPaths.SingBoxLogPath, "singbox-tail.log", entries, warnings);
             var singBoxOld = Path.Combine(AppPaths.LogsDir, "singbox.old.log");
             if (File.Exists(singBoxOld))
@@ -97,6 +100,8 @@ public static class DiagnosticsExporter
         "  current.redacted.json  - the config sing-box actually loaded (secrets removed)",
         "  state.redacted.json    - runtime state (PID etc.)",
         "  vpnrouter*.log          - app logs, last few days (scrubbed)",
+        "  crash-*.txt            - the last crash reports of the app (unhandled exceptions, scrubbed) and crash-index.txt",
+        "  trampoline.log         - the launcher stub log, if present (scrubbed)",
         "  singbox-tail.log        - sing-box log, current (scrubbed)",
         "  singbox-old-tail.log    - sing-box log, previous rotation if present (scrubbed)",
         "  slipstream-tail.log     - DNS-tunnel transport log, if dns-tunnel was used (scrubbed)",
@@ -418,6 +423,60 @@ public static class DiagnosticsExporter
         catch (Exception ex)
         {
             warnings.Add($"{outName} could not be read ({ex.GetType().Name}) — skipped");
+        }
+    }
+
+    public const int MaxCrashReports = 5;
+
+    // An unhandled exception kills the process before it can write to the normal log, so its report lives in <data>\crashes.
+    // crash-index.txt also lists the graceful-shutdown markers: a start without a matching marker is a process that did not exit cleanly.
+    private static void AddCrashReports(string staging, List<string> entries, List<string> warnings)
+    {
+        try
+        {
+            var dir = Path.Combine(AppPaths.DataDir, "crashes");
+            if (!Directory.Exists(dir))
+            {
+                warnings.Add("no crashes folder - no crash report was ever written");
+                return;
+            }
+
+            var index = new StringBuilder();
+            index.AppendLine("Newest first. crash-* = unhandled exception report; shutdown-* = graceful exit marker.");
+            foreach (var file in Directory.GetFiles(dir)
+                         .OrderByDescending(File.GetLastWriteTimeUtc)
+                         .Take(40))
+            {
+                index.AppendLine($"{File.GetLastWriteTime(file):yyyy-MM-dd HH:mm:ss}  {new FileInfo(file).Length,8} B  {Path.GetFileName(file)}");
+            }
+            AddText(staging, "crash-index.txt", index.ToString(), entries);
+
+            var reports = Directory.GetFiles(dir, "crash-*.txt")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .Take(MaxCrashReports)
+                .ToList();
+            if (reports.Count == 0)
+                warnings.Add("crashes folder has no crash-*.txt report");
+            foreach (var report in reports)
+                AddLogTail(staging, report, Path.GetFileName(report), entries, warnings);
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"crash reports could not be read ({ex.GetType().Name}) - skipped");
+        }
+    }
+
+    private static void AddOptionalLogTail(string staging, string path, string outName, List<string> entries)
+    {
+        try
+        {
+            if (!File.Exists(path)) return;
+            File.WriteAllText(Path.Combine(staging, outName), DiagnosticsRedactor.RedactLogText(TailLines(path, 2_000)));
+            entries.Add(outName);
+        }
+        catch
+        {
+            // optional file: a missing or locked one is not worth a warning
         }
     }
 
