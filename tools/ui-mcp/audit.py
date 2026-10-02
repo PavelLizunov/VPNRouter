@@ -58,7 +58,27 @@ class Server:
             if msg.get("id") == ident:
                 return msg
 
+    # A probe session leaks a little per rendered cell (a view model with its timers and files each time) and eventually stops answering or dies,
+    # so the server is restarted proactively, and a cell whose server died is retried once on a fresh one.
+    RESTART_EVERY = 60
+
     def call(self, tool, args):
+        self.calls = getattr(self, "calls", 0) + 1
+        if self.calls % self.RESTART_EVERY == 0:
+            self.close()
+            self.p.kill()
+            self.start()
+        try:
+            return self._call(tool, args)
+        except (Hang, BrokenPipeError, OSError):
+            try:
+                self.p.kill()
+            except Exception:
+                pass
+            self.start()
+            return self._call(tool, args)
+
+    def _call(self, tool, args):
         reply = self.rpc("tools/call", {"name": tool, "arguments": args})
         if "error" in reply:
             raise RuntimeError(reply["error"])

@@ -106,7 +106,7 @@
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 Background="{DynamicResource SuccessSolidBrush}"
-                                Foreground="White"
+                                Foreground="{DynamicResource SuccessOnSolidBrush}"
                                 ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"
                                 AutomationProperties.Name="{Binding L_FcDeepVerify}"/>
                         <Button Classes="solid" icons:PictogramText.Icons="stop" icons:PictogramText.Content="{Binding L_FcDeepStop}"
