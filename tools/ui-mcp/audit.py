@@ -14,13 +14,24 @@ import itertools
 import json
 import os
 import re
+import select
 import subprocess
 import sys
 
 
+class Hang(Exception):
+    pass
+
+
 class Server:
+    CALL_TIMEOUT = 90
+
     def __init__(self, cmd):
-        self.p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+        self.cmd = cmd
+        self.start()
+
+    def start(self):
+        self.p = subprocess.Popen(self.cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
         self.n = 0
         self.rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "audit", "version": "0"}})
         self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
@@ -32,9 +43,14 @@ class Server:
         self.p.stdin.write(json.dumps({"jsonrpc": "2.0", "id": ident, "method": method, "params": params or {}}) + "\n")
         self.p.stdin.flush()
         while True:
+            ready, _, _ = select.select([self.p.stdout], [], [], self.CALL_TIMEOUT)
+            if not ready:
+                self.p.kill()
+                self.start()
+                raise Hang(f"no answer within {self.CALL_TIMEOUT} s - server restarted")
             line = self.p.stdout.readline()
             if not line:
-                sys.exit("server closed the pipe: " + self.p.stderr.read()[:2000])
+                raise Hang("server closed the pipe: " + self.p.stderr.read()[:500])
             try:
                 msg = json.loads(line)
             except ValueError:
@@ -88,9 +104,9 @@ def main():
 
     TAB = re.compile(r'^\s*(?:ListBoxItem|TabItem) "([^"]+)"')
 
-    def tab_labels(surface, steps, width):
+    def tab_labels(surface, steps, width, lang):
         """Labels of the tab-like controls visible after `steps`, found through ui_tree."""
-        args = {"surface": surface, "width": width, "height": opts.height, "max_lines": 1500}
+        args = {"surface": surface, "width": width, "height": opts.height, "max_lines": 1500, "language": lang}
         if steps:
             args["steps"] = steps
         _, tree, _ = srv.call("ui_tree", args)
@@ -101,28 +117,28 @@ def main():
                 labels.append(m.group(1))
         return labels
 
-    def variants_for(surface):
-        """Step lists that reach each inner tab (depth set by --tabs)."""
+    def variants_for(surface, lang):
+        """Step lists that reach each inner tab (depth set by --tabs), in the labels of that language."""
         found = [[]]
         if not opts.tabs:
             return found
-        first = tab_labels(surface, [], 520)
+        first = tab_labels(surface, [], 520, lang)
         for a in first:
             found.append([a])
             if opts.tabs > 1:
-                for b in tab_labels(surface, [a], 520):
+                for b in tab_labels(surface, [a], 520, lang):
                     if b not in first and b != a:
                         found.append([a, b])
         return found
 
     cells = []
     findings = collections.defaultdict(lambda: collections.defaultdict(set))
-    variants = {surface: variants_for(surface) for surface in surfaces}
     combos = []
     for surface in surfaces:
-        for steps in variants[surface]:
-            for scenario, theme, lang, width in itertools.product(opts.scenarios.split(","), opts.themes.split(","), opts.languages.split(","), [int(w) for w in opts.widths.split(",")]):
-                combos.append((surface, steps, scenario, theme, lang, width))
+        for lang in opts.languages.split(","):
+            for steps in variants_for(surface, lang):
+                for scenario, theme, width in itertools.product(opts.scenarios.split(","), opts.themes.split(","), [int(w) for w in opts.widths.split(",")]):
+                    combos.append((surface, steps, scenario, theme, lang, width))
     for index, (surface, steps, scenario, theme, lang, width) in enumerate(combos, 1):
         tag = ("+" + "+".join(re.sub(r"[^A-Za-z0-9]+", "", x) for x in steps)) if steps else ""
         label = f"{surface}{tag}-{scenario}-{theme}-{lang}-{width}"
@@ -131,7 +147,7 @@ def main():
             if steps:
                 call_args["steps"] = steps
             err, text, images = srv.call("ui_render", call_args)
-        except Exception as ex:  # a crash of the server or the tool is itself a finding
+        except Exception as ex:  # a crash or a hang of the server is itself a finding
             cells.append((label, -1, -1, f"EXCEPTION {ex}"))
             print(f"[{index}/{len(combos)}] {label}: EXCEPTION {ex}", flush=True)
             continue
