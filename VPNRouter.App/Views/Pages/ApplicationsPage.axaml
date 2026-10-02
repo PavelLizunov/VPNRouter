@@ -320,7 +320,7 @@
                      PlaceholderText="{Binding L_CategoryNameWatermark}"
                      FontSize="11" Padding="8,5"
                      CornerRadius="{StaticResource RadiusSm}"/>
-            <Button Classes="small"
+            <Button Classes="small" Padding="4,3"
                     icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddCategory}"
                     Command="{Binding AddCategoryCommand}"
                     HorizontalAlignment="Stretch"
