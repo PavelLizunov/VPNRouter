@@ -27,6 +27,11 @@ public partial class MainWindowViewModel
     public string L_FcSettingsToggle => FcSettingsExpanded ? Strings.SectionHide : Strings.SectionShow;
     public string L_FcSettingsLabel => UiIcons.StripSymbols(Strings.FcAdvancedSettings);
     public string L_SrvManualEmptyHint => Strings.SrvManualEmptyHint;
+    public string L_SrvEmptyTitle => Strings.SrvEmptyTitle;
+    public string L_SrvEmptyBody => Strings.SrvEmptyBody;
+    public string L_SubsEmptyTitle => Strings.SubsEmptyTitle;
+    public string L_SubsEmptyBody => Strings.SubsEmptyBody;
+    public string L_AddSubscriptionTitle => VPNRouter.Core.Localization.Strings.AdvSubscribeAddSubscription;
 
     [RelayCommand]
     private void ToggleFcSettings() => FcSettingsExpanded = !FcSettingsExpanded;

@@ -15,339 +15,249 @@
     <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
   </UserControl.Resources>
 
-  <UserControl.Styles>
 
-    <Style Selector="Border.srv-row">
-      <Setter Property="Padding" Value="8,5"/>
-      <Setter Property="CornerRadius" Value="3"/>
-      <Setter Property="Background" Value="Transparent"/>
-    </Style>
-    <Style Selector="Border.srv-row.active">
-      <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
-    </Style>
+  <Grid RowDefinitions="*,Auto,Auto,Auto" RowSpacing="8" Margin="10,8,10,10">
 
-    <Style Selector="TextBlock.srv-name">
-      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
-      <Setter Property="FontSize" Value="11"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
-    </Style>
-    <Style Selector="Border.srv-row.active TextBlock.srv-name">
-      <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
-    </Style>
+    <Border Grid.Row="0" Classes="list-card">
+      <DockPanel>
+        <Border DockPanel.Dock="Top" Classes="list-head" IsVisible="{Binding SubscriptionServers.Count}">
+          <Grid ColumnDefinitions="22,*,Auto,30" ColumnSpacing="10">
+            <TextBlock Grid.Column="1" Text="{Binding L_ColServer}"/>
+            <TextBlock Grid.Column="2" Text="{Binding L_ColPing}"
+                       ToolTip.Tip="{Binding L_ColPingTooltip}"
+                       MinWidth="58" TextAlignment="Center"/>
+          </Grid>
+        </Border>
+        <Panel>
+          <ListBox x:Name="SubList"
+                   Classes="server-list"
+                   ItemsSource="{Binding SubscriptionServers}"
+                   SelectedItem="{Binding SelectedSubscriptionServer}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <VirtualizingStackPanel/>
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ServerViewModel">
+                <Border Classes="server-row" Classes.active="{Binding IsActive}">
+                  <Grid ColumnDefinitions="22,*,Auto,Auto" ColumnSpacing="10">
+                    <Panel Grid.Column="0" VerticalAlignment="Center">
+                      <icons:Pictogram Id="radio-on" Width="18" Height="18" IsVisible="{Binding IsActive}" Foreground="{DynamicResource AccentSolidBrush}"/>
+                      <icons:Pictogram Id="radio-off" Width="18" Height="18" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
+                    </Panel>
 
-    <Style Selector="TextBlock.srv-host">
-      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
-      <Setter Property="FontSize" Value="9"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
-    </Style>
-    <Style Selector="Border.srv-use">
-      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
-      <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
-      <Setter Property="Padding" Value="4,0"/>
-    </Style>
-    <Style Selector="TextBlock.srv-use-text">
-      <Setter Property="FontSize" Value="9"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-    </Style>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                      <TextBlock Classes="server-name" Text="{Binding DisplayName}" ToolTip.Tip="{Binding DisplayName}"/>
+                      <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="5">
+                        <Border Grid.Column="0" Classes="chip"
+                                IsVisible="{Binding HostSubtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                          <TextBlock Text="{Binding HostSubtitle}"/>
+                        </Border>
+                        <Border Grid.Column="1" Classes="chip" ToolTip.Tip="{Binding ProtocolUseCaseTooltip}">
+                          <TextBlock Text="{Binding ProtocolUseCase}"/>
+                        </Border>
+                        <TextBlock Grid.Column="2" Classes="server-endpoint" Text="{Binding Endpoint}" Margin="2,0,0,0"/>
+                      </Grid>
+                      <TextBlock Classes="server-endpoint" Text="{Binding HealthVerdictText}"
+                                 IsVisible="{Binding HasHealthVerdict}"
+                                 TextWrapping="Wrap"
+                                 ToolTip.Tip="{Binding HealthTooltip}"/>
+                    </StackPanel>
 
-    <Style Selector="TextBlock.srv-cell">
-      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
-      <Setter Property="FontSize" Value="9"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-    </Style>
+                    <Border Grid.Column="2" Classes="ping-pill"
+                            Classes.good="{Binding IsPingGood}"
+                            Classes.slow="{Binding IsPingSlow}"
+                            Classes.bad="{Binding IsPingBad}"
+                            ToolTip.Tip="{Binding HealthTooltip}">
+                      <TextBlock Text="{Binding PingDisplay}"/>
+                    </Border>
 
-    <Style Selector="TextBlock.srv-col-label">
-      <Setter Property="FontSize" Value="9"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-    </Style>
+                    <Button Grid.Column="3" Classes="row-icon"
+                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
+                            CommandParameter="{Binding}"
+                            IsEnabled="{Binding !IsTesting}"
+                            ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}">
+                      <icons:Pictogram Id="retest"/>
+                    </Button>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
 
-    <Style Selector="Button.srv-refresh">
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-      <Setter Property="FontSize" Value="11"/>
-      <Setter Property="Padding" Value="2"/>
-      <Setter Property="MinHeight" Value="0"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="Cursor" Value="Hand"/>
-    </Style>
-    <Style Selector="Button.srv-refresh:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
-    </Style>
-
-    <Style Selector="ListBox.srv-list ListBoxItem">
-      <Setter Property="Padding" Value="0"/>
-      <Setter Property="MinHeight" Value="0"/>
-    </Style>
-  </UserControl.Styles>
-
-  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
-
-    <Grid Grid.Row="0" ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8"
-          Margin="18,6,18,4">
-      <TextBlock Grid.Column="1" Classes="srv-col-label"
-                 Text="{Binding L_ColServer}"/>
-      <TextBlock Grid.Column="2" Classes="srv-col-label"
-                 Text="{Binding L_ColIp}"/>
-      <TextBlock Grid.Column="3" Classes="srv-col-label"
-                 Text="{Binding L_ColPing}"
-                 ToolTip.Tip="{Binding L_ColPingTooltip}"
-                 HorizontalAlignment="Center"/>
-      <TextBlock Grid.Column="4" Classes="srv-col-label"
-                 Text="{Binding L_ColPort}"
-                 HorizontalAlignment="Center"/>
-    </Grid>
-
-    <ListBox Grid.Row="1"
-             x:Name="SubList"
-             Classes="srv-list"
-             ItemsSource="{Binding SubscriptionServers}"
-             SelectedItem="{Binding SelectedSubscriptionServer}"
-             BorderBrush="{DynamicResource BorderSubtleBrush}"
-             BorderThickness="1"
-             CornerRadius="{StaticResource RadiusSm}"
-             Background="{DynamicResource SurfaceBaseBrush}"
-             Margin="10,0,10,0"
-             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-             ScrollViewer.VerticalScrollBarVisibility="Auto">
-      <ListBox.ItemsPanel>
-        <ItemsPanelTemplate>
-          <VirtualizingStackPanel/>
-        </ItemsPanelTemplate>
-      </ListBox.ItemsPanel>
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="vm:ServerViewModel">
-          <Border Classes="srv-row" Classes.active="{Binding IsActive}">
-            <Grid ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8">
-
-              <Panel Grid.Column="0" VerticalAlignment="Center">
-                <icons:Pictogram Id="radio-on" Width="16" Height="16" IsVisible="{Binding IsActive}" Foreground="{DynamicResource SuccessSolidBrush}"/>
-                <icons:Pictogram Id="radio-off" Width="16" Height="16" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
-              </Panel>
-
-              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                <TextBlock Classes="srv-name" Text="{Binding DisplayName}"/>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="5">
-                  <TextBlock Grid.Column="0" Classes="srv-host" Text="{Binding HostSubtitle}"
-                             IsVisible="{Binding HostSubtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                  <Border Grid.Column="1" Classes="srv-use"
-                          ToolTip.Tip="{Binding ProtocolUseCaseTooltip}">
-                    <TextBlock Classes="srv-use-text" Text="{Binding ProtocolUseCase}"/>
-                  </Border>
-                </Grid>
-                <TextBlock Classes="srv-host" Text="{Binding HealthVerdictText}"
-                           IsVisible="{Binding HasHealthVerdict}"
-                           ToolTip.Tip="{Binding HealthTooltip}"/>
-              </StackPanel>
-
-              <TextBlock Grid.Column="2" Classes="srv-cell"
-                         Text="{Binding Server}"
-                         TextTrimming="CharacterEllipsis"/>
-
-              <TextBlock Grid.Column="3" Classes="srv-cell"
-                         Text="{Binding PingDisplay}"
-                         Foreground="{Binding StatusDotBrush}"
-                         HorizontalAlignment="Center"
-                         ToolTip.Tip="{Binding HealthTooltip}"/>
-
-              <TextBlock Grid.Column="4" Classes="srv-cell"
-                         Text="{Binding Port}"
-                         HorizontalAlignment="Center"/>
-
-              <Button Grid.Column="5" Classes="srv-refresh"
-                      icons:PictogramText.Icons="retest" icons:PictogramText.Content="⟳"
-                      Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
-                      CommandParameter="{Binding}"
-                      IsEnabled="{Binding !IsTesting}"
-                      ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
-            </Grid>
-          </Border>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-
-    <StackPanel Grid.Row="1"
-                IsVisible="{Binding !SubscriptionServers.Count}"
-                HorizontalAlignment="Center" VerticalAlignment="Center"
-                Spacing="6">
-      <TextBlock Text="{Binding L_LblNoServers}"
-                 FontSize="13" FontWeight="SemiBold"
-                 Foreground="{DynamicResource TextSecondaryBrush}"
-                 HorizontalAlignment="Center"/>
-      <TextBlock Text="{Binding L_LblAddSubscriptionHint}"
-                 FontSize="11"
-                 Foreground="{DynamicResource TextMutedBrush}"
-                 HorizontalAlignment="Center"/>
-    </StackPanel>
-
-    <Border Grid.Row="2" Padding="10,6,10,4"
-            BorderThickness="0,1,0,0"
-            BorderBrush="{DynamicResource BorderDefaultBrush}">
-      <StackPanel Spacing="4">
-        <StackPanel Spacing="2">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <Button Classes="solid" Content="{Binding ServerTestButtonText}"
-                    Command="{Binding TestAllSubscriptionServersCommand}"
-                    IsEnabled="{Binding !!SubscriptionServers.Count}"
-                    Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
-                    FontSize="10"
-                    Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
-                    ToolTip.Tip="{Binding L_TipTestAllServers}"
-                    AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
-            <Button Classes="solid" Content="{Binding ServerDeepButtonText}"
-                    Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
-                    IsEnabled="{Binding !!SubscriptionServers.Count}"
-                    Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
-                    FontSize="10"
-                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                    ToolTip.Tip="{Binding L_TipDeepVerifyServers}"
-                    AutomationProperties.Name="{Binding L_TipDeepVerifyServers}"/>
-            <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding SubscriptionTestProgressText}"
-                       VerticalAlignment="Center"
-                       FontSize="10"/>
+          <StackPanel Classes="empty-state" IsVisible="{Binding !SubscriptionServers.Count}">
+            <Border Classes="empty-icon">
+              <icons:Pictogram Id="tab-subscribe"/>
+            </Border>
+            <TextBlock Classes="empty-title" Text="{Binding L_SubsEmptyTitle}" IsVisible="{Binding !Subscriptions.Count}"/>
+            <TextBlock Classes="empty-text" Text="{Binding L_SubsEmptyBody}" IsVisible="{Binding !Subscriptions.Count}"/>
+            <TextBlock Classes="empty-title" Text="{Binding L_LblNoServers}" IsVisible="{Binding !!Subscriptions.Count}"/>
+            <TextBlock Classes="empty-text" Text="{Binding L_TipRefreshSubscription}" IsVisible="{Binding !!Subscriptions.Count}"/>
           </StackPanel>
-          <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding SubscriptionDeepProgressText}"
-                     FontSize="10"
-                     IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-          <Border IsVisible="{Binding SubscriptionTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                  Padding="8,5" CornerRadius="{StaticResource RadiusSm}"
-                  Background="{DynamicResource WarningBgBrush}"
-                  BorderBrush="{DynamicResource WarningBorderBrush}"
-                  BorderThickness="1">
-              <TextBlock icons:PictogramText.Icons="warning" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding SubscriptionTestImplausibleWarning}"
-                         FontSize="10" TextWrapping="Wrap"
-                         Foreground="{DynamicResource WarningFgBrush}"/>
-          </Border>
-        </StackPanel>
-        <CheckBox IsChecked="{Binding AutoSelectBestServer}"
+        </Panel>
+      </DockPanel>
+    </Border>
+
+    <StackPanel Grid.Row="1" Spacing="6">
+      <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
+        <Button Grid.Column="0" Classes="solid" Content="{Binding ServerTestButtonText}"
+                Command="{Binding TestAllSubscriptionServersCommand}"
+                IsEnabled="{Binding !!SubscriptionServers.Count}"
+                Padding="12,5" CornerRadius="{StaticResource RadiusSm}"
+                FontSize="11" FontWeight="SemiBold"
+                Background="{DynamicResource SuccessSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                ToolTip.Tip="{Binding L_TipTestAllServers}"
+                AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
+        <Button Grid.Column="1" Content="{Binding ServerDeepButtonText}"
+                Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
+                IsEnabled="{Binding !!SubscriptionServers.Count}"
+                Padding="12,5" CornerRadius="{StaticResource RadiusSm}"
+                FontSize="11" FontWeight="SemiBold"
+                ToolTip.Tip="{Binding L_TipDeepVerifyServers}"
+                AutomationProperties.Name="{Binding L_TipDeepVerifyServers}"/>
+        <TextBlock Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}" Text="{Binding SubscriptionTestProgressText}"
+                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                   FontSize="10"/>
+      </Grid>
+      <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding SubscriptionDeepProgressText}"
+                 FontSize="10"
+                 IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+      <Border IsVisible="{Binding SubscriptionTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+              Padding="8,5" CornerRadius="{StaticResource RadiusSm}"
+              Background="{DynamicResource WarningBgBrush}"
+              BorderBrush="{DynamicResource WarningBorderBrush}"
+              BorderThickness="1">
+          <TextBlock icons:PictogramText.Icons="warning" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding SubscriptionTestImplausibleWarning}"
+                     FontSize="10" TextWrapping="Wrap"
+                     Foreground="{DynamicResource WarningFgBrush}"/>
+      </Border>
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <CheckBox Grid.Column="0" IsChecked="{Binding AutoSelectBestServer}"
                   MinHeight="0" Padding="4,0"
                   ToolTip.Tip="{Binding L_AutoSelectBestTip}">
           <TextBlock Text="{Binding L_AutoSelectBest}" TextWrapping="Wrap" FontSize="11"/>
         </CheckBox>
-        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-          <TextBlock Grid.Column="0"
-                     Text="{Binding ConnectionIntentStatusText}"
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <TextBlock Text="{Binding ConnectionIntentStatusText}"
                      FontSize="10"
                      Foreground="{DynamicResource TextMutedBrush}"
                      VerticalAlignment="Center"/>
-          <ComboBox Grid.Column="1"
-                    ItemsSource="{Binding ConnectionIntentChoices}"
+          <ComboBox ItemsSource="{Binding ConnectionIntentChoices}"
                     SelectedIndex="{Binding ConnectionIntentIndex}"
-                    FontSize="10"
+                    FontSize="11"
                     MinHeight="0"
-                    Padding="8,2"/>
-        </Grid>
-        <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Grid.Column="0"
-                     Text="{Binding L_SubscriptionsSection}"
-                     FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-          <Button Grid.Column="1"
-                  Content="{Binding L_RefreshAll}"
-                  Command="{Binding RefreshAllSubscriptionsCommand}"
-                  IsEnabled="{Binding !!Subscriptions.Count}"
-                  FontSize="10" Padding="8,3" CornerRadius="{StaticResource RadiusSm}"
-                  AutomationProperties.Name="{Binding L_RefreshAll}"/>
+                    Padding="8,3"/>
+        </StackPanel>
+      </Grid>
+    </StackPanel>
+
+    <StackPanel Grid.Row="2" Spacing="6" IsVisible="{Binding Subscriptions.Count}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0"
+                   Text="{Binding L_SubscriptionsSection}"
+                   FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
+                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+        <Button Grid.Column="1"
+                Command="{Binding RefreshAllSubscriptionsCommand}"
+                IsEnabled="{Binding !!Subscriptions.Count}"
+                FontSize="11" Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
+                AutomationProperties.Name="{Binding L_RefreshAll}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <icons:Pictogram Id="refresh" Width="13" Height="13" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding L_RefreshAll}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+      </Grid>
+      <ScrollViewer MaxHeight="150"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding Subscriptions}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:SubscriptionViewModel">
+              <Border Classes="form-card" Padding="10,8" Margin="0,0,0,6">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10">
+                  <CheckBox Grid.Column="0"
+                            IsChecked="{Binding Enabled}"
+                            AutomationProperties.Name="{Binding Name}"
+                            MinHeight="0" MinWidth="0" Padding="0"
+                            VerticalAlignment="Center"/>
+
+                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                      <TextBlock Classes="server-name" Text="{Binding Name}"/>
+                      <Border Grid.Column="1" Classes="chip">
+                        <TextBlock Text="{Binding ServerCountText}"/>
+                      </Border>
+                    </Grid>
+                    <TextBlock Classes="server-endpoint" Text="{Binding Url}"
+                               ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipSubscriptionMetadata}"/>
+                    <TextBlock Classes="server-endpoint" Text="{Binding LastRefreshedDisplay}"/>
+                    <TextBlock Text="{Binding StatusBadge}"
+                               IsVisible="{Binding LastRefreshFailed}"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource WarningFgBrush}"/>
+                    <TextBlock Text="{Binding UserInfoDisplay}"
+                               IsVisible="{Binding HasUserInfo}"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource AccentFgBrush}"/>
+                  </StackPanel>
+
+                  <ProgressBar Grid.Column="2" IsVisible="{Binding IsRefreshing}"
+                               IsIndeterminate="True"
+                               Height="3" Width="40" VerticalAlignment="Center"
+                               Foreground="{DynamicResource AccentSolidBrush}"/>
+
+                  <Button Grid.Column="3" Classes="row-icon"
+                          Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
+                          CommandParameter="{Binding}"
+                          IsEnabled="{Binding !IsRefreshing}"
+                          ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}">
+                    <icons:Pictogram Id="refresh"/>
+                  </Button>
+
+                  <Button Grid.Column="4" Classes="row-icon danger"
+                          Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
+                          CommandParameter="{Binding}"
+                          ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveSubscription}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveSubscription}">
+                    <icons:Pictogram Id="delete"/>
+                  </Button>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </StackPanel>
+
+    <Border Grid.Row="3" Classes="form-card" Padding="10">
+      <StackPanel Spacing="8">
+        <TextBlock Classes="form-title" Text="{Binding L_AddSubscriptionTitle}"/>
+        <TextBox Text="{Binding NewSubName}"
+                 PlaceholderText="{Binding L_SubscriptionNameHint}"
+                 FontSize="11" Padding="8,6" MinHeight="32" VerticalContentAlignment="Center"
+                 AutomationProperties.Name="{Binding L_SubscriptionNameHint}"/>
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <TextBox Grid.Column="0"
+                   Text="{Binding NewSubUrl}"
+                   PlaceholderText="{Binding LblSubscriptionUrlHint}"
+                   FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
+                   FontSize="11" Padding="8,6" MinHeight="32" VerticalContentAlignment="Center"
+                   AutomationProperties.Name="{Binding LblSubscriptionUrlHint}"/>
+          <Button Classes="solid" Grid.Column="1"
+                  icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddSubscription}"
+                  Command="{Binding AddSubscriptionCommand}"
+                  Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                  FontSize="11" FontWeight="SemiBold"
+                  Padding="16,0" VerticalAlignment="Stretch" VerticalContentAlignment="Center"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  AutomationProperties.Name="{Binding L_AddSubscription}"/>
         </Grid>
       </StackPanel>
-    </Border>
-
-    <ScrollViewer Grid.Row="3"
-                  MaxHeight="130"
-                  HorizontalScrollBarVisibility="Disabled"
-                  VerticalScrollBarVisibility="Auto"
-                  Padding="10,2,10,2">
-      <ItemsControl ItemsSource="{Binding Subscriptions}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:SubscriptionViewModel">
-            <Border Classes="srv-row">
-              <Grid ColumnDefinitions="24,*,Auto,Auto,Auto" ColumnSpacing="8"
-                    VerticalAlignment="Center">
-
-                <CheckBox Grid.Column="0"
-                          IsChecked="{Binding Enabled}"
-                          AutomationProperties.Name="{Binding Name}"
-                          MinHeight="0" MinWidth="0" Padding="0"
-                          VerticalAlignment="Center"/>
-
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                  <TextBlock Classes="srv-name" Text="{Binding Name}"/>
-                  <TextBlock Classes="srv-host"
-                             ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipSubscriptionMetadata}">
-                    <TextBlock.Text>
-                      <MultiBinding StringFormat="{}{0} · {1}s · {2}">
-                        <Binding Path="Url"/>
-                        <Binding Path="LastServerCount"/>
-                        <Binding Path="LastRefreshedDisplay"/>
-                      </MultiBinding>
-                    </TextBlock.Text>
-                  </TextBlock>
-                  <TextBlock Text="{Binding StatusBadge}"
-                             IsVisible="{Binding LastRefreshFailed}"
-                             FontSize="10"
-                             TextWrapping="Wrap"
-                             Foreground="{DynamicResource WarningFgBrush}"/>
-                  <TextBlock Text="{Binding UserInfoDisplay}"
-                             IsVisible="{Binding HasUserInfo}"
-                             FontSize="10"
-                             FontWeight="SemiBold"
-                             Foreground="{DynamicResource AccentFgBrush}"/>
-                </StackPanel>
-
-                <ProgressBar Grid.Column="2" IsVisible="{Binding IsRefreshing}"
-                             IsIndeterminate="True"
-                             Height="3" Width="40" VerticalAlignment="Center"
-                             Margin="0,0,4,0" Foreground="{DynamicResource AccentSolidBrush}"/>
-
-                <Button Grid.Column="3" Classes="srv-refresh"
-                        icons:PictogramText.Icons="refresh" icons:PictogramText.Content="↻"
-                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
-                        CommandParameter="{Binding}"
-                        IsEnabled="{Binding !IsRefreshing}"
-                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}"/>
-
-                <Button Grid.Column="4" Classes="srv-refresh"
-                        icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
-                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
-                        CommandParameter="{Binding}"
-                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveSubscription}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveSubscription}"/>
-              </Grid>
-            </Border>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </ScrollViewer>
-
-    <Border Grid.Row="4" Padding="10,6"
-            BorderThickness="0,1,0,0"
-            BorderBrush="{DynamicResource BorderDefaultBrush}">
-      <Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="4">
-        <TextBox Grid.Column="0"
-                 Text="{Binding NewSubName}"
-                 PlaceholderText="{Binding L_SubscriptionNameHint}"
-                 FontSize="10" Padding="6,4"
-                 AutomationProperties.Name="{Binding L_SubscriptionNameHint}"/>
-        <TextBox Grid.Column="1"
-                 Text="{Binding NewSubUrl}"
-                 PlaceholderText="{Binding LblSubscriptionUrlHint}"
-                 FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
-                 FontSize="10" Padding="6,4"
-                 AutomationProperties.Name="{Binding LblSubscriptionUrlHint}"/>
-        <Button Classes="solid" Grid.Column="2"
-                icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddSubscription}"
-                Command="{Binding AddSubscriptionCommand}"
-                Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                FontSize="11" FontWeight="SemiBold"
-                Padding="12,5" CornerRadius="{StaticResource RadiusSm}"
-                AutomationProperties.Name="{Binding L_AddSubscription}"/>
-      </Grid>
     </Border>
   </Grid>
 </UserControl>

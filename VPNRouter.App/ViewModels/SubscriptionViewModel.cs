@@ -18,7 +18,11 @@ public partial class SubscriptionViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(UserInfoDisplay))]
     [NotifyPropertyChangedFor(nameof(HasUserInfo))]
     private DateTimeOffset? _lastRefreshedAt;
-    [ObservableProperty] private int _lastServerCount;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServerCountText))]
+    private int _lastServerCount;
+
+    public string ServerCountText => string.Format(VPNRouter.Core.Localization.Strings.SubsServersFormat, LastServerCount);
     [ObservableProperty] private bool _isRefreshing;
 
     [ObservableProperty]

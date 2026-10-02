@@ -560,6 +560,10 @@ public static class Strings
     public static string SmpConfigRowHide => global::VPNRouter.Core.Localization.Strings.SmpConfigRowHide;
     public static string SectionShow => global::VPNRouter.Core.Localization.Strings.SectionShow;
     public static string SectionHide => global::VPNRouter.Core.Localization.Strings.SectionHide;
+    public static string SrvEmptyTitle => global::VPNRouter.Core.Localization.Strings.SrvEmptyTitle;
+    public static string SrvEmptyBody => global::VPNRouter.Core.Localization.Strings.SrvEmptyBody;
+    public static string SubsEmptyTitle => global::VPNRouter.Core.Localization.Strings.SubsEmptyTitle;
+    public static string SubsEmptyBody => global::VPNRouter.Core.Localization.Strings.SubsEmptyBody;
     public static string SrvManualEmptyHint => global::VPNRouter.Core.Localization.Strings.SrvManualEmptyHint;
 
     public static string FcTabSearch => global::VPNRouter.Core.Localization.Strings.FcTabSearch;
