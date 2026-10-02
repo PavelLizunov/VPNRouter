@@ -35,8 +35,11 @@ public class FirewallManager : IFirewallManager
 
     internal static IReadOnlyList<string> ManagedRulePrefixes => AllPrefixes;
 
+    private const int PathResolveParallelism = 8;
+
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
+    private IFirewallRuleStore? _store;
     private readonly List<string> _managedRules = new();
     private List<string> _requestedNames = new();
     private bool _disposed;
@@ -60,12 +63,24 @@ public class FirewallManager : IFirewallManager
         }
     }
 
-    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+    private static readonly IProcessRunner DefaultRunner = new ProcessRunner();
 
+    internal static IProcessRunner Runner { get; set; } = DefaultRunner;
+
+    // The COM rule store is used only with the real process runner; tests that inject a runner keep exercising the netsh path.
     public FirewallManager(ILogger? logger = null, IProcessRunner? runner = null)
     {
         _logger = logger ?? Log.Logger;
         _runner = runner ?? Runner;
+        if (runner is null && ReferenceEquals(Runner, DefaultRunner) && OperatingSystem.IsWindows())
+            _store = ComFirewallRuleStore.TryCreate(_logger);
+    }
+
+    internal FirewallManager(ILogger? logger, IProcessRunner? runner, IFirewallRuleStore? store)
+    {
+        _logger = logger ?? Log.Logger;
+        _runner = runner ?? Runner;
+        _store = store;
     }
 
     public static void TryCleanupOrphanedRulesSafe(ILogger? logger = null)
@@ -102,11 +117,16 @@ public class FirewallManager : IFirewallManager
             .ToList();
         _requestedNames = exact;
 
-        foreach (var name in exact)
+        // Resolving a name that is not running costs a where.exe process; do them side by side.
+        var resolved = exact
+            .AsParallel().AsOrdered().WithDegreeOfParallelism(PathResolveParallelism)
+            .Select(n => (Name: n, Path: ResolveProcessPath(n)))
+            .ToList();
+
+        foreach (var (name, exePath) in resolved)
         {
             var ruleName = RulePrefix + name.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
 
-            var exePath = ResolveProcessPath(name);
             if (exePath == null)
             {
                 _logger.Warning("[Firewall] Skipping rule for {Process} — exe path not found (process not running?)", name);
@@ -145,12 +165,7 @@ public class FirewallManager : IFirewallManager
             }
         }
 
-        var ok = 0;
-        foreach (var rule in _managedRules)
-        {
-            if (RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=yes"))
-                ok++;
-        }
+        var ok = SetManagedRulesEnabled(true);
         if (ok == _managedRules.Count)
             _logger.Information("[Firewall] ENABLED {Count} block rules (VPN down — leak protection active)", ok);
         else
@@ -160,12 +175,7 @@ public class FirewallManager : IFirewallManager
 
     public void DisableBlockRules()
     {
-        var ok = 0;
-        foreach (var rule in _managedRules)
-        {
-            if (RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=no"))
-                ok++;
-        }
+        var ok = SetManagedRulesEnabled(false);
         if (ok == _managedRules.Count)
             _logger.Information("[Firewall] Disabled {Count} block rules (VPN up — TUN handles routing)", ok);
         else
@@ -173,19 +183,82 @@ public class FirewallManager : IFirewallManager
                 ok, _managedRules.Count, _managedRules.Count - ok);
     }
 
-    public void DeleteAllRules()
+    private int SetManagedRulesEnabled(bool enabled)
     {
+        if (_store is not null)
+        {
+            try
+            {
+                return _store.SetEnabled(_managedRules, enabled);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Firewall] COM enable/disable failed - falling back to netsh");
+                _store = null;
+            }
+        }
+
+        var ok = 0;
         foreach (var rule in _managedRules)
+        {
+            if (RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable={(enabled ? "yes" : "no")}"))
+                ok++;
+        }
+        return ok;
+    }
+
+    private void RemoveRules(IReadOnlyCollection<string> rules)
+    {
+        if (rules.Count == 0) return;
+
+        if (_store is not null)
+        {
+            try
+            {
+                _store.Remove(rules);
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Firewall] COM delete failed - falling back to netsh");
+                _store = null;
+            }
+        }
+
+        foreach (var rule in rules)
         {
             RunNetsh($"advfirewall firewall delete rule name=\"{rule}\"");
             _logger.Debug("[Firewall] Deleted rule: {Rule}", rule);
         }
+    }
+
+    public void DeleteAllRules()
+    {
+        RemoveRules(_managedRules.ToList());
         _managedRules.Clear();
         _logger.Information("[Firewall] All VPNRouter firewall rules deleted");
     }
 
     private bool CreateBlockRule(string ruleName, string programPath, bool enabled)
     {
+        if (_store is not null)
+        {
+            try
+            {
+                if (_store.AddOutboundBlockRule(ruleName, programPath, enabled, "VPNRouter block_on_vpn_fail"))
+                {
+                    _logger.Debug("[Firewall] Created rule '{Rule}' for {Program} (enabled: {Enabled})",
+                        ruleName, programPath, enabled);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Firewall] COM add failed for '{Rule}' - falling back to netsh", ruleName);
+                _store = null;
+            }
+        }
+
         var enabledStr = enabled ? "yes" : "no";
 
         var success = RunNetsh($"advfirewall firewall add rule " +
@@ -236,11 +309,7 @@ public class FirewallManager : IFirewallManager
             return;
         }
 
-        foreach (var ruleName in orphaned)
-        {
-            RunNetsh($"advfirewall firewall delete rule name=\"{ruleName}\"");
-            _logger.Debug("[Firewall] Deleted orphaned rule: {Rule}", ruleName);
-        }
+        RemoveRules(orphaned);
 
         _logger.Information("[Firewall] Cleaned up {Count} orphaned rules", orphaned.Count);
     }
@@ -255,6 +324,19 @@ public class FirewallManager : IFirewallManager
             .ToList();
         var result = new List<string>();
         if (prefixList.Count == 0) return result;
+
+        if (_store is not null)
+        {
+            try
+            {
+                return _store.FindByPrefixes(prefixList);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Firewall] COM enumeration failed - falling back to netsh");
+                _store = null;
+            }
+        }
 
         try
         {
