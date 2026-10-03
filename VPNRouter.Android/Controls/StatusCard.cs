@@ -5,7 +5,10 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
+using Avalonia.Automation;
+using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using VPNRouter.Core.Services;
 
@@ -32,6 +35,8 @@ public class StatusCard : UserControl
         AvaloniaProperty.Register<StatusCard, string?>(nameof(Title));
     public static readonly StyledProperty<string?> SubtitleProperty =
         AvaloniaProperty.Register<StatusCard, string?>(nameof(Subtitle));
+    public static readonly StyledProperty<IImage?> EmblemProperty =
+        AvaloniaProperty.Register<StatusCard, IImage?>(nameof(Emblem));
 
     public bool IsOn { get => GetValue(IsOnProperty); set => SetValue(IsOnProperty, value); }
     public bool IsWarn { get => GetValue(IsWarnProperty); set => SetValue(IsWarnProperty, value); }
@@ -40,7 +45,13 @@ public class StatusCard : UserControl
     public string? Title { get => GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
     public string? Subtitle { get => GetValue(SubtitleProperty); set => SetValue(SubtitleProperty, value); }
 
-    private const double RingSize = 112;
+    /// <summary>The picture in the ring (the mascot). Without it the ring shows the power icon, as before.</summary>
+    public IImage? Emblem { get => GetValue(EmblemProperty); set => SetValue(EmblemProperty, value); }
+
+    /// <summary>Raised when the ring is tapped. The ring is the main connect/disconnect target of the screen.</summary>
+    public event System.EventHandler? Clicked;
+
+    private const double RingSize = 136;
     private const double Stroke = 4;
     private const double GlyphSize = 52;
     private const double GlyphLift = 1;
@@ -53,6 +64,11 @@ public class StatusCard : UserControl
     private readonly Ellipse _ringTrack;
     private readonly Arc _spinner;
     private readonly IconView _glyph;
+    private readonly Image _emblemImage;
+    private readonly Border _emblemDisc;
+    private readonly Border _badge;
+    private readonly IconView _badgeGlyph;
+    private bool _pressed;
     private readonly TextBlock _titleText;
     private readonly TextBlock _subtitleText;
     private CancellationTokenSource? _spinCts;
@@ -80,15 +96,49 @@ public class StatusCard : UserControl
             Margin = new Thickness(0, 0, 0, 2 * GlyphLift),
         };
 
+        // The mascot sits on a disc of its own (the art is dark line work): white in every theme, like the tile around it on the desktop.
+        _emblemImage = new Image { Stretch = Stretch.Uniform, Margin = new Thickness(6), IsHitTestVisible = false };
+        RenderOptions.SetBitmapInterpolationMode(_emblemImage, BitmapInterpolationMode.HighQuality);
+        _emblemDisc = new Border
+        {
+            Margin = new Thickness(Stroke + 8),
+            CornerRadius = new CornerRadius(RingSize),
+            ClipToBounds = true,
+            Background = Brushes.White,
+            IsVisible = false,
+            IsHitTestVisible = false,
+            Child = _emblemImage,
+        };
+
+        _badgeGlyph = new IconView(UiIcons.Power, 16) { StrokeWidth = 2.5, Foreground = Brushes.White };
+        _badge = new Border
+        {
+            Width = 34,
+            Height = 34,
+            CornerRadius = new CornerRadius(17),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 0, -10),
+            IsVisible = false,
+            IsHitTestVisible = false,
+            Child = _badgeGlyph,
+        };
+
         _ringHost = new Grid
         {
             Width = RingSize,
             Height = RingSize,
             HorizontalAlignment = HorizontalAlignment.Center,
+            Background = Brushes.Transparent,
+            Margin = new Thickness(0, 0, 0, 10),
             RenderTransformOrigin = RelativePoint.Center,
             RenderTransform = new ScaleTransform(1, 1),
-            Children = { _ringFill, _ringTrack, _spinner, _glyph },
+            Children = { _ringFill, _ringTrack, _spinner, _glyph, _emblemDisc, _badge },
         };
+        AutomationProperties.SetControlTypeOverride(_ringHost, AutomationControlType.Button);
+        _ringHost.PointerPressed += OnRingPressed;
+        _ringHost.PointerReleased += OnRingReleased;
+        _ringHost.PointerCaptureLost += (_, _) => SetPressed(false);
         if (VPNRouter.Android.UiMotion.Enabled)
         {
             var fade = System.TimeSpan.FromMilliseconds(250);
@@ -122,17 +172,8 @@ public class StatusCard : UserControl
         stack.Children.Add(_titleText);
         stack.Children.Add(_subtitleText);
 
-        var card = new Border
-        {
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(20),
-            Padding = new Thickness(18, 22),
-            Child = stack,
-        };
-        BindBrush(card, Border.BorderBrushProperty, "BorderSubtleBrush");
-        BindBrush(card, Border.BackgroundProperty, "SurfaceBaseBrush");
-
-        Content = card;
+        // The hero sits straight on the page (no card around it), like the home screen on the desktop.
+        Content = new Border { Padding = new Thickness(8, 14, 8, 6), Child = stack };
 
         ApplyState();
         PropertyChanged += (_, e) =>
@@ -144,6 +185,8 @@ public class StatusCard : UserControl
                 _titleText.Text = Title ?? string.Empty;
             else if (e.Property == SubtitleProperty)
                 _subtitleText.Text = Subtitle ?? string.Empty;
+            else if (e.Property == EmblemProperty)
+                ApplyEmblem();
         };
     }
 
@@ -181,6 +224,8 @@ public class StatusCard : UserControl
         BindBrush(_ringFill, Shape.FillProperty, fillKey);
         BindBrush(_spinner, Shape.StrokeProperty, "WarningSolidBrush");
         BindBrush(_glyph, IconView.ForegroundProperty, glyphKey);
+        BindBrush(_badge, Border.BackgroundProperty, connecting ? "WarningSolidBrush" : trackKey);
+        AutomationProperties.SetName(_ringHost, IsOn ? VPNRouter.Android.Localization.ButtonDisconnect : VPNRouter.Android.Localization.ButtonConnect);
 
         _spinner.IsVisible = connecting;
         if (connecting) StartSpin();
@@ -188,6 +233,46 @@ public class StatusCard : UserControl
 
         if (IsOn && !_wasOn && _attached) Settle();
         _wasOn = IsOn;
+    }
+
+    private void ApplyEmblem()
+    {
+        var emblem = Emblem;
+        _emblemImage.Source = emblem;
+        var has = emblem is not null;
+        _emblemDisc.IsVisible = has;
+        _badge.IsVisible = has;
+        _glyph.IsVisible = !has;
+    }
+
+    private void OnRingPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (IsWarn) return;
+        SetPressed(true);
+        e.Pointer.Capture(_ringHost);
+        e.Handled = true;
+    }
+
+    private void OnRingReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_pressed) return;
+        SetPressed(false);
+        e.Pointer.Capture(null);
+        var p = e.GetPosition(_ringHost);
+        if (p.X >= 0 && p.Y >= 0 && p.X <= _ringHost.Bounds.Width && p.Y <= _ringHost.Bounds.Height)
+            Clicked?.Invoke(this, System.EventArgs.Empty);
+        e.Handled = true;
+    }
+
+    private void SetPressed(bool pressed)
+    {
+        _pressed = pressed;
+        if (_ringHost.RenderTransform is ScaleTransform scale)
+        {
+            var s = pressed ? 0.95 : 1.0;
+            scale.ScaleX = s;
+            scale.ScaleY = s;
+        }
     }
 
     // One short scale of the ring when the state turns green: 0.94 -> 1.03 -> 1.
