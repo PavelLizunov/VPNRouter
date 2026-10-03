@@ -125,6 +125,18 @@ public static partial class Strings
     public static string SmpServerSwitchedNote(string previous) => Ru
         ? $"«{previous}» не отвечал, выбран самый быстрый из рабочих."
         : $"'{previous}' was not responding; picked the fastest working server.";
+    public static string SmpPickServerLabel         => Ru ? "Сервер" : "Server";
+    public static string SmpPickServerHint          => Ru
+        ? "Подключение берёт последний выбранный сервер, если он отвечает, иначе самый быстрый из рабочих."
+        : "Connect uses the server you picked last if it answers, otherwise the fastest working one.";
+    public static string SmpSetupCheckTitle         => Ru ? "Проверка настроек" : "Check my setup";
+    public static string SmpSetupCheckSubtitle      => Ru
+        ? "Маршрутизация, MTU и аварийное отключение, шаг за шагом"
+        : "Routing, MTU and the safety switch, step by step";
+    public static string SmpMenuResetWindowSize     => Ru ? "Размер окна по умолчанию" : "Reset window size";
+    public static string TipSmpMenuResetWindowSize  => Ru
+        ? "Вернуть обычный размер окна (двойной щелчок по значку в шапке делает то же)."
+        : "Restore the default window size (a double click on the icon in the header does the same).";
     public static string SmpStatusApplying          => Ru ? "Применяю настройки…" : "Applying settings…";
     public static string SmpStatusApplyingHint      => Ru
         ? "Переключаю маршрутизацию — несколько секунд."
