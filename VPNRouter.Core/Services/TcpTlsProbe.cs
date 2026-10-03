@@ -52,6 +52,109 @@ public static class TcpTlsProbe
 
     public static ILogger? Logger { get; set; }
 
+    // While the VPN's TUN adapter is up, a plain connect to any server is answered by the tunnel itself in under a millisecond, so the
+    // number says nothing about the server. A probe is therefore bound to the physical interface (IP_UNICAST_IF, Windows) when the
+    // tunnel is up, and the "under 5 ms means interception" rule applies only to an unbound probe made while the tunnel is up. Without a
+    // tunnel a fast answer is real (a server in the same room), not a fault.
+    public static Func<bool> IsTunnelActive { get; set; } = DefaultIsTunnelActive;
+
+    public static Func<int?> OutboundInterfaceIndex { get; set; } = DefaultOutboundInterfaceIndex;
+
+    private static DateTime _tunnelCheckedAt = DateTime.MinValue;
+    private static bool _tunnelCached;
+    private static DateTime _ifaceCheckedAt = DateTime.MinValue;
+    private static int? _ifaceCached;
+
+    private static bool DefaultIsTunnelActive()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _tunnelCheckedAt).TotalSeconds < 2) return _tunnelCached;
+        bool active;
+        try
+        {
+            active = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().Any(n =>
+                n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up &&
+                n.Name.Equals("VPNRouter-TUN", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            active = false;
+        }
+        _tunnelCached = active;
+        _tunnelCheckedAt = now;
+        return active;
+    }
+
+    private static int? DefaultOutboundInterfaceIndex()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _ifaceCheckedAt).TotalSeconds < 5) return _ifaceCached;
+        int? index = null;
+        try { index = NetworkInterfaceDetector.GetInternetInterfaceIndex("VPNRouter-TUN", Logger); }
+        catch { index = null; }
+        _ifaceCached = index;
+        _ifaceCheckedAt = now;
+        return index;
+    }
+
+    // A probe socket; bound to the physical interface when the tunnel is up and Windows lets us (IP_UNICAST_IF = 31, index in network order).
+    internal static Socket CreateProbeSocket(SocketType type, ProtocolType protocol, out bool bound)
+    {
+        var socket = new Socket(AddressFamily.InterNetwork, type, protocol);
+        bound = ApplyOutboundBinding(socket);
+        return socket;
+    }
+
+    internal static bool ApplyOutboundBinding(Socket socket)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        try
+        {
+            if (!IsTunnelActive()) return false;
+            var index = OutboundInterfaceIndex();
+            if (index is not > 0) return false;
+            socket.SetSocketOption(SocketOptionLevel.IP, (SocketOptionName)31, IPAddress.HostToNetworkOrder(index.Value));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // The tunnel answers an unbound connect itself; this decides whether a very fast answer is that interception.
+    internal static bool LooksIntercepted(int latencyMs, bool bound)
+        => latencyMs < ImplausibleThresholdMs && !bound && IsTunnelActive();
+
+    // Name resolution is not part of the server's round trip: resolve first, time only the connect.
+    private static async Task<(IPAddress? ip, string? err)> ResolveIpv4Async(string host, CancellationToken ct)
+    {
+        if (IPAddress.TryParse(host, out var literal))
+            return literal.AddressFamily == AddressFamily.InterNetwork ? (literal, null) : (null, "ipv6 not supported");
+        try
+        {
+            var addrs = await Dns.GetHostAddressesAsync(host, ct);
+            var v4 = Array.Find(addrs, a => a.AddressFamily == AddressFamily.InterNetwork);
+            return v4 is null ? (null, "no ipv4") : (v4, null);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            return (null, "timeout");
+        }
+        catch (SocketException sx)
+        {
+            return (null, sx.SocketErrorCode.ToString());
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.GetType().Name);
+        }
+    }
+
     public static TimeSpan UdpProbeTimeout { get; set; } = TimeSpan.FromSeconds(2);
 
     public static async Task<ServerProbeResult> ProbeAsync(
@@ -71,14 +174,16 @@ public static class TcpTlsProbe
         var latencies = new List<int>(capacity: 2);
         ServerProbeStatus tcpError = ServerProbeStatus.Timeout;
         string? lastTcpErr = null;
+        var anyUnbound = false;
 
         for (var attempt = 0; attempt < 2; attempt++)
         {
             ct.ThrowIfCancellationRequested();
-            var (ok, latency, err) = await ProbeTcpAsync(host, port, effectiveTcpTimeout, ct);
+            var (ok, latency, err, bound) = await ProbeTcpCoreAsync(host, port, effectiveTcpTimeout, ct);
             if (ok)
             {
                 latencies.Add(latency);
+                if (!bound) anyUnbound = true;
             }
             else
             {
@@ -98,7 +203,7 @@ public static class TcpTlsProbe
 
         var bestLatency = latencies.Min();
 
-        if (bestLatency < ImplausibleThresholdMs)
+        if (LooksIntercepted(bestLatency, bound: !anyUnbound))
         {
             return new ServerProbeResult(
                 ServerProbeStatus.Implausible,
@@ -131,24 +236,35 @@ public static class TcpTlsProbe
     public static async Task<(bool ok, int latencyMs, string? err)> ProbeTcpAsync(
         string host, int port, TimeSpan tcpTimeout, CancellationToken ct)
     {
+        var (ok, latency, err, _) = await ProbeTcpCoreAsync(host, port, tcpTimeout, ct);
+        return (ok, latency, err);
+    }
+
+    internal static async Task<(bool ok, int latencyMs, string? err, bool bound)> ProbeTcpCoreAsync(
+        string host, int port, TimeSpan tcpTimeout, CancellationToken ct)
+    {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(tcpTimeout);
 
-        var sw = Stopwatch.StartNew();
+        var bound = false;
         try
         {
-            using var client = new TcpClient(AddressFamily.InterNetwork)
-            {
-                NoDelay = true,
-                LingerState = new LingerOption(enable: true, seconds: 0)
-            };
-            await client.ConnectAsync(host, port, cts.Token);
+            var (ip, resolveErr) = await ResolveIpv4Async(host, cts.Token);
+            if (ip is null)
+                return (false, 0, resolveErr ?? "dns", false);
+
+            using var socket = CreateProbeSocket(SocketType.Stream, ProtocolType.Tcp, out bound);
+            socket.NoDelay = true;
+            socket.LingerState = new LingerOption(enable: true, seconds: 0);
+
+            var sw = Stopwatch.StartNew();
+            await socket.ConnectAsync(new IPEndPoint(ip, port), cts.Token);
             sw.Stop();
-            return (true, (int)sw.ElapsedMilliseconds, null);
+            return (true, (int)sw.ElapsedMilliseconds, null, bound);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return (false, 0, "timeout");
+            return (false, 0, "timeout", bound);
         }
         catch (SocketException sx) when (
             sx.SocketErrorCode is SocketError.ConnectionRefused
@@ -157,11 +273,11 @@ public static class TcpTlsProbe
                              or SocketError.NetworkUnreachable
                              or SocketError.HostNotFound)
         {
-            return (false, 0, sx.SocketErrorCode.ToString());
+            return (false, 0, sx.SocketErrorCode.ToString(), bound);
         }
         catch (Exception ex)
         {
-            return (false, 0, ex.GetType().Name);
+            return (false, 0, ex.GetType().Name, bound);
         }
     }
 
@@ -175,20 +291,22 @@ public static class TcpTlsProbe
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(tlsTimeout);
 
-        TcpClient? tcp = null;
+        Socket? tcp = null;
         SslStream? ssl = null;
         try
         {
-            tcp = new TcpClient(AddressFamily.InterNetwork)
-            {
-                NoDelay = true,
-                LingerState = new LingerOption(enable: true, seconds: 0)
-            };
-            await tcp.ConnectAsync(host, port, cts.Token);
+            var (ip, resolveErr) = await ResolveIpv4Async(host, cts.Token);
+            if (ip is null)
+                return (false, resolveErr ?? "dns");
+
+            tcp = CreateProbeSocket(SocketType.Stream, ProtocolType.Tcp, out _);
+            tcp.NoDelay = true;
+            tcp.LingerState = new LingerOption(enable: true, seconds: 0);
+            await tcp.ConnectAsync(new IPEndPoint(ip, port), cts.Token);
 
             string? certError = null;
 
-            ssl = new SslStream(tcp.GetStream(), leaveInnerStreamOpen: false,
+            ssl = new SslStream(new NetworkStream(tcp, ownsSocket: false), leaveInnerStreamOpen: false,
                 userCertificateValidationCallback: (sender, cert, chain, errors) =>
                 {
                     if (cert is null) { certError = "no cert"; return false; }
@@ -385,7 +503,9 @@ public static class TcpTlsProbe
 
             ct.ThrowIfCancellationRequested();
 
+            sw.Restart();
             using var udp = new UdpClient(AddressFamily.InterNetwork);
+            var udpBound = ApplyOutboundBinding(udp.Client);
             udp.Client.SendTimeout = (int)UdpProbeTimeout.TotalMilliseconds;
             udp.Client.ReceiveTimeout = (int)UdpProbeTimeout.TotalMilliseconds;
 
@@ -410,7 +530,7 @@ public static class TcpTlsProbe
             ct.ThrowIfCancellationRequested();
 
             var latencyMs = (int)sw.ElapsedMilliseconds;
-            if (latencyMs < ImplausibleThresholdMs)
+            if (LooksIntercepted(latencyMs, udpBound))
                 return new ServerProbeResult(ServerProbeStatus.Implausible, latencyMs, "udp <5ms");
             var status = latencyMs > SlowThresholdMs ? ServerProbeStatus.Slow : ServerProbeStatus.Ok;
             return new ServerProbeResult(status, latencyMs, null);
