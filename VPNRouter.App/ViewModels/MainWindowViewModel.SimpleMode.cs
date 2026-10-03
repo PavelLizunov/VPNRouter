@@ -485,6 +485,13 @@ public partial class MainWindowViewModel
 
     public bool SmpConfigEditorVisible => SmpNeedsConfig || SmpFormExpanded;
 
+    // The first-run step above the button, and the "Change" panel inside the connection card.
+    public bool SmpFirstRunEditorVisible => SmpNeedsConfig;
+
+    public bool SmpPickerVisible => SmpFormExpanded && SmpHasConfig;
+
+    public bool SmpHasSubscriptionServers => SubscriptionServers.Count > 0;
+
     public bool SmpCanConnect => SmpHasConfig || !string.IsNullOrWhiteSpace(SmpInput);
 
     // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
@@ -553,6 +560,7 @@ public partial class MainWindowViewModel
     private static readonly string[] SmpHomeProps =
     {
         nameof(SmpHasConfig), nameof(SmpNeedsConfig), nameof(SmpConfigEditorVisible), nameof(SmpCanConnect),
+        nameof(SmpFirstRunEditorVisible), nameof(SmpPickerVisible), nameof(SmpHasSubscriptionServers),
         nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
         nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
     };
