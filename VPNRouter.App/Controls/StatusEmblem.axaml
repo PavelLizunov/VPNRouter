@@ -2,11 +2,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="using:VPNRouter.App.Controls"
              x:Class="VPNRouter.App.Controls.StatusEmblem"
-             Width="136" Height="136"
+             Width="136" Height="144"
              Focusable="False" IsTabStop="False">
     <!-- The emblem of the home screen as a control: halo, track, state ring, connecting arc, a disc with the page's icon and a badge at six
          o'clock. State comes from IsOn / IsBusy / IsError / IsWarn. The styles live in Styles/HomeKit.axaml (hk-emblem). -->
-    <Grid x:Name="Root" Classes="hk-emblem" Width="136" Height="136">
+    <!-- The control is 8 px taller than the emblem: the badge hangs 6 px below the ring, and anything outside the control's own bounds was cut off (the owner's screenshot). -->
+    <Grid x:Name="Root" Classes="hk-emblem" Width="136" Height="136" VerticalAlignment="Top">
         <Ellipse Classes="hk-halo" Width="136" Height="136"/>
         <Ellipse Classes="hk-track" Width="114" Height="114"/>
         <Ellipse Classes="hk-ring" Width="114" Height="114"/>
