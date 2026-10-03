@@ -36,6 +36,11 @@ internal static class SimpleConnectPolicy
 
     private static string Normalize(string? url) => (url ?? string.Empty).Trim().TrimEnd('/');
 
+    // UDP based protocols answer a blind datagram never (QUIC) and the probe waits its whole timeout for nothing; AmneziaWG is not probed at all.
+    // Probing such a selected server only costs the wait (2 s) and then a pointless probe of the whole list: keep it, connecting tells.
+    internal static bool CannotBeVerifiedByProbe(VlessServerEntry server)
+        => (server.Protocol ?? "vless").Trim().ToLowerInvariant() is "hysteria2" or "hy2" or "tuic" or "amneziawg" or "awg";
+
     // The probe of the selected server could not judge it (AmneziaWG, IPv6-only, unknown protocol): that is not a dead server, so Connect keeps
     // the user's choice instead of switching to another server and saving that.
     internal static bool KeepSelectedAfterProbe(IReadOnlyList<ServerLiveness> selectedProbe)
