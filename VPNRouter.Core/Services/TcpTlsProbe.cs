@@ -126,6 +126,11 @@ public static class TcpTlsProbe
     internal static bool LooksIntercepted(int latencyMs, bool bound)
         => latencyMs < ImplausibleThresholdMs && !bound && IsTunnelActive();
 
+    internal const string Ipv6OnlyNote = "IPv6-only address - not probed, use Deep verify";
+
+    private static bool IsIpv6OnlyError(string? err) =>
+        string.Equals(err, "ipv6 not supported", StringComparison.Ordinal) || string.Equals(err, "no ipv4", StringComparison.Ordinal);
+
     // Name resolution is not part of the server's round trip: resolve first, time only the connect.
     private static async Task<(IPAddress? ip, string? err)> ResolveIpv4Async(string host, CancellationToken ct)
     {
@@ -198,6 +203,9 @@ public static class TcpTlsProbe
 
         if (latencies.Count == 0)
         {
+            // The probe speaks IPv4 only: an IPv6-only server is "not judged", not "dead".
+            if (IsIpv6OnlyError(lastTcpErr))
+                return new ServerProbeResult(ServerProbeStatus.SkippedNotApplicable, 0, Ipv6OnlyNote);
             return new ServerProbeResult(tcpError, 0, lastTcpErr ?? "tcp failed");
         }
 
@@ -499,7 +507,9 @@ public static class TcpTlsProbe
             }
             var ipv4 = Array.Find(addrs, a => a.AddressFamily == AddressFamily.InterNetwork);
             if (ipv4 is null)
-                return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "no ipv4");
+                return addrs.Length > 0
+                    ? new ServerProbeResult(ServerProbeStatus.SkippedNotApplicable, 0, Ipv6OnlyNote)
+                    : new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "no address");
 
             ct.ThrowIfCancellationRequested();
 
