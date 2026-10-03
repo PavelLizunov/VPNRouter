@@ -12,20 +12,17 @@
 
     <Grid RowDefinitions="Auto,*">
 
-        <ListBox Grid.Row="0"
+        <ListBox Grid.Row="0" Classes="hk-segs"
                  SelectedIndex="{Binding SelectedToolIndex}"
-                 Background="Transparent"
-                 BorderThickness="0,0,0,1"
-                 BorderBrush="{DynamicResource BorderDefaultBrush}"
-                 Padding="6,2">
+                 Margin="16,10,16,0">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Spacing="4"/>
+                    <UniformGrid Rows="1"/>
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
-            <ListBoxItem Classes="sub-tab" Content="{Binding LblToolZapret}"
+            <ListBoxItem Content="{Binding LblToolZapret}"
                          IsVisible="{Binding IsZapretAvailable}"/>
-            <ListBoxItem Classes="sub-tab" Content="{Binding LblToolTgProxy}"
+            <ListBoxItem Content="{Binding LblToolTgProxy}"
                          IsVisible="{Binding IsTgProxyAvailable}"/>
         </ListBox>
 
