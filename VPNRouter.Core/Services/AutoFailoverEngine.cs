@@ -19,6 +19,12 @@ public sealed class AutoFailoverEngine
 
     internal Func<bool>? IsCurrentIntent { get; init; }
 
+    // When set, the replacement is the fastest candidate that answers a quick probe, not the first in list order.
+    internal Func<VlessServerEntry, CancellationToken, Task<ServerProbeResult>>? ProbeCandidate { get; init; }
+
+    internal const int MaxCandidateProbes = 8;
+    internal static readonly TimeSpan CandidateProbeBudget = TimeSpan.FromSeconds(4);
+
     private bool IsIntentCurrent() => IsCurrentIntent?.Invoke() ?? true;
 
     public AutoFailoverEngine(
@@ -41,10 +47,10 @@ public sealed class AutoFailoverEngine
     {
         _logger?.Warning("[AutoFailover] Dead config: {Reason}", reason);
 
-        var rejected = TryRejectBeforeSwitch(reason, out var pending);
+        var rejected = TryRejectBeforeSwitch(reason, out var pool);
         if (rejected != null)
             return rejected;
-        var candidate = pending!;
+        var candidate = await ChooseCandidateAsync(pool, ct).ConfigureAwait(false);
 
         var oldActive = _settings.Vless.ActiveServer ?? "";
         var oldActiveSub = _settings.App.ActiveSubscriptionServer;
@@ -97,9 +103,9 @@ public sealed class AutoFailoverEngine
             UserFacingMessage: Strings.FailoverSwitching(newName));
     }
 
-    private FailoverOutcome? TryRejectBeforeSwitch(string reason, out VlessServerEntry? candidate)
+    private FailoverOutcome? TryRejectBeforeSwitch(string reason, out List<VlessServerEntry> pool)
     {
-        candidate = null;
+        pool = new List<VlessServerEntry>();
 
         if (!IsIntentCurrent())
         {
@@ -144,8 +150,8 @@ public sealed class AutoFailoverEngine
                 UserFacingMessage: Strings.FailoverAllServersDown(_tried.Count));
         }
 
-        candidate = PickNextCandidate(out var poolSource);
-        if (candidate == null)
+        pool = PickCandidates(out var poolSource);
+        if (pool.Count == 0)
         {
             _logger?.Warning(
                 "[AutoFailover] No candidate servers left (pool source: {Source})",
@@ -216,7 +222,7 @@ public sealed class AutoFailoverEngine
         return !VlessServersResolver.IsPlaceholderEntry(entry);
     }
 
-    private VlessServerEntry? PickNextCandidate(out string poolSource)
+    private List<VlessServerEntry> PickCandidates(out string poolSource)
     {
         var oldActive = _settings.Vless.ActiveServer ?? "";
 
@@ -231,7 +237,7 @@ public sealed class AutoFailoverEngine
         if (subscriptionPool.Count > 0)
         {
             poolSource = "subscriptions";
-            return subscriptionPool[0];
+            return subscriptionPool;
         }
 
         var manualPool = (_settings.Vless?.Servers ?? new List<VlessServerEntry>())
@@ -242,11 +248,58 @@ public sealed class AutoFailoverEngine
         if (manualPool.Count > 0)
         {
             poolSource = "vless.servers";
-            return manualPool[0];
+            return manualPool;
         }
 
         poolSource = subs.Count > 0 ? "subscriptions" : "vless.servers";
-        return null;
+        return manualPool;
+    }
+
+    private async Task<VlessServerEntry> ChooseCandidateAsync(List<VlessServerEntry> pool, CancellationToken ct)
+    {
+        if (ProbeCandidate is null || pool.Count < 2 || ct.IsCancellationRequested)
+            return pool[0];
+
+        var head = pool.Take(MaxCandidateProbes).ToList();
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(CandidateProbeBudget);
+
+        var results = await Task.WhenAll(head.Select(async server =>
+        {
+            try { return await ProbeCandidate(server, budget.Token).ConfigureAwait(false); }
+            catch (Exception) { return ServerProbeResult.Unknown; }
+        })).ConfigureAwait(false);
+
+        var reachable = Enumerable.Range(0, head.Count)
+            .Where(i => results[i].IsReachable)
+            .OrderBy(i => results[i].LatencyMs)
+            .ThenBy(i => i)
+            .ToList();
+        if (reachable.Count > 0)
+        {
+            var best = reachable[0];
+            _logger?.Information(
+                "[AutoFailover] Candidate probe: {Reachable}/{Probed} answer — picked '{Name}' ({Ms} ms)",
+                reachable.Count, head.Count, head[best].Name, results[best].LatencyMs);
+            return head[best];
+        }
+
+        // Nothing proved reachable: prefer one the probe could not judge (unsupported protocol, cancelled) over a known-dead one.
+        var undecided = Enumerable.Range(0, head.Count)
+            .Where(i => results[i].Status is ServerProbeStatus.Unknown or ServerProbeStatus.SkippedNotApplicable)
+            .ToList();
+        if (undecided.Count > 0)
+        {
+            _logger?.Information(
+                "[AutoFailover] Candidate probe: none confirmed, {Count} could not be judged — picked '{Name}'",
+                undecided.Count, head[undecided[0]].Name);
+            return head[undecided[0]];
+        }
+
+        _logger?.Warning(
+            "[AutoFailover] Candidate probe: all {Probed} probed candidates look unreachable — trying '{Name}' anyway",
+            head.Count, pool[0].Name);
+        return pool[0];
     }
 
     private static bool IsCandidateUsable(VlessServerEntry? entry)
