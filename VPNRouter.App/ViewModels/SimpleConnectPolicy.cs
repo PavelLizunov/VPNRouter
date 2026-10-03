@@ -1,4 +1,5 @@
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -34,6 +35,11 @@ internal static class SimpleConnectPolicy
     }
 
     private static string Normalize(string? url) => (url ?? string.Empty).Trim().TrimEnd('/');
+
+    // The probe of the selected server could not judge it (AmneziaWG, IPv6-only, unknown protocol): that is not a dead server, so Connect keeps
+    // the user's choice instead of switching to another server and saving that.
+    internal static bool KeepSelectedAfterProbe(IReadOnlyList<ServerLiveness> selectedProbe)
+        => selectedProbe.Count > 0 && !selectedProbe[0].Judged;
 
     // The pre-flight of Connect: a server that is already selected and answers does not need the other twelve probed (a silent UDP port costs
     // two seconds each). Only when the selected server is missing, not answering, or the intent asks for a specific kind is the whole list probed.

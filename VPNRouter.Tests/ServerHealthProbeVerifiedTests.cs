@@ -14,6 +14,23 @@ public sealed class ServerHealthProbeVerifiedTests
     private static ServerLiveness Dead(string name)
         => new(new VlessServerEntry { Name = name, Server = "10.0.0.2", Port = 443 }, false, int.MaxValue);
 
+    [Theory]
+    [InlineData("amneziawg", ServerProbeStatus.SkippedNotApplicable, false)]
+    [InlineData("vless", ServerProbeStatus.Unknown, false)]
+    [InlineData("vless", ServerProbeStatus.Unreachable, true)]
+    [InlineData("vless", ServerProbeStatus.Timeout, true)]
+    [InlineData("vless", ServerProbeStatus.Ok, true)]
+    public async Task ProbeAll_MarksAServerTheProbeCouldNotJudge_AsNotJudged_NotAsDead(string protocol, ServerProbeStatus status, bool judged)
+    {
+        var probe = new ServerHealthProbe(logger: null, probeOverride: (_, _) => Task.FromResult(new ServerProbeResult(status, status == ServerProbeStatus.Ok ? 30 : 0, null)));
+        var server = new VlessServerEntry { Name = "s", Server = "10.0.0.1", Port = 443, Protocol = protocol };
+
+        var result = (await probe.ProbeAllAsync(new[] { server }, System.TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken)).Single();
+
+        Assert.Equal(judged, result.Judged);
+        Assert.Equal(status == ServerProbeStatus.Ok, result.Alive);
+    }
+
     [Fact]
     public void SilentUdpPort_IsReachableButNotVerified()
     {
