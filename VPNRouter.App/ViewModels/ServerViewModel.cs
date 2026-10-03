@@ -67,6 +67,7 @@ public partial class ServerViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPingUnverified))]
     [NotifyPropertyChangedFor(nameof(IsPingGood))]
+    [NotifyPropertyChangedFor(nameof(IsPingSlow))]
     [NotifyPropertyChangedFor(nameof(PingDisplay))]
     private string? _testError;
 
