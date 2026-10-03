@@ -216,18 +216,20 @@ public partial class AndroidApp
 
         _advSimpleToggleBtn = new Avalonia.Controls.Button
         {
-            Content = IconText(UiIcons.ChevronLeft, Localization.AdvSimpleToggle, 14),
-            Padding = new Thickness(8, 4),
-            MinHeight = 0,
-            FontSize = UiScale.Fs(11),
-            FontWeight = FontWeight.SemiBold,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Content = IconText(UiIcons.ChevronLeft, Localization.AdvSimpleToggle, 16),
+            Padding = new Thickness(12, 8),
+            MinHeight = 40,
+            FontSize = UiScale.Fs(12),
+            FontWeight = FontWeight.Bold,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(999),
             VerticalAlignment = VerticalAlignment.Center,
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
         };
+        // The way back to the home screen is a filled pill with an outline, not bare text: it has to be seen at a glance.
         _advSimpleToggleBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentFgBrush");
+        _advSimpleToggleBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentBgSubtleBrush");
+        _advSimpleToggleBtn.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "AccentBorderBrush");
         _advSimpleToggleBtn.Click += (_, _) => CloseAdvancedShell();
 
         _advKebabMenuBtn = new Avalonia.Controls.Button
