@@ -7,19 +7,20 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r20 (prerelease, 2026-10-03), not
+- **Latest published candidate:** v2.50.0-r21 (prerelease, 2026-10-03), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
   on WINBRAT on the first attempt (`tools/post-ship-local.ps1`); the screenshot
   gate and the live-update gate were not run
-  (see `plans/phase-r20-release-2.50.0-r20-2026-10-03.md`). r19 was the visible
-  redesign (home screen with a status emblem and one dominant Connect button,
-  brand area and tabs, Servers and Subscribe lists, one look for inputs); r20
-  makes the default window tall enough for it and loads the mascot lazily so a
-  plain unit test cannot poison the view model type. Earlier candidates: r18
-  (every-page-every-size audit fixes), r17 (Applications page redone, safe web
-  installer, UI exception guard, crash reports in the diagnostics bundle), r16,
-  r15. The owner's next real update is the check of the driver-lock fix. Main
-  declares `AppVersion` 2.50.0-r20.
+  (see `plans/phase-r21-release-2.50.0-r21-2026-10-03.md`). r21 fixes the
+  connection bugs a tester found in r20: the window and the tunnel agree after a
+  routing change (F-1), Connect no longer trusts probes that went through the
+  running tunnel or silent UDP ports (F-2), firewall leak-protection rules go
+  through the in-process COM API instead of one netsh per rule (F-3), the home
+  card names the server the tunnel really uses (F-4), the apps-mode selector
+  keeps its highlight (F-5). r20 made the default window tall enough for the
+  redesigned home screen (r19). Earlier candidates: r18 (every-page-every-size
+  audit fixes), r17, r16, r15. The owner's next real update is the check of the
+  driver-lock fix. Main declares `AppVersion` 2.50.0-r21.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.

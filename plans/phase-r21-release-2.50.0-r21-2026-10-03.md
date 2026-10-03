@@ -22,4 +22,16 @@ Exact-head CI on this PR; the steps above are recorded in the Outcome.
 
 ## Outcome
 
-Pending.
+Published 2026-10-03 as prerelease `v2.50.0-r21` (`--latest=false`; Latest stays `v2.49.3`), annotated tag on main `a60cf1a6`, 18 assets. The six Windows files (unsigned: no SignPath secret exists) were built on
+`windows-worker` and uploaded only after size, SHA-256 and sidecar matched the worker's copies; macOS, Linux and Android came from the tag workflows. Before publication: tag-bound `dotnet test`, `test-update`, the platform builds
+and the dispatched integrity run green, strict CI gate `OK` (8 green, 0 red), `check-open-p0.ps1` with the recorded waiver (same three owner-gated P1 lines).
+
+Included PRs: F-1 #487 (window/tunnel state, red-green policy tests), F-2 #488 (silent UDP ports are unverified, switch note), F-3 #489 (COM firewall store, netsh fallback; the real-COM round trip test ran on the worker),
+F-4 #490 (home screen keeps the mode, card names the connected server), F-5 #491 (radio segments; the headless real-click test failed on the old markup and also showed that re-announcing the property did not help, so the control was replaced).
+
+Post-ship on WINBRAT with `tools/post-ship-local.ps1`: `POSTSHIP-LOCAL: PASS` on the first attempt (version 2.50.0-r21, commit `a60cf1a6`, 2 cold cycles). Live run of the tester's failing sequence on the deployed build (UI Automation, two runs):
+connect, then six switches All traffic / Selected apps with the window checked for 20 s after each: the window never showed Connect and sing-box stayed alive in all 12 switches (r20 flipped it every time); connect in
+Selected apps mode 7.8-8.6 s and stop 4.8-5.4 s on this machine (the tester's r20 log: 22-29 s and 41 s on a machine where netsh costs 3x more). One stop in the first run took 92.8 s and did not reproduce in the next three; the cause is
+not known (the app log of the live session is not flushed to disk until exit, so it could not be read). The home card shows the subscription server and "Subscription - 13 servers".
+
+Not run: the screenshot gate, the live-update gate, hover with a real cursor. Still open from the tester report: narrow window / minimum size / header chips / Change panel / setup wizard entry (F-6..F-8) and the Android home (A-8).

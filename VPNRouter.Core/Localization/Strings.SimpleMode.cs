@@ -133,6 +133,10 @@ public static partial class Strings
     public static string SmpSetupCheckSubtitle      => Ru
         ? "Маршрутизация, MTU и аварийное отключение, шаг за шагом"
         : "Routing, MTU and the safety switch, step by step";
+    public static string SmpMenuResetWindowSize     => Ru ? "Размер окна по умолчанию" : "Reset window size";
+    public static string TipSmpMenuResetWindowSize  => Ru
+        ? "Вернуть обычный размер окна (двойной щелчок по значку в шапке делает то же)."
+        : "Restore the default window size (a double click on the icon in the header does the same).";
     public static string SmpStatusApplying          => Ru ? "Применяю настройки…" : "Applying settings…";
     public static string SmpStatusApplyingHint      => Ru
         ? "Переключаю маршрутизацию — несколько секунд."
