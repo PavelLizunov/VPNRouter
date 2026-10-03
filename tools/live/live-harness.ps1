@@ -41,7 +41,8 @@ $tree = [System.Windows.Automation.TreeScope]
 
 function Add-Step($name, $ok, $ms, $detail, $shot) {
     [void]$Steps.Add([ordered]@{ name = $name; ok = [bool]$ok; ms = [int]$ms; detail = $detail; shot = $shot })
-    Add-Content (Join-Path $Run 'steps.log') ("{0} {1} {2} ms {3}" -f ($(if ($ok) { 'OK  ' } else { 'FAIL' })), $name, [int]$ms, $detail)
+    $shotNote = if ($shot) { " [shot: $shot]" } else { '' }
+    Add-Content -Encoding UTF8 (Join-Path $Run 'steps.log') ("{0} {1} {2} ms {3}{4}" -f ($(if ($ok) { 'OK  ' } else { 'FAIL' })), $name, [int]$ms, $detail, $shotNote)
 }
 
 $script:Proc = Get-Process VPNRouter.App -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -76,15 +77,17 @@ function Scan {
     }
     return $res
 }
+$script:PressError = ''
 function Press($el) {
     $p = $null
+    $script:PressError = 'no pattern to press with (not selectable, invokable or toggleable)'
     try {
         $sp = $null
         if ($el.TryGetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern, [ref]$sp)) { try { $sp.ScrollIntoView() } catch { } }
         if ($el.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$p)) { $p.Select(); return $true }
         if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$p)) { $p.Invoke(); return $true }
         if ($el.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$p)) { $p.Toggle(); return $true }
-    } catch { }
+    } catch { $script:PressError = $_.Exception.GetType().Name + ': ' + $_.Exception.Message }
     return $false
 }
 function Find-One($pattern, $scan) {
@@ -251,7 +254,8 @@ function Run-Tabs {
             $label = $t.Name
             $pressed = Press $t.El
             Start-Sleep -Milliseconds 700
-            Add-Step "$tab / $label" ($pressed -and (Alive)) $sw.ElapsedMilliseconds $t.Type (Shot "$tab-$i-$label")
+            $why = if ($pressed) { $t.Type } else { "$($t.Type): $script:PressError" }
+            Add-Step "$tab / $label" ($pressed -and (Alive)) $sw.ElapsedMilliseconds $why (Shot "$tab-$i")
             if ($tab -eq 'tools') {
                 # the segments of the Zapret and Telegram pages
                 $inner = @(Scan | Where-Object { $_.Type -eq 'RadioButton' })
@@ -261,7 +265,8 @@ function Run-Tabs {
                     $sw.Restart()
                     $p2 = Press $r.El
                     Start-Sleep -Milliseconds 600
-                    Add-Step "tools / $label / $($r.Name)" ($p2 -and (Alive)) $sw.ElapsedMilliseconds 'RadioButton' (Shot "tools-$i-$j-$($r.Name)")
+                    $why2 = if ($p2) { 'RadioButton' } else { "RadioButton: $script:PressError" }
+                    Add-Step "tools / $label / $($r.Name)" ($p2 -and (Alive)) $sw.ElapsedMilliseconds $why2 (Shot "tools-$i-$j")
                 }
             }
         }
