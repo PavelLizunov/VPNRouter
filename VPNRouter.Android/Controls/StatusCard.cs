@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
