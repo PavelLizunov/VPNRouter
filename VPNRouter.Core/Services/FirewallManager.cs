@@ -127,13 +127,15 @@ public class FirewallManager : IFirewallManager
             .Select(n => (Name: n, Path: ResolveProcessPath(n)))
             .ToList();
 
+        var notRunning = 0;
         foreach (var (name, exePath) in resolved)
         {
             var ruleName = RulePrefix + name.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
 
             if (exePath == null)
             {
-                _logger.Warning("[Firewall] Skipping rule for {Process} — exe path not found (process not running?)", name);
+                notRunning++;
+                _logger.Debug("[Firewall] Skipping rule for {Process} — exe path not found (process not running?)", name);
                 continue;
             }
 
@@ -147,11 +149,14 @@ public class FirewallManager : IFirewallManager
             }
         }
 
-        _logger.Information("[Firewall] Created {Count} block rules (disabled — will enable on VPN crash)", _managedRules.Count);
+        _logger.Information(
+            "[Firewall] Created {Count} block rules (disabled — will enable on VPN crash); {Skipped} listed apps have no exe on this machine",
+            _managedRules.Count, notRunning);
     }
 
     public void EnableBlockRules()
     {
+        var unresolved = 0;
         foreach (var name in _requestedNames)
         {
             var ruleName = RulePrefix + name.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
@@ -159,7 +164,8 @@ public class FirewallManager : IFirewallManager
             var exePath = ResolveProcessPath(name);
             if (exePath == null)
             {
-                _logger.Warning("[Firewall] kill-switch: still cannot resolve {Process} — cannot block its direct egress", name);
+                unresolved++;
+                _logger.Debug("[Firewall] kill-switch: still cannot resolve {Process} — cannot block its direct egress", name);
                 continue;
             }
             if (CreateBlockRule(ruleName, exePath, enabled: true))
@@ -168,6 +174,9 @@ public class FirewallManager : IFirewallManager
                 _logger.Information("[Firewall] kill-switch: late-created + enabled block rule for {Process} (was unresolved at connect time)", name);
             }
         }
+
+        if (unresolved > 0)
+            _logger.Information("[Firewall] kill-switch: {Count} listed apps have no exe on this machine - nothing to block for them", unresolved);
 
         var ok = SetManagedRulesEnabled(true);
         if (ok == _managedRules.Count)
