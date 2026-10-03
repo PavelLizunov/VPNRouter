@@ -95,6 +95,16 @@ function Find-One($pattern, $scan) {
     foreach ($e in $scan) { if ($e.Name -match $pattern) { return $e } }
     return $null
 }
+# The same control found again after the page may have rebuilt: same name and type, nearest to where it was (several controls can share a name, e.g. a tab and a segment).
+function Find-Same($was) {
+    $best = $null; $bestD = [double]::MaxValue
+    foreach ($e in (Scan)) {
+        if ($e.Name -ne $was.Name -or $e.Type -ne $was.Type) { continue }
+        $d = [Math]::Abs($e.Y - $was.Y) + [Math]::Abs($e.X - $was.X)
+        if ($d -lt $bestD) { $best = $e; $bestD = $d }
+    }
+    return $best
+}
 function Alive { [bool](Get-Process -Id $script:Proc.Id -ErrorAction SilentlyContinue) }
 function Shot($name) {
     try {
@@ -252,7 +262,9 @@ function Run-Tabs {
             $i++
             $sw.Restart()
             $label = $t.Name
-            $pressed = Press $t.El
+            # the page may have rebuilt its list since the scan: press a freshly found element, not the scanned handle
+            $fresh = Find-Same $t
+            $pressed = if ($fresh) { Press $fresh.El } else { $script:PressError = 'element no longer on the page'; $false }
             Start-Sleep -Milliseconds 700
             $why = if ($pressed) { $t.Type } else { "$($t.Type): $script:PressError" }
             Add-Step "$tab / $label" ($pressed -and (Alive)) $sw.ElapsedMilliseconds $why (Shot "$tab-$i")
@@ -263,7 +275,8 @@ function Run-Tabs {
                 foreach ($r in $inner) {
                     $j++
                     $sw.Restart()
-                    $p2 = Press $r.El
+                    $freshR = Find-Same $r
+                    $p2 = if ($freshR) { Press $freshR.El } else { $script:PressError = 'element no longer on the page'; $false }
                     Start-Sleep -Milliseconds 600
                     $why2 = if ($p2) { 'RadioButton' } else { "RadioButton: $script:PressError" }
                     Add-Step "tools / $label / $($r.Name)" ($p2 -and (Alive)) $sw.ElapsedMilliseconds $why2 (Shot "tools-$i-$j")
