@@ -71,6 +71,9 @@ tools/*
 # Command-line client for the UI exploration MCP server (VPNRouter.Tools/UiMcp).
 !tools/ui-mcp/
 !tools/ui-mcp/**
+# Live functional harness for the real app on the Windows worker (UI Automation, timings, reports).
+!tools/live/
+!tools/live/**
 # Refactor equivalence harness (worker-run corpus check for behaviour-preserving changes).
 !tools/refactor-equivalence/
 !tools/refactor-equivalence/**
