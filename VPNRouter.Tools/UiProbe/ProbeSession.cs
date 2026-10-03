@@ -110,8 +110,21 @@ public sealed class ProbeSession : IDisposable
         Window.UpdateLayout();
     }
 
+    // A step is a label to click; "hover:Label" only moves the mouse onto the control and leaves it there (pointer-over styles), "press:Label"
+    // moves onto it and holds the button down (pressed styles). Both stay in effect for the render that follows.
     public bool ClickByLabel(string step)
     {
+        var mode = "click";
+        foreach (var prefix in new[] { "hover:", "press:" })
+        {
+            if (step.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                mode = prefix[..^1];
+                step = step[prefix.Length..];
+                break;
+            }
+        }
+
         var index = 1;
         var label = step;
         var hash = step.LastIndexOf('#');
@@ -145,7 +158,21 @@ public sealed class ProbeSession : IDisposable
         }
 
         Window.MouseMove(centre.Value, RawInputModifiers.None);
+        if (mode == "hover")
+        {
+            Pump(150);
+            Layout();
+            return true;
+        }
+
         Window.MouseDown(centre.Value, MouseButton.Left, RawInputModifiers.None);
+        if (mode == "press")
+        {
+            Pump(150);
+            Layout();
+            return true;
+        }
+
         Window.MouseUp(centre.Value, MouseButton.Left, RawInputModifiers.None);
         Pump(150);
         Layout();
