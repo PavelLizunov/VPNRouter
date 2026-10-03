@@ -7,20 +7,21 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r21 (prerelease, 2026-10-03), not
+- **Latest published candidate:** v2.50.0-r23 (prerelease, 2026-10-03), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
   on WINBRAT on the first attempt (`tools/post-ship-local.ps1`); the screenshot
   gate and the live-update gate were not run
-  (see `plans/phase-r21-release-2.50.0-r21-2026-10-03.md`). r21 fixes the
-  connection bugs a tester found in r20: the window and the tunnel agree after a
-  routing change (F-1), Connect no longer trusts probes that went through the
-  running tunnel or silent UDP ports (F-2), firewall leak-protection rules go
-  through the in-process COM API instead of one netsh per rule (F-3), the home
-  card names the server the tunnel really uses (F-4), the apps-mode selector
-  keeps its highlight (F-5). r20 made the default window tall enough for the
-  redesigned home screen (r19). Earlier candidates: r18 (every-page-every-size
-  audit fixes), r17, r16, r15. The owner's next real update is the check of the
-  driver-lock fix. Main declares `AppVersion` 2.50.0-r21.
+  (see `plans/phase-r23-release-2.50.0-r23-2026-10-03.md`). r23 is r22 plus a
+  fix of the Subscribe page layout. r22 carries the interface half of the
+  tester's report on r20: "Change" opens a panel inside the connection card
+  (F-6), a "Check my setup" row opens the wizard (F-8), the window cannot be
+  squeezed below 380 x 520 and has a reset-size gesture, the header chips look
+  like buttons (F-7), and the Android home ring shows the mascot and is a tap
+  target (A-8). r21 fixed the connection bugs (window/tunnel state, server
+  choice, firewall rules through COM, home card, apps-mode selector). r20 made
+  the default window tall enough for the redesigned home screen (r19). Earlier
+  candidates: r18, r17, r16, r15. The owner's next real update is the check of
+  the driver-lock fix. Main declares `AppVersion` 2.50.0-r23.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
