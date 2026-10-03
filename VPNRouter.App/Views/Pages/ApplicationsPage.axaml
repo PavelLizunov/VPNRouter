@@ -49,47 +49,6 @@
       <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
       <Setter Property="Padding" Value="3"/>
     </Style>
-    <Style Selector="RadioButton.apps-mode-seg">
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-      <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
-      <Setter Property="Padding" Value="10,6"/>
-      <Setter Property="MinHeight" Value="32"/>
-      <Setter Property="HorizontalAlignment" Value="Stretch"/>
-      <Setter Property="HorizontalContentAlignment" Value="Center"/>
-      <Setter Property="VerticalContentAlignment" Value="Center"/>
-      <Setter Property="FontSize" Value="11"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Template">
-        <ControlTemplate>
-          <ContentPresenter Name="PART_ContentPresenter"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="{TemplateBinding CornerRadius}"
-                            Padding="{TemplateBinding Padding}"
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"/>
-        </ControlTemplate>
-      </Setter>
-    </Style>
-    <Style Selector="RadioButton.apps-mode-seg:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-    </Style>
-    <Style Selector="RadioButton.apps-mode-seg:pressed /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
-    </Style>
-    <Style Selector="RadioButton.apps-mode-seg:checked /template/ ContentPresenter#PART_ContentPresenter,
-                     RadioButton.apps-mode-seg:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter,
-                     RadioButton.apps-mode-seg:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
-      <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
-      <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
-    </Style>
-
     <Style Selector="ListBox.cat-list ListBoxItem">
       <Setter Property="Padding" Value="8,6"/>
       <Setter Property="MinHeight" Value="0"/>
@@ -249,10 +208,10 @@
             Background="{DynamicResource SurfaceBaseBrush}">
       <StackPanel Spacing="6">
         <TextBlock Classes="section-title" Text="{Binding L_AppsModeSectionTitle}"/>
-        <Border Classes="segments">
+        <Border Classes="hk-seg-track">
           <Grid ColumnDefinitions="*,*" ColumnSpacing="3">
             <RadioButton Grid.Column="0"
-                          Classes="apps-mode-seg" GroupName="AppsRoutingMode"
+                          Classes="apps-mode-seg hk-seg" GroupName="AppsRoutingMode"
                           IsChecked="{Binding IsRoutingAppsModeInclude, Mode=TwoWay}"
                           AutomationProperties.Name="{Binding L_AppsModeInclude}">
               <TextBlock Text="{Binding L_AppsModeInclude}"
@@ -260,7 +219,7 @@
                          TextAlignment="Center"/>
             </RadioButton>
             <RadioButton Grid.Column="1"
-                          Classes="apps-mode-seg" GroupName="AppsRoutingMode"
+                          Classes="apps-mode-seg hk-seg" GroupName="AppsRoutingMode"
                           IsChecked="{Binding IsRoutingAppsModeExclude, Mode=TwoWay}"
                           AutomationProperties.Name="{Binding L_AppsModeExclude}">
               <TextBlock Text="{Binding L_AppsModeExclude}"
