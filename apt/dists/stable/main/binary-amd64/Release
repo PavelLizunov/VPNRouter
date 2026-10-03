@@ -1,0 +1,7 @@
+Archive: stable
+Version: 2.22
+Component: main
+Origin: VPNRouter
+Label: VPNRouter APT Repository
+Architecture: amd64
+Description: VPNRouter Debian repository for Debian / Ubuntu / Linux Mint
