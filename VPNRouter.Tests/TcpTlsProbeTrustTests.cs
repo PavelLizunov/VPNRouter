@@ -106,6 +106,27 @@ public sealed class TcpTlsProbeTrustTests : IDisposable
     }
 
     [Fact]
+    public void SilentUdpResult_TellsABindingAboutTheAmberState_NotOnlyTheText()
+    {
+        // The pill reads IsPingGood / IsPingSlow / PingDisplay only when told they changed: after the whole result is applied each cached value must be current.
+        var vm = new ServerViewModel(new VlessServerEntry { Name = "HY2", Server = "203.0.113.1", Port = 8444, Protocol = "hysteria2" });
+        bool good = vm.IsPingGood, slow = vm.IsPingSlow;
+        var text = vm.PingDisplay;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ServerViewModel.IsPingGood)) good = vm.IsPingGood;
+            if (e.PropertyName == nameof(ServerViewModel.IsPingSlow)) slow = vm.IsPingSlow;
+            if (e.PropertyName == nameof(ServerViewModel.PingDisplay)) text = vm.PingDisplay;
+        };
+
+        vm.ApplyProbeResult(new ServerProbeResult(ServerProbeStatus.Ok, 2000, TcpTlsProbe.UdpNoReplyNote));
+
+        Assert.False(good);
+        Assert.True(slow);
+        Assert.Equal("UDP ?", text);
+    }
+
+    [Fact]
     public void SilentUdpResult_IsShownAsUnverified_NotAsA2000msPing()
     {
         var vm = new ServerViewModel(new VlessServerEntry { Name = "HY2", Server = "203.0.113.1", Port = 8444, Protocol = "hysteria2" });
