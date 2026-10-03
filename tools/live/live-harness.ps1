@@ -6,9 +6,10 @@
 #   servers  connect to every server of the subscription one by one, timing each and checking the data plane
 #   ping     Test all and Deep verify on the Subscribe tab with timings and per-row results, disconnected and connected
 #   dump     write every visible control of one tab (-Tab servers|subscribe|settings|apps|tools|public) to dump-<tab>.txt, for debugging selectors
+#   versions open Settings > Updates > Other versions on the experimental channel and read the list of older releases (never installs one)
 #   modes    switch Selected apps / All traffic N times while connected; the window must never fall back to "Connect"
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('tabs', 'cycles', 'servers', 'ping', 'modes', 'dump')][string]$Scenario,
+    [Parameter(Mandatory = $true)][ValidateSet('tabs', 'cycles', 'servers', 'ping', 'modes', 'dump', 'versions')][string]$Scenario,
     [int]$Count = 3,
     [string]$OutDir = 'C:\android-build\live',
     [int]$MaxServers = 20,
@@ -488,6 +489,51 @@ function Run-Ping {
     Ensure-Disconnected
 }
 
+function Find-AllTexts($pattern) {
+    $w = Win
+    $out = New-Object System.Collections.ArrayList
+    if (-not $w) { return $out }
+    $cond = New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text)
+    foreach ($e in $w.FindAll($tree::Descendants, $cond)) { try { if ($e.Current.Name -match $pattern) { [void]$out.Add($e.Current.Name) } } catch { } }
+    return $out
+}
+function Run-Versions {
+    Ensure-Disconnected
+    if (-not (Go-Advanced)) { Add-Step 'enter advanced mode' $false 0 '' $null; return }
+    [void](Go-Tab $TabNames['settings'])
+    $upd = Find-One '^(Обновления|Updates)$' $null
+    if ($upd) { Press $upd.El | Out-Null; Start-Sleep -Milliseconds 800 }
+    Add-Step 'open Settings > Updates' ($null -ne $upd) 0 '' (Shot 'versions-updates')
+    $cb = Find-Any 'CheckBox' 'prerelease|experimental|экспериментал'
+    if (-not $cb) { Add-Step 'experimental channel checkbox' $false 0 'not found' $null; return }
+    $tp = $null
+    $wasOn = $false
+    if ($cb.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$tp)) {
+        $wasOn = ($tp.Current.ToggleState -eq 'On')
+        if (-not $wasOn) { $tp.Toggle(); Start-Sleep -Milliseconds 600 }
+    }
+    Add-Step 'experimental channel on' $true 0 "was on before: $wasOn" $null
+    $btn = $w = Win
+    $btn = $w.FindFirst($tree::Descendants, (New-Object System.Windows.Automation.PropertyCondition($ae::AutomationIdProperty, 'UpdateVersionHistoryButton')))
+    if (-not $btn) { Add-Step 'version history button' $false 0 'not found' (Shot 'versions-nobutton'); return }
+    # the panel may be open from an earlier run: close it first so the press below always opens (and reloads) it
+    if (@(Find-AllTexts '^(Hide versions|Скрыть версии)$').Count -gt 0) { Press $btn | Out-Null; Start-Sleep -Milliseconds 600 }
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    Press $btn | Out-Null
+    $rows = @()
+    while ($sw.Elapsed.TotalSeconds -lt 40) {
+        Start-Sleep -Milliseconds 700
+        $rows = @(Find-AllTexts '^v\d+\.\d+\.\d+')
+        # the hint line shows "Loading versions..." until the GitHub answer is in
+        if ((@(Find-AllTexts '^(Загружаю список|Loading versions)').Count -eq 0) -and $sw.Elapsed.TotalSeconds -gt 2) { break }
+    }
+    $hint = @(Find-AllTexts 'SHA-256|Подходящих|No eligible|Could not|Не удалось')
+    Add-Step 'version list' ($rows.Count -ge 3) $sw.ElapsedMilliseconds "$($rows.Count) rows: $($rows -join ' | '). Hint: $($hint -join ' / ')" (Shot 'versions-list')
+    if (-not $wasOn -and $tp) { try { $tp.Toggle() } catch { } ; Add-Step 'experimental channel restored' $true 0 '' $null }
+    $close = $w.FindFirst($tree::Descendants, (New-Object System.Windows.Automation.PropertyCondition($ae::AutomationIdProperty, 'UpdateVersionHistoryButton')))
+    if ($close) { Press $close | Out-Null }
+}
+
 function Run-Dump {
     if (-not (Go-Advanced)) { Add-Step 'enter advanced mode' $false 0 '' $null; return }
     [void](Go-Tab $TabNames[$Tab])
@@ -528,6 +574,7 @@ if ($script:Proc) {
             'ping' { Run-Ping }
             'modes' { Run-Modes }
             'dump' { Run-Dump }
+            'versions' { Run-Versions }
         }
     } catch {
         Add-Step 'harness error' $false 0 ($_.Exception.Message) $null
