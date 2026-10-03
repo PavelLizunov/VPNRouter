@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using VPNRouter.Core;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.Views;
 
@@ -45,8 +46,9 @@ public partial class AboutWindow : Window
                 });
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Serilog.Log.Logger.Debug(ex, "[AboutWindow] OpenRepo failed");
         }
     }
 
@@ -103,7 +105,7 @@ public partial class AboutWindow : Window
                 System.IO.Directory.CreateDirectory(AppPaths.LogsDir);
                 System.IO.File.AppendAllText(
                     logPath,
-                    $"[{DateTime.UtcNow:u}] GetSingBoxVersion failed: {ex.GetType().Name}: {ex.Message}\n");
+                    $"[{DateTime.UtcNow:u}] GetSingBoxVersion failed: {ex.GetType().Name}: {CrashReporter.ScrubSecrets(ex.Message)}\n");
             }
             catch { }
 
