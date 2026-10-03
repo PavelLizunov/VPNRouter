@@ -16,12 +16,14 @@
   </UserControl.Resources>
 
 
-  <Grid RowDefinitions="*,Auto,Auto,Auto" RowSpacing="8" Margin="10,8,10,10">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+  <Border Padding="10,8,10,10" MinHeight="{Binding $parent[ScrollViewer].Viewport.Height}">
+  <Grid RowDefinitions="*,Auto,Auto,Auto" RowSpacing="8">
 
-    <Border Grid.Row="0" Classes="list-card">
+    <Border Grid.Row="0" Classes="list-card" MinHeight="170">
       <DockPanel>
         <Border DockPanel.Dock="Top" Classes="list-head" IsVisible="{Binding SubscriptionServers.Count}">
-          <Grid ColumnDefinitions="22,*,Auto,30" ColumnSpacing="10">
+          <Grid ColumnDefinitions="22,*,Auto,30" ColumnSpacing="10" Margin="0,0,10,0">
             <TextBlock Grid.Column="1" Text="{Binding L_ColServer}"/>
             <TextBlock Grid.Column="2" Text="{Binding L_ColPing}"
                        ToolTip.Tip="{Binding L_ColPingTooltip}"
@@ -43,7 +45,7 @@
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ServerViewModel">
                 <Border Classes="server-row" Classes.active="{Binding IsActive}">
-                  <Grid ColumnDefinitions="22,*,Auto,Auto" ColumnSpacing="10">
+                  <Grid ColumnDefinitions="22,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,10,0">
                     <Panel Grid.Column="0" VerticalAlignment="Center">
                       <icons:Pictogram Id="radio-on" Width="18" Height="18" IsVisible="{Binding IsActive}" Foreground="{DynamicResource AccentSolidBrush}"/>
                       <icons:Pictogram Id="radio-off" Width="18" Height="18" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
@@ -259,4 +261,6 @@
       </StackPanel>
     </Border>
   </Grid>
+  </Border>
+  </ScrollViewer>
 </UserControl>

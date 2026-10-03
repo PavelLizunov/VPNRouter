@@ -845,6 +845,8 @@ public static class Strings
     public static string SmpStatusConnectedNoDetails => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedNoDetails;
     public static string SmpStatusConnectingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectingHint;
     public static string SmpServerSwitchedNote(string previous) => global::VPNRouter.Core.Localization.Strings.SmpServerSwitchedNote(previous);
+    public static string SmpMenuResetWindowSize => global::VPNRouter.Core.Localization.Strings.SmpMenuResetWindowSize;
+    public static string TipSmpMenuResetWindowSize => global::VPNRouter.Core.Localization.Strings.TipSmpMenuResetWindowSize;
     public static string SmpStatusApplying => global::VPNRouter.Core.Localization.Strings.SmpStatusApplying;
     public static string SmpStatusApplyingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusApplyingHint;
     public static string SmpStatusDisconnectedHint => global::VPNRouter.Core.Localization.Strings.SmpStatusDisconnectedHint;

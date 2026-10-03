@@ -53,6 +53,24 @@ public partial class MainWindow : Window
     internal static double FittedHeight(double preferred, double workAreaHeightDip, double minimum) =>
         Math.Max(minimum, Math.Min(preferred, workAreaHeightDip - FrameAllowance));
 
+    // Back to the default size (width 520, the tall default fitted to the screen) after the window was squeezed or stretched; bound to a
+    // double click on the brand tile and to a menu item.
+    internal void ResetWindowSize()
+    {
+        if (WindowState != WindowState.Normal) WindowState = WindowState.Normal;
+        Width = 520;
+        Height = PreferredHeight;
+        FitToScreen();
+    }
+
+    private void OnBrandTileDoubleTapped(object? sender, Avalonia.Input.TappedEventArgs e)
+    {
+        ResetWindowSize();
+        e.Handled = true;
+    }
+
+    private void OnResetWindowSizeClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => ResetWindowSize();
+
     private void FitToScreen()
     {
         try
