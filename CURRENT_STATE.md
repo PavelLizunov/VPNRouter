@@ -7,21 +7,20 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r23 (prerelease, 2026-10-03), not
+- **Latest published candidate:** v2.50.0-r24 (prerelease, 2026-10-03), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
   on WINBRAT on the first attempt (`tools/post-ship-local.ps1`); the screenshot
   gate and the live-update gate were not run
-  (see `plans/phase-r23-release-2.50.0-r23-2026-10-03.md`). r23 is r22 plus a
-  fix of the Subscribe page layout. r22 carries the interface half of the
-  tester's report on r20: "Change" opens a panel inside the connection card
-  (F-6), a "Check my setup" row opens the wizard (F-8), the window cannot be
-  squeezed below 380 x 520 and has a reset-size gesture, the header chips look
-  like buttons (F-7), and the Android home ring shows the mascot and is a tap
-  target (A-8). r21 fixed the connection bugs (window/tunnel state, server
-  choice, firewall rules through COM, home card, apps-mode selector). r20 made
-  the default window tall enough for the redesigned home screen (r19). Earlier
-  candidates: r18, r17, r16, r15. The owner's next real update is the check of
-  the driver-lock fix. Main declares `AppVersion` 2.50.0-r23.
+  (see `plans/phase-r24-release-2.50.0-r24-2026-10-03.md`). r24 redoes the
+  Zapret and Telegram proxy pages in the look of the home screen (shared
+  `Styles/HomeKit.axaml` and the `StatusEmblem` control), uses one segmented
+  strip on the Tools, Servers, Public and Applications pages, and makes the way
+  back to Simple a bold outlined pill on desktop and Android. r23 fixed a
+  Subscribe layout regression of r22; r22 carried the Change panel, the setup
+  check row, the window floor and the Android home ring; r21 fixed the
+  connection bugs the tester found in r20. Earlier candidates: r20, r19, r18,
+  r17, r16, r15. The owner's next real update is the check of the driver-lock
+  fix. Main declares `AppVersion` 2.50.0-r24.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
