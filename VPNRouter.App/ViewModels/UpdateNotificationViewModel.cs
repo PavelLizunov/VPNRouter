@@ -20,6 +20,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
 {
     private const int CheckStateResetDelayMs = 3000;
     private const int StableHistoryLimit = 3;
+    private const int CandidateHistoryLimit = 8;
 
     private readonly UpdateSettings _settings;
     private readonly ILogger _logger;
@@ -76,7 +77,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
     public string VersionHistoryMessage => _versionHistoryState switch
     {
         VersionHistoryState.Loading => Strings.LoadingVersions,
-        VersionHistoryState.Ready => Strings.RollbackSafetyHint,
+        VersionHistoryState.Ready => _settings.IsExperimental ? Strings.RollbackSafetyHintCandidates : Strings.RollbackSafetyHint,
         VersionHistoryState.Empty => Strings.NoOlderVersions,
         VersionHistoryState.Failed => Strings.VersionHistoryFailed,
         _ => string.Empty,
@@ -226,18 +227,22 @@ public partial class UpdateNotificationViewModel : ObservableObject
         SetVersionHistoryState(VersionHistoryState.Loading);
         StableVersions.Clear();
         StableVersions.Add(new RollbackReleaseItemViewModel(
-            AppVersion.Version, isInstalled: true, info: null, onSelect: null));
+            AppVersion.Version, isInstalled: true, info: null, onSelect: null,
+            isPrerelease: AppVersion.Version.Contains('-')));
 
         try
         {
-            var releases = await _updateSource.ListStableAsync(StableHistoryLimit);
+            var includeCandidates = _settings.IsExperimental;
+            var releases = await _updateSource.ListOlderAsync(
+                includeCandidates ? CandidateHistoryLimit : StableHistoryLimit, includeCandidates);
             foreach (var release in releases)
             {
                 StableVersions.Add(new RollbackReleaseItemViewModel(
                     release.Version,
                     isInstalled: false,
                     release,
-                    SelectRollback));
+                    SelectRollback,
+                    release.IsPrerelease));
             }
             SetVersionHistoryState(releases.Count == 0
                 ? VersionHistoryState.Empty
@@ -340,10 +345,12 @@ public sealed class RollbackReleaseItemViewModel : ObservableObject
         string version,
         bool isInstalled,
         UpdateSourceInfo? info,
-        Action<UpdateSourceInfo>? onSelect)
+        Action<UpdateSourceInfo>? onSelect,
+        bool isPrerelease = false)
     {
         Version = version;
         IsInstalled = isInstalled;
+        IsPrerelease = isPrerelease;
         SelectCommand = new RelayCommand(
             () =>
             {
@@ -355,11 +362,14 @@ public sealed class RollbackReleaseItemViewModel : ObservableObject
 
     public string Version { get; }
     public bool IsInstalled { get; }
+    public bool IsPrerelease { get; }
+    public string DisplayVersion => IsPrerelease ? $"v{Version}  ·  {Strings.PrereleaseLabel}" : $"v{Version}";
     public string StateText => IsInstalled ? Strings.InstalledVersion : Strings.RollbackAction;
     public IRelayCommand SelectCommand { get; }
 
     internal void NotifyLangChanged()
     {
         OnPropertyChanged(nameof(StateText));
+        OnPropertyChanged(nameof(DisplayVersion));
     }
 }
