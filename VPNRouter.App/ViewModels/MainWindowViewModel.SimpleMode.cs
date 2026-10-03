@@ -288,6 +288,7 @@ public partial class MainWindowViewModel
         try
         {
             var kind = SimpleInputDetector.Classify(SmpInput);
+            var subscriptionAction = SubscriptionInputAction.Replace;
 
             var hasExistingConfig =
                 (_settings.Vless.Servers?.Count > 0) ||
@@ -317,10 +318,19 @@ public partial class MainWindowViewModel
             }
             else if (kind == SmpInputKind.SubscriptionUrl)
             {
-                if (!TryApplySubscriptionUrl(SmpInput.Trim()))
+                subscriptionAction = SimpleConnectPolicy.DecideSubscriptionInput(SmpInput, _settings.App.Subscriptions);
+                if (subscriptionAction == SubscriptionInputAction.Replace)
                 {
-                    IsConnecting = false;
-                    return;
+                    if (!TryApplySubscriptionUrl(SmpInput.Trim()))
+                    {
+                        IsConnecting = false;
+                        return;
+                    }
+                }
+                else
+                {
+                    _logger.Information("[Simple] Subscription URL unchanged ({Action}) - keeping the saved servers", subscriptionAction);
+                    _settings.App.ConfigMode = "subscribe";
                 }
             }
 
@@ -332,7 +342,7 @@ public partial class MainWindowViewModel
             SaveSettings();
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
-            if (kind == SmpInputKind.SubscriptionUrl)
+            if (kind == SmpInputKind.SubscriptionUrl && subscriptionAction != SubscriptionInputAction.KeepCached)
             {
                 try
                 {
@@ -363,8 +373,20 @@ public partial class MainWindowViewModel
                     StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                     try
                     {
-                        var results = await new ServerHealthProbe(_logger)
-                            .ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                        var generalIntent = ConnectionIntent.Normalize(_settings.App.ConnectionIntent) == ConnectionIntent.General;
+                        var probe = new ServerHealthProbe(_logger);
+                        List<ServerLiveness> results;
+                        if (SimpleConnectPolicy.ShouldProbeSelectedFirst(_settings.App.ActiveSubscriptionServer, candidates, generalIntent))
+                        {
+                            var selected = candidates.First(c => string.Equals(c.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal));
+                            results = await probe.ProbeAllAsync(new[] { selected }, TimeSpan.FromSeconds(2));
+                            if (results.Count == 0 || !results[0].Alive)
+                                results = await probe.ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                        }
+                        else
+                        {
+                            results = await probe.ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                        }
                         var chosen = ConnectionIntentScorer.PickServer(
                             results,
                             _settings.App.ConnectionIntent,
