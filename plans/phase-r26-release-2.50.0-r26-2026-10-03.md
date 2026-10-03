@@ -1,0 +1,24 @@
+# R-26: the emblem badge fix, candidate v2.50.0-r26
+
+## Why
+
+The owner's screenshot of r25: the round badge under the emblem on the Zapret page is cut off at the bottom (D-22, #510 or the number in the PR list). This brief follows `.dsh/skills/ship-rolling-candidate/SKILL.md`.
+
+## What
+
+1. Version bump PR: `AppVersion.Version` becomes `2.50.0-r26` (this PR).
+2. Contents since r25: D-22 (the `StatusEmblem` control is 144 px tall so the badge hanging below the ring is inside its bounds).
+3. After it is merged: annotated tag, draft prerelease, six Windows files (unsigned) built on `windows-worker`, macOS/Linux/Android from the tag workflows, prepublication gate, `check-open-p0.ps1` with the recorded waiver, publish as a prerelease.
+4. Post-ship on WINBRAT with `tools/post-ship-local.ps1`, a zoomed real screenshot of the badge.
+
+## Not covered
+
+Everything listed as open in the r25 brief.
+
+## Verification
+
+Exact-head CI on this PR; the steps above are recorded in the Outcome.
+
+## Outcome
+
+Pending.
