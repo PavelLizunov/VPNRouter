@@ -229,4 +229,37 @@
     <Style Selector="RadioButton.hk-seg:checked /template/ Border#PART_Segment">
         <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
     </Style>
+
+    <!-- The same segmented look for a ListBox (a page's tool switcher): one sunken pill track, the selected item raised. -->
+    <Style Selector="ListBox.hk-segs">
+        <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <Style Selector="ListBox.hk-segs ListBoxItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="MinHeight" Value="34"/>
+        <Setter Property="Padding" Value="8,5"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FsMd}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="ListBox.hk-segs ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ListBox.hk-segs ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+    <Style Selector="ListBox.hk-segs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.hk-segs ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceOverlayBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
+    </Style>
 </Styles>
