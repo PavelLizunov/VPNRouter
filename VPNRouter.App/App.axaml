@@ -29,6 +29,7 @@
             </FluentTheme.Palettes>
         </FluentTheme>
         <StyleInclude Source="avares://VPNRouter.App/Styles/Lists.axaml"/>
+        <StyleInclude Source="avares://VPNRouter.App/Styles/HomeKit.axaml"/>
 
         <!-- Tab strips (the main tabs and the inner tabs of a page): secondary text when idle, an accent tint on hover
              and the accent role when selected, in both themes through the tokens. -->

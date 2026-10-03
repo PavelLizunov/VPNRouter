@@ -17,7 +17,8 @@
 
     <Grid RowDefinitions="*,Auto">
 
-        <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,*" Margin="12,8,14,8">
+        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="16,8,16,16">
             <StackPanel Grid.Row="0" Spacing="8">
 
                     <StackPanel IsVisible="{Binding IsTgProxyDownloading}" Spacing="6">
@@ -32,131 +33,38 @@
                                    Foreground="{DynamicResource TextMutedBrush}"/>
                     </StackPanel>
 
-                    <Border CornerRadius="{StaticResource RadiusLg}"
-                            Background="{DynamicResource SurfaceBaseBrush}"
-                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                            BorderThickness="1"
-                            Padding="16,10,16,12"
-                            ClipToBounds="True">
-                        <Grid>
-                            <Ellipse Width="140" Height="140"
-                                     HorizontalAlignment="Right"
-                                     VerticalAlignment="Top"
-                                     Opacity="0.5"
-                                     IsHitTestVisible="False">
-                                <Ellipse.Fill>
-                                    <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="0.5" RadiusY="0.5">
-                                        <GradientStop Offset="0.0"  Color="{DynamicResource AccentBgSubtle}"/>
-                                        <GradientStop Offset="0.65" Color="Transparent"/>
-                                    </RadialGradientBrush>
-                                </Ellipse.Fill>
-                            </Ellipse>
+                    <!-- Hero in the look of the home screen: the status emblem, the state word and sub-line, one pill button. -->
+                    <StackPanel HorizontalAlignment="Stretch" MaxWidth="400" Margin="0,12,0,4">
+                        <icons:StatusEmblem HorizontalAlignment="Center" IconId="telegram"
+                                            IsOn="{Binding TgProxyEnabled}"
+                                            IsBusy="{Binding IsTgProxyDownloading}"/>
+                        <TextBlock Classes="hk-state" Classes.on="{Binding TgProxyEnabled}" Margin="0,22,0,0"
+                                   Text="{Binding LblTgProxyHeroTitle}"/>
+                        <TextBlock Classes="hk-subline" Margin="0,6,0,0" Text="{Binding LblTgProxyHeroLede}"/>
+                        <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding TgProxyStats}"
+                                   IsVisible="{Binding HasTgProxyStats}"
+                                   Margin="0,8,0,0"
+                                   HorizontalAlignment="Center"
+                                   FontSize="{StaticResource FsSm}"
+                                   FontFamily="Consolas,Menlo,monospace"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
 
-                            <StackPanel Spacing="10" HorizontalAlignment="Stretch" MaxWidth="420">
-
-                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
-                                    <Border Grid.Column="0" Grid.RowSpan="2"
-                                            Width="36" Height="36"
-                                            CornerRadius="10"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource AccentBorderBrush}"
-                                            BorderThickness="1"
-                                            BoxShadow="0 2 6 0 #14000000"
-                                            VerticalAlignment="Top"
-                                            Margin="0,2,12,0">
-                                        <icons:Pictogram Id="telegram" Width="20" Height="20"
-                                                         Foreground="{DynamicResource AccentFgBrush}"
-                                                         HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center"/>
-                                    </Border>
-
-                                    <TextBlock Grid.Column="1" Grid.Row="0"
-                                               Text="{Binding LblTgProxyHeroTitle}"
-                                               FontSize="15"
-                                               FontWeight="Bold"
-                                               Foreground="{DynamicResource TextPrimaryBrush}"
-                                               TextWrapping="Wrap"
-                                               VerticalAlignment="Top"/>
-
-                                    <TextBlock Grid.Column="1" Grid.Row="1"
-                                               Text="{Binding LblTgProxyHeroLede}"
-                                               FontSize="11"
-                                               LineHeight="15"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               TextWrapping="Wrap"
-                                               Margin="0,3,0,0"/>
-                                </Grid>
-
-                                <Button Classes="solid" Command="{Binding TgProxyMainActionCommand}"
-                                        IsEnabled="{Binding !IsTgProxyDownloading}"
-                                        Background="{DynamicResource AccentSolidBrush}"
-                                        Foreground="{DynamicResource AccentOnSolidBrush}"
-                                        BorderThickness="0"
-                                        CornerRadius="{StaticResource RadiusMd}"
-                                        Padding="22,12"
-                                        MinWidth="220"
-                                        HorizontalAlignment="Center"
-                                        HorizontalContentAlignment="Center"
-                                        FontWeight="Bold"
-                                        FontSize="13"
-                                        AutomationProperties.Name="{Binding LblTgProxyMainAction}">
-                                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                        <icons:Pictogram Id="play" Width="14" Height="14"
-                                                         Foreground="{DynamicResource AccentOnSolidBrush}"
-                                                         VerticalAlignment="Center"
-                                                         IsVisible="{Binding !TgProxyEnabled}"/>
-                                        <icons:Pictogram Id="stop" Width="14" Height="14"
-                                                         Foreground="{DynamicResource AccentOnSolidBrush}"
-                                                         VerticalAlignment="Center"
-                                                         IsVisible="{Binding TgProxyEnabled}"/>
-                                        <TextBlock Text="{Binding LblTgProxyMainAction}"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-
-                                <StackPanel IsVisible="{Binding TgProxyEnabled}"
-                                            Orientation="Horizontal"
-                                            Spacing="6"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center">
-                                    <Border CornerRadius="{StaticResource RadiusPill}"
-                                            Background="{DynamicResource SuccessBgBrush}"
-                                            BorderBrush="{DynamicResource SuccessBorderBrush}"
-                                            BorderThickness="1"
-                                            Padding="10,5">
-                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <icons:Pictogram Id="status" Width="12" Height="12"
-                                                     Foreground="{DynamicResource SuccessSolidBrush}"
-                                                     VerticalAlignment="Center"/>
-                                            <TextBlock Text="{Binding LblTgProxyAirPill}"
-                                                       FontSize="10"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource SuccessFgBrush}"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding TgProxyStats}"
-                                                       IsVisible="{Binding HasTgProxyStats}"
-                                                       FontSize="10"
-                                                       Opacity="0.85"
-                                                       Foreground="{DynamicResource SuccessFgBrush}"
-                                                       VerticalAlignment="Center"
-                                                       Margin="6,0,0,0"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <Button Command="{Binding CopyTgProxyLinkCommand}"
-                                            Content="{Binding L_TgProxyCopyLink}"
-                                            FontSize="10"
-                                            Padding="10,5"
-                                            CornerRadius="{StaticResource RadiusPill}"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                            BorderThickness="1"
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.Name="{Binding L_TgProxyCopyLink}"/>
-                                </StackPanel>
-
+                        <Button Classes="hk-cta" Classes.stop="{Binding TgProxyEnabled}" Margin="0,20,0,0"
+                                Command="{Binding TgProxyMainActionCommand}"
+                                IsEnabled="{Binding !IsTgProxyDownloading}"
+                                AutomationProperties.Name="{Binding LblTgProxyMainAction}">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <icons:Pictogram Id="play" IsVisible="{Binding !TgProxyEnabled}"/>
+                                <icons:Pictogram Id="stop" IsVisible="{Binding TgProxyEnabled}"/>
+                                <TextBlock Text="{Binding LblTgProxyMainAction}" VerticalAlignment="Center"/>
                             </StackPanel>
-                        </Grid>
-                    </Border>
+                        </Button>
+                        <Button Classes="hk-soft" Margin="0,10,0,0" HorizontalAlignment="Center"
+                                IsVisible="{Binding TgProxyEnabled}"
+                                Command="{Binding CopyTgProxyLinkCommand}"
+                                Content="{Binding L_TgProxyCopyLink}"
+                                AutomationProperties.Name="{Binding L_TgProxyCopyLink}"/>
+                    </StackPanel>
 
                     <Border IsVisible="{Binding HasTgProxyToast}"
                             Padding="10,6"
@@ -199,40 +107,22 @@
 
             </StackPanel>
 
-            <UniformGrid Grid.Row="1" Rows="1" Columns="3" Margin="0,8,0,0">
-                <ToggleButton IsChecked="{Binding IsTgProxyTab0}"
-                              Command="{Binding SetTgProxyTabCommand}"
-                              CommandParameter="0"
-                              Classes="TabStripPill"
-                              Content="{Binding L_TgProxyTabSettings}"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Center"/>
-                <ToggleButton IsChecked="{Binding IsTgProxyTab1}"
-                              Command="{Binding SetTgProxyTabCommand}"
-                              CommandParameter="1"
-                              Classes="TabStripPill"
-                              Content="{Binding L_TgProxyTabVersion}"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Center"/>
-                <ToggleButton IsChecked="{Binding IsTgProxyTab2}"
-                              Command="{Binding SetTgProxyTabCommand}"
-                              CommandParameter="2"
-                              Classes="TabStripPill"
-                              Content="{Binding L_TgProxyTabHelp}"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Center"/>
+            <Border Grid.Row="1" Classes="hk-seg-track" Margin="0,8,0,0">
+            <UniformGrid Rows="1" Columns="3">
+                <RadioButton Classes="hk-seg" GroupName="TgProxyTabs" IsChecked="{Binding IsTgProxyTab0, Mode=OneWay}"
+                                 Command="{Binding SetTgProxyTabCommand}" CommandParameter="0"
+                                 Content="{Binding L_TgProxyTabSettings}"/>
+                <RadioButton Classes="hk-seg" GroupName="TgProxyTabs" IsChecked="{Binding IsTgProxyTab1, Mode=OneWay}"
+                                 Command="{Binding SetTgProxyTabCommand}" CommandParameter="1"
+                                 Content="{Binding L_TgProxyTabVersion}"/>
+                <RadioButton Classes="hk-seg" GroupName="TgProxyTabs" IsChecked="{Binding IsTgProxyTab2, Mode=OneWay}"
+                                 Command="{Binding SetTgProxyTabCommand}" CommandParameter="2"
+                                 Content="{Binding L_TgProxyTabHelp}"/>
             </UniformGrid>
+            </Border>
 
-            <Border Grid.Row="2"
-                    Height="1"
-                    Background="{DynamicResource BorderSubtleBrush}"
-                    Margin="0,0,0,6"/>
 
-            <Border Grid.Row="3"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusSm}"
-                    Padding="10,6">
+            <Border Grid.Row="3" Classes="hk-card" Margin="0,12,0,0" Padding="4">
                 <Panel>
 
                         <ScrollViewer IsVisible="{Binding IsTgProxyTab0}"
@@ -380,6 +270,7 @@
                 </Panel>
             </Border>
         </Grid>
+        </ScrollViewer>
 
         <Border Grid.Row="1" Padding="14,7,14,8"
                 BorderThickness="0,1,0,0"
