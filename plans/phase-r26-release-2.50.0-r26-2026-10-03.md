@@ -21,4 +21,7 @@ Exact-head CI on this PR; the steps above are recorded in the Outcome.
 
 ## Outcome
 
-Pending.
+Published 2026-10-03 as prerelease `v2.50.0-r26` (`--latest=false`; Latest stays `v2.49.3`), annotated tag on main `7bab7148`, 18 assets, same gates as r21-r25 (strict CI gate `OK`, 8 green, waiver gate, integrity run green before and after
+publication, `POSTSHIP-LOCAL: PASS` on the first attempt, 2 cold cycles). Contents: D-22 #510. A zoom into a real Windows screenshot of the deployed r26 shows the whole round badge (r25 showed a flat bottom edge). The three Windows baselines were re-rendered on the worker.
+
+Not run: the screenshot gate, the live-update gate; the open items of the r25 brief are unchanged.
