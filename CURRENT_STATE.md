@@ -7,11 +7,17 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r26 (prerelease, 2026-10-03), not
+- **Latest published candidate:** v2.50.0-r27 (prerelease, 2026-10-04), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
-  on WINBRAT on the first attempt (`tools/post-ship-local.ps1`); the screenshot
-  gate and the live-update gate were not run
-  (see `plans/phase-r26-release-2.50.0-r26-2026-10-03.md`). r26 only fixes the cut-off round badge under the status emblem of the Zapret and Telegram pages. r25 replaced the
+  on WINBRAT on the first attempt (`tools/post-ship-local.ps1`) and the live
+  scenarios of `tools/live` (cycles, per-server connects, ping with the VPN off
+  and on, mode switches, all tabs); the screenshot gate and the live-update
+  gate were not run (see `plans/phase-r27-release-2.50.0-r27-2026-10-04.md`).
+  r27 is the first block of the night pool: connect 3.6-3.9 s to a chosen
+  server and 7.7 s from the home screen (r26: 7-12 s), stop 4.3-4.5 s, honest
+  pings with the VPN on, failover that picks a reachable server, IPv6-only and
+  AmneziaWG servers reported as "not probed", the Other versions list with
+  older candidates on the experimental channel. r26 only fixed the cut-off round badge under the status emblem of the Zapret and Telegram pages. r25 replaced the
   outlined "Simple" pill with a "Home" button (house icon and the word on a
   quiet tint) on desktop and Android, and fits the home screen into its window
   (tighter spacing, default height 820 px). r24 redid the Zapret and Telegram
@@ -19,7 +25,7 @@ When release or platform facts change, update this file.
   `StatusEmblem`) and put one segmented strip on the Tools, Servers, Public and
   Applications pages. Earlier candidates: r23, r22, r21 (connection fixes from
   the tester's report on r20), r20, r19, r18. The owner's next real update is
-  the check of the driver-lock fix. Main declares `AppVersion` 2.50.0-r26.
+  the check of the driver-lock fix. Main declares `AppVersion` 2.50.0-r27.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
