@@ -25,6 +25,12 @@ UI MCP renders of both pages (EN/RU, light/dark, 380/520/1000) and the audit mat
 
 Revert the PR.
 
+## Also in this PR
+
+The way back to the home screen: on desktop the "< Simple" pill is bold with an outline (14,7 padding, 32 px high); on Android it was bare text in the Advanced header and is now an outlined accent pill 40 dp high (the owner: "the back button to Simple mode is hardly visible").
+The Tools page switcher (Zapret / Telegram proxy) uses the same segmented look (`ListBox.hk-segs`).
+
 ## Outcome
 
-Pending.
+UI MCP renders of both pages in light, dark, English and Russian look consistent with the home screen; the Windows-rendered baselines (page-dpi-bypass, page-tools, page-telegram) were re-rendered on the worker and show the segmented switcher, emblem hero, pill button and cards. Android: the test-hook APK
+built at this commit shows the outlined "< Simple" pill in the Advanced header on the emulator. 485 + 228 targeted tests green on windows-worker. Not checked: the Tools switcher with real tool availability on Linux (hidden there), Android Zapret/Telegram bodies (unchanged).
