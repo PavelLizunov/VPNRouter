@@ -380,14 +380,23 @@ public partial class MainWindowViewModel
                         if (SimpleConnectPolicy.ShouldProbeSelectedFirst(_settings.App.ActiveSubscriptionServer, candidates, generalIntent))
                         {
                             var selected = candidates.First(c => string.Equals(c.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal));
-                            results = await probe.ProbeAllAsync(new[] { selected }, TimeSpan.FromSeconds(2));
-                            if (SimpleConnectPolicy.KeepSelectedAfterProbe(results))
+                            if (SimpleConnectPolicy.CannotBeVerifiedByProbe(selected))
                             {
-                                _logger.Information("[SmartConnect] '{Name}' cannot be probed (protocol or address family) — keeping the selected server", selected.Name);
+                                _logger.Information("[SmartConnect] '{Name}' is {Proto} - a probe cannot verify it; keeping the selected server without one", selected.Name, selected.Protocol);
                                 keptSelection = selected;
+                                results = new List<ServerLiveness>();
                             }
-                            else if (results.Count == 0 || !results[0].Alive)
-                                results = await probe.ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                            else
+                            {
+                                results = await probe.ProbeAllAsync(new[] { selected }, TimeSpan.FromSeconds(2));
+                                if (SimpleConnectPolicy.KeepSelectedAfterProbe(results))
+                                {
+                                    _logger.Information("[SmartConnect] '{Name}' cannot be probed (protocol or address family) — keeping the selected server", selected.Name);
+                                    keptSelection = selected;
+                                }
+                                else if (results.Count == 0 || !results[0].Alive)
+                                    results = await probe.ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                            }
                         }
                         else
                         {
