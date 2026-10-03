@@ -21,4 +21,11 @@ Exact-head CI on this PR; the steps above are recorded in the Outcome.
 
 ## Outcome
 
-Pending.
+Published 2026-10-03 as prerelease `v2.50.0-r24` (`--latest=false`; Latest stays `v2.49.3`), annotated tag on main `23679561`, 18 assets, same gates as r21-r23 (strict CI gate `OK`, 8 green, waiver gate, integrity run green,
+`POSTSHIP-LOCAL: PASS` on the first attempt, 2 cold cycles). Contents: D-19 #503 (HomeKit styles, StatusEmblem, Zapret/Telegram/Tools pages, outlined "Simple" pill on desktop and Android; Windows baselines for page-dpi-bypass/tools/telegram re-rendered on the worker),
+D-20 #504 (segmented strips on Servers, Public, Applications), M-1c #502 (hover/press probe steps). The audit of the redesigned surfaces (dpi, telegram, tools, simple; 96 cells) had 0 warnings; the earlier full audit of r23 had 2340 cells with 0 broken.
+
+Real Windows screenshots of the deployed r24 (WINBRAT, 536x719 window) show the Tools tab with the segmented Zapret / Telegram proxy switcher, the emblem hero, the pill button and the strategy card, and the outlined "Simple" pill. Android: the outlined "< Simple" pill in the Advanced
+header was checked on the emulator with a test-hook APK of the D-19 commit (not with the release APK). Screenshots: artifact "Экраны VPNRouter r24".
+
+Not run: the screenshot gate, the live-update gate; Android Zapret/Telegram screens and the Android cards below the ring were not redone; the Pixel (Android 16) and a real tunnel on Android were not checked.

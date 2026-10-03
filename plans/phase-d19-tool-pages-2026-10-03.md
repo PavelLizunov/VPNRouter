@@ -32,5 +32,5 @@ The Tools page switcher (Zapret / Telegram proxy) uses the same segmented look (
 
 ## Outcome
 
-UI MCP renders of both pages in light, dark, English and Russian look consistent with the home screen; the Windows-rendered baselines (page-dpi-bypass, page-tools, page-telegram) were re-rendered on the worker and show the segmented switcher, emblem hero, pill button and cards. Android: the test-hook APK
+Merged as #503 and shipped in r24. UI MCP renders of both pages in light, dark, English and Russian look consistent with the home screen; the Windows-rendered baselines (page-dpi-bypass, page-tools, page-telegram) were re-rendered on the worker and show the segmented switcher, emblem hero, pill button and cards. Android: the test-hook APK
 built at this commit shows the outlined "< Simple" pill in the Advanced header on the emulator. 485 + 228 targeted tests green on windows-worker. Not checked: the Tools switcher with real tool availability on Linux (hidden there), Android Zapret/Telegram bodies (unchanged).
