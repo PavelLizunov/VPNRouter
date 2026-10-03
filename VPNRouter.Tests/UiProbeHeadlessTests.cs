@@ -97,6 +97,24 @@ public class UiProbeHeadlessTests
     }
 
     [AvaloniaFact]
+    public void Steps_HoverAndPress_ChangeTheCaptureWithoutClicking()
+    {
+        var rest = Probe.Render(new ProbeOptions { Surface = "window-advanced", Height = 900, Width = 900 });
+        var hover = Probe.Render(new ProbeOptions { Surface = "window-advanced", Height = 900, Width = 900, Steps = new List<string> { "hover:Settings" } });
+        var press = Probe.Render(new ProbeOptions { Surface = "window-advanced", Height = 900, Width = 900, Steps = new List<string> { "press:Settings" } });
+
+        Assert.Empty(hover.Notes);
+        Assert.Empty(press.Notes);
+        Assert.NotEqual(rest.Png, hover.Png);
+        Assert.NotEqual(hover.Png, press.Png);
+
+        // Hovering is not a click: the page behind the tab strip is still the one that was open at rest.
+        var restTree = Probe.Tree(new ProbeOptions { Surface = "window-advanced", Height = 900 }, 400);
+        var hoverTree = Probe.Tree(new ProbeOptions { Surface = "window-advanced", Height = 900, Steps = new List<string> { "hover:Settings" } }, 400);
+        Assert.Equal(restTree.Contains("Routing", StringComparison.Ordinal), hoverTree.Contains("Routing", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
     public void Lint_FlagsTextCutOffByAClippingContainerAndOverlappingText()
     {
         var canvas = new Canvas { Width = 200, Height = 100 };

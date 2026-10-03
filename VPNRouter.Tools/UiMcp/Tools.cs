@@ -48,7 +48,7 @@ public static class Tools
             ["type"] = "object",
             ["description"] = "View model properties to set by name before rendering, e.g. {\"SelectedSettingsIndex\":5,\"IsConnected\":true}. See ui_state_properties.",
         },
-        ["steps"] = StrList("Clicks made before rendering, to reach inner tabs and expanders: the visible label of each control, in order (\"Label#2\" = second match), e.g. [\"Settings\",\"Autostart\"]. Labels come from ui_tree."),
+        ["steps"] = StrList("Clicks made before rendering, to reach inner tabs and expanders: the visible label of each control, in order (\"Label#2\" = second match), e.g. [\"Settings\",\"Autostart\"]. Labels come from ui_tree. A step \"hover:Label\" only moves the mouse onto the control and keeps it there (pointer-over styles), \"press:Label\" holds the button down on it (pressed styles); the last such step stays in effect for the capture."),
     };
 
     public static JsonArray Definitions()
