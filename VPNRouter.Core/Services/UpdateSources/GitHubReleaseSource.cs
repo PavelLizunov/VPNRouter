@@ -117,9 +117,18 @@ public sealed class GitHubReleaseSource : IUpdateSource
                 && r.Parsed.Value.CompareTo(current) < 0)
             .OrderByDescending(r => r.Parsed!.Value);
 
-        var result = new List<UpdateSourceInfo>(Math.Min(maxCount, 8));
+        // On the candidate list the newest releases are mostly candidates; keep room for the three newest stable ones, which is where a tester
+        // wants to go back to. Without candidates the whole list is stable and the reserve is not used.
+        var stableReserve = includePrereleases && maxCount >= MinCountForStableReserve ? StableReserve : 0;
+        var openSlots = maxCount - stableReserve;
+        var acceptedStable = 0;
+        var result = new List<(UpdateSourceInfo Info, UpdateChecker.SemVer Version)>(Math.Min(maxCount, 8));
         foreach (var candidate in candidates)
         {
+            var isStable = candidate.Parsed!.Value.Rc == null && !candidate.Release.Prerelease;
+            if (result.Count >= openSlots && !(isStable && acceptedStable < stableReserve))
+                continue;
+
             var asset = FindFullAsset(candidate.Release.Assets, candidate.Tag);
             if (asset == null ||
                 !Uri.TryCreate(asset.BrowserDownloadUrl, UriKind.Absolute, out var assetUri) ||
@@ -131,7 +140,7 @@ public sealed class GitHubReleaseSource : IUpdateSource
             if (!IsValidSha256(sha))
                 continue;
 
-            result.Add(new UpdateSourceInfo(
+            result.Add((new UpdateSourceInfo(
                 Version: candidate.Tag,
                 ReleaseUrl: candidate.Release.HtmlUrl ?? string.Empty,
                 AssetName: asset.Name,
@@ -139,14 +148,18 @@ public sealed class GitHubReleaseSource : IUpdateSource
                 AssetSize: asset.Size,
                 AssetSha256: sha,
                 IsPrerelease: candidate.Release.Prerelease || candidate.Parsed!.Value.Rc != null,
-                ReleaseNotes: candidate.Release.Body?.Trim() ?? string.Empty));
+                ReleaseNotes: candidate.Release.Body?.Trim() ?? string.Empty), candidate.Parsed!.Value));
+            if (isStable) acceptedStable++;
 
-            if (result.Count == maxCount)
+            if (result.Count >= maxCount || (result.Count >= openSlots && acceptedStable >= stableReserve))
                 break;
         }
 
-        return result;
+        return result.OrderByDescending(r => r.Version).Select(r => r.Info).ToList();
     }
+
+    private const int StableReserve = 3;
+    private const int MinCountForStableReserve = 4;
 
     public Task<string> DownloadAsync(
         UpdateSourceInfo info,

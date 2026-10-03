@@ -312,6 +312,44 @@ public sealed class IUpdateSourceContractTests
     }
 
     [Fact]
+    public async Task GitHubReleaseSource_ListOlderAsync_ManyCandidates_StillOffersTheNewestStableReleases()
+    {
+        // ten candidates newer than every stable release: a plain "newest eight" would never reach a stable version
+        var tags = Enumerable.Range(1, 10).Select(i => $"2.31.9-r{i}")
+            .Concat(new[] { "2.31.0", "2.30.0", "2.29.0", "2.28.0" }).ToList();
+        var releases = new List<ReleaseStub>();
+        var fake = new FakeHttpClient();
+        foreach (var version in tags)
+        {
+            var assetName = AssetNameForCurrentPlatform(version);
+            var assetUrl = $"https://example.com/{assetName}";
+            releases.Add(new ReleaseStub($"v{version}", version.Contains("-r"), $"Release {version}", new[]
+            {
+                new AssetStub(assetName, assetUrl, 10_000),
+                new AssetStub($"{assetName}.sha256", $"{assetUrl}.sha256", 64),
+            }));
+            fake.Setup($"{assetUrl}.sha256", new string('e', 64));
+        }
+        fake.Setup(ReleasesApi, BuildReleasesJson(releases));
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo, Channel = "experimental" },
+            CurrentVersion,
+            fake,
+            new FakeDesktopInstaller());
+
+        var list = await source.ListOlderAsync(8, includePrereleases: true, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new[] { "2.31.9-r10", "2.31.9-r9", "2.31.9-r8", "2.31.9-r7", "2.31.9-r6", "2.31.0", "2.30.0", "2.29.0" },
+            list.Select(x => x.Version));
+        Assert.Equal(new[] { true, true, true, true, true, false, false, false }, list.Select(x => x.IsPrerelease));
+
+        // a small cap keeps the old meaning: the newest items of any kind
+        var small = await source.ListOlderAsync(3, includePrereleases: true, TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "2.31.9-r10", "2.31.9-r9", "2.31.9-r8" }, small.Select(x => x.Version));
+    }
+
+    [Fact]
     public async Task GitHubReleaseSource_ListOlderAsync_RunningCandidate_ListsEarlierCandidates()
     {
         var versions = new[] { "2.32.0-r1", "2.32.0-r2", "2.32.0-r3", "2.32.0-r4" };
