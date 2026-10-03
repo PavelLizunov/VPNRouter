@@ -82,6 +82,12 @@ public sealed class FreeConfigTester
                 cfg.LastError = result.Error ?? "tcp unreachable";
                 cfg.LatencyMs = 0;
                 break;
+            case ServerProbeStatus.SkippedNotApplicable:
+                // A free config nobody could check (IPv6-only address) is not offered as a working one.
+                cfg.Status = FreeConfigStatus.Unreachable;
+                cfg.LastError = result.Error ?? "not probed";
+                cfg.LatencyMs = 0;
+                break;
             default:
                 cfg.Status = FreeConfigStatus.Timeout;
                 cfg.LastError = result.Error ?? "unknown";
