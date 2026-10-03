@@ -25,6 +25,15 @@ public sealed class FirewallManagerRuleStoreTests
             return true;
         }
 
+        public List<FirewallRuleSpec> Specs { get; } = new();
+
+        public bool AddRule(FirewallRuleSpec spec)
+        {
+            if (Throw) throw new InvalidOperationException("com down");
+            Specs.Add(spec);
+            return true;
+        }
+
         public int SetEnabled(IReadOnlyCollection<string> names, bool enabled)
         {
             if (Throw) throw new InvalidOperationException("com down");
