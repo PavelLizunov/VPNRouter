@@ -21,4 +21,9 @@ Exact-head CI on this PR; the steps above are recorded in the Outcome.
 
 ## Outcome
 
-Pending.
+Published 2026-10-03 as prerelease `v2.50.0-r23` (`--latest=false`; Latest stays `v2.49.3`), annotated tag on main `33a1b382`, 18 assets, same gates as r21 and r22 (strict CI gate `OK`, 8 green, waiver gate, integrity run green,
+`POSTSHIP-LOCAL: PASS` on the first attempt, 2 cold cycles). Contents: F-7b #499 on top of r22 (Subscribe page: list row 3*, at least 150 px, controls in their own scrolling 2* area; Servers page back to its original layout with a 170 px list minimum).
+UI MCP renders showed everything fitting at 520x760 and the list staying visible with a scrolling lower area at 400x520; a real Windows screenshot of the deployed r23 shows the list, the test buttons, the subscription and the start of the add form
+in the 719 px window. Screenshots: artifact "Экраны VPNRouter r23".
+
+Not run: the screenshot gate, the live-update gate, hover with a real cursor; Android connected/error ring colours with a real tunnel and the Pixel (Android 16).
