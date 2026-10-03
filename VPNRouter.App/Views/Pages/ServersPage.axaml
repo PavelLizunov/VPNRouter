@@ -32,10 +32,10 @@
       <ListBoxItem Classes="sub-tab" Content="{Binding LblServerModeCustom}"/>
     </ListBox>
 
-    <ScrollViewer Grid.Row="1" IsVisible="{Binding IsVlessMode}"
-                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-    <Border Padding="10,8,10,4" MinHeight="{Binding $parent[ScrollViewer].Viewport.Height}">
-    <Grid RowDefinitions="Auto,*,Auto,Auto">
+    <Grid Grid.Row="1"
+          IsVisible="{Binding IsVlessMode}"
+          RowDefinitions="Auto,*,Auto,Auto"
+          Margin="10,8,10,4">
 
       <Border Grid.Row="0" Grid.RowSpan="2" Classes="list-card" MinHeight="170">
         <DockPanel>
@@ -168,8 +168,6 @@
         </DockPanel>
       </Border>
     </Grid>
-    </Border>
-    </ScrollViewer>
 
     <Grid Grid.Row="1"
           IsVisible="{Binding !IsVlessMode}"
