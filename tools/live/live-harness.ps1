@@ -263,8 +263,8 @@ function Probe-Summary($lines, $since) {
 function Deep-Summary($lines, $since) {
     $rows = New-Object System.Collections.ArrayList
     foreach ($l in $lines) {
-        if ($l.Text -match '\[VlessDeepVerifier\] (.+?): (PASS http=(\d+)ms bw=([\d.]+)|HTTP probe FAILED.*|.*never bound.*)') {
-            [void]$rows.Add(('{0}={1}' -f $Matches[1], $(if ($Matches[3]) { "PASS $($Matches[3])ms $($Matches[4])Mbps" } else { 'FAIL' })))
+        if ($l.Text -match '\[VlessDeepVerifier\] (.+?): (PASS http=(\d+)ms bw=([\d.]+|-)|HTTP probe FAILED.*|.*never bound.*)') {
+            [void]$rows.Add(('{0}={1}' -f $Matches[1], $(if ($Matches[3]) { "PASS $($Matches[3])ms $(if ($Matches[4] -eq '-') { 'bw not measured' } else { $Matches[4] + 'Mbps' })" } else { 'FAIL' })))
         }
     }
     if ($rows.Count -eq 0) { return 'no deep verify lines in the log' }
@@ -318,7 +318,7 @@ function Run-Tabs {
         switch ($tab) {
             'servers'  { $targets = @($s | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -lt ($top + 70) -and $_.Y -gt $top - 5 }) }
             'settings' { $targets = @($s | Where-Object { $_.Type -eq 'ListItem' -and $_.X -lt 240 -and $_.Y -gt $top - 5 }) }
-            'apps'     { $targets = @($s | Where-Object { ($_.Type -eq 'ListItem' -and $_.X -lt 240 -and $_.Y -gt $top + 90) -or $_.Type -eq 'RadioButton' } | Select-Object -First 14) }
+            'apps'     { $targets = @($s | Where-Object { (($_.Type -eq 'ListItem' -and $_.X -lt 240 -and $_.Y -gt $top + 90) -or $_.Type -eq 'RadioButton') -and $_.Name -notmatch '^VPNRouter\.App\.' } | Select-Object -First 14) }
             'tools'    { $targets = @($s | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -lt ($top + 70) -and $_.Y -gt $top - 5 }) }
             'public'   { $targets = @($s | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -lt ($top + 70) -and $_.Y -gt $top - 5 }) }
         }
