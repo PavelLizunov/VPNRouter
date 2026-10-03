@@ -17,6 +17,23 @@ public sealed class SimpleConnectPolicyTests
     private static ServerLiveness Probed(bool alive, bool judged)
         => new(new VlessServerEntry { Name = "sel", Server = "1.1.1.1", Port = 443 }, alive, alive ? 40 : int.MaxValue, Judged: judged);
 
+    [Theory]
+    [InlineData("hysteria2", true)]
+    [InlineData("hy2", true)]
+    [InlineData("TUIC", true)]
+    [InlineData("amneziawg", true)]
+    [InlineData("awg", true)]
+    [InlineData("vless", false)]
+    [InlineData("shadowsocks", false)]
+    [InlineData("naive", false)]
+    [InlineData(null, false)]
+    public void UdpBasedSelectedServer_IsKeptWithoutAProbe(string? protocol, bool expected)
+    {
+        var server = new VlessServerEntry { Name = "s", Server = "1.1.1.1", Port = 8444, Protocol = protocol! };
+
+        Assert.Equal(expected, SimpleConnectPolicy.CannotBeVerifiedByProbe(server));
+    }
+
     [Fact]
     public void SelectedServerTheProbeCannotJudge_IsKept()
     {
