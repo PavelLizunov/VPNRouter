@@ -23,4 +23,4 @@ Revert the PR.
 
 ## Outcome
 
-Pending.
+The three Windows baselines were re-rendered on the worker; the zoomed Telegram baseline shows the whole round badge. Page, visual-diff, probe and window suites green on windows-worker. Shipped in r26.
