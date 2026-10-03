@@ -112,7 +112,7 @@ public sealed class UpdateNotificationViewModelTests
     public async Task ToggleVersionHistoryCommand_ExperimentalChannel_ListsCandidatesWithALabel()
     {
         var stable = SampleInfo("2.49.3");
-        var candidate = SampleInfo("2.50.0-r26") with { IsPrerelease = true };
+        var candidate = SampleInfo("2.0.0-r26") with { IsPrerelease = true };
         var fake = new FakeUpdateSource
         {
             StableReleases = new[] { stable },
@@ -127,11 +127,11 @@ public sealed class UpdateNotificationViewModelTests
         Assert.True(fake.LastIncludePrereleases);
         Assert.Equal(8, fake.LastListMaxCount);
         Assert.Equal(3, vm.StableVersions.Count);
-        var row = vm.StableVersions.Single(v => v.Version == "2.50.0-r26");
+        var row = vm.StableVersions.Single(v => !v.IsInstalled && v.Version == "2.0.0-r26");
         Assert.True(row.IsPrerelease);
-        Assert.Contains("2.50.0-r26", row.DisplayVersion);
+        Assert.Contains("2.0.0-r26", row.DisplayVersion);
         Assert.Contains(VPNRouter.Core.Localization.Strings.PrereleaseLabel, row.DisplayVersion);
-        Assert.DoesNotContain(VPNRouter.Core.Localization.Strings.PrereleaseLabel, vm.StableVersions.Single(v => v.Version == "2.49.3").DisplayVersion);
+        Assert.DoesNotContain(VPNRouter.Core.Localization.Strings.PrereleaseLabel, vm.StableVersions.Single(v => !v.IsInstalled && v.Version == "2.49.3").DisplayVersion);
         Assert.Equal(VPNRouter.Core.Localization.Strings.RollbackSafetyHintCandidates, vm.VersionHistoryMessage);
     }
 
