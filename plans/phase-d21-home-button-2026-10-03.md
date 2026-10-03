@@ -24,4 +24,4 @@ Revert the PR.
 
 ## Outcome
 
-Pending.
+Merged as #507 and shipped in r25 (see the r25 brief for the checks).
