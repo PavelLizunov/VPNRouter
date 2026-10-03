@@ -335,6 +335,8 @@ public static class Strings
     public static string NoOlderVersions => global::VPNRouter.Core.Localization.Strings.NoOlderVersions;
     public static string VersionHistoryFailed => global::VPNRouter.Core.Localization.Strings.VersionHistoryFailed;
     public static string InstalledVersion => global::VPNRouter.Core.Localization.Strings.InstalledVersion;
+    public static string RollbackSafetyHintCandidates => global::VPNRouter.Core.Localization.Strings.RollbackSafetyHintCandidates;
+    public static string PrereleaseLabel => global::VPNRouter.Core.Localization.Strings.PrereleaseLabel;
     public static string RollbackAction => global::VPNRouter.Core.Localization.Strings.RollbackAction;
     public static string RollbackSafetyHint => global::VPNRouter.Core.Localization.Strings.RollbackSafetyHint;
     public static string RollbackConfirmation => global::VPNRouter.Core.Localization.Strings.RollbackConfirmation;
