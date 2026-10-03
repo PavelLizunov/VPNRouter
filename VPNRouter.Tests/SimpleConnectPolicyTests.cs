@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 using Xunit;
 
 namespace VPNRouter.Tests;
@@ -12,6 +13,29 @@ public sealed class SimpleConnectPolicyTests
         Name = "simple", Url = url, Enabled = enabled,
         Servers = new List<VlessServerEntry>(Enumerable.Range(0, servers).Select(i => new VlessServerEntry { Name = $"s{i}", Server = "1.1.1.1", Port = 443 })),
     };
+
+    private static ServerLiveness Probed(bool alive, bool judged)
+        => new(new VlessServerEntry { Name = "sel", Server = "1.1.1.1", Port = 443 }, alive, alive ? 40 : int.MaxValue, Judged: judged);
+
+    [Fact]
+    public void SelectedServerTheProbeCannotJudge_IsKept()
+    {
+        Assert.True(SimpleConnectPolicy.KeepSelectedAfterProbe(new[] { Probed(alive: false, judged: false) }));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void SelectedServerThatAnsweredOrIsKnownDead_FollowsTheNormalPath(bool alive, bool judged)
+    {
+        Assert.False(SimpleConnectPolicy.KeepSelectedAfterProbe(new[] { Probed(alive, judged) }));
+    }
+
+    [Fact]
+    public void NoProbeResult_FollowsTheNormalPath()
+    {
+        Assert.False(SimpleConnectPolicy.KeepSelectedAfterProbe(new List<ServerLiveness>()));
+    }
 
     [Fact]
     public void SameUrlWithCachedServers_IsKept_NotReplacedOrRefetched()
