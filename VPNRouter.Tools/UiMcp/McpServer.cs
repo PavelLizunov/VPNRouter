@@ -103,7 +103,9 @@ public sealed class McpServer
             ["instructions"] =
                 "Renders and clicks through the real VPNRouter desktop UI headlessly. Start with ui_catalog. " +
                 "ui_render shows one surface, ui_matrix compares themes/languages/sizes on one sheet, ui_tree lists controls, " +
-                "ui_sweep clicks controls to look for crashes. Fonts here are not the Windows fonts: trust overflow and overlap, not pixels.",
+                "ui_sweep clicks controls to look for crashes. Fonts here are not the Windows fonts: trust overflow and overlap, not pixels. " +
+                "live_run drives the REAL installed app on the Windows test worker over ssh (tabs, connect cycles, per-server connects, ping timings, mode switches) " +
+                "and returns step timings, log findings and screenshots; live_runs and live_report read earlier runs.",
         };
     }
 
@@ -113,7 +115,10 @@ public sealed class McpServer
         var args = parameters["arguments"] as JsonObject ?? new JsonObject();
         try
         {
-            var content = _ui.Dispatch(() => Tools.Run(name, args), CancellationToken.None).GetAwaiter().GetResult();
+            // The live tools wait on ssh for minutes and never touch the UI: keep them off the UI thread.
+            var content = LiveTools.IsLiveTool(name)
+                ? Tools.Run(name, args)
+                : _ui.Dispatch(() => Tools.Run(name, args), CancellationToken.None).GetAwaiter().GetResult();
             return new JsonObject { ["content"] = content, ["isError"] = false };
         }
         catch (Exception ex)
