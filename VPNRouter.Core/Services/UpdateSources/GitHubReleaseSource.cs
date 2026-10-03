@@ -92,8 +92,14 @@ public sealed class GitHubReleaseSource : IUpdateSource
         return null;
     }
 
-    public async Task<IReadOnlyList<UpdateSourceInfo>> ListStableAsync(
+    public Task<IReadOnlyList<UpdateSourceInfo>> ListStableAsync(
         int maxCount,
+        CancellationToken ct = default) =>
+        ListOlderAsync(maxCount, includePrereleases: false, ct);
+
+    public async Task<IReadOnlyList<UpdateSourceInfo>> ListOlderAsync(
+        int maxCount,
+        bool includePrereleases,
         CancellationToken ct = default)
     {
         if (maxCount <= 0 || string.IsNullOrWhiteSpace(_settings.GitHubRepo) ||
@@ -104,8 +110,11 @@ public sealed class GitHubReleaseSource : IUpdateSource
         if (releases == null)
             return Array.Empty<UpdateSourceInfo>();
 
-        var candidates = ReleaseCandidates.Parse(releases.Where(r => !r.Draft && !r.Prerelease))
-            .Where(r => r.Parsed is { Rc: null } && r.Parsed.Value.CompareTo(current) < 0)
+        // Stable list: only real stable releases. Candidate list: a -rN tag counts as a candidate whatever flag the release carries.
+        var candidates = ReleaseCandidates.Parse(releases.Where(r => !r.Draft && (includePrereleases || !r.Prerelease)))
+            .Where(r => r.Parsed != null
+                && (includePrereleases || r.Parsed.Value.Rc == null)
+                && r.Parsed.Value.CompareTo(current) < 0)
             .OrderByDescending(r => r.Parsed!.Value);
 
         var result = new List<UpdateSourceInfo>(Math.Min(maxCount, 8));
@@ -129,7 +138,7 @@ public sealed class GitHubReleaseSource : IUpdateSource
                 DownloadUrl: asset.BrowserDownloadUrl,
                 AssetSize: asset.Size,
                 AssetSha256: sha,
-                IsPrerelease: false,
+                IsPrerelease: candidate.Release.Prerelease || candidate.Parsed!.Value.Rc != null,
                 ReleaseNotes: candidate.Release.Body?.Trim() ?? string.Empty));
 
             if (result.Count == maxCount)
