@@ -376,18 +376,24 @@ public partial class MainWindowViewModel
                         var generalIntent = ConnectionIntent.Normalize(_settings.App.ConnectionIntent) == ConnectionIntent.General;
                         var probe = new ServerHealthProbe(_logger);
                         List<ServerLiveness> results;
+                        VlessServerEntry? keptSelection = null;
                         if (SimpleConnectPolicy.ShouldProbeSelectedFirst(_settings.App.ActiveSubscriptionServer, candidates, generalIntent))
                         {
                             var selected = candidates.First(c => string.Equals(c.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal));
                             results = await probe.ProbeAllAsync(new[] { selected }, TimeSpan.FromSeconds(2));
-                            if (results.Count == 0 || !results[0].Alive)
+                            if (SimpleConnectPolicy.KeepSelectedAfterProbe(results))
+                            {
+                                _logger.Information("[SmartConnect] '{Name}' cannot be probed (protocol or address family) — keeping the selected server", selected.Name);
+                                keptSelection = selected;
+                            }
+                            else if (results.Count == 0 || !results[0].Alive)
                                 results = await probe.ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
                         }
                         else
                         {
                             results = await probe.ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
                         }
-                        var chosen = ConnectionIntentScorer.PickServer(
+                        var chosen = keptSelection ?? ConnectionIntentScorer.PickServer(
                             results,
                             _settings.App.ConnectionIntent,
                             _settings.App.ActiveSubscriptionServer);
