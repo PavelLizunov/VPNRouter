@@ -105,6 +105,16 @@ function Find-Same($was) {
     }
     return $best
 }
+# Controls that scroll out of view (the lower area of the Subscribe page) are "offscreen" for Scan; these look through everything.
+function Find-Any($typeName, $pattern) {
+    $w = Win
+    if (-not $w) { return $null }
+    $cond = New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::($typeName))
+    $found = $null
+    try { $found = $w.FindAll($tree::Descendants, $cond) } catch { return $null }
+    foreach ($e in $found) { try { if ($e.Current.Name -match $pattern) { return $e } } catch { } }
+    return $null
+}
 function Alive { [bool](Get-Process -Id $script:Proc.Id -ErrorAction SilentlyContinue) }
 function Shot($name) {
     try {
@@ -123,8 +133,9 @@ function Shot($name) {
 }
 
 # --- connection state -------------------------------------------------------------------------------------------------------------------
-$ConnectPat = '^(Connect|Подключить|Start VPN|Запустить VPN)$'
-$DisconnectPat = '^(Disconnect|Отключить|Stop VPN|Остановить VPN)$'
+# the Advanced shell names its button with a leading glyph ("▶  Запустить VPN"): allow non-letters before the label
+$ConnectPat = '^[^\p{L}]*(Connect|Подключить|Start VPN|Запустить VPN)$'
+$DisconnectPat = '^[^\p{L}]*(Disconnect|Отключить|Stop VPN|Остановить VPN)$'
 function Get-VpnState {
     $s = Scan
     if (Find-One $DisconnectPat $s) { return 'connected' }
@@ -204,6 +215,59 @@ function Phase-Timeline($since) {
     $sorted = @($events | Sort-Object T)
     if ($sorted.Count -eq 0) { return 'no log lines visible' }
     return (($sorted | ForEach-Object { '+{0:N1}s {1}' -f (($_.T - $since).TotalSeconds), $_.M }) -join ' | ')
+}
+function Log-Tail($since, $pattern) {
+    # app log lines since a moment that match a pattern: (time, text after the level)
+    $lines = New-Object System.Collections.ArrayList
+    foreach ($f in (Live-LogFiles $since)) {
+        try {
+            $fs = [System.IO.File]::Open($f.FullName, 'Open', 'Read', 'ReadWrite')
+            $sr = New-Object System.IO.StreamReader($fs, [Text.Encoding]::UTF8)
+            while (($line = $sr.ReadLine()) -ne $null) {
+                if ($line.Length -lt 35 -or $line -notmatch $pattern) { continue }
+                $stamp = $null
+                try { $stamp = [datetime]::ParseExact($line.Substring(0, 23), 'yyyy-MM-dd HH:mm:ss.fff', [Globalization.CultureInfo]::InvariantCulture) } catch { continue }
+                if ($stamp -lt $since) { continue }
+                [void]$lines.Add([pscustomobject]@{ T = $stamp; Text = $line.Substring(31) })
+            }
+            $sr.Close(); $fs.Close()
+        } catch { }
+    }
+    return @($lines | Sort-Object T)
+}
+function Wait-LogQuiet($since, $pattern, $quietSec, $maxSec) {
+    # waits until matching lines appeared and none new came for $quietSec; returns them
+    $sw = [Diagnostics.Stopwatch]::StartNew(); $last = 0; $lastChange = Get-Date
+    while ($sw.Elapsed.TotalSeconds -lt $maxSec) {
+        $n = (Log-Tail $since $pattern).Count
+        if ($n -ne $last) { $last = $n; $lastChange = Get-Date }
+        elseif ($n -gt 0 -and ((Get-Date) - $lastChange).TotalSeconds -ge $quietSec) { break }
+        Start-Sleep -Milliseconds 700
+    }
+    return (Log-Tail $since $pattern)
+}
+function Probe-Summary($lines, $since) {
+    # "[TcpTlsProbe] NAME HOST:PORT protocol=P status="S" latency=Nms err=E" -> one entry per server, plus the span of the run
+    $rows = @{}
+    foreach ($l in $lines) {
+        if ($l.Text -match '\[TcpTlsProbe\] (.+?) \S+:\d+ protocol=(\S+) status="(\w+)" latency=(\d+)ms err=(.*)$') {
+            $err = $Matches[5]; if ($err -eq '-') { $err = '' } elseif ($err.Length -gt 30) { $err = $err.Substring(0, 30) }
+            $rows[$Matches[1]] = '{0}={1} {2}ms{3}' -f $Matches[1], $Matches[3], $Matches[4], $(if ($err) { " ($err)" } else { '' })
+        }
+    }
+    if ($lines.Count -eq 0) { return 'no probe lines in the log' }
+    $span = ($lines[-1].T - $since).TotalSeconds
+    return ('{0} servers, last result +{1:N1}s: {2}' -f $rows.Count, $span, (($rows.Values | Sort-Object) -join '; '))
+}
+function Deep-Summary($lines, $since) {
+    $rows = New-Object System.Collections.ArrayList
+    foreach ($l in $lines) {
+        if ($l.Text -match '\[VlessDeepVerifier\] (.+?): (PASS http=(\d+)ms bw=([\d.]+)|HTTP probe FAILED.*|.*never bound.*)') {
+            [void]$rows.Add(('{0}={1}' -f $Matches[1], $(if ($Matches[3]) { "PASS $($Matches[3])ms $($Matches[4])Mbps" } else { 'FAIL' })))
+        }
+    }
+    if ($rows.Count -eq 0) { return 'no deep verify lines in the log' }
+    return ('{0} results, last +{1:N1}s: {2}' -f $rows.Count, ($lines[-1].T - $since).TotalSeconds, (($rows | Sort-Object) -join '; '))
 }
 function Crash-Events {
     try {
@@ -358,50 +422,67 @@ function Run-Servers {
 }
 
 function Read-Pings {
-    $s = Scan
+    # Every server row of the page, scrolled out of view or not: its name and the ping/verdict text inside it (read from the row's own children).
+    $w = Win
     $out = New-Object System.Collections.ArrayList
-    $rows = @($s | Where-Object { $_.Type -eq 'ListItem' })
-    foreach ($r in $rows) {
-        $texts = @($s | Where-Object { $_.Type -eq 'Text' -and $_.X -ge $r.X -and $_.X -le ($r.X + $r.W) -and $_.Y -ge $r.Y -and $_.Y -le ($r.Y + $r.H) -and $_.Name -match '^(\d+ ms|UDP \?|×|TLS ×|<5 ms|—)$' })
-        [void]$out.Add([ordered]@{ server = $r.Name; ping = ($texts | Select-Object -First 1 | ForEach-Object { $_.Name }) })
+    if (-not $w) { return $out }
+    $liCond = New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
+    $txCond = New-Object System.Windows.Automation.PropertyCondition($ae::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text)
+    $items = $null
+    try { $items = $w.FindAll($tree::Descendants, $liCond) } catch { return $out }
+    foreach ($li in $items) {
+        try {
+            $name = $li.Current.Name
+            if ($name -notmatch '\(\S+:\d+\)$') { continue }
+            $texts = @($li.FindAll($tree::Descendants, $txCond) | ForEach-Object { $_.Current.Name })
+            $ping = $texts | Where-Object { $_ -match '^(\d+ ms|UDP \?|×|TLS ×|<5 ms|—)$' } | Select-Object -First 1
+            [void]$out.Add([ordered]@{ server = $name; ping = $ping })
+        } catch { }
     }
     return $out
 }
+function Wait-Idle($busyPattern, $deadlineSec) {
+    # busy while the button shows its running label (Cancel / Stop); idle again when that label has been gone twice in a row
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $seenBusy = $false; $quiet = 0
+    while ($sw.Elapsed.TotalSeconds -lt $deadlineSec) {
+        if (Find-Any 'Text' $busyPattern) { $seenBusy = $true; $quiet = 0 }
+        else { $quiet++; if ($quiet -ge 2 -and ($seenBusy -or $sw.Elapsed.TotalSeconds -gt 4)) { return [int]$sw.ElapsedMilliseconds } }
+        Start-Sleep -Milliseconds 400
+    }
+    return -1
+}
+function Format-Pings($pings) { ($pings | ForEach-Object { ($_.server -replace ' \(\S+:\d+\)$', '') + '=' + $_.ping }) -join '; ' }
+$TestAllTip = 'TCP \+ TLS (probe to all|проверка всех)'
+$TestAllIdle = '^(Test all|Проверить все)$'
+$DeepTip = 'Spawn sing-box'
+$DeepIdle = '^(Deep verify|Глубокая проверка)$'
 function Run-Ping {
     Ensure-Disconnected
     if (-not (Go-Advanced)) { Add-Step 'enter advanced mode' $false 0 '' $null; return }
     [void](Go-Tab $TabNames['subscribe'])
     foreach ($phase in 'disconnected', 'connected') {
         if ($phase -eq 'connected') {
+            $pressedAt = Get-Date
             $clicked = Click-Cta $ConnectPat
             $t = Wait-VpnState 'connected' 120
-            Add-Step 'connect for the ping test' ($clicked -and $t -ge 0) $t '' $null
+            Add-Step 'connect for the ping test' ($clicked -and $t -ge 0) $t "clicked: $clicked$(if (-not $clicked) { ' (' + $script:PressError + ')' }). $(Phase-Timeline $pressedAt)" (Shot 'ping-connect')
+            if ($t -lt 0) { continue }
             [void](Go-Tab $TabNames['subscribe'])
         }
-        $btn = Find-One '^(Test all|Проверить все)$' $null
-        if (-not $btn) { Add-Step "test all ($phase)" $false 0 'button not found' $null; continue }
-        $sw = [Diagnostics.Stopwatch]::StartNew()
-        Press $btn.El | Out-Null
-        Start-Sleep -Milliseconds 800
-        # finished when the button shows its idle name again
-        $deadline = 90
-        while ($sw.Elapsed.TotalSeconds -lt $deadline) {
-            if (Find-One '^(Test all|Проверить все)$' $null) { break }
-            Start-Sleep -Milliseconds 500
-        }
-        $pings = Read-Pings
-        $withValue = @($pings | Where-Object { $_.ping -and $_.ping -ne '—' }).Count
-        Add-Step "test all ($phase)" ($withValue -gt 0) $sw.ElapsedMilliseconds "$withValue of $($pings.Count) rows have a result: $(($pings | ForEach-Object { $_.server + '=' + $_.ping }) -join '; ')" (Shot "ping-$phase")
-        $dv = Find-One '^(Deep verify|Глубокая проверка)$' $null
+        # the buttons are named by their tooltip; the app log is the reliable account of what was probed and when
+        $btn = Find-Any 'Button' $TestAllTip
+        if (-not $btn) { Add-Step "test all ($phase)" $false 0 'button not found' (Shot "ping-$phase-nobutton"); continue }
+        $t0 = Get-Date
+        Press $btn | Out-Null
+        $lines = Wait-LogQuiet $t0 '\[TcpTlsProbe\]' 3 120
+        Add-Step "test all ($phase)" ($lines.Count -gt 0) $(if ($lines.Count -gt 0) { [int](($lines[-1].T - $t0).TotalMilliseconds) } else { -1 }) (Probe-Summary $lines $t0) (Shot "ping-$phase")
+        $dv = Find-Any 'Button' $DeepTip
         if ($dv) {
-            $sw.Restart()
-            Press $dv.El | Out-Null
-            Start-Sleep -Seconds 2
-            while ($sw.Elapsed.TotalSeconds -lt 150) {
-                if (Find-One '^(Deep verify|Глубокая проверка)$' $null) { break }
-                Start-Sleep -Seconds 1
-            }
-            Add-Step "deep verify ($phase)" $true $sw.ElapsedMilliseconds '' (Shot "deep-$phase")
+            $t1 = Get-Date
+            Press $dv | Out-Null
+            $deepLines = Wait-LogQuiet $t1 '\[VlessDeepVerifier\] .*(PASS http|HTTP probe FAILED|never bound)' 12 300
+            Add-Step "deep verify ($phase)" ($deepLines.Count -gt 0) $(if ($deepLines.Count -gt 0) { [int](($deepLines[-1].T - $t1).TotalMilliseconds) } else { -1 }) (Deep-Summary $deepLines $t1) (Shot "deep-$phase")
         }
     }
     Ensure-Disconnected
