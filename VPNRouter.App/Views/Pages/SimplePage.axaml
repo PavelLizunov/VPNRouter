@@ -325,7 +325,7 @@
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
                   AllowAutoHide="False">
-        <Grid Margin="16,24,16,24">
+        <Grid Margin="16,16,16,16">
             <StackPanel MaxWidth="400" HorizontalAlignment="Stretch">
 
                 <!-- Hero: emblem, state word, sub-line, live traffic. -->
@@ -371,7 +371,7 @@
                            Classes.on="{Binding SmpHeroIsOn}"
                            Classes.error="{Binding SmpHeroIsError}"
                            Classes.warn="{Binding SmpHeroIsWarn}"
-                           Margin="0,22,0,0"
+                           Margin="0,16,0,0"
                            Text="{Binding SmpHomeTitle}"/>
                 <TextBlock Classes="subline"
                            Margin="0,6,0,0"
@@ -450,7 +450,7 @@
 
                 <!-- Primary action. Exactly one of the three is visible; the UI Automation name is the visible text
                      ("Connect" / "Disconnect", tools/brat-stability.ps1 finds the button by it). -->
-                <Panel Margin="0,24,0,0">
+                <Panel Margin="0,18,0,0">
                     <Button Classes="cta go solid"
                             Command="{Binding SmpToggleConnectCommand}"
                             IsVisible="{Binding SimpleCtaIsDisconnected}"
@@ -490,7 +490,7 @@
                 </Panel>
 
                 <!-- Current connection: which config, and what goes through it. -->
-                <Border Classes="card" Margin="0,20,0,0">
+                <Border Classes="card" Margin="0,14,0,0">
                     <StackPanel>
                         <Grid IsVisible="{Binding SmpHasConfig}"
                               ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"
@@ -610,7 +610,7 @@
                 </Border>
 
                 <!-- Secondary: quiet rows, no fill. -->
-                <Border Classes="quiet" Margin="0,16,0,0">
+                <Border Classes="quiet" Margin="0,12,0,0">
                     <StackPanel>
                         <Button Classes="row"
                                 Command="{Binding OpenAutostartSettingsCommand}"

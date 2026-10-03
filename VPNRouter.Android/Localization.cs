@@ -57,6 +57,7 @@ internal static class Localization
     public static string TabAdvApplications => global::VPNRouter.Core.Localization.Strings.TabAdvApplications;
     public static string TabAdvTools => global::VPNRouter.Core.Localization.Strings.TabAdvTools;
     public static string TabAdvPublic => global::VPNRouter.Core.Localization.Strings.TabAdvPublic;
+    public static string SmpHomeButton => global::VPNRouter.Core.Localization.Strings.SmpHomeButton;
     public static string AdvSimpleToggle => global::VPNRouter.Core.Localization.Strings.AdvSimpleToggle;
     public static string VlessServers => global::VPNRouter.Core.Localization.Strings.VlessServers;
     public static string CustomConfigJson => global::VPNRouter.Core.Localization.Strings.CustomConfigJson;

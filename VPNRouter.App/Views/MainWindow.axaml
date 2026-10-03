@@ -13,7 +13,7 @@
         x:CompileBindings="True"
         x:DataType="vm:MainWindowViewModel"
         Title="VPNRouter"
-        Width="520" Height="760"
+        Width="520" Height="820"
         MinWidth="380" MinHeight="520"
         FontSize="10"
         Background="{DynamicResource SurfaceAppBrush}"
@@ -417,20 +417,24 @@
                     </StackPanel>
                 </StackPanel>
 
+                <!-- The way back to the home screen: the house icon and the word "Home" on a quiet accent tint, like the other header controls. -->
                 <Button Grid.Column="2"
                         Command="{Binding ToggleUiModeCommand}"
-                        icons:PictogramText.Icons="chevron-left,chevron-right" icons:PictogramText.Content="{Binding UiModeToggleText}"
-                        ToolTip.Tip="{Binding UiModeToggleTooltip}"
+                        ToolTip.Tip="{Binding L_SmpHomeButtonTip}"
+                        AutomationProperties.Name="{Binding L_SmpHomeButton}"
                         IsVisible="{Binding !IsSimpleMode}"
-                        Padding="14,7" MinHeight="32"
-                        FontSize="12" FontWeight="Bold"
+                        Padding="12,6" MinHeight="34"
                         Background="{DynamicResource AccentBgSubtleBrush}"
-                        BorderBrush="{DynamicResource AccentBorderBrush}"
-                        BorderThickness="1"
+                        BorderThickness="0"
                         Foreground="{DynamicResource AccentFgBrush}"
-                        CornerRadius="{StaticResource RadiusPill}"
+                        CornerRadius="{StaticResource RadiusLg}"
                         VerticalAlignment="Center"
                         Cursor="Hand">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <icons:Pictogram Id="home" Width="16" Height="16" Foreground="{DynamicResource AccentFgBrush}"/>
+                        <TextBlock Text="{Binding L_SmpHomeButton}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentFgBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
                     <Button.Styles>
                         <Style Selector="Button:pointerover /template/ ContentPresenter">
                             <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>

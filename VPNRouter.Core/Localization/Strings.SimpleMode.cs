@@ -137,6 +137,8 @@ public static partial class Strings
     public static string TipSmpMenuResetWindowSize  => Ru
         ? "Вернуть обычный размер окна (двойной щелчок по значку в шапке делает то же)."
         : "Restore the default window size (a double click on the icon in the header does the same).";
+    public static string SmpHomeButton              => Ru ? "Главная" : "Home";
+    public static string SmpHomeButtonTip           => Ru ? "Вернуться на главный экран" : "Back to the home screen";
     public static string SmpStatusApplying          => Ru ? "Применяю настройки…" : "Applying settings…";
     public static string SmpStatusApplyingHint      => Ru
         ? "Переключаю маршрутизацию — несколько секунд."

@@ -75,6 +75,7 @@ public sealed class Pictogram : Control
         ["more-horizontal"] = [L(UiIcons.Ellipsis)],
         ["play"] = [L(UiIcons.Play)],
         ["power"] = [L(UiIcons.Power)],
+        ["home"] = [L(UiIcons.House)],
         ["radio-off"] = [L(UiIcons.Circle)],
         ["radio-on"] = [L(UiIcons.Circle), Dot(5)],
         ["refresh"] = [L(UiIcons.RefreshCw)],

@@ -205,6 +205,8 @@ public partial class MainWindowViewModel
     public string L_SmpMenuDiagnosticsSection => Strings.SmpMenuDiagnosticsSection;
     public string L_SmpMenuHealthCheck => Strings.SmpMenuHealthCheck;
     public string L_SmpMenuSetupWizard => Strings.SmpMenuSetupWizard;
+    public string L_SmpHomeButton => Strings.SmpHomeButton;
+    public string L_SmpHomeButtonTip => Strings.SmpHomeButtonTip;
     public string L_SmpPickServerLabel => Strings.SmpPickServerLabel;
     public string L_SmpPickServerHint => Strings.SmpPickServerHint;
     public string L_SmpSetupCheckTitle => Strings.SmpSetupCheckTitle;
