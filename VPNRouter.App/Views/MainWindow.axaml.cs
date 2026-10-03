@@ -45,9 +45,9 @@ public partial class MainWindow : Window
         };
     }
 
-    // The home screen needs about 760 px of height; on a smaller screen the window is shortened to what the work area allows (title bar and margin
+    // The home screen needs about 820 px of height; on a smaller screen the window is shortened to what the work area allows (title bar and margin
     // included) and kept on screen.
-    internal const double PreferredHeight = 760;
+    internal const double PreferredHeight = 820;
     private const double FrameAllowance = 48;
 
     internal static double FittedHeight(double preferred, double workAreaHeightDip, double minimum) =>
