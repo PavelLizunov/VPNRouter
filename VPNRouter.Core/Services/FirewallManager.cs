@@ -40,6 +40,7 @@ public class FirewallManager : IFirewallManager
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
     private IFirewallRuleStore? _store;
+    private readonly bool _resolveInProcess;
     private readonly List<string> _managedRules = new();
     private List<string> _requestedNames = new();
     private bool _disposed;
@@ -73,7 +74,10 @@ public class FirewallManager : IFirewallManager
         _logger = logger ?? Log.Logger;
         _runner = runner ?? Runner;
         if (runner is null && ReferenceEquals(Runner, DefaultRunner) && OperatingSystem.IsWindows())
+        {
             _store = ComFirewallRuleStore.TryCreate(_logger);
+            _resolveInProcess = true;
+        }
     }
 
     internal FirewallManager(ILogger? logger, IProcessRunner? runner, IFirewallRuleStore? store)
@@ -290,7 +294,9 @@ public class FirewallManager : IFirewallManager
 
         if (OperatingSystem.IsWindows())
         {
-            var onPath = ProcessImagePath.ResolveNameToPath(processName, _runner);
+            var onPath = _resolveInProcess
+                ? ProcessImagePath.ResolveNameOnPath(processName)
+                : ProcessImagePath.ResolveNameToPath(processName, _runner);
             if (!string.IsNullOrEmpty(onPath))
                 return onPath;
         }
@@ -452,6 +458,42 @@ public class FirewallManager : IFirewallManager
         DeleteAllRules();
     }
 
+    internal static readonly string[] DnsLockdownRuleNames =
+    {
+        DnsLockdownAllowRule, DnsLockdownTunAllowRule, DnsLockdownTunAllowRule + "-TCP",
+        DnsLockdownUdp53Rule, DnsLockdownTcp53Rule, DnsLockdownTcp853Rule,
+        DnsLockdownUdp53Ipv6Rule, DnsLockdownTcp53Ipv6Rule, DnsLockdownTcp853Ipv6Rule,
+    };
+
+    // The rules of the DNS leak lockdown as data, so the COM path and the netsh fallback add exactly the same thing.
+    internal static IReadOnlyList<FirewallRuleSpec> BuildDnsLockdownSpecs(string blockExclusionRange) => new[]
+    {
+        new FirewallRuleSpec(DnsLockdownAllowRule, Allow: true, "UDP", "53", "127.0.0.1",
+            "VPNRouter Wave 39: allow loopback DNS for local proxies"),
+        new FirewallRuleSpec(DnsLockdownUdp53Rule, Allow: false, "UDP", "53", blockExclusionRange,
+            "VPNRouter Wave 39 BR-9: block UDP/53 to prevent DNS leak (TUN range excluded)"),
+        new FirewallRuleSpec(DnsLockdownTcp53Rule, Allow: false, "TCP", "53", blockExclusionRange,
+            "VPNRouter Wave 39 BR-9: block TCP/53 to prevent DNS leak (TUN range excluded)"),
+        new FirewallRuleSpec(DnsLockdownTcp853Rule, Allow: false, "TCP", "853", blockExclusionRange,
+            "VPNRouter Wave 39 BR-9: block TCP/853 to prevent DNS leak (TUN range excluded)"),
+        new FirewallRuleSpec(DnsLockdownUdp53Ipv6Rule, Allow: false, "UDP", "53", Ipv6PublicDnsScope,
+            "VPNRouter r10 #6: block UDP/53 over public IPv6 (2000::/3) to prevent DNS leak"),
+        new FirewallRuleSpec(DnsLockdownTcp53Ipv6Rule, Allow: false, "TCP", "53", Ipv6PublicDnsScope,
+            "VPNRouter r10 #6: block TCP/53 over public IPv6 (2000::/3) to prevent DNS leak"),
+        new FirewallRuleSpec(DnsLockdownTcp853Ipv6Rule, Allow: false, "TCP", "853", Ipv6PublicDnsScope,
+            "VPNRouter r10 #6: block TCP/853 over public IPv6 (2000::/3) to prevent DNS leak"),
+    };
+
+    internal static string NetshAddArguments(FirewallRuleSpec spec) =>
+        $"advfirewall firewall add rule name=\"{spec.Name}\" dir=out action={(spec.Allow ? "allow" : "block")} " +
+        $"protocol={spec.Protocol} remoteport={spec.RemotePorts} remoteip={spec.RemoteAddresses} enable=yes profile=any " +
+        $"description=\"{spec.Description}\"";
+
+    // Nine netsh processes took about a second each way; the in-process firewall API does it at once. Used only with the real process runner
+    // (tests that inject a runner keep the netsh path and its order).
+    private static IFirewallRuleStore? TryStaticStore(ILogger log) =>
+        OperatingSystem.IsWindows() && ReferenceEquals(Runner, DefaultRunner) ? ComFirewallRuleStore.TryCreate(log) : null;
+
     [SupportedOSPlatform("windows")]
     public static async Task EnableDnsLockdownAsync(
         ILogger? logger = null,
@@ -476,67 +518,23 @@ public class FirewallManager : IFirewallManager
         {
             await Task.Run(() =>
             {
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownAllowRule}\" " +
-                    $"dir=out action=allow " +
-                    $"protocol=UDP remoteip=127.0.0.1 remoteport=53 " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39: allow loopback DNS for local proxies\"");
+                var specs = BuildDnsLockdownSpecs(blockExclusionRange);
+                var store = TryStaticStore(log);
+                if (store is not null)
+                {
+                    try
+                    {
+                        foreach (var spec in specs) store.AddRule(spec);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Warning(ex, "[FirewallManager] COM DNS lockdown failed - using netsh");
+                        try { store.Remove(specs.Select(sp => sp.Name).ToList()); } catch { }
+                    }
+                }
 
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownUdp53Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=UDP remoteport=53 " +
-                    $"remoteip={blockExclusionRange} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39 BR-9: block UDP/53 to prevent DNS leak (TUN range excluded)\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTcp53Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=TCP remoteport=53 " +
-                    $"remoteip={blockExclusionRange} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39 BR-9: block TCP/53 to prevent DNS leak (TUN range excluded)\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTcp853Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=TCP remoteport=853 " +
-                    $"remoteip={blockExclusionRange} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39 BR-9: block TCP/853 to prevent DNS leak (TUN range excluded)\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownUdp53Ipv6Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=UDP remoteport=53 " +
-                    $"remoteip={Ipv6PublicDnsScope} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter r10 #6: block UDP/53 over public IPv6 (2000::/3) to prevent DNS leak\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTcp53Ipv6Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=TCP remoteport=53 " +
-                    $"remoteip={Ipv6PublicDnsScope} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter r10 #6: block TCP/53 over public IPv6 (2000::/3) to prevent DNS leak\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTcp853Ipv6Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=TCP remoteport=853 " +
-                    $"remoteip={Ipv6PublicDnsScope} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter r10 #6: block TCP/853 over public IPv6 (2000::/3) to prevent DNS leak\"");
+                foreach (var spec in specs) RunNetshStatic(log, NetshAddArguments(spec));
             }, timeoutCts.Token).ConfigureAwait(false);
 
             log.Information(
@@ -571,15 +569,22 @@ public class FirewallManager : IFirewallManager
         {
             await Task.Run(() =>
             {
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownAllowRule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTunAllowRule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTunAllowRule}-TCP\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp53Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp853Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Ipv6Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp53Ipv6Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp853Ipv6Rule}\"");
+                var store = TryStaticStore(log);
+                if (store is not null)
+                {
+                    try
+                    {
+                        store.Remove(DnsLockdownRuleNames);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Warning(ex, "[FirewallManager] COM DNS lockdown teardown failed - using netsh");
+                    }
+                }
+
+                foreach (var name in DnsLockdownRuleNames)
+                    RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{name}\"");
             }, timeoutCts.Token).ConfigureAwait(false);
 
             log.Information(

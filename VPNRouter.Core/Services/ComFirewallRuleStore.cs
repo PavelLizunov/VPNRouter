@@ -6,9 +6,14 @@ namespace VPNRouter.Core.Services;
 // Windows Firewall rule operations through the in-process COM API (HNetCfg.FwPolicy2) instead of one netsh.exe per rule.
 // A netsh process costs 50-200 ms (more with antivirus), and a split-tunnel connect handles about a hundred rules: that was 24 s to
 // connect and 41 s to stop on the tester's machine. COM does the same in milliseconds.
+// One outbound rule that is not tied to a program (the DNS leak lockdown): action, protocol, remote ports and remote addresses as netsh writes them.
+internal sealed record FirewallRuleSpec(string Name, bool Allow, string Protocol, string RemotePorts, string RemoteAddresses, string Description);
+
 internal interface IFirewallRuleStore
 {
     bool AddOutboundBlockRule(string name, string programPath, bool enabled, string description);
+
+    bool AddRule(FirewallRuleSpec spec);
 
     int SetEnabled(IReadOnlyCollection<string> names, bool enabled);
 
@@ -21,6 +26,7 @@ internal interface IFirewallRuleStore
 internal sealed class ComFirewallRuleStore : IFirewallRuleStore
 {
     private const int ActionBlock = 0;
+    private const int ActionAllow = 1;
     private const int DirectionOut = 2;
     private const int ProfilesAll = 0x7FFFFFFF;
 
@@ -63,6 +69,34 @@ internal sealed class ComFirewallRuleStore : IFirewallRuleStore
         rule.Enabled = enabled;
         _policy.Rules.Add(rule);
         return true;
+    }
+
+    public bool AddRule(FirewallRuleSpec spec)
+    {
+        dynamic rule = Activator.CreateInstance(_ruleType)!;
+        rule.Name = spec.Name;
+        rule.Direction = DirectionOut;
+        rule.Action = spec.Allow ? ActionAllow : ActionBlock;
+        rule.Protocol = spec.Protocol.Equals("TCP", StringComparison.OrdinalIgnoreCase) ? 6 : 17;
+        rule.RemotePorts = spec.RemotePorts;
+        rule.RemoteAddresses = spec.RemoteAddresses;
+        rule.Profiles = ProfilesAll;
+        rule.Description = spec.Description;
+        rule.Enabled = true;
+        _policy.Rules.Add(rule);
+        return true;
+    }
+
+    // What the firewall holds for a rule (for tests and diagnostics): action, protocol, ports, addresses, enabled.
+    internal string? Describe(string name)
+    {
+        foreach (dynamic rule in (System.Collections.IEnumerable)_policy.Rules)
+        {
+            string n = rule.Name;
+            if (!string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) continue;
+            return $"action={(int)rule.Action} protocol={(int)rule.Protocol} ports={(string)rule.RemotePorts} addresses={(string)rule.RemoteAddresses} enabled={(bool)rule.Enabled} direction={(int)rule.Direction}";
+        }
+        return null;
     }
 
     public int SetEnabled(IReadOnlyCollection<string> names, bool enabled)
