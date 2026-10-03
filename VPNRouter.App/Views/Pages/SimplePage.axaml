@@ -193,6 +193,17 @@
             <Setter Property="Height" Value="1"/>
             <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}"/>
         </Style>
+        <Style Selector="ListBox.pick">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.pick ListBoxItem">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
+            <Setter Property="FontSize" Value="{StaticResource FsMd}"/>
+        </Style>
         <Style Selector="TextBlock.label">
             <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -409,10 +420,10 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Config input: the first-run step (no saved config), or opened by "Change" on the connection card.
-                     It sits above the button so the flow reads top-down: paste, then connect. -->
+                <!-- Config input of the first-run step (no saved config); it sits above the button so the flow reads top-down: paste, then connect.
+                     "Change" on the connection card opens its own panel inside that card, so the emblem and the button never move. -->
                 <Border Classes="card"
-                        IsVisible="{Binding SmpConfigEditorVisible}"
+                        IsVisible="{Binding SmpFirstRunEditorVisible}"
                         Margin="0,24,0,0"
                         Padding="16,14,16,16">
                     <StackPanel Spacing="8">
@@ -523,6 +534,47 @@
                             </Button>
                         </Grid>
 
+                        <!-- Opened by "Change": pick another server of the subscription, or replace the link. -->
+                        <Border Classes="divider" IsVisible="{Binding SmpPickerVisible}"/>
+                        <StackPanel IsVisible="{Binding SmpPickerVisible}" Margin="16,12,16,14" Spacing="8">
+                            <StackPanel IsVisible="{Binding SmpHasSubscriptionServers}" Spacing="6">
+                                <TextBlock Classes="label" Text="{Binding L_SmpPickServerLabel}"/>
+                                <ListBox Classes="pick"
+                                         ItemsSource="{Binding SubscriptionServers}"
+                                         SelectedItem="{Binding SelectedSubscriptionServer}"
+                                         MaxHeight="216"
+                                         AutomationProperties.Name="{Binding L_SmpPickServerLabel}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ServerViewModel">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip.Tip="{Binding DisplayName}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding PingDisplay}"
+                                                           FontSize="{StaticResource FsXs}"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Classes="hint" Text="{Binding L_SmpPickServerHint}"/>
+                            </StackPanel>
+                            <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" Margin="0,4,0,0"/>
+                            <TextBox Text="{Binding SmpInput}"
+                                     PlaceholderText="{Binding L_SmpInputWatermark}"
+                                     AutomationProperties.Name="{Binding L_SmpInputLabel}"
+                                     FontSize="{StaticResource FsMd}"
+                                     MinHeight="40"
+                                     Padding="8,10,12,10"
+                                     VerticalContentAlignment="Center"
+                                     AcceptsReturn="False"
+                                     CornerRadius="{StaticResource RadiusLg}"/>
+                            <TextBlock Classes="hint" Text="{Binding L_SmpInputHint}"/>
+                        </StackPanel>
+
                         <Border Classes="divider" IsVisible="{Binding SmpHasConfig}"/>
 
                         <StackPanel Margin="16,14,16,16" Spacing="10" IsEnabled="{Binding !IsApplying}">
@@ -579,6 +631,24 @@
                             </Grid>
                         </Button>
                         <Border Classes="divider" Margin="42,2,12,2"/>
+                        <Button Classes="row"
+                                Command="{Binding OpenSetupWizardCommand}"
+                                ToolTip.Tip="{Binding L_TipSmpMenuSetupWizard}"
+                                AutomationProperties.Name="{Binding L_SmpSetupCheckTitle}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <icons:Pictogram Classes="lead" Id="shield-check"/>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding L_SmpSetupCheckTitle}"
+                                               FontSize="{StaticResource FsMd}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding L_SmpSetupCheckSubtitle}"
+                                               FontSize="{StaticResource FsXs}"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                </StackPanel>
+                                <icons:Pictogram Grid.Column="2" Classes="trail" Id="chevron-right"/>
+                            </Grid>
+                        </Button>
                         <Button Classes="row"
                                 Command="{Binding ToggleUiModeCommand}"
                                 ToolTip.Tip="{Binding UiModeToggleTooltip}"
