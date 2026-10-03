@@ -76,6 +76,28 @@ public static class NetworkInterfaceDetector
 
     public static (IPAddress? V4, IPAddress? V6) GetInternetInterfaceAddresses(string ownTunName, ILogger? logger)
     {
+        var pick = PickInternetNic(ownTunName, logger);
+        if (pick is null)
+        {
+            logger?.Warning("[SplitTunnel] No internet-facing NIC found for split-tunnel bind");
+            return (null, null);
+        }
+
+        logger?.Information("[SplitTunnel] Internet NIC for split-bind: {Name} ({Desc}) v4={V4} v6={V6}",
+            pick.Value.Name, pick.Value.Description, pick.Value.V4, pick.Value.V6);
+        return (pick.Value.V4, pick.Value.V6);
+    }
+
+    // The IPv4 interface index of the NIC that carries the internet (never the VPN's own TUN). A probe socket forced onto it with
+    // IP_UNICAST_IF measures the real path to a server even while the tunnel is up.
+    public static int? GetInternetInterfaceIndex(string ownTunName, ILogger? logger = null)
+    {
+        var pick = PickInternetNic(ownTunName, logger);
+        return pick is { Index: > 0 } ? pick.Value.Index : null;
+    }
+
+    private static NicSnapshot? PickInternetNic(string ownTunName, ILogger? logger)
+    {
         var snapshots = new List<NicSnapshot>();
         try
         {
@@ -86,6 +108,7 @@ public static class NetworkInterfaceDetector
 
                 IPAddress? v4 = null, v6 = null;
                 bool hasV4Gateway = false;
+                var index = 0;
                 try
                 {
                     var ipProps = iface.GetIPProperties();
@@ -107,6 +130,7 @@ public static class NetworkInterfaceDetector
                                  !a.IsIPv6LinkLocal && !IPAddress.IsLoopback(a))
                             v6 = a;
                     }
+                    try { index = ipProps.GetIPv4Properties().Index; } catch { index = 0; }
                 }
                 catch (Exception ex)
                 {
@@ -117,25 +141,16 @@ public static class NetworkInterfaceDetector
                 snapshots.Add(new NicSnapshot(
                     iface.Name, iface.Description, iface.NetworkInterfaceType,
                     IsUp: iface.OperationalStatus == OperationalStatus.Up,
-                    HasV4Gateway: hasV4Gateway, V4: v4, V6: v6));
+                    HasV4Gateway: hasV4Gateway, V4: v4, V6: v6, Index: index));
             }
         }
         catch (Exception ex)
         {
             logger?.Warning("[SplitTunnel] Failed to enumerate NICs for internet-pick: {Err}", ex.Message);
-            return (null, null);
+            return null;
         }
 
-        var pick = SplitTunnelDriverProtocol.PickInternetInterface(snapshots);
-        if (pick is null)
-        {
-            logger?.Warning("[SplitTunnel] No internet-facing NIC found for split-tunnel bind");
-            return (null, null);
-        }
-
-        logger?.Information("[SplitTunnel] Internet NIC for split-bind: {Name} ({Desc}) v4={V4} v6={V6}",
-            pick.Value.Name, pick.Value.Description, pick.Value.V4, pick.Value.V6);
-        return (pick.Value.V4, pick.Value.V6);
+        return SplitTunnelDriverProtocol.PickInternetInterface(snapshots);
     }
 
     private static bool IsWireGuardInterface(NetworkInterface iface)
