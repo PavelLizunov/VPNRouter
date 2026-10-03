@@ -22,4 +22,4 @@ Revert the PR.
 
 ## Outcome
 
-Pending.
+Merged as #519 and shipped in r27 together with #523 (IPv6-only servers are "not probed", not "dead"), #524 (Connect keeps a selected server the probe cannot judge) and, after the tag, #526 and #528. The failover candidate choice is covered by unit tests only (a real dead server was not staged on the worker). In the live logs a normal stop no longer writes the crash tail and the connect writes one "Created 4 block rules ... N listed apps have no exe" line instead of 88 warnings.
