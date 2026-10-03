@@ -1,4 +1,5 @@
 using Serilog;
+using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -93,7 +94,7 @@ public sealed class AutoFailoverEngine
         return new FailoverOutcome(
             Switched: true,
             NewActiveServer: newName,
-            UserFacingMessage: $"Переключение на сервер: {newName}");
+            UserFacingMessage: Strings.FailoverSwitching(newName));
     }
 
     private FailoverOutcome? TryRejectBeforeSwitch(string reason, out VlessServerEntry? candidate)
@@ -112,9 +113,7 @@ public sealed class AutoFailoverEngine
             return new FailoverOutcome(
                 Switched: false,
                 NewActiveServer: null,
-                UserFacingMessage:
-                    "Кастомный конфиг недоступен. Проверьте JSON в Серверы → Custom — " +
-                    "поле server, server_port, uuid или Reality public_key выглядят неверно.");
+                UserFacingMessage: Strings.FailoverCustomConfigUnusable);
         }
 
         var hasEnabledSub = _settings.App.Subscriptions?
@@ -130,12 +129,8 @@ public sealed class AutoFailoverEngine
             return new FailoverOutcome(
                 Switched: false,
                 NewActiveServer: null,
-                UserFacingMessage:
-                    $"Сервер '{_settings.Vless.ActiveServer}' не отвечает на probe " +
-                    $"({reason}). VPN запущен, но прямая проверка через сервер не " +
-                    "проходит — возможно ложное срабатывание (Reality маскируется) " +
-                    "или сервер действительно недоступен. Выберите другой сервер из " +
-                    "списка вручную или переключитесь на подписку.");
+                UserFacingMessage: Strings.FailoverManualServerSilent(
+                    _settings.Vless.ActiveServer ?? "", reason));
         }
 
         if (_tried.Count >= MaxAttempts)
@@ -146,9 +141,7 @@ public sealed class AutoFailoverEngine
             return new FailoverOutcome(
                 Switched: false,
                 NewActiveServer: null,
-                UserFacingMessage:
-                    $"Все серверы недоступны ({_tried.Count} попыток). " +
-                    "Проверьте подписку (Обновить) или сетевое подключение.");
+                UserFacingMessage: Strings.FailoverAllServersDown(_tried.Count));
         }
 
         candidate = PickNextCandidate(out var poolSource);
@@ -160,13 +153,9 @@ public sealed class AutoFailoverEngine
             return new FailoverOutcome(
                 Switched: false,
                 NewActiveServer: null,
-                UserFacingMessage:
-                    poolSource == "subscriptions"
-                        ? "Сервер не отвечает, а других в подписке нет — возможно, провайдер " +
-                          "блокирует его IP или сервер недоступен. Смените сервер или попросите " +
-                          "обновить подписку."
-                        : "Сервер не отвечает, а других в списке VLESS нет — возможно, он " +
-                          "заблокирован или недоступен. Добавьте другой сервер.");
+                UserFacingMessage: poolSource == "subscriptions"
+                    ? Strings.FailoverNoOtherInSubscription
+                    : Strings.FailoverNoOtherInList);
         }
 
         return null;
