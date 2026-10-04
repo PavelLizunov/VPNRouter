@@ -237,12 +237,18 @@ public sealed class AgentContextContractTests
         var readme = Read("README.md");
         var readmeRu = Read("README.ru.md");
 
-        foreach (var screenshot in new[] { "page-simple.png", "page-applications.png", "page-tools.png" })
+        foreach (var (language, text) in new[] { ("en", readme), ("ru", readmeRu) })
         {
-            Assert.Contains($"VPNRouter.Tests/screenshots/{screenshot}", readme);
-            Assert.Contains($"VPNRouter.Tests/screenshots/{screenshot}", readmeRu);
-            Assert.True(File.Exists(Path.Combine(FindRoot(), "VPNRouter.Tests", "screenshots", screenshot)),
-                $"README screenshot is missing: {screenshot}");
+            foreach (var image in new[]
+            {
+                $"home-connected-dark-{language}.png", $"home-ready-light-{language}.png",
+                $"apps-dark-{language}.png", $"tour-{language}.webp"
+            })
+            {
+                Assert.Contains($"docs/images/{image}", text);
+                Assert.True(File.Exists(Path.Combine(FindRoot(), "docs", "images", image)),
+                    $"README image is missing: {image}");
+            }
         }
 
         Assert.DoesNotContain("Screenshots coming soon", readme);

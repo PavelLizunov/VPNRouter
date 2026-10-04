@@ -149,14 +149,15 @@
       <ListBox SelectedIndex="{Binding SelectedSettingsIndex}"
                Background="Transparent"
                BorderThickness="0"
+               Padding="6"
                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                ScrollViewer.VerticalScrollBarVisibility="Auto">
-        <ListBoxItem Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblSettingsRules}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblSettingsUpdates}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-        <ListBoxItem Content="{Binding LblAutostartSection}"   Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsRules}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblSettingsUpdates}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Classes="sub-tab" Content="{Binding LblAutostartSection}"   Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
       </ListBox>
     </Border>
 
@@ -307,7 +308,7 @@
                          VerticalAlignment="Top" Margin="0,1,0,0"/>
               <StackPanel Grid.Column="1" Spacing="4">
                 <TextBlock Text="{Binding L_RulesHelpHeader}"
-                           FontSize="10" FontWeight="SemiBold"
+                           FontSize="10" FontWeight="SemiBold" TextWrapping="Wrap"
                            Foreground="{DynamicResource InfoFgBrush}"/>
                 <TextBlock FontSize="10"
                            TextWrapping="Wrap" LineHeight="15"
@@ -378,7 +379,7 @@
                         VerticalAlignment="Center"/>
               <StackPanel Grid.Column="1" Spacing="2">
                 <TextBlock Text="{Binding L_RulesCustomAboveToggles}"
-                           FontSize="11" FontWeight="SemiBold"/>
+                           FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding L_RulesCustomAboveTogglesHint}"
                            FontSize="10"
                            Foreground="{DynamicResource TextMutedBrush}"
@@ -414,7 +415,7 @@
                   <ComboBox ItemsSource="{Binding AvailableRuleActions}"
                             SelectedItem="{Binding NewRuleAction}"
                             HorizontalAlignment="Stretch"
-                            FontSize="11" Padding="6,3" MinHeight="0"
+                            FontSize="11" Padding="8,5"
                             ToolTip.Tip="{Binding NewRuleActionHint}"/>
                   <TextBlock Text="{Binding NewRuleActionHint}"
                              FontSize="9"
@@ -429,7 +430,7 @@
                   <ComboBox ItemsSource="{Binding AvailableRuleTypes}"
                             SelectedItem="{Binding NewRuleType}"
                             HorizontalAlignment="Stretch"
-                            FontSize="11" Padding="6,3" MinHeight="0"
+                            FontSize="11" Padding="8,5"
                             ToolTip.Tip="{Binding NewRuleTypeHint}"/>
                   <TextBlock Text="{Binding NewRuleTypeHint}"
                              FontSize="9"
@@ -443,7 +444,7 @@
                              Foreground="{DynamicResource TextMutedBrush}"/>
                   <TextBox Text="{Binding NewRuleValue}"
                            PlaceholderText="{Binding NewRuleValuePlaceholder}"
-                           FontSize="11" Padding="6,3" MinHeight="0"
+                           FontSize="11" Padding="8,5"
                            FontFamily="Consolas, 'SF Mono', monospace"
                            BorderBrush="{Binding NewRuleValueBorderColor,
                                          Converter={x:Static conv:BoolToBrushConverter.Instance},
@@ -467,7 +468,7 @@
                   </TextBlock>
                   <TextBox Text="{Binding NewRuleComment}"
                            PlaceholderText="{Binding L_CustomRulesCommentLabel}"
-                           FontSize="11" Padding="6,3" MinHeight="0"/>
+                           FontSize="11" Padding="8,5"/>
                   <TextBlock Text=" " FontSize="9" MinHeight="11"/>
                 </StackPanel>
                 <Button Classes="solid" Grid.Column="4"
@@ -502,23 +503,24 @@
               <TextBlock Text="{Binding L_CustomRulesAddTitle}"
                          FontSize="9" FontWeight="SemiBold"
                          Foreground="{DynamicResource TextMutedBrush}"/>
-              <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-                <ComboBox Grid.Column="0"
+              <!-- Stacked: side by side each box was ~85 px wide at 360 px and clipped "domain_suffix". -->
+              <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
+                <ComboBox Grid.Row="0"
                           ItemsSource="{Binding AvailableRuleActions}"
                           SelectedItem="{Binding NewRuleAction}"
                           HorizontalAlignment="Stretch"
-                          FontSize="11" Padding="6,3" MinHeight="0"
+                          FontSize="11" Padding="8,5"
                           ToolTip.Tip="{Binding NewRuleActionHint}"/>
-                <ComboBox Grid.Column="1"
+                <ComboBox Grid.Row="1"
                           ItemsSource="{Binding AvailableRuleTypes}"
                           SelectedItem="{Binding NewRuleType}"
                           HorizontalAlignment="Stretch"
-                          FontSize="11" Padding="6,3" MinHeight="0"
+                          FontSize="11" Padding="8,5"
                           ToolTip.Tip="{Binding NewRuleTypeHint}"/>
               </Grid>
               <TextBox Text="{Binding NewRuleValue}"
                        PlaceholderText="{Binding NewRuleValuePlaceholder}"
-                       FontSize="11" Padding="6,3" MinHeight="0"
+                       FontSize="11" Padding="8,5"
                        FontFamily="Consolas, 'SF Mono', monospace"
                        BorderBrush="{Binding NewRuleValueBorderColor,
                                      Converter={x:Static conv:BoolToBrushConverter.Instance},
@@ -532,7 +534,7 @@
                                       ConverterParameter=SuccessFgBrush|DangerFgBrush}"/>
               <TextBox Text="{Binding NewRuleComment}"
                        PlaceholderText="{Binding L_CustomRulesCommentLabel}"
-                       FontSize="11" Padding="6,3" MinHeight="0"/>
+                       FontSize="11" Padding="8,5"/>
               <Button Classes="solid" icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_CustomRulesAddBtn}"
                       Command="{Binding AddCustomRuleFromFormCommand}"
                       FontSize="11" FontWeight="SemiBold"
@@ -573,7 +575,7 @@
             <TextBox Grid.Column="0"
                      Text="{Binding CustomRulesSearchText}"
                      PlaceholderText="{Binding L_CustomRulesSearchPlaceholder}"
-                     FontSize="11" Padding="6,3" MinHeight="0"/>
+                     FontSize="11" Padding="8,5"/>
             <Border Grid.Column="1"
                     Padding="2"
                     CornerRadius="{StaticResource RadiusSm}"
@@ -755,7 +757,7 @@
           <StackPanel IsVisible="{Binding IsRulesNarrow}" Spacing="6">
             <TextBox Text="{Binding CustomRulesSearchText}"
                      PlaceholderText="{Binding L_CustomRulesSearchPlaceholder}"
-                     FontSize="11" Padding="6,3" MinHeight="0"/>
+                     FontSize="11" Padding="8,5"/>
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
               <Border Grid.Column="0"
                       Padding="2"
@@ -967,10 +969,11 @@
                   <Grid ColumnDefinitions="74,110,*,Auto,Auto,Auto"
                         ColumnSpacing="12" VerticalAlignment="Center">
                     <Border Grid.Column="0"
-                            CornerRadius="{StaticResource RadiusXs}"
-                            Padding="10,5"
-                            Width="74"
+                            CornerRadius="10"
+                            Padding="10,2"
+                            MinWidth="58"
                             BorderThickness="1"
+                            VerticalAlignment="Center"
                             HorizontalAlignment="Left"
                             Background="{Binding Action,
                                          Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
@@ -1069,10 +1072,11 @@
                         RowDefinitions="Auto,Auto,Auto"
                         ColumnSpacing="10" RowSpacing="3">
                     <Border Grid.Row="0" Grid.Column="0"
-                            CornerRadius="{StaticResource RadiusXs}"
-                            Padding="10,5"
-                            Width="74"
+                            CornerRadius="10"
+                            Padding="10,2"
+                            MinWidth="58"
                             BorderThickness="1"
+                            VerticalAlignment="Center"
                             HorizontalAlignment="Left"
                             Background="{Binding Action,
                                          Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
@@ -1654,7 +1658,7 @@
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
                   BorderThickness="1">
             <StackPanel Spacing="3">
-              <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"
+              <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold"
                          TextWrapping="Wrap"/>
               <CheckBox IsChecked="{Binding ReceivePrereleases}"
                         AutomationProperties.Name="{Binding ReceivePrereleasesLabel}"
@@ -1668,20 +1672,19 @@
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
                   BorderThickness="1">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-              <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="{Binding L_CurrentVersion}"
-                           FontSize="10" Opacity="0.7"/>
+            <StackPanel Spacing="6">
+              <StackPanel Spacing="2">
+                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding L_CurrentVersion}"
+                           FontSize="10" TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding AppVersionShortText}"
-                           FontSize="12" FontWeight="SemiBold"/>
+                           FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
               </StackPanel>
-              <Button Grid.Column="1"
-                      Content="{Binding UpdateVm.CheckLinkText}"
+              <Button Content="{Binding UpdateVm.CheckLinkText}"
                       Command="{Binding UpdateVm.CheckManuallyCommand}"
                       FontSize="10" Padding="10,5" MinHeight="0"
                       CornerRadius="{StaticResource RadiusSm}"
-                      VerticalAlignment="Center"/>
-            </Grid>
+                      HorizontalAlignment="Left"/>
+            </StackPanel>
           </Border>
 
           <Button Command="{Binding UpdateVm.ToggleVersionHistoryCommand}"
@@ -1706,7 +1709,7 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:RollbackReleaseItemViewModel">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,2">
-                      <TextBlock Grid.Column="0" Text="{Binding Version, StringFormat=v{0}}"
+                      <TextBlock Grid.Column="0" Text="{Binding DisplayVersion}"
                                  VerticalAlignment="Center" FontWeight="SemiBold"/>
                       <Button Grid.Column="1"
                               Command="{Binding SelectCommand}"
@@ -1766,9 +1769,9 @@
                         Background="{DynamicResource SurfaceRaisedBrush}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
                         AutomationProperties.Name="{Binding L_DiagExportButton}"/>
-                <TextBlock Text="{Binding L_DiagExporting}"
+                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding L_DiagExporting}"
                            IsVisible="{Binding IsExportingDiagnostics}"
-                           VerticalAlignment="Center" Opacity="0.7" FontSize="11"/>
+                           VerticalAlignment="Center" FontSize="11"/>
               </StackPanel>
             </StackPanel>
           </Border>

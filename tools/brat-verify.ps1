@@ -1267,7 +1267,10 @@ $udp.Dispose()
                         }
                         if (-not $include -or -not $at) { continue }
 
-                        $isErrorLine = $line -match '\[ERR\]|Exception|FATAL'
+                        # An INF/DBG line may merely mention an exception type (for example a cancelled probe);
+                        # only an error-level tag, FATAL or an exception outside those levels is an error signal.
+                        $isErrorLine = $line -match '\[ERR\]|\[FTL\]|FATAL' -or
+                            ($line -match 'Exception' -and $line -notmatch '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2} \[(INF|DBG|VRB)\]')
                         if ($isErrorLine) {
                             $errorCount++
                             if ($line -match 'FATAL') { $fatalCount++ }
@@ -1368,7 +1371,9 @@ $udp.Dispose()
                             $include = $parsedOk -and $parsed -ge $since
                             if ($include) { $recentEntryCount++ }
                         }
-                        if ($include -and $line -match '\[ERR\]|Exception|FATAL') { $errorCount++ }
+                        $isErrorLine = $line -match '\[ERR\]|\[FTL\]|FATAL' -or
+                            ($line -match 'Exception' -and $line -notmatch '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2} \[(INF|DBG|VRB)\]')
+                        if ($include -and $isErrorLine) { $errorCount++ }
                         if ($include -and $logPattern -and $line -match $logPattern) { $contextCount++ }
                     }
                     if ($lines.Count -ge $maxLines -and ($null -eq $oldestParsed -or $oldestParsed -ge $since)) {

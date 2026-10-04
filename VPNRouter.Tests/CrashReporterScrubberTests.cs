@@ -199,6 +199,10 @@ public sealed class CrashReporterScrubberTests
     [InlineData("wss://example.com/api?sid=sid_998877", "sid=[REDACTED]")]
     [InlineData("ws://example.com/api?short_id=short123", "short_id=[REDACTED]")]
     [InlineData("wss://example.com/api?key=my_key_value", "key=[REDACTED]")]
+    [InlineData("wss://example.com/api?usersecret=sec112233", "usersecret=[REDACTED]")]
+    [InlineData("ws://example.com/api?userpassword=pass445566", "userpassword=[REDACTED]")]
+    [InlineData("wss://example.com/api?authsecret=sec778899", "authsecret=[REDACTED]")]
+    [InlineData("ws://example.com/api?authtoken=tok001122", "authtoken=[REDACTED]")]
     public void ScrubSecrets_RedactsSensitiveQueryParams(string input, string expectedSubstring)
     {
         var s = CrashReporter.ScrubSecrets(input);

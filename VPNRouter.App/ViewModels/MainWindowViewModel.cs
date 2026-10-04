@@ -512,6 +512,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
         WireServersOrphanTracking();
+        WireSimpleHomeNotifications();
 
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
         ServiceVm = new ServiceViewModel(_logger);
@@ -572,6 +573,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         var serverIp = _engine.ActiveServerAddress;
         var configuredMode = _settings.App.ConfigMode ?? "generated";
+        if (IsConnected && !configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
+        {
+            var viaSubscription = ActiveServerMatcher.FindName(
+                serverIp, SubscriptionServers.Select(s => (s.DisplayName, s.Server)));
+            if (viaSubscription is not null) return (viaSubscription, serverIp);
+        }
         if (configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
         {
             return AutoSelectStatus.ResolveSubscribeLabel(

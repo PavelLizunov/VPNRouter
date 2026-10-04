@@ -40,7 +40,8 @@
 
     <Grid RowDefinitions="*,Auto">
 
-        <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,*" Margin="12,8,14,8">
+        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" Margin="16,8,16,16" MaxWidth="560">
             <StackPanel Grid.Row="0" Spacing="8">
 
                     <StackPanel IsVisible="{Binding IsZapretDownloading}" Spacing="6">
@@ -51,8 +52,7 @@
                         <TextBlock Text="{Binding ZapretStatus}"
                                    TextWrapping="Wrap"
                                    FontSize="10"
-                                   Opacity="0.7"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
                     </StackPanel>
 
                     <Border IsVisible="{Binding HasZapretAvBlockToast}"
@@ -89,100 +89,69 @@
                         </Grid>
                     </Border>
 
-                    <Border CornerRadius="{StaticResource RadiusLg}"
-                            Background="{DynamicResource SurfaceBaseBrush}"
-                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                            BorderThickness="1"
-                            Padding="16,10,16,12"
-                            ClipToBounds="True">
-                        <Grid>
-                            <Ellipse Width="140" Height="140"
-                                     HorizontalAlignment="Right"
-                                     VerticalAlignment="Top"
-                                     Opacity="0.5"
-                                     IsHitTestVisible="False">
-                                <Ellipse.Fill>
-                                    <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="0.5" RadiusY="0.5">
-                                        <GradientStop Offset="0.0"  Color="{DynamicResource AccentBgSubtle}"/>
-                                        <GradientStop Offset="0.65" Color="Transparent"/>
-                                    </RadialGradientBrush>
-                                </Ellipse.Fill>
-                            </Ellipse>
+                    <!-- Hero in the look of the home screen: the status emblem, the state word and sub-line, one pill button, then the strategy card. -->
+                    <StackPanel HorizontalAlignment="Stretch" MaxWidth="400" Margin="0,12,0,4">
+                        <icons:StatusEmblem HorizontalAlignment="Center" IconId="shield-bolt"
+                                            IsOn="{Binding ZapretEnabled}"
+                                            IsError="{Binding HasZapretAvBlockToast}">
+                            <icons:StatusEmblem.IsBusy>
+                                <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                                    <Binding Path="IsZapretProbing"/>
+                                    <Binding Path="IsZapretDownloading"/>
+                                </MultiBinding>
+                            </icons:StatusEmblem.IsBusy>
+                        </icons:StatusEmblem>
+                        <TextBlock Classes="hk-state" Classes.on="{Binding ZapretEnabled}" Margin="0,22,0,0"
+                                   Text="{Binding LblZapretHeroTitle}"/>
+                        <TextBlock Classes="hk-subline" Margin="0,6,0,0" Text="{Binding LblZapretHeroLede}"/>
 
-                            <StackPanel Spacing="10" HorizontalAlignment="Stretch" MaxWidth="420">
+                        <Button Classes="hk-cta" Classes.stop="{Binding ZapretEnabled}" Margin="0,20,0,0"
+                                Command="{Binding ZapretOneClickCommand}"
+                                IsEnabled="{Binding IsZapretMagicButtonEnabled}"
+                                AutomationProperties.Name="{Binding LblZapretMagicButton}">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <icons:Pictogram Id="play" IsVisible="{Binding !ZapretEnabled}"/>
+                                <icons:Pictogram Id="stop" IsVisible="{Binding ZapretEnabled}"/>
+                                <TextBlock Text="{Binding LblZapretMagicButton}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
 
-                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
-                                    <Border Grid.Column="0" Grid.RowSpan="2"
-                                            Width="36" Height="36"
-                                            CornerRadius="10"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource AccentBorderBrush}"
-                                            BorderThickness="1"
-                                            BoxShadow="0 2 6 0 #14000000"
-                                            VerticalAlignment="Top"
-                                            Margin="0,2,12,0">
-                                        <icons:Pictogram Id="shield-bolt" Width="20" Height="20"
-                                                         Foreground="{DynamicResource AccentFgBrush}"
-                                                         HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center"/>
-                                    </Border>
+                        <StackPanel IsVisible="{Binding IsZapretProbing}"
+                                    Spacing="6"
+                                    HorizontalAlignment="Center">
+                            <ProgressBar IsIndeterminate="True"
+                                         Height="3"
+                                         Width="240"
+                                         CornerRadius="{StaticResource RadiusXs}"
+                                         Foreground="{DynamicResource AccentSolidBrush}"/>
+                            <TextBlock Text="{Binding LblZapretProbeElapsed}"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center"/>
+                            <Button Content="{Binding L_ZapretCancelProbeButton}"
+                                    Command="{Binding CancelZapretProbeCommand}"
+                                    FontSize="10" Padding="10,3"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    HorizontalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource DangerBorderBrush}"
+                                    BorderThickness="1"
+                                    Foreground="{DynamicResource DangerSolidBrush}"/>
+                        </StackPanel>
 
-                                    <TextBlock Grid.Column="1" Grid.Row="0"
-                                               Text="{Binding LblZapretHeroTitle}"
-                                               FontSize="15"
-                                               FontWeight="Bold"
-                                               Foreground="{DynamicResource TextPrimaryBrush}"
-                                               TextWrapping="Wrap"
-                                               VerticalAlignment="Top"/>
-
-                                    <TextBlock Grid.Column="1" Grid.Row="1"
-                                               Text="{Binding LblZapretHeroLede}"
-                                               FontSize="11"
-                                               LineHeight="15"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               TextWrapping="Wrap"
-                                               Margin="0,3,0,0"/>
-                                </Grid>
-
-                                <Button Classes="solid" Command="{Binding ZapretOneClickCommand}"
-                                        IsEnabled="{Binding IsZapretMagicButtonEnabled}"
-                                        Background="{DynamicResource AccentSolidBrush}"
-                                        Foreground="{DynamicResource AccentOnSolidBrush}"
-                                        BorderThickness="0"
-                                        CornerRadius="{StaticResource RadiusMd}"
-                                        Padding="22,12"
-                                        MinWidth="260"
-                                        HorizontalAlignment="Center"
-                                        HorizontalContentAlignment="Center"
-                                        FontWeight="Bold"
-                                        FontSize="13"
-                                        AutomationProperties.Name="{Binding LblZapretMagicButton}">
-                                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                        <icons:Pictogram Id="play" Width="14" Height="14"
-                                                         Foreground="{DynamicResource AccentOnSolidBrush}"
-                                                         VerticalAlignment="Center"
-                                                         IsVisible="{Binding !ZapretEnabled}"/>
-                                        <icons:Pictogram Id="stop" Width="14" Height="14"
-                                                         Foreground="{DynamicResource AccentOnSolidBrush}"
-                                                         VerticalAlignment="Center"
-                                                         IsVisible="{Binding ZapretEnabled}"/>
-                                        <TextBlock Text="{Binding LblZapretMagicButton}"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Button>
-
-                                <Border IsVisible="{Binding HasZapretStrategiesForQuickStart}"
-                                        Padding="0"
-                                        Margin="0,4,0,0"
-                                        MaxWidth="380"
-                                        HorizontalAlignment="Stretch">
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                        <ComboBox Grid.Column="0"
+                        <Border Classes="hk-card" Margin="0,16,0,0" Padding="14,12,14,12"
+                                IsVisible="{Binding HasZapretStrategiesForQuickStart}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Classes="hk-label" Text="{Binding L_ZapretSecStrategy}"/>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <ComboBox Grid.Column="0"
                                                   ItemsSource="{Binding ZapretStrategiesDisplay}"
                                                   SelectedIndex="{Binding ZapretStrategyIndex}"
-                                                  FontSize="10"
-                                                  Padding="6,2"
-                                                  MinHeight="0"
+                                                  FontSize="12"
+                                                  MinHeight="36"
+                                                  Padding="10,4"
+                                                  CornerRadius="{StaticResource RadiusLg}"
                                                   HorizontalAlignment="Stretch"
                                                   icons:PictogramText.Tip="{Binding LblStrategyBadgeLegend}">
                                             <ComboBox.ItemTemplate>
@@ -203,30 +172,22 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
-                                        <Button Grid.Column="1"
-                                                Command="{Binding StartZapretWithSelectedStrategyCommand}"
-                                                IsEnabled="{Binding !IsZapretProbing}"
-                                                ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"
-                                                FontSize="10" Padding="10,2"
-                                                MinHeight="0"
-                                                CornerRadius="{StaticResource RadiusSm}"
-                                                Background="{DynamicResource AccentBgSubtleBrush}"
-                                                Foreground="{DynamicResource AccentFgBrush}"
-                                                BorderBrush="{DynamicResource AccentBorderBrush}"
-                                                BorderThickness="1">
-                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                                <TextBlock icons:PictogramText.Icons="play" icons:PictogramText.Text="▶" FontSize="9" VerticalAlignment="Center"/>
-                                                <TextBlock Text="{Binding LblZapretRunSelected}" FontSize="10" VerticalAlignment="Center"/>
-                                            </StackPanel>
-                                        </Button>
-                                    </Grid>
-                                </Border>
-
+                                    <Button Grid.Column="1" Classes="hk-soft"
+                                        Command="{Binding StartZapretWithSelectedStrategyCommand}"
+                                        IsEnabled="{Binding !IsZapretProbing}"
+                                        ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"
+                                        AutomationProperties.Name="{Binding LblZapretRunSelected}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <icons:Pictogram Id="play" Width="12" Height="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding LblZapretRunSelected}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                </Grid>
                                 <WrapPanel IsVisible="{Binding HasZapretStrategiesForQuickStart}"
-                                           HorizontalAlignment="Center"
+                                           HorizontalAlignment="Left"
                                            ItemSpacing="10"
                                            Margin="0,2,0,0"
-                                           MaxWidth="380">
+                                           >
                                     <StackPanel Orientation="Horizontal" Spacing="3">
                                         <TextBlock icons:PictogramText.Icons="check" icons:PictogramText.Text="✓" FontSize="10" Classes="zglyph-success"/>
                                         <TextBlock Text="{Binding LblLegendWorking}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
@@ -248,54 +209,9 @@
                                         <TextBlock Text="{Binding LblLegendStale}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                 </WrapPanel>
-
-                                <StackPanel IsVisible="{Binding IsZapretProbing}"
-                                            Spacing="6"
-                                            HorizontalAlignment="Center">
-                                    <ProgressBar IsIndeterminate="True"
-                                                 Height="3"
-                                                 Width="240"
-                                                 CornerRadius="{StaticResource RadiusXs}"
-                                                 Foreground="{DynamicResource AccentSolidBrush}"/>
-                                    <TextBlock Text="{Binding LblZapretProbeElapsed}"
-                                               FontSize="10"
-                                               Opacity="0.7"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               TextAlignment="Center"
-                                               HorizontalAlignment="Center"/>
-                                    <Button Content="{Binding L_ZapretCancelProbeButton}"
-                                            Command="{Binding CancelZapretProbeCommand}"
-                                            FontSize="10" Padding="10,3"
-                                            CornerRadius="{StaticResource RadiusSm}"
-                                            HorizontalAlignment="Center"
-                                            Background="Transparent"
-                                            BorderBrush="{DynamicResource DangerBorderBrush}"
-                                            BorderThickness="1"
-                                            Foreground="{DynamicResource DangerSolidBrush}"/>
-                                </StackPanel>
-
-                                <Border IsVisible="{Binding ZapretEnabled}"
-                                        CornerRadius="{StaticResource RadiusPill}"
-                                        Background="{DynamicResource SuccessBgBrush}"
-                                        BorderBrush="{DynamicResource SuccessBorderBrush}"
-                                        BorderThickness="1"
-                                        Padding="10,5"
-                                        HorizontalAlignment="Center">
-                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                        <icons:Pictogram Id="status" Width="12" Height="12"
-                                                 Foreground="{DynamicResource SuccessSolidBrush}"
-                                                 VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding LblZapretAirPill}"
-                                                   FontSize="10"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource SuccessFgBrush}"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-
                             </StackPanel>
-                        </Grid>
-                    </Border>
+                        </Border>
+                    </StackPanel>
 
                     <Grid IsVisible="{Binding IsZapretSummaryVisible}"
                           ColumnDefinitions="*,Auto"
@@ -303,11 +219,10 @@
                         <TextBlock Grid.Column="0"
                                    Text="{Binding LblZapretSummarySubtext}"
                                    FontSize="10"
-                                   Opacity="0.7"
                                    TextWrapping="NoWrap"
                                    TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
                         <Button Grid.Column="1"
                                 Content="{Binding L_ZapretReverifyButton}"
                                 Command="{Binding ForceFreshProbeCommand}"
@@ -324,61 +239,38 @@
 
             </StackPanel>
 
-            <UniformGrid Grid.Row="1" Rows="1" Columns="4" Margin="0,8,0,0">
-                <ToggleButton IsChecked="{Binding IsZapretTab0}"
-                              Command="{Binding SetZapretTabCommand}"
-                              CommandParameter="0"
-                              Classes="TabStripPill"
-                              Content="{Binding L_ZapretSecStrategy}"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Center"/>
-                <ToggleButton IsChecked="{Binding IsZapretTab1}"
-                              Command="{Binding SetZapretTabCommand}"
-                              CommandParameter="1"
-                              Classes="TabStripPill"
-                              Content="{Binding L_ZapretSecHosts}"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Center"/>
-                <ToggleButton IsChecked="{Binding IsZapretTab2}"
-                              Command="{Binding SetZapretTabCommand}"
-                              CommandParameter="2"
-                              Classes="TabStripPill"
-                              Content="{Binding L_ZapretSecFilters}"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Center"/>
-                <ToggleButton IsChecked="{Binding IsZapretTab3}"
-                              Command="{Binding SetZapretTabCommand}"
-                              CommandParameter="3"
-                              Classes="TabStripPill"
-                              Content="{Binding L_ZapretSecAdvanced}"
-                              HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Center"/>
+            <Border Grid.Row="1" Classes="hk-seg-track" Margin="0,8,0,0">
+            <UniformGrid Rows="1" Columns="4">
+                <RadioButton Classes="hk-seg" GroupName="ZapretTabs" IsChecked="{Binding IsZapretTab0, Mode=OneWay}"
+                                 Command="{Binding SetZapretTabCommand}" CommandParameter="0"
+                                 Content="{Binding L_ZapretSecStrategy}"/>
+                <RadioButton Classes="hk-seg" GroupName="ZapretTabs" IsChecked="{Binding IsZapretTab1, Mode=OneWay}"
+                                 Command="{Binding SetZapretTabCommand}" CommandParameter="1"
+                                 Content="{Binding L_ZapretSecHosts}"/>
+                <RadioButton Classes="hk-seg" GroupName="ZapretTabs" IsChecked="{Binding IsZapretTab2, Mode=OneWay}"
+                                 Command="{Binding SetZapretTabCommand}" CommandParameter="2"
+                                 Content="{Binding L_ZapretSecFilters}"/>
+                <RadioButton Classes="hk-seg" GroupName="ZapretTabs" IsChecked="{Binding IsZapretTab3, Mode=OneWay}"
+                                 Command="{Binding SetZapretTabCommand}" CommandParameter="3"
+                                 Content="{Binding L_ZapretSecAdvanced}"/>
             </UniformGrid>
+            </Border>
 
-            <Border Grid.Row="2"
-                    Height="1"
-                    Background="{DynamicResource BorderSubtleBrush}"
-                    Margin="0,0,0,6"/>
 
-            <Border Grid.Row="3"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusSm}"
-                    Padding="10,6">
+            <Border Grid.Row="3" Classes="hk-card" Margin="0,12,0,0" Padding="2">
                 <Panel>
 
                         <ScrollViewer IsVisible="{Binding IsZapretTab0}"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="{Binding L_ZapretSecStrategyDesc}"
-                                           TextWrapping="Wrap" FontSize="10"
-                                           Opacity="0.7"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <StackPanel Spacing="10" Margin="10,8,10,10">
+                                <TextBlock Classes="hk-hint" Text="{Binding L_ZapretSecStrategyDesc}"/>
                                 <ComboBox ItemsSource="{Binding ZapretStrategiesDisplay}"
                                           SelectedIndex="{Binding ZapretStrategyIndex}"
+                                          IsVisible="{Binding !HasZapretStrategiesForQuickStart}"
                                           HorizontalAlignment="Stretch"
-                                          Padding="8,4" FontSize="11">
+                                          MinHeight="36" CornerRadius="{StaticResource RadiusLg}"
+                                          Padding="10,4" FontSize="12">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate DataType="vm:ZapretStrategyDisplayItem">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -397,28 +289,23 @@
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{Binding ZapretVersionText}"
-                                               FontSize="10" Opacity="0.5"
-                                               VerticalAlignment="Center"/>
-                                    <Button Content="{Binding LblUpdateZapret}"
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <TextBlock Classes="hk-hint" Text="{Binding ZapretVersionText}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Classes="hk-soft"
+                                            Content="{Binding LblUpdateZapret}"
                                             Command="{Binding UpdateZapretCommand}"
-                                            FontSize="10" Padding="8,4"
-                                            CornerRadius="{StaticResource RadiusSm}"
                                             IsEnabled="{Binding !IsZapretDownloading}"/>
-                                </StackPanel>
+                                </Grid>
                                 <TextBox Text="{Binding ZapretCustomArgs}"
                                          IsVisible="{Binding IsCustomStrategy}"
                                          PlaceholderText="{Binding L_WmZapretCustomArgs}"
-                                         FontSize="10" Padding="6,4"
+                                         FontSize="10" Padding="8,5"
                                          AcceptsReturn="True" MinHeight="50" MaxHeight="80"/>
-                                <Button Content="{Binding L_UpdateIpSet}"
+                                <Button Classes="hk-soft" Content="{Binding L_UpdateIpSet}"
                                         Command="{Binding UpdateIpSetListCommand}"
                                         IsEnabled="{Binding !IsZapretActionRunning}"
                                         HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Center"
-                                        FontSize="10" Padding="8,4"
-                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                        HorizontalContentAlignment="Center"/>
                                 <CheckBox IsChecked="{Binding ZapretAutoUpdateCheck}"
                                           AutomationProperties.Name="{Binding L_AutoUpdateCheckLabel}"
                                           ToolTip.Tip="{Binding L_TipZapretAutoUpdate}"
@@ -435,8 +322,7 @@
                             <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding L_ZapretSecHostsDesc}"
                                            TextWrapping="Wrap" FontSize="10"
-                                           Opacity="0.7"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
                                 <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                                         Background="{DynamicResource SurfaceSunkenBrush}">
                                     <StackPanel Spacing="4">
@@ -449,8 +335,8 @@
                                                 Foreground="{Binding DiscordHostsInstalled,
                                                              Converter={x:Static conv:BoolToBrushConverter.Instance},
                                                              ConverterParameter=DangerSolidBrush|TextPrimaryBrush}"/>
-                                        <TextBlock Text="{Binding LblDiscordHostsDesc}"
-                                                   TextWrapping="Wrap" FontSize="9" Opacity="0.6"/>
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding LblDiscordHostsDesc}"
+                                                   TextWrapping="Wrap" FontSize="9"/>
                                     </StackPanel>
                                 </Border>
                                 <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
@@ -465,7 +351,7 @@
                                                 Foreground="{Binding FlowsealHostsInstalled,
                                                              Converter={x:Static conv:BoolToBrushConverter.Instance},
                                                              ConverterParameter=DangerSolidBrush|TextPrimaryBrush}"/>
-                                        <TextBlock TextWrapping="Wrap" FontSize="9" Opacity="0.6"
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" FontSize="9"
                                                    Text="{Binding L_ZapretHostsHint}"/>
                                     </StackPanel>
                                 </Border>
@@ -478,14 +364,13 @@
                             <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding L_ZapretSecFiltersDesc}"
                                            TextWrapping="Wrap" FontSize="10"
-                                           Opacity="0.7"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="{Binding L_GameFilter}"
                                                FontWeight="SemiBold" FontSize="10"/>
                                     <ComboBox SelectedIndex="{Binding GameFilterModeIndex}"
                                               HorizontalAlignment="Stretch"
-                                              Padding="6,3" FontSize="10">
+                                              Padding="8,5" FontSize="11">
                                         <ComboBoxItem Content="{Binding L_GameFilterOff}"/>
                                         <ComboBoxItem Content="{Binding L_GameFilterAll}"/>
                                         <ComboBoxItem Content="{Binding L_GameFilterTcp}"/>
@@ -497,7 +382,7 @@
                                                FontWeight="SemiBold" FontSize="10"/>
                                     <ComboBox SelectedIndex="{Binding IpSetModeIndex}"
                                               HorizontalAlignment="Stretch"
-                                              Padding="6,3" FontSize="10">
+                                              Padding="8,5" FontSize="11">
                                         <ComboBoxItem Content="{Binding L_IpSetAny}"/>
                                         <ComboBoxItem Content="{Binding L_IpSetLoaded}"/>
                                         <ComboBoxItem Content="{Binding L_IpSetNone}"/>
@@ -514,7 +399,7 @@
                                         Command="{Binding RunZapretDiagnosticsCommand}"
                                         IsEnabled="{Binding !IsZapretActionRunning}"
                                         HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
+                                        HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <Border IsVisible="{Binding ZapretActionOutput.Count}"
@@ -524,8 +409,8 @@
                                         BorderThickness="1"
                                         CornerRadius="{StaticResource RadiusSm}">
                                     <StackPanel Spacing="2">
-                                        <TextBlock Text="{Binding ZapretActionTitle}"
-                                                   FontWeight="SemiBold" FontSize="10" Opacity="0.7"/>
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" Text="{Binding ZapretActionTitle}"
+                                                   FontWeight="SemiBold" FontSize="10"/>
                                         <ScrollViewer MaxHeight="160"
                                                       HorizontalScrollBarVisibility="Disabled"
                                                       VerticalScrollBarVisibility="Auto">
@@ -546,35 +431,35 @@
                                         Command="{Binding ClearDiscordCacheCommand}"
                                         IsEnabled="{Binding !IsZapretActionRunning}"
                                         HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
+                                        HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <Button Content="{Binding L_RunTestsLabel}"
                                         Command="{Binding RunZapretTestsCommand}"
                                         HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
+                                        HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <Button Content="{Binding L_RemoveServiceLabel}"
                                         Command="{Binding RemoveZapretServiceCommand}"
                                         IsEnabled="{Binding !IsZapretActionRunning}"
                                         HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
+                                        HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"
-                                        Foreground="{DynamicResource DangerSolidBrush}"/>
+                                        Classes="danger-soft"/>
                                 <Button Content="{Binding LblOpenProbeLog}"
                                         Command="{Binding OpenProbeLogCommand}"
                                         IsVisible="{Binding HasLastProbeLog}"
                                         HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
+                                        HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <Button Content="{Binding L_OpenServiceMenu}"
                                         Command="{Binding OpenZapretServiceMenuCommand}"
                                         ToolTip.Tip="{Binding L_TipOpenServiceMenu}"
                                         HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
+                                        HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
@@ -585,8 +470,7 @@
                                     <Button Content="{Binding L_OpenGitHub}"
                                             Command="{Binding OpenZapretGitHubCommand}"
                                             FontSize="10" Padding="8,4"
-                                            CornerRadius="{StaticResource RadiusSm}"
-                                            Foreground="{DynamicResource AccentSolidBrush}"/>
+                                            CornerRadius="{StaticResource RadiusSm}"/>
                                 </StackPanel>
                                 <TextBlock Text="Flowseal/zapret-discord-youtube"
                                            FontSize="9"
@@ -609,9 +493,9 @@
                                                     CornerRadius="{StaticResource RadiusSm}"/>
                                         </WrapPanel>
                                         <TextBlock Text="{Binding LblZapretCacheStatus}"
-                                                   FontSize="10" Opacity="0.6"
+                                                   FontSize="10"
                                                    TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -620,6 +504,7 @@
                 </Panel>
             </Border>
         </Grid>
+        </ScrollViewer>
 
         <Border Grid.Row="1" Padding="14,7,14,8"
                 BorderThickness="0,1,0,0"

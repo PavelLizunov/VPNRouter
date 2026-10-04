@@ -82,6 +82,9 @@ public static class Strings
     public static string TrueSplitFallback => Ru
         ? "Обычный split активен; True Split не запустился."
         : "Ordinary split is active; True Split did not start.";
+    public static string TrueSplitNoRunningApps => Ru
+        ? "True Split не включён: ни одно из исключённых приложений сейчас не запущено. Работает обычный split; True Split включится при следующем подключении, если эти приложения уже запущены."
+        : "True Split is off: none of the excluded apps is running right now. Ordinary split is active; True Split engages on the next connect if those apps are already running.";
     public static string TrueSplitDeviceBusy => Ru
         ? "True Split не запустился: split-драйвер занят Amnezia/Mullvad/VPNRouter Service (err=5). VPNRouter не будет останавливать чужой kernel driver автоматически; закройте тот VPN, отключите его split tunneling и перезагрузите Windows."
         : "True Split did not start: the split driver is held by Amnezia/Mullvad/VPNRouter Service (err=5). VPNRouter will not stop another kernel driver automatically; close that VPN, disable its split tunneling, and reboot Windows.";
@@ -332,6 +335,8 @@ public static class Strings
     public static string NoOlderVersions => global::VPNRouter.Core.Localization.Strings.NoOlderVersions;
     public static string VersionHistoryFailed => global::VPNRouter.Core.Localization.Strings.VersionHistoryFailed;
     public static string InstalledVersion => global::VPNRouter.Core.Localization.Strings.InstalledVersion;
+    public static string RollbackSafetyHintCandidates => global::VPNRouter.Core.Localization.Strings.RollbackSafetyHintCandidates;
+    public static string PrereleaseLabel => global::VPNRouter.Core.Localization.Strings.PrereleaseLabel;
     public static string RollbackAction => global::VPNRouter.Core.Localization.Strings.RollbackAction;
     public static string RollbackSafetyHint => global::VPNRouter.Core.Localization.Strings.RollbackSafetyHint;
     public static string RollbackConfirmation => global::VPNRouter.Core.Localization.Strings.RollbackConfirmation;
@@ -557,6 +562,10 @@ public static class Strings
     public static string SmpConfigRowHide => global::VPNRouter.Core.Localization.Strings.SmpConfigRowHide;
     public static string SectionShow => global::VPNRouter.Core.Localization.Strings.SectionShow;
     public static string SectionHide => global::VPNRouter.Core.Localization.Strings.SectionHide;
+    public static string SrvEmptyTitle => global::VPNRouter.Core.Localization.Strings.SrvEmptyTitle;
+    public static string SrvEmptyBody => global::VPNRouter.Core.Localization.Strings.SrvEmptyBody;
+    public static string SubsEmptyTitle => global::VPNRouter.Core.Localization.Strings.SubsEmptyTitle;
+    public static string SubsEmptyBody => global::VPNRouter.Core.Localization.Strings.SubsEmptyBody;
     public static string SrvManualEmptyHint => global::VPNRouter.Core.Localization.Strings.SrvManualEmptyHint;
 
     public static string FcTabSearch => global::VPNRouter.Core.Localization.Strings.FcTabSearch;
@@ -837,6 +846,17 @@ public static class Strings
     public static string SmpStatusConnectedVia => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedVia;
     public static string SmpStatusConnectedNoDetails => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedNoDetails;
     public static string SmpStatusConnectingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectingHint;
+    public static string SmpServerSwitchedNote(string previous) => global::VPNRouter.Core.Localization.Strings.SmpServerSwitchedNote(previous);
+    public static string SmpPickServerLabel => global::VPNRouter.Core.Localization.Strings.SmpPickServerLabel;
+    public static string SmpPickServerHint => global::VPNRouter.Core.Localization.Strings.SmpPickServerHint;
+    public static string SmpSetupCheckTitle => global::VPNRouter.Core.Localization.Strings.SmpSetupCheckTitle;
+    public static string SmpSetupCheckSubtitle => global::VPNRouter.Core.Localization.Strings.SmpSetupCheckSubtitle;
+    public static string SmpMenuResetWindowSize => global::VPNRouter.Core.Localization.Strings.SmpMenuResetWindowSize;
+    public static string TipSmpMenuResetWindowSize => global::VPNRouter.Core.Localization.Strings.TipSmpMenuResetWindowSize;
+    public static string SmpHomeButton => global::VPNRouter.Core.Localization.Strings.SmpHomeButton;
+    public static string SmpHomeButtonTip => global::VPNRouter.Core.Localization.Strings.SmpHomeButtonTip;
+    public static string SmpStatusApplying => global::VPNRouter.Core.Localization.Strings.SmpStatusApplying;
+    public static string SmpStatusApplyingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusApplyingHint;
     public static string SmpStatusDisconnectedHint => global::VPNRouter.Core.Localization.Strings.SmpStatusDisconnectedHint;
 
     public static string SmpConfigRowLabel => global::VPNRouter.Core.Localization.Strings.SmpConfigRowLabel;
@@ -845,6 +865,18 @@ public static class Strings
     public static string SmpCfgCustom => global::VPNRouter.Core.Localization.Strings.SmpCfgCustom;
     public static string SmpCfgSplit => global::VPNRouter.Core.Localization.Strings.SmpCfgSplit;
     public static string SmpCfgFull => global::VPNRouter.Core.Localization.Strings.SmpCfgFull;
+
+    public static string SmpHeroAddConfigTitle => global::VPNRouter.Core.Localization.Strings.SmpHeroAddConfigTitle;
+    public static string SmpHeroAddConfigHint => global::VPNRouter.Core.Localization.Strings.SmpHeroAddConfigHint;
+    public static string SmpHeroWarnTitle => global::VPNRouter.Core.Localization.Strings.SmpHeroWarnTitle;
+    public static string SmpCtaWait => global::VPNRouter.Core.Localization.Strings.SmpCtaWait;
+    public static string SmpHeroErrorTitle => global::VPNRouter.Core.Localization.Strings.SmpHeroErrorTitle;
+    public static string SmpSegSplit => global::VPNRouter.Core.Localization.Strings.SmpSegSplit;
+    public static string SmpSegFull => global::VPNRouter.Core.Localization.Strings.SmpSegFull;
+    public static string SmpKindServer => global::VPNRouter.Core.Localization.Strings.SmpKindServer;
+    public static string SmpKindSubscription => global::VPNRouter.Core.Localization.Strings.SmpKindSubscription;
+    public static string SmpKindCustom => global::VPNRouter.Core.Localization.Strings.SmpKindCustom;
+    public static string SmpKindServers(int n) => global::VPNRouter.Core.Localization.Strings.SmpKindServers(n);
 
     public static string SmpCtaConnect => global::VPNRouter.Core.Localization.Strings.SmpCtaConnect;
     public static string SmpCtaDisconnect => global::VPNRouter.Core.Localization.Strings.SmpCtaDisconnect;

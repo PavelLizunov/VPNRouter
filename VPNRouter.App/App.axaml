@@ -14,6 +14,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://VPNRouter.App/Styles/Tokens.axaml"/>
                 <ResourceInclude Source="avares://VPNRouter.App/Styles/ButtonRoles.axaml"/>
+                <ResourceInclude Source="avares://VPNRouter.App/Styles/ControlRoles.axaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <FontFamily x:Key="EmojiFlagFont">avares://VPNRouter.App/Assets/Fonts/Twemoji.Mozilla.ttf#Twemoji Mozilla</FontFamily>
@@ -27,6 +28,52 @@
                 <ColorPaletteResources x:Key="Dark" Accent="#FF38BDF8"/>
             </FluentTheme.Palettes>
         </FluentTheme>
+        <StyleInclude Source="avares://VPNRouter.App/Styles/Lists.axaml"/>
+        <StyleInclude Source="avares://VPNRouter.App/Styles/HomeKit.axaml"/>
+
+        <!-- Tab strips (the main tabs and the inner tabs of a page): secondary text when idle, an accent tint on hover
+             and the accent role when selected, in both themes through the tokens. -->
+        <Style Selector="ListBoxItem.main-tab, ListBoxItem.sub-tab, ListBox.sub-tabs ListBoxItem">
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.sub-tab">
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab /template/ ContentPresenter#PART_ContentPresenter, ListBox.sub-tabs ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.sub-tabs ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:pressed /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:pressed /template/ ContentPresenter#PART_ContentPresenter, ListBox.sub-tabs ListBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:focus /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected:focus /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:focus:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected:focus:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:pressed /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.sub-tab:selected:pressed /template/ ContentPresenter#PART_ContentPresenter, ListBox.sub-tabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.sub-tabs ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.sub-tabs ListBoxItem:selected:focus /template/ ContentPresenter#PART_ContentPresenter, ListBox.sub-tabs ListBoxItem:selected:focus:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.sub-tabs ListBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <!-- The main tabs: the selected one is a solid accent pill, a clear step above the tinted inner tabs. -->
+        <Style Selector="ListBoxItem.main-tab:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:focus /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:focus:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem.main-tab:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+            <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
+        </Style>
+
+        <!-- A destructive action that is not the main one: danger text on a danger tint, a stronger tint on hover. -->
+        <Style Selector="Button.danger-soft">
+            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        </Style>
+        <Style Selector="Button.danger-soft:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.danger-soft:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerBorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        </Style>
 
         <Style Selector="Button.solid:pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{Binding $parent[Button].Background}"/>
@@ -37,6 +84,20 @@
             <Setter Property="Background" Value="{Binding $parent[Button].Background}"/>
             <Setter Property="Foreground" Value="{Binding $parent[Button].Foreground}"/>
             <Setter Property="Opacity" Value="0.76"/>
+        </Style>
+
+        <!-- Input controls share one height (the per-page MinHeight="0" overrides were removed). -->
+        <Style Selector="TextBox, ComboBox">
+            <Setter Property="MinHeight" Value="30"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <!-- Fluent draws the placeholder in the text colour at half opacity, which is too faint on both themes: use the muted token. -->
+        <Style Selector="TextBox /template/ TextBlock#PART_Watermark">
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         </Style>
 
         <Style Selector="Border.disclosure-pill">

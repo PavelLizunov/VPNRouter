@@ -107,6 +107,14 @@ public sealed class PictogramText : AvaloniaObject
             if (id is null) continue;
             if (i > start) inlines.Add(new Run(source[start..i]));
             var icon = new Pictogram { Id = id, Width = control.FontSize, Height = control.FontSize };
+            // InlineUIContainer measures its child with the width of the text block (0 when the block was never measured,
+            // which is the case when it is rendered before its first layout pass) and TextBlock does that lazily inside
+            // RenderCore. A fresh icon that is measured for the first time there changes its DesiredSize, the parent is
+            // asked to invalidate itself in the middle of the render pass and Avalonia throws "Visual was invalidated
+            // during the render pass": the app crashed on the Applications tab. Give the icon the desired size of a
+            // zero-width measure now, so that a render before the first layout finds it unchanged; the real layout pass
+            // then measures it normally.
+            icon.Measure(new Size(0, double.PositiveInfinity));
             icon.Bind(Pictogram.ForegroundProperty, control.GetObservable(TextBlock.ForegroundProperty));
             inlines.Add(new InlineUIContainer { Child = icon, BaselineAlignment = BaselineAlignment.Center });
             i += length - 1;

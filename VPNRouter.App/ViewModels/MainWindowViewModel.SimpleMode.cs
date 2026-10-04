@@ -16,7 +16,7 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(L_SmpConfigRowToggle))]
-    private bool _smpFormExpanded = true;
+    private bool _smpFormExpanded;
 
     public string L_SmpConfigRowToggle => SmpFormExpanded ? Strings.SmpConfigRowHide : Strings.SmpConfigRowChange;
 
@@ -27,6 +27,11 @@ public partial class MainWindowViewModel
     public string L_FcSettingsToggle => FcSettingsExpanded ? Strings.SectionHide : Strings.SectionShow;
     public string L_FcSettingsLabel => UiIcons.StripSymbols(Strings.FcAdvancedSettings);
     public string L_SrvManualEmptyHint => Strings.SrvManualEmptyHint;
+    public string L_SrvEmptyTitle => Strings.SrvEmptyTitle;
+    public string L_SrvEmptyBody => Strings.SrvEmptyBody;
+    public string L_SubsEmptyTitle => Strings.SubsEmptyTitle;
+    public string L_SubsEmptyBody => Strings.SubsEmptyBody;
+    public string L_AddSubscriptionTitle => VPNRouter.Core.Localization.Strings.AdvSubscribeAddSubscription;
 
     [RelayCommand]
     private void ToggleFcSettings() => FcSettingsExpanded = !FcSettingsExpanded;
@@ -98,10 +103,14 @@ public partial class MainWindowViewModel
 
     private string? _lastConnectionAlert;
 
+    // Why the connected server is not the one that was selected (set by the pre-flight, cleared on the next Connect).
+    private string? _smpChoiceNote;
+
     private bool HasConnectionAlert => !string.IsNullOrEmpty(_lastConnectionAlert);
 
     private void RaiseSimpleAlertProps()
     {
+        RaiseSimpleHomeProps();
         OnPropertyChanged(nameof(SimpleStatusIsOn));
         OnPropertyChanged(nameof(SimpleStatusIsWarn));
         OnPropertyChanged(nameof(SimpleStatusIsOff));
@@ -118,12 +127,14 @@ public partial class MainWindowViewModel
         }
     }
 
-    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting && !HasConnectionAlert;
-    public bool SimpleStatusIsWarn => IsConnecting || HasConnectionAlert;
-    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting && !HasConnectionAlert;
+    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting && !IsApplying && !HasConnectionAlert;
+    public bool SimpleStatusIsWarn => IsConnecting || IsApplying || HasConnectionAlert;
+    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting && !IsApplying && !HasConnectionAlert;
 
     public string SimpleStatusTitle => IsConnecting
         ? Strings.SmpStatusConnecting
+        : IsApplying
+            ? Strings.SmpStatusApplying
         : (IsConnected && !HasConnectionAlert)
             ? Strings.SmpStatusProtected
             : Strings.SmpStatusNotConnected;
@@ -133,13 +144,15 @@ public partial class MainWindowViewModel
         get
         {
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (HasConnectionAlert) return _lastConnectionAlert!;
             if (IsConnected)
             {
                 var (name, ip) = DeriveConnectedServerLabel();
                 var via = Strings.SmpStatusConnectedVia;
-                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(ip)) return $"{via} {name} · {ip}";
-                if (!string.IsNullOrEmpty(name)) return $"{via} {name}";
+                var note = string.IsNullOrEmpty(_smpChoiceNote) ? string.Empty : $"\n{_smpChoiceNote}";
+                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(ip)) return $"{via} {name} · {ip}{note}";
+                if (!string.IsNullOrEmpty(name)) return $"{via} {name}{note}";
                 if (!string.IsNullOrEmpty(ip))   return $"{via} {ip}";
                 return Strings.SmpStatusConnectedNoDetails;
             }
@@ -236,13 +249,15 @@ public partial class MainWindowViewModel
 
     public string SimpleCtaText => IsConnecting
         ? Strings.SmpCtaCancel
+        : IsApplying
+            ? Strings.SmpCtaWait
         : IsConnected
             ? Strings.SmpCtaDisconnect
             : Strings.SmpCtaConnect;
 
-    public bool SimpleCtaIsConnected    => IsConnected && !IsConnecting;
-    public bool SimpleCtaIsConnecting   => IsConnecting;
-    public bool SimpleCtaIsDisconnected => !IsConnected && !IsConnecting;
+    public bool SimpleCtaIsConnected    => IsConnected && !IsConnecting && !IsApplying;
+    public bool SimpleCtaIsConnecting   => IsConnecting || IsApplying;
+    public bool SimpleCtaIsDisconnected => !IsConnected && !IsConnecting && !IsApplying;
 
     [RelayCommand]
     private void OpenConfigPicker()
@@ -261,11 +276,19 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (IsConnecting) return;
+        _smpChoiceNote = null;
+
+        if (IsConnecting || IsApplying || _isReconnecting) return;
+        if (_engine.IsRunning)
+        {
+            AdoptRunningEngine();
+            return;
+        }
         IsConnecting = true;
         try
         {
             var kind = SimpleInputDetector.Classify(SmpInput);
+            var subscriptionAction = SubscriptionInputAction.Replace;
 
             var hasExistingConfig =
                 (_settings.Vless.Servers?.Count > 0) ||
@@ -295,10 +318,19 @@ public partial class MainWindowViewModel
             }
             else if (kind == SmpInputKind.SubscriptionUrl)
             {
-                if (!TryApplySubscriptionUrl(SmpInput.Trim()))
+                subscriptionAction = SimpleConnectPolicy.DecideSubscriptionInput(SmpInput, _settings.App.Subscriptions);
+                if (subscriptionAction == SubscriptionInputAction.Replace)
                 {
-                    IsConnecting = false;
-                    return;
+                    if (!TryApplySubscriptionUrl(SmpInput.Trim()))
+                    {
+                        IsConnecting = false;
+                        return;
+                    }
+                }
+                else
+                {
+                    _logger.Information("[Simple] Subscription URL unchanged ({Action}) - keeping the saved servers", subscriptionAction);
+                    _settings.App.ConfigMode = "subscribe";
                 }
             }
 
@@ -310,7 +342,7 @@ public partial class MainWindowViewModel
             SaveSettings();
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
-            if (kind == SmpInputKind.SubscriptionUrl)
+            if (kind == SmpInputKind.SubscriptionUrl && subscriptionAction != SubscriptionInputAction.KeepCached)
             {
                 try
                 {
@@ -341,9 +373,36 @@ public partial class MainWindowViewModel
                     StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                     try
                     {
-                        var results = await new ServerHealthProbe(_logger)
-                            .ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
-                        var chosen = ConnectionIntentScorer.PickServer(
+                        var generalIntent = ConnectionIntent.Normalize(_settings.App.ConnectionIntent) == ConnectionIntent.General;
+                        var probe = new ServerHealthProbe(_logger);
+                        List<ServerLiveness> results;
+                        VlessServerEntry? keptSelection = null;
+                        if (SimpleConnectPolicy.ShouldProbeSelectedFirst(_settings.App.ActiveSubscriptionServer, candidates, generalIntent))
+                        {
+                            var selected = candidates.First(c => string.Equals(c.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal));
+                            if (SimpleConnectPolicy.CannotBeVerifiedByProbe(selected))
+                            {
+                                _logger.Information("[SmartConnect] '{Name}' is {Proto} - a probe cannot verify it; keeping the selected server without one", selected.Name, selected.Protocol);
+                                keptSelection = selected;
+                                results = new List<ServerLiveness>();
+                            }
+                            else
+                            {
+                                results = await probe.ProbeAllAsync(new[] { selected }, TimeSpan.FromSeconds(2));
+                                if (SimpleConnectPolicy.KeepSelectedAfterProbe(results))
+                                {
+                                    _logger.Information("[SmartConnect] '{Name}' cannot be probed (protocol or address family) — keeping the selected server", selected.Name);
+                                    keptSelection = selected;
+                                }
+                                else if (results.Count == 0 || !results[0].Alive)
+                                    results = await probe.ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                            }
+                        }
+                        else
+                        {
+                            results = await probe.ProbeAllAsync(candidates, TimeSpan.FromSeconds(4));
+                        }
+                        var chosen = keptSelection ?? ConnectionIntentScorer.PickServer(
                             results,
                             _settings.App.ConnectionIntent,
                             _settings.App.ActiveSubscriptionServer);
@@ -361,6 +420,9 @@ public partial class MainWindowViewModel
                         {
                             _logger.Information(
                                 "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
+                            var previousServer = _settings.App.ActiveSubscriptionServer;
+                            if (!string.IsNullOrWhiteSpace(previousServer))
+                                _smpChoiceNote = Strings.SmpServerSwitchedNote(previousServer);
                             _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
 
                             var winnerVm = SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name);
@@ -449,6 +511,131 @@ public partial class MainWindowViewModel
         IsSubscribeMode = true;
         IsVlessMode = false;
         return true;
+    }
+
+    // Home screen (Simple page) state. Read-only projections of the state above; the page binds to these so that it
+    // can show one status emblem, one sub-line and the right block for a fresh install without its own logic.
+    public bool SmpHasConfig =>
+        Servers.Count > 0 || SubscriptionServers.Count > 0 || Subscriptions.Count > 0 || CustomConfigs.Count > 0;
+
+    public bool SmpNeedsConfig => !SmpHasConfig && !IsConnected && !IsConnecting;
+
+    public bool SmpConfigEditorVisible => SmpNeedsConfig || SmpFormExpanded;
+
+    // The first-run step above the button, and the "Change" panel inside the connection card.
+    public bool SmpFirstRunEditorVisible => SmpNeedsConfig;
+
+    public bool SmpPickerVisible => SmpFormExpanded && SmpHasConfig;
+
+    public bool SmpHasSubscriptionServers => SubscriptionServers.Count > 0;
+
+    public bool SmpCanConnect => SmpHasConfig || !string.IsNullOrWhiteSpace(SmpInput);
+
+    // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
+    // alert). On / busy / idle are the plain connection states.
+    public bool SmpHeroIsError => !IsConnecting && !string.IsNullOrEmpty(SmpErrorText);
+    public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && HasConnectionAlert;
+    public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
+    public bool SmpHeroIsBusy => IsConnecting || IsApplying;
+    public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError && !SmpHeroIsWarn;
+
+    public string SmpHomeTitle => SmpHeroIsError
+        ? Strings.SmpHeroErrorTitle
+        : SmpHeroIsWarn
+            ? Strings.SmpHeroWarnTitle
+            : SmpNeedsConfig
+                ? Strings.SmpHeroAddConfigTitle
+                : SimpleStatusTitle;
+
+    public string SmpHomeSubline
+    {
+        get
+        {
+            if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsApplying) return Strings.SmpStatusApplyingHint;
+            if (!string.IsNullOrEmpty(SmpErrorText)) return SmpErrorText;
+            if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();
+            if (SmpNeedsConfig) return Strings.SmpHeroAddConfigHint;
+            return SimpleStatusDescription;
+        }
+    }
+
+    public string SmpConfigName
+    {
+        get
+        {
+            var (name, _) = DeriveConnectedServerLabel();
+            return !string.IsNullOrWhiteSpace(name) ? name! : SmpConfigKind;
+        }
+    }
+
+    public string SmpConfigKind
+    {
+        get
+        {
+            var mode = _settings?.App.ConfigMode ?? "generated";
+            if (IsConnected && !mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase) &&
+                ActiveServerMatcher.FindName(_engine.ActiveServerAddress, SubscriptionServers.Select(s => (s.DisplayName, s.Server))) is not null)
+                mode = "subscribe";
+            if (mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
+                return SubscriptionServers.Count > 0
+                    ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(SubscriptionServers.Count)}"
+                    : Strings.SmpKindSubscription;
+            return mode.Equals("generated", StringComparison.OrdinalIgnoreCase)
+                ? Strings.SmpKindServer
+                : Strings.SmpKindCustom;
+        }
+    }
+
+    public string L_SmpHeroChange => Strings.SmpConfigRowChange;
+    public string L_SmpCtaWait => Strings.SmpCtaWait;
+    public string L_SmpSegSplit => Strings.SmpSegSplit;
+    public string L_SmpSegFull => Strings.SmpSegFull;
+    public string L_SmpTipSplitHome => Strings.SmpTipSplit;
+    public string L_SmpTipFullHome => Strings.SmpTipFull;
+
+    private static readonly string[] SmpHomeProps =
+    {
+        nameof(SmpHasConfig), nameof(SmpNeedsConfig), nameof(SmpConfigEditorVisible), nameof(SmpCanConnect),
+        nameof(SmpFirstRunEditorVisible), nameof(SmpPickerVisible), nameof(SmpHasSubscriptionServers),
+        nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
+        nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
+    };
+
+    private void RaiseSimpleHomeProps()
+    {
+        foreach (var name in SmpHomeProps)
+            OnPropertyChanged(name);
+    }
+
+    // Called once from the constructor: the home projections follow the properties and collections they read.
+    private void WireSimpleHomeNotifications()
+    {
+        PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(IsConnected):
+                case nameof(IsConnecting):
+                case nameof(IsApplying):
+                case nameof(SimpleStatusTitle):
+                case nameof(SimpleStatusDescription):
+                case nameof(SmpErrorText):
+                case nameof(SmpInput):
+                case nameof(SmpFormExpanded):
+                case nameof(SelectedServer):
+                case nameof(SelectedSubscriptionServer):
+                case nameof(SelectedCustomConfig):
+                case nameof(IsSubscribeMode):
+                case nameof(IsVlessMode):
+                    RaiseSimpleHomeProps();
+                    break;
+            }
+        };
+        Servers.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
+        SubscriptionServers.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
+        Subscriptions.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
+        CustomConfigs.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
     }
 
     partial void OnIsSplitTunnelChanged(bool value)

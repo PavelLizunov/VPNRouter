@@ -19,12 +19,12 @@
 
             <Color x:Key="TextPrimary">#FF0F1320</Color>
             <Color x:Key="TextSecondary">#FF475067</Color>
-            <Color x:Key="TextMuted">#FF667287</Color>
+            <Color x:Key="TextMuted">#FF5B6A7F</Color>
             <Color x:Key="TextInverse">#FFFFFFFF</Color>
             <Color x:Key="TextAccent">#FF0369A1</Color>
             <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FF0F1320"/>
             <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FF475067"/>
-            <SolidColorBrush x:Key="TextMutedBrush" Color="#FF667287"/>
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#FF5B6A7F"/>
             <SolidColorBrush x:Key="TextInverseBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="TextAccentBrush" Color="#FF0369A1"/>
 
@@ -41,25 +41,26 @@
             <Color x:Key="AccentBgMuted">#FFCFFAFE</Color>
             <Color x:Key="AccentBorder">#FF67E8F9</Color>
             <Color x:Key="AccentFg">#FF0369A1</Color>
-            <Color x:Key="AccentSolid">#FF0EA5E9</Color>
-            <Color x:Key="AccentSolidHover">#FF0284C7</Color>
+            <Color x:Key="AccentSolid">#FF0276B4</Color>
+            <Color x:Key="AccentSolidHover">#FF0369A1</Color>
             <Color x:Key="AccentOnSolid">#FFFFFFFF</Color>
             <SolidColorBrush x:Key="AccentBgSubtleBrush" Color="#FFECFEFF"/>
             <SolidColorBrush x:Key="AccentBgMutedBrush" Color="#FFCFFAFE"/>
             <SolidColorBrush x:Key="AccentBorderBrush" Color="#FF67E8F9"/>
             <SolidColorBrush x:Key="AccentFgBrush" Color="#FF0369A1"/>
-            <SolidColorBrush x:Key="AccentSolidBrush" Color="#FF0EA5E9"/>
-            <SolidColorBrush x:Key="AccentSolidHoverBrush" Color="#FF0284C7"/>
+            <SolidColorBrush x:Key="AccentSolidBrush" Color="#FF0276B4"/>
+            <SolidColorBrush x:Key="AccentSolidHoverBrush" Color="#FF0369A1"/>
             <SolidColorBrush x:Key="AccentOnSolidBrush" Color="#FFFFFFFF"/>
 
             <Color x:Key="SuccessBg">#FFDCFCE7</Color>
             <Color x:Key="SuccessBorder">#FF86EFAC</Color>
-            <Color x:Key="SuccessFg">#FF15803D</Color>
-            <Color x:Key="SuccessSolid">#FF16A34A</Color>
+            <Color x:Key="SuccessFg">#FF166534</Color>
+            <Color x:Key="SuccessSolid">#FF15803D</Color>
             <SolidColorBrush x:Key="SuccessBgBrush" Color="#FFDCFCE7"/>
             <SolidColorBrush x:Key="SuccessBorderBrush" Color="#FF86EFAC"/>
-            <SolidColorBrush x:Key="SuccessFgBrush" Color="#FF15803D"/>
-            <SolidColorBrush x:Key="SuccessSolidBrush" Color="#FF16A34A"/>
+            <SolidColorBrush x:Key="SuccessFgBrush" Color="#FF166534"/>
+            <SolidColorBrush x:Key="SuccessSolidBrush" Color="#FF15803D"/>
+            <SolidColorBrush x:Key="SuccessOnSolidBrush" Color="#FFFFFFFF"/>
 
             <Color x:Key="WarningBg">#FFFEF3C7</Color>
             <Color x:Key="WarningBorder">#FFFCD34D</Color>
@@ -117,6 +118,17 @@
             <BoxShadows x:Key="ShadowSm">0 1 2 0 #0F0F1320, 0 1 1 0 #0A0F1320</BoxShadows>
             <BoxShadows x:Key="ShadowMd">0 4 12 0 #120F1320, 0 1 2 0 #0A0F1320</BoxShadows>
             <BoxShadows x:Key="ShadowLg">0 12 28 0 #1A0F1320, 0 2 6 0 #0D0F1320</BoxShadows>
+
+            <!-- Fluent text box resources, so that every input follows the tokens (rounded by the page, a quiet border, an accent border on focus). -->
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFC2C9D5"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#FF9AA5B8"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FF0276B4"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#FF5B6A7F"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#FF5B6A7F"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#FF5B6A7F"/>
 
         </ResourceDictionary>
 
@@ -176,6 +188,7 @@
             <SolidColorBrush x:Key="SuccessBorderBrush" Color="#5922C55E"/>
             <SolidColorBrush x:Key="SuccessFgBrush" Color="#FF4ADE80"/>
             <SolidColorBrush x:Key="SuccessSolidBrush" Color="#FF22C55E"/>
+            <SolidColorBrush x:Key="SuccessOnSolidBrush" Color="#FF052E16"/>
 
             <Color x:Key="WarningBg">#1FF59E0B</Color>
             <Color x:Key="WarningBorder">#59F59E0B</Color>
@@ -233,6 +246,16 @@
             <BoxShadows x:Key="ShadowSm">0 1 2 0 #80000000, 0 1 1 0 #66000000</BoxShadows>
             <BoxShadows x:Key="ShadowMd">0 4 14 0 #8C000000, 0 1 2 0 #66000000</BoxShadows>
             <BoxShadows x:Key="ShadowLg">0 16 32 0 #A5000000, 0 2 6 0 #80000000</BoxShadows>
+
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FF3A4560"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#FF56627F"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FF38BDF8"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#FF8791A6"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#FF8791A6"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#FF8791A6"/>
 
         </ResourceDictionary>
 

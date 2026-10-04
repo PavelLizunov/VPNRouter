@@ -140,6 +140,7 @@ public partial class MainWindowViewModel
     public string L_FcMsUnit => Strings.FcMsUnit;
 
     public string L_FcTabSearch              => Strings.FcTabSearch;
+    public string L_FcTabSearchLabel         => VPNRouter.Core.Services.UiIcons.StripSymbols(Strings.FcTabSearch);
     public string L_FcSavedTabHint           => Strings.FcSavedTabHint;
     public string L_FcSavedClearAllBtn       => Strings.FcSavedClearAllBtn;
     public string L_FcSavedColStatus         => Strings.FcSavedColStatus;
@@ -181,6 +182,8 @@ public partial class MainWindowViewModel
     public string L_RunDiagnostics => Strings.RunDiagnostics;
     public string L_RunTestsLabel => Strings.RunTestsLabel;
     public string L_SelectCategoryHint => Strings.SelectCategoryHint;
+    public string L_SelectCategoryLabel => VPNRouter.Core.Services.UiIcons.StripSymbols(Strings.SelectCategoryHint);
+    public string L_CategoryNameWatermark => Strings.CategoryNamePrompt.TrimEnd(':', ' ');
     public string L_ServiceComponentsHeader => Strings.ServiceComponentsHeader;
     public string L_ServiceMasterSubtitle => Strings.ServiceMasterSubtitle;
     public string L_ServiceMasterTitle => Strings.ServiceMasterTitle;
@@ -202,6 +205,14 @@ public partial class MainWindowViewModel
     public string L_SmpMenuDiagnosticsSection => Strings.SmpMenuDiagnosticsSection;
     public string L_SmpMenuHealthCheck => Strings.SmpMenuHealthCheck;
     public string L_SmpMenuSetupWizard => Strings.SmpMenuSetupWizard;
+    public string L_SmpHomeButton => Strings.SmpHomeButton;
+    public string L_SmpHomeButtonTip => Strings.SmpHomeButtonTip;
+    public string L_SmpPickServerLabel => Strings.SmpPickServerLabel;
+    public string L_SmpPickServerHint => Strings.SmpPickServerHint;
+    public string L_SmpSetupCheckTitle => Strings.SmpSetupCheckTitle;
+    public string L_SmpSetupCheckSubtitle => Strings.SmpSetupCheckSubtitle;
+    public string L_SmpMenuResetWindowSize => Strings.SmpMenuResetWindowSize;
+    public string L_TipSmpMenuResetWindowSize => Strings.TipSmpMenuResetWindowSize;
     public string L_SmpMenuOpenLogs => Strings.SmpMenuOpenLogs;
     public string L_DiagSupportHeader => Strings.DiagSupportHeader;
     public string L_DiagExportButton => Strings.DiagExportButton;

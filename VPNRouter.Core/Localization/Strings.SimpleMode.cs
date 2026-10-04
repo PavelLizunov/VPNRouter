@@ -122,6 +122,27 @@ public static partial class Strings
 
     public static string SmpStatusConnectedVia      => Ru ? "через" : "via";
     public static string SmpStatusConnectedNoDetails=> Ru ? "Туннель активен." : "Tunnel is active.";
+    public static string SmpServerSwitchedNote(string previous) => Ru
+        ? $"«{previous}» не отвечал, выбран самый быстрый из рабочих."
+        : $"'{previous}' was not responding; picked the fastest working server.";
+    public static string SmpPickServerLabel         => Ru ? "Сервер" : "Server";
+    public static string SmpPickServerHint          => Ru
+        ? "Подключение берёт последний выбранный сервер, если он отвечает, иначе самый быстрый из рабочих."
+        : "Connect uses the server you picked last if it answers, otherwise the fastest working one.";
+    public static string SmpSetupCheckTitle         => Ru ? "Проверка настроек" : "Check my setup";
+    public static string SmpSetupCheckSubtitle      => Ru
+        ? "Маршрутизация, MTU и аварийное отключение, шаг за шагом"
+        : "Routing, MTU and the safety switch, step by step";
+    public static string SmpMenuResetWindowSize     => Ru ? "Размер окна по умолчанию" : "Reset window size";
+    public static string TipSmpMenuResetWindowSize  => Ru
+        ? "Вернуть обычный размер окна (двойной щелчок по значку в шапке делает то же)."
+        : "Restore the default window size (a double click on the icon in the header does the same).";
+    public static string SmpHomeButton              => Ru ? "Главная" : "Home";
+    public static string SmpHomeButtonTip           => Ru ? "Вернуться на главный экран" : "Back to the home screen";
+    public static string SmpStatusApplying          => Ru ? "Применяю настройки…" : "Applying settings…";
+    public static string SmpStatusApplyingHint      => Ru
+        ? "Переключаю маршрутизацию — несколько секунд."
+        : "Switching routing — a few seconds.";
     public static string SmpStatusConnectingHint    => Ru
         ? "Рукопожатие с сервером — пара секунд."
         : "Handshaking with the server — a moment.";
@@ -137,6 +158,30 @@ public static partial class Strings
     public static string SmpCfgCustom      => Ru ? "свой"           : "custom";
     public static string SmpCfgSplit       => Ru ? "сплит"          : "split";
     public static string SmpCfgFull        => Ru ? "полный"         : "full";
+
+    public static string SmpHeroAddConfigTitle => Ru ? "Добавьте конфиг VPN" : "Add a VPN config";
+    public static string SmpHeroAddConfigHint  => Ru
+        ? "Вставьте ссылку на сервер или URL подписки, затем подключитесь."
+        : "Paste a server link or a subscription URL, then connect.";
+    public static string SmpHeroErrorTitle     => Ru ? "Не удалось подключиться" : "Couldn't connect";
+    public static string SmpHeroWarnTitle      => Ru ? "Проблема с подключением" : "Connection problem";
+    public static string SmpCtaWait            => Ru ? "Подождите…" : "Please wait…";
+    public static string SmpSegSplit           => Ru ? "Приложения"       : "Selected apps";
+    public static string SmpSegFull            => Ru ? "Весь трафик"      : "All traffic";
+    public static string SmpKindServer         => Ru ? "Ссылка на сервер" : "Server link";
+    public static string SmpKindSubscription   => Ru ? "Подписка"         : "Subscription";
+    public static string SmpKindCustom         => Ru ? "Свой конфиг"      : "Custom config";
+    public static string SmpKindServers(int n) => Ru
+        ? $"{n} {RuPlural(n, "сервер", "сервера", "серверов")}"
+        : (n == 1 ? "1 server" : $"{n} servers");
+
+    private static string RuPlural(int n, string one, string few, string many)
+    {
+        var mod100 = n % 100;
+        var mod10 = n % 10;
+        if (mod100 is >= 11 and <= 14) return many;
+        return mod10 switch { 1 => one, >= 2 and <= 4 => few, _ => many };
+    }
 
     public static string SmpCtaConnect    => Ru ? "Подключить"   : "Connect";
     public static string SmpCtaDisconnect => Ru ? "Отключить"    : "Disconnect";

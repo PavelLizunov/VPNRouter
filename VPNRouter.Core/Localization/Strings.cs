@@ -473,8 +473,8 @@ public static partial class Strings
         ? $"Конфиг '{name}' уже существует."
         : $"Config '{name}' already exists.";
 
-    public static string TrayStart => Ru ? "\u25b6 Запустить VPN" : "\u25b6 Start VPN";
-    public static string TrayStop => Ru ? "\u2b1b Остановить VPN" : "\u2b1b Stop VPN";
+    public static string TrayStart => Ru ? "Запустить VPN" : "Start VPN";
+    public static string TrayStop => Ru ? "Остановить VPN" : "Stop VPN";
     public static string TraySettings => Ru ? "Настройки..." : "Settings...";
     public static string TrayExit => Ru ? "Выход" : "Exit";
 
@@ -585,6 +585,10 @@ public static partial class Strings
     public static string RollbackSafetyHint => Ru
         ? "Доступны только недавние стабильные версии с проверкой SHA-256."
         : "Only recent stable releases with verified SHA-256 are available.";
+    public static string RollbackSafetyHintCandidates => Ru
+        ? "Недавние стабильные версии и кандидаты (канал «экспериментальный»); у каждой проверяется SHA-256."
+        : "Recent stable releases and candidates (experimental channel); every one has its SHA-256 verified.";
+    public static string PrereleaseLabel => Ru ? "кандидат" : "candidate";
     public static string RollbackConfirmation => Ru
         ? "Установить v{0}? VPN остановится, приложение перезапустится. Перед откатом будет сохранена резервная копия настроек."
         : "Install v{0}? VPN will stop and the app will restart. A settings backup will be saved before rollback.";
@@ -648,6 +652,12 @@ public static partial class Strings
         "Privacy_Shell"   => Ru ? "Приватность" : "Privacy",
         "Terminal"        => Ru ? "Терминал" : "Terminal",
         "Custom Apps"     => Ru ? "Свои" : "Custom",
+        "Russian_Desktop_Apps" => Ru ? "Российские приложения" : "Russian apps",
+        "Game_Launchers"  => Ru ? "Игровые лаунчеры" : "Game launchers",
+        "Game_AntiCheats" => Ru ? "Античиты" : "Anti-cheats",
+        "Remote_LAN"      => Ru ? "Удалённый доступ и LAN" : "Remote access and LAN",
+        "Work_Calls"      => Ru ? "Рабочие звонки" : "Work calls",
+        "Dev_Local_Mirrors" => Ru ? "Зеркала для разработки" : "Dev mirrors",
         _                 => internalName
     };
 
@@ -1452,6 +1462,15 @@ public static partial class Strings
     public static string SrvManualEmptyHint => Ru
         ? "Серверов пока нет. Вставьте ссылку на сервер в поле ниже и добавьте её."
         : "No servers yet. Paste a server link into the field below and add it.";
+
+    public static string SrvEmptyTitle => Ru ? "Серверов пока нет" : "No servers yet";
+    public static string SrvEmptyBody => Ru
+        ? "Вставьте ссылку на сервер (vless://, hy2://, tuic://, ss://) в поле ниже и нажмите «Добавить сервер(ы)»."
+        : "Paste a server link (vless://, hy2://, tuic://, ss://) into the field below and press Add Server(s).";
+    public static string SubsEmptyTitle => Ru ? "Подписок пока нет" : "No subscriptions yet";
+    public static string SubsEmptyBody => Ru
+        ? "Подписка — это ссылка от VPN-провайдера со списком серверов. Вставьте её ниже и нажмите «Добавить»."
+        : "A subscription is a link from your VPN provider with its list of servers. Paste it below and press Add.";
 
     public static string SectionShow => Ru ? "Показать" : "Show";
     public static string SectionHide => Ru ? "Свернуть" : "Hide";

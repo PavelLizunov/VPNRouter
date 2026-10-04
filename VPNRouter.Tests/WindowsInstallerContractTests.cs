@@ -140,6 +140,29 @@ public sealed class WindowsInstallerContractTests
     }
 
     [Fact]
+    public void Upgrade_StopsTheSplitTunnelDriverThatLocksItsFile()
+    {
+        // The owner saw "DeleteFile: code 5" on app\driver\mullvad-split-tunnel.sys: a loaded kernel driver locks its file.
+        Assert.Contains("mullvad-split-tunnel", StopScript);
+        Assert.Contains("Stop-Service -Name 'mullvad-split-tunnel'", StopScript);
+        Assert.Contains("Test-InRoots", StopScript);
+        Assert.Contains("restartreplace", File.ReadAllText(Path.Combine(Root, "packaging", "windows", "vpnrouter.iss")));
+        var updater = File.ReadAllText(Path.Combine(Root, "VPNRouter.Core", "Services", "UpdateChecker.Apply.cs"));
+        Assert.Contains("sc stop mullvad-split-tunnel", updater);
+    }
+
+    [Fact]
+    public void FinishPage_LaunchesTheAppAsTheElevatedInstallerUser()
+    {
+        // A postinstall entry runs as the original, non-elevated user by default; the app then has to elevate itself with a UAC prompt of its
+        // own, which the owner never saw: the app did not start after the install. The installer is already elevated, so launch it as that user.
+        var launch = Section("Run").Split('\n').Single(l => l.Contains("VPNRouter.GUI.exe", StringComparison.Ordinal));
+        Assert.Contains("postinstall", launch);
+        Assert.Contains("runascurrentuser", launch);
+        Assert.DoesNotContain("runasoriginaluser", launch);
+    }
+
+    [Fact]
     public void ReleaseTooling_ShipsTheInstallerWithItsSidecar()
     {
         var buildPs1 = File.ReadAllText(Path.Combine(Root, "build.ps1"));

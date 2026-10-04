@@ -66,20 +66,15 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
 
-        <ListBox Grid.Row="0"
-                 SelectedIndex="{Binding FreeConfigsVm.SelectedFreeTabIndex, Mode=TwoWay}"
-                 Background="Transparent"
-                 BorderThickness="0,0,0,1"
-                 BorderBrush="{DynamicResource BorderDefaultBrush}"
-                 Padding="6,2">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Spacing="4"/>
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBoxItem icons:PictogramText.Icons="search-tab" icons:PictogramText.Content="{Binding L_FcTabSearch}" Padding="10,4" FontSize="11"/>
-            <ListBoxItem Content="{Binding FreeConfigsVm.SavedTabHeaderText}"
-                         Padding="10,4" FontSize="11"/>
+        <ListBox Grid.Row="0" Classes="hk-segs" Margin="10,8,10,6"
+             SelectedIndex="{Binding FreeConfigsVm.SelectedFreeTabIndex, Mode=TwoWay}">
+      <ListBox.ItemsPanel>
+        <ItemsPanelTemplate>
+          <UniformGrid Rows="1"/>
+        </ItemsPanelTemplate>
+      </ListBox.ItemsPanel>
+            <ListBoxItem Content="{Binding L_FcTabSearchLabel}"/>
+            <ListBoxItem Content="{Binding FreeConfigsVm.SavedTabHeaderText}"/>
         </ListBox>
 
         <Grid Grid.Row="1">
@@ -107,7 +102,7 @@
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 Background="{DynamicResource SuccessSolidBrush}"
-                                Foreground="White"
+                                Foreground="{DynamicResource SuccessOnSolidBrush}"
                                 ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"
                                 AutomationProperties.Name="{Binding L_FcDeepVerify}"/>
                         <Button Classes="solid" icons:PictogramText.Icons="stop" icons:PictogramText.Content="{Binding L_FcDeepStop}"
@@ -199,12 +194,12 @@
 
                 <Grid Grid.Row="1" ColumnDefinitions="*,Auto"
                       Margin="2,8,2,4">
-                    <TextBlock Grid.Column="0"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="0"
                                Text="{Binding L_FcListHeader}"
-                               FontSize="9" FontWeight="SemiBold" Opacity="0.55"
+                               FontSize="9" FontWeight="SemiBold"
                                VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="1"
-                               FontSize="9" Opacity="0.5" VerticalAlignment="Center">
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="1"
+                               FontSize="9" VerticalAlignment="Center">
                         <Run Text="{Binding FreeConfigsVm.DisplayedConfigs.Count}"/>
                         <Run Text="{Binding L_FcListShown}"/>
                     </TextBlock>
@@ -220,20 +215,20 @@
                               RowDefinitions="Auto,*">
                             <Grid Grid.Row="0" Background="{DynamicResource SurfaceSunkenBrush}"
                                   ColumnDefinitions="44,*,80,80,72" Height="22">
-                                <TextBlock Grid.Column="0" Text="{Binding L_FcColCountry}"
-                                           FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="0" Text="{Binding L_FcColCountry}"
+                                           FontWeight="SemiBold" FontSize="9"
                                            VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding L_FcColEndpoint}"
-                                           FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="1" Text="{Binding L_FcColEndpoint}"
+                                           FontWeight="SemiBold" FontSize="9"
                                            VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                <TextBlock Grid.Column="2" Text="{Binding L_FcColLatency}"
-                                           FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="2" Text="{Binding L_FcColLatency}"
+                                           FontWeight="SemiBold" FontSize="9"
                                            VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                                <TextBlock Grid.Column="3" Classes="col-aux" Text="{Binding L_FcColBandwidth}"
-                                           FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="3" Classes="col-aux" Text="{Binding L_FcColBandwidth}"
+                                           FontWeight="SemiBold" FontSize="9"
                                            VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                                <TextBlock Grid.Column="4" Classes="col-aux" Text="{Binding L_FcColTransport}"
-                                           FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="4" Classes="col-aux" Text="{Binding L_FcColTransport}"
+                                           FontWeight="SemiBold" FontSize="9"
                                            VerticalAlignment="Center" HorizontalAlignment="Center"/>
                             </Grid>
                             <ListBox Grid.Row="1"
@@ -281,15 +276,15 @@
                             </ListBox>
                         </Grid>
 
-                        <TextBlock IsVisible="{Binding FreeConfigsVm.IsEmpty}"
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" IsVisible="{Binding FreeConfigsVm.IsEmpty}"
                                    Text="{Binding L_FcSearchListEmptyHint}"
-                                   FontSize="10" Opacity="0.45" TextWrapping="Wrap"
+                                   FontSize="10" TextWrapping="Wrap"
                                    HorizontalAlignment="Center" TextAlignment="Center"
                                    VerticalAlignment="Center"
                                    MaxWidth="320" Margin="20"/>
-                        <TextBlock IsVisible="{Binding FreeConfigsVm.IsFilteredEmpty}"
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" IsVisible="{Binding FreeConfigsVm.IsFilteredEmpty}"
                                    Text="{Binding L_FcFilteredEmpty}"
-                                   FontSize="10" Opacity="0.45" TextWrapping="Wrap"
+                                   FontSize="10" TextWrapping="Wrap"
                                    HorizontalAlignment="Center" TextAlignment="Center"
                                    VerticalAlignment="Center"
                                    MaxWidth="360" Margin="20"/>
@@ -304,9 +299,9 @@
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6"
                       Margin="2,0,2,8"
                       IsVisible="{Binding !FreeConfigsVm.IsSavedEmpty}">
-                    <TextBlock Grid.Column="0"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="0"
                                icons:PictogramText.Icons="retest" icons:PictogramText.Text="{Binding L_FcSavedTabHint}"
-                               FontSize="9" Opacity="0.55"
+                               FontSize="9"
                                TextWrapping="Wrap"
                                VerticalAlignment="Center"/>
                     <Button Grid.Column="1"
@@ -328,20 +323,20 @@
                 <Grid Grid.Row="1" ColumnDefinitions="44,*,72,72,68,52" Height="22"
                       Background="{DynamicResource SurfaceSunkenBrush}"
                       IsVisible="{Binding !FreeConfigsVm.IsSavedEmpty}">
-                    <TextBlock Grid.Column="0" Text="{Binding L_FcColCountry}"
-                               FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="0" Text="{Binding L_FcColCountry}"
+                               FontWeight="SemiBold" FontSize="9"
                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                    <TextBlock Grid.Column="1" Text="{Binding L_FcColEndpoint}"
-                               FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="1" Text="{Binding L_FcColEndpoint}"
+                               FontWeight="SemiBold" FontSize="9"
                                VerticalAlignment="Center" Margin="8,0,0,0"/>
-                    <TextBlock Grid.Column="2" Text="{Binding L_FcColLatency}"
-                               FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="2" Text="{Binding L_FcColLatency}"
+                               FontWeight="SemiBold" FontSize="9"
                                VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                    <TextBlock Grid.Column="3" Classes="col-aux" Text="{Binding L_FcColBandwidth}"
-                               FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="3" Classes="col-aux" Text="{Binding L_FcColBandwidth}"
+                               FontWeight="SemiBold" FontSize="9"
                                VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                    <TextBlock Grid.Column="4" Classes="col-aux" Text="{Binding L_FcSavedColStatus}"
-                               FontWeight="SemiBold" FontSize="9" Opacity="0.55"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="4" Classes="col-aux" Text="{Binding L_FcSavedColStatus}"
+                               FontWeight="SemiBold" FontSize="9"
                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
                 </Grid>
 
@@ -388,8 +383,8 @@
                                                    icons:PictogramText.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
                                                    FontSize="9" Opacity="0.85" FontWeight="SemiBold"
                                                    VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                                        <TextBlock Grid.Column="4" Classes="col-aux" Text="{Binding FreshnessLabel}"
-                                                   FontSize="9" Opacity="0.7"
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="4" Classes="col-aux" Text="{Binding FreshnessLabel}"
+                                                   FontSize="9"
                                                    VerticalAlignment="Center" HorizontalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis"/>
                                         <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2"
@@ -418,9 +413,9 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
 
-                        <TextBlock IsVisible="{Binding FreeConfigsVm.IsSavedEmpty}"
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" IsVisible="{Binding FreeConfigsVm.IsSavedEmpty}"
                                    Text="{Binding L_FcSavedEmpty}"
-                                   FontSize="10" Opacity="0.45" TextWrapping="Wrap"
+                                   FontSize="10" TextWrapping="Wrap"
                                    HorizontalAlignment="Center" TextAlignment="Center"
                                    VerticalAlignment="Center"
                                    MaxWidth="320" Margin="20"/>
@@ -434,13 +429,13 @@
                 BorderBrush="{DynamicResource BorderDefaultBrush}">
             <StackPanel Spacing="6">
                 <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="0"
                                icons:PictogramText.Icons="verified,check,warning,error" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding FreeConfigsVm.StatusText}"
-                               FontSize="10" Opacity="0.7"
+                               FontSize="10"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Grid.Column="1"
-                               FontSize="10" Opacity="0.7"
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" Grid.Column="1"
+                               FontSize="10"
                                VerticalAlignment="Center"
                                IsVisible="{Binding FreeConfigsVm.HasProgress}">
                         <Run Text="{Binding FreeConfigsVm.ProgressDone}"/>
@@ -452,9 +447,9 @@
                              Maximum="{Binding FreeConfigsVm.ProgressTotal}"
                              IsVisible="{Binding FreeConfigsVm.HasProgress}"
                              Height="4" CornerRadius="{StaticResource RadiusXs}"/>
-                <TextBlock icons:PictogramText.Icons="arrow-up" icons:PictogramText.Text="{Binding L_FcConnectHint}"
+                <TextBlock Foreground="{DynamicResource TextMutedBrush}" icons:PictogramText.Icons="arrow-up" icons:PictogramText.Text="{Binding L_FcConnectHint}"
                            IsVisible="{Binding !FreeConfigsVm.HasSelection}"
-                           FontSize="10" Opacity="0.55"
+                           FontSize="10"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap"/>
                 <Button Classes="solid" Content="{Binding L_FcApplySelected}"

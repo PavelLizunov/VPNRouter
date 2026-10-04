@@ -473,5 +473,6 @@ sealed class Program
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .WithInterFont()
+            .AfterSetup(_ => VPNRouter.App.Services.UiExceptionGuard.Install())
             .LogToTrace();
 }

@@ -277,6 +277,10 @@ app:
             "[DBG] id_token: mySecretIdTokenJKL\n" +
             "[DBG] appsecret=mySecretAppSecretMNO\n" +
             "[DBG] app_secret: mySecretAppSecretPQR\n" +
+            "[DBG] usersecret=mySecretUserSecretSTU\n" +
+            "[DBG] userpassword: mySecretUserPassVWX\n" +
+            "[DBG] authsecret=mySecretAuthSecretYZ1\n" +
+            "[DBG] authtoken: mySecretAuthToken234\n" +
             "[DBG] bypass=true\n" +
             "[DBG] bypass_russian_traffic=true");
         Assert.DoesNotContain("mySecretClientNoSep123", outp);
@@ -288,6 +292,10 @@ app:
         Assert.DoesNotContain("mySecretIdTokenJKL", outp);
         Assert.DoesNotContain("mySecretAppSecretMNO", outp);
         Assert.DoesNotContain("mySecretAppSecretPQR", outp);
+        Assert.DoesNotContain("mySecretUserSecretSTU", outp);
+        Assert.DoesNotContain("mySecretUserPassVWX", outp);
+        Assert.DoesNotContain("mySecretAuthSecretYZ1", outp);
+        Assert.DoesNotContain("mySecretAuthToken234", outp);
         Assert.Contains("clientsecret=", outp);
         Assert.Contains("refreshtoken=", outp);
         Assert.Contains("accesstoken:", outp);
@@ -295,6 +303,10 @@ app:
         Assert.Contains("id_token:", outp);
         Assert.Contains("appsecret=", outp);
         Assert.Contains("app_secret:", outp);
+        Assert.Contains("usersecret=", outp);
+        Assert.Contains("userpassword:", outp);
+        Assert.Contains("authsecret=", outp);
+        Assert.Contains("authtoken:", outp);
         Assert.Contains("bypass=true", outp);
         Assert.Contains("bypass_russian_traffic=true", outp);
     }

@@ -9,57 +9,114 @@
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
              x:Class="VPNRouter.App.Views.Pages.ApplicationsPage"
              x:CompileBindings="True"
-             x:DataType="vm:MainWindowViewModel">
+             x:DataType="vm:MainWindowViewModel"
+             Background="{DynamicResource SurfaceAppBrush}">
 
   <UserControl.Styles>
 
-    <Style Selector="TextBlock.cat-name">
+    <Style Selector="TextBlock.section-title">
       <Setter Property="FontSize" Value="11"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
       <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
     </Style>
-    <Style Selector="TextBlock.cat-count">
-      <Setter Property="FontSize" Value="9"/>
-      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
       <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="Margin" Value="4,0,4,0"/>
     </Style>
 
-    <Style Selector="ListBox.cat-list ListBoxItem:selected /template/ ContentPresenter">
+    <Style Selector="Border.banner">
+      <Setter Property="Background" Value="{DynamicResource WarningBgBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource WarningBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="0,0,0,1"/>
+      <Setter Property="Padding" Value="14,8"/>
+    </Style>
+    <Style Selector="Border.banner TextBlock">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/>
+    </Style>
+    <Style Selector="Border.banner icons|Pictogram">
+      <Setter Property="Width" Value="14"/>
+      <Setter Property="Height" Value="14"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/>
+    </Style>
+
+    <Style Selector="Border.segments">
+      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
+      <Setter Property="Padding" Value="3"/>
+    </Style>
+    <Style Selector="ListBox.cat-list ListBoxItem">
+      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Margin" Value="0,0,0,2"/>
+    </Style>
+    <Style Selector="TextBlock.cat-name">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="Medium"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style Selector="Border.cat-count">
+      <Setter Property="Background" Value="{DynamicResource PillNeutralBgBrush}"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="5,0"/>
+      <Setter Property="MinWidth" Value="18"/>
+      <Setter Property="Margin" Value="6,0,0,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.cat-count TextBlock">
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource PillNeutralFgBrush}"/>
+    </Style>
+    <Style Selector="ListBox.cat-list ListBoxItem:selected Border.cat-count">
       <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
     </Style>
-    <Style Selector="ListBox.cat-list ListBoxItem:selected TextBlock.cat-name">
-      <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
-      <Setter Property="FontWeight" Value="Bold"/>
-    </Style>
-    <Style Selector="ListBox.cat-list ListBoxItem:selected TextBlock.cat-count">
+    <Style Selector="ListBox.cat-list ListBoxItem:selected Border.cat-count TextBlock">
       <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
     </Style>
 
+    <Style Selector="ListBox.apps-list ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+    <Style Selector="ListBox.apps-list ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBox.apps-list ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBox.apps-list ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     ListBox.apps-list ListBoxItem:selected:focus /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
     <Style Selector="Border.app-row">
-      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
-      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Padding" Value="10,0,4,0"/>
+      <Setter Property="MinHeight" Value="38"/>
+    </Style>
+    <Style Selector="ListBox.apps-list ListBoxItem:pointerover Border.app-row">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}"/>
     </Style>
     <Style Selector="Border.app-row TextBlock.app-name">
       <Setter Property="FontSize" Value="11"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
     </Style>
 
-    <Style Selector="Border.custom-badge">
-      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+    <Style Selector="Border.badge">
       <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
       <Setter Property="Padding" Value="5,1"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
-
-    <Style Selector="Border.routing-badge">
-      <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
-      <Setter Property="Padding" Value="4,1"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
+    <Style Selector="Border.badge TextBlock">
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>
     <Style Selector="Border.vpn-badge">
       <Setter Property="Background" Value="{DynamicResource PillFastBgBrush}"/>
@@ -73,127 +130,124 @@
     <Style Selector="Border.direct-badge TextBlock">
       <Setter Property="Foreground" Value="{DynamicResource PillSlowFgBrush}"/>
     </Style>
-
-    <Style Selector="ListBox.cat-list ListBoxItem">
-      <Setter Property="Padding" Value="4,0"/>
-      <Setter Property="MinHeight" Value="0"/>
+    <Style Selector="Border.custom-badge">
+      <Setter Property="Background" Value="{DynamicResource PillNeutralBgBrush}"/>
     </Style>
-    <Style Selector="ListBox.apps-list ListBoxItem">
+    <Style Selector="Border.custom-badge TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource PillNeutralFgBrush}"/>
+      <Setter Property="FontWeight" Value="Medium"/>
+    </Style>
+
+    <Style Selector="Button.icon-btn">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Width" Value="28"/>
+      <Setter Property="Height" Value="28"/>
       <Setter Property="Padding" Value="0"/>
       <Setter Property="MinHeight" Value="0"/>
-      <Setter Property="Margin" Value="0,0,0,4"/>
-    </Style>
-  </UserControl.Styles>
-
-  <UserControl.Styles>
-    <Style Selector="ToggleButton.apps-mode-seg">
-      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
-      <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
-      <Setter Property="Padding" Value="10,5"/>
-      <Setter Property="HorizontalAlignment" Value="Stretch"/>
       <Setter Property="HorizontalContentAlignment" Value="Center"/>
-      <Setter Property="FontSize" Value="11"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
     </Style>
-    <Style Selector="ToggleButton.apps-mode-seg:checked /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
-      <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+    <Style Selector="Button.icon-btn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+    <Style Selector="Button.small">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="10,4"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="StackPanel.empty-state">
+      <Setter Property="Spacing" Value="8"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="MaxWidth" Value="260"/>
+      <Setter Property="Margin" Value="16"/>
+    </Style>
+    <Style Selector="StackPanel.empty-state icons|Pictogram">
+      <Setter Property="Width" Value="28"/>
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+    </Style>
+    <Style Selector="StackPanel.empty-state TextBlock">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="TextAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
     </Style>
   </UserControl.Styles>
 
   <Grid RowDefinitions="Auto,Auto,Auto,*">
 
-    <Border Grid.Row="0"
-            IsVisible="{Binding IsFullTunnel}"
-            Background="{DynamicResource WarningBgBrush}"
-            BorderBrush="{DynamicResource WarningBorderBrush}"
-            BorderThickness="0,0,0,1"
-            Padding="14,10">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-        <TextBlock Grid.Column="0"
-                   Text="{Binding L_AppsFullTunnelBanner}"
-                   FontSize="11"
-                   TextWrapping="Wrap"
-                   VerticalAlignment="Center"
-                   Foreground="{DynamicResource WarningFgBrush}"/>
-        <Button Classes="solid" Grid.Column="1"
+    <Border Grid.Row="0" Classes="banner" IsVisible="{Binding IsFullTunnel}">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <icons:Pictogram Grid.Column="0" Id="info"/>
+        <TextBlock Grid.Column="1" Text="{Binding L_AppsFullTunnelBanner}"/>
+        <Button Classes="solid small" Grid.Column="2"
                 Content="{Binding L_AppsFullTunnelBannerAction}"
                 Command="{Binding SwitchToSplitTunnelCommand}"
-                FontSize="11" FontWeight="SemiBold"
-                Padding="10,4"
-                CornerRadius="{StaticResource RadiusSm}"
+                FontWeight="SemiBold"
                 Background="{DynamicResource AccentSolidBrush}"
-                Foreground="{DynamicResource AccentOnSolidBrush}"
-                VerticalAlignment="Center"/>
+                Foreground="{DynamicResource AccentOnSolidBrush}"/>
       </Grid>
     </Border>
 
     <Border Grid.Row="1"
             IsVisible="{Binding IsSplitTunnel}"
             IsEnabled="{Binding !IsApplying}"
-            Padding="14,8,14,4"
+            Padding="12,10,12,10"
             BorderThickness="0,0,0,1"
-            BorderBrush="{DynamicResource BorderSubtleBrush}">
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            Background="{DynamicResource SurfaceBaseBrush}">
       <StackPanel Spacing="6">
-        <TextBlock Text="{Binding L_AppsModeSectionTitle}"
-                   FontSize="11" FontWeight="SemiBold"
-                   Foreground="{DynamicResource TextSecondaryBrush}"/>
-        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-          <ToggleButton Grid.Column="0"
-                        Classes="apps-mode-seg"
-                        IsChecked="{Binding IsRoutingAppsModeInclude, Mode=TwoWay}"
-                        AutomationProperties.Name="{Binding L_AppsModeInclude}">
-            <TextBlock Text="{Binding L_AppsModeInclude}"
-                       TextWrapping="Wrap"
-                       TextAlignment="Center"/>
-          </ToggleButton>
-          <ToggleButton Grid.Column="1"
-                        Classes="apps-mode-seg"
-                        IsChecked="{Binding IsRoutingAppsModeExclude, Mode=TwoWay}"
-                        AutomationProperties.Name="{Binding L_AppsModeExclude}">
-            <TextBlock Text="{Binding L_AppsModeExclude}"
-                       TextWrapping="Wrap"
-                       TextAlignment="Center"/>
-          </ToggleButton>
-        </Grid>
-        <TextBlock Text="{Binding L_CurrentAppsModeHint}"
-                   FontSize="10"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource TextMutedBrush}"/>
+        <TextBlock Classes="section-title" Text="{Binding L_AppsModeSectionTitle}"/>
+        <Border Classes="hk-seg-track">
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="3">
+            <RadioButton Grid.Column="0"
+                          Classes="apps-mode-seg hk-seg" GroupName="AppsRoutingMode"
+                          IsChecked="{Binding IsRoutingAppsModeInclude, Mode=TwoWay}"
+                          AutomationProperties.Name="{Binding L_AppsModeInclude}">
+              <TextBlock Text="{Binding L_AppsModeInclude}"
+                         TextWrapping="Wrap"
+                         TextAlignment="Center"/>
+            </RadioButton>
+            <RadioButton Grid.Column="1"
+                          Classes="apps-mode-seg hk-seg" GroupName="AppsRoutingMode"
+                          IsChecked="{Binding IsRoutingAppsModeExclude, Mode=TwoWay}"
+                          AutomationProperties.Name="{Binding L_AppsModeExclude}">
+              <TextBlock Text="{Binding L_AppsModeExclude}"
+                         TextWrapping="Wrap"
+                         TextAlignment="Center"/>
+            </RadioButton>
+          </Grid>
+        </Border>
+        <TextBlock Classes="hint" Text="{Binding L_CurrentAppsModeHint}"/>
       </StackPanel>
     </Border>
 
-    <Border Grid.Row="2"
-            IsVisible="{Binding IsTrueSplitStatusVisible}"
-            Background="{DynamicResource WarningBgBrush}"
-            BorderBrush="{DynamicResource WarningBorderBrush}"
-            BorderThickness="0,0,0,1"
-            Padding="14,7">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-        <TextBlock Grid.Column="0"
-                   Text="{Binding TrueSplitStatusText}"
-                   FontSize="11"
-                   TextWrapping="Wrap"
-                   VerticalAlignment="Center"
-                   Foreground="{DynamicResource WarningFgBrush}"/>
-        <Button Classes="solid" Grid.Column="1"
+    <Border Grid.Row="2" Classes="banner" IsVisible="{Binding IsTrueSplitStatusVisible}">
+      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+        <icons:Pictogram Grid.Column="0" Id="warning"/>
+        <TextBlock Grid.Column="1" Text="{Binding TrueSplitStatusText}"/>
+        <Button Classes="solid small" Grid.Column="2"
                 Content="{Binding L_TrueSplitRetry}"
                 Command="{Binding RestartTrueSplitCommand}"
                 IsVisible="{Binding IsTrueSplitRetryVisible}"
-                FontSize="11" FontWeight="SemiBold"
-                Padding="10,4"
-                CornerRadius="{StaticResource RadiusSm}"
+                FontWeight="SemiBold"
                 Background="{DynamicResource WarningSolidBrush}"
-                Foreground="White"
-                VerticalAlignment="Center"/>
+                Foreground="White"/>
       </Grid>
     </Border>
 
     <Grid Grid.Row="3"
-          ColumnDefinitions="120,*"
+          ColumnDefinitions="136,*"
           IsEnabled="{Binding !IsApplying}"
           Opacity="{Binding IsSplitTunnel, Converter={x:Static conv:BoolTo10or05Converter.Instance}}"
           IsHitTestVisible="{Binding IsSplitTunnel}"
@@ -203,84 +257,92 @@
             BorderThickness="0,0,1,0"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
             Background="{DynamicResource SurfaceSunkenBrush}">
-      <Grid RowDefinitions="*,Auto,Auto">
+      <Grid RowDefinitions="*,Auto">
         <ListBox Grid.Row="0"
-                 Classes="cat-list"
+                 Classes="cat-list sub-tabs"
                  ItemsSource="{Binding ActiveAppGroups}"
                  SelectedItem="{Binding SelectedActiveAppGroup}"
                  Background="Transparent"
                  BorderThickness="0"
+                 Padding="6"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.VerticalScrollBarVisibility="Auto">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AppGroupViewModel">
-              <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,4">
+              <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0" Classes="cat-name"
-                           Text="{Binding DisplayName}"/>
-                <TextBlock Grid.Column="1" Classes="cat-count"
-                           Text="{Binding Apps.Count}"
-                           IsVisible="{Binding Apps.Count}"/>
+                           Text="{Binding DisplayName}"
+                           ToolTip.Tip="{Binding DisplayName}"/>
+                <Border Grid.Column="1" Classes="cat-count"
+                        IsVisible="{Binding Apps.Count}">
+                  <TextBlock Text="{Binding Apps.Count}"/>
+                </Border>
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
 
-        <TextBox Grid.Row="1" x:Name="NewCategoryInput"
-                 Text="{Binding NewCategoryName}"
-                 PlaceholderText="{Binding L_CategoryNamePrompt}"
-                 FontSize="10" Padding="6,4" Margin="4,4,4,2"/>
-        <Button Classes="solid" Grid.Row="2"
-                icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddCategory}"
-                Command="{Binding AddCategoryCommand}"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Center"
-                Margin="4,0,4,4" Padding="4,4"
-                FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
-                Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"/>
+        <Border Grid.Row="1"
+                Padding="6,8,6,8"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource BorderSubtleBrush}">
+          <StackPanel Spacing="6">
+            <TextBox x:Name="NewCategoryInput"
+                     Text="{Binding NewCategoryName}"
+                     PlaceholderText="{Binding L_CategoryNameWatermark}"
+                     FontSize="11" Padding="8,5"
+                     CornerRadius="{StaticResource RadiusSm}"/>
+            <Button Classes="small" Padding="4,3"
+                    icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding L_AddCategory}"
+                    Command="{Binding AddCategoryCommand}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    FontWeight="SemiBold"/>
+          </StackPanel>
+        </Border>
       </Grid>
     </Border>
 
-    <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto"
+    <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto"
           DataContext="{Binding SelectedActiveAppGroup}"
           x:DataType="vm:AppGroupViewModel"
           IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
 
-      <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
-            Margin="14,10,14,6">
-        <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="13" FontWeight="Bold"
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="6"
+            Margin="12,10,10,8">
+        <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold"
+                   Foreground="{DynamicResource TextPrimaryBrush}"
+                   TextTrimming="CharacterEllipsis"
                    VerticalAlignment="Center"/>
-        <Button Grid.Column="1" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="4">
+          <Button Classes="small"
+                  Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_SelectAllApps}"
+                  Command="{Binding SelectAllCommand}"/>
+          <Button Classes="small"
+                  Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ClearAllApps}"
+                  Command="{Binding ClearAllCommand}"/>
+        </StackPanel>
+        <Button Grid.Column="1" Classes="icon-btn"
                 IsVisible="{Binding IsCustomCategory}"
                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCategoryCommand}"
                 CommandParameter="{Binding}"
-                Background="Transparent" BorderThickness="0"
-                Padding="8,2" MinHeight="0" FontSize="11"
-                Opacity="0.6"
-                ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}"/>
+                ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}"
+                AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveCategory}">
+          <icons:Pictogram Id="delete" Width="15" Height="15"/>
+        </Button>
       </Grid>
 
-      <Border Grid.Row="1" Padding="14,4,14,8">
-        <StackPanel Orientation="Horizontal" Spacing="6">
-          <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_SelectAllApps}"
-                  Command="{Binding SelectAllCommand}"
-                  HorizontalContentAlignment="Center" FontSize="11" Padding="6,4"/>
-          <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ClearAllApps}"
-                  Command="{Binding ClearAllCommand}"
-                  HorizontalContentAlignment="Center" FontSize="11" Padding="6,4"/>
-        </StackPanel>
-      </Border>
+      <StackPanel Grid.Row="1" Classes="empty-state" IsVisible="{Binding !Apps.Count}">
+        <icons:Pictogram Id="tab-apps"/>
+        <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsGroupEmpty}"/>
+      </StackPanel>
 
-      <TextBlock Grid.Row="2" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsGroupEmpty}"
-                 HorizontalAlignment="Center" VerticalAlignment="Center"
-                 FontSize="11" Opacity="0.5" FontStyle="Italic"
-                 IsVisible="{Binding !Apps.Count}"/>
-
-      <ListBox Grid.Row="2"
+      <ListBox Grid.Row="1"
                Classes="apps-list"
                ItemsSource="{Binding Apps}"
                Background="Transparent"
                BorderThickness="0"
-               Padding="10,0,10,6"
+               Padding="12,0,12,8"
                SelectionMode="Single"
                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -300,48 +362,51 @@
                            TextTrimming="CharacterEllipsis"
                            ToolTip.Tip="{Binding ProcessName}"/>
                 <Panel Grid.Column="2" IsVisible="{Binding IsChecked}">
-                  <Border Classes="routing-badge vpn-badge"
+                  <Border Classes="badge vpn-badge"
                           ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsListInclude}"
                           IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRoutingAppsModeInclude}">
-                    <TextBlock Text="VPN" FontSize="9" FontWeight="Bold"/>
+                    <TextBlock Text="VPN"/>
                   </Border>
-                  <Border Classes="routing-badge direct-badge"
+                  <Border Classes="badge direct-badge"
                           ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsListExclude}"
                           IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsRoutingAppsModeExclude}">
-                    <TextBlock Text="BYPASS" FontSize="9" FontWeight="Bold"/>
+                    <TextBlock Text="BYPASS"/>
                   </Border>
                 </Panel>
-                <Border Grid.Column="3" Classes="custom-badge"
+                <Border Grid.Column="3" Classes="badge custom-badge"
                         IsVisible="{Binding IsCustom}">
-                  <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblCustomBadge}"
-                             FontSize="9"
-                             Foreground="{DynamicResource TextMutedBrush}"/>
+                  <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblCustomBadge}"/>
                 </Border>
-                <Button Grid.Column="4" icons:PictogramText.Icons="delete" icons:PictogramText.Content="✕"
+                <Button Grid.Column="4" Classes="icon-btn"
                         IsVisible="{Binding IsCustom}"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCustomAppCommand}"
                         CommandParameter="{Binding}"
-                        Background="Transparent" BorderThickness="0"
-                        Padding="6,0" MinHeight="0" FontSize="11"
-                        Foreground="{DynamicResource TextMutedBrush}"
-                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveApp}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveApp}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveApp}"
+                        AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveApp}">
+                  <icons:Pictogram Id="delete" Width="14" Height="14"/>
+                </Button>
               </Grid>
             </Border>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
 
-      <Border Grid.Row="3"
-              Padding="10,8"
+      <Border Grid.Row="2"
+              Padding="12,10"
               BorderThickness="0,1,0,0"
               BorderBrush="{DynamicResource BorderSubtleBrush}"
-              Background="{DynamicResource SurfaceSunkenBrush}">
-        <StackPanel Spacing="6">
-          <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsPendingApplyHint}"
-                     IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
-                     TextWrapping="Wrap"
-                     FontSize="10"
-                     Foreground="{DynamicResource WarningFgBrush}"/>
+              Background="{DynamicResource SurfaceBaseBrush}">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6"
+                IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}">
+            <icons:Pictogram Grid.Column="0" Id="warning" Width="13" Height="13" VerticalAlignment="Top" Margin="0,1,0,0"
+                             Foreground="{DynamicResource WarningFgBrush}"/>
+            <TextBlock Grid.Column="1"
+                       Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AppsPendingApplyHint}"
+                       TextWrapping="Wrap"
+                       FontSize="10"
+                       Foreground="{DynamicResource WarningFgBrush}"/>
+          </Grid>
           <Button Classes="solid" icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}"
                   Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
                   IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
@@ -350,56 +415,60 @@
                   HorizontalContentAlignment="Center"
                   Background="{DynamicResource WarningSolidBrush}" Foreground="White"
                   FontSize="11" FontWeight="SemiBold"
-                  Padding="0,6" CornerRadius="{StaticResource RadiusSm}"/>
+                  Padding="0,7" CornerRadius="{StaticResource RadiusSm}"/>
           <Button Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ImportSteamGames}"
                   Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ImportSteamGamesCommand}"
                   IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsAppsListEditorExclude}"
                   HorizontalAlignment="Stretch"
                   HorizontalContentAlignment="Center"
                   FontSize="11" FontWeight="SemiBold"
-                  Padding="0,5" CornerRadius="{StaticResource RadiusSm}"/>
-          <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
-            <TextBox Grid.Row="0" x:Name="CustomAppInput"
+                  Padding="0,6" CornerRadius="{StaticResource RadiusSm}"/>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <TextBox Grid.Column="0" x:Name="CustomAppInput"
                      PlaceholderText="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"
-                     FontSize="11" Padding="8,5"
-                     CornerRadius="{StaticResource RadiusSm}"
-                     HorizontalAlignment="Stretch"/>
-
-            <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
-              <Button Grid.Column="0" x:Name="BrowseExeButton"
-                      Click="OnBrowseExeClicked"
-                      Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
-                      Background="{DynamicResource SurfaceBaseBrush}"
-                      BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1"/>
-              <Button Grid.Column="1" x:Name="RunningProcessesButton"
-                      Click="OnSelectRunningProcessClicked"
-                      Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
-                      Background="{DynamicResource SurfaceBaseBrush}"
-                      BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="1">
-                <Button.Flyout>
-                  <MenuFlyout Placement="TopEdgeAlignedRight"/>
-                </Button.Flyout>
-              </Button>
-              <Button Classes="solid" Grid.Column="2" x:Name="AddCustomAppButton"
-                      icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
-                      Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
-                      CommandParameter="{Binding #CustomAppInput.Text}"
-                      HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Center"
-                      Padding="10,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
-                      Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                      FontWeight="SemiBold"/>
-            </Grid>
+                     FontSize="11" Padding="8,6"
+                     VerticalContentAlignment="Center"
+                     CornerRadius="{StaticResource RadiusSm}"/>
+            <Button Classes="solid" Grid.Column="1" x:Name="AddCustomAppButton"
+                    icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
+                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
+                    CommandParameter="{Binding #CustomAppInput.Text}"
+                    VerticalAlignment="Stretch"
+                    VerticalContentAlignment="Center"
+                    Padding="14,0" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                    FontWeight="SemiBold"/>
+          </Grid>
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+            <Button Grid.Column="0" x:Name="BrowseExeButton" Classes="small"
+                    Click="OnBrowseExeClicked"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <icons:Pictogram Id="folder" Width="13" Height="13" VerticalAlignment="Center"/>
+                <TextBlock x:Name="BrowseExeLabel" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+            <Button Grid.Column="1" x:Name="RunningProcessesButton" Classes="small"
+                    Click="OnSelectRunningProcessClicked"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+              <StackPanel Orientation="Horizontal" Spacing="5">
+                <icons:Pictogram Id="running" Width="13" Height="13" VerticalAlignment="Center"/>
+                <TextBlock x:Name="RunningProcessesLabel" VerticalAlignment="Center"/>
+              </StackPanel>
+              <Button.Flyout>
+                <MenuFlyout Placement="TopEdgeAlignedRight"/>
+              </Button.Flyout>
+            </Button>
           </Grid>
         </StackPanel>
       </Border>
     </Grid>
 
-    <TextBlock Grid.Column="1"
-               icons:PictogramText.Icons="arrow-left" icons:PictogramText.Text="{Binding L_SelectCategoryHint}"
-               HorizontalAlignment="Center" VerticalAlignment="Center"
-               FontSize="11" Opacity="0.5" FontStyle="Italic"
-               IsVisible="{Binding SelectedActiveAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>
+    <StackPanel Grid.Column="1" Classes="empty-state"
+                IsVisible="{Binding SelectedActiveAppGroup, Converter={x:Static ObjectConverters.IsNull}}">
+      <icons:Pictogram Id="arrow-left"/>
+      <TextBlock Text="{Binding L_SelectCategoryLabel}"/>
+    </StackPanel>
     </Grid>
   </Grid>
 </UserControl>

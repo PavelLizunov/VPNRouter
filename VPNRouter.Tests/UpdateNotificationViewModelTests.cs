@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -105,6 +106,48 @@ public sealed class UpdateNotificationViewModelTests
         Assert.Equal(1, fake.CheckCallCount);
         Assert.Equal(UpdateNotificationViewModel.UpdateCheckState.UpToDate, vm.CheckState);
         Assert.False(vm.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task ToggleVersionHistoryCommand_ExperimentalChannel_ListsCandidatesWithALabel()
+    {
+        var stable = SampleInfo("2.49.3");
+        var candidate = SampleInfo("2.0.0-r26") with { IsPrerelease = true };
+        var fake = new FakeUpdateSource
+        {
+            StableReleases = new[] { stable },
+            CandidateReleases = new[] { candidate, stable },
+        };
+        var settings = DefaultSettings();
+        settings.Channel = "experimental";
+        var vm = new UpdateNotificationViewModel(settings, DefaultLogger(), fake);
+
+        await vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+
+        Assert.True(fake.LastIncludePrereleases);
+        Assert.Equal(8, fake.LastListMaxCount);
+        Assert.Equal(3, vm.StableVersions.Count);
+        var row = vm.StableVersions.Single(v => !v.IsInstalled && v.Version == "2.0.0-r26");
+        Assert.True(row.IsPrerelease);
+        Assert.Contains("2.0.0-r26", row.DisplayVersion);
+        Assert.Contains(VPNRouter.Core.Localization.Strings.PrereleaseLabel, row.DisplayVersion);
+        Assert.DoesNotContain(VPNRouter.Core.Localization.Strings.PrereleaseLabel, vm.StableVersions.Single(v => !v.IsInstalled && v.Version == "2.49.3").DisplayVersion);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.RollbackSafetyHintCandidates, vm.VersionHistoryMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task ToggleVersionHistoryCommand_StableChannel_AsksForStableOnlyAndKeepsTheOldLimit()
+    {
+        var fake = new FakeUpdateSource { StableReleases = new[] { SampleInfo("2.49.2") } };
+        var vm = new UpdateNotificationViewModel(DefaultSettings(), DefaultLogger(), fake);
+
+        await vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+
+        Assert.False(fake.LastIncludePrereleases);
+        Assert.Equal(3, fake.LastListMaxCount);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.RollbackSafetyHint, vm.VersionHistoryMessage);
+        Assert.All(vm.StableVersions.Where(v => !v.IsInstalled),
+            v => Assert.DoesNotContain(VPNRouter.Core.Localization.Strings.PrereleaseLabel, v.DisplayVersion));
     }
 
     [AvaloniaFact]

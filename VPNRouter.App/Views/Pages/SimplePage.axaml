@@ -3,61 +3,394 @@
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:icons="using:VPNRouter.App.Controls"
+             xmlns:pages="using:VPNRouter.App.Views.Pages"
              x:Class="VPNRouter.App.Views.Pages.SimplePage"
              x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
 
+    <!-- Home screen, direction A "status emblem": one centred column (max 400 px) with the status emblem as the hero,
+         the state word and one sub-line under it, the pill Connect / Disconnect button, then the connection card
+         (config row + routing segments) and a quiet list of secondary rows. Spacing uses the 4 px scale (4, 8, 12, 16,
+         24); every card uses RadiusXl and every control inside a card RadiusLg, so corners stay concentric. -->
+    <UserControl.Styles>
+
+        <!-- Status emblem: halo, track, state ring, connecting arc, mascot tile and a shield badge at six o'clock. -->
+        <Style Selector="Ellipse.halo">
+            <Setter Property="Fill" Value="Transparent"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Fill" Duration="0:0:0.24"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Grid.emblem.on Ellipse.halo">
+            <Setter Property="Fill" Value="{DynamicResource SuccessBgBrush}"/>
+        </Style>
+        <Style Selector="Grid.emblem.busy Ellipse.halo">
+            <Setter Property="Fill" Value="{DynamicResource AccentBgSubtleBrush}"/>
+        </Style>
+        <Style Selector="Grid.emblem.error Ellipse.halo">
+            <Setter Property="Fill" Value="{DynamicResource DangerBgBrush}"/>
+        </Style>
+        <Style Selector="Grid.emblem.warn Ellipse.halo">
+            <Setter Property="Fill" Value="{DynamicResource WarningBgBrush}"/>
+        </Style>
+
+        <Style Selector="Ellipse.track">
+            <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}"/>
+            <Setter Property="StrokeThickness" Value="3"/>
+        </Style>
+
+        <Style Selector="Ellipse.ring">
+            <Setter Property="StrokeThickness" Value="3"/>
+            <Setter Property="Stroke" Value="{DynamicResource SuccessSolidBrush}"/>
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.24"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Grid.emblem.on Ellipse.ring">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Grid.emblem.error Ellipse.ring">
+            <Setter Property="Stroke" Value="{DynamicResource DangerSolidBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Grid.emblem.warn Ellipse.ring">
+            <Setter Property="Stroke" Value="{DynamicResource WarningSolidBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+
+        <Style Selector="Arc.spinner">
+            <Setter Property="Stroke" Value="{DynamicResource AccentSolidBrush}"/>
+            <Setter Property="StrokeLineCap" Value="Round"/>
+            <Setter Property="StartAngle" Value="-90"/>
+            <Setter Property="SweepAngle" Value="100"/>
+        </Style>
+        <!-- RenderTransform only: the rotation never touches layout. Skipped when the system asks for reduced motion. -->
+        <Style Selector="pages|SimplePage:not(.calm) Arc.spinner.spin">
+            <Style.Animations>
+                <Animation Duration="0:0:1.1" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RotateTransform.Angle" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RotateTransform.Angle" Value="360"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+
+        <Style Selector="Border.tile">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
+        </Style>
+
+        <Style Selector="Border.badge">
+            <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SurfaceAppBrush}"/>
+            <Setter Property="BorderThickness" Value="3"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+        <Style Selector="Grid.emblem.on Border.badge">
+            <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource SurfaceBaseBrush}"/>
+        </Style>
+        <Style Selector="Grid.emblem.busy Border.badge">
+            <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource SurfaceBaseBrush}"/>
+        </Style>
+        <Style Selector="Grid.emblem.error Border.badge">
+            <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource SurfaceBaseBrush}"/>
+        </Style>
+        <Style Selector="Grid.emblem.warn Border.badge">
+            <Setter Property="Background" Value="{DynamicResource WarningSolidBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource SurfaceBaseBrush}"/>
+        </Style>
+
+        <!-- Hero text. -->
+        <Style Selector="TextBlock.state">
+            <Setter Property="FontSize" Value="{StaticResource Fs3Xl}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.state.on">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessFgBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.state.error">
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.state.warn">
+            <Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.subline">
+            <Setter Property="FontSize" Value="{StaticResource FsMd}"/>
+            <Setter Property="LineHeight" Value="18"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="MaxWidth" Value="340"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+
+        <!-- Primary action: one pill, 48 px high, the full width of the column. -->
+        <Style Selector="Button.cta">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="MinHeight" Value="48"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="FontSize" Value="{StaticResource FsXl}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.cta.go">
+            <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.cta.stop">
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="Button.cta.wait">
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.cta.wait:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="Button.cta icons|Pictogram">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Cards and the quiet list. -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusXl}"/>
+            <Setter Property="BoxShadow" Value="{DynamicResource ShadowXs}"/>
+        </Style>
+        <Style Selector="Border.quiet">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusXl}"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+        <Style Selector="Border.divider">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}"/>
+        </Style>
+        <Style Selector="ListBox.pick">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.pick ListBoxItem">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
+            <Setter Property="FontSize" Value="{StaticResource FsMd}"/>
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="LineHeight" Value="16"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+
+        <Style Selector="Button.row">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}"/>
+        </Style>
+        <Style Selector="Button.row:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="Button.row:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="Button.row icons|Pictogram.lead">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="Button.row icons|Pictogram.trail">
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+
+        <Style Selector="Button.change">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6,10,6"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.change:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.change:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+
+        <!-- Routing segments: two radio buttons drawn as one pill track with a raised selected segment. -->
+        <Style Selector="Border.seg-track">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+        <Style Selector="RadioButton.seg">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="FontSize" Value="{StaticResource FsMd}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Segment"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="RadioButton.seg:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="RadioButton.seg:checked">
+            <Setter Property="Background" Value="{DynamicResource SurfaceOverlayBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <!-- The Fluent radio theme recolours its content presenter on hover and press; keep the token colours. -->
+        <Style Selector="RadioButton.seg:pointerover /template/ ContentPresenter#PART_ContentPresenter, RadioButton.seg:pressed /template/ ContentPresenter#PART_ContentPresenter, RadioButton.seg:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="RadioButton.seg:checked /template/ Border#PART_Segment">
+            <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
+        </Style>
+        <Style Selector="RadioButton.seg icons|Pictogram">
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="RadioButton.seg:checked icons|Pictogram">
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="RadioButton.seg:disabled">
+            <Setter Property="Opacity" Value="0.6"/>
+        </Style>
+    </UserControl.Styles>
+
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
-                  AllowAutoHide="False"
-                  Padding="0,12,0,16">
-        <Grid Margin="16,0,16,0">
-        <Grid MaxWidth="420" HorizontalAlignment="Center">
-            <StackPanel Spacing="14">
+                  AllowAutoHide="False">
+        <Grid Margin="16,16,16,16">
+            <StackPanel MaxWidth="400" HorizontalAlignment="Stretch">
 
-                <Border BorderThickness="1"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        Background="{DynamicResource SurfaceBaseBrush}"
-                        CornerRadius="{StaticResource RadiusMd}"
-                        Padding="14">
-                    <StackPanel Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                            <icons:Pictogram Id="status" Width="20" Height="20" VerticalAlignment="Center"
-                                     Foreground="{DynamicResource SuccessSolidBrush}"
-                                     IsVisible="{Binding SimpleStatusIsOn}"/>
-                            <icons:Pictogram Id="status" Width="20" Height="20" VerticalAlignment="Center"
-                                     Foreground="{DynamicResource WarningSolidBrush}"
-                                     IsVisible="{Binding SimpleStatusIsWarn}"/>
-                            <icons:Pictogram Id="status" Width="20" Height="20" VerticalAlignment="Center"
-                                     Foreground="{DynamicResource TextMutedBrush}"
-                                     IsVisible="{Binding SimpleStatusIsOff}"/>
-                            <TextBlock Text="{Binding SimpleStatusTitle}"
-                                       FontSize="15" FontWeight="Bold"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                        <TextBlock icons:PictogramText.Icons="warning" icons:PictogramText.PrefixOnly="True" icons:PictogramText.Text="{Binding SimpleStatusDescription}"
-                                   FontSize="10"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap"
-                                   Margin="20,0,0,0"
-                                   LineHeight="15"/>
-                        <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding ConnectionStatsText}"
-                                   IsVisible="{Binding HasConnectionStats}"
-                                   FontSize="10"
-                                   FontFamily="Consolas,Menlo,monospace"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                   Margin="20,0,0,0"
-                                   LineHeight="15"/>
-                    </StackPanel>
-                </Border>
+                <!-- Hero: emblem, state word, sub-line, live traffic. -->
+                <Grid Classes="emblem"
+                      Width="136" Height="136"
+                      HorizontalAlignment="Center"
+                      Classes.on="{Binding SmpHeroIsOn}"
+                      Classes.busy="{Binding SmpHeroIsBusy}"
+                      Classes.error="{Binding SmpHeroIsError}"
+                      Classes.warn="{Binding SmpHeroIsWarn}">
+                    <Ellipse Classes="halo" Width="136" Height="136"/>
+                    <Ellipse Classes="track" Width="114" Height="114"/>
+                    <Ellipse Classes="ring" Width="114" Height="114"/>
+                    <Arc Classes="spinner"
+                         Classes.spin="{Binding SmpHeroIsBusy}"
+                         IsVisible="{Binding SmpHeroIsBusy}"
+                         Width="114" Height="114" StrokeThickness="3">
+                        <Arc.RenderTransform>
+                            <RotateTransform/>
+                        </Arc.RenderTransform>
+                    </Arc>
+                    <Border Classes="tile" Width="92" Height="92" CornerRadius="46" ClipToBounds="True">
+                        <Image Source="{Binding LogoSource}"
+                               Width="70" Height="70" Stretch="Uniform"
+                               RenderOptions.BitmapInterpolationMode="HighQuality"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <Border Classes="badge"
+                            Width="34" Height="34" CornerRadius="17"
+                            HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                            Margin="0,0,0,-6">
+                        <Panel>
+                            <icons:Pictogram Id="shield" Width="16" Height="16" IsVisible="{Binding SmpHeroIsIdle}"/>
+                            <icons:Pictogram Id="shield" Width="16" Height="16" IsVisible="{Binding SmpHeroIsBusy}"/>
+                            <icons:Pictogram Id="shield-check" Width="16" Height="16" IsVisible="{Binding SmpHeroIsOn}"/>
+                            <icons:Pictogram Id="shield-alert" Width="16" Height="16" IsVisible="{Binding SmpHeroIsError}"/>
+                            <icons:Pictogram Id="shield-alert" Width="16" Height="16" IsVisible="{Binding SmpHeroIsWarn}"/>
+                        </Panel>
+                    </Border>
+                </Grid>
+
+                <TextBlock Classes="state"
+                           Classes.on="{Binding SmpHeroIsOn}"
+                           Classes.error="{Binding SmpHeroIsError}"
+                           Classes.warn="{Binding SmpHeroIsWarn}"
+                           Margin="0,16,0,0"
+                           Text="{Binding SmpHomeTitle}"/>
+                <TextBlock Classes="subline"
+                           Margin="0,6,0,0"
+                           Text="{Binding SmpHomeSubline}"/>
+                <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding ConnectionStatsText}"
+                           IsVisible="{Binding HasConnectionStats}"
+                           Margin="0,8,0,0"
+                           HorizontalAlignment="Center"
+                           FontSize="{StaticResource FsSm}"
+                           FontFamily="Consolas,Menlo,monospace"
+                           Foreground="{DynamicResource TextMutedBrush}"/>
 
                 <Border IsVisible="{Binding IsBadComboWarningVisible}"
+                        Margin="0,20,0,0"
                         BorderThickness="1"
                         BorderBrush="{DynamicResource WarningBorderBrush}"
                         Background="{DynamicResource WarningBgBrush}"
-                        CornerRadius="{StaticResource RadiusMd}"
-                        Padding="14,12">
+                        CornerRadius="{StaticResource RadiusXl}"
+                        Padding="16,12">
                     <StackPanel Spacing="8">
                         <TextBlock Text="{Binding LblBadComboWarningTitle}"
                                    FontWeight="Bold"
@@ -74,12 +407,12 @@
                                     Command="{Binding DisableBadComboLockdownCommand}"
                                     FontSize="11"
                                     Padding="10,5"
-                                    CornerRadius="{StaticResource RadiusSm}"/>
+                                    CornerRadius="{StaticResource RadiusLg}"/>
                             <Button Content="{Binding LblBadComboDisableRuBypass}"
                                     Command="{Binding DisableBadComboRuBypassCommand}"
                                     FontSize="11"
                                     Padding="10,5"
-                                    CornerRadius="{StaticResource RadiusSm}"
+                                    CornerRadius="{StaticResource RadiusLg}"
                                     Background="Transparent"
                                     BorderBrush="{DynamicResource WarningBorderBrush}"
                                     BorderThickness="1"/>
@@ -87,219 +420,257 @@
                     </StackPanel>
                 </Border>
 
-                <Button Command="{Binding OpenConfigPickerCommand}"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Stretch"
-                        Padding="0"
-                        BorderThickness="1"
-                        BorderBrush="{DynamicResource BorderSubtleBrush}"
-                        Background="{DynamicResource SurfaceRaisedBrush}"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        AutomationProperties.Name="{Binding L_SmpConfigRowLabel}">
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,8">
-                        <Border Grid.Column="0" Width="24" Height="24"
-                                CornerRadius="{StaticResource RadiusXs}"
-                                Background="{DynamicResource AccentBgSubtleBrush}"
-                                VerticalAlignment="Center">
-                            <TextBlock icons:PictogramText.Icons="flag" icons:PictogramText.Text="⚑" FontSize="12"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource AccentFgBrush}"/>
-                        </Border>
-                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding L_SmpConfigRowLabel}"
-                                       FontSize="9" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextMutedBrush}"/>
-                            <TextBlock Text="{Binding SimpleConfigModeSummary}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextPrimaryBrush}"
-                                       FontFamily="Consolas, 'Segoe UI Mono', monospace"/>
-                            <TextBlock Text="{Binding SimpleActiveOutboundLine}"
-                                       IsVisible="{Binding SimpleActiveOutboundNormalVisible}"
-                                       FontSize="9"
-                                       Foreground="{DynamicResource TextMutedBrush}"
-                                       FontFamily="Consolas, 'Segoe UI Mono', monospace"
-                                       TextWrapping="Wrap"/>
-                            <StackPanel Orientation="Horizontal" Spacing="4"
-                                        IsVisible="{Binding SimpleActiveOutboundSuspectVisible}">
-                                <TextBlock icons:PictogramText.Icons="warning" icons:PictogramText.Text="⚠"
-                                           FontSize="9" FontWeight="Bold"
-                                           Foreground="{DynamicResource DangerFgBrush}"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding SimpleActiveOutboundLine}"
-                                           FontSize="9" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource DangerFgBrush}"
-                                           FontFamily="Consolas, 'Segoe UI Mono', monospace"
-                                           TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </StackPanel>
-                        <Border Grid.Column="2" Classes="disclosure-pill">
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="{Binding L_SmpConfigRowToggle}"/>
-                                <icons:Pictogram Id="chevron-down" Classes="disclosure"
-                                                 Classes.open="{Binding SmpFormExpanded}"/>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-                </Button>
+                <!-- Config input of the first-run step (no saved config); it sits above the button so the flow reads top-down: paste, then connect.
+                     "Change" on the connection card opens its own panel inside that card, so the emblem and the button never move. -->
+                <Border Classes="card"
+                        IsVisible="{Binding SmpFirstRunEditorVisible}"
+                        Margin="0,24,0,0"
+                        Padding="16,14,16,16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}"/>
+                        <TextBox Text="{Binding SmpInput}"
+                                 PlaceholderText="{Binding L_SmpInputWatermark}"
+                                 AutomationProperties.Name="{Binding L_SmpInputLabel}"
+                                 FontSize="{StaticResource FsMd}"
+                                 MinHeight="40"
+                                 Padding="8,10,12,10"
+                                 VerticalContentAlignment="Center"
+                                 AcceptsReturn="False"
+                                 CornerRadius="{StaticResource RadiusLg}">
+                            <TextBox.InnerLeftContent>
+                                <icons:Pictogram Id="link" Width="16" Height="16"
+                                                 Margin="12,0,0,0"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{DynamicResource TextMutedBrush}"/>
+                            </TextBox.InnerLeftContent>
+                        </TextBox>
+                        <TextBlock Classes="hint" Text="{Binding L_SmpInputHint}"/>
+                    </StackPanel>
+                </Border>
 
-                <Border IsVisible="{Binding SmpFormExpanded}"
-                        BorderThickness="1"
-                        BorderBrush="{DynamicResource BorderSubtleBrush}"
-                        Background="{DynamicResource SurfaceBaseBrush}"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        Padding="12">
-                    <StackPanel Spacing="14">
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding L_SmpInputLabel}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                <!-- Primary action. Exactly one of the three is visible; the UI Automation name is the visible text
+                     ("Connect" / "Disconnect", tools/brat-stability.ps1 finds the button by it). -->
+                <Panel Margin="0,18,0,0">
+                    <Button Classes="cta go solid"
+                            Command="{Binding SmpToggleConnectCommand}"
+                            IsVisible="{Binding SimpleCtaIsDisconnected}"
+                            IsEnabled="{Binding SmpCanConnect}"
+                            AutomationProperties.Name="{Binding SimpleCtaText}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <icons:Pictogram Id="power"/>
+                            <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="cta stop danger-soft"
+                            Command="{Binding SmpToggleConnectCommand}"
+                            IsVisible="{Binding SimpleCtaIsConnected}"
+                            AutomationProperties.Name="{Binding SimpleCtaText}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <icons:Pictogram Id="power"/>
+                            <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="cta wait"
+                            Command="{Binding SmpToggleConnectCommand}"
+                            IsVisible="{Binding SimpleCtaIsConnecting}"
+                            IsEnabled="False"
+                            AutomationProperties.Name="{Binding L_SmpCtaWait}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Arc Classes="spinner"
+                                 Classes.spin="{Binding SimpleCtaIsConnecting}"
+                                 Width="16" Height="16" StrokeThickness="2"
+                                 VerticalAlignment="Center">
+                                <Arc.RenderTransform>
+                                    <RotateTransform/>
+                                </Arc.RenderTransform>
+                            </Arc>
+                            <TextBlock Text="{Binding L_SmpCtaWait}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </Panel>
+
+                <!-- Current connection: which config, and what goes through it. -->
+                <Border Classes="card" Margin="0,14,0,0">
+                    <StackPanel>
+                        <Grid IsVisible="{Binding SmpHasConfig}"
+                              ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"
+                              Margin="16,14,14,14">
+                            <Border Width="40" Height="40"
+                                    CornerRadius="{StaticResource RadiusLg}"
+                                    Background="{DynamicResource AccentBgSubtleBrush}"
+                                    VerticalAlignment="Center">
+                                <icons:Pictogram Id="tab-servers" Width="20" Height="20"
+                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                 Foreground="{DynamicResource AccentFgBrush}"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding SmpConfigName}"
+                                           FontSize="{StaticResource FsLg}" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                <TextBlock Text="{Binding SmpConfigKind}"
+                                           FontSize="{StaticResource FsSm}"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                                <StackPanel Orientation="Horizontal" Spacing="4"
+                                            IsVisible="{Binding SimpleActiveOutboundSuspectVisible}">
+                                    <icons:Pictogram Id="warning" Width="12" Height="12"
+                                                     VerticalAlignment="Center"
+                                                     Foreground="{DynamicResource DangerFgBrush}"/>
+                                    <TextBlock Text="{Binding SimpleActiveOutboundLine}"
+                                               FontSize="{StaticResource FsXs}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource DangerFgBrush}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Button Grid.Column="2" Classes="change"
+                                    Command="{Binding OpenConfigPickerCommand}"
+                                    AutomationProperties.Name="{Binding L_SmpConfigRowToggle}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="{Binding L_SmpConfigRowToggle}" VerticalAlignment="Center"/>
+                                    <icons:Pictogram Id="chevron-down" Classes="disclosure"
+                                                     Classes.open="{Binding SmpFormExpanded}"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- Opened by "Change": pick another server of the subscription, or replace the link. -->
+                        <Border Classes="divider" IsVisible="{Binding SmpPickerVisible}"/>
+                        <StackPanel IsVisible="{Binding SmpPickerVisible}" Margin="16,12,16,14" Spacing="8">
+                            <StackPanel IsVisible="{Binding SmpHasSubscriptionServers}" Spacing="6">
+                                <TextBlock Classes="label" Text="{Binding L_SmpPickServerLabel}"/>
+                                <ListBox Classes="pick"
+                                         ItemsSource="{Binding SubscriptionServers}"
+                                         SelectedItem="{Binding SelectedSubscriptionServer}"
+                                         MaxHeight="216"
+                                         AutomationProperties.Name="{Binding L_SmpPickServerLabel}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ServerViewModel">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip.Tip="{Binding DisplayName}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding PingDisplay}"
+                                                           FontSize="{StaticResource FsXs}"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Classes="hint" Text="{Binding L_SmpPickServerHint}"/>
+                            </StackPanel>
+                            <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" Margin="0,4,0,0"/>
                             <TextBox Text="{Binding SmpInput}"
                                      PlaceholderText="{Binding L_SmpInputWatermark}"
-                                     FontSize="11" Padding="10,7"
+                                     AutomationProperties.Name="{Binding L_SmpInputLabel}"
+                                     FontSize="{StaticResource FsMd}"
+                                     MinHeight="40"
+                                     Padding="8,10,12,10"
+                                     VerticalContentAlignment="Center"
                                      AcceptsReturn="False"
-                                     CornerRadius="{StaticResource RadiusXs}"/>
-                            <TextBlock Text="{Binding L_SmpInputHint}"
-                                       FontSize="9"
-                                       Foreground="{DynamicResource TextMutedBrush}"
-                                       TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding SmpErrorText}"
-                                       FontSize="10"
-                                       Foreground="{DynamicResource DangerFgBrush}"
-                                       IsVisible="{Binding SmpErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                       TextWrapping="Wrap"/>
+                                     CornerRadius="{StaticResource RadiusLg}"/>
+                            <TextBlock Classes="hint" Text="{Binding L_SmpInputHint}"/>
                         </StackPanel>
 
-                        <StackPanel Spacing="4" IsEnabled="{Binding !IsApplying}">
-                            <TextBlock Text="{Binding L_SmpTunnelModeLabel}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <StackPanel Spacing="8">
-                                <StackPanel Spacing="1">
-                                    <RadioButton GroupName="SmpTunnel"
+                        <Border Classes="divider" IsVisible="{Binding SmpHasConfig}"/>
+
+                        <StackPanel Margin="16,14,16,16" Spacing="10" IsEnabled="{Binding !IsApplying}">
+                            <TextBlock Classes="label" Text="{Binding L_SmpTunnelModeLabel}"/>
+                            <Border Classes="seg-track">
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
+                                    <RadioButton Classes="seg" GroupName="SmpTunnel"
                                                  IsChecked="{Binding IsSplitTunnel}"
-                                                 Content="{Binding L_SmpSplitOption}"
-                                                 FontSize="11" FontWeight="SemiBold"
-                                                 MinHeight="0" Padding="4,0"/>
-                                    <TextBlock Text="{Binding L_SmpSplitHint}"
-                                               FontSize="9"
-                                               Foreground="{DynamicResource TextMutedBrush}"
-                                               Margin="24,0,0,0"
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <StackPanel Spacing="1">
-                                    <RadioButton GroupName="SmpTunnel"
+                                                 AutomationProperties.Name="{Binding L_SmpSegSplit}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <icons:Pictogram Id="tab-apps"/>
+                                            <TextBlock Text="{Binding L_SmpSegSplit}"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton Grid.Column="1" Classes="seg" GroupName="SmpTunnel"
                                                  IsChecked="{Binding !IsSplitTunnel, Mode=OneWay}"
-                                                 Content="{Binding L_SmpFullOption}"
-                                                 FontSize="11" FontWeight="SemiBold"
-                                                 MinHeight="0" Padding="4,0"/>
-                                    <TextBlock Text="{Binding L_SmpFullHint}"
-                                               FontSize="9"
-                                               Foreground="{DynamicResource TextMutedBrush}"
-                                               Margin="24,0,0,0"
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </StackPanel>
+                                                 AutomationProperties.Name="{Binding L_SmpSegFull}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <icons:Pictogram Id="globe"/>
+                                            <TextBlock Text="{Binding L_SmpSegFull}"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </RadioButton>
+                                </Grid>
+                            </Border>
+                            <TextBlock Classes="hint" Text="{Binding L_SmpTipSplitHome}" IsVisible="{Binding IsSplitTunnel}"/>
+                            <TextBlock Classes="hint" Text="{Binding L_SmpTipFullHome}" IsVisible="{Binding !IsSplitTunnel}"/>
                         </StackPanel>
+                    </StackPanel>
+                </Border>
 
-                        <Button Command="{Binding OpenAutostartSettingsCommand}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Stretch"
-                                Padding="10,8"
-                                BorderThickness="1"
-                                BorderBrush="{DynamicResource BorderDefaultBrush}"
-                                Background="{DynamicResource SurfaceSunkenBrush}"
-                                CornerRadius="{StaticResource RadiusSm}"
-                                ToolTip.Tip="{Binding L_SmpTipAutostart}">
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                <!-- Secondary: quiet rows, no fill. -->
+                <Border Classes="quiet" Margin="0,12,0,0">
+                    <StackPanel>
+                        <Button Classes="row"
+                                Command="{Binding OpenAutostartSettingsCommand}"
+                                ToolTip.Tip="{Binding L_SmpTipAutostart}"
+                                AutomationProperties.Name="{Binding L_SmpAutostartCardTitle}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <icons:Pictogram Classes="lead" Id="power"/>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding L_SmpAutostartCardTitle}"
-                                               FontSize="11" FontWeight="SemiBold"
+                                               FontSize="{StaticResource FsMd}" FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextPrimaryBrush}"/>
                                     <TextBlock Text="{Binding L_SmpAutostartCardStatus}"
-                                               FontSize="9"
+                                               FontSize="{StaticResource FsXs}"
                                                TextWrapping="Wrap"
                                                Foreground="{DynamicResource TextMutedBrush}"/>
                                 </StackPanel>
-                                <TextBlock Grid.Column="1" icons:PictogramText.Icons="chevron-right" icons:PictogramText.Text="›"
-                                           FontSize="14" FontWeight="Bold"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource AccentFgBrush}"/>
+                                <icons:Pictogram Grid.Column="2" Classes="trail" Id="chevron-right"/>
+                            </Grid>
+                        </Button>
+                        <Border Classes="divider" Margin="42,2,12,2"/>
+                        <Button Classes="row"
+                                Command="{Binding OpenSetupWizardCommand}"
+                                ToolTip.Tip="{Binding L_TipSmpMenuSetupWizard}"
+                                AutomationProperties.Name="{Binding L_SmpSetupCheckTitle}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <icons:Pictogram Classes="lead" Id="shield-check"/>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding L_SmpSetupCheckTitle}"
+                                               FontSize="{StaticResource FsMd}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding L_SmpSetupCheckSubtitle}"
+                                               FontSize="{StaticResource FsXs}"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                </StackPanel>
+                                <icons:Pictogram Grid.Column="2" Classes="trail" Id="chevron-right"/>
+                            </Grid>
+                        </Button>
+                        <Button Classes="row"
+                                Command="{Binding ToggleUiModeCommand}"
+                                ToolTip.Tip="{Binding UiModeToggleTooltip}"
+                                AutomationProperties.Name="{Binding L_SmpAdvCardTitle}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <icons:Pictogram Classes="lead" Id="tab-settings"/>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding L_SmpAdvCardTitle}"
+                                               FontSize="{StaticResource FsMd}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding L_SmpAdvCardSubtitle}"
+                                               FontSize="{StaticResource FsXs}"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                </StackPanel>
+                                <icons:Pictogram Grid.Column="2" Classes="trail" Id="chevron-right"/>
                             </Grid>
                         </Button>
                     </StackPanel>
                 </Border>
 
-                <Button Classes="solid" Command="{Binding SmpToggleConnectCommand}"
-                        Content="{Binding SimpleCtaText}"
-                        IsVisible="{Binding SimpleCtaIsConnected}"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Padding="0,12" FontSize="12" FontWeight="Bold"
-                        Background="{DynamicResource AccentSolidBrush}"
-                        Foreground="{DynamicResource AccentOnSolidBrush}"
-                        BorderThickness="0"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        AutomationProperties.Name="{Binding SimpleCtaText}"/>
-
-                <Button Command="{Binding SmpToggleConnectCommand}"
-                        Content="{Binding SimpleCtaText}"
-                        IsVisible="{Binding SimpleCtaIsConnecting}"
-                        IsEnabled="False"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Padding="0,12" FontSize="12" FontWeight="Bold"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        Foreground="{DynamicResource TextSecondaryBrush}"
-                        BorderThickness="0"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        AutomationProperties.Name="{Binding SimpleCtaText}"/>
-
-                <Button Command="{Binding SmpToggleConnectCommand}"
-                        Content="{Binding SimpleCtaText}"
-                        IsVisible="{Binding SimpleCtaIsDisconnected}"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Padding="0,12" FontSize="12" FontWeight="Bold"
-                        Background="{DynamicResource SurfaceBaseBrush}"
-                        Foreground="{DynamicResource AccentFgBrush}"
-                        BorderBrush="{DynamicResource AccentBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        AutomationProperties.Name="{Binding SimpleCtaText}"/>
-
-                <Button Command="{Binding ToggleUiModeCommand}"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Stretch"
-                        Padding="0"
-                        BorderThickness="1"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        Background="{DynamicResource SurfaceBaseBrush}"
-                        CornerRadius="{StaticResource RadiusMd}"
-                        ToolTip.Tip="{Binding UiModeToggleTooltip}"
-                        AutomationProperties.Name="{Binding L_SmpAdvCardTitle}">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,12">
-                        <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding L_SmpAdvCardTitle}"
-                                       FontSize="12" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="{Binding L_SmpAdvCardSubtitle}"
-                                       FontSize="9"
-                                       Foreground="{DynamicResource TextMutedBrush}"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                        <Border Grid.Column="1" Width="28" Height="28"
-                                CornerRadius="{StaticResource RadiusSm}"
-                                Background="{DynamicResource AccentBgSubtleBrush}"
-                                VerticalAlignment="Center">
-                            <TextBlock icons:PictogramText.Icons="chevron-right" icons:PictogramText.Text="›" FontSize="15" FontWeight="Bold"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource AccentFgBrush}"/>
-                        </Border>
-                    </Grid>
-                </Button>
-
             </StackPanel>
-        </Grid>
         </Grid>
     </ScrollViewer>
 </UserControl>

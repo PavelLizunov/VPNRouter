@@ -1,3 +1,4 @@
+using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -98,7 +99,11 @@ public class AutoFailoverEngineTests
         var fourth = await engine.HandleDeadConfigAsync("dead-4", ct);
         Assert.False(fourth.Switched);
         Assert.NotNull(fourth.UserFacingMessage);
-        Assert.Contains("Все серверы", fourth.UserFacingMessage!);
+        Assert.Contains(fourth.UserFacingMessage!, new[]
+        {
+            Strings.FailoverAllServersDown(engine.TriedServers.Count, "ru"),
+            Strings.FailoverAllServersDown(engine.TriedServers.Count, "en"),
+        });
     }
 
     [Fact]
@@ -118,7 +123,11 @@ public class AutoFailoverEngineTests
         Assert.False(outcome.Switched);
         Assert.Null(outcome.NewActiveServer);
         Assert.NotNull(outcome.UserFacingMessage);
-        Assert.Contains("Кастомный", outcome.UserFacingMessage!);
+        Assert.Contains(outcome.UserFacingMessage!, new[]
+        {
+            Strings.FailoverCustomConfigUnusableFor("ru"),
+            Strings.FailoverCustomConfigUnusableFor("en"),
+        });
         Assert.Equal("srv-1", settings.Vless.ActiveServer);
     }
 
@@ -177,8 +186,11 @@ public class AutoFailoverEngineTests
 
         Assert.False(outcome.Switched);
         Assert.NotNull(outcome.UserFacingMessage);
-        Assert.Contains("провайдер", outcome.UserFacingMessage!);
-        Assert.Contains("подписк", outcome.UserFacingMessage!);
+        Assert.Contains(outcome.UserFacingMessage!, new[]
+        {
+            Strings.FailoverNoOtherInSubscriptionFor("ru"),
+            Strings.FailoverNoOtherInSubscriptionFor("en"),
+        });
     }
 
     [Fact]
