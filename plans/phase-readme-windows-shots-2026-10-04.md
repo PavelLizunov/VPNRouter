@@ -41,4 +41,15 @@ Revert the PR. The previous images and workflow are in Git.
 
 ## Outcome
 
-Pending.
+Ready for review.
+
+- Workflow: `build-ui-mcp.yml` now also publishes `win-x64` (self-contained) as the artifact `vpnrouter-ui-mcp-win-x64`; PR run 37210114841 at c1e0f661 passed (both publishes, Linux smoke unchanged).
+- Render on WINBRAT: identity checked twice (`WINBRAT`), binary from that artifact copied to `C:\android-build\readme-render`, six `ui_render` calls through `mcpcall.py` over ssh (about 20 s of work), folder removed afterwards (checked), no `vpnrouter-ui-mcp.exe` left running; the installed app that was already running was not touched. The Windows render differs from the Linux one where it matters: "Configure VPN autostart at Windows boot", the VPN/Zapret/TG badges in the header, real executable names in the application list.
+- Images in `docs/images/` replaced (same names): six PNG of 50 to 53 KB, two clips of 2.7 and 2.9 MB rebuilt from a lossless intermediate at WebP quality 95; `clip_quality.py` worst frame 0.985 (en) and 0.985 (ru), none under 0.98. The click and highlight positions of the clip were retuned for the taller Windows header.
+- README: the hero caption now says the screens are renders of the current code on Windows with sample data; the clip has its own caption saying it is assembled from such renders with an animated cursor and is not a screen recording (English and Russian).
+- Guide pages: all 28 platform emoji removed from `docs/guide/install.md` and the Russian page (plain labels instead); no emoji left in the READMEs or guide pages.
+- Checks: `readme_check.py` 0 FAIL and 0 WARN on both READMEs, `readme_phone.py` PASS (390 px box) on both, links unchanged and resolving.
+- Surprise: the first clip captures hung and two headless Chromium processes crashed (SIGILL, SIGTRAP) while about 6 GB of `/tmp` (a RAM-backed filesystem) were in use together with the owner's heavy browser tab; freeing about 1 GB of my own scratch files fixed it and the renders ran at low priority afterwards.
+- Not done: Android screenshots; macOS and Linux renders (the README says Windows).
+
+Rollback: revert the PR.
