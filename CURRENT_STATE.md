@@ -7,13 +7,19 @@ When release or platform facts change, update this file.
 ## Releases
 
 - **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r28 (prerelease, 2026-10-04), not
+- **Latest published candidate:** v2.50.0-r29 (prerelease, 2026-10-04), not
   promoted to stable. Its Windows binary passed the cold-cycle post-ship check
-  on WINBRAT on the first attempt (`tools/post-ship-local.ps1`) and the live
+  on WINBRAT on the first attempt (`tools/post-ship-local.ps1`), the live
   scenarios of `tools/live` (cycles, per-server connects, ping with the VPN off
-  and on, mode switches, all tabs); the screenshot gate and the live-update
-  gate were not run (see `plans/phase-r28-release-2.50.0-r28-2026-10-04.md`).
-  r28 fixes what the live runs on r27 found: no pre-connect probe for a selected
+  and on, mode switches, auto-select, Other versions, all tabs, 600 fast
+  clicks), the full Windows test suite (3355 passed, 0 failed) and a headless
+  audit of 468 screen cells; macOS, Linux and Android on real devices and the
+  live-update gate were not run (see
+  `plans/phase-r29-release-2.50.0-r29-2026-10-04.md`). r29 changes no
+  connection behavior: it hides `usersecret`, `userpassword`, `authsecret` and
+  `authtoken` in logs and crash reports, scrubs the About window error log and
+  refuses a malformed host, secret or port for the Telegram proxy link; the
+  READMEs were rewritten. r28 fixes what the live runs on r27 found: no pre-connect probe for a selected
   Hysteria2/TUIC/AmneziaWG server (connect 3.7-4.1 s from the home screen),
   auto-select works for a selected Hysteria2/TUIC server (urltest group of the
   same-protocol servers), the Other versions list always offers the three newest
@@ -29,7 +35,7 @@ When release or platform facts change, update this file.
   `StatusEmblem`) and put one segmented strip on the Tools, Servers, Public and
   Applications pages. Earlier candidates: r23, r22, r21 (connection fixes from
   the tester's report on r20), r20, r19, r18. The owner's next real update is
-  the check of the driver-lock fix. Main declares `AppVersion` 2.50.0-r28.
+  the check of the driver-lock fix. Main declares `AppVersion` 2.50.0-r29.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
