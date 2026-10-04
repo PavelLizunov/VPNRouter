@@ -23,4 +23,6 @@ No agents. Everything heavy on the workers. Nothing is published as a stable rel
 
 ## Outcome
 
-Pending.
+Item 3 (ping and automatic server choice): done and shipped in r27 (N-1a, N-1b, N-3a, N-3b, N-3c), with follow-ups on main (N-3d #526, N-3e #528). Item 2 (denser MCP): the live harness and `live_*` tools are merged (N-2 #518, N-2b #520); the all-servers scenario is limited to the rows in view. Item 1 (version choice): the rollback list already existed on desktop since PR #161; N-1c extends it to older candidates on the experimental channel; Android is intentionally forward-only. Evidence tables are in the r27 brief.
+
+Not done from item 3: auto-select (urltest) on a real subscription was not observed live (needs the setting on and a degrading server), the TUN removal wait on stop, a scroll-capable all-servers scenario.
