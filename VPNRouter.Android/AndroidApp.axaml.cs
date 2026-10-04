@@ -781,7 +781,9 @@ public partial class AndroidApp : Avalonia.Application
             IsWarn = false,
             Title = Localization.SimpleStatusTitleOff,
             Subtitle = Localization.SimpleStatusDescOff,
+            Emblem = LoadMascot(),
         };
+        _statusCard.Clicked += (s, e) => OnConnectClicked(s, new Avalonia.Interactivity.RoutedEventArgs());
 
         _statusHealthCheck = new TextBlock
         {

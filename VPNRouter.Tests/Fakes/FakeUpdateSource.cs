@@ -22,6 +22,13 @@ public sealed class FakeUpdateSource : IUpdateSource
 
     public Exception? ListStableException { get; init; }
 
+    public IReadOnlyList<UpdateSourceInfo> CandidateReleases { get; init; } =
+        Array.Empty<UpdateSourceInfo>();
+
+    public bool? LastIncludePrereleases { get; private set; }
+
+    public int? LastListMaxCount { get; private set; }
+
     public string DownloadReturnPath { get; init; } = Path.Combine(Path.GetTempPath(), "fake-update-staging");
 
     public Exception? DownloadException { get; init; }
@@ -64,6 +71,16 @@ public sealed class FakeUpdateSource : IUpdateSource
         if (ListStableException is not null)
             return Task.FromException<IReadOnlyList<UpdateSourceInfo>>(ListStableException);
         return Task.FromResult(StableReleases);
+    }
+
+    public Task<IReadOnlyList<UpdateSourceInfo>> ListOlderAsync(
+        int maxCount,
+        bool includePrereleases,
+        CancellationToken ct = default)
+    {
+        LastIncludePrereleases = includePrereleases;
+        LastListMaxCount = maxCount;
+        return includePrereleases ? Task.FromResult(CandidateReleases) : ListStableAsync(maxCount, ct);
     }
 
     public Task<string> DownloadAsync(

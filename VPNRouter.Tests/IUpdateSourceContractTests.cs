@@ -263,6 +263,122 @@ public sealed class IUpdateSourceContractTests
     }
 
     [Fact]
+    public async Task GitHubReleaseSource_ListOlderAsync_WithCandidates_ListsOlderCandidatesAndStableNewestFirst()
+    {
+        // running version is 2.32.0: older = 2.31.x stable and 2.31.x-rN candidates, plus the candidate of the running core version below the final
+        var spec = new (string Tag, bool PreFlag, bool Draft, bool WithSha)[]
+        {
+            ("v2.31.9", false, false, true),
+            ("v2.31.9-r4", true, false, true),
+            ("v2.31.9-r2", true, false, true),
+            ("v2.31.8", false, false, true),
+            ("v2.31.7-r9", false, false, true),   // candidate whose release is not flagged as a prerelease: still a candidate
+            ("v2.31.6", false, true, true),       // draft
+            ("v2.31.5", false, false, false),     // no checksum
+            ("v2.32.1", false, false, true),      // newer than the running build
+            ("v2.32.0", false, false, true),      // the running build itself
+        };
+        var releases = new List<ReleaseStub>();
+        var fake = new FakeHttpClient();
+        foreach (var (tag, preFlag, draft, withSha) in spec)
+        {
+            var version = tag.TrimStart('v');
+            var assetName = AssetNameForCurrentPlatform(version);
+            var assetUrl = $"https://example.com/{assetName}";
+            var assets = withSha
+                ? new[] { new AssetStub(assetName, assetUrl, 10_000), new AssetStub($"{assetName}.sha256", $"{assetUrl}.sha256", 64) }
+                : new[] { new AssetStub(assetName, assetUrl, 10_000) };
+            releases.Add(new ReleaseStub(tag, preFlag, $"Release {tag}", assets, Draft: draft));
+            if (withSha) fake.Setup($"{assetUrl}.sha256", new string('c', 64));
+        }
+        fake.Setup(ReleasesApi, BuildReleasesJson(releases));
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo, Channel = "experimental" },
+            CurrentVersion,
+            fake,
+            new FakeDesktopInstaller());
+
+        var all = await source.ListOlderAsync(20, includePrereleases: true, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new[] { "2.31.9", "2.31.9-r4", "2.31.9-r2", "2.31.8", "2.31.7-r9" }, all.Select(x => x.Version));
+        Assert.Equal(new[] { false, true, true, false, true }, all.Select(x => x.IsPrerelease));
+
+        var capped = await source.ListOlderAsync(2, includePrereleases: true, TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "2.31.9", "2.31.9-r4" }, capped.Select(x => x.Version));
+
+        var stableOnly = await source.ListOlderAsync(20, includePrereleases: false, TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "2.31.9", "2.31.8" }, stableOnly.Select(x => x.Version));
+        Assert.All(stableOnly, x => Assert.False(x.IsPrerelease));
+    }
+
+    [Fact]
+    public async Task GitHubReleaseSource_ListOlderAsync_ManyCandidates_StillOffersTheNewestStableReleases()
+    {
+        // ten candidates newer than every stable release: a plain "newest eight" would never reach a stable version
+        var tags = Enumerable.Range(1, 10).Select(i => $"2.31.9-r{i}")
+            .Concat(new[] { "2.31.0", "2.30.0", "2.29.0", "2.28.0" }).ToList();
+        var releases = new List<ReleaseStub>();
+        var fake = new FakeHttpClient();
+        foreach (var version in tags)
+        {
+            var assetName = AssetNameForCurrentPlatform(version);
+            var assetUrl = $"https://example.com/{assetName}";
+            releases.Add(new ReleaseStub($"v{version}", version.Contains("-r"), $"Release {version}", new[]
+            {
+                new AssetStub(assetName, assetUrl, 10_000),
+                new AssetStub($"{assetName}.sha256", $"{assetUrl}.sha256", 64),
+            }));
+            fake.Setup($"{assetUrl}.sha256", new string('e', 64));
+        }
+        fake.Setup(ReleasesApi, BuildReleasesJson(releases));
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo, Channel = "experimental" },
+            CurrentVersion,
+            fake,
+            new FakeDesktopInstaller());
+
+        var list = await source.ListOlderAsync(8, includePrereleases: true, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new[] { "2.31.9-r10", "2.31.9-r9", "2.31.9-r8", "2.31.9-r7", "2.31.9-r6", "2.31.0", "2.30.0", "2.29.0" },
+            list.Select(x => x.Version));
+        Assert.Equal(new[] { true, true, true, true, true, false, false, false }, list.Select(x => x.IsPrerelease));
+
+        // a small cap keeps the old meaning: the newest items of any kind
+        var small = await source.ListOlderAsync(3, includePrereleases: true, TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "2.31.9-r10", "2.31.9-r9", "2.31.9-r8" }, small.Select(x => x.Version));
+    }
+
+    [Fact]
+    public async Task GitHubReleaseSource_ListOlderAsync_RunningCandidate_ListsEarlierCandidates()
+    {
+        var versions = new[] { "2.32.0-r1", "2.32.0-r2", "2.32.0-r3", "2.32.0-r4" };
+        var releases = new List<ReleaseStub>();
+        var fake = new FakeHttpClient();
+        foreach (var version in versions)
+        {
+            var assetName = AssetNameForCurrentPlatform(version);
+            var assetUrl = $"https://example.com/{assetName}";
+            releases.Add(new ReleaseStub($"v{version}", true, $"Candidate {version}", new[]
+            {
+                new AssetStub(assetName, assetUrl, 10_000),
+                new AssetStub($"{assetName}.sha256", $"{assetUrl}.sha256", 64),
+            }));
+            fake.Setup($"{assetUrl}.sha256", new string('d', 64));
+        }
+        fake.Setup(ReleasesApi, BuildReleasesJson(releases));
+        var source = new GitHubReleaseSource(
+            new UpdateSettings { GitHubRepo = TestRepo, Channel = "experimental" },
+            "2.32.0-r3",
+            fake,
+            new FakeDesktopInstaller());
+
+        var older = await source.ListOlderAsync(8, includePrereleases: true, TestContext.Current.CancellationToken);
+
+        Assert.Equal(new[] { "2.32.0-r2", "2.32.0-r1" }, older.Select(x => x.Version));
+    }
+
+    [Fact]
     public async Task GitHubReleaseSource_ListStableAsync_InvalidChecksum_HidesRelease()
     {
         const string version = "2.31.9";

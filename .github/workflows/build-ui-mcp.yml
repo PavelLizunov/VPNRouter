@@ -1,7 +1,8 @@
 name: Build UI MCP
 
 # Builds the UI exploration MCP server (VPNRouter.Tools/UiMcp) for Linux, runs it once against the real XAML as a smoke test and
-# keeps it as an artifact, so a workstation can run the binary without a .NET SDK. See plans/phase-m1-ui-mcp-2026-10-02.md.
+# keeps it as an artifact, so a workstation can run the binary without a .NET SDK. A win-x64 build is kept as well, so the README
+# screens can be rendered on the Windows test machine (Windows strings and fonts); it is not smoke-tested in CI. See plans/phase-m1-ui-mcp-2026-10-02.md.
 
 on:
   push:
@@ -41,6 +42,9 @@ jobs:
       - name: Publish (linux-x64, self-contained)
         run: dotnet publish VPNRouter.Tools/UiMcp/UiMcp.csproj -c Release -p:UiMcpRid=linux-x64 -o publish/ui-mcp
 
+      - name: Publish (win-x64, self-contained)
+        run: dotnet publish VPNRouter.Tools/UiMcp/UiMcp.csproj -c Release -p:UiMcpRid=win-x64 -o publish/ui-mcp-win
+
       - name: Smoke session
         run: |
           set -o pipefail
@@ -55,13 +59,22 @@ jobs:
           test "$(ls smoke/*.png | wc -l)" -ge 3
 
       - name: Pack
-        run: tar -C publish -czf vpnrouter-ui-mcp-linux-x64.tar.gz ui-mcp
+        run: |
+          tar -C publish -czf vpnrouter-ui-mcp-linux-x64.tar.gz ui-mcp
+          tar -C publish -czf vpnrouter-ui-mcp-win-x64.tar.gz ui-mcp-win
 
       - name: Upload server
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: vpnrouter-ui-mcp-linux-x64
           path: vpnrouter-ui-mcp-linux-x64.tar.gz
+          retention-days: 30
+
+      - name: Upload Windows server
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: vpnrouter-ui-mcp-win-x64
+          path: vpnrouter-ui-mcp-win-x64.tar.gz
           retention-days: 30
 
       - name: Upload smoke output

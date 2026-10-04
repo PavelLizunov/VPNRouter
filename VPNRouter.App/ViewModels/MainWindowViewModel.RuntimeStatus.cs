@@ -140,52 +140,51 @@ public partial class MainWindowViewModel
 
     private void SyncConnectedWithVpnRuntime(bool vpnRunning)
     {
-        if (IsConnecting) return;
+        var action = ConnectionSyncPolicy.DecideRuntimeSync(
+            vpnRunning,
+            IsConnected,
+            inTransition: IsConnecting || IsApplying || _isReconnecting,
+            failedStartStatus: StatusText.StartsWith(Strings.FailedStartVpn, StringComparison.Ordinal),
+            inProcessEngineRunning: _engine.SingBoxPid != null || _engine.IsRunning,
+            secondsSinceConnect: (DateTime.UtcNow - _lastSuccessfulConnectAt).TotalSeconds,
+            hasConnectedBefore: _lastSuccessfulConnectAt != DateTime.MinValue);
 
-        if (vpnRunning &&
-            (!IsConnected ||
-             StatusText.StartsWith(Strings.FailedStartVpn, StringComparison.Ordinal)))
+        switch (action)
         {
-            if (_engine.SingBoxPid != null || _engine.IsRunning)
-            {
-                if (!IsConnected) return;
+            case RuntimeSyncAction.AdoptRunningEngine:
+                AdoptRunningEngine();
+                return;
+            case RuntimeSyncAction.RestoreConnectedStatus:
                 RestoreConnectedStatus();
                 return;
-            }
-
-            IsConnected = true;
-            ConnectButtonText = Strings.StopVPN;
-            var configuredMode = _settings.App.ConfigMode ?? "generated";
-            var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-                ? (IsRussian ? "подписка" : "subscribe")
-                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
-                    ? (IsRussian ? "ручной" : "manual")
-                    : (IsRussian ? "свой" : "custom");
-            var tunnelLabel = IsSplitTunnel ? (IsRussian ? "сплит" : "split") : (IsRussian ? "полный" : "full");
-            var mode = $"{configLabel}/{tunnelLabel}";
-            StatusText = IsRussian
-                ? $"Подключено через службу [{mode}]"
-                : $"Connected via service [{mode}]";
-            MarkTrueSplitServiceManagedIfNeeded();
-            try { StartSubRefreshTimer(); } catch { }
-        }
-        else if (!vpnRunning && IsConnected)
-        {
-            if (_lastSuccessfulConnectAt != DateTime.MinValue &&
-                (DateTime.UtcNow - _lastSuccessfulConnectAt).TotalSeconds < 8)
+            case RuntimeSyncAction.MarkConnectedViaService:
+                MarkConnectedViaService();
                 return;
-
-            try
-            {
-                if (_engine?.IsRunning == true)
-                    return;
-            }
-            catch { }
-
-            IsConnected = false;
-            ConnectButtonText = Strings.StartVPN;
-            StatusText = Strings.NotConnected;
+            case RuntimeSyncAction.MarkDisconnected:
+                IsConnected = false;
+                ConnectButtonText = Strings.StartVPN;
+                StatusText = Strings.NotConnected;
+                return;
         }
+    }
+
+    private void MarkConnectedViaService()
+    {
+        IsConnected = true;
+        ConnectButtonText = Strings.StopVPN;
+        var configuredMode = _settings.App.ConfigMode ?? "generated";
+        var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
+            ? (IsRussian ? "подписка" : "subscribe")
+            : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
+                ? (IsRussian ? "ручной" : "manual")
+                : (IsRussian ? "свой" : "custom");
+        var tunnelLabel = IsSplitTunnel ? (IsRussian ? "сплит" : "split") : (IsRussian ? "полный" : "full");
+        var mode = $"{configLabel}/{tunnelLabel}";
+        StatusText = IsRussian
+            ? $"Подключено через службу [{mode}]"
+            : $"Connected via service [{mode}]";
+        MarkTrueSplitServiceManagedIfNeeded();
+        try { StartSubRefreshTimer(); } catch { }
     }
 
     private string FormatBadgeText(string name, ComponentRuntimeStatus status)

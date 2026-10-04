@@ -1,0 +1,265 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="using:VPNRouter.App.Controls">
+
+    <!-- The look of the home screen as a kit for the other pages (Zapret, Telegram proxy): the status emblem, the state word and sub-line, the one
+         pill button, cards, small labels and a segmented control. Classes carry the hk- prefix so nothing here can collide with a page's own styles.
+         Spacing uses the 4 px scale; cards use RadiusXl and the controls inside them RadiusLg. All colours come from Tokens.axaml. -->
+
+    <!-- Status emblem (StatusEmblem control): halo, track, state ring, connecting arc, a disc with the icon and a badge at six o'clock. -->
+    <Style Selector="Ellipse.hk-halo">
+        <Setter Property="Fill" Value="Transparent"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Fill" Duration="0:0:0.24"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Grid.hk-emblem.on Ellipse.hk-halo"><Setter Property="Fill" Value="{DynamicResource SuccessBgBrush}"/></Style>
+    <Style Selector="Grid.hk-emblem.busy Ellipse.hk-halo"><Setter Property="Fill" Value="{DynamicResource AccentBgSubtleBrush}"/></Style>
+    <Style Selector="Grid.hk-emblem.error Ellipse.hk-halo"><Setter Property="Fill" Value="{DynamicResource DangerBgBrush}"/></Style>
+    <Style Selector="Grid.hk-emblem.warn Ellipse.hk-halo"><Setter Property="Fill" Value="{DynamicResource WarningBgBrush}"/></Style>
+
+    <Style Selector="Ellipse.hk-track">
+        <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}"/>
+        <Setter Property="StrokeThickness" Value="3"/>
+    </Style>
+    <Style Selector="Ellipse.hk-ring">
+        <Setter Property="StrokeThickness" Value="3"/>
+        <Setter Property="Stroke" Value="{DynamicResource SuccessSolidBrush}"/>
+        <Setter Property="Opacity" Value="0"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.24"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Grid.hk-emblem.on Ellipse.hk-ring"><Setter Property="Opacity" Value="1"/></Style>
+    <Style Selector="Grid.hk-emblem.error Ellipse.hk-ring">
+        <Setter Property="Stroke" Value="{DynamicResource DangerSolidBrush}"/>
+        <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="Grid.hk-emblem.warn Ellipse.hk-ring">
+        <Setter Property="Stroke" Value="{DynamicResource WarningSolidBrush}"/>
+        <Setter Property="Opacity" Value="1"/>
+    </Style>
+
+    <Style Selector="Arc.hk-spinner">
+        <Setter Property="Stroke" Value="{DynamicResource AccentSolidBrush}"/>
+        <Setter Property="StrokeLineCap" Value="Round"/>
+        <Setter Property="StartAngle" Value="-90"/>
+        <Setter Property="SweepAngle" Value="100"/>
+    </Style>
+    <!-- RenderTransform only: the rotation never touches layout. The control adds the "calm" class when the system asks for reduced motion. -->
+    <Style Selector="Grid.hk-emblem:not(.calm) Arc.hk-spinner.spin">
+        <Style.Animations>
+            <Animation Duration="0:0:1.1" IterationCount="INFINITE">
+                <KeyFrame Cue="0%"><Setter Property="RotateTransform.Angle" Value="0"/></KeyFrame>
+                <KeyFrame Cue="100%"><Setter Property="RotateTransform.Angle" Value="360"/></KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+
+    <Style Selector="Border.hk-disc">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
+    </Style>
+    <Style Selector="Grid.hk-emblem icons|Pictogram.hk-glyph">
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+    </Style>
+    <Style Selector="Grid.hk-emblem.on icons|Pictogram.hk-glyph"><Setter Property="Foreground" Value="{DynamicResource SuccessFgBrush}"/></Style>
+    <Style Selector="Grid.hk-emblem.busy icons|Pictogram.hk-glyph"><Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/></Style>
+    <Style Selector="Grid.hk-emblem.error icons|Pictogram.hk-glyph"><Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/></Style>
+    <Style Selector="Grid.hk-emblem.warn icons|Pictogram.hk-glyph"><Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/></Style>
+
+    <Style Selector="Border.hk-badge">
+        <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceAppBrush}"/>
+        <Setter Property="BorderThickness" Value="3"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource TextMutedBrush}"/>
+    </Style>
+    <Style Selector="Grid.hk-emblem.on Border.hk-badge">
+        <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource SurfaceBaseBrush}"/>
+    </Style>
+    <Style Selector="Grid.hk-emblem.busy Border.hk-badge">
+        <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource SurfaceBaseBrush}"/>
+    </Style>
+    <Style Selector="Grid.hk-emblem.error Border.hk-badge">
+        <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource SurfaceBaseBrush}"/>
+    </Style>
+    <Style Selector="Grid.hk-emblem.warn Border.hk-badge">
+        <Setter Property="Background" Value="{DynamicResource WarningSolidBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource SurfaceBaseBrush}"/>
+    </Style>
+
+    <!-- State word and sub-line under the emblem. -->
+    <Style Selector="TextBlock.hk-state">
+        <Setter Property="FontSize" Value="{DynamicResource Fs3Xl}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.hk-state.on"><Setter Property="Foreground" Value="{DynamicResource SuccessFgBrush}"/></Style>
+    <Style Selector="TextBlock.hk-state.error"><Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/></Style>
+    <Style Selector="TextBlock.hk-state.warn"><Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/></Style>
+    <Style Selector="TextBlock.hk-subline">
+        <Setter Property="FontSize" Value="{DynamicResource FsMd}"/>
+        <Setter Property="LineHeight" Value="18"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="MaxWidth" Value="340"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    </Style>
+
+    <!-- The one primary action: a pill, 48 px high, the full width of the column. -->
+    <Style Selector="Button.hk-cta">
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="MinHeight" Value="48"/>
+        <Setter Property="Padding" Value="16,0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FsXl}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="Button.hk-cta.stop">
+        <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="Button.hk-cta icons|Pictogram">
+        <Setter Property="Width" Value="18"/>
+        <Setter Property="Height" Value="18"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Secondary soft button (Run, Copy, New, Download ...). -->
+    <Style Selector="Button.hk-soft">
+        <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusLg}"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="Padding" Value="14,0"/>
+        <Setter Property="FontSize" Value="{DynamicResource FsMd}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Cards, labels and hints. -->
+    <Style Selector="Border.hk-card">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusXl}"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowXs}"/>
+    </Style>
+    <Style Selector="Border.hk-divider">
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.hk-label">
+        <Setter Property="FontSize" Value="{DynamicResource FsSm}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.hk-hint">
+        <Setter Property="FontSize" Value="{DynamicResource FsSm}"/>
+        <Setter Property="LineHeight" Value="16"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+    </Style>
+
+    <!-- Segmented control: radio buttons drawn as one pill track with a raised selected segment (the home screen's routing segments). -->
+    <Style Selector="Border.hk-seg-track">
+        <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <Style Selector="RadioButton.hk-seg">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="MinHeight" Value="34"/>
+        <Setter Property="Padding" Value="8,5"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FsMd}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_Segment"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="RadioButton.hk-seg:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+    <Style Selector="RadioButton.hk-seg:checked">
+        <Setter Property="Background" Value="{DynamicResource SurfaceOverlayBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+    <!-- The Fluent radio theme recolours its content presenter on hover and press; keep the token colours. -->
+    <Style Selector="RadioButton.hk-seg:pointerover /template/ ContentPresenter#PART_ContentPresenter, RadioButton.hk-seg:pressed /template/ ContentPresenter#PART_ContentPresenter, RadioButton.hk-seg:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+    <Style Selector="RadioButton.hk-seg:checked /template/ Border#PART_Segment">
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
+    </Style>
+
+    <!-- The same segmented look for a ListBox (a page's tool switcher): one sunken pill track, the selected item raised. -->
+    <Style Selector="ListBox.hk-segs">
+        <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <Style Selector="ListBox.hk-segs ListBoxItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="MinHeight" Value="34"/>
+        <Setter Property="Padding" Value="8,5"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FsMd}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="ListBox.hk-segs ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="CornerRadius" Value="{DynamicResource RadiusPill}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ListBox.hk-segs ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+    <Style Selector="ListBox.hk-segs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.hk-segs ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SurfaceOverlayBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
+    </Style>
+</Styles>

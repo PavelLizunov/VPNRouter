@@ -100,6 +100,42 @@ internal static class ProcessImagePath
         }
     }
 
+    // The same search where.exe does (the current directory, then every PATH entry, each with the PATHEXT extensions) without starting a process:
+    // the firewall asks for ~90 names on every split-tunnel connect and a where.exe each cost 50-300 ms.
+    public static string? ResolveNameOnPath(string? processName)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return null;
+        if (!OperatingSystem.IsWindows()) return null;
+        var name = processName.Trim();
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;
+
+        var extensions = Path.HasExtension(name)
+            ? new[] { string.Empty }
+            : (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var dirs = new List<string> { Environment.CurrentDirectory };
+        dirs.AddRange((Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        foreach (var dir in dirs)
+        {
+            foreach (var ext in extensions)
+            {
+                try
+                {
+                    var candidate = Path.Combine(dir.Trim('"'), name + ext);
+                    if (File.Exists(candidate)) return candidate;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        return null;
+    }
+
     public static string? ResolveNameToPath(string? processName, IProcessRunner? runner = null)
     {
         if (string.IsNullOrWhiteSpace(processName)) return null;

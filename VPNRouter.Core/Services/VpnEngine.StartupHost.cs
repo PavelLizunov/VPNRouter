@@ -174,6 +174,7 @@ public partial class VpnEngine
                     _engine.ExecuteFailoverRestartAsync(settings, innerCt, generation),
                 logger: _engine._logger)
             {
+                ProbeCandidate = (server, probeCt) => TcpTlsProbe.ProbeServerAsync(server, probeCt),
                 IsCurrentIntent = () =>
                 {
                     var sessionCts = _engine._sessionCts;

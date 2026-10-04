@@ -345,7 +345,8 @@ internal readonly record struct NicSnapshot(
     bool IsUp,
     bool HasV4Gateway,
     IPAddress? V4,
-    IPAddress? V6);
+    IPAddress? V6,
+    int Index = 0);
 
 internal static class SplitTunnelPolicy
 {

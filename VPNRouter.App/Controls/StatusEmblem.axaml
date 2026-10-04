@@ -1,0 +1,29 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:VPNRouter.App.Controls"
+             x:Class="VPNRouter.App.Controls.StatusEmblem"
+             Width="136" Height="144"
+             Focusable="False" IsTabStop="False">
+    <!-- The emblem of the home screen as a control: halo, track, state ring, connecting arc, a disc with the page's icon and a badge at six
+         o'clock. State comes from IsOn / IsBusy / IsError / IsWarn. The styles live in Styles/HomeKit.axaml (hk-emblem). -->
+    <!-- The control is 8 px taller than the emblem: the badge hangs 6 px below the ring, and anything outside the control's own bounds was cut off (the owner's screenshot). -->
+    <Grid x:Name="Root" Classes="hk-emblem" Width="136" Height="136" VerticalAlignment="Top">
+        <Ellipse Classes="hk-halo" Width="136" Height="136"/>
+        <Ellipse Classes="hk-track" Width="114" Height="114"/>
+        <Ellipse Classes="hk-ring" Width="114" Height="114"/>
+        <Arc x:Name="Spinner" Classes="hk-spinner" IsVisible="False" Width="114" Height="114" StrokeThickness="3">
+            <Arc.RenderTransform>
+                <RotateTransform/>
+            </Arc.RenderTransform>
+        </Arc>
+        <Border Classes="hk-disc" Width="92" Height="92" CornerRadius="46">
+            <icons:Pictogram x:Name="Glyph" Classes="hk-glyph" Width="40" Height="40"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+        <Border Classes="hk-badge" Width="34" Height="34" CornerRadius="17"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-6">
+            <icons:Pictogram x:Name="BadgeGlyph" Width="16" Height="16"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+    </Grid>
+</UserControl>

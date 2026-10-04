@@ -49,34 +49,6 @@
       <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
       <Setter Property="Padding" Value="3"/>
     </Style>
-    <Style Selector="ToggleButton.apps-mode-seg">
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-      <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
-      <Setter Property="Padding" Value="10,6"/>
-      <Setter Property="MinHeight" Value="32"/>
-      <Setter Property="HorizontalAlignment" Value="Stretch"/>
-      <Setter Property="HorizontalContentAlignment" Value="Center"/>
-      <Setter Property="VerticalContentAlignment" Value="Center"/>
-      <Setter Property="FontSize" Value="11"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-    </Style>
-    <Style Selector="ToggleButton.apps-mode-seg:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
-    </Style>
-    <Style Selector="ToggleButton.apps-mode-seg:pressed /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
-    </Style>
-    <Style Selector="ToggleButton.apps-mode-seg:checked /template/ ContentPresenter#PART_ContentPresenter,
-                     ToggleButton.apps-mode-seg:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter,
-                     ToggleButton.apps-mode-seg:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
-      <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
-      <Setter Property="BoxShadow" Value="{DynamicResource ShadowSm}"/>
-    </Style>
-
     <Style Selector="ListBox.cat-list ListBoxItem">
       <Setter Property="Padding" Value="8,6"/>
       <Setter Property="MinHeight" Value="0"/>
@@ -236,24 +208,24 @@
             Background="{DynamicResource SurfaceBaseBrush}">
       <StackPanel Spacing="6">
         <TextBlock Classes="section-title" Text="{Binding L_AppsModeSectionTitle}"/>
-        <Border Classes="segments">
+        <Border Classes="hk-seg-track">
           <Grid ColumnDefinitions="*,*" ColumnSpacing="3">
-            <ToggleButton Grid.Column="0"
-                          Classes="apps-mode-seg"
+            <RadioButton Grid.Column="0"
+                          Classes="apps-mode-seg hk-seg" GroupName="AppsRoutingMode"
                           IsChecked="{Binding IsRoutingAppsModeInclude, Mode=TwoWay}"
                           AutomationProperties.Name="{Binding L_AppsModeInclude}">
               <TextBlock Text="{Binding L_AppsModeInclude}"
                          TextWrapping="Wrap"
                          TextAlignment="Center"/>
-            </ToggleButton>
-            <ToggleButton Grid.Column="1"
-                          Classes="apps-mode-seg"
+            </RadioButton>
+            <RadioButton Grid.Column="1"
+                          Classes="apps-mode-seg hk-seg" GroupName="AppsRoutingMode"
                           IsChecked="{Binding IsRoutingAppsModeExclude, Mode=TwoWay}"
                           AutomationProperties.Name="{Binding L_AppsModeExclude}">
               <TextBlock Text="{Binding L_AppsModeExclude}"
                          TextWrapping="Wrap"
                          TextAlignment="Center"/>
-            </ToggleButton>
+            </RadioButton>
           </Grid>
         </Border>
         <TextBlock Classes="hint" Text="{Binding L_CurrentAppsModeHint}"/>

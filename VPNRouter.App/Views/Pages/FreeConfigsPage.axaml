@@ -66,19 +66,15 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
 
-        <ListBox Grid.Row="0"
-                 SelectedIndex="{Binding FreeConfigsVm.SelectedFreeTabIndex, Mode=TwoWay}"
-                 Background="Transparent"
-                 BorderThickness="0,0,0,1"
-                 BorderBrush="{DynamicResource BorderDefaultBrush}"
-                 Padding="6,2">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Spacing="4"/>
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBoxItem Classes="sub-tab" Content="{Binding L_FcTabSearchLabel}"/>
-            <ListBoxItem Classes="sub-tab" Content="{Binding FreeConfigsVm.SavedTabHeaderText}"/>
+        <ListBox Grid.Row="0" Classes="hk-segs" Margin="10,8,10,6"
+             SelectedIndex="{Binding FreeConfigsVm.SelectedFreeTabIndex, Mode=TwoWay}">
+      <ListBox.ItemsPanel>
+        <ItemsPanelTemplate>
+          <UniformGrid Rows="1"/>
+        </ItemsPanelTemplate>
+      </ListBox.ItemsPanel>
+            <ListBoxItem Content="{Binding L_FcTabSearchLabel}"/>
+            <ListBoxItem Content="{Binding FreeConfigsVm.SavedTabHeaderText}"/>
         </ListBox>
 
         <Grid Grid.Row="1">
