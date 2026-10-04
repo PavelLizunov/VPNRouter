@@ -6,15 +6,17 @@ When release or platform facts change, update this file.
 
 ## Releases
 
-- **Current stable:** v2.49.3.
-- **Latest published candidate:** v2.50.0-r29 (prerelease, 2026-10-04), not
-  promoted to stable. Its Windows binary passed the cold-cycle post-ship check
+- **Current stable:** v2.50.0 (2026-10-04), cut from the candidate v2.50.0-r29
+  (same tree; `AppVersion` only loses the suffix). Previous stable: v2.49.3. No
+  candidate is in flight; main declares `AppVersion` 2.50.0. The evidence of the
+  cut, including the live update from v2.49.3, is in
+  `plans/phase-stable-2.50.0-2026-10-04.md`.
+- **Last candidate before the cut:** v2.50.0-r29 (prerelease, 2026-10-04). Its Windows binary passed the cold-cycle post-ship check
   on WINBRAT on the first attempt (`tools/post-ship-local.ps1`), the live
   scenarios of `tools/live` (cycles, per-server connects, ping with the VPN off
   and on, mode switches, auto-select, Other versions, all tabs, 600 fast
   clicks), the full Windows test suite (3355 passed, 0 failed) and a headless
-  audit of 468 screen cells; macOS, Linux and Android on real devices and the
-  live-update gate were not run (see
+  audit of 468 screen cells; macOS, Linux and Android on real devices were not run (see
   `plans/phase-r29-release-2.50.0-r29-2026-10-04.md`). r29 changes no
   connection behavior: it hides `usersecret`, `userpassword`, `authsecret` and
   `authtoken` in logs and crash reports, scrubs the About window error log and
@@ -35,7 +37,7 @@ When release or platform facts change, update this file.
   `StatusEmblem`) and put one segmented strip on the Tools, Servers, Public and
   Applications pages. Earlier candidates: r23, r22, r21 (connection fixes from
   the tester's report on r20), r20, r19, r18. The owner's next real update is
-  the check of the driver-lock fix. Main declares `AppVersion` 2.50.0-r29.
+  the check of the driver-lock fix.
 - Release policy: rolling `-rN` candidates, stable cut on explicit maintainer
   command after verification and a live-update gate. See `docs/agent-contract.md`
   and the native release skills under `.dsh/skills/`.
