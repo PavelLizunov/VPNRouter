@@ -506,16 +506,18 @@ function Run-AutoSelect {
     [void](Go-Tab $TabNames['subscribe'])
     # a plain TCP server must be the selected one: with a UDP-native one (Hysteria2, TUIC) the generated config pins that server alone
     $top = Page-Top
-    $row = Scan | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -gt $top -and $_.Name -match 'VLESS' -and $_.Name -notmatch 'XHTTP' } | Select-Object -First 1
+    $kind = if ($Tab -eq 'hy2') { 'HY2' } else { 'VLESS' }   # -Tab hy2 selects a Hysteria2 server instead (the group must then hold the Hysteria2 servers)
+    $row = Scan | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -gt $top -and $_.Name -match $kind -and $_.Name -notmatch 'XHTTP' } | Select-Object -First 1
     if ($row) { Press $row.El | Out-Null; Start-Sleep -Milliseconds 800 }
-    Add-Step 'select a VLESS server' ($null -ne $row) 0 $(if ($row) { $row.Name } else { 'none in view' }) $null
+    Add-Step "select a $kind server" ($null -ne $row) 0 $(if ($row) { $row.Name } else { 'none in view' }) $null
     $cb = Find-Any 'CheckBox' 'Авто-выбор|Auto.?select'
     if (-not $cb) { Add-Step 'auto-select checkbox' $false 0 'not found' (Shot 'autoselect-nocheckbox'); return }
     $tp = $null
     [void]$cb.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$tp)
     $wasOn = ($tp.Current.ToggleState -eq 'On')
+    $ipBefore = Public-Ip
     if (-not $wasOn) { $tp.Toggle(); Start-Sleep -Milliseconds 1500 }
-    Add-Step 'auto-select on' $true 0 "was on before: $wasOn" (Shot 'autoselect-on')
+    Add-Step 'auto-select on' $true 0 "was on before: $wasOn; public ip before: $ipBefore" (Shot 'autoselect-on')
     try {
         $pressedAt = Get-Date
         $clicked = Click-Cta $ConnectPat
@@ -540,11 +542,18 @@ function Run-AutoSelect {
         Add-Step 'clash: delay of every member through the tunnel' ($rows.Count -gt 0) $sw.ElapsedMilliseconds ("{0} answered: {1}" -f $rows.Count, ($rows -join '; ')) $null
         $after = Clash-Get '/proxies/proxy'
         Add-Step 'clash: pick after the test' $true 0 ("now='{0}'" -f $after.now) $null
+        # the data plane through the group: a TCP request from this machine must come out at the picked server
+        $ipDuring = Public-Ip
+        Add-Step 'data plane through the group' ($ipDuring -and $ipDuring -ne $ipBefore) 0 "public ip during: $ipDuring (before: $ipBefore)" $null
     } catch {
         Add-Step 'autoselect error' $false 0 $_.Exception.Message $null
     } finally {
         Ensure-Disconnected
-        if (-not $wasOn) { try { $cb2 = Find-Any 'CheckBox' 'Авто-выбор|Auto.?select'; $t2 = $null; if ($cb2 -and $cb2.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$t2)) { $t2.Toggle(); Start-Sleep -Milliseconds 1200 } } catch { } ; Add-Step 'auto-select restored' $true 0 '' $null }
+        if (-not $wasOn) { try { $cb2 = Find-Any 'CheckBox' 'Авто-выбор|Auto.?select'; $t2 = $null; if ($cb2 -and $cb2.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$t2)) { $t2.Toggle(); Start-Sleep -Milliseconds 1200 } } catch { } ; 
+            # the checkbox only changes the in-memory setting until the next save: put the file back too, other tools (post-ship) read it
+            $cfgPath = 'C:\ProgramData\VPNRouter\config.yaml'
+            try { $txt = [IO.File]::ReadAllText($cfgPath); [IO.File]::WriteAllText($cfgPath, [regex]::Replace($txt, '(?m)^(\s*auto_select_best_server:\s*)\S+', '${1}false'), (New-Object Text.UTF8Encoding($false))) } catch { }
+            Add-Step 'auto-select restored' $true 0 'UI toggle and config.yaml' $null }
     }
 }
 
