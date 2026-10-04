@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">VPNRouter</h1>
-<p align="center"><b>Virtual Penguin Network</b> — a split-tunnel VPN router: only the apps you choose go through the VPN. Windows, macOS, Linux and Android.</p>
+<p align="center"><b>Virtual Penguin Network</b> — a split-tunnel VPN router: you choose which apps use the VPN. Windows, macOS, Linux and Android.</p>
 
 <p align="center">
   <a href="README.md"><b>English</b></a> · <a href="README.ru.md">Русский</a>
@@ -60,14 +60,15 @@ ZIP, DMG, AppImage, `.deb` and `.tar.gz` downloads, requirements and checksums: 
 - **Your own servers.** VLESS+Reality, or custom sing-box JSON (TUIC, Hysteria2, Shadowsocks). Subscriptions merge into one server pool.
 - **Server tests.** A one-click TCP+TLS probe, and deep verification (HTTP round trip and a 5 MB bandwidth test).
 - **Desktop extras.** A setup and diagnostics wizard, safe rollback to a previous stable version, Russian and English interface.
-- **Optional on Windows.** DPI bypass (Zapret) and a Telegram proxy. The Free Configs tab lists public VLESS endpoints run by third parties.
+- **Optional on Windows.** DPI bypass (Zapret) and a Telegram proxy.
+- **Free Configs.** A tab with public VLESS endpoints run by third parties; a successful test does not make an operator trustworthy.
 
 More: [Features](docs/guide/features.md).
 
 ## See it work
 
 <p align="center">
-  <img src="docs/images/tour-en.webp" width="640" alt="Short tour: connect with one tap, then choose which apps use the VPN"/>
+  <img src="docs/images/tour-en.webp" width="640" alt="Short tour: connect with one button, then choose which apps use the VPN"/>
 </p>
 <p align="center">
   <img src="docs/images/apps-dark-en.png" width="46%" alt="VPNRouter application routing screen with the Browsers category selected"/>

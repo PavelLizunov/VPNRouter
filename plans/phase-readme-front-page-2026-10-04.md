@@ -41,4 +41,16 @@ Revert the PR. The old screenshots under `VPNRouter.Tests/screenshots/` stay in 
 
 ## Outcome
 
-Pending.
+Ready for review (not merged: merging needs the owner's command).
+
+- README.md and README.ru.md: 293 -> 95 lines each. `readme_check.py` before: 2 FAIL (length; first text link to the releases at visible line 14) and 6 WARN (a wide-table and HTML-table group, 6 long code lines, 3 screenshots 43 to 51 days older than the UI, 8 hard-coded versions). After: 0 FAIL, 0 WARN.
+- Detail moved unchanged to `docs/guide/` (6 pages) and `docs/guide/ru/` (6 pages), links re-based, build examples use `{version}`. Line multiset check old README vs new README plus pages: only the intentional drops remain (stale v2.32.3 feature matrix, the old screenshot block, the rewritten header and tagline, the merged license lines). The check caught one real loss: the Russian "Free Configs" subsection sat inside the dropped matrix section; it is now on `docs/guide/ru/features.md`.
+- Images: 6 PNG (about 60 KB each) and 2 WebP clips (1.3 and 1.4 MB, 12 s, silent, seamless loop) in `docs/images/`, rendered headlessly from fixture data by the CI-built UI renderer (run 37170338541, head 8f7e3e97), English and Russian. First renders at 740 px showed a scrollbar and a cut-off card, re-rendered at 780 px. The clip was made with Motion Studio's capture tool (360 frames in about 36 s per language, run on the workstation after a load check: load 2.5, 4 GB RAM free; it is a render, not a build). Clip sources are kept outside the repo in `~/VPNRouter-knowledge/readme-clip` with rebuild notes.
+- Phone check: both READMEs rendered with GitHub's markdown renderer and loaded in headless Chromium at 390 px: body width 390, no sideways page scroll; the three install one-liners scroll inside their code blocks.
+- Test: `AgentContextContractTests.PublicReadmes_ReferenceVersionedCredentialFreeScreenshots` follows the new image paths (both languages, four files each). The Android line `VPNRouter-v{version}-android-arm64.apk` is unchanged in both READMEs. Release skills `cut-stable` (step 3) and `ship-rolling-candidate` (last paragraph) no longer tell people to retype versions into the READMEs. `docs/AGENTS.md` indexes the guide pages and images.
+- Independent read: one external reviewer (`pi`, owner-approved) compared the new pages with the old README, about 7 minutes. Confirmed and fixed: the tagline "only the apps you choose go through the VPN" was wrong for the exclude and full-tunnel modes; the Free Configs tab was folded into the Windows-only bullet (it is available on all platforms). Changed after its doubt: "one tap" became "one button" in the clip and alt text. The light theme and the sample-data provenance it could not verify were checked by hand against the renders.
+- CI on the exact head 5e0a8e81: test, characterization-windows, go-test-windows and grep all passed.
+- Not done: Android device screenshots; no live desktop capture (forbidden by the contract). The old `VPNRouter.Tests/screenshots/page-*.png` stay (tests regenerate them) but the READMEs no longer use them.
+- Follow-ups: refresh the images with the renderer after the next visible redesign; `docs/guide` Russian pages mirror the English ones by hand.
+
+Rollback: revert the PR.

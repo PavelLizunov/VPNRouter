@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">VPNRouter</h1>
-<p align="center"><b>Virtual Penguin Network</b> — split-tunnel VPN-роутер: через VPN идут только выбранные вами приложения. Windows, macOS, Linux и Android.</p>
+<p align="center"><b>Virtual Penguin Network</b> — split-tunnel VPN-роутер: вы выбираете, какие приложения идут через VPN. Windows, macOS, Linux и Android.</p>
 
 <p align="center">
   <a href="README.md">English</a> · <a href="README.ru.md"><b>Русский</b></a>
@@ -60,14 +60,15 @@ ZIP, DMG, AppImage, `.deb` и `.tar.gz`, требования и контрол�
 - **Ваши серверы.** VLESS+Reality или собственный sing-box JSON (TUIC, Hysteria2, Shadowsocks). Подписки сливаются в один пул серверов.
 - **Проверка серверов.** TCP+TLS-проба в один клик и глубокая проверка (HTTP-запрос и тест скорости на 5 МБ).
 - **Для десктопа.** Мастер настройки и диагностики, безопасный откат на предыдущую стабильную версию, интерфейс на русском и английском.
-- **Необязательно на Windows.** Обход DPI (Zapret) и Telegram-прокси. Вкладка Free Configs показывает публичные VLESS-точки, которые держат третьи лица.
+- **Необязательно на Windows.** Обход DPI (Zapret) и Telegram-прокси.
+- **Free Configs.** Вкладка с публичными VLESS-точками третьих лиц; успешная проверка не делает оператора надёжным.
 
 Подробнее: [Возможности](docs/guide/ru/features.md).
 
 ## Как это выглядит
 
 <p align="center">
-  <img src="docs/images/tour-ru.webp" width="640" alt="Короткий тур: подключение в одно касание и выбор приложений, идущих через VPN"/>
+  <img src="docs/images/tour-ru.webp" width="640" alt="Короткий тур: подключение одной кнопкой и выбор приложений, идущих через VPN"/>
 </p>
 <p align="center">
   <img src="docs/images/apps-dark-ru.png" width="46%" alt="Экран маршрутизации приложений VPNRouter, выбрана категория Браузеры"/>
