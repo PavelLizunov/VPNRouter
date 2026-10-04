@@ -91,8 +91,8 @@ hard gate.
 
 1. Create or continue a `dsh/` task branch from current `origin/main`.
 2. Change `VPNRouter.Core/AppVersion.cs` from `X.Y.Z-rN` to `X.Y.Z`.
-3. Update current version examples in `README.md`, `README.ru.md` and
-   `CURRENT_STATE.md`.
+3. Update the current version in `CURRENT_STATE.md`. The READMEs and `docs/guide/` carry
+   `{version}` placeholders and no typed version, so they need no bump.
 4. Run build, full tests, verifier contracts, visual tests,
    `tools/check-open-p0.ps1`, PowerShell 5.1 parse checks and
    `git diff --check`.

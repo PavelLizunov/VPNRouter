@@ -174,6 +174,6 @@ exact commit, 18 assets, workflow status, WINBRAT cycles, log scan, cleanup and
 any owner-blocked external step. Candidate PASS is readiness evidence only; it
 does not authorize stable.
 
-After a user-facing candidate ships, update the `build.ps1 -Version` and
-`build-mac.sh` examples in both `README.md` and `README.ru.md` to the shipped
-version in one small `docs(readme)` commit on a task branch.
+After a user-facing candidate ships, the READMEs and `docs/guide/` need no version bump
+(they use `{version}` placeholders). Touch them only when public behavior, setup or
+commands change.

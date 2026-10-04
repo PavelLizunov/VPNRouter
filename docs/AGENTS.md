@@ -15,6 +15,9 @@ This directory owns repository contracts, worker guidance and review prompts.
 - [code-signing-signpath-runbook.md](code-signing-signpath-runbook.md): Windows signing enrollment steps, ON HOLD (owner decision 2026-10-01: no code signing for now).
 - [code-signing-application.md](code-signing-application.md): SignPath Foundation application answers and eligibility risks, ON HOLD with the signing work.
 - [interaction-contracts/README.md](interaction-contracts/README.md): Free Configs and Applications contracts.
+- [guide/](guide/install.md) and [guide/ru/](guide/ru/install.md): user-facing detail pages linked from `README.md` and
+  `README.ru.md` (install, build, architecture, privacy, credits); [images/](images/) holds the README screenshots and clips,
+  rendered from fixture data, never from a live desktop. Keep the READMEs short and mirror them section by section.
 - [android-development-methodology.md](android-development-methodology.md) and
   [android-keystore-backup.md](android-keystore-backup.md): Android workflow and signing-key backup.
 
