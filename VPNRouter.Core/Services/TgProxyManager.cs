@@ -264,6 +264,14 @@ public class TgProxyManager : IDisposable
 
     public static void OpenInTelegram(string host, int port, string secret)
     {
+        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(secret) ||
+            host.Any(c => c is '\r' or '\n' or '"' or '\'' or ' ' || char.IsControl(c)) ||
+            secret.Any(c => c is '\r' or '\n' or '"' or '\'' or ' ' || char.IsControl(c)))
+        {
+            Log.Warning("[TgProxy] Refusing to open tg:// link with invalid host or secret parameters");
+            return;
+        }
+
         if (port is < 1 or > 65535)
         {
             Log.Warning("[TgProxy] Refusing to open tg:// link with invalid port {Port}", port);
