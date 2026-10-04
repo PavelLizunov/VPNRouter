@@ -26,4 +26,9 @@ Exact-head CI on this PR; a full audit (`tools/ui-mcp/audit.py`) on the MCP bina
 
 ## Outcome
 
-Pending.
+Published 2026-10-03 as prerelease `v2.50.0-r19` (`--latest=false`; Latest stays `v2.49.3`), annotated tag on main `5e8946bc`, 18 assets. The six Windows files (unsigned: no SignPath secret exists)
+were built on `windows-worker` and uploaded only after size, SHA-256 and sidecar matched the worker's copies; macOS, Linux and Android came from the tag workflows. Strict CI gate and the
+waiver gate as in r18.
+
+Post-ship on WINBRAT with `tools/post-ship-local.ps1`: `POSTSHIP-LOCAL: PASS` (version 2.50.0-r19, commit `5e8946bc`, 2 cold cycles). A real Windows screenshot of the deployed build then
+showed the default window (640 px) too low for the redesigned home screen; fixed by D-17 (#481) and shipped in r20.

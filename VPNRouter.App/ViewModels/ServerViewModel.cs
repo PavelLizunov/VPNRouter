@@ -47,18 +47,29 @@ public partial class ServerViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsPingGood))]
     [NotifyPropertyChangedFor(nameof(IsPingSlow))]
     [NotifyPropertyChangedFor(nameof(IsPingBad))]
+    [NotifyPropertyChangedFor(nameof(IsPingUnverified))]
     private ServerProbeStatus _testStatus = ServerProbeStatus.Unknown;
 
     // The ping pill of a server row: green when the probe passed, amber when slow or implausible, red when it failed.
-    public bool IsPingGood => TestStatus == ServerProbeStatus.Ok;
-    public bool IsPingSlow => TestStatus is ServerProbeStatus.Slow or ServerProbeStatus.Implausible;
+    public bool IsPingGood => TestStatus == ServerProbeStatus.Ok && !IsPingUnverified;
+
+    // A UDP port that stayed silent (Hysteria2, TUIC): the server may be fine, but no time was measured; the timeout is not a ping.
+    public bool IsPingUnverified =>
+        TestStatus is ServerProbeStatus.Ok or ServerProbeStatus.Slow &&
+        string.Equals(TestError, TcpTlsProbe.UdpNoReplyNote, StringComparison.Ordinal);
+    public bool IsPingSlow => TestStatus is ServerProbeStatus.Slow or ServerProbeStatus.Implausible || IsPingUnverified;
     public bool IsPingBad => TestStatus is ServerProbeStatus.TlsFailed or ServerProbeStatus.Unreachable or ServerProbeStatus.Timeout;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PingDisplay))]
     private int _pingMs;
 
-    [ObservableProperty] private string? _testError;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPingUnverified))]
+    [NotifyPropertyChangedFor(nameof(IsPingGood))]
+    [NotifyPropertyChangedFor(nameof(IsPingSlow))]
+    [NotifyPropertyChangedFor(nameof(PingDisplay))]
+    private string? _testError;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusDot))]
@@ -74,7 +85,7 @@ public partial class ServerViewModel : ViewModelBase
 
     public bool HasTestResult => TestStatus != ServerProbeStatus.Unknown;
 
-    public string PingDisplay => TestStatus switch
+    public string PingDisplay => IsPingUnverified ? "UDP ?" : TestStatus switch
     {
         ServerProbeStatus.Unknown                          => "—",
         ServerProbeStatus.SkippedNotApplicable             => "—",
@@ -100,7 +111,7 @@ public partial class ServerViewModel : ViewModelBase
     {
         get
         {
-            var key = TestStatus switch
+            var key = IsPingUnverified ? "TextMutedBrush" : TestStatus switch
             {
                 ServerProbeStatus.Ok                   => "SuccessSolidBrush",
                 ServerProbeStatus.Slow                 => "WarningSolidBrush",

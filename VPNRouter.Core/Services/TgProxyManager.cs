@@ -272,6 +272,12 @@ public class TgProxyManager : IDisposable
             return;
         }
 
+        if (port is < 1 or > 65535)
+        {
+            Log.Warning("[TgProxy] Refusing to open tg:// link with invalid port {Port}", port);
+            return;
+        }
+
         var url = BuildProxyLink(host, port, secret);
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             !string.Equals(uri.Scheme, "tg", StringComparison.OrdinalIgnoreCase))

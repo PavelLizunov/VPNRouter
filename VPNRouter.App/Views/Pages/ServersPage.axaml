@@ -17,19 +17,15 @@
 
   <Grid RowDefinitions="Auto,*,Auto">
 
-    <ListBox Grid.Row="0"
-             SelectedIndex="{Binding SelectedServerModeIndex}"
-             Background="Transparent"
-             BorderThickness="0,0,0,1"
-             BorderBrush="{DynamicResource BorderDefaultBrush}"
-             Padding="6,2">
+    <ListBox Grid.Row="0" Classes="hk-segs" Margin="10,8,10,6"
+             SelectedIndex="{Binding SelectedServerModeIndex}">
       <ListBox.ItemsPanel>
         <ItemsPanelTemplate>
-          <StackPanel Orientation="Horizontal" Spacing="4"/>
+          <UniformGrid Rows="1"/>
         </ItemsPanelTemplate>
       </ListBox.ItemsPanel>
-      <ListBoxItem Classes="sub-tab" Content="{Binding LblServerModeVless}"/>
-      <ListBoxItem Classes="sub-tab" Content="{Binding LblServerModeCustom}"/>
+      <ListBoxItem Content="{Binding LblServerModeVless}"/>
+      <ListBoxItem Content="{Binding LblServerModeCustom}"/>
     </ListBox>
 
     <Grid Grid.Row="1"
@@ -37,7 +33,7 @@
           RowDefinitions="Auto,*,Auto,Auto"
           Margin="10,8,10,4">
 
-      <Border Grid.Row="0" Grid.RowSpan="2" Classes="list-card">
+      <Border Grid.Row="0" Grid.RowSpan="2" Classes="list-card" MinHeight="170">
         <DockPanel>
           <Border DockPanel.Dock="Top" Classes="list-head" IsVisible="{Binding Servers.Count}">
             <Grid ColumnDefinitions="22,*,Auto,70" ColumnSpacing="10">

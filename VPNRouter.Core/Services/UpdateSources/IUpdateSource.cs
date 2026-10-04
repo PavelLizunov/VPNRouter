@@ -17,6 +17,15 @@ public interface IUpdateSource
         CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<UpdateSourceInfo>>(Array.Empty<UpdateSourceInfo>());
 
+    // Releases older than the running build, newest first. With includePrereleases the experimental-channel candidates (-rN) are listed too.
+    Task<IReadOnlyList<UpdateSourceInfo>> ListOlderAsync(
+        int maxCount,
+        bool includePrereleases,
+        CancellationToken ct = default) =>
+        includePrereleases
+            ? Task.FromResult<IReadOnlyList<UpdateSourceInfo>>(Array.Empty<UpdateSourceInfo>())
+            : ListStableAsync(maxCount, ct);
+
     Task<string> DownloadAsync(
         UpdateSourceInfo info,
         IProgress<DownloadProgress>? progress = null,

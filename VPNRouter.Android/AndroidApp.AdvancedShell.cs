@@ -216,18 +216,19 @@ public partial class AndroidApp
 
         _advSimpleToggleBtn = new Avalonia.Controls.Button
         {
-            Content = IconText(UiIcons.ChevronLeft, Localization.AdvSimpleToggle, 14),
-            Padding = new Thickness(8, 4),
-            MinHeight = 0,
-            FontSize = UiScale.Fs(11),
-            FontWeight = FontWeight.SemiBold,
-            Background = Brushes.Transparent,
+            Content = IconText(UiIcons.House, Localization.SmpHomeButton, 16),
+            Padding = new Thickness(12, 8),
+            MinHeight = 40,
+            FontSize = UiScale.Fs(12),
+            FontWeight = FontWeight.Bold,
             BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            CornerRadius = new CornerRadius(12),
             VerticalAlignment = VerticalAlignment.Center,
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
         };
+        // The way back to the home screen: the house icon and the word "Home" on a quiet accent tint (a tinted button, not bare text).
         _advSimpleToggleBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentFgBrush");
+        _advSimpleToggleBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentBgSubtleBrush");
         _advSimpleToggleBtn.Click += (_, _) => CloseAdvancedShell();
 
         _advKebabMenuBtn = new Avalonia.Controls.Button
@@ -575,7 +576,7 @@ public partial class AndroidApp
         if (_advBrandTitle is not null)
             _advBrandTitle.Text = Localization.BrandTitle;
         if (_advSimpleToggleBtn is not null)
-            _advSimpleToggleBtn.Content = IconText(UiIcons.ChevronLeft, Localization.AdvSimpleToggle, 14);
+            _advSimpleToggleBtn.Content = IconText(UiIcons.House, Localization.SmpHomeButton, 16);
         foreach (var kv in _advShellTabButtons)
         {
             if (kv.Value.Tag is AdvTabVisual visual)

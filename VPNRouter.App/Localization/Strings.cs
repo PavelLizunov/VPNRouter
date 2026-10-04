@@ -335,6 +335,8 @@ public static class Strings
     public static string NoOlderVersions => global::VPNRouter.Core.Localization.Strings.NoOlderVersions;
     public static string VersionHistoryFailed => global::VPNRouter.Core.Localization.Strings.VersionHistoryFailed;
     public static string InstalledVersion => global::VPNRouter.Core.Localization.Strings.InstalledVersion;
+    public static string RollbackSafetyHintCandidates => global::VPNRouter.Core.Localization.Strings.RollbackSafetyHintCandidates;
+    public static string PrereleaseLabel => global::VPNRouter.Core.Localization.Strings.PrereleaseLabel;
     public static string RollbackAction => global::VPNRouter.Core.Localization.Strings.RollbackAction;
     public static string RollbackSafetyHint => global::VPNRouter.Core.Localization.Strings.RollbackSafetyHint;
     public static string RollbackConfirmation => global::VPNRouter.Core.Localization.Strings.RollbackConfirmation;
@@ -844,6 +846,17 @@ public static class Strings
     public static string SmpStatusConnectedVia => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedVia;
     public static string SmpStatusConnectedNoDetails => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedNoDetails;
     public static string SmpStatusConnectingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectingHint;
+    public static string SmpServerSwitchedNote(string previous) => global::VPNRouter.Core.Localization.Strings.SmpServerSwitchedNote(previous);
+    public static string SmpPickServerLabel => global::VPNRouter.Core.Localization.Strings.SmpPickServerLabel;
+    public static string SmpPickServerHint => global::VPNRouter.Core.Localization.Strings.SmpPickServerHint;
+    public static string SmpSetupCheckTitle => global::VPNRouter.Core.Localization.Strings.SmpSetupCheckTitle;
+    public static string SmpSetupCheckSubtitle => global::VPNRouter.Core.Localization.Strings.SmpSetupCheckSubtitle;
+    public static string SmpMenuResetWindowSize => global::VPNRouter.Core.Localization.Strings.SmpMenuResetWindowSize;
+    public static string TipSmpMenuResetWindowSize => global::VPNRouter.Core.Localization.Strings.TipSmpMenuResetWindowSize;
+    public static string SmpHomeButton => global::VPNRouter.Core.Localization.Strings.SmpHomeButton;
+    public static string SmpHomeButtonTip => global::VPNRouter.Core.Localization.Strings.SmpHomeButtonTip;
+    public static string SmpStatusApplying => global::VPNRouter.Core.Localization.Strings.SmpStatusApplying;
+    public static string SmpStatusApplyingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusApplyingHint;
     public static string SmpStatusDisconnectedHint => global::VPNRouter.Core.Localization.Strings.SmpStatusDisconnectedHint;
 
     public static string SmpConfigRowLabel => global::VPNRouter.Core.Localization.Strings.SmpConfigRowLabel;

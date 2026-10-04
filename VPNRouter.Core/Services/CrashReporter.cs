@@ -120,7 +120,7 @@ public static class CrashReporter
         RegexOptions.Compiled);
 
     private static readonly Regex _tokenParamPattern = new(
-        @"([?&])((?:[a-z0-9_]*[_-])?(?:token|secret|api[_-]?key|auth|pass(?:word|wd)?|private[_-]?key|psk|session|session[_-]?id|sig|signature|credential|sid|short[_-]?id|key)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret)=[^&\s]+",
+        @"([?&])((?:[a-z0-9_]*[_-])?(?:token|secret|api[_-]?key|auth|pass(?:word|wd)?|private[_-]?key|psk|session|session[_-]?id|sig|signature|credential|sid|short[_-]?id|key)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)=[^&\s]+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static string ScrubSecrets(string? input)

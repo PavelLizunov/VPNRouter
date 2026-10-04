@@ -16,12 +16,18 @@
   </UserControl.Resources>
 
 
-  <Grid RowDefinitions="*,Auto,Auto,Auto" RowSpacing="8" Margin="10,8,10,10">
+  <!-- The server list takes about 60 % of the page (at least 150 px); the rest (test buttons, subscriptions, the add form) scrolls in its own area,
+       so a short window never hides the list and a tall one shows everything. -->
+  <Grid RowSpacing="8" Margin="10,8,10,10">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="3*" MinHeight="150"/>
+      <RowDefinition Height="2*" MinHeight="110"/>
+    </Grid.RowDefinitions>
 
     <Border Grid.Row="0" Classes="list-card">
       <DockPanel>
         <Border DockPanel.Dock="Top" Classes="list-head" IsVisible="{Binding SubscriptionServers.Count}">
-          <Grid ColumnDefinitions="22,*,Auto,30" ColumnSpacing="10">
+          <Grid ColumnDefinitions="22,*,Auto,30" ColumnSpacing="10" Margin="0,0,10,0">
             <TextBlock Grid.Column="1" Text="{Binding L_ColServer}"/>
             <TextBlock Grid.Column="2" Text="{Binding L_ColPing}"
                        ToolTip.Tip="{Binding L_ColPingTooltip}"
@@ -43,7 +49,7 @@
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ServerViewModel">
                 <Border Classes="server-row" Classes.active="{Binding IsActive}">
-                  <Grid ColumnDefinitions="22,*,Auto,Auto" ColumnSpacing="10">
+                  <Grid ColumnDefinitions="22,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,10,0">
                     <Panel Grid.Column="0" VerticalAlignment="Center">
                       <icons:Pictogram Id="radio-on" Width="18" Height="18" IsVisible="{Binding IsActive}" Foreground="{DynamicResource AccentSolidBrush}"/>
                       <icons:Pictogram Id="radio-off" Width="18" Height="18" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
@@ -101,7 +107,9 @@
       </DockPanel>
     </Border>
 
-    <StackPanel Grid.Row="1" Spacing="6">
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="8" Margin="0,0,10,0">
+    <StackPanel Spacing="6">
       <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
         <Button Grid.Column="0" Classes="solid" Content="{Binding ServerTestButtonText}"
                 Command="{Binding TestAllSubscriptionServersCommand}"
@@ -153,7 +161,7 @@
       </Grid>
     </StackPanel>
 
-    <StackPanel Grid.Row="2" Spacing="6" IsVisible="{Binding Subscriptions.Count}">
+    <StackPanel Spacing="6" IsVisible="{Binding Subscriptions.Count}">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Grid.Column="0"
                    Text="{Binding L_SubscriptionsSection}"
@@ -233,7 +241,7 @@
       </ScrollViewer>
     </StackPanel>
 
-    <Border Grid.Row="3" Classes="form-card" Padding="10">
+    <Border Classes="form-card" Padding="10">
       <StackPanel Spacing="8">
         <TextBlock Classes="form-title" Text="{Binding L_AddSubscriptionTitle}"/>
         <TextBox Text="{Binding NewSubName}"
@@ -258,5 +266,7 @@
         </Grid>
       </StackPanel>
     </Border>
+      </StackPanel>
+    </ScrollViewer>
   </Grid>
 </UserControl>

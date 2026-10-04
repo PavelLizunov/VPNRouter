@@ -199,6 +199,10 @@ public sealed class CrashReporterScrubberTests
     [InlineData("wss://example.com/api?sid=sid_998877", "sid=[REDACTED]")]
     [InlineData("ws://example.com/api?short_id=short123", "short_id=[REDACTED]")]
     [InlineData("wss://example.com/api?key=my_key_value", "key=[REDACTED]")]
+    [InlineData("wss://example.com/api?usersecret=sec112233", "usersecret=[REDACTED]")]
+    [InlineData("ws://example.com/api?userpassword=pass445566", "userpassword=[REDACTED]")]
+    [InlineData("wss://example.com/api?authsecret=sec778899", "authsecret=[REDACTED]")]
+    [InlineData("ws://example.com/api?authtoken=tok001122", "authtoken=[REDACTED]")]
     public void ScrubSecrets_RedactsSensitiveQueryParams(string input, string expectedSubstring)
     {
         var s = CrashReporter.ScrubSecrets(input);
@@ -321,5 +325,15 @@ public sealed class CrashReporterScrubberTests
         Assert.DoesNotContain("abcd1234efgh", report);
         Assert.Contains("benign line", report);
         Assert.Contains("last line", report);
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsExceptionMessageWithSensitiveUri()
+    {
+        var ex = new InvalidOperationException("Failed to access https://sub.provider.com/config?token=secret12345");
+        var scrubbed = CrashReporter.ScrubSecrets(ex.Message);
+
+        Assert.DoesNotContain("secret12345", scrubbed);
+        Assert.Contains("[redacted]", scrubbed);
     }
 }

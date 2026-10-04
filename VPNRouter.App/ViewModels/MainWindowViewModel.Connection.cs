@@ -144,10 +144,32 @@ public partial class MainWindowViewModel
         await Task.Run(() => _engine.RestartTrueSplitAsync(_settings, CancellationToken.None));
     }
 
+    // The window lost track of a tunnel that is running (a routing change restarts sing-box). Show the truth instead of
+    // letting the next press of "Connect" stop it.
+    private void AdoptRunningEngine()
+    {
+        _logger.Information("[VM] Engine is running while the window showed Not connected - showing Connected");
+        IsConnected = true;
+        ConnectButtonText = Strings.StopVPN;
+        StartSubRefreshTimer();
+        RefreshActiveIndicator();
+        RestoreConnectedStatus();
+    }
+
     [RelayCommand]
     private async Task ToggleConnectionAsync()
     {
-        if (IsConnecting || IsApplying || _isReconnecting)
+        var toggle = ConnectionSyncPolicy.DecideToggle(
+            IsConnected,
+            inTransition: IsConnecting || IsApplying || _isReconnecting,
+            inProcessEngineRunning: _engine.IsRunning);
+        if (toggle == ToggleAction.AdoptRunningEngine)
+        {
+            AdoptRunningEngine();
+            return;
+        }
+
+        if (toggle == ToggleAction.Ignore)
         {
             _logger.Debug(
                 "[VM] ToggleConnectionAsync ignored - transition already in progress (IsConnecting={IsConnecting}, IsApplying={IsApplying}, IsReconnecting={IsReconnecting})",
@@ -157,7 +179,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (IsConnected || _engine.IsRunning)
+        if (toggle == ToggleAction.Stop)
         {
             IsConnecting = true;
             StatusText = Strings.Stopping;

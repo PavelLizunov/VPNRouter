@@ -35,8 +35,12 @@ public class FirewallManager : IFirewallManager
 
     internal static IReadOnlyList<string> ManagedRulePrefixes => AllPrefixes;
 
+    private const int PathResolveParallelism = 8;
+
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
+    private IFirewallRuleStore? _store;
+    private readonly bool _resolveInProcess;
     private readonly List<string> _managedRules = new();
     private List<string> _requestedNames = new();
     private bool _disposed;
@@ -60,12 +64,27 @@ public class FirewallManager : IFirewallManager
         }
     }
 
-    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+    private static readonly IProcessRunner DefaultRunner = new ProcessRunner();
 
+    internal static IProcessRunner Runner { get; set; } = DefaultRunner;
+
+    // The COM rule store is used only with the real process runner; tests that inject a runner keep exercising the netsh path.
     public FirewallManager(ILogger? logger = null, IProcessRunner? runner = null)
     {
         _logger = logger ?? Log.Logger;
         _runner = runner ?? Runner;
+        if (runner is null && ReferenceEquals(Runner, DefaultRunner) && OperatingSystem.IsWindows())
+        {
+            _store = ComFirewallRuleStore.TryCreate(_logger);
+            _resolveInProcess = true;
+        }
+    }
+
+    internal FirewallManager(ILogger? logger, IProcessRunner? runner, IFirewallRuleStore? store)
+    {
+        _logger = logger ?? Log.Logger;
+        _runner = runner ?? Runner;
+        _store = store;
     }
 
     public static void TryCleanupOrphanedRulesSafe(ILogger? logger = null)
@@ -102,14 +121,21 @@ public class FirewallManager : IFirewallManager
             .ToList();
         _requestedNames = exact;
 
-        foreach (var name in exact)
+        // Resolving a name that is not running costs a where.exe process; do them side by side.
+        var resolved = exact
+            .AsParallel().AsOrdered().WithDegreeOfParallelism(PathResolveParallelism)
+            .Select(n => (Name: n, Path: ResolveProcessPath(n)))
+            .ToList();
+
+        var notRunning = 0;
+        foreach (var (name, exePath) in resolved)
         {
             var ruleName = RulePrefix + name.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
 
-            var exePath = ResolveProcessPath(name);
             if (exePath == null)
             {
-                _logger.Warning("[Firewall] Skipping rule for {Process} — exe path not found (process not running?)", name);
+                notRunning++;
+                _logger.Debug("[Firewall] Skipping rule for {Process} — exe path not found (process not running?)", name);
                 continue;
             }
 
@@ -123,11 +149,14 @@ public class FirewallManager : IFirewallManager
             }
         }
 
-        _logger.Information("[Firewall] Created {Count} block rules (disabled — will enable on VPN crash)", _managedRules.Count);
+        _logger.Information(
+            "[Firewall] Created {Count} block rules (disabled — will enable on VPN crash); {Skipped} listed apps have no exe on this machine",
+            _managedRules.Count, notRunning);
     }
 
     public void EnableBlockRules()
     {
+        var unresolved = 0;
         foreach (var name in _requestedNames)
         {
             var ruleName = RulePrefix + name.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
@@ -135,7 +164,8 @@ public class FirewallManager : IFirewallManager
             var exePath = ResolveProcessPath(name);
             if (exePath == null)
             {
-                _logger.Warning("[Firewall] kill-switch: still cannot resolve {Process} — cannot block its direct egress", name);
+                unresolved++;
+                _logger.Debug("[Firewall] kill-switch: still cannot resolve {Process} — cannot block its direct egress", name);
                 continue;
             }
             if (CreateBlockRule(ruleName, exePath, enabled: true))
@@ -145,12 +175,10 @@ public class FirewallManager : IFirewallManager
             }
         }
 
-        var ok = 0;
-        foreach (var rule in _managedRules)
-        {
-            if (RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=yes"))
-                ok++;
-        }
+        if (unresolved > 0)
+            _logger.Information("[Firewall] kill-switch: {Count} listed apps have no exe on this machine - nothing to block for them", unresolved);
+
+        var ok = SetManagedRulesEnabled(true);
         if (ok == _managedRules.Count)
             _logger.Information("[Firewall] ENABLED {Count} block rules (VPN down — leak protection active)", ok);
         else
@@ -160,12 +188,7 @@ public class FirewallManager : IFirewallManager
 
     public void DisableBlockRules()
     {
-        var ok = 0;
-        foreach (var rule in _managedRules)
-        {
-            if (RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=no"))
-                ok++;
-        }
+        var ok = SetManagedRulesEnabled(false);
         if (ok == _managedRules.Count)
             _logger.Information("[Firewall] Disabled {Count} block rules (VPN up — TUN handles routing)", ok);
         else
@@ -173,19 +196,82 @@ public class FirewallManager : IFirewallManager
                 ok, _managedRules.Count, _managedRules.Count - ok);
     }
 
-    public void DeleteAllRules()
+    private int SetManagedRulesEnabled(bool enabled)
     {
+        if (_store is not null)
+        {
+            try
+            {
+                return _store.SetEnabled(_managedRules, enabled);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Firewall] COM enable/disable failed - falling back to netsh");
+                _store = null;
+            }
+        }
+
+        var ok = 0;
         foreach (var rule in _managedRules)
+        {
+            if (RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable={(enabled ? "yes" : "no")}"))
+                ok++;
+        }
+        return ok;
+    }
+
+    private void RemoveRules(IReadOnlyCollection<string> rules)
+    {
+        if (rules.Count == 0) return;
+
+        if (_store is not null)
+        {
+            try
+            {
+                _store.Remove(rules);
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Firewall] COM delete failed - falling back to netsh");
+                _store = null;
+            }
+        }
+
+        foreach (var rule in rules)
         {
             RunNetsh($"advfirewall firewall delete rule name=\"{rule}\"");
             _logger.Debug("[Firewall] Deleted rule: {Rule}", rule);
         }
+    }
+
+    public void DeleteAllRules()
+    {
+        RemoveRules(_managedRules.ToList());
         _managedRules.Clear();
         _logger.Information("[Firewall] All VPNRouter firewall rules deleted");
     }
 
     private bool CreateBlockRule(string ruleName, string programPath, bool enabled)
     {
+        if (_store is not null)
+        {
+            try
+            {
+                if (_store.AddOutboundBlockRule(ruleName, programPath, enabled, "VPNRouter block_on_vpn_fail"))
+                {
+                    _logger.Debug("[Firewall] Created rule '{Rule}' for {Program} (enabled: {Enabled})",
+                        ruleName, programPath, enabled);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Firewall] COM add failed for '{Rule}' - falling back to netsh", ruleName);
+                _store = null;
+            }
+        }
+
         var enabledStr = enabled ? "yes" : "no";
 
         var success = RunNetsh($"advfirewall firewall add rule " +
@@ -217,7 +303,9 @@ public class FirewallManager : IFirewallManager
 
         if (OperatingSystem.IsWindows())
         {
-            var onPath = ProcessImagePath.ResolveNameToPath(processName, _runner);
+            var onPath = _resolveInProcess
+                ? ProcessImagePath.ResolveNameOnPath(processName)
+                : ProcessImagePath.ResolveNameToPath(processName, _runner);
             if (!string.IsNullOrEmpty(onPath))
                 return onPath;
         }
@@ -236,11 +324,7 @@ public class FirewallManager : IFirewallManager
             return;
         }
 
-        foreach (var ruleName in orphaned)
-        {
-            RunNetsh($"advfirewall firewall delete rule name=\"{ruleName}\"");
-            _logger.Debug("[Firewall] Deleted orphaned rule: {Rule}", ruleName);
-        }
+        RemoveRules(orphaned);
 
         _logger.Information("[Firewall] Cleaned up {Count} orphaned rules", orphaned.Count);
     }
@@ -255,6 +339,19 @@ public class FirewallManager : IFirewallManager
             .ToList();
         var result = new List<string>();
         if (prefixList.Count == 0) return result;
+
+        if (_store is not null)
+        {
+            try
+            {
+                return _store.FindByPrefixes(prefixList);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Firewall] COM enumeration failed - falling back to netsh");
+                _store = null;
+            }
+        }
 
         try
         {
@@ -370,6 +467,42 @@ public class FirewallManager : IFirewallManager
         DeleteAllRules();
     }
 
+    internal static readonly string[] DnsLockdownRuleNames =
+    {
+        DnsLockdownAllowRule, DnsLockdownTunAllowRule, DnsLockdownTunAllowRule + "-TCP",
+        DnsLockdownUdp53Rule, DnsLockdownTcp53Rule, DnsLockdownTcp853Rule,
+        DnsLockdownUdp53Ipv6Rule, DnsLockdownTcp53Ipv6Rule, DnsLockdownTcp853Ipv6Rule,
+    };
+
+    // The rules of the DNS leak lockdown as data, so the COM path and the netsh fallback add exactly the same thing.
+    internal static IReadOnlyList<FirewallRuleSpec> BuildDnsLockdownSpecs(string blockExclusionRange) => new[]
+    {
+        new FirewallRuleSpec(DnsLockdownAllowRule, Allow: true, "UDP", "53", "127.0.0.1",
+            "VPNRouter Wave 39: allow loopback DNS for local proxies"),
+        new FirewallRuleSpec(DnsLockdownUdp53Rule, Allow: false, "UDP", "53", blockExclusionRange,
+            "VPNRouter Wave 39 BR-9: block UDP/53 to prevent DNS leak (TUN range excluded)"),
+        new FirewallRuleSpec(DnsLockdownTcp53Rule, Allow: false, "TCP", "53", blockExclusionRange,
+            "VPNRouter Wave 39 BR-9: block TCP/53 to prevent DNS leak (TUN range excluded)"),
+        new FirewallRuleSpec(DnsLockdownTcp853Rule, Allow: false, "TCP", "853", blockExclusionRange,
+            "VPNRouter Wave 39 BR-9: block TCP/853 to prevent DNS leak (TUN range excluded)"),
+        new FirewallRuleSpec(DnsLockdownUdp53Ipv6Rule, Allow: false, "UDP", "53", Ipv6PublicDnsScope,
+            "VPNRouter r10 #6: block UDP/53 over public IPv6 (2000::/3) to prevent DNS leak"),
+        new FirewallRuleSpec(DnsLockdownTcp53Ipv6Rule, Allow: false, "TCP", "53", Ipv6PublicDnsScope,
+            "VPNRouter r10 #6: block TCP/53 over public IPv6 (2000::/3) to prevent DNS leak"),
+        new FirewallRuleSpec(DnsLockdownTcp853Ipv6Rule, Allow: false, "TCP", "853", Ipv6PublicDnsScope,
+            "VPNRouter r10 #6: block TCP/853 over public IPv6 (2000::/3) to prevent DNS leak"),
+    };
+
+    internal static string NetshAddArguments(FirewallRuleSpec spec) =>
+        $"advfirewall firewall add rule name=\"{spec.Name}\" dir=out action={(spec.Allow ? "allow" : "block")} " +
+        $"protocol={spec.Protocol} remoteport={spec.RemotePorts} remoteip={spec.RemoteAddresses} enable=yes profile=any " +
+        $"description=\"{spec.Description}\"";
+
+    // Nine netsh processes took about a second each way; the in-process firewall API does it at once. Used only with the real process runner
+    // (tests that inject a runner keep the netsh path and its order).
+    private static IFirewallRuleStore? TryStaticStore(ILogger log) =>
+        OperatingSystem.IsWindows() && ReferenceEquals(Runner, DefaultRunner) ? ComFirewallRuleStore.TryCreate(log) : null;
+
     [SupportedOSPlatform("windows")]
     public static async Task EnableDnsLockdownAsync(
         ILogger? logger = null,
@@ -394,67 +527,23 @@ public class FirewallManager : IFirewallManager
         {
             await Task.Run(() =>
             {
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownAllowRule}\" " +
-                    $"dir=out action=allow " +
-                    $"protocol=UDP remoteip=127.0.0.1 remoteport=53 " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39: allow loopback DNS for local proxies\"");
+                var specs = BuildDnsLockdownSpecs(blockExclusionRange);
+                var store = TryStaticStore(log);
+                if (store is not null)
+                {
+                    try
+                    {
+                        foreach (var spec in specs) store.AddRule(spec);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Warning(ex, "[FirewallManager] COM DNS lockdown failed - using netsh");
+                        try { store.Remove(specs.Select(sp => sp.Name).ToList()); } catch { }
+                    }
+                }
 
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownUdp53Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=UDP remoteport=53 " +
-                    $"remoteip={blockExclusionRange} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39 BR-9: block UDP/53 to prevent DNS leak (TUN range excluded)\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTcp53Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=TCP remoteport=53 " +
-                    $"remoteip={blockExclusionRange} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39 BR-9: block TCP/53 to prevent DNS leak (TUN range excluded)\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTcp853Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=TCP remoteport=853 " +
-                    $"remoteip={blockExclusionRange} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39 BR-9: block TCP/853 to prevent DNS leak (TUN range excluded)\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownUdp53Ipv6Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=UDP remoteport=53 " +
-                    $"remoteip={Ipv6PublicDnsScope} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter r10 #6: block UDP/53 over public IPv6 (2000::/3) to prevent DNS leak\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTcp53Ipv6Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=TCP remoteport=53 " +
-                    $"remoteip={Ipv6PublicDnsScope} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter r10 #6: block TCP/53 over public IPv6 (2000::/3) to prevent DNS leak\"");
-
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTcp853Ipv6Rule}\" " +
-                    $"dir=out action=block " +
-                    $"protocol=TCP remoteport=853 " +
-                    $"remoteip={Ipv6PublicDnsScope} " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter r10 #6: block TCP/853 over public IPv6 (2000::/3) to prevent DNS leak\"");
+                foreach (var spec in specs) RunNetshStatic(log, NetshAddArguments(spec));
             }, timeoutCts.Token).ConfigureAwait(false);
 
             log.Information(
@@ -489,15 +578,22 @@ public class FirewallManager : IFirewallManager
         {
             await Task.Run(() =>
             {
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownAllowRule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTunAllowRule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTunAllowRule}-TCP\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp53Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp853Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Ipv6Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp53Ipv6Rule}\"");
-                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp853Ipv6Rule}\"");
+                var store = TryStaticStore(log);
+                if (store is not null)
+                {
+                    try
+                    {
+                        store.Remove(DnsLockdownRuleNames);
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Warning(ex, "[FirewallManager] COM DNS lockdown teardown failed - using netsh");
+                    }
+                }
+
+                foreach (var name in DnsLockdownRuleNames)
+                    RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{name}\"");
             }, timeoutCts.Token).ConfigureAwait(false);
 
             log.Information(

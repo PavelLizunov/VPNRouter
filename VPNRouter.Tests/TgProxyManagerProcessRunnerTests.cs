@@ -377,4 +377,15 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         var ex = Record.Exception(() => TgProxyManager.OpenInTelegram(host, 1443, secret));
         Assert.Null(ex);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(65536)]
+    [InlineData(70000)]
+    public void OpenInTelegram_InvalidPort_RejectsAndDoesNotLaunch(int invalidPort)
+    {
+        var ex = Record.Exception(() => TgProxyManager.OpenInTelegram("127.0.0.1", invalidPort, "abc123secret"));
+        Assert.Null(ex);
+    }
 }

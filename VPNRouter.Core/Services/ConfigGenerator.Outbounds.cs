@@ -85,7 +85,12 @@ public static partial class ConfigGenerator
 
         if (udpNativeActive != null)
         {
-            AddOutboundGroup(outbounds, new List<VlessServerEntry> { udpNativeActive }, "proxy", "vless");
+            // Auto-select wraps the servers of the same protocol in a urltest group (Hysteria2 with Hysteria2, TUIC with TUIC); without it the chosen server is used alone.
+            var udpPool = settings.Vless.AutoSelectBestServer
+                ? servers.Where(s => string.Equals(s.Protocol, udpNativeActive.Protocol, StringComparison.OrdinalIgnoreCase)).ToList()
+                : new List<VlessServerEntry>();
+            if (!udpPool.Contains(udpNativeActive)) udpPool.Insert(0, udpNativeActive);
+            AddOutboundGroup(outbounds, udpPool, "proxy", "vless");
             hasUdpProxy = false;
             proxyIsUdpNativeOutbound = true;
         }

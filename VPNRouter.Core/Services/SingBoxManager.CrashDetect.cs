@@ -36,7 +36,6 @@ public partial class SingBoxManager
                 "[SingBoxManager] Expected exit during intentional {Phase:l} (exit code: {Code}) — suppressing Crashed event, late OS callback after SuppressExitedEvent",
                 _restartInProgress ? "restart" : "stop",
                 exitCode);
-            LogSingBoxCrashTail();
             DetectTunOrphanCrashSignature();
             return;
         }
