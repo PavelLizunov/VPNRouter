@@ -13,6 +13,11 @@ public partial class MainWindowViewModel
     private CancellationTokenSource? _serverDeepCts;
     private VlessDeepVerifier? _deepVerifier;
 
+    // With the tunnel up, probes are bound to the physical interface (Windows), so the numbers are real; without that they would only
+    // measure the tunnel's own answer and the test stays unavailable.
+    private static bool CanProbeWhileConnected =>
+        OperatingSystem.IsWindows() && TcpTlsProbe.OutboundInterfaceIndex() is > 0;
+
     private const int ServerTestConcurrency = 20;
     private const int ServerDeepConcurrency = 5;
 
@@ -50,7 +55,7 @@ public partial class MainWindowViewModel
         if (server == null) return;
         if (server.IsTesting) return;
 
-        if (IsConnected) return;
+        if (IsConnected && !CanProbeWhileConnected) return;
 
         server.IsTesting = true;
         try
@@ -110,7 +115,7 @@ public partial class MainWindowViewModel
     {
         setWarning(string.Empty);
 
-        if (IsConnected)
+        if (IsConnected && !CanProbeWhileConnected)
         {
             setWarning(Strings.PingUnavailableWhenConnected);
             return;

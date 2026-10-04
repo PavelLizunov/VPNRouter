@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -48,7 +49,11 @@ public sealed class AutoFailoverRecoveryAndPersistTests
 
         var capped = await engine.HandleDeadConfigAsync("dead", CancellationToken.None);
         Assert.False(capped.Switched);
-        Assert.Contains("Все серверы недоступны", capped.UserFacingMessage);
+        Assert.Contains(capped.UserFacingMessage, new[]
+        {
+            Strings.FailoverAllServersDown(engine.TriedServers.Count, "ru"),
+            Strings.FailoverAllServersDown(engine.TriedServers.Count, "en"),
+        });
 
         engine.ResetCycle();
         Assert.Empty(engine.TriedServers);

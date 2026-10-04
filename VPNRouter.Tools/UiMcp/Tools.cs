@@ -94,7 +94,14 @@ public static class Tools
             Tool("ui_tree", "Outline of the visible controls of a surface: type, name, text, window bounds, state, bound command. Controls marked * are what ui_sweep clicks.",
                 Schema(AddTo(Common(), "max_lines", Num("Maximum lines (default 600)")), "surface")),
             Tool("ui_sweep", "Click controls of a surface with real pointer input at a chosen speed, rendering frames, and report exceptions with the element and the action trail. Skips controls that act on the machine unless allowed.",
-                Schema(sweep, "surface")));
+                Schema(sweep, "surface")))
+            .WithLive();
+    }
+
+    private static JsonArray WithLive(this JsonArray tools)
+    {
+        foreach (var live in LiveTools.Definitions()) tools.Add(live);
+        return tools;
     }
 
     private static JsonObject AddTo(JsonObject o, string key, JsonNode value)
@@ -119,6 +126,7 @@ public static class Tools
         "ui_matrix" => MatrixTool(args),
         "ui_tree" => Text(Probe.Tree(Options(args), Int(args, "max_lines", 600))),
         "ui_sweep" => SweepTool(args),
+        _ when LiveTools.IsLiveTool(name) => LiveTools.Run(name, args),
         _ => throw new ArgumentException("Unknown tool " + name),
     };
 

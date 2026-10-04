@@ -585,6 +585,10 @@ public static partial class Strings
     public static string RollbackSafetyHint => Ru
         ? "Доступны только недавние стабильные версии с проверкой SHA-256."
         : "Only recent stable releases with verified SHA-256 are available.";
+    public static string RollbackSafetyHintCandidates => Ru
+        ? "Недавние стабильные версии и кандидаты (канал «экспериментальный»); у каждой проверяется SHA-256."
+        : "Recent stable releases and candidates (experimental channel); every one has its SHA-256 verified.";
+    public static string PrereleaseLabel => Ru ? "кандидат" : "candidate";
     public static string RollbackConfirmation => Ru
         ? "Установить v{0}? VPN остановится, приложение перезапустится. Перед откатом будет сохранена резервная копия настроек."
         : "Install v{0}? VPN will stop and the app will restart. A settings backup will be saved before rollback.";

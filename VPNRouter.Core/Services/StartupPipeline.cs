@@ -572,7 +572,7 @@ internal sealed class StartupPipeline
             if (udpCandidates.Count == 0)
                 return null;
 
-            _host.OnStatus("Проверяем UDP-серверы для игр…");
+            _host.OnStatus(Localization.Strings.StartupCheckingUdpServers);
             var probe = new ServerHealthProbe(_host.Logger);
             var results = await probe.ProbeAllAsync(udpCandidates, TimeSpan.FromSeconds(3), ct)
                 .ConfigureAwait(false);

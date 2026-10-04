@@ -85,6 +85,56 @@ public class ConfigGeneratorAutoSelectHealthFilterTests : IDisposable
         return null;
     }
 
+    private static VlessServerEntry Hy2(string name, string server) => new()
+    {
+        Name = name,
+        Server = server,
+        Port = 8444,
+        Protocol = "hysteria2",
+        Password = "pw",
+        Tls = new VlessTlsConfig { Enabled = true, ServerName = "example.com" },
+    };
+
+    [Fact]
+    public void AutoSelect_WithAHysteria2ServerSelected_GroupsTheHysteria2Servers_NotTheVlessOnes()
+    {
+        var h1 = Hy2("hy-a", "10.1.0.1");
+        var h2 = Hy2("hy-b", "10.1.0.2");
+        var h3 = Hy2("hy-c", "10.1.0.3");
+        var v = Vless("srv-v", "10.0.0.9");
+
+        var config = ConfigGenerator.Generate(FullProfile(), new[] { "x.exe" }, Settings(autoSelect: true, h2, v, h1, h3));
+        var members = UrltestMembers(config);
+
+        Assert.NotNull(members);
+        Assert.Equal(3, members!.Count);
+        Assert.All(members, m => Assert.Contains("hy-", m));
+        Assert.DoesNotContain(members, m => m.Contains("srv-v"));
+    }
+
+    [Fact]
+    public void AutoSelectOff_WithAHysteria2ServerSelected_UsesThatServerAlone()
+    {
+        var h1 = Hy2("hy-a", "10.1.0.1");
+        var h2 = Hy2("hy-b", "10.1.0.2");
+
+        var config = ConfigGenerator.Generate(FullProfile(), new[] { "x.exe" }, Settings(autoSelect: false, h1, h2));
+
+        Assert.Null(UrltestMembers(config));
+    }
+
+    [Fact]
+    public void AutoSelect_WithOnlyOneHysteria2Server_StaysASingleOutbound()
+    {
+        var h1 = Hy2("hy-a", "10.1.0.1");
+        var v1 = Vless("srv-v1", "10.0.0.8");
+        var v2 = Vless("srv-v2", "10.0.0.9");
+
+        var config = ConfigGenerator.Generate(FullProfile(), new[] { "x.exe" }, Settings(autoSelect: true, h1, v1, v2));
+
+        Assert.Null(UrltestMembers(config));
+    }
+
     [Fact]
     public void FreshBlockedMember_IsDroppedFromAutoPool()
     {
