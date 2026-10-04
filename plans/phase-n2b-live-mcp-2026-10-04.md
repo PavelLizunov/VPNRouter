@@ -23,4 +23,4 @@ Revert the PR; the `ui_*` tools are untouched.
 
 ## Outcome
 
-Pending.
+Merged as #520. Verified with the CI-built binary: argument validation, `live_runs`, `live_report`, `live_run` for `dump`, `tabs`, `cycles`, `servers`, `ping`, `modes`, with images. Scripts folder from `VPNROUTER_LIVE_SCRIPTS` or found from the working directory; host from `VPNROUTER_LIVE_HOST`.
