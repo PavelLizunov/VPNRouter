@@ -37,6 +37,48 @@ public class RevealInFileManagerTests
             Assert.Equal(Path.GetDirectoryName(malPath), psi.ArgumentList[0]);
         }
     }
+
+    [Fact]
+    public void OpenLogs_StartInfo_UsesCorrectOpenerForOS()
+    {
+        var logsDir = VPNRouter.Core.AppPaths.LogsDir;
+        ProcessStartInfo psi;
+        if (OperatingSystem.IsWindows())
+        {
+            psi = new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                UseShellExecute = false
+            };
+            psi.ArgumentList.Add(logsDir);
+        }
+        else
+        {
+            psi = new ProcessStartInfo
+            {
+                FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
+                UseShellExecute = false
+            };
+            psi.ArgumentList.Add(logsDir);
+        }
+
+        Assert.False(psi.UseShellExecute);
+        Assert.Single(psi.ArgumentList);
+        Assert.Equal(logsDir, psi.ArgumentList[0]);
+
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal("explorer.exe", psi.FileName);
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            Assert.Equal("/usr/bin/open", psi.FileName);
+        }
+        else
+        {
+            Assert.Equal("xdg-open", psi.FileName);
+        }
+    }
 }
 
 #if PLATFORM_WINDOWS
