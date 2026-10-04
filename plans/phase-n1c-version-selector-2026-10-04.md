@@ -29,3 +29,5 @@ Revert the PR.
 ## Outcome
 
 Merged as #522 and shipped in r27. Covered by contract tests (candidates and stable together, flag-less -rN tags, drafts, missing checksum, cap) and view model tests; the list against real GitHub releases was not exercised (it needs a running r27 on the experimental channel). Desktop only; Android stays forward-only.
+
+Follow-up N-1d #532 (r28): the live `versions` scenario on the installed r27 showed r26..r19 and no stable release, so the experimental list now reserves three slots for the newest stable releases (5 newest of any kind + 3 stable). Verified live on r28: r28 (installed), r27..r23, v2.49.3, v2.49.2, v2.49.1.
