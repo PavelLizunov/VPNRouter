@@ -6,7 +6,7 @@ Part of the [VPNRouter README](../../README.md).
 
 <table>
 <tr>
-<td width="80" align="center">🐧<br><b>Linux</b></td>
+<td width="80" align="center"><b>Linux</b></td>
 <td>
 
 ```bash
@@ -16,7 +16,7 @@ Debian / Ubuntu / Mint / Pop / elementary. Adds the signed apt repo, installs `v
 </td>
 </tr>
 <tr>
-<td align="center">🍎<br><b>macOS</b></td>
+<td align="center"><b>macOS</b></td>
 <td>
 
 ```bash
@@ -26,7 +26,7 @@ Apple Silicon. Auto-strips Gatekeeper quarantine. First launch prompts once for 
 </td>
 </tr>
 <tr>
-<td align="center">🪟<br><b>Windows</b></td>
+<td align="center"><b>Windows</b></td>
 <td>
 
 ```powershell
@@ -38,7 +38,7 @@ Prefer a regular setup wizard? Download `VPNRouter-Setup-v{version}.exe` from [R
 </td>
 </tr>
 <tr>
-<td align="center">🤖<br><b>Android</b></td>
+<td align="center"><b>Android</b></td>
 <td>
 
 ```
@@ -59,16 +59,16 @@ Published version tags are permanent source references; older candidate download
 
 | File | Platform | What it is |
 |---|---|---|
-| `VPNRouter-v{version}-win.zip` | 🪟 Windows | Full installer (first install) |
-| `VPNRouter-update-v{version}-win.zip` | 🪟 Windows | DLL-only update (if you're already on a recent version) |
-| `VPNRouter-Setup-v{version}.exe` | 🪟 Windows | Setup wizard (Inno Setup, not code-signed): installs the same files as the install zip, with an uninstaller and optional autostart/service checkboxes |
-| `VPNRouter-*-win.zip.sha256` | 🪟 Windows | SHA256 companion file — auto-updater verifies the download against this before extracting (v2.15.8+) |
-| `VPNRouter-v{version}-mac.dmg` | 🍎 macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
-| `VPNRouter-v{version}-mac.zip` | 🍎 macOS | Raw `.app` bundle (for manual install) |
-| `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Debian/Ubuntu package (desktop entry + `setcap` for passwordless TUN; no systemd service). Install: `sudo dpkg -i <file>.deb` |
-| `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
-| `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
-| `VPNRouter-v{version}-android-arm64.apk` | 🤖 Android | Signed ARM64 APK, API 23+. Built and signed by `build-android.yml` for every release tag, then published at Releases and [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). An in-app updater delivers future APKs. |
+| `VPNRouter-v{version}-win.zip` | Windows | Full installer (first install) |
+| `VPNRouter-update-v{version}-win.zip` | Windows | DLL-only update (if you're already on a recent version) |
+| `VPNRouter-Setup-v{version}.exe` | Windows | Setup wizard (Inno Setup, not code-signed): installs the same files as the install zip, with an uninstaller and optional autostart/service checkboxes |
+| `VPNRouter-*-win.zip.sha256` | Windows | SHA256 companion file — auto-updater verifies the download against this before extracting (v2.15.8+) |
+| `VPNRouter-v{version}-mac.dmg` | macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
+| `VPNRouter-v{version}-mac.zip` | macOS | Raw `.app` bundle (for manual install) |
+| `VPNRouter-v{version}-linux-amd64.deb` | Linux | Debian/Ubuntu package (desktop entry + `setcap` for passwordless TUN; no systemd service). Install: `sudo dpkg -i <file>.deb` |
+| `VPNRouter-v{version}-linux-x86_64.AppImage` | Linux | Portable single-file build. `chmod +x`, run, no install needed |
+| `VPNRouter-v{version}-linux.tar.gz` | Linux | Raw tarball (for manual install or packaging into other formats) |
+| `VPNRouter-v{version}-android-arm64.apk` | Android | Signed ARM64 APK, API 23+. Built and signed by `build-android.yml` for every release tag, then published at Releases and [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). An in-app updater delivers future APKs. |
 | `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip` + `*-Setup-*.exe`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Compare `sha256sum <file>` on Linux, `shasum -a 256 <file>` on macOS, or `Get-FileHash -Algorithm SHA256 <file>` on Windows with the 64-character hash in its sidecar. Some sidecars contain only the hash and cannot be used directly with `sha256sum -c`. |
 
 The scheduled pool job publishes this separate artifact when it succeeds:

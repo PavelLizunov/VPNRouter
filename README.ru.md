@@ -19,7 +19,7 @@
   <img src="docs/images/home-connected-dark-ru.png" width="46%" alt="Главный экран VPNRouter: подключено, тёмная тема"/>
   <img src="docs/images/home-ready-light-ru.png" width="46%" alt="Главный экран VPNRouter: готов к подключению, светлая тема"/>
 </p>
-<p align="center"><sub>Снимки текущей сборки на тестовых данных: без настоящих серверов и аккаунтов.</sub></p>
+<p align="center"><sub>Снимки текущего кода на Windows на тестовых данных: без настоящих серверов и аккаунтов.</sub></p>
 
 <p align="center">
   <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest"><img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?color=7C3AED" alt="Последний релиз"/></a>
@@ -70,6 +70,7 @@ ZIP, DMG, AppImage, `.deb` и `.tar.gz`, требования и контрол�
 <p align="center">
   <img src="docs/images/tour-ru.webp" width="640" alt="Короткий тур: подключение одной кнопкой и выбор приложений, идущих через VPN"/>
 </p>
+<p align="center"><sub>Собрано из таких снимков с анимированным курсором. Это не запись экрана.</sub></p>
 <p align="center">
   <img src="docs/images/apps-dark-ru.png" width="46%" alt="Экран маршрутизации приложений VPNRouter, выбрана категория Браузеры"/>
 </p>

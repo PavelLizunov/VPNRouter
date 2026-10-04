@@ -19,7 +19,7 @@
   <img src="docs/images/home-connected-dark-en.png" width="46%" alt="VPNRouter main screen, connected, dark theme"/>
   <img src="docs/images/home-ready-light-en.png" width="46%" alt="VPNRouter main screen, ready to connect, light theme"/>
 </p>
-<p align="center"><sub>Rendered from the current build with sample data: no real servers or accounts.</sub></p>
+<p align="center"><sub>Rendered from the current code on Windows with sample data: no real servers or accounts.</sub></p>
 
 <p align="center">
   <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest"><img src="https://img.shields.io/github/v/release/PavelLizunov/VPNRouter?color=7C3AED" alt="Latest release"/></a>
@@ -70,6 +70,7 @@ More: [Features](docs/guide/features.md).
 <p align="center">
   <img src="docs/images/tour-en.webp" width="640" alt="Short tour: connect with one button, then choose which apps use the VPN"/>
 </p>
+<p align="center"><sub>Assembled from such renders with an animated cursor. It is not a screen recording.</sub></p>
 <p align="center">
   <img src="docs/images/apps-dark-en.png" width="46%" alt="VPNRouter application routing screen with the Browsers category selected"/>
 </p>
