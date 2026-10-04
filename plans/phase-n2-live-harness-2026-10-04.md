@@ -23,4 +23,4 @@ Runs on WINBRAT against the installed candidate; each run's report is the eviden
 
 ## Outcome
 
-Pending.
+Merged as #518 (the scripts were first missing from the commit because `.gitignore` ignores `tools/*`; fixed in the same PR) with follow-ups #525 and #529. Scenarios `tabs`, `cycles`, `servers`, `ping`, `modes`, `dump` all produce evidence on WINBRAT. Bugs found in the harness itself: ANSI log encoding (Cyrillic turned into `?`), stale UI Automation handles after a page rebuild, a segment sharing its name with a main tab, buttons named by their tooltip, the Advanced shell connect button named with a leading glyph, a virtualized server list that cannot be scrolled by input in this session (the all-servers scenario sees the rows in view only: 4-5 of 13).
