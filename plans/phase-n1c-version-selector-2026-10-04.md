@@ -28,4 +28,4 @@ Revert the PR.
 
 ## Outcome
 
-Pending.
+Merged as #522 and shipped in r27. Covered by contract tests (candidates and stable together, flag-less -rN tags, drafts, missing checksum, cap) and view model tests; the list against real GitHub releases was not exercised (it needs a running r27 on the experimental channel). Desktop only; Android stays forward-only.
