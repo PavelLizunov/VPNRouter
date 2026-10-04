@@ -15,7 +15,7 @@ public static class LiveTools
     private const string RemoteDirScp = "C:/android-build";
     private const string RemoteDirWin = @"C:\android-build";
 
-    internal static readonly string[] Scenarios = { "tabs", "cycles", "servers", "ping", "modes", "dump" };
+    internal static readonly string[] Scenarios = { "tabs", "cycles", "servers", "ping", "modes", "dump", "versions", "autoselect" };
     private static readonly string[] DumpTabs = { "servers", "subscribe", "settings", "apps", "tools", "public" };
 
     private static readonly Regex HostPattern = new(@"^[A-Za-z0-9_.-]+@[A-Za-z0-9_.:-]+$", RegexOptions.Compiled);
@@ -29,7 +29,8 @@ public static class LiveTools
         yield return Tool("live_run",
             "Run a functional scenario against the REAL installed VPNRouter app on the Windows test worker (UI Automation over ssh) and return the step log with timings, log findings, crash events and optionally screenshots. " +
             "Scenarios: tabs (every tab and inner tab), cycles (N connect/disconnect cycles with phase timings and public IP), servers (connect to each subscription server and time it), " +
-            "ping (ping/test-all timings with the tunnel down and up), modes (switch Selected apps / All traffic while connected), dump (write the controls of one tab). " +
+            "ping (ping/test-all timings with the tunnel down and up), modes (switch Selected apps / All traffic while connected), dump (write the controls of one tab), " +
+            "versions (Settings > Updates > Other versions against the real releases), autoselect (auto-select on, connect, read the urltest group and the Clash API pick and delays). " +
             "Connect scenarios change the worker's real VPN state; the app must already be running there. Takes minutes.",
             Schema(new JsonObject
             {

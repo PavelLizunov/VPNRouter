@@ -28,4 +28,4 @@ Revert the PR.
 
 ## Outcome
 
-Pending.
+Merged as #514 and shipped in r27. Verified live on WINBRAT: with the tunnel up, Test all runs (13 servers in 2.1 s) and shows the same 48-86 ms as with the VPN off; the connect pre-flight probes only the selected server. Follow-ups found by the live runs: #526 (the amber state of the "UDP ?" pill) and #528 (a selected UDP server is kept without a probe that cannot finish).

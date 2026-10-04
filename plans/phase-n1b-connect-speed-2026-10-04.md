@@ -26,4 +26,4 @@ Revert the PR (netsh remains the fallback).
 
 ## Outcome
 
-Pending.
+Merged as #516 and shipped in r27; the elevated COM round trip test passed on windows-worker (272 tests in the filtered run). Measured live: connect to a chosen server 3.6-3.9 s (r26: 7.3-8.8 s), stop 4.3-4.5 s (r26: 5.3-5.9 s); the log shows "DNS leak lockdown disabled" 3.3 s after the stop begins, no `VPNRouter_*` rule remains. Not changed: the TUN adapter removal wait on stop (about 2.6 s) and the sing-box/TUN start (2-3 s).

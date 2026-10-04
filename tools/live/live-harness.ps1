@@ -7,9 +7,10 @@
 #   ping     Test all and Deep verify on the Subscribe tab with timings and per-row results, disconnected and connected
 #   dump     write every visible control of one tab (-Tab servers|subscribe|settings|apps|tools|public) to dump-<tab>.txt, for debugging selectors
 #   versions open Settings > Updates > Other versions on the experimental channel and read the list of older releases (never installs one)
+#   autoselect switch "auto-select by quick web test" on, connect, read the generated urltest group and ask the Clash API which server it picked and the delay of each member through the tunnel
 #   modes    switch Selected apps / All traffic N times while connected; the window must never fall back to "Connect"
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('tabs', 'cycles', 'servers', 'ping', 'modes', 'dump', 'versions')][string]$Scenario,
+    [Parameter(Mandatory = $true)][ValidateSet('tabs', 'cycles', 'servers', 'ping', 'modes', 'dump', 'autoselect', 'versions')][string]$Scenario,
     [int]$Count = 3,
     [string]$OutDir = 'C:\android-build\live',
     [int]$MaxServers = 20,
@@ -263,8 +264,8 @@ function Probe-Summary($lines, $since) {
 function Deep-Summary($lines, $since) {
     $rows = New-Object System.Collections.ArrayList
     foreach ($l in $lines) {
-        if ($l.Text -match '\[VlessDeepVerifier\] (.+?): (PASS http=(\d+)ms bw=([\d.]+)|HTTP probe FAILED.*|.*never bound.*)') {
-            [void]$rows.Add(('{0}={1}' -f $Matches[1], $(if ($Matches[3]) { "PASS $($Matches[3])ms $($Matches[4])Mbps" } else { 'FAIL' })))
+        if ($l.Text -match '\[VlessDeepVerifier\] (.+?): (PASS http=(\d+)ms bw=([\d.]+|-)|HTTP probe FAILED.*|.*never bound.*)') {
+            [void]$rows.Add(('{0}={1}' -f $Matches[1], $(if ($Matches[3]) { "PASS $($Matches[3])ms $(if ($Matches[4] -eq '-') { 'bw not measured' } else { $Matches[4] + 'Mbps' })" } else { 'FAIL' })))
         }
     }
     if ($rows.Count -eq 0) { return 'no deep verify lines in the log' }
@@ -318,7 +319,7 @@ function Run-Tabs {
         switch ($tab) {
             'servers'  { $targets = @($s | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -lt ($top + 70) -and $_.Y -gt $top - 5 }) }
             'settings' { $targets = @($s | Where-Object { $_.Type -eq 'ListItem' -and $_.X -lt 240 -and $_.Y -gt $top - 5 }) }
-            'apps'     { $targets = @($s | Where-Object { ($_.Type -eq 'ListItem' -and $_.X -lt 240 -and $_.Y -gt $top + 90) -or $_.Type -eq 'RadioButton' } | Select-Object -First 14) }
+            'apps'     { $targets = @($s | Where-Object { (($_.Type -eq 'ListItem' -and $_.X -lt 240 -and $_.Y -gt $top + 90) -or $_.Type -eq 'RadioButton') -and $_.Name -notmatch '^VPNRouter\.App\.' } | Select-Object -First 14) }
             'tools'    { $targets = @($s | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -lt ($top + 70) -and $_.Y -gt $top - 5 }) }
             'public'   { $targets = @($s | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -lt ($top + 70) -and $_.Y -gt $top - 5 }) }
         }
@@ -489,6 +490,64 @@ function Run-Ping {
     Ensure-Disconnected
 }
 
+function Clash-Get($path) {
+    # the Clash API of the running sing-box (address and secret from the app's own config.yaml)
+    $cfg = Get-Content 'C:\ProgramData\VPNRouter\config.yaml' -Encoding UTF8
+    $addr = ($cfg | Where-Object { $_ -match '^\s*clash_api:\s*(\S+)' } | Select-Object -First 1) -replace '^\s*clash_api:\s*', ''
+    $secret = ($cfg | Where-Object { $_ -match '^\s*clash_api_secret:' } | Select-Object -First 1) -replace '^\s*clash_api_secret:\s*', ''
+    $secret = $secret.Trim().Trim('"').Trim("'")
+    $headers = @{}
+    if ($secret) { $headers['Authorization'] = "Bearer $secret" }
+    return Invoke-RestMethod -Uri ("http://$($addr.Trim())$path") -Headers $headers -TimeoutSec 20
+}
+function Run-AutoSelect {
+    Ensure-Disconnected
+    if (-not (Go-Advanced)) { Add-Step 'enter advanced mode' $false 0 '' $null; return }
+    [void](Go-Tab $TabNames['subscribe'])
+    # a plain TCP server must be the selected one: with a UDP-native one (Hysteria2, TUIC) the generated config pins that server alone
+    $top = Page-Top
+    $row = Scan | Where-Object { $_.Type -eq 'ListItem' -and $_.Y -gt $top -and $_.Name -match 'VLESS' -and $_.Name -notmatch 'XHTTP' } | Select-Object -First 1
+    if ($row) { Press $row.El | Out-Null; Start-Sleep -Milliseconds 800 }
+    Add-Step 'select a VLESS server' ($null -ne $row) 0 $(if ($row) { $row.Name } else { 'none in view' }) $null
+    $cb = Find-Any 'CheckBox' 'Авто-выбор|Auto.?select'
+    if (-not $cb) { Add-Step 'auto-select checkbox' $false 0 'not found' (Shot 'autoselect-nocheckbox'); return }
+    $tp = $null
+    [void]$cb.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$tp)
+    $wasOn = ($tp.Current.ToggleState -eq 'On')
+    if (-not $wasOn) { $tp.Toggle(); Start-Sleep -Milliseconds 1500 }
+    Add-Step 'auto-select on' $true 0 "was on before: $wasOn" (Shot 'autoselect-on')
+    try {
+        $pressedAt = Get-Date
+        $clicked = Click-Cta $ConnectPat
+        $t = Wait-VpnState 'connected' 120
+        Add-Step 'connect with auto-select' ($clicked -and $t -ge 0) $t (Phase-Timeline $pressedAt) (Shot 'autoselect-connected')
+        if ($t -lt 0) { return }
+        Start-Sleep -Seconds 4
+        # the generated config: the group and its members
+        $json = Get-Content 'C:\ProgramData\VPNRouter\config\current.json' -Raw -Encoding UTF8 | ConvertFrom-Json
+        $group = @($json.outbounds | Where-Object { $_.type -eq 'urltest' -and $_.tag -eq 'proxy' }) | Select-Object -First 1
+        if ($group) {
+            Add-Step 'urltest group in the config' $true 0 ("members={0} interval={1} tolerance={2} url={3}" -f @($group.outbounds).Count, $group.interval, $group.tolerance, $group.url) $null
+        } else {
+            Add-Step 'urltest group in the config' $false 0 ("no urltest 'proxy' outbound; outbound types: " + ((@($json.outbounds) | ForEach-Object { $_.type + ':' + $_.tag }) -join ', ')) $null
+        }
+        # the live state: which member is selected and what the members measure through the tunnel
+        $p = Clash-Get '/proxies/proxy'
+        Add-Step 'clash: current pick' ($null -ne $p.now) 0 ("type={0} now='{1}' members={2}" -f $p.type, $p.now, @($p.all).Count) $null
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $delays = Clash-Get '/group/proxy/delay?url=http%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=5000'
+        $rows = @($delays.PSObject.Properties | ForEach-Object { '{0}={1}ms' -f ($_.Name -replace '^(vless|vless-udp)-', ''), $_.Value } | Sort-Object)
+        Add-Step 'clash: delay of every member through the tunnel' ($rows.Count -gt 0) $sw.ElapsedMilliseconds ("{0} answered: {1}" -f $rows.Count, ($rows -join '; ')) $null
+        $after = Clash-Get '/proxies/proxy'
+        Add-Step 'clash: pick after the test' $true 0 ("now='{0}'" -f $after.now) $null
+    } catch {
+        Add-Step 'autoselect error' $false 0 $_.Exception.Message $null
+    } finally {
+        Ensure-Disconnected
+        if (-not $wasOn) { try { $cb2 = Find-Any 'CheckBox' 'Авто-выбор|Auto.?select'; $t2 = $null; if ($cb2 -and $cb2.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$t2)) { $t2.Toggle(); Start-Sleep -Milliseconds 1200 } } catch { } ; Add-Step 'auto-select restored' $true 0 '' $null }
+    }
+}
+
 function Find-AllTexts($pattern) {
     $w = Win
     $out = New-Object System.Collections.ArrayList
@@ -574,6 +633,7 @@ if ($script:Proc) {
             'ping' { Run-Ping }
             'modes' { Run-Modes }
             'dump' { Run-Dump }
+            'autoselect' { Run-AutoSelect }
             'versions' { Run-Versions }
         }
     } catch {
