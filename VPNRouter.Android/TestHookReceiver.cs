@@ -4,12 +4,14 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.Net;
 using Android.Util;
 using Avalonia.Threading;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.Android;
 
@@ -23,6 +25,7 @@ namespace VPNRouter.Android;
     "com.ninitux.vpnrouter.TEST_RESET",
     "com.ninitux.vpnrouter.TEST_SET_VPN_STATE",
     "com.ninitux.vpnrouter.TEST_SET_HERO",
+    "com.ninitux.vpnrouter.TEST_DEEP_VERIFY",
 })]
 public sealed class TestHookReceiver : BroadcastReceiver
 {
@@ -35,6 +38,7 @@ public sealed class TestHookReceiver : BroadcastReceiver
     private const string ActReset = "com.ninitux.vpnrouter.TEST_RESET";
     private const string ActSetVpnState = "com.ninitux.vpnrouter.TEST_SET_VPN_STATE";
     private const string ActSetHero = "com.ninitux.vpnrouter.TEST_SET_HERO";
+    private const string ActDeepVerify = "com.ninitux.vpnrouter.TEST_DEEP_VERIFY";
 
     public override void OnReceive(Context? context, Intent? intent)
     {
@@ -53,6 +57,7 @@ public sealed class TestHookReceiver : BroadcastReceiver
                 ActReset => OnUi(AndroidApp.TestHookReset),
                 ActSetVpnState => SetVpnState(context, intent.GetStringExtra("value"), intent.GetStringExtra("reason")),
                 ActSetHero => OnUi(() => AndroidApp.TestHookSetHero(intent.GetStringExtra("value"))),
+                ActDeepVerify => StartDeepVerify(intent.GetStringExtra("value")),
                 _ => TestHookJson.Result(action, false, w => w.WriteString("error", "unknown-action")),
             };
         }
@@ -63,6 +68,43 @@ public sealed class TestHookReceiver : BroadcastReceiver
 
         Log.Info(LogTag, json);
         if (IsOrderedBroadcast) ResultData = json;
+    }
+
+    /// <summary>
+    /// Runs the Free Configs deep verifier (the Java verify box with its own short-lived engine) on one share link, with
+    /// the VPN off. The check outlasts a broadcast, so the verdict is logged as a TEST_DEEP_VERIFY_RESULT line.
+    /// </summary>
+    private static string StartDeepVerify(string? link)
+    {
+        if (string.IsNullOrWhiteSpace(link))
+            return TestHookJson.Result(ActDeepVerify, false, w => w.WriteString("error", "value-required"));
+
+        VPNRouter.Core.Models.VlessServerEntry entry;
+        try { entry = ServerUriParser.Parse(link.Trim()); }
+        catch (Exception ex) { return TestHookJson.Result(ActDeepVerify, false, w => w.WriteString("error", ex.GetType().Name)); }
+
+        var cfg = new FreeConfigEntry { RawUri = link.Trim(), Host = entry.Server, Port = entry.Port, CountryCode = "XX" };
+        _ = Task.Run(async () =>
+        {
+            string json;
+            try
+            {
+                await new AndroidFreeConfigDeepVerifier(Serilog.Log.Logger).VerifyOneAsync(cfg).ConfigureAwait(false);
+                json = TestHookJson.Result("TEST_DEEP_VERIFY_RESULT", cfg.Status == FreeConfigStatus.Verified, w =>
+                {
+                    w.WriteString("status", cfg.Status.ToString());
+                    w.WriteNumber("latencyMs", cfg.LatencyMs);
+                    w.WriteString("error", TestHookJson.Scrub(cfg.LastError));
+                });
+            }
+            catch (Exception ex)
+            {
+                json = TestHookJson.Result("TEST_DEEP_VERIFY_RESULT", false, w => w.WriteString("error", ex.GetType().Name));
+            }
+            Log.Info(LogTag, json);
+        });
+        return TestHookJson.Result(ActDeepVerify, true,
+            w => w.WriteString("note", "started; read TEST_DEEP_VERIFY_RESULT with logcat -s VpnRouterTest"));
     }
 
     /// <summary>
