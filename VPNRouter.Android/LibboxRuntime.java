@@ -29,6 +29,7 @@ final class LibboxRuntime {
 
     private static final String LOG_TAG = "VpnRouter.Libbox";
     private static final String CRASH_REPORT_SOURCE = "vpnrouter";
+    private static final long STOP_TIMEOUT_MS = 4_000L;
     private static final Object SETUP_LOCK = new Object();
     private static boolean setupDone;
 
@@ -73,17 +74,33 @@ final class LibboxRuntime {
         return server;
     }
 
-    static void stop(CommandServer server) {
+    /** Closes the engine, waiting at most four seconds so a stuck shutdown cannot block the caller. */
+    static void stop(final CommandServer server) {
         if (server == null) return;
+        Thread closer = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    server.closeService();
+                } catch (Exception e) {
+                    Log.w(LOG_TAG, "closeService threw: " + e.getMessage());
+                }
+                try {
+                    server.close();
+                } catch (Exception e) {
+                    Log.w(LOG_TAG, "close threw: " + e.getMessage());
+                }
+            }
+        }, "libbox-stop");
+        closer.setDaemon(true);
+        closer.start();
         try {
-            server.closeService();
-        } catch (Exception e) {
-            Log.w(LOG_TAG, "closeService threw: " + e.getMessage());
+            closer.join(STOP_TIMEOUT_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
-        try {
-            server.close();
-        } catch (Exception e) {
-            Log.w(LOG_TAG, "close threw: " + e.getMessage());
+        if (closer.isAlive()) {
+            Log.w(LOG_TAG, "engine shutdown still running after " + STOP_TIMEOUT_MS + " ms; continuing");
         }
     }
 
