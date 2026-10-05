@@ -4,7 +4,6 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.Net;
@@ -72,7 +71,8 @@ public sealed class TestHookReceiver : BroadcastReceiver
 
     /// <summary>
     /// Runs the Free Configs deep verifier (the Java verify box with its own short-lived engine) on one share link, with
-    /// the VPN off. The check outlasts a broadcast, so the verdict is logged as a TEST_DEEP_VERIFY_RESULT line.
+    /// the VPN off. The check outlasts a broadcast, so the verdict is logged as a TEST_DEEP_VERIFY_RESULT line. It starts on
+    /// the UI thread because the verifier looks its Java class up by name and only that thread sees the app class loader.
     /// </summary>
     private static string StartDeepVerify(string? link)
     {
@@ -84,7 +84,7 @@ public sealed class TestHookReceiver : BroadcastReceiver
         catch (Exception ex) { return TestHookJson.Result(ActDeepVerify, false, w => w.WriteString("error", ex.GetType().Name)); }
 
         var cfg = new FreeConfigEntry { RawUri = link.Trim(), Host = entry.Server, Port = entry.Port, CountryCode = "XX" };
-        _ = Task.Run(async () =>
+        Dispatcher.UIThread.Post(async () =>
         {
             string json;
             try
