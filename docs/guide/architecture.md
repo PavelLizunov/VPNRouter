@@ -32,7 +32,7 @@ VPNRouter.sln
 
 Core services live in `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderDefense` (known-bad credential filter), plus subsystems for Zapret, Telegram proxy, subscriptions, free configs.
 
-> **Note**: Desktop builds (Windows, macOS, Linux) default to official `PavelLizunov/sing-box-vpnctl` `v1.14.0-vpnctl.5` release artifacts. Android intentionally retains legacy tooling sing-box 1.13.10 (`libbox.aar`, Android 6.0+ / API 23+) per owner decision rather than migrating all platforms to vpnctl.
+> **Note**: Desktop builds (Windows, macOS, Linux) default to official `PavelLizunov/sing-box-vpnctl` `v1.14.2-vpnctl.2` release artifacts. Android uses the `libbox-legacy.aar` of the same release (API 21 build without naive, which Android does not offer; the app keeps Android 6.0+ / API 23+).
 
 See [`CURRENT_STATE.md`](../../CURRENT_STATE.md) for the current platform/build matrix.
 Historical plans, including the feature catalog and the v3.0 roadmap, were

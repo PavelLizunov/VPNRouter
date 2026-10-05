@@ -58,20 +58,23 @@ product; it doesn't pollute the user-facing release list because
 the `tooling-*` tag prefix + non-`--latest` flag keeps it out of the
 default "Latest" filter.
 
-### Active tooling release
+### Active libbox source
 
-| Tag | Asset | sing-box version | Created |
-|---|---|---|---|
-| `tooling-libbox-singbox-1.13.10` | `libbox.aar` (~11.7 MB) | 1.13.10 | 2026-05-19 |
+Since 2.50.1 the Android build no longer uses a tooling release of this repository.
+`build-android.yml` and `android-compile.yml` download `libbox-legacy-1.14.2-vpnctl.2.aar`
+(Android API 21, no naive outbound; the app keeps minSdk 23) from the
+`PavelLizunov/sing-box-vpnctl` release `v1.14.2-vpnctl.2` as `VPNRouter.Android/Lib/libbox.aar`,
+compare it with the SHA-256 pinned next to the tag and run `gh attestation verify` against that
+repository. To move to another core release, bump `LIBBOX_RELEASE_TAG`, `LIBBOX_ASSET` and
+`LIBBOX_AAR_SHA256` together in both workflows; the sums are in the release's `SHA256SUMS`.
+Naive is not offered on Android (`SmpQrNaiveUnsupportedAndroid`), which is why the legacy build
+is enough; the full `libbox-<ver>.aar` needs API 24.
 
-Referenced from `.github/workflows/build-android.yml`:
+The tooling release `tooling-libbox-singbox-1.13.10` (the old 1.13.10 binding, ~11.7 MB, created
+2026-05-19) stays untouched: the workflows of tags built before 2.50.1 download it. The two
+sections below describe how tooling releases were made and are kept for that history.
 
-```yaml
-env:
-  LIBBOX_RELEASE_TAG: "tooling-libbox-singbox-1.13.10"
-```
-
-### Provisioning command (one-time per sing-box version)
+### Provisioning command (legacy: tooling releases before 2.50.1)
 
 Run on the dev workstation that just rebuilt `libbox.aar`:
 
@@ -140,7 +143,7 @@ Hard failure: if `gh release download` fails, the asset is empty, or its
 SHA256 differs from `LIBBOX_AAR_SHA256` pinned in `build-android.yml`, the
 Android build fails. Bump the release tag and the SHA256 together.
 
-### Rotation (when sing-box bumps)
+### Rotation (legacy: tooling releases before 2.50.1)
 
 `libbox.aar` is a build artifact, not a cryptographic secret. Rotate
 when:

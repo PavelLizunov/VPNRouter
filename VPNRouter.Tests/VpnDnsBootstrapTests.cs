@@ -159,7 +159,7 @@ public sealed class VpnDnsBootstrapTests : IDisposable
             @"C:\ProgramData\VPNRouter\bin\sing-box.exe",
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "sing-box.exe")),
             root == null ? "" : Path.Combine(root, "publish", "dist", "sing-box.exe"),
-            root == null ? "" : Path.Combine(root, "tools", "singbox-cache", "sing-box-1.13.14-windows-amd64", "sing-box.exe"),
+            root == null ? "" : Path.Combine(root, "tools", "singbox-cache", "sing-box-1.14.2-windows-amd64", "sing-box.exe"),
         };
 
         return candidates.FirstOrDefault(File.Exists);

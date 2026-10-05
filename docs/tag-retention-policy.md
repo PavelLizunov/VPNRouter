@@ -68,9 +68,11 @@ owner approval. Age, tag count or absence of a Release alone is insufficient.
   [pool workflow](../.github/workflows/build-free-pool.yml) replaces `pool.json`
   and `pool.json.gz` via `--clobber`. Do not delete or rename the endpoint, move its
   tag, or apply app-binary immutability to these explicitly mutable assets.
-- `tooling-libbox-singbox-1.13.10` is pinned with an asset SHA256 in the
-  [Android workflow](../.github/workflows/build-android.yml). Keep the release and
-  `libbox.aar`; rotate tooling through a new version and verified consumer pin.
+- `tooling-libbox-singbox-1.13.10` is pinned with an asset SHA256 by the Android workflows of
+  tags built before 2.50.1. Keep the release and `libbox.aar`. From 2.50.1 the Android
+  workflows take `libbox-legacy.aar` from the `sing-box-vpnctl` release with a pinned SHA256 and
+  an attestation check (see [SECRETS.md](../.github/SECRETS.md)); rotate through a new version
+  and verified consumer pin.
 - New service exceptions require an explicit owner decision, not a convenient
   `latest`/`nightly` moving tag. Existing exceptions do not weaken app release gates.
 

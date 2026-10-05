@@ -95,7 +95,7 @@ public sealed class VpnctlPackagingCharacterizationTests
             "Archive hash verification (Get-FileHash) must execute before Expand-Archive.");
 
         var dllHashIndex = section.IndexOf("Get-FileHash", expandIndex, StringComparison.Ordinal);
-        Assert.True(dllHashIndex > expandIndex || section.Contains("c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2"),
+        Assert.True(dllHashIndex > expandIndex || section.Contains("3217c6260fbca5f16072e0b79735742f40109a63bb0ff88fd6b96dd6b54a2928"),
             "libcronet.dll hash must be checked.");
 
         Assert.Contains("libcronet.dll", section);
@@ -111,16 +111,16 @@ public sealed class VpnctlPackagingCharacterizationTests
         try
         {
             var cacheDir = Path.Combine(temp, "tools", "singbox-cache");
-            var zipPath = Path.Combine(cacheDir, "sing-box-1.14.0-vpnctl.5-windows-amd64.zip");
-            var hash = CreateZipWithEntry(zipPath, "sing-box-1.14.0-vpnctl.5-windows-amd64/sing-box.exe", "AUTHENTIC_EXE");
+            var zipPath = Path.Combine(cacheDir, "sing-box-1.14.2-vpnctl.2-windows-amd64.zip");
+            var hash = CreateZipWithEntry(zipPath, "sing-box-1.14.2-vpnctl.2-windows-amd64/sing-box.exe", "AUTHENTIC_EXE");
 
-            var extractDir = Path.Combine(cacheDir, "sing-box-1.14.0-vpnctl.5-windows-amd64");
+            var extractDir = Path.Combine(cacheDir, "sing-box-1.14.2-vpnctl.2-windows-amd64");
             Directory.CreateDirectory(extractDir);
             File.WriteAllText(Path.Combine(extractDir, "sing-box.exe"), "TAMPERED_EXE");
 
             var (exitCode, stdout, stderr) = RunPwsh(pwsh, script,
                 "-Root", temp, "-DistDir", distDir,
-                "-SingBoxVersion", "1.14.0-vpnctl.5", "-SingBoxSha256", hash);
+                "-SingBoxVersion", "1.14.2-vpnctl.2", "-SingBoxSha256", hash);
 
             Assert.True(exitCode == 0, $"Exit code {exitCode}: {stderr}\n{stdout}");
             var bundledExe = Path.Combine(distDir, "sing-box.exe");
@@ -140,15 +140,15 @@ public sealed class VpnctlPackagingCharacterizationTests
         {
             var cacheDir = Path.Combine(temp, "tools", "singbox-cache");
             Directory.CreateDirectory(cacheDir);
-            File.WriteAllBytes(Path.Combine(cacheDir, "sing-box-1.14.0-vpnctl.5-windows-amd64.zip"), new byte[] { 0x50, 0x4B, 0x05, 0x06, 0, 0, 0, 0 });
+            File.WriteAllBytes(Path.Combine(cacheDir, "sing-box-1.14.2-vpnctl.2-windows-amd64.zip"), new byte[] { 0x50, 0x4B, 0x05, 0x06, 0, 0, 0, 0 });
 
-            var extractDir = Path.Combine(cacheDir, "sing-box-1.14.0-vpnctl.5-windows-amd64");
+            var extractDir = Path.Combine(cacheDir, "sing-box-1.14.2-vpnctl.2-windows-amd64");
             Directory.CreateDirectory(extractDir);
             File.WriteAllText(Path.Combine(extractDir, "sing-box.exe"), "EXISTING_EXE");
 
             var (exitCode, stdout, stderr) = RunPwsh(pwsh, script,
-                "-Root", temp, "-DistDir", distDir, "-SingBoxVersion", "1.14.0-vpnctl.5",
-                "-SingBoxSha256", "3823e4baed13fec43b84acefa480ff9cf9b2c222ea9dd9ceb9987aefd623aeb4");
+                "-Root", temp, "-DistDir", distDir, "-SingBoxVersion", "1.14.2-vpnctl.2",
+                "-SingBoxSha256", "96cc8c5c586bbff482986572ff25e7a360a842492352df76b7113cc053be34ce");
 
             Assert.NotEqual(0, exitCode);
             Assert.Contains("SHA256 mismatch", stdout + stderr);
@@ -169,7 +169,7 @@ public sealed class VpnctlPackagingCharacterizationTests
         {
             var (exitCode, stdout, stderr) = RunPwsh(pwsh, script,
                 "-Root", temp, "-DistDir", distDir,
-                "-SingBoxVersion", "1.14.0-vpnctl.5", "-SingBoxSha256", malformedHash);
+                "-SingBoxVersion", "1.14.2-vpnctl.2", "-SingBoxSha256", malformedHash);
 
             Assert.NotEqual(0, exitCode);
             Assert.Contains("SingBoxSha256 must be a non-blank 64-character hex string", stdout + stderr);
@@ -189,7 +189,7 @@ public sealed class VpnctlPackagingCharacterizationTests
             var (exitCode, stdout, stderr) = RunPwsh(pwsh, script,
                 "-Root", temp, "-DistDir", distDir,
                 "-SingBoxVersion", invalidVersion,
-                "-SingBoxSha256", "3823e4baed13fec43b84acefa480ff9cf9b2c222ea9dd9ceb9987aefd623aeb4");
+                "-SingBoxSha256", "96cc8c5c586bbff482986572ff25e7a360a842492352df76b7113cc053be34ce");
 
             Assert.NotEqual(0, exitCode);
             Assert.Contains("SingBoxVersion must match pattern", stdout + stderr);
@@ -254,12 +254,12 @@ public sealed class VpnctlPackagingCharacterizationTests
             File.WriteAllText(Path.Combine(publishDir, "sing-box-lx.exe"), "LEGACY_LX_PAYLOAD");
 
             var cacheDir = Path.Combine(temp, "tools", "singbox-cache");
-            var zipPath = Path.Combine(cacheDir, "sing-box-1.14.0-vpnctl.5-windows-amd64.zip");
-            var hash = CreateZipWithEntry(zipPath, "sing-box-1.14.0-vpnctl.5-windows-amd64/sing-box.exe", "OFFICIAL_VPNCTL_PAYLOAD");
+            var zipPath = Path.Combine(cacheDir, "sing-box-1.14.2-vpnctl.2-windows-amd64.zip");
+            var hash = CreateZipWithEntry(zipPath, "sing-box-1.14.2-vpnctl.2-windows-amd64/sing-box.exe", "OFFICIAL_VPNCTL_PAYLOAD");
 
             var (exitCode, stdout, stderr) = RunPwsh(pwsh, script,
                 "-Root", temp, "-DistDir", distDir,
-                "-SingBoxVersion", "1.14.0-vpnctl.5", "-SingBoxSha256", hash);
+                "-SingBoxVersion", "1.14.2-vpnctl.2", "-SingBoxSha256", hash);
 
             Assert.True(exitCode == 0, $"Exit code {exitCode}: {stderr}\n{stdout}");
             Assert.DoesNotContain("Auto-selected local sing-box-lx", stdout);
@@ -308,7 +308,7 @@ public sealed class VpnctlPackagingCharacterizationTests
         var sec2 = buildPs1.Substring(idx2, idx2End - idx2);
 
         return "param(\n" +
-            "    [string]$Root,\n    [string]$DistDir,\n    [string]$SingBoxVersion = \"1.14.0-vpnctl.5\",\n" +
+            "    [string]$Root,\n    [string]$DistDir,\n    [string]$SingBoxVersion = \"1.14.2-vpnctl.2\",\n" +
             "    [string]$SingBoxSha256 = \"\",\n    [string]$SingBoxPath = \"\",\n    [switch]$Upload\n)\n" +
             "$ErrorActionPreference = 'Stop'\nfunction Invoke-WebRequest { throw 'Network download prohibited in test' }\n\n" +
             sec1 + "\n" + sec2;

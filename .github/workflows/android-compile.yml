@@ -56,23 +56,26 @@ jobs:
       - name: Install .NET Android workload
         run: dotnet workload install android --skip-manifest-update
 
-      - name: Provision libbox.aar from tooling release
+      - name: Provision libbox.aar from the sing-box-vpnctl release
         env:
           GH_TOKEN: ${{ github.token }}
-          LIBBOX_RELEASE_TAG: "tooling-libbox-singbox-1.13.10"
-          LIBBOX_AAR_SHA256: "239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6"
+          LIBBOX_SOURCE_REPO: "PavelLizunov/sing-box-vpnctl"
+          LIBBOX_RELEASE_TAG: "v1.14.2-vpnctl.2"
+          LIBBOX_ASSET: "libbox-legacy-1.14.2-vpnctl.2.aar"
+          LIBBOX_AAR_SHA256: "c09d4bbbe99cc1bf541dcd0b414f8b0edcf727c5a1cdbfe4b69e5aed12d13631"
         run: |
           set -euo pipefail
           mkdir -p VPNRouter.Android/Lib
           gh release download "$LIBBOX_RELEASE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "libbox.aar" \
+            --repo "$LIBBOX_SOURCE_REPO" \
+            --pattern "$LIBBOX_ASSET" \
             --output VPNRouter.Android/Lib/libbox.aar
           ACTUAL_SHA="$(sha256sum VPNRouter.Android/Lib/libbox.aar | awk '{print $1}')"
           if [ "$ACTUAL_SHA" != "$LIBBOX_AAR_SHA256" ]; then
             echo "::error::libbox.aar SHA256 mismatch (expected $LIBBOX_AAR_SHA256, got $ACTUAL_SHA)"
             exit 1
           fi
+          gh attestation verify VPNRouter.Android/Lib/libbox.aar --repo "$LIBBOX_SOURCE_REPO"
 
       - name: dotnet build (android-arm64, unsigned)
         run: |

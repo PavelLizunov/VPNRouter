@@ -86,11 +86,12 @@ public sealed class PlatformReleaseWorkflowTests
         Assert.Contains("[ -z \"${KEYSTORE_B64:-}\" ]", signing);
         Assert.Contains("exit 1", signing);
         Assert.Contains("test -s \"$GITHUB_WORKSPACE/vpnrouter.keystore\"", signing);
-        var libbox = Text(steps.Single(step => Text(step, "name") == "Provision libbox.aar from tooling release"), "run");
+        var libbox = Text(steps.Single(step => Text(step, "name") == "Provision libbox.aar from the sing-box-vpnctl release"), "run");
         Assert.Contains("if ! gh release download", libbox);
         Assert.Contains("test -s VPNRouter.Android/Lib/libbox.aar", libbox);
         Assert.Contains("[ \"$ACTUAL_SHA\" != \"$LIBBOX_AAR_SHA256\" ]", libbox);
         Assert.Equal(2, Regex.Matches(libbox, "exit 1").Count);
+        Assert.Contains("gh attestation verify VPNRouter.Android/Lib/libbox.aar --repo \"$LIBBOX_SOURCE_REPO\"", libbox);
         var publish = Text(steps.Single(step => Text(step, "name") == "dotnet publish (android-arm64, signed)"), "run");
         Assert.Contains("[ -z \"${KS_PASS:-}\" ]", publish);
         Assert.Contains("exit 1", publish);

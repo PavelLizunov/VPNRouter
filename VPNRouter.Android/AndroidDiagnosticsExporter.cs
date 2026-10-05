@@ -71,7 +71,7 @@ internal static class AndroidDiagnosticsExporter
             var singboxLog = ResolveSingboxLogPath();
             AddLogTail(staging, singboxLog, "singbox-tail.log", entries, warnings);
 
-            AddLogTail(staging, Path.Combine(AppPaths.DataDir, "singbox.stderr.log"),
+            AddLogTail(staging, Path.Combine(AppPaths.DataDir, "data", "CrashReport-vpnrouter.log"),
                 "singbox-stderr-tail.log", entries, warnings);
 
             AddRecentCrashes(staging, entries, warnings);

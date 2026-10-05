@@ -1,7 +1,7 @@
 param(
     [string]$Version = "1.0",
-    [string]$SingBoxVersion = "1.14.0-vpnctl.5",
-    [string]$SingBoxSha256 = "3823e4baed13fec43b84acefa480ff9cf9b2c222ea9dd9ceb9987aefd623aeb4",
+    [string]$SingBoxVersion = "1.14.2-vpnctl.2",
+    [string]$SingBoxSha256 = "96cc8c5c586bbff482986572ff25e7a360a842492352df76b7113cc053be34ce",
     [string]$SingBoxPath = "",
     [string]$SlipstreamPath = "",
     [switch]$Upload,
@@ -282,23 +282,23 @@ if ($SingBoxPath) {
 if (-not $SingBoxPath) {
     $cronetCache = Join-Path $Root "tools\singbox-cache"
     New-Item -ItemType Directory -Force -Path $cronetCache | Out-Null
-    $cronetZipName = "sing-box-1.13.14-windows-amd64.zip"
+    $cronetZipName = "sing-box-1.14.2-windows-amd64.zip"
     $cronetZipPath = Join-Path $cronetCache $cronetZipName
-    $cronetArchiveSha256 = "f580782c6dd10f7691c66cea1d7c421813c5fbf7e305d1ee7ce0c3a40d196341"
-    $cronetDllSha256 = "c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2"
-    $cronetExtractDir = Join-Path $cronetCache "sing-box-1.13.14-windows-amd64"
+    $cronetArchiveSha256 = "c2d8bfff918755808781dfdeeb8581b6c91eb3a243d9a7b55483cfc0c0684d32"
+    $cronetDllSha256 = "3217c6260fbca5f16072e0b79735742f40109a63bb0ff88fd6b96dd6b54a2928"
+    $cronetExtractDir = Join-Path $cronetCache "sing-box-1.14.2-windows-amd64"
     $cronetDll = Join-Path $cronetExtractDir "libcronet.dll"
 
     if (-not (Test-Path $cronetZipPath)) {
-        $cronetUrl = "https://github.com/SagerNet/sing-box/releases/download/v1.13.14/$cronetZipName"
-        Write-Host "       Downloading SagerNet sing-box v1.13.14 for libcronet.dll from $cronetUrl..." -ForegroundColor Gray
+        $cronetUrl = "https://github.com/SagerNet/sing-box/releases/download/v1.14.2/$cronetZipName"
+        Write-Host "       Downloading SagerNet sing-box v1.14.2 for libcronet.dll from $cronetUrl..." -ForegroundColor Gray
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         try {
             Invoke-WebRequest -Uri $cronetUrl -OutFile $cronetZipPath -UseBasicParsing
         } catch {
             Write-Host "       ERROR: Download failed: $_" -ForegroundColor Red
             if (Test-Path $cronetZipPath) { Remove-Item $cronetZipPath -Force }
-            throw "SagerNet sing-box download failed. Check https://github.com/SagerNet/sing-box/releases/tag/v1.13.14"
+            throw "SagerNet sing-box download failed. Check https://github.com/SagerNet/sing-box/releases/tag/v1.14.2"
         }
     }
 
@@ -324,7 +324,7 @@ if (-not $SingBoxPath) {
     if (Test-Path $cronetLicense) {
         Copy-Item $cronetLicense (Join-Path $DistDir "LICENSE.libcronet") -Force
     }
-    Write-Host "       Bundled libcronet.dll from SagerNet v1.13.14 (verified SHA256)" -ForegroundColor Green
+    Write-Host "       Bundled libcronet.dll from SagerNet v1.14.2 (verified SHA256)" -ForegroundColor Green
 }
 
 Write-Host "[6b/9] Bundling slipstream-client.exe (DNS-tunnel)..." -ForegroundColor Yellow

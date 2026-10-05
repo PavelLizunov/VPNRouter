@@ -24,7 +24,6 @@ import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.system.OsConstants;
-import android.util.Base64;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
@@ -35,23 +34,18 @@ import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
-import java.security.KeyStore;
-import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
 
-import io.nekohasekai.libbox.BoxService;
+import io.nekohasekai.libbox.CommandServer;
 import io.nekohasekai.libbox.InterfaceUpdateListener;
 import io.nekohasekai.libbox.Libbox;
 import io.nekohasekai.libbox.LocalDNSTransport;
 import io.nekohasekai.libbox.NetworkInterfaceIterator;
-import io.nekohasekai.libbox.PlatformInterface;
 import io.nekohasekai.libbox.RoutePrefix;
 import io.nekohasekai.libbox.RoutePrefixIterator;
-import io.nekohasekai.libbox.SetupOptions;
 import io.nekohasekai.libbox.StringIterator;
 import io.nekohasekai.libbox.TunOptions;
 import io.nekohasekai.libbox.WIFIState;
@@ -113,9 +107,6 @@ public final class VpnRouterService extends VpnService {
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_PORT = "last_good_dns_tunnel_port";
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "last_good_dns_tunnel_use_system_resolver";
 
-    private static boolean libboxSetupDone = false;
-    private static volatile List<String> sCachedSystemCertificatePems;
-
     private String pendingConfigJson;
     private String[] pendingAllowedPackages;
     private String pendingPerAppMode;
@@ -126,7 +117,7 @@ public final class VpnRouterService extends VpnService {
     private int pendingDnsTunnelPort;
     private boolean pendingDnsTunnelUseSystemResolver;
     private volatile boolean slipstreamRunning;
-    private volatile BoxService boxService;
+    private volatile CommandServer commandServer;
     private volatile ParcelFileDescriptor currentPfd;
     private PowerManager.WakeLock connectWakeLock;
 
@@ -255,7 +246,7 @@ public final class VpnRouterService extends VpnService {
                         stopStatsPoller();
                     } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                         isScreenOn = true;
-                        if (boxService != null) {
+                        if (commandServer != null) {
                             startStatsPoller();
                         }
                     }
@@ -390,7 +381,7 @@ public final class VpnRouterService extends VpnService {
             submitLifecycle(new Runnable() {
                 @Override
                 public void run() {
-                    if (boxService != null) {
+                    if (commandServer != null) {
                         Log.i(LOG_TAG, "AND-NODOZE: restart/always-on intent but tunnel "
                                 + "already running — no-op (service survived the swipe)");
                     } else if (loadLastGoodConfig()) {
@@ -483,7 +474,7 @@ public final class VpnRouterService extends VpnService {
 
     private void startTunnel() {
         writeVpnState(STATE_CONNECTING, null);
-        if (boxService != null) {
+        if (commandServer != null) {
             Log.i(LOG_TAG, "startTunnel: tunnel already live — tearing down previous before re-start");
             teardownTunnelResources();
         }
@@ -492,7 +483,7 @@ public final class VpnRouterService extends VpnService {
         clashApiSecret = extractClashApiSecret(pendingConfigJson);
 
         try {
-            ensureLibboxSetup();
+            LibboxRuntime.ensureSetup(this);
             startSlipstreamIfNeeded();
             startLibboxService();
             persistLastGoodConfig();
@@ -637,49 +628,14 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    private synchronized void ensureLibboxSetup() throws Exception {
-        if (libboxSetupDone) return;
-
-        File filesDir = getFilesDir();
-        File workingDir = new File(filesDir, "data");
-        File cacheDir = getCacheDir();
-        if (!workingDir.exists()) {
-            //noinspection ResultOfMethodCallIgnored
-            workingDir.mkdirs();
-        }
-
-        SetupOptions options = new SetupOptions();
-        options.setBasePath(filesDir.getAbsolutePath());
-        options.setWorkingPath(workingDir.getAbsolutePath());
-        options.setTempPath(cacheDir.getAbsolutePath());
-        options.setFixAndroidStack(false);
-        Libbox.setup(options);
-
-        try {
-            File stderrFile = new File(filesDir, "singbox.stderr.log");
-            Libbox.redirectStderr(stderrFile.getAbsolutePath());
-            Log.i(LOG_TAG, "Bug-AND-011: stderr → " + stderrFile.getAbsolutePath()
-                    + " (private sandbox)");
-        } catch (Exception e) {
-            Log.w(LOG_TAG, "redirectStderr failed: " + e.getMessage());
-        }
-
-        libboxSetupDone = true;
-        Log.i(LOG_TAG, "libbox setup OK (base=" + filesDir.getAbsolutePath() + ")");
-    }
-
     private void startLibboxService() throws Exception {
         if (pendingConfigJson == null || pendingConfigJson.isEmpty()) {
             throw new Exception("config_json missing");
         }
 
-        Libbox.checkConfig(pendingConfigJson);
+        commandServer = LibboxRuntime.start(pendingConfigJson, new VpnRouterPlatformInterface(this));
 
-        VpnRouterPlatformInterface platformInterface = new VpnRouterPlatformInterface(this);
-        boxService = Libbox.newService(pendingConfigJson, platformInterface);
-        boxService.start();
-
-        Log.i(LOG_TAG, "libbox service started successfully (v2.32.0)");
+        Log.i(LOG_TAG, "libbox service started successfully");
     }
 
     private void startSlipstreamIfNeeded() throws Exception {
@@ -903,18 +859,14 @@ public final class VpnRouterService extends VpnService {
 
     private boolean teardownTunnelResources() {
         stopStatsPoller();
-        final BoxService bs = boxService;
-        boxService = null;
-        final boolean wasLive = bs != null || slipstreamRunning || currentPfd != null;
-        if (bs != null) {
-            runBounded("boxService.close", 4_000L, new Runnable() {
+        final CommandServer cs = commandServer;
+        commandServer = null;
+        final boolean wasLive = cs != null || slipstreamRunning || currentPfd != null;
+        if (cs != null) {
+            runBounded("libbox stop", 4_000L, new Runnable() {
                 @Override
                 public void run() {
-                    try {
-                        bs.close();
-                    } catch (Exception e) {
-                        Log.w(LOG_TAG, "boxService.close threw: " + e.getMessage());
-                    }
+                    LibboxRuntime.stop(cs);
                 }
             });
         }
@@ -975,7 +927,7 @@ public final class VpnRouterService extends VpnService {
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         try {
-            if (boxService != null && isIgnoringBatteryOptimizations()) {
+            if (commandServer != null && isIgnoringBatteryOptimizations()) {
                 Intent restart = new Intent(getApplicationContext(), VpnRouterService.class)
                         .setAction(ACTION_RESTART);
                 PendingIntent pi = PendingIntent.getService(
@@ -988,7 +940,7 @@ public final class VpnRouterService extends VpnService {
                     Log.i(LOG_TAG, "AND-NODOZE: onTaskRemoved — tunnel active + "
                             + "battery-exempt; scheduled restart in 1.5s");
                 }
-            } else if (boxService != null) {
+            } else if (commandServer != null) {
                 Log.w(LOG_TAG, "AND-NODOZE: onTaskRemoved — tunnel active but NOT "
                         + "battery-exempt; cannot safely restart from background. "
                         + "Grant battery exemption for swipe-away recovery.");
@@ -1087,11 +1039,13 @@ public final class VpnRouterService extends VpnService {
 
         boolean dnsAdded = false;
         try {
-            String dns = options.getDNSServerAddress() != null
-                    ? options.getDNSServerAddress().getValue() : null;
-            if (dns != null && !dns.isEmpty()) {
-                builder.addDnsServer(dns);
-                dnsAdded = true;
+            StringIterator dnsServers = options.getDNSServerAddress();
+            while (dnsServers != null && dnsServers.hasNext()) {
+                String dns = dnsServers.next();
+                if (dns != null && !dns.isEmpty()) {
+                    builder.addDnsServer(dns);
+                    dnsAdded = true;
+                }
             }
         } catch (Exception ignored) {}
         if (!dnsAdded) builder.addDnsServer("1.1.1.1");
@@ -1194,7 +1148,7 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    private static final class VpnRouterPlatformInterface implements PlatformInterface {
+    private static final class VpnRouterPlatformInterface extends LibboxRuntime.PlatformDefaults {
         private final VpnRouterService service;
 
         private InterfaceUpdateListener defaultListener;
@@ -1321,33 +1275,6 @@ public final class VpnRouterService extends VpnService {
             } catch (Exception e) {
                 Log.w(LOG_TAG, "getInterfaces failed: " + e.getMessage());
                 return null;
-            }
-        }
-
-        @Override
-        public StringIterator systemCertificates() {
-            List<String> cached = sCachedSystemCertificatePems;
-            if (cached != null) {
-                return new SimpleStringIterator(new ArrayList<>(cached));
-            }
-            try {
-                List<String> certs = new ArrayList<>();
-                KeyStore ks = KeyStore.getInstance("AndroidCAStore");
-                ks.load(null, null);
-                Enumeration<String> aliases = ks.aliases();
-                while (aliases.hasMoreElements()) {
-                    Certificate cert = ks.getCertificate(aliases.nextElement());
-                    if (cert == null) continue;
-                    String pem = "-----BEGIN CERTIFICATE-----\n"
-                            + Base64.encodeToString(cert.getEncoded(), Base64.DEFAULT)
-                            + "-----END CERTIFICATE-----";
-                    certs.add(pem);
-                }
-                sCachedSystemCertificatePems = Collections.unmodifiableList(certs);
-                return new SimpleStringIterator(new ArrayList<>(certs));
-            } catch (Exception e) {
-                Log.w(LOG_TAG, "systemCertificates failed: " + e.getMessage());
-                return new SimpleStringIterator(new ArrayList<>());
             }
         }
 
@@ -1505,39 +1432,6 @@ public final class VpnRouterService extends VpnService {
             Log.i("Libbox", "notification: type=" + type + " title=" + title);
         }
 
-        @Override
-        public int findConnectionOwner(
-                int ipProtocol,
-                String sourceAddress, int sourcePort,
-                String destinationAddress, int destinationPort) throws Exception {
-            return -1;
-        }
-
-        @Override
-        public void writeLog(String message) {
-            if (message != null && !message.isEmpty()) {
-                Log.d("Libbox", message);
-            }
-        }
-
-        @Override
-        public String packageNameByUid(int uid) throws Exception {
-            try {
-                String[] packages = service.getPackageManager().getPackagesForUid(uid);
-                if (packages != null && packages.length > 0) return packages[0];
-            } catch (Exception ignore) { }
-            return "uid=" + uid;
-        }
-
-        @Override
-        public int uidByPackageName(String packageName) throws Exception {
-            try {
-                return service.getPackageManager()
-                        .getApplicationInfo(packageName, 0).uid;
-            } catch (Exception ignore) {
-                return -1;
-            }
-        }
     }
 
     private static final class SimpleStringIterator implements StringIterator {
