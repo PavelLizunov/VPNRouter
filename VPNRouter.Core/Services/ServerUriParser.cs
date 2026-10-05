@@ -400,7 +400,7 @@ public static class ServerUriParser
         static bool ParseBoolParam(string? s) =>
             !string.IsNullOrEmpty(s) && (s.Equals("true", StringComparison.OrdinalIgnoreCase) || s == "1" || s.Equals("yes", StringComparison.OrdinalIgnoreCase));
 
-        return new VlessServerEntry
+        var uriEntry = new VlessServerEntry
         {
             Name = name.Length > 0 ? name : $"amneziawg-{server}-{port}",
             Protocol = "amneziawg",
@@ -427,6 +427,9 @@ public static class ServerUriParser
                 DisableCookies         = ParseBoolParam(query["disable_cookies"] ?? query["dc"] ?? query["disablecookies"]),
             },
         };
+        if (uriEntry.Awg!.FindLimitViolation() is { } uriProblem)
+            throw new FormatException("Invalid amneziawg URI: " + uriProblem);
+        return uriEntry;
     }
 
     public static bool IsWireGuardConf(string? text)
@@ -542,6 +545,9 @@ public static class ServerUriParser
             RandomTrailers         = ParseBool(Val(ifaceDict, "RandomTrailers")),
             DisableCookies         = ParseBool(Val(ifaceDict, "DisableCookies")),
         };
+
+        if (awg.FindLimitViolation() is { } confProblem)
+            throw new FormatException("Invalid WireGuard/AmneziaWG config: " + confProblem);
 
         var name = !string.IsNullOrEmpty(defaultName) ? defaultName : $"awg-{server}-{port}";
 

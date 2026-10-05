@@ -50,7 +50,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: tools/singbox-cache/
-          key: singbox-1.14.0-vpnctl.5-${{ runner.os }}
+          key: singbox-1.14.2-vpnctl.2-${{ runner.os }}
 
       - name: Setup Go (for VPNRouter.GUI stub)
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
@@ -79,7 +79,7 @@ jobs:
         shell: pwsh
         run: |
           $ver = "${{ steps.ver.outputs.version }}"
-          $expectedCronetHash = "c7434cfa93c3041321dd19111c4de6c52b8a9531a65661ba45425d3c51ec69e2"
+          $expectedCronetHash = "3217c6260fbca5f16072e0b79735742f40109a63bb0ff88fd6b96dd6b54a2928"
           $installZipPath = (Resolve-Path "VPNRouter-v$ver-win.zip").Path
           $updateZipPath  = (Resolve-Path "VPNRouter-update-v$ver-win.zip").Path
 

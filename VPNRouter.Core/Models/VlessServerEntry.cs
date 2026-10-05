@@ -148,4 +148,20 @@ public class AwgConfig
     [YamlMember(Alias = "content_padding_addition")] public string ContentPaddingAddition { get; set; } = string.Empty;
     [YamlMember(Alias = "random_trailers")] public bool RandomTrailers { get; set; }
     [YamlMember(Alias = "disable_cookies")] public bool DisableCookies { get; set; }
+
+    internal const int MaxJunkPacketCount = 128;
+    internal const int MaxJunkPacketSize = 65507;
+
+    internal string? FindLimitViolation()
+    {
+        if (Jc < 0 || Jc > MaxJunkPacketCount)
+            return $"jc must be between 0 and {MaxJunkPacketCount} (got {Jc})";
+        if (Jmin < 0 || Jmax < 0)
+            return "jmin and jmax must not be negative";
+        if (Jmax > MaxJunkPacketSize)
+            return $"jmax must be at most {MaxJunkPacketSize} (got {Jmax})";
+        if (Jmin > Jmax)
+            return $"jmin must not exceed jmax (got jmin {Jmin}, jmax {Jmax})";
+        return null;
+    }
 }
