@@ -1,10 +1,8 @@
 package com.ninitux.vpnrouter;
 
 import android.content.Context;
-import android.util.Base64;
 import android.util.Log;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -12,21 +10,15 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
 import java.net.URL;
-import java.security.KeyStore;
-import java.security.cert.Certificate;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import io.nekohasekai.libbox.BoxService;
+import io.nekohasekai.libbox.CommandServer;
 import io.nekohasekai.libbox.InterfaceUpdateListener;
 import io.nekohasekai.libbox.Libbox;
 import io.nekohasekai.libbox.LocalDNSTransport;
 import io.nekohasekai.libbox.NetworkInterfaceIterator;
-import io.nekohasekai.libbox.PlatformInterface;
-import io.nekohasekai.libbox.SetupOptions;
 import io.nekohasekai.libbox.StringIterator;
 import io.nekohasekai.libbox.TunOptions;
 import io.nekohasekai.libbox.WIFIState;
@@ -34,7 +26,6 @@ import io.nekohasekai.libbox.WIFIState;
 public final class AndroidDeepVerifyBox {
 
     private static final String LOG_TAG = "VpnRouter.DV";
-    private static final AtomicBoolean libboxSetupDone = new AtomicBoolean(false);
 
     private AndroidDeepVerifyBox() { }
 
@@ -45,15 +36,11 @@ public final class AndroidDeepVerifyBox {
             int timeoutMs,
             String probeUrl) {
         long start = System.currentTimeMillis();
-        BoxService boxService = null;
+        CommandServer server = null;
         try {
-            ensureLibboxSetup(ctx);
+            LibboxRuntime.ensureSetup(ctx);
 
-            Libbox.checkConfig(configJson);
-
-            VerifyPlatformInterface platform = new VerifyPlatformInterface(ctx);
-            boxService = Libbox.newService(configJson, platform);
-            boxService.start();
+            server = LibboxRuntime.start(configJson, new VerifyPlatformInterface(ctx));
 
             if (!waitForPortBound(socksPort, 2000)) {
                 return jsonError(0, "sing-box didn't bind");
@@ -75,13 +62,7 @@ public final class AndroidDeepVerifyBox {
             return jsonError(0, t.getClass().getSimpleName() + ": "
                     + (t.getMessage() != null ? t.getMessage() : "(no message)"));
         } finally {
-            if (boxService != null) {
-                try {
-                    boxService.close();
-                } catch (Throwable t) {
-                    Log.w(LOG_TAG, "boxService.close threw: " + t.getMessage());
-                }
-            }
+            LibboxRuntime.stop(server);
         }
     }
 
@@ -111,32 +92,6 @@ public final class AndroidDeepVerifyBox {
             }
         }
         return sb.toString();
-    }
-
-    private static void ensureLibboxSetup(Context ctx) throws Exception {
-        if (libboxSetupDone.get()) return;
-        synchronized (libboxSetupDone) {
-            if (libboxSetupDone.get()) return;
-
-            File filesDir = ctx.getFilesDir();
-            File workingDir = new File(filesDir, "data");
-            File cacheDir = ctx.getCacheDir();
-            if (!workingDir.exists()) {
-                //noinspection ResultOfMethodCallIgnored
-                workingDir.mkdirs();
-            }
-
-            SetupOptions options = new SetupOptions();
-            options.setBasePath(filesDir.getAbsolutePath());
-            options.setWorkingPath(workingDir.getAbsolutePath());
-            options.setTempPath(cacheDir.getAbsolutePath());
-            options.setFixAndroidStack(false);
-            Libbox.setup(options);
-
-            libboxSetupDone.set(true);
-            Log.i(LOG_TAG, "libbox setup OK (verify path, base="
-                    + filesDir.getAbsolutePath() + ")");
-        }
     }
 
     private static boolean waitForPortBound(int port, int maxWaitMs) {
@@ -233,7 +188,7 @@ public final class AndroidDeepVerifyBox {
         }
     }
 
-    private static final class VerifyPlatformInterface implements PlatformInterface {
+    private static final class VerifyPlatformInterface extends LibboxRuntime.PlatformDefaults {
 
         private final Context ctx;
 
@@ -342,28 +297,6 @@ public final class AndroidDeepVerifyBox {
             }
         }
 
-        @Override
-        public StringIterator systemCertificates() {
-            try {
-                List<String> certs = new ArrayList<>();
-                KeyStore ks = KeyStore.getInstance("AndroidCAStore");
-                ks.load(null, null);
-                Enumeration<String> aliases = ks.aliases();
-                while (aliases.hasMoreElements()) {
-                    Certificate cert = ks.getCertificate(aliases.nextElement());
-                    if (cert == null) continue;
-                    String pem = "-----BEGIN CERTIFICATE-----\n"
-                            + Base64.encodeToString(cert.getEncoded(), Base64.DEFAULT)
-                            + "-----END CERTIFICATE-----";
-                    certs.add(pem);
-                }
-                return new SimpleStringIterator(certs);
-            } catch (Exception e) {
-                Log.w(LOG_TAG, "systemCertificates failed: " + e.getMessage());
-                return new SimpleStringIterator(new ArrayList<String>());
-            }
-        }
-
         @Override public LocalDNSTransport localDNSTransport() { return null; }
         @Override public WIFIState readWIFIState() { return null; }
         @Override public boolean includeAllNetworks() { return false; }
@@ -398,27 +331,6 @@ public final class AndroidDeepVerifyBox {
         @Override
         public void sendNotification(io.nekohasekai.libbox.Notification notification) { }
 
-        @Override
-        public int findConnectionOwner(int ipProtocol, String sa, int sp, String da, int dp) {
-            return -1;
-        }
-
-        @Override
-        public void writeLog(String message) {
-            if (message != null && !message.isEmpty()) {
-                Log.d("VpnRouter.DV.Libbox", message);
-            }
-        }
-
-        @Override
-        public String packageNameByUid(int uid) {
-            return "uid=" + uid;
-        }
-
-        @Override
-        public int uidByPackageName(String packageName) {
-            return -1;
-        }
     }
 
     private static final class SimpleStringIterator implements StringIterator {
