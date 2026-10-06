@@ -1,0 +1,40 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: VPNRouter
+Label: VPNRouter APT Repository
+Suite: stable
+Codename: stable
+Version: 2.22
+Date: Tue, 06 Oct 2026 18:36:16 UTC
+Architectures: amd64
+Components: main
+Description: VPNRouter Debian repository for Debian / Ubuntu / Linux Mint
+MD5Sum:
+ 210bedbf9849c55d0d61052f61d672e3 892 main/binary-amd64/Packages
+ ce5697ad06bed456178775aef919f8d7 617 main/binary-amd64/Packages.gz
+ 69db19a0e5aad1ff1cd7483f2cc7e929 190 main/binary-amd64/Release
+SHA1:
+ a730bac2447de8e2a9ad00083240228d5f277468 892 main/binary-amd64/Packages
+ 657007d67f21474a99848c7db9316ed584d106dc 617 main/binary-amd64/Packages.gz
+ 58963d84f9069bd2189d6b526b787909a4a84307 190 main/binary-amd64/Release
+SHA256:
+ 5064c6f0e52304c770fa0edb063e6f7fc92d8e2983aa68fb19d78986338f9c30 892 main/binary-amd64/Packages
+ ee98894fefbf654f74ee7de45be2635a61a3ce38257db086c2b3b00d24214b0f 617 main/binary-amd64/Packages.gz
+ a0ff43de890df04e98e2c77081c8c8deaaee4700ac38b004488a4b792033a67a 190 main/binary-amd64/Release
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEgo1yjCjc3GBDhdaA19TNfCr8j/AFAmrFP6AACgkQ19TNfCr8
+j/Bn4A/+KoySNect/SaCXd5vbsTiCYpqWpp2ZQ2K7At01iy37ZvJXh26/rTfz1vz
+hpe0LbbDRldnoiSiYPRyhAj5jrOGm9u1xl3ZWypCtz3+maBtlKbJH8sg10pNmgHU
+yy3yYzh2s+3yKNCmMN5P4GSA0WejkkFy0alHjPnWYZkdpGr/dbd7WeF17j2mhFMT
+kTQPl17hk6l97CSAauGg2f9B/M+0U44CWq54uJOWN3zJjJBJQOo9Uz99xk3t7jS/
+6gHDz756gq72Xqy0NeNjvg5Rve9dUNHMDhXPwoesA2e0XQuauKO/Ls6hV41NnI2X
+LFxZ/A+H6TMXzCvse/lSy5J5AaCg0UTGQmRkFnKXZp04R89rZru3RsnerbwjZbfW
+UCDu222doaFWKCI2NZQtdk/r2MYjKZTE3+rNpprP62y+/lkeEDL8rN+mnipQFGxd
+UvE5Yk6MlBb4SxbwfJL8HG3WomfTaA60/7p3U28dYfHtaRSNkTanrGPEyQkz6d+O
+p+LrNRF4SQJtdQl/WWDd1wpI+lfVQ6bQLq8sUlKIDpHlYTndTIbdyj+Pinz/7QQC
+As/ho6hSFg/sJBmxFS2pKvYBzpfq4NCryYoiuCu+5tvXUCrPsv0fW1zDz1mRAr3B
+5utA/xqFQdQWIZ1yUCUgBiE9n9vG+P1IhLPh+VrOuroFMMiKK0s=
+=09is
+-----END PGP SIGNATURE-----
