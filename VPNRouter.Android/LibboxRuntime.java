@@ -25,7 +25,7 @@ import io.nekohasekai.libbox.SystemProxyStatus;
  * {@link CommandServer} per running engine. The command server's gRPC listener is never started,
  * so there is no socket or port to clash with a second engine in the same process.
  */
-final class LibboxRuntime {
+public final class LibboxRuntime {
 
     private static final String LOG_TAG = "VpnRouter.Libbox";
     private static final String CRASH_REPORT_SOURCE = "vpnrouter";
@@ -34,6 +34,10 @@ final class LibboxRuntime {
     private static boolean setupDone;
 
     private LibboxRuntime() { }
+
+    public static String coreVersion() {
+        return Libbox.version();
+    }
 
     /** Writes the Go runtime's stderr to files/data/CrashReport-vpnrouter.log (set up by libbox). */
     static void ensureSetup(Context ctx) throws Exception {

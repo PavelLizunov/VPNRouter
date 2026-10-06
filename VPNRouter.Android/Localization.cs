@@ -580,6 +580,7 @@ internal static class Localization
     public static string AboutCreatorLabel => global::VPNRouter.Core.Localization.Strings.AboutCreatorLabel;
     public static string AboutRepoLabel => global::VPNRouter.Core.Localization.Strings.AboutRepoLabel;
     public static string AboutCloseBtn => global::VPNRouter.Core.Localization.Strings.AboutCloseBtn;
+    public static string AboutVersionUnknown => global::VPNRouter.Core.Localization.Strings.AboutVersionUnknown;
     public static string TipOpenLogs => global::VPNRouter.Core.Localization.Strings.TipOpenLogs;
     public static string TipIpLeak => global::VPNRouter.Core.Localization.Strings.TipIpLeak;
     public static string TipRemoveCategory => global::VPNRouter.Core.Localization.Strings.TipRemoveCategory;

@@ -235,23 +235,15 @@ public partial class AndroidApp
         _subsListOnlyParts = new Control[] { aggServerSection, autoSelectBorder, middleActionRow, sectionHeaderBorder, subsListScroller };
         var fill = new Grid { Children = { aggServerSection, _subsIntro } };
 
-        var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(addFormBorder, Dock.Bottom);
-        DockPanel.SetDock(subsListScroller, Dock.Bottom);
-        DockPanel.SetDock(sectionHeaderBorder, Dock.Bottom);
-        DockPanel.SetDock(middleActionRow, Dock.Bottom);
-        DockPanel.SetDock(autoSelectBorder, Dock.Bottom);
-        dock.Children.Add(addFormBorder);
-        dock.Children.Add(subsListScroller);
-        dock.Children.Add(sectionHeaderBorder);
-        dock.Children.Add(middleActionRow);
-        dock.Children.Add(autoSelectBorder);
-        dock.Children.Add(fill);
+        var column = new StackPanel
+        {
+            Children = { fill, autoSelectBorder, middleActionRow, sectionHeaderBorder, subsListScroller, addFormBorder },
+        };
 
         return new Border
         {
             Background = GetBrush("SurfaceAppBrush"),
-            Child = dock,
+            Child = column,
         };
     }
 
@@ -325,6 +317,8 @@ public partial class AndroidApp
         return true;
     }
 
+    private const double AggregatedListMaxHeight = 440;
+
     private DockPanel BuildSubscribeAggregatedServerSection()
     {
         _subsAggColServer = new TextBlock
@@ -381,6 +375,7 @@ public partial class AndroidApp
         var listScroller = new ScrollViewer
         {
             Content = listRoot,
+            MaxHeight = AggregatedListMaxHeight,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };

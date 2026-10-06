@@ -203,6 +203,7 @@ public partial class AndroidApp
     {
         if (_logOverlay is null) return;
         if (_logViewerTitle is not null) _logViewerTitle.Text = "singbox.log";
+        if (_logViewerRefreshBtn is not null) _logViewerRefreshBtn.IsVisible = true;
         LoadLogContent();
         _logOverlay.IsVisible = true;
     }

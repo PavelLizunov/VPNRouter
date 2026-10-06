@@ -210,17 +210,31 @@ public partial class AndroidApp
             : IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true);
     }
 
+    private void PrepareKebabMenu(Control? target)
+    {
+        if (_kebabPopup is null) return;
+        _kebabPopup.PlacementTarget = target;
+        if (_kebabPopup.Child is Border panel && _pageRoot is { Bounds.Height: > 0 })
+        {
+            var bottom = _imeBottom > 0 ? 0.0 : _currentSafeArea.Bottom;
+            panel.MaxHeight = Math.Max(120.0, _pageRoot.Bounds.Height - _currentSafeArea.Top - bottom - 16.0);
+        }
+        UpdateMenuAdvancedToggle();
+        _resetConfirmPending = false;
+        if (_menuResetSettingsItem is not null)
+            SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
+    }
+
     private void OnKebabMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is null) return;
-        _kebabPopup.IsOpen = !_kebabPopup.IsOpen;
         if (_kebabPopup.IsOpen)
         {
-            UpdateMenuAdvancedToggle();
-            _resetConfirmPending = false;
-            if (_menuResetSettingsItem is not null)
-                SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
+            _kebabPopup.IsOpen = false;
+            return;
         }
+        PrepareKebabMenu(_kebabMenuButton);
+        _kebabPopup.IsOpen = true;
     }
 
     private void OnMenuLangRuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

@@ -15,6 +15,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -128,6 +129,7 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _menuSectionAbout;
     private bool _resetConfirmPending = false;
     private TextBlock? _menuFeedback;
+    private Grid? _menuFeedbackFloating;
 
     private Thickness _currentSafeArea;
     private ScrollViewer? _mainScroller;
@@ -335,6 +337,21 @@ public partial class AndroidApp : Avalonia.Application
         _imeBottom = Math.Max(0.0, imeBottom);
         if (_pageRoot is not null) _pageRoot.Margin = new Thickness(0, 0, 0, _imeBottom);
         ApplySafeArea(_currentSafeArea);
+        RevealHomeFocusedTextBox();
+    }
+
+    private void RevealHomeFocusedTextBox()
+    {
+        if (_imeBottom <= 0) return;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (_imeBottom <= 0 || _advShellOverlay is { IsVisible: true }) return;
+            var scroller = _mainScroller;
+            if (scroller is null) return;
+            if (TopLevel.GetTopLevel(scroller)?.FocusManager?.GetFocusedElement() is TextBox focused &&
+                focused.IsVisible && scroller.IsVisualAncestorOf(focused))
+                focused.BringIntoView();
+        }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     internal void ApplySafeArea(Thickness rawInsets)
@@ -354,6 +371,9 @@ public partial class AndroidApp : Avalonia.Application
             _updateBannerFloating.Margin = new Thickness(16, top, 16, 0);
         }
 
+        if (_menuFeedbackFloating is not null)
+            _menuFeedbackFloating.Margin = new Thickness(16, 0, 16, Math.Max(16.0, insets.Bottom + 16.0));
+
         ApplyAdvancedShellSafeArea(insets);
         ApplyOverlaySafeArea(insets);
     }
@@ -362,6 +382,7 @@ public partial class AndroidApp : Avalonia.Application
     {
         var pad = new Thickness(0, Math.Max(0.0, insets.Top), 0, Math.Max(0.0, insets.Bottom));
         if (_logOverlay is not null) _logOverlay.Padding = pad;
+        if (_aboutOverlay is not null) _aboutOverlay.Padding = pad;
         if (_cfgExportOverlay is not null) _cfgExportOverlay.Padding = pad;
         if (_cfgImportOverlay is not null) _cfgImportOverlay.Padding = pad;
         if (_profilesOverlay is not null) _profilesOverlay.Padding = pad;
@@ -479,7 +500,6 @@ public partial class AndroidApp : Avalonia.Application
             {
                 headerRow,
                 statusCard,
-                _menuFeedback,
                 _ctaConnect,
                 _ctaConnecting,
                 _ctaDisconnect,
@@ -520,9 +540,13 @@ public partial class AndroidApp : Avalonia.Application
         _mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
         var mainScroller = _mainScroller;
 
+        mainScroller.SizeChanged += (_, _) => RevealHomeFocusedTextBox();
+        mainScroller.AddHandler(InputElement.GotFocusEvent, (_, _) => RevealHomeFocusedTextBox(),
+            RoutingStrategies.Bubble, handledEventsToo: true);
         AttachTouchScrolling(mainScroller);
 
         _logOverlay = BuildLogOverlay();
+        _aboutOverlay = BuildAboutOverlay();
 
         _cfgExportOverlay = BuildExportOverlay();
         _cfgImportOverlay = BuildImportOverlay();
@@ -541,12 +565,19 @@ public partial class AndroidApp : Avalonia.Application
         };
         var updateBannerFloating = _updateBannerFloating;
 
+        _menuFeedbackFloating = new Grid
+        {
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(16, 0, 16, 16),
+            IsHitTestVisible = false,
+            Children = { _menuFeedback },
+        };
+
         _pageRoot = new Grid
         {
-            Children = { mainScroller, _logOverlay,
+            Children = { mainScroller, _advShellOverlay, _logOverlay, _aboutOverlay,
                          _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
-                         _advShellOverlay,
-                         updateBannerFloating }
+                         updateBannerFloating, _menuFeedbackFloating }
         };
         return _pageRoot;
     }
@@ -687,11 +718,7 @@ public partial class AndroidApp : Avalonia.Application
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
-        _menuVersionItem.Click += (s, e) =>
-        {
-            if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-            OnMenuRepoClicked(s, e);
-        };
+        _menuVersionItem.Click += OnMenuAboutClicked;
 
         var menuStack = new StackPanel
         {
@@ -740,7 +767,12 @@ public partial class AndroidApp : Avalonia.Application
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(GetRadius("RadiusMd")),
             Padding = new Thickness(6),
-            Child = menuStack,
+            Child = new ScrollViewer
+            {
+                Content = menuStack,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            },
         };
         menuPanel.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
         menuPanel.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
@@ -1585,6 +1617,7 @@ public partial class AndroidApp : Avalonia.Application
             if (_logOverlay is null) return;
             if (_logViewerTitle is not null)
                 _logViewerTitle.Text = Localization.MenuItemHealthCheck;
+            if (_logViewerRefreshBtn is not null) _logViewerRefreshBtn.IsVisible = false;
             if (_logViewerContent is not null)
             {
                 _logViewerContent.Text = report;
