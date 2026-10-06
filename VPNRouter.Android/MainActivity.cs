@@ -41,7 +41,8 @@ public class MainActivity : AvaloniaMainActivity
     /// <summary>Height of the on-screen keyboard in dp (0 when it is hidden). With the enforced edge-to-edge windows of
     /// Android 15 and newer the window no longer shrinks for the keyboard, so the app has to make room itself.</summary>
     public static double CurrentImeBottom { get; private set; }
-    public static event Action<double>? ImeChanged;
+    public static bool CurrentImeVisible { get; private set; }
+    public static event Action<double, bool>? ImeChanged;
 
     private const int RequestCodeCameraQr = 0x4711;
     private const int RequestCodePostNotifications = 0x4712;
@@ -304,18 +305,35 @@ public class MainActivity : AvaloniaMainActivity
             var root = AndroidX.Core.View.ViewCompat.GetRootWindowInsets(decor);
             var density = Resources?.DisplayMetrics?.Density ?? 1.0f;
             if (density <= 0.001f) density = 1.0f;
-            var ime = root is null
-                ? 0.0
-                : root.GetInsets(AndroidX.Core.View.WindowInsetsCompat.Type.Ime()).Bottom / (double)density;
-            if (Math.Abs(ime - CurrentImeBottom) < 0.5) return;
+            var imePx = root is null ? 0 : root.GetInsets(AndroidX.Core.View.WindowInsetsCompat.Type.Ime()).Bottom;
+            var ime = ImeOverlapPx(decor, imePx) / (double)density;
+            var visible = imePx > 0;
+            if (Math.Abs(ime - CurrentImeBottom) < 0.5 && visible == CurrentImeVisible) return;
             CurrentImeBottom = ime;
-            ImeChanged?.Invoke(ime);
+            CurrentImeVisible = visible;
+            ImeChanged?.Invoke(ime, visible);
         }
         catch (Exception ex)
         {
             try { global::Android.Util.Log.Warn("VpnRouter.Insets", $"ReportImeInset failed: {ex.GetType().Name}: {ex.Message}"); }
             catch { }
         }
+    }
+
+    // Below Android 15 the system shrinks the window for AdjustResize, so only the part of the keyboard that still
+    // covers the content view is the app's business; with enforced edge-to-edge the whole keyboard height is.
+    private int ImeOverlapPx(global::Android.Views.View decor, int imePx)
+    {
+        if (imePx <= 0) return 0;
+        var content = FindViewById(global::Android.Resource.Id.Content);
+        if (content is null) return imePx;
+        var decorLoc = new int[2];
+        var contentLoc = new int[2];
+        decor.GetLocationOnScreen(decorLoc);
+        content.GetLocationOnScreen(contentLoc);
+        var keyboardTop = decorLoc[1] + decor.Height - imePx;
+        var contentBottom = contentLoc[1] + content.Height;
+        return Math.Max(0, contentBottom - keyboardTop);
     }
 
     private sealed class InsetsListener : Java.Lang.Object, AndroidX.Core.View.IOnApplyWindowInsetsListener

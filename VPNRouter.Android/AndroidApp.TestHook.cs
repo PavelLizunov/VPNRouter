@@ -39,6 +39,7 @@ public partial class AndroidApp
                 if (app._mainContentGrid is not null) w.WriteString("contentMargin", T(app._mainContentGrid.Margin));
                 w.WriteString("scrollerBounds", R(scroller.Bounds));
                 w.WriteNumber("imeBottom", MainActivity.CurrentImeBottom);
+                w.WriteBoolean("imeVisible", MainActivity.CurrentImeVisible);
                 w.WriteString("pageRootMargin", app._pageRoot is null ? "" : T(app._pageRoot.Margin));
                 w.WriteString("extent", $"{scroller.Extent.Width:0.#}x{scroller.Extent.Height:0.#}");
                 w.WriteString("viewport", $"{scroller.Viewport.Width:0.#}x{scroller.Viewport.Height:0.#}");

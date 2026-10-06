@@ -136,6 +136,7 @@ public partial class AndroidApp : Avalonia.Application
     private Grid? _mainContentGrid;
     private Grid? _pageRoot;
     private double _imeBottom;
+    private bool _imeVisible;
     private Grid? _updateBannerFloating;
 
     private Border? _updateBanner;
@@ -267,7 +268,7 @@ public partial class AndroidApp : Avalonia.Application
             _ = Task.Run(() => RunUpdateCheckAsync(manual: false));
 
             MainActivity.SafeAreaChanged += OnMainActivitySafeAreaChanged;
-            MainActivity.ImeChanged += ime => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyImeInset(ime));
+            MainActivity.ImeChanged += (ime, visible) => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyImeInset(ime, visible));
             ApplySafeArea(MainActivity.CurrentSafeArea);
 
             view.AttachedToVisualTree += (sender, _) =>
@@ -332,9 +333,10 @@ public partial class AndroidApp : Avalonia.Application
     /// Makes room for the on-screen keyboard: the whole page ends above it, and the bottom system-bar inset (which the
     /// keyboard covers) is not added on top of that.
     /// </summary>
-    internal void ApplyImeInset(double imeBottom)
+    internal void ApplyImeInset(double imeBottom, bool visible)
     {
         _imeBottom = Math.Max(0.0, imeBottom);
+        _imeVisible = visible;
         if (_pageRoot is not null) _pageRoot.Margin = new Thickness(0, 0, 0, _imeBottom);
         ApplySafeArea(_currentSafeArea);
         RevealHomeFocusedTextBox();
@@ -342,10 +344,10 @@ public partial class AndroidApp : Avalonia.Application
 
     private void RevealHomeFocusedTextBox()
     {
-        if (_imeBottom <= 0) return;
+        if (!_imeVisible) return;
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (_imeBottom <= 0 || _advShellOverlay is { IsVisible: true }) return;
+            if (!_imeVisible || _advShellOverlay is { IsVisible: true }) return;
             var scroller = _mainScroller;
             if (scroller is null) return;
             if (TopLevel.GetTopLevel(scroller)?.FocusManager?.GetFocusedElement() is TextBox focused &&
@@ -357,7 +359,7 @@ public partial class AndroidApp : Avalonia.Application
     internal void ApplySafeArea(Thickness rawInsets)
     {
         _currentSafeArea = rawInsets;
-        var insets = new Thickness(rawInsets.Left, rawInsets.Top, rawInsets.Right, _imeBottom > 0 ? 0.0 : rawInsets.Bottom);
+        var insets = new Thickness(rawInsets.Left, rawInsets.Top, rawInsets.Right, _imeVisible ? 0.0 : rawInsets.Bottom);
         if (_mainContentGrid is not null)
         {
             var top = Math.Max(12.0, insets.Top + 6.0);

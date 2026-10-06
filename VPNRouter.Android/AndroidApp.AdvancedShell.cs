@@ -649,7 +649,7 @@ public partial class AndroidApp
 
         // While the keyboard is open the status footer and the navigation step aside, so the page keeps the room (in
         // landscape they would otherwise take all of it).
-        var typing = _imeBottom > 0;
+        var typing = _imeVisible;
         if (_advTabStripBorder is not null) _advTabStripBorder.IsVisible = !typing;
         if (_advFooterBorder is not null) _advFooterBorder.IsVisible = !typing;
     }

@@ -216,7 +216,7 @@ public partial class AndroidApp
         _kebabPopup.PlacementTarget = target;
         if (_kebabPopup.Child is Border panel && _pageRoot is { Bounds.Height: > 0 })
         {
-            var bottom = _imeBottom > 0 ? 0.0 : _currentSafeArea.Bottom;
+            var bottom = _imeVisible ? 0.0 : _currentSafeArea.Bottom;
             panel.MaxHeight = Math.Max(120.0, _pageRoot.Bounds.Height - _currentSafeArea.Top - bottom - 16.0);
         }
         UpdateMenuAdvancedToggle();
