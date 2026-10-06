@@ -20,4 +20,19 @@ A published stable tag is immutable; a correction is a new version. Emergency me
 
 ## Outcome
 
-Pending.
+Published 2026-10-06 as the stable `v2.50.2` (Latest; the previous stable is `v2.50.1`), annotated tag on main `194eaee1` (PR #554), 18 assets (six Windows files built on `windows-worker`, hashed there and compared by size, SHA-256 and sidecar before upload; macOS, Linux and Android from the tag workflows). The tree equals the candidate `v2.50.2-r1` (`07097020`) except `AppVersion`; the candidate stays a published prerelease and its tag is untouched.
+
+| gate | result |
+|---|---|
+| exact-head CI on the stable PR #554 | all green (test, characterization-windows, go-test-windows, grep, Android compile, Windows update test) |
+| tag workflows (macOS, Linux, Android, `dotnet test`, Windows update test) | all success |
+| draft integrity (`verify-release-integrity.yml` at the tag) | success |
+| strict commit gate | `OK`, 8 green |
+| `check-open-p0.ps1` | `OK: no open P0/P1` |
+| stable APK | 45,345,327 bytes, SHA-256 equals the sidecar, `arm64-v8a` only, libbox tags with_awg and with_xhttp |
+| release event: Publish APT Repository, Verify Release Integrity, Auto-Update Integration Test (Windows) | success |
+| Homebrew tap `repository_dispatch` | tap run success; cask version 2.50.2 and the DMG hash equal the release sidecar |
+
+Waived by the owner and NOT run: the live update from `v2.50.1` on WINBRAT, `post-ship-local` and the live scenarios on the stable build, any new emulator run. The candidate carried the full suite (3369 passed), `post-ship-local` PASS (2 cold cycles) and the emulator evidence recorded in `plans/phase-android-abi-awg-keyboard-about-2026-10-06.md`. Not verified anywhere: a real Android phone, a real AWG or XHTTP tunnel on Android, signed Windows files.
+
+Why a new tag and not a flag change: the candidate tag `v2.50.2-r1` would have stayed in the stable channel and in APT, where `2.50.2-r1` sorts above a later `2.50.2`; the Homebrew step also refuses tags with an `-rN` suffix.
