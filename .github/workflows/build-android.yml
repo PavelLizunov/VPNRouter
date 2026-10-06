@@ -191,6 +191,30 @@ jobs:
           ls -lh "$APK_OUT"
           echo "apk=$APK_OUT" >> "$GITHUB_OUTPUT"
 
+      - name: Verify the APK is arm64-only and its core keeps AWG and XHTTP
+        run: |
+          set -euo pipefail
+          APKS=("${{ steps.apk.outputs.apk }}")
+          for APK in "${APKS[@]}"; do
+            ABIS="$(unzip -Z1 "$APK" | sed -n 's#^lib/\([^/]*\)/.*#\1#p' | sort -u | tr '\n' ' ')"
+            echo "$APK native ABIs: $ABIS"
+            if [ "$ABIS" != "arm64-v8a " ]; then
+              echo "::error::$APK must carry arm64-v8a native libraries only, found: $ABIS"
+              exit 1
+            fi
+            WORK="$(mktemp -d)"
+            unzip -q -o "$APK" lib/arm64-v8a/libbox.so -d "$WORK"
+            TAGS="$(grep -a -o -m1 -- '-tags=with_[A-Za-z0-9_,]*' "$WORK/lib/arm64-v8a/libbox.so" || true)"
+            echo "libbox build tags: $TAGS"
+            for NEED in with_awg with_xhttp; do
+              case ",${TAGS#-tags=}," in
+                *",$NEED,"*) ;;
+                *) echo "::error::libbox.so was built without $NEED"; exit 1 ;;
+              esac
+            done
+            rm -rf "$WORK"
+          done
+
       - name: Verify production signing identity
         env:
           EXPECTED_CERT_SHA256: 6e50af0f51ff021db30883eca9fd5d4e66c18d7d64fab3b1b346942bf045a221

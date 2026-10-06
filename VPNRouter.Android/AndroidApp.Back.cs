@@ -19,6 +19,7 @@ public partial class AndroidApp
     private bool CloseTopmostLayer()
     {
         if (_kebabPopup is { IsOpen: true }) { _kebabPopup.IsOpen = false; return true; }
+        if (_aboutOverlay is { IsVisible: true }) { _aboutOverlay.IsVisible = false; return true; }
         if (_logOverlay is { IsVisible: true }) { _logOverlay.IsVisible = false; return true; }
         if (_cfgExportOverlay is { IsVisible: true }) { HideExportOverlay(); return true; }
         if (_cfgImportOverlay is { IsVisible: true }) { HideImportOverlay(); return true; }

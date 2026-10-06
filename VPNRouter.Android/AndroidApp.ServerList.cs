@@ -950,6 +950,11 @@ public partial class AndroidApp
                     parts.Add(srv.CongestionControl.ToLowerInvariant());
                 break;
 
+            case "amneziawg":
+            case "awg":
+                parts.Add("amneziawg");
+                break;
+
             case "shadowsocks":
             case "ss":
                 parts.Add("ss");

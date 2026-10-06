@@ -12,6 +12,8 @@ public static class SingBoxFeatures
     private static bool _awg;
     private static bool _xhttp;
 
+    internal static bool EmbeddedCore { get; set; } = OperatingSystem.IsAndroid();
+
     internal static bool? OverrideAwg { get; set; }
 
     internal static bool? OverrideXhttp { get; set; }
@@ -33,6 +35,7 @@ public static class SingBoxFeatures
             _probed = false;
             _awg = false;
             _xhttp = false;
+            EmbeddedCore = OperatingSystem.IsAndroid();
             OverrideAwg = null;
             OverrideXhttp = null;
         }
@@ -40,6 +43,8 @@ public static class SingBoxFeatures
 
     private static (bool awg, bool xhttp) Probe()
     {
+        // Android runs the core inside the app (libbox, built with with_awg and with_xhttp, checked in CI); no executable to ask.
+        if (EmbeddedCore) return (true, true);
         if (_probed) return (_awg, _xhttp);
         lock (_gate)
         {

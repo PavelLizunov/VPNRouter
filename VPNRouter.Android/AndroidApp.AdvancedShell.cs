@@ -123,9 +123,9 @@ public partial class AndroidApp
         if (_advShellContentHost is null) return;
         var h = _advShellContentHost.Bounds.Height;
         if (h <= 0) return;
-        foreach (var page in _advShellTabContent.Values)
+        foreach (var (tab, page) in _advShellTabContent)
             if (page is ScrollViewer { Content: Control content })
-                content.Height = Math.Max(h, AdvMinPageHeight);
+                content.Height = tab == AdvancedTab.Subscribe ? double.NaN : Math.Max(h, AdvMinPageHeight);
         // When the keyboard makes the page scroll, keep the field being typed into in view.
         var host = _advShellContentHost;
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -364,12 +364,8 @@ public partial class AndroidApp
             _kebabPopup.IsOpen = false;
             return;
         }
-        _kebabPopup.PlacementTarget = _advKebabMenuBtn;
-        UpdateMenuAdvancedToggle();
+        PrepareKebabMenu(_advKebabMenuBtn);
         _kebabPopup.IsOpen = true;
-        _resetConfirmPending = false;
-        if (_menuResetSettingsItem is not null)
-            SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
     }
 
     private void OpenAdvancedShell(AdvancedTab tab)
@@ -653,7 +649,7 @@ public partial class AndroidApp
 
         // While the keyboard is open the status footer and the navigation step aside, so the page keeps the room (in
         // landscape they would otherwise take all of it).
-        var typing = _imeBottom > 0;
+        var typing = _imeVisible;
         if (_advTabStripBorder is not null) _advTabStripBorder.IsVisible = !typing;
         if (_advFooterBorder is not null) _advFooterBorder.IsVisible = !typing;
     }

@@ -99,6 +99,20 @@ public sealed class ReleaseToolingContractTests
     }
 
     [Fact]
+    public void AndroidProject_HonoursSingleRidAndWorkflowsGuardTheApk()
+    {
+        var csproj = Read("VPNRouter.Android", "VPNRouter.Android.csproj");
+        Assert.Contains("<RuntimeIdentifiers Condition=\"'$(RuntimeIdentifier)' == ''\">", csproj);
+
+        foreach (var name in new[] { "build-android.yml", "android-compile.yml" })
+        {
+            var workflow = Read(".github", "workflows", name);
+            Assert.Contains("must carry arm64-v8a native libraries only", workflow);
+            Assert.Contains("for NEED in with_awg with_xhttp", workflow);
+        }
+    }
+
+    [Fact]
     public void AndroidDownloadPageAndReadmes_SelectCanonicalArm64Asset()
     {
         var page = Read("packaging", "android-page", "index.html");

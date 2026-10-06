@@ -253,5 +253,6 @@ public static partial class Strings
     public static string AboutCreatorLabel   => Ru ? "Автор"                     : "Author";
     public static string AboutRepoLabel      => Ru ? "Репозиторий"               : "Repository";
     public static string AboutCloseBtn       => Ru ? "Закрыть"                   : "Close";
+    public static string AboutVersionUnknown => Ru ? "неизвестно"                : "unknown";
 
 }
