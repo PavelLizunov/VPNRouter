@@ -47,4 +47,15 @@ public sealed class SingBoxFeaturesEmbeddedCoreTests : IDisposable
         Assert.False(SingBoxFeatures.AwgAvailable);
         Assert.False(SingBoxFeatures.XhttpAvailable);
     }
+
+    [Fact]
+    public void HealthCheck_EmbeddedCoreIsNotReportedAsMissingBinary()
+    {
+        var results = new System.Collections.Generic.List<HealthCheck.Result>();
+
+        HealthCheck.CheckSingBoxBinary(results);
+
+        var only = Assert.Single(results);
+        Assert.Equal(HealthCheck.Level.Ok, only.Severity);
+    }
 }

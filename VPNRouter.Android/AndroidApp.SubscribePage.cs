@@ -386,6 +386,7 @@ public partial class AndroidApp
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = GetBrush("SurfaceBaseBrush"),
             Margin = new Thickness(12, 0, 12, 4),
+            MinHeight = 96,
             Child = listScroller,
         };
 

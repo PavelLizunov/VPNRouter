@@ -20,7 +20,7 @@ public static class HealthCheck
     public static List<Result> RunAll()
     {
         var results = new List<Result>();
-        var parsedSettings = CheckConfigYaml(results);
+        var parsedSettings = SingBoxFeatures.EmbeddedCore ? null : CheckConfigYaml(results);
         CheckUserCatalogue(results);
         CheckSingBoxBinary(results);
 
@@ -154,8 +154,14 @@ public static class HealthCheck
         }
     }
 
-    private static void CheckSingBoxBinary(List<Result> results)
+    internal static void CheckSingBoxBinary(List<Result> results)
     {
+        if (SingBoxFeatures.EmbeddedCore)
+        {
+            results.Add(new(Level.Ok, "sing-box core is built into the app (libbox)"));
+            return;
+        }
+
         var singboxPath = AppPaths.SingBoxExePath;
         if (File.Exists(singboxPath))
         {

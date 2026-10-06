@@ -161,6 +161,27 @@ public partial class AndroidApp
         ShowLogViewer();
     }
 
+    private void ShareDiagnosticsZip(string zipPath, string name)
+    {
+        try
+        {
+            var ctx = global::Android.App.Application.Context;
+            var uri = AndroidX.Core.Content.FileProvider.GetUriForFile(
+                ctx, ctx.PackageName + ".fileprovider", new Java.IO.File(zipPath));
+            var send = new global::Android.Content.Intent(global::Android.Content.Intent.ActionSend);
+            send.SetType("application/zip");
+            send.PutExtra(global::Android.Content.Intent.ExtraStream, uri);
+            send.AddFlags(global::Android.Content.ActivityFlags.GrantReadUriPermission);
+            var chooser = global::Android.Content.Intent.CreateChooser(send, name);
+            chooser!.AddFlags(global::Android.Content.ActivityFlags.NewTask);
+            ctx.StartActivity(chooser);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter", $"AND-DIAG-SHARE: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
     private async void OnMenuExportDiagClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
@@ -181,6 +202,7 @@ public partial class AndroidApp
             {
                 var name = System.IO.Path.GetFileName(result.ZipPath);
                 ShowMenuFeedback($"{result.Entries.Count} files → {name}");
+                ShareDiagnosticsZip(result.ZipPath, name);
                 global::Android.Util.Log.Info("VpnRouter",
                     $"AND-DIAG-EXPORT: wrote {result.ZipPath} ({result.Entries.Count} entries, {result.Warnings.Count} warnings)");
             }

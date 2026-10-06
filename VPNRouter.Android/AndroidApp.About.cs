@@ -81,16 +81,10 @@ public partial class AndroidApp
             Padding = new Thickness(14, 10),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             BorderThickness = new Thickness(1),
-            Child = new StackPanel
-            {
-                Spacing = 8,
-                Children =
-                {
-                    MakeAboutDetailRow(Localization.AboutVersionLabel, $"v{VPNRouter.Core.AppVersion.Version}"),
-                    MakeAboutDetailRow(Localization.AboutSingBoxLabel, ReadEmbeddedCoreVersion()),
-                    MakeAboutDetailRow(Localization.AboutCreatorLabel, "NiniTux"),
-                },
-            },
+            Child = MakeAboutDetails(
+                (Localization.AboutVersionLabel, $"v{VPNRouter.Core.AppVersion.Version}"),
+                (Localization.AboutSingBoxLabel, ReadEmbeddedCoreVersion()),
+                (Localization.AboutCreatorLabel, "NiniTux")),
         };
         details.BindToken(Border.BackgroundProperty, "SurfaceSunkenBrush");
         details.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
@@ -99,11 +93,13 @@ public partial class AndroidApp
         repo.MinHeight = 44;
         repo.HorizontalAlignment = HorizontalAlignment.Stretch;
         repo.HorizontalContentAlignment = HorizontalAlignment.Center;
+        repo.VerticalContentAlignment = VerticalAlignment.Center;
         repo.Click += OnMenuRepoClicked;
         var close = StyledSecondaryButton(Localization.AboutCloseBtn);
         close.MinHeight = 44;
         close.HorizontalAlignment = HorizontalAlignment.Stretch;
         close.HorizontalContentAlignment = HorizontalAlignment.Center;
+        close.VerticalContentAlignment = VerticalAlignment.Center;
         close.BorderThickness = new Thickness(0);
         close.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
         close.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
@@ -122,17 +118,23 @@ public partial class AndroidApp
         };
     }
 
-    private static Control MakeAboutDetailRow(string label, string value)
+    private static Control MakeAboutDetails(params (string Label, string Value)[] rows)
     {
-        var labelText = new TextBlock { Text = label, FontSize = UiScale.Fs(10), TextWrapping = TextWrapping.Wrap };
-        labelText.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-        var valueText = new TextBlock { Text = value, FontSize = UiScale.Fs(11), TextWrapping = TextWrapping.Wrap };
-        valueText.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 16 };
-        Grid.SetColumn(valueText, 1);
-        row.Children.Add(labelText);
-        row.Children.Add(valueText);
-        return row;
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 16, RowSpacing = 8 };
+        for (var i = 0; i < rows.Length; i++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var labelText = new TextBlock { Text = rows[i].Label, FontSize = UiScale.Fs(10), TextWrapping = TextWrapping.Wrap };
+            labelText.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+            var valueText = new TextBlock { Text = rows[i].Value, FontSize = UiScale.Fs(11), TextWrapping = TextWrapping.Wrap };
+            valueText.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+            Grid.SetRow(labelText, i);
+            Grid.SetRow(valueText, i);
+            Grid.SetColumn(valueText, 1);
+            grid.Children.Add(labelText);
+            grid.Children.Add(valueText);
+        }
+        return grid;
     }
 
     private static string ReadEmbeddedCoreVersion()
