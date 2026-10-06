@@ -60,3 +60,19 @@ Not verified: a real Android phone (the tester's Samsung, Android 15+ where the 
 Surprises: the old hook build's emulator run showed that the released app collapses the page under the keyboard below Android 15 (not reported by the tester); the `wm size` change blanks the Avalonia surface on the emulator, `wm density` does not, so the keyboard checks used a larger density; the Android `Localization` already had all About strings (only `AboutVersionUnknown` is new).
 
 Rollback: revert the PR. A published candidate is never replaced; a fix is a new version.
+
+## Release of the candidate (2026-10-06)
+
+Merged as `07097020` (squash of PR #552), annotated tag `v2.50.2-r1`, draft prerelease with `--latest=false`, six Windows files built on `windows-worker` (`relbuild2.ps1`, size, SHA-256 and sidecar compared on the worker and locally before the upload), 18 assets, published as a prerelease; Latest stayed `v2.50.1`.
+
+| gate | result |
+|---|---|
+| tag workflows (macOS, Linux, Android, `dotnet test`, Windows update test) | all success |
+| completed-draft integrity workflow, then again on the release event | success |
+| strict gate `verify-last-commit-ci.ps1 -Strict` | 8 green, 0 red |
+| `check-open-p0.ps1` | OK without waiver; SignPath secrets 0 (Windows files unsigned) |
+| released APK | 45,345,327 bytes, SHA-256 equals the sidecar, `arm64-v8a` only, libbox tags with_awg and with_xhttp (same guard as in CI, run locally on the downloaded asset) |
+| Publish APT Repository, Auto-Update Integration Test (Windows) on the release event | success |
+| `post-ship-local.ps1 -Version 2.50.2-r1` on WINBRAT | `POSTSHIP-LOCAL: PASS`, commit `07097020`, 2 cold cycles |
+
+Not run for this candidate: the live scenarios of `tools/live` (the desktop program changed only in `SingBoxFeatures`/`HealthCheck` branches that are off on desktop and the version string), the live update from v2.50.1 (required before a stable cut), a real Android phone.
