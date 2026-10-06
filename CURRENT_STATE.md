@@ -6,9 +6,22 @@ When release or platform facts change, update this file.
 
 ## Releases
 
+- **Candidate in flight:** v2.50.2-r1 (prerelease, 2026-10-06, tag on main
+  `07097020`, Latest stays v2.50.1). Android fixes after v2.50.1: the release APK
+  is arm64-only (45.3 MB instead of 174.9 MB), AmneziaWG and XHTTP subscription
+  entries are accepted on Android (`SingBoxFeatures.EmbeddedCore`), the keyboard
+  no longer hides the Home field or collapses the page below Android 15, the
+  Subscription tab is one column, an in-app About overlay shows the embedded core
+  version, the kebab menu results are visible in the Advanced screens, Export
+  diagnostics opens the share sheet. Gates: full suite 3369 passed, post-ship
+  PASS on WINBRAT, strict gate 8 green, integrity, APT and update test green;
+  emulator runs on API 34. Not verified: a real Android phone (Android 15+), a
+  real AWG or XHTTP tunnel on Android. Evidence in
+  `plans/phase-android-abi-awg-keyboard-about-2026-10-06.md`; stable needs the
+  owner's word and the live update from v2.50.1.
 - **Current stable:** v2.50.1 (2026-10-06), cut from the candidate v2.50.1-r1
-  (same tree; `AppVersion` only loses the suffix). Previous stable: v2.50.0. No
-  candidate is in flight; main declares `AppVersion` 2.50.1. v2.50.1 moves the
+  (same tree; `AppVersion` only loses the suffix). Previous stable: v2.50.0.
+  Main declares `AppVersion` 2.50.2-r1. v2.50.1 moves the
   program to the core `sing-box-vpnctl` v1.14.2-vpnctl.2 on desktop and Android
   (Android on `libbox-legacy`, API 21 build without naive; the engine start code
   uses the libbox 1.14 `CommandServer` API in `LibboxRuntime.java`). The evidence
