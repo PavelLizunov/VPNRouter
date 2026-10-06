@@ -16,6 +16,15 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Owner report 2026-10-06 (stable v2.50.1, main `120d324d`)
+
+Found by the owner's questions about the Android installer and a tester's screenshots; fixed in the task `plans/phase-android-abi-awg-keyboard-about-2026-10-06.md` (target v2.50.2).
+
+- [ ] **P2** - ANDROID-APK-ALL-ABIS (verified in the release asset 2026-10-06): the "arm64" APK of v2.50.1 holds arm64-v8a, armeabi-v7a, x86 and x86_64 libraries (174.9 MB; arm64 alone is about 45 MB) because `VPNRouter.Android.csproj` set the plural `RuntimeIdentifiers`, which the Android SDK honours over the workflows' `-p:RuntimeIdentifier=android-arm64`. Fix: plural list only without a singular RID, plus a CI guard on the APK content - `VPNRouter.Android/VPNRouter.Android.csproj`, `build-android.yml`, `android-compile.yml` - v2.50.2.
+- [ ] **P2** - ANDROID-FORK-GATE-CLOSED (found 2026-10-06, verified in source and in libbox.so build tags): `SingBoxFeatures.AwgAvailable` and `XhttpAvailable` probe a `sing-box` executable that Android does not have, so on Android awg://, awg3:// and amneziawg:// subscription lines are skipped and XHTTP links rejected although the embedded libbox has with_awg and with_xhttp. AWG and XHTTP on Android were never run live (emulator only had Shadowsocks) - `VPNRouter.Core/Services/SingBoxFeatures.cs:44` - v2.50.2.
+- [ ] **P2** - ANDROID-HOME-KEYBOARD (tester screenshot, Samsung, 2026-10-06; cause from source, not reproduced): with the keyboard open the Home page ends above it but the focused "VPN config" field stays below the visible area; scroll-to-field exists only for the Advanced shell tabs (`AndroidApp.AdvancedShell.cs:121`). The Subscription tab shows the server list in a three-row box - `VPNRouter.Android/AndroidApp.axaml.cs`, `AndroidApp.SubscribePage.cs` - v2.50.2.
+- [ ] **P3** - ANDROID-ABOUT-GITHUB (owner question 2026-10-06): the kebab version item opens the repository in the browser (`AndroidApp.axaml.cs:690`, `AndroidApp.PerAppFilter.cs:934`) while the desktop opens the About window with the app and core versions - v2.50.2.
+
 ### Release r29 verification 2026-10-04 (main `99e6b09a`, AppVersion 2.50.0-r29)
 
 Found by the pre-tag checks of `plans/phase-r29-release-2.50.0-r29-2026-10-04.md`. Neither entry is a regression of r29 and neither blocks a candidate.
