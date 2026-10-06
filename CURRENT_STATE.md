@@ -6,12 +6,18 @@ When release or platform facts change, update this file.
 
 ## Releases
 
-- **Current stable:** v2.50.0 (2026-10-04), cut from the candidate v2.50.0-r29
-  (same tree; `AppVersion` only loses the suffix). Previous stable: v2.49.3. No
-  candidate is in flight; main declares `AppVersion` 2.50.0. The evidence of the
-  cut, including the live update from v2.49.3, is in
-  `plans/phase-stable-2.50.0-2026-10-04.md`.
-- **Last candidate before the cut:** v2.50.0-r29 (prerelease, 2026-10-04). Its Windows binary passed the cold-cycle post-ship check
+- **Current stable:** v2.50.1 (2026-10-06), cut from the candidate v2.50.1-r1
+  (same tree; `AppVersion` only loses the suffix). Previous stable: v2.50.0. No
+  candidate is in flight; main declares `AppVersion` 2.50.1. v2.50.1 moves the
+  program to the core `sing-box-vpnctl` v1.14.2-vpnctl.2 on desktop and Android
+  (Android on `libbox-legacy`, API 21 build without naive; the engine start code
+  uses the libbox 1.14 `CommandServer` API in `LibboxRuntime.java`). The evidence
+  of the cut, including the live update from v2.50.0, is in
+  `plans/phase-stable-2.50.1-2026-10-06.md`; the core update itself in
+  `plans/phase-core-1.14.2-vpnctl2-2026-10-05.md`.
+- **Previous stable:** v2.50.0 (2026-10-04), cut from the candidate v2.50.0-r29.
+  The evidence of that cut is in `plans/phase-stable-2.50.0-2026-10-04.md`.
+- **Last candidate of the v2.50.0 line:** v2.50.0-r29 (prerelease, 2026-10-04). Its Windows binary passed the cold-cycle post-ship check
   on WINBRAT on the first attempt (`tools/post-ship-local.ps1`), the live
   scenarios of `tools/live` (cycles, per-server connects, ping with the VPN off
   and on, mode switches, auto-select, Other versions, all tabs, 600 fast
