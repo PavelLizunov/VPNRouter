@@ -50,7 +50,7 @@
     <ApplicationDisplayVersion Condition="'$(VpnRouterTestHook)' == 'true'">$(VpnRouterVersion)+testhook</ApplicationDisplayVersion>
 
     <!-- Android-specific build flags. -->
-    <RuntimeIdentifiers>android-arm64;android-arm;android-x64;android-x86</RuntimeIdentifiers>
+    <RuntimeIdentifiers Condition="'$(RuntimeIdentifier)' == ''">android-arm64;android-arm;android-x64;android-x86</RuntimeIdentifiers>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <AndroidSigningKeyStore Condition="'$(Configuration)' == 'Release'">vpnrouter.keystore</AndroidSigningKeyStore>
     <AndroidSigningKeyAlias Condition="'$(Configuration)' == 'Release'">vpnrouter</AndroidSigningKeyAlias>
