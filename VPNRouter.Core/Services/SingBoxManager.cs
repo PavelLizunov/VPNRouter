@@ -39,6 +39,10 @@ public partial class SingBoxManager : IDisposable
 
     private bool _linuxUsedPkexec;
     private bool _ownsTunLock;
+    private SingBoxRuntimePolicy? _policy;
+
+    // Sticky: production denial wins, the first fixture stays, a later fixture cannot replace it.
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
     private bool _exactStopUnconfirmed;
     private readonly object _lifecycleGate = new();
 
@@ -70,6 +74,7 @@ public partial class SingBoxManager : IDisposable
         _http = http ?? PolicyHttpClient.Shared;
         _runner = runner ?? Runner;
         _tunLock = TunOwnershipLock.Instance(_logger);
+        _policy = SingBoxRuntimePolicy.Current;
 
         AppDomain.CurrentDomain.ProcessExit += OnAppDomainProcessExit;
     }

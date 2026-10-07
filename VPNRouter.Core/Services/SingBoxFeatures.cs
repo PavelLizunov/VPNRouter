@@ -14,16 +14,33 @@ public static class SingBoxFeatures
 
     internal static bool EmbeddedCore { get; set; } = OperatingSystem.IsAndroid();
 
+    public static bool AwgAvailable
+    {
+        get
+        {
+            var policy = SingBoxRuntimePolicy.Current;
+            if (policy != null) return policy.AwgAvailable;
+            return OverrideAwg ?? Probe().awg;
+        }
+    }
+
+    public static bool XhttpAvailable
+    {
+        get
+        {
+            var policy = SingBoxRuntimePolicy.Current;
+            if (policy != null) return policy.XhttpAvailable;
+            return OverrideXhttp ?? Probe().xhttp;
+        }
+    }
+
     internal static bool? OverrideAwg { get; set; }
 
     internal static bool? OverrideXhttp { get; set; }
 
-    public static bool AwgAvailable => OverrideAwg ?? Probe().awg;
-
-    public static bool XhttpAvailable => OverrideXhttp ?? Probe().xhttp;
-
     public static void Prewarm()
     {
+        if (SingBoxRuntimePolicy.Current != null) return;
         if (OverrideAwg.HasValue && OverrideXhttp.HasValue) return;
         _ = Task.Run(() => { try { _ = Probe(); } catch { } });
     }
@@ -43,6 +60,8 @@ public static class SingBoxFeatures
 
     private static (bool awg, bool xhttp) Probe()
     {
+        var policy = SingBoxRuntimePolicy.Current;
+        if (policy != null) return (policy.AwgAvailable, policy.XhttpAvailable);
         // Android runs the core inside the app (libbox, built with with_awg and with_xhttp, checked in CI); no executable to ask.
         if (EmbeddedCore) return (true, true);
         if (_probed) return (_awg, _xhttp);

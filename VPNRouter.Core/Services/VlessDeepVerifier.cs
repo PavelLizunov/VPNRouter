@@ -40,6 +40,9 @@ public sealed class VlessDeepVerifier
     private readonly ILogger _logger;
     private readonly string _singBoxPath;
     private readonly IProcessRunner _runner;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan OverallTimeout = DeepVerifyConstants.OverallTimeout;
@@ -57,18 +60,20 @@ public sealed class VlessDeepVerifier
     public VlessDeepVerifier(ILogger logger, IProcessRunner? runner = null)
     {
         _logger = logger;
-        _singBoxPath = AppPaths.SingBoxExePath;
+        _policy = SingBoxRuntimePolicy.Current;
+        _singBoxPath = _policy?.SelectedExecutablePath ?? AppPaths.SingBoxExePath;
         _runner = runner ?? Runner;
     }
 
     internal VlessDeepVerifier(ILogger logger, string singBoxPath, IProcessRunner? runner = null)
     {
         _logger = logger;
-        _singBoxPath = singBoxPath;
+        _policy = SingBoxRuntimePolicy.Current;
+        _singBoxPath = _policy?.SelectedExecutablePath ?? singBoxPath;
         _runner = runner ?? Runner;
     }
 
-    public bool IsAvailable => File.Exists(_singBoxPath);
+    public bool IsAvailable => EffectivePolicy != null ? EffectivePolicy.IsAvailable : File.Exists(_singBoxPath);
 
     public async Task VerifyBatchAsync(
         IReadOnlyList<VlessServerEntry> servers,
@@ -77,7 +82,19 @@ public sealed class VlessDeepVerifier
         IProgress<(int done, int total)>? progress = null,
         CancellationToken ct = default)
     {
-        if (!IsAvailable)
+        var policy = EffectivePolicy;
+        using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            if (!policy.IsAvailable)
+            {
+                _logger.Warning("[VlessDeepVerifier] sing-box binary unavailable under runtime policy");
+                foreach (var s in servers)
+                    onOneDone(s, DeepVerifyResult.Failed("sing-box runtime is unavailable or untrusted", DeepVerifyFailurePhase.LocalSpawn));
+                return;
+            }
+        }
+        else if (!IsAvailable)
         {
             _logger.Warning("[VlessDeepVerifier] sing-box not found at {Path}", _singBoxPath);
             foreach (var s in servers)
@@ -159,7 +176,20 @@ public sealed class VlessDeepVerifier
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
 
-        if (!IsAvailable)
+        var policy = EffectivePolicy;
+        using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            try
+            {
+                policy.Authorize(SingBoxRuntimeOperation.Verify);
+            }
+            catch (SingBoxRuntimePolicyException)
+            {
+                return DeepVerifyResult.Failed("sing-box runtime is unavailable or untrusted", DeepVerifyFailurePhase.LocalSpawn);
+            }
+        }
+        else if (!IsAvailable)
         {
             _logger.Warning("[VlessDeepVerifier] {Name}: sing-box binary missing at {Path}", label, _singBoxPath);
             return DeepVerifyResult.Failed("sing-box binary missing", DeepVerifyFailurePhase.LocalSpawn);
@@ -173,7 +203,8 @@ public sealed class VlessDeepVerifier
                 return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
                     DeepVerifyFailurePhase.UnsupportedByVerifier);
             }
-            SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
+            if (policy == null)
+                SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
         }
 
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
