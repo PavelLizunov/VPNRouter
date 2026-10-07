@@ -1,0 +1,31 @@
+# Maintainer: VPNRouter Team
+pkgname=vpnrouter-headless
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="VPNRouter Headless daemon and runtime staging (source-only prototype)"
+arch=('x86_64')
+url="https://github.com/PavelLizunov/VPNRouter"
+license=('GPL-3.0-or-later' 'GPL-3.0-only' 'Apache-2.0' 'MIT' 'BSD-3-Clause')
+depends=('glibc' 'gcc-libs' 'dotnet-runtime>=10' 'dotnet-runtime<11')
+options=(!strip !debug)
+source=('payload.tar')
+sha256sums=('@PAYLOAD_SHA256@')
+noextract=('payload.tar')
+
+prepare() {
+    python3 - "$startdir" "$startdir/payload.tar" "$srcdir/staged_root" "${sha256sums[0]}" <<'EOF'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import staging_tools
+staging_tools.safe_extract(
+    archive=Path(sys.argv[2]),
+    dest=Path(sys.argv[3]),
+    expected_sha256=sys.argv[4],
+)
+EOF
+}
+
+package() {
+    cp -a "$srcdir/staged_root/usr" "$pkgdir/"
+}
