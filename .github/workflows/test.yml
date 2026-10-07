@@ -53,6 +53,15 @@ jobs:
       - name: Headless contract checks
         run: dotnet test VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj -c Release --blame-hang-timeout 4m --blame-hang-dump-type none
 
+  packaging-arch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Arch packaging unit tests
+        run: python3 -m unittest discover -s packaging/arch/tests -v
+
   go-test-windows:
     runs-on: windows-latest
     timeout-minutes: 10
