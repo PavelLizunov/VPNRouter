@@ -81,23 +81,12 @@ public sealed class FreeConfigDeepVerifier
 
     public async Task VerifyOneAsync(FreeConfigEntry cfg, CancellationToken ct = default)
     {
-        cfg.LastTestedAt = DateTime.UtcNow;
-
         var policy = EffectivePolicy;
         using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
         if (policy != null)
-        {
-            try
-            {
-                policy.Authorize(SingBoxRuntimeOperation.Verify);
-            }
-            catch (SingBoxRuntimePolicyException)
-            {
-                _logger.Warning("DeepVerify: policy denied verification for {host}:{port}", cfg.Host, cfg.Port);
-                cfg.LastError = "sing-box runtime is unavailable or untrusted";
-                return;
-            }
-        }
+            policy.Authorize(SingBoxRuntimeOperation.Verify);
+
+        cfg.LastTestedAt = DateTime.UtcNow;
 
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
 

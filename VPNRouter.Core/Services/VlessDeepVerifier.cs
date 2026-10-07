@@ -225,7 +225,7 @@ public sealed class VlessDeepVerifier
             await File.WriteAllTextAsync(tmpConfigPath, configJson, overallCts.Token);
 
             var request = new ProcessRequest(
-                ExecutablePath: _singBoxPath,
+                ExecutablePath: policy?.SelectedExecutablePath ?? _singBoxPath,
                 Arguments: new[] { "run", "-c", tmpConfigPath },
                 CaptureStdout: true,
                 CaptureStderr: true);
