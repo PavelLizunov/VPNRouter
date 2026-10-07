@@ -55,7 +55,9 @@ Out:
 - Done: contract and zone reads; origin/main fetched at `9aeae15b`; worktree `/var/lib/dsh/Project/VPNRouter-omarchy-a` on `dsh/omarchy-headless-seams-2026-10-07`. Old branch read-only at `04bdff27`.
 - Done in this worktree, not yet committed: `SingBoxRuntimePolicy.cs` and `LinuxTunOwnership.cs` copied from the old branch and re-read. `ProcessOwnership.cs` and `SingBoxManager.LinuxStop.cs` applied cleanly. Manual wiring, active only when a policy scope is entered: `SingBoxManager`, `VpnEngine.StartAsync`, `StartupPipeline` (skips binary deploy), `HealthCheck`, `DiagnosticsExporter`, `SingBoxFeatures`, `VlessDeepVerifier`, `FreeConfigDeepVerifier`. Tests copied as `HeadlessRuntimePolicyTests.cs`. `git diff --check` clean. No local build.
 - Not done: TunOwnershipLock still uses the Windows semaphore on Linux. The old Linux flock branch does not apply. Headless, packaging, plugin are later PRs.
-- Next step: commit this A1 set, push the branch, open a draft PR, then read CI at the exact SHA. If CI fails, fix on this branch. Do not start A2 until A1 CI is known.
+- A1 committed `2e248deb` and pushed. Draft PR https://github.com/PavelLizunov/VPNRouter/pull/558. At poll time: grep pass, go-test-windows pass, test pass, compile (android) pass. characterization-windows was still running. Head SHA matches `2e248deb`. No local build.
+- A2 worktree `/var/lib/dsh/Project/VPNRouter-omarchy-b`, branch `dsh/omarchy-headless-backend-2026-10-07`, rebased onto `2e248deb`. Headless copied, then `ProfileFeature` changed to the current one-argument `BuildProfileSources`. InternalsVisibleTo and solution entries applied. CI job `headless-contract` added. Commits `a3b63b06` (port, subject after rebase) and `d348c317` (CI). Draft PR https://github.com/PavelLizunov/VPNRouter/pull/559. Not mergeable until 558 lands. CI not yet read.
+- Next step: read 559 checks at its head SHA. Fix compile failures on that branch only. Do not start packaging until 559 CI is known. Update this State from the A1 worktree; the A2 worktree does not contain this file until 558 merges.
 
 ## Assumptions
 
