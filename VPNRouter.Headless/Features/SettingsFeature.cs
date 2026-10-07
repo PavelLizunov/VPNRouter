@@ -44,7 +44,7 @@ public sealed class SettingsFeature
 
         var settings = _storage.GetSettings();
         var isCustom = string.Equals(settings.App?.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase);
-        var configuredMode = settings.App?.DnsModeOverride ?? ResolveLocalProfileDnsMode(settings);
+        var configuredMode = ResolveLocalProfileDnsMode(settings);
 
         string dnsMode;
         string? dnsModeSemantics = null;
@@ -89,7 +89,7 @@ public sealed class SettingsFeature
             strictRoute = settings.Tun?.StrictRoute ?? false,
             strictDns = settings.App?.StrictDns ?? false,
             dnsMode,
-            dnsModeOverride = settings.App?.DnsModeOverride,
+            dnsModeOverride = (string?)null,
             dnsModeSemantics,
             bypassRussianTraffic = settings.App?.BypassRussianTraffic ?? true,
             blockAds = settings.App?.BlockAds ?? false,
@@ -280,7 +280,9 @@ public sealed class SettingsFeature
             settings.App.StrictDns = newStrictDns.Value;
 
         if (hasDnsMode)
-            settings.App.DnsModeOverride = newDnsMode;
+            throw new RouterException(
+                "unsupported",
+                "dnsMode is no longer stored on AppConfig; change it on the profile");
 
         if (newBypassRu.HasValue)
             settings.App.BypassRussianTraffic = newBypassRu.Value;
