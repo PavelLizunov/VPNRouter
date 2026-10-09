@@ -1,0 +1,11 @@
+{
+  "type": "config",
+  "name": "Performance Autoresearch Campaign",
+  "metric_name": "wall_seconds",
+  "metric_unit": "s",
+  "direction": "lower",
+  "max_iterations": 25,
+  "evaluator_lock": "b1186778d54259db3077afbf9c64e33e687c62cf",
+  "manifest": "autoresearch.manifest.sha256",
+  "timestamp": 1788538028
+}
