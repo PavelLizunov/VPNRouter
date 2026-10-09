@@ -382,7 +382,7 @@ public partial class MainWindowViewModel
             {
                 psi = new ProcessStartInfo
                 {
-                    FileName = "/usr/bin/open",
+                    FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
                     UseShellExecute = false
                 };
                 psi.ArgumentList.Add(logsDir);
