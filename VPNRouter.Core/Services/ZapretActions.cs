@@ -248,10 +248,10 @@ public static class ZapretActions
         ArgumentNullException.ThrowIfNull(tempPath);
         ArgumentNullException.ThrowIfNull(hostsPath);
 
-        if (tempPath.Any(c => c is '\r' or '\n' or '"'))
+        if (tempPath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"' or '\''))
             throw new ArgumentException("Temp path contains disallowed characters", nameof(tempPath));
 
-        if (hostsPath.Any(c => c is '\r' or '\n' or '"'))
+        if (hostsPath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"' or '\''))
             throw new ArgumentException("Hosts path contains disallowed characters", nameof(hostsPath));
 
         if (!OperatingSystem.IsWindows())
@@ -259,8 +259,13 @@ public static class ZapretActions
 
         try
         {
-            Process.Start(new ProcessStartInfo("notepad", tempPath) { UseShellExecute = true });
-            Process.Start(new ProcessStartInfo("explorer", $"/select,\"{hostsPath}\"") { UseShellExecute = true });
+            var notepadPsi = new ProcessStartInfo("notepad.exe") { UseShellExecute = false };
+            notepadPsi.ArgumentList.Add(tempPath);
+            Process.Start(notepadPsi);
+
+            var explorerPsi = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
+            explorerPsi.ArgumentList.Add($"/select,{hostsPath}");
+            Process.Start(explorerPsi);
         }
         catch { }
     }

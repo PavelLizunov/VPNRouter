@@ -321,9 +321,23 @@ public sealed class ZapretActionsTests : IDisposable
     [InlineData("temp\rpath", "valid_hosts")]
     [InlineData("temp\npath", "valid_hosts")]
     [InlineData("temp\"path", "valid_hosts")]
+    [InlineData("temp&path", "valid_hosts")]
+    [InlineData("temp|path", "valid_hosts")]
+    [InlineData("temp^path", "valid_hosts")]
+    [InlineData("temp<path", "valid_hosts")]
+    [InlineData("temp>path", "valid_hosts")]
+    [InlineData("temp%path", "valid_hosts")]
+    [InlineData("temp'path", "valid_hosts")]
     [InlineData("valid_temp", "hosts\rpath")]
     [InlineData("valid_temp", "hosts\npath")]
     [InlineData("valid_temp", "hosts\"path")]
+    [InlineData("valid_temp", "hosts&path")]
+    [InlineData("valid_temp", "hosts|path")]
+    [InlineData("valid_temp", "hosts^path")]
+    [InlineData("valid_temp", "hosts<path")]
+    [InlineData("valid_temp", "hosts>path")]
+    [InlineData("valid_temp", "hosts%path")]
+    [InlineData("valid_temp", "hosts'path")]
     public void OpenHostsEditHelpers_PathWithDisallowedCharacters_ThrowsArgumentException(string tempPath, string hostsPath)
     {
         var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath));
