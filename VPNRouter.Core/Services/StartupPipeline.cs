@@ -91,6 +91,9 @@ internal sealed class StartupPipeline
     private readonly IStartupHost _host;
     private readonly ISettingsStore _store;
     private readonly IWindowsDnsHardening _dnsHardening;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public static IHttpClient? WarmupHttp;
 
@@ -102,6 +105,7 @@ internal sealed class StartupPipeline
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _store = store ?? RealSettingsStore.Instance;
         _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
+        _policy = SingBoxRuntimePolicy.Current;
     }
 
     public async Task<StartupResult> ExecuteAsync(
@@ -109,6 +113,9 @@ internal sealed class StartupPipeline
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
+        var policy = EffectivePolicy;
+        using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Start);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var settings = context.Settings;
 
@@ -699,6 +706,9 @@ internal sealed class StartupPipeline
 
     private void DeploySingBoxBinary(AppSettings settings)
     {
+        if (EffectivePolicy != null)
+            return;
+
         var exePath = OperatingSystem.IsWindows()
             ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
             : AppPaths.SingBoxExePath;

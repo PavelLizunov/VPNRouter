@@ -162,6 +162,28 @@ public static class HealthCheck
             return;
         }
 
+        var policy = SingBoxRuntimePolicy.Current;
+        if (policy != null)
+        {
+            try
+            {
+                policy.Authorize(SingBoxRuntimeOperation.Inspect);
+                var path = policy.SelectedExecutablePath;
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    var size = new FileInfo(path).Length;
+                    results.Add(new(Level.Ok, $"sing-box at {path} ({size / 1024 / 1024} MB)"));
+                }
+                else
+                    results.Add(new(Level.Err, "sing-box binary missing or unavailable under runtime policy"));
+            }
+            catch
+            {
+                results.Add(new(Level.Err, "sing-box binary unavailable or untrusted under runtime policy"));
+            }
+            return;
+        }
+
         var singboxPath = AppPaths.SingBoxExePath;
         if (File.Exists(singboxPath))
         {
@@ -185,6 +207,12 @@ public static class HealthCheck
     {
         if (OperatingSystem.IsLinux())
         {
+            if (SingBoxRuntimePolicy.Current != null)
+            {
+                results.Add(new(Level.Warn, "runtime policy unavailable"));
+                return;
+            }
+
             var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
             if (blocker != null)
             {

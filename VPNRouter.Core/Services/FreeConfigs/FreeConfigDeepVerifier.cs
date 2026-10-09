@@ -10,6 +10,9 @@ public sealed class FreeConfigDeepVerifier
 {
     private readonly ILogger _logger;
     private readonly string _singBoxPath;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
 
@@ -29,7 +32,8 @@ public sealed class FreeConfigDeepVerifier
     public FreeConfigDeepVerifier(ILogger logger)
     {
         _logger = logger;
-        _singBoxPath = AppPaths.SingBoxExePath;
+        _policy = SingBoxRuntimePolicy.Current;
+        _singBoxPath = _policy?.SelectedExecutablePath ?? AppPaths.SingBoxExePath;
     }
 
     public async Task VerifyBatchAsync(
@@ -37,7 +41,17 @@ public sealed class FreeConfigDeepVerifier
         IProgress<(int done, int total)>? progress = null,
         CancellationToken ct = default)
     {
-        if (!File.Exists(_singBoxPath))
+        var policy = EffectivePolicy;
+        using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+        {
+            if (!policy.IsAvailable)
+            {
+                _logger.Warning("DeepVerify: sing-box binary unavailable under runtime policy");
+                return;
+            }
+        }
+        else if (!File.Exists(_singBoxPath))
         {
             _logger.Warning("DeepVerify: sing-box binary not found at {path}", _singBoxPath);
             return;
@@ -67,6 +81,11 @@ public sealed class FreeConfigDeepVerifier
 
     public async Task VerifyOneAsync(FreeConfigEntry cfg, CancellationToken ct = default)
     {
+        var policy = EffectivePolicy;
+        using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
+        if (policy != null)
+            policy.Authorize(SingBoxRuntimeOperation.Verify);
+
         cfg.LastTestedAt = DateTime.UtcNow;
 
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
@@ -93,7 +112,7 @@ public sealed class FreeConfigDeepVerifier
 
             var startInfo = new ProcessStartInfo
             {
-                FileName = _singBoxPath,
+                FileName = policy != null ? policy.SelectedExecutablePath! : _singBoxPath,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
