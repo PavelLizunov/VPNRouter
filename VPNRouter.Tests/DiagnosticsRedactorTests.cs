@@ -210,8 +210,8 @@ app:
         Assert.DoesNotContain("x y", outp);
         Assert.DoesNotContain("hello world 123", outp);
         Assert.Equal(
-            "[DBG] password=\"***\" ok\n" +
-            "[DBG] token='***' set\n" +
+            $"[DBG] password=\"***\" ok{Environment.NewLine}" +
+            $"[DBG] token='***' set{Environment.NewLine}" +
             "[DBG] userpassword=\"***\" ok",
             outp);
     }
