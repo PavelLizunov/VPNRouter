@@ -222,6 +222,22 @@ public class UrlValidationSecurityTests
         }
     }
 
+    [Fact]
+    public void SelfRepair_BuildProcessStartInfo_UsesSafeArgumentListAndDisablesShellExecute()
+    {
+        var testPath = @"C:\Users\Public\Test Scripts\ vpnr-repair & calc.exe .ps1";
+        var psi = VPNRouter.App.Services.SelfRepair.BuildProcessStartInfo(testPath);
+
+        Assert.False(psi.UseShellExecute);
+        Assert.Equal("powershell.exe", psi.FileName);
+        Assert.Empty(psi.Arguments);
+        Assert.Contains("-NoProfile", psi.ArgumentList);
+        Assert.Contains("-ExecutionPolicy", psi.ArgumentList);
+        Assert.Contains("Bypass", psi.ArgumentList);
+        Assert.Contains("-File", psi.ArgumentList);
+        Assert.Equal(testPath, psi.ArgumentList[^1]);
+    }
+
     private sealed class InMemorySink : ILogEventSink
     {
         private readonly System.Collections.Generic.List<string> _events = new();
