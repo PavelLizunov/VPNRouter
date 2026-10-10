@@ -43,14 +43,14 @@
          shape stays mostly the same ([Fact]/[Theory]/Assert.* etc.) but
          the project becomes an Exe (see OutputType above). -->
     <PackageReference Include="xunit.v3" Version="3.2.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
 
     <!-- Avalonia headless testing: lets us instantiate Window/ViewModel and
          drive them from xUnit without a display. Required for dev-loop GUI
          testing on CI and in the VM shell. Bumped to 12.0.3 in lockstep
          with App + Android. -->
-    <PackageReference Include="Avalonia.Headless" Version="12.1.3" />
-    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.4" />
   </ItemGroup>
 
   <ItemGroup>
