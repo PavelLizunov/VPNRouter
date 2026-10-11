@@ -113,8 +113,7 @@ public class GeoDataDownloader
                     return IsUsable(destPath, minSize);
                 }
 
-                if (File.Exists(destPath)) File.Delete(destPath);
-                File.Move(tmpPath, destPath);
+                File.Move(tmpPath, destPath, overwrite: true);
 
                 _logger.Information("[GeoData] {Label} downloaded ({Size} bytes)", label, size);
                 return true;

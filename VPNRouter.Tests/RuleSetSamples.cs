@@ -10,7 +10,9 @@ internal static class RuleSetSamples
 
     public static byte[] UpstreamGeositeTldRu() => Convert.FromBase64String(UpstreamGeositeTldRuBase64);
 
-    public static byte[] Valid(int minLength = 0)
+    // Passes the app's check (signature, version, intact zlib stream) but is not a rule-set the core could load:
+    // a stand-in for the 50 KB geoip file where a test only needs "present and not damaged".
+    public static byte[] IntactEnvelope(int minLength = 0)
     {
         var payload = new byte[Math.Max(64, minLength + 1024)];
         new Random(20261011).NextBytes(payload);

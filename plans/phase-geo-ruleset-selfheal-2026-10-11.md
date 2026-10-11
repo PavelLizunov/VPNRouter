@@ -30,8 +30,9 @@ followed by `sing-box crashed (exit code: 1)` and "sing-box failed to start with
 
 ## What
 
-1. `RuleSetFile.IsValidBinary`: a binary rule-set is usable when it starts with `SRS`, has a non-zero version byte and
-   its zlib payload inflates to the end (zlib carries a checksum, so a zeroed or garbled body is caught too).
+1. `RuleSetFile.IsValidBinary`: a binary rule-set is usable when it starts with `SRS`, has a version the pinned core
+   reads (1-5), its zlib payload inflates to the end and the trailing Adler-32 matches the inflated bytes (so a zeroed,
+   garbled or cut-off body is caught too).
 2. `GeoDataDownloader`: `AreGeoFilesAvailable` requires that check for both files; `EnsureFileAsync` deletes and
    re-downloads an existing damaged file and refuses to install a downloaded one that fails the check.
 3. Result on the affected machine: the next connect sees the damaged file, downloads a fresh copy and starts; when the
@@ -62,8 +63,8 @@ file: only content that fails the format check does. No URL or secret in the new
 ## Unknowns
 
 - How the file got damaged on that machine. Not needed for the repair.
-- Whether .NET reports a cleanly truncated zlib stream; the check does not rely on it (the core would still reject such
-  a file, as today).
+- Whether .NET reports a cleanly truncated zlib stream. The check does not rely on it: it compares the trailing
+  checksum itself (the two published geo files end exactly at that checksum, verified 2026-10-11).
 
 ## Rollback
 

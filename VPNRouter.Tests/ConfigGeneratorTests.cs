@@ -145,7 +145,7 @@ public class ConfigGeneratorTests
         {
             AppPaths.OverrideDataDir(tempDataDir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.Valid(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(10 * 1024));
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
 
             var settings = CreateSettings();
@@ -175,7 +175,7 @@ public class ConfigGeneratorTests
         {
             AppPaths.OverrideDataDir(tempDataDir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.Valid(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(10 * 1024));
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.ZeroFilled(155));
 
             var settings = CreateSettings();

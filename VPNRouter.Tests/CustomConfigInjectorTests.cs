@@ -444,7 +444,7 @@ public class CustomConfigInjectorTests
         {
             AppPaths.OverrideDataDir(tempDataDir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.Valid(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(10 * 1024));
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
 
             var source = (JsonNode.Parse(ActionConfig) as JsonObject)!;

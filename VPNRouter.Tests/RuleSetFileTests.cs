@@ -6,68 +6,90 @@ namespace VPNRouter.Tests;
 
 public sealed class RuleSetFileTests
 {
-    private static bool IsValid(byte[] bytes)
-    {
-        using var stream = new MemoryStream(bytes, writable: false);
-        return RuleSetFile.IsValidBinary(stream);
-    }
-
     [Fact]
     public void PublishedGeositeFile_IsValid()
     {
         var bytes = RuleSetSamples.UpstreamGeositeTldRu();
 
         Assert.Equal(155, bytes.Length);
-        Assert.True(IsValid(bytes));
+        Assert.True(RuleSetFile.IsValidBinary(bytes));
     }
 
     [Theory]
     [InlineData(0)]
-    [InlineData(11 * 1024)]
-    public void GeneratedSample_IsValid(int minLength)
+    [InlineData(10 * 1024)]
+    public void IntactEnvelope_PassesTheCheck(int minLength)
     {
-        var bytes = RuleSetSamples.Valid(minLength);
+        var bytes = RuleSetSamples.IntactEnvelope(minLength);
 
         Assert.True(bytes.Length >= minLength);
-        Assert.True(IsValid(bytes));
+        Assert.True(RuleSetFile.IsValidBinary(bytes));
     }
 
     [Fact]
     public void ZeroFilledFileOfThePublishedLength_IsInvalid()
     {
-        Assert.False(IsValid(RuleSetSamples.ZeroFilled(155)));
+        Assert.False(RuleSetFile.IsValidBinary(RuleSetSamples.ZeroFilled(155)));
     }
 
     [Fact]
     public void ValidHeaderWithZeroedBody_IsInvalid()
     {
-        Assert.False(IsValid(RuleSetSamples.ValidHeaderZeroedBody(155)));
+        Assert.False(RuleSetFile.IsValidBinary(RuleSetSamples.ValidHeaderZeroedBody(155)));
     }
 
     [Fact]
     public void HtmlPage_IsInvalid()
     {
-        Assert.False(IsValid(Encoding.UTF8.GetBytes("<!DOCTYPE html><html><body>Blocked</body></html>")));
+        Assert.False(RuleSetFile.IsValidBinary(
+            Encoding.UTF8.GetBytes("<!DOCTYPE html><html><body>Blocked</body></html>")));
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(2)]
     [InlineData(4)]
-    public void FileCutInsideOrRightAfterTheHeader_IsInvalid(int length)
+    [InlineData(20)]
+    [InlineData(100)]
+    [InlineData(150)]
+    [InlineData(151)]
+    public void FileCutShort_IsInvalid(int length)
     {
         var bytes = RuleSetSamples.UpstreamGeositeTldRu().AsSpan(0, length).ToArray();
 
-        Assert.False(IsValid(bytes));
+        Assert.False(RuleSetFile.IsValidBinary(bytes));
     }
 
     [Fact]
-    public void VersionZero_IsInvalid()
+    public void ZeroedTail_IsInvalid()
     {
         var bytes = RuleSetSamples.UpstreamGeositeTldRu();
-        bytes[3] = 0;
+        Array.Clear(bytes, bytes.Length - 40, 40);
 
-        Assert.False(IsValid(bytes));
+        Assert.False(RuleSetFile.IsValidBinary(bytes));
+    }
+
+    [Theory]
+    [InlineData((byte)0)]
+    [InlineData((byte)6)]
+    [InlineData((byte)255)]
+    public void VersionTheCoreDoesNotRead_IsInvalid(byte version)
+    {
+        var bytes = RuleSetSamples.UpstreamGeositeTldRu();
+        bytes[3] = version;
+
+        Assert.False(RuleSetFile.IsValidBinary(bytes));
+    }
+
+    [Theory]
+    [InlineData((byte)1)]
+    [InlineData((byte)5)]
+    public void VersionTheCoreReads_IsValid(byte version)
+    {
+        var bytes = RuleSetSamples.UpstreamGeositeTldRu();
+        bytes[3] = version;
+
+        Assert.True(RuleSetFile.IsValidBinary(bytes));
     }
 
     [Fact]

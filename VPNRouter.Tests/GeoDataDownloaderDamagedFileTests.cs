@@ -75,7 +75,7 @@ public sealed class GeoDataDownloaderDamagedFileTests : IDisposable
     {
         var published = RuleSetSamples.UpstreamGeositeTldRu();
         File.WriteAllBytes(_dest, published);
-        var http = new FakeHttpClient().SetupStream("rules.example", RuleSetSamples.Valid(200));
+        var http = new FakeHttpClient().SetupStream("rules.example", RuleSetSamples.IntactEnvelope(200));
 
         var ok = await EnsureAsync(http);
 
@@ -109,7 +109,7 @@ public sealed class GeoDataDownloaderDamagedFileTests : IDisposable
         {
             AppPaths.OverrideDataDir(_dir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.Valid(11 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(11 * 1024));
 
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
             Assert.True(GeoDataDownloader.AreGeoFilesAvailable());
