@@ -72,4 +72,47 @@ Revert the PR: the validator has no other callers.
 
 ## Outcome
 
-Pending.
+Merged as PR #573 (squash, main `52eca5d1`), candidate `v2.50.3-r1` published 2026-10-11 as a prerelease.
+
+Files: new `VPNRouter.Core/Services/RuleSetFile.cs` (72 lines); `GeoDataDownloader.cs` (validity in
+`AreGeoFilesAvailable` and `EnsureFileAsync`, one-step replace of the destination); tests `RuleSetFileTests`,
+`GeoDataDownloaderDamagedFileTests`, `RuleSetSamples`, one new case in `ConfigGeneratorTests`; two existing tests moved
+from zero-filled stand-ins to valid ones; `AppVersion` 2.50.3-r1.
+
+| check | result |
+|---|---|
+| PR CI at the head `946be46f` | all green (test, characterization-windows, go-test-windows, grep, compile, test-update) |
+| Release build + full suite on `windows-worker` at `946be46f` (same tree as the merge commit) | 0 errors, 229 warnings; 3396 passed, 0 failed, 19 skipped (v2.50.2-r1: 3369) |
+| worker preflight before that run | WINBRAT, CPU 0-10 % of 8, 14.1 of 16 GB free, 117 GB disk, no build process, SDK 10.0.301 |
+| tag workflows at `v2.50.3-r1` (macOS, Linux, Android, `dotnet test`, Windows update test) | all success |
+| draft and published integrity, strict commit gate, `check-open-p0.ps1` | success; `OK`, 8 green; `OK: no open P0/P1` |
+| release event: APT, integrity, Windows update test | success |
+| `post-ship-local` on WINBRAT | PASS, 2 cold cycles |
+
+Reproduction and live proof on WINBRAT (the app there had `bypass_russian_traffic: true`; its healthy
+`geosite-ru.srs` is 155 bytes starting with `SRS`, written 2026-08-02 and never refreshed):
+
+- Build of `07097020` (the v2.50.2 tree), geosite overwritten with 155 zero bytes, one Connect through the UI: the same
+  line as in the user's bundles (`parse rule-set[1]: invalid sing-box rule-set file`; index 1 because ad blocking is
+  off there), `sing-box crashed (exit code: 1)`, `Failed to start VPN`, the file stays damaged.
+- Candidate, same damage, one Connect: `[GeoData] geosite-ru is damaged (155 bytes, not a readable rule-set) -
+  re-downloading`, `geosite-ru downloaded (155 bytes)`, core started, connected in 3.6 s, the public IP of routed apps
+  changed, disconnect clean, the file starts with `SRS` again. The stale `geoip-ru.srs` (70 days) was refreshed in the
+  same pass.
+- Live update: v2.50.2 stable deployed, geosite zeroed, updater to `2.50.3-r1` PASS (helper done, version matches,
+  receipt consumed), 2 cold cycles PASS, the file repaired, cleanup PASS.
+
+Independent read by a second model family (gpt-sol through `xmodel.sh`, two passes). First pass: DO NOT SHIP, because
+the check trusts an intact zlib stream and does not parse the rule structure, a version byte above 5 passed, a stream
+cut short could pass (the runtime does not report it), the old copy was deleted before the move, and the generated test
+stand-in was called valid. Fixed in the second commit: version 1-5 only, trailing Adler-32 compared, one-step replace,
+honest name for the stand-in, new cases. Left open in the ledger as P3: `RULESET-STRUCTURE-NOT-PARSED`,
+`GEO-DOWNLOAD-TWO-PROCESS-RACE` (plus `RULESET-CACHE-NO-CONTENT-CHECK`, `GEO-REFRESH-UNREACHABLE`,
+`DIAG-RULESET-NOT-SURFACED` from the diagnosis). Second pass on the final files: SHIP, no blocking defect.
+
+Surprises: the first worker run died after the preflight line with an empty checkout (the fetch did not complete; a
+manual fetch worked) and its waiter kept the lock, removed by hand; another project's job was using the worker, so the
+release build waited for it and the desktop checks were agreed with that session.
+
+Not verified: macOS, Linux and Android on real devices; a download failure in the field (covered by unit tests only);
+signed Windows files.

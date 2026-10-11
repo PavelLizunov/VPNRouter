@@ -6,7 +6,19 @@ When release or platform facts change, update this file.
 
 ## Releases
 
-- **Current stable:** v2.50.2 (2026-10-06), cut from the candidate v2.50.2-r1
+- **Current stable:** v2.50.3 (2026-10-11), cut from the candidate v2.50.3-r1
+  (same tree; `AppVersion` only loses the suffix) on the owner's order for a quick
+  fix release. One fix after v2.50.2: a geo rule-set file that is damaged on disk
+  but keeps its size (`geosite-ru.srs`, `geoip-ru.srs`; used by "Russian traffic
+  direct") no longer makes the core exit on every connect. `RuleSetFile.IsValidBinary`
+  checks the content, `GeoDataDownloader` downloads a fresh copy and never installs
+  a damaged one; without a good copy the config is generated without the bypass.
+  Reproduced on WINBRAT with v2.50.2 and verified there with the candidate,
+  including the live update from v2.50.2 with a zeroed file. Evidence of the
+  candidate: `plans/phase-geo-ruleset-selfheal-2026-10-11.md`; the cut:
+  `plans/phase-stable-2.50.3-2026-10-11.md`. Main declares `AppVersion` 2.50.3.
+  Not verified anywhere: macOS, Linux and Android on real devices for this fix.
+- **Previous stable:** v2.50.2 (2026-10-06), cut from the candidate v2.50.2-r1
   (same tree; `AppVersion` only loses the suffix) on the owner's order to release
   without further checks: the live update from v2.50.1 and the live scenarios were
   NOT run for this stable. Android fixes after v2.50.1: the release APK is
@@ -19,16 +31,15 @@ When release or platform facts change, update this file.
   `plans/phase-android-abi-awg-keyboard-about-2026-10-06.md`; the cut:
   `plans/phase-stable-2.50.2-2026-10-06.md`. Not verified anywhere: a real Android
   phone (Android 15+), a real AWG or XHTTP tunnel on Android.
-- **Previous stable:** v2.50.1 (2026-10-06), cut from the candidate v2.50.1-r1
-  (same tree; `AppVersion` only loses the suffix). Previous stable: v2.50.0.
-  Main declares `AppVersion` 2.50.2. v2.50.1 moves the
+- **Before that:** v2.50.1 (2026-10-06), cut from the candidate v2.50.1-r1
+  (same tree; `AppVersion` only loses the suffix). v2.50.1 moves the
   program to the core `sing-box-vpnctl` v1.14.2-vpnctl.2 on desktop and Android
   (Android on `libbox-legacy`, API 21 build without naive; the engine start code
   uses the libbox 1.14 `CommandServer` API in `LibboxRuntime.java`). The evidence
   of the cut, including the live update from v2.50.0, is in
   `plans/phase-stable-2.50.1-2026-10-06.md`; the core update itself in
   `plans/phase-core-1.14.2-vpnctl2-2026-10-05.md`.
-- **Before that:** v2.50.0 (2026-10-04), cut from the candidate v2.50.0-r29.
+- **Earlier:** v2.50.0 (2026-10-04), cut from the candidate v2.50.0-r29.
   The evidence of that cut is in `plans/phase-stable-2.50.0-2026-10-04.md`.
 - **Last candidate of the v2.50.0 line:** v2.50.0-r29 (prerelease, 2026-10-04). Its Windows binary passed the cold-cycle post-ship check
   on WINBRAT on the first attempt (`tools/post-ship-local.ps1`), the live
