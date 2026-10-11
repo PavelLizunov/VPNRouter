@@ -41,12 +41,8 @@ public class GeoDataDownloader
     {
         try
         {
-            if (!File.Exists(AppPaths.GeoIpRuPath) || !File.Exists(AppPaths.GeoSiteRuPath))
-                return false;
-
-            var ipSize = new FileInfo(AppPaths.GeoIpRuPath).Length;
-            var siteSize = new FileInfo(AppPaths.GeoSiteRuPath).Length;
-            return ipSize >= MinGeoIpSize && siteSize >= MinGeoSiteSize;
+            return IsUsable(AppPaths.GeoIpRuPath, MinGeoIpSize)
+                && IsUsable(AppPaths.GeoSiteRuPath, MinGeoSiteSize);
         }
         catch
         {
@@ -54,7 +50,12 @@ public class GeoDataDownloader
         }
     }
 
-    private async Task<bool> EnsureFileAsync(string url, string destPath, long minSize, string label, CancellationToken ct)
+    private static bool IsUsable(string path, long minSize) =>
+        File.Exists(path)
+        && new FileInfo(path).Length >= minSize
+        && RuleSetFile.IsValidBinary(path);
+
+    internal async Task<bool> EnsureFileAsync(string url, string destPath, long minSize, string label, CancellationToken ct)
     {
         try
         {
@@ -65,6 +66,11 @@ public class GeoDataDownloader
                 if (existing < minSize)
                 {
                     _logger.Warning("[GeoData] {Label} exists but too small ({Size} bytes) — re-downloading", label, existing);
+                    File.Delete(destPath);
+                }
+                else if (!RuleSetFile.IsValidBinary(destPath))
+                {
+                    _logger.Warning("[GeoData] {Label} is damaged ({Size} bytes, not a readable rule-set) — re-downloading", label, existing);
                     File.Delete(destPath);
                 }
                 else
@@ -100,15 +106,14 @@ public class GeoDataDownloader
                 }
 
                 var size = new FileInfo(tmpPath).Length;
-                if (size < minSize)
+                if (size < minSize || !RuleSetFile.IsValidBinary(tmpPath))
                 {
-                    _logger.Warning("[GeoData] {Label} download too small ({Size} bytes) — corrupted?", label, size);
+                    _logger.Warning("[GeoData] {Label} download rejected ({Size} bytes, too small or not a readable rule-set)", label, size);
                     try { File.Delete(tmpPath); } catch { }
-                    return File.Exists(destPath) && new FileInfo(destPath).Length >= minSize;
+                    return IsUsable(destPath, minSize);
                 }
 
-                if (File.Exists(destPath)) File.Delete(destPath);
-                File.Move(tmpPath, destPath);
+                File.Move(tmpPath, destPath, overwrite: true);
 
                 _logger.Information("[GeoData] {Label} downloaded ({Size} bytes)", label, size);
                 return true;
@@ -116,7 +121,7 @@ public class GeoDataDownloader
             catch (Exception ex)
             {
                 try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
-                if (File.Exists(destPath) && new FileInfo(destPath).Length >= minSize)
+                if (IsUsable(destPath, minSize))
                 {
                     _logger.Warning(ex, "[GeoData] Failed to refresh {Label} — keeping existing stale copy", label);
                     return true;
