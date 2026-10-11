@@ -16,6 +16,15 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Owner report 2026-10-11 (stable v2.50.2, two diagnostics bundles of one Windows user)
+
+Found from the bundles of a user for whom no connect works; task `plans/phase-geo-ruleset-selfheal-2026-10-11.md` (target v2.50.3).
+
+- [ ] **P1** - GEO-RULESET-DAMAGED-NO-START (verified 2026-10-11 from two bundles and the source of the pinned core): a `geosite-ru.srs` with the right length (155 bytes) but damaged content passes the size-only check of `GeoDataDownloader.AreGeoFilesAvailable`, is referenced as `vpnrouter-geosite-ru`, and the core exits on every start with `parse rule-set[2]: invalid sing-box rule-set file` (`common/srs/binary.go`: first three bytes are not `SRS`). `StartupPipeline.PreflightGeoDataAsync` downloads only when the files are "not available", so nothing repairs it; the user cannot connect at all until the file is deleted or the Russian bypass is turned off - `VPNRouter.Core/Services/GeoDataDownloader.cs:40` - v2.50.3.
+- [ ] **P3** - RULESET-CACHE-NO-CONTENT-CHECK (found 2026-10-11 while reading the same path, verified in source, not reproduced): `RuleSetCacheManager.EnsureLocalAsync` treats any non-empty cached file as usable and rejects a download only when it is empty or starts with `<`, so a damaged `adblock_reject.srs` or custom geosite/geoip cache gives the same no-start until the 7-day refetch succeeds - `VPNRouter.Core/Services/RuleSetCacheManager.cs:50`. Deferred from the hotfix to keep it small; reuse `RuleSetFile.IsValidBinary`.
+- [ ] **P3** - GEO-REFRESH-UNREACHABLE (found 2026-10-11, verified in source): the 7-day refresh inside `GeoDataDownloader.EnsureFileAsync` (v2.31.6-r18) runs only when `PreflightGeoDataAsync` calls the downloader, and that call is gated on `!AreGeoFilesAvailable()` (same gate at `3f32463e`), so present files are never refreshed; the affected machine still had files written 2026-05-22 - `VPNRouter.Core/Services/StartupPipeline.cs:243`. Needs a decision on a download before every seventh-day connect (raw.githubusercontent.com can be slow or blocked).
+- [ ] **P3** - DIAG-RULESET-NOT-SURFACED (found 2026-10-11 from the same bundles): with the core unable to start the health check printed 0 errors, `geo-manifest.txt` lists only size and date, and the user saw "sing-box failed to start within 5 seconds. Check logs." instead of the core's own fatal line - `VPNRouter.Core/Services/Diagnostics/DiagnosticsExporter.cs:291`, `VPNRouter.Core/Services/HealthCheck.cs`.
+
 ### Owner report 2026-10-06 (stable v2.50.1, main `120d324d`)
 
 Found by the owner's questions about the Android installer and a tester's screenshots; fixed in the task `plans/phase-android-abi-awg-keyboard-about-2026-10-06.md` (target v2.50.2).
