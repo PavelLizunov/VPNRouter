@@ -40,4 +40,31 @@ A published stable tag is immutable; a correction is a new version. Emergency me
 
 ## Outcome
 
-Pending.
+Published 2026-10-11 as the stable `v2.50.3` (Latest; the previous stable is `v2.50.2`), annotated tag on main `8b78853b`
+(PR #574), 18 assets (six Windows files built on `windows-worker`, hashed there and compared by size, SHA-256 and
+sidecar before upload; macOS, Linux and Android from the tag workflows). The tree equals the candidate `v2.50.3-r1`
+(`52eca5d1`) except `AppVersion` and documents; the candidate stays a published prerelease and its tag is untouched.
+
+| gate | result |
+|---|---|
+| exact-head CI on the stable PR #574 | all green (test, characterization-windows, go-test-windows, grep, Android compile, Windows update test) |
+| tag workflows (macOS, Linux, Android, `dotnet test`, Windows update test) | all success |
+| draft integrity (`verify-release-integrity.yml` at the tag) | success |
+| strict commit gate | `OK`, 8 green |
+| `check-open-p0.ps1` | `OK: no open P0/P1` |
+| SignPath settings | none (unsigned Windows files) |
+| release event: Publish APT Repository, Verify Release Integrity, Auto-Update Integration Test (Windows) | success |
+| Homebrew tap `repository_dispatch` | tap run success; cask version 2.50.3 and the DMG hash equal the release sidecar |
+| `post-ship-local` on WINBRAT with the stable zip | `POSTSHIP-LOCAL: PASS`, 2 cold cycles |
+| damaged-file scenario on the stable build (geosite zeroed, one Connect through the UI) | repaired and connected in 3.2 s, clean disconnect |
+
+Worker preflight before the stable build: WINBRAT, CPU 17 % of 8, 13.9 of 16 GB free, 111 GB disk, no build process,
+SDK 10.0.301. Another project's session was using the same worker; the desktop checks ran in windows agreed with it and
+its jobs were not touched.
+
+Not run on the stable commit: the full Windows suite on the worker (candidate tree: 3396 passed, 0 failed, 19 skipped)
+and the candidate-to-stable live update. Not verified anywhere: macOS, Linux and Android on real devices for this fix,
+a failed download in the field, signed Windows files.
+
+Follow-ups stay in `plans/OPEN-DEFECTS.md` (all P3): `RULESET-CACHE-NO-CONTENT-CHECK`, `GEO-REFRESH-UNREACHABLE`,
+`DIAG-RULESET-NOT-SURFACED`, `RULESET-STRUCTURE-NOT-PARSED`, `GEO-DOWNLOAD-TWO-PROCESS-RACE`.
