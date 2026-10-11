@@ -444,8 +444,8 @@ public class CustomConfigInjectorTests
         {
             AppPaths.OverrideDataDir(tempDataDir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, new byte[10 * 1024]);
-            File.WriteAllBytes(AppPaths.GeoSiteRuPath, new byte[100]);
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.Valid(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
 
             var source = (JsonNode.Parse(ActionConfig) as JsonObject)!;
             if (sourceMode == "no-dns")

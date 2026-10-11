@@ -145,8 +145,8 @@ public class ConfigGeneratorTests
         {
             AppPaths.OverrideDataDir(tempDataDir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, new byte[10 * 1024]);
-            File.WriteAllBytes(AppPaths.GeoSiteRuPath, new byte[100]);
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.Valid(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
 
             var settings = CreateSettings();
             settings.App.BypassRussianTraffic = true;
@@ -157,6 +157,34 @@ public class ConfigGeneratorTests
             Assert.Equal("vpn-dns", geoRule.Server);
             Assert.Equal("proxy", config.Dns.Servers.Single(s => s.Tag == "vpn-dns").Detour);
             Assert.DoesNotContain(config.Dns.Servers, s => s.Tag == "vpnrouter-dns-ru");
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previousDataDir);
+            if (Directory.Exists(tempDataDir))
+                Directory.Delete(tempDataDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void GeoBypass_DamagedGeositeFile_IsLeftOutOfTheConfig()
+    {
+        var previousDataDir = AppPaths.DataDir;
+        var tempDataDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-generated-geo-damaged-{Guid.NewGuid():N}");
+        try
+        {
+            AppPaths.OverrideDataDir(tempDataDir);
+            Directory.CreateDirectory(AppPaths.GeoDir);
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.Valid(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.ZeroFilled(155));
+
+            var settings = CreateSettings();
+            settings.App.BypassRussianTraffic = true;
+            var config = ConfigGenerator.Generate(CreateProfile(), Array.Empty<string>(), settings);
+
+            Assert.DoesNotContain(config.Route.RuleSet ?? new List<RuleSetEntry>(), r => r.Tag.StartsWith("vpnrouter-geo", StringComparison.Ordinal));
+            Assert.DoesNotContain(config.Route.Rules, r => r.RuleSet?.Any(tag => tag.StartsWith("vpnrouter-geo", StringComparison.Ordinal)) == true);
+            Assert.DoesNotContain(config.Dns.Rules, r => r.RuleSet?.Any(tag => tag.StartsWith("vpnrouter-geo", StringComparison.Ordinal)) == true);
         }
         finally
         {
