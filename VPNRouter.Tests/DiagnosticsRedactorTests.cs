@@ -265,6 +265,26 @@ app:
     }
 
     [Fact]
+    public void Logs_RedactQuotedSecretValuesWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta\" ok\n" +
+            "[DBG] token='x y' ok\n" +
+            "[DBG] userpassword=\"hello world 123\"\n" +
+            "[DBG] clientsecret='secret token value'");
+
+        Assert.DoesNotContain("alpha", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("x y", outp);
+        Assert.DoesNotContain("hello world", outp);
+        Assert.DoesNotContain("secret token value", outp);
+        Assert.Contains("password=\"***\"", outp);
+        Assert.Contains("token='***'", outp);
+        Assert.Contains("userpassword=\"***\"", outp);
+        Assert.Contains("clientsecret='***'", outp);
+    }
+
+    [Fact]
     public void Logs_RedactSeparatorlessSecretKeys()
     {
         var outp = DiagnosticsRedactor.RedactLogText(
