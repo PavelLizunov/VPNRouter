@@ -33,8 +33,6 @@ Headless Avalonia harness in `VPNRouter.Tests` runs offscreen rendering, page sc
 - **Never hardcode hex colors** in XAML; always use dynamic resources (e.g., `{DynamicResource SurfaceAppBrush}`, `{DynamicResource TextPrimaryBrush}`, `{DynamicResource BorderSubtleBrush}`).
 - Use semantic token categories for Surfaces, Text, Borders, Accent, States, and Radii (`RadiusXs`, `RadiusSm`, `RadiusMd`, `RadiusLg`, `RadiusPill`).
 
-## Code Patterns & Architecture Rules
-
 ### Partial Class Extraction & Characterization Hash
 - `MainWindowViewModel` is structured across partial files organized by concern. `MainWindowViewModel.cs` retains constructor and cross-concern orchestration.
 - **Characterization snapshot**: `VPNRouter.Tests/MainWindowViewModelCharacterizationTests.cs` pins the public-surface SHA-256 hash. Any extraction or refactoring must preserve this public surface hash unless an intentional API change is re-pinned.
@@ -44,14 +42,11 @@ Headless Avalonia harness in `VPNRouter.Tests` runs offscreen rendering, page sc
 - Add only the required pass-through getter in `VPNRouter.App/Localization/Strings.cs`, then expose it to bindings from the appropriate ViewModel partial such as `MainWindowViewModel.Localization.cs`.
 - Never hardcode raw English or Russian strings directly in XAML.
 
-## Critical Gotchas
-
 ### Avalonia 12 TabControl + ScrollViewer Overflow Bug
 - **Do not use `<TabControl>` if tab content can overflow.** TabControl in Avalonia 12 renders content in a Carousel presenter that fails to propagate bounded parent height to an inner `ScrollViewer`.
 - Use manual primitives: a `ToggleButton` selection strip with tab commands, paired with a `Panel` containing per-tab `ScrollViewers` in a bounded Grid `*` row. Current examples are `DpiBypassPage.axaml` and `TelegramPage.axaml`.
 
 ### CheckBox.Content Overflow on Narrow Layouts
-- **Do not use bare-string `Content="{Binding XLabel}"` on CheckBox.** Bare strings generate non-wrapping TextBlocks that push parent container widths.
 - Wrap content explicitly:
 ```xml
 <CheckBox IsChecked="{Binding X}" MinHeight="0" Padding="4,0">

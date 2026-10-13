@@ -29,12 +29,6 @@ Linux/macOS do not infer full-tunnel mode from an empty process list. With
 `isFullTunnel == false`, both remain disarmed even when a scan returns no names.
 Their enable paths log write/load failures and may leave traffic unblocked.
 
-Inspect `ReadServerIps` and `BuildRuleset` (Linux) / `BuildRules` (macOS) for
-loopback, LAN and server exceptions. Inspect cleanup branches separately:
-Linux attempts table deletion; macOS flushes its anchor in anchor mode but
-restores the default ruleset after a legacy broad load. Do not promise
-anchor-only mutation or successful cleanup regardless of command failures.
-
 ## Other adapters
 
 - `Linux/LinuxDnsHardening.cs` and `macOS/MacDnsHardening.cs`: Unix DNS

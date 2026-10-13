@@ -10,12 +10,6 @@
 - DLL product-version/commit integrity validation before trusting repaired payloads (`integrity.go`).
 - Repair-loop suppression through bounded marker state (`marker.go`).
 
-## Safety and guidelines
-
-- Written in Go to avoid mapping .NET runtime DLLs so executable files can be safely replaced.
-- Primary binary target is `VPNRouter.GUI.exe`.
-- Follow canonical safety and git guidelines in [`docs/agent-contract.md`](../docs/agent-contract.md).
-
 ## Zone checks
 
 ```bash

@@ -10,11 +10,6 @@
 - The sweeper must not act on the machine: it skips controls whose text or command suggests install, start, stop, delete, update and similar, plain code-behind buttons, and everything except navigation on a Windows host, unless the caller opts in. Keep it that way.
 - Tools here complement core and release automation without embedding runtime VPN logic.
 
-## Safety and guidelines
-
-- Follow canonical repository contract in [`docs/agent-contract.md`](../docs/agent-contract.md).
-- Changes to pool aggregation must preserve downstream schema expectations for `pool.json`.
-
 ## Zone checks
 
 ```powershell

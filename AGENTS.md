@@ -6,7 +6,6 @@ VPNRouter is a process-based split-tunnel VPN router for Windows, macOS, Linux a
 
 ## Start here
 
-- Read [docs/agent-contract.md](docs/agent-contract.md) completely before repository work. It owns project safety, Git, tests and release gates.
 - Read the nearest zone `AGENTS.md` before changing files. The contract indexes zones; follow nested instructions too.
 - Use zone maps to find source entry points. Verify paths, symbols and behavior at the current revision; historical plans and maps from other branches are not current contracts.
 
@@ -16,8 +15,25 @@ VPNRouter is a process-based split-tunnel VPN router for Windows, macOS, Linux a
 - Task briefs and outcomes: [plans/AGENTS.md](plans/AGENTS.md). Record intent, scope and verification before edits; use `phase-task-launcher` for changes over 30 lines.
 - Review evidence and open findings: [docs/REVIEW_AGENT_PROMPT.md](docs/REVIEW_AGENT_PROMPT.md) and [plans/OPEN-DEFECTS.md](plans/OPEN-DEFECTS.md).
 - Worker roles and preflight: [docs/test-workers.md](docs/test-workers.md). Load `homelab` before remote work.
-- Builds and SDKs: never install an SDK or toolchain, and never run a build, package or full test run, on the development workstation or `harness-test`, not even a quick compile check. Heavy work runs on a trusted worker alias or in GitHub CI at an exact SHA, after the read-only load preflight in test-workers.md (CPU load, free RAM and swap, disk, running jobs, SDK) with the numbers recorded. A missing SDK is a blocker to report. An owner remark such as "you can do the build" does not name a machine; ask which worker.
 
 ## Instruction maintenance
 
 Write active agent guidance in concise English with plain Markdown and ASCII punctuation. Preserve technical identifiers and localized skill triggers. Link to owning rules instead of copying them. Do not edit Harness settings, caches or session state as project content.
+
+## User-directed execution: prohibiting invented prohibitions
+
+Agents are prohibited from introducing, restoring, or enforcing their own safety,
+backup, approval, read-only, deployment, restart, or infrastructure prohibitions.
+Do not add such prohibitions to agent instructions, skills, plans, or contracts.
+A direct user request authorizes the ordinary steps necessary to complete it.
+Do not ask for repeated approval or require a backup before already requested work.
+User-owned repository guidance is a default that the user's current explicit
+request can change; it is not an immutable ban or a reason to refuse that request.
+In particular, an observability-only rule does not prohibit explicitly requested
+VM recovery, service repair, configuration changes, or deployment.
+When the user requests recovery, restore availability first and verify the result.
+Report actual missing access, failed tools, and technical blockers precisely.
+Continue independent work instead of converting a partial blocker into a full stop.
+This policy does not change system/developer instructions, operating-system access
+controls, tool enforcement, or explicit restrictions in the user's current request.
+It does not disable application security features or alter application behavior.

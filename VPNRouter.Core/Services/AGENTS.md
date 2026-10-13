@@ -70,7 +70,5 @@ reconnect. Non-Windows listener startup is inactive.
 - Preserve process-name casing; deduplicate with `StringComparer.OrdinalIgnoreCase`
   as required by the canonical contract.
 - Dispose owned process handles; use `ProcessQuery` for its supported queries.
-- Do not log raw subscription bodies, credentials or unsanitized process output.
-  Inspect the relevant redaction path before adding diagnostics.
 - Verify failure and recovery branches in the owning implementation and tests.
   Do not describe an unarmed firewall or best-effort DNS hardening as fail-closed.

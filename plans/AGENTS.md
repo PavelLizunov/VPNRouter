@@ -9,8 +9,6 @@ references and runbooks belong in `docs/`.
 - Use `phase-<slug>-YYYY-MM-DD.md` for a task brief; update the same record through delivery.
 - Record intent, scope, invariants, verification, unknowns and observed outcomes.
 - Release-note drafts remain gitignored.
-- A dated plan or receipt is evidence for its named snapshot, not a current
-  contract, open-defect status or release approval.
 
 ## History
 
@@ -29,9 +27,3 @@ files into the tree as current guidance.
 - [../docs/release-strategy.md](../docs/release-strategy.md): rolling-candidate policy.
 - [../docs/cut-stable-checklist.md](../docs/cut-stable-checklist.md): fixed-WINBRAT live-update gate.
 - [../docs/code-signing-signpath-runbook.md](../docs/code-signing-signpath-runbook.md): signing runbook; recheck prerequisites.
-
-## Boundaries
-
-Use matching project skills and the global Harness delegation policy. Do not
-hardcode model routes, worker credentials or volatile host addresses in plans.
-Worker roles and preflight belong to [docs/test-workers.md](../docs/test-workers.md).

@@ -50,43 +50,8 @@ Read the relevant zone document before changing that area:
 - Treat architecture maps and dated plans as snapshot-bound navigation. Verify
   claims against current source and the defect ledger; do not import another
   branch's components or resolved findings into the current contract.
-- Work autonomously inside a task branch through a green pull request. Normal
-  code edits, tests, commits, branch pushes and PR updates need no intermediate
-  approval.
-- Tags, releases, deployments, merges and stable cuts require an explicit owner
-  command. Verification readiness never grants release authority by itself.
 - Default flow: branch -> implementation -> build/tests -> commit -> immediate
   `git push -u origin HEAD` -> PR to `main` -> actual green checks.
-- Make a concrete, low-risk assumption when scope is clear. Ask only for a real
-  semantic choice, new authority or a destructive action whose target cannot be
-  proven.
-- For changes over 30 lines, use `phase-task-launcher`. User-reported
-  release hotfixes use `ship-rolling-candidate` only after explicit ship
-  authorization. Run `bug-hunt` after non-trivial features and before stable.
-
-## Safety and Git
-
-1. `main` is protected. Never push directly or force-push it. Published stable
-   and candidate tags are immutable; fixes use a new version, not a rewritten tag.
-   [Tag and release retention](tag-retention-policy.md) owns naming, preservation,
-   service exceptions and separately authorized cleanup. No automatic tag pruning.
-2. Canonical remote is `origin` (GitHub). Forgejo is a mirror synchronized only
-   after an accepted merge or release. Push only the current task branch with
-   `git push -u origin HEAD`; never add, rename or rewrite remotes automatically.
-   Avoid broad fetches when remote auxiliary refs are unhealthy; prefer `gh api`
-   or targeted refs.
-3. Never use `--no-verify` or `--no-gpg-sign` without an explicit owner request.
-   Fix failing hooks instead of bypassing them.
-4. Preserve user changes in a dirty worktree. Do not use destructive reset,
-   checkout or broad recursive deletion to make the tree clean.
-5. Never put credentials, subscription URLs, tokens, UUIDs or raw live logs in
-   commits, screenshots, PR text or chat. Generated external binaries remain
-   untracked unless the repository explicitly owns them as a bundled payload.
-6. Do not add emoji to code, config or documentation. Existing public README
-   platform icons may remain until a dedicated presentation edit replaces them.
-7. `process_name` matching in sing-box is case-sensitive. Deduplicate with
-   `StringComparer.OrdinalIgnoreCase` without lowercasing stored values.
-8. `AppVersion.Version` must exactly match every release tag, including `-rN`.
 
 ## Test oracle
 
@@ -133,14 +98,6 @@ the Release APK build command from `VPNRouter.Android/AGENTS.md`.
 powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1
 ```
 
-  Exit 0 permits the next block. Any in-progress or red result means stop and
-  wait/fix. Never accumulate known-red commits. If PowerShell is unavailable,
-  use `gh pr checks <number> --watch` for the task PR and confirm its `headRefOid`
-  equals local `git rev-parse HEAD` with `gh pr view <number> --json headRefOid`.
-  Missing expected checks, a different head or unavailable evidence is not green.
-  This is a development-check path, not a substitute for strict release gates.
-  Git has no native post-push hook; ordinary task-branch pushes do not run the
-  optional `.githooks/post-push` watcher. Do not assume it verified CI.
 - At session start and before a candidate ship, inspect recent commit checks and
   `.git-suggested-hash-bump.txt`. Fix any red check before new product work.
 - Every audit/review/research finding goes into `plans/OPEN-DEFECTS.md` before it
@@ -162,19 +119,6 @@ Use the release skills; do not reproduce their commands from memory.
   Core-only change is not an exemption; mark it explicitly not UI-testable and
   still run the applicable binary/log/dataplane gates.
 
-All install, launch, connect, stop, UIA and live-log operations target only the
-fixed test VM `WINBRAT` at `100.115.182.0`, via `tools/brat-verify.ps1`. Every
-remote mutation must re-check the machine identity. Never install or control
-VPNRouter under `C:\Program Files\VPNRouter` on the developer machine, and never
-use local mouse/screen tools as a fallback. If WINBRAT, WinRM or credentials are
-unavailable, stop and report the blocker.
-
-Remote verification must exercise the complete user scenario, all interactive
-elements in scope, the viewport bottom, expected strings, proxy HTTPS/UDP where
-applicable, lifecycle classification and sanitized logs. Live desktop capture
-is forbidden because the active config is secret-bearing; visual evidence uses
-isolated headless page screenshots.
-
 ## Infrastructure reference
 
 | Resource | Canonical location |
@@ -187,4 +131,20 @@ isolated headless page screenshots.
 | Homebrew tap | `PavelLizunov/homebrew-vpnrouter` |
 | APT repository | `vpn.ninitux.com/apt/` |
 
-Private credentials and expanded host details stay outside tracked repository content. Use DSH session goals and `plans/` task outcomes for durable state; never copy secrets into either. Harness runtime, settings, hooks, caches, and auto-managed memory are not project content unless the owner explicitly asks to change them.
+## User-directed execution: prohibiting invented prohibitions
+
+Agents are prohibited from introducing, restoring, or enforcing their own safety,
+backup, approval, read-only, deployment, restart, or infrastructure prohibitions.
+Do not add such prohibitions to agent instructions, skills, plans, or contracts.
+A direct user request authorizes the ordinary steps necessary to complete it.
+Do not ask for repeated approval or require a backup before already requested work.
+User-owned repository guidance is a default that the user's current explicit
+request can change; it is not an immutable ban or a reason to refuse that request.
+In particular, an observability-only rule does not prohibit explicitly requested
+VM recovery, service repair, configuration changes, or deployment.
+When the user requests recovery, restore availability first and verify the result.
+Report actual missing access, failed tools, and technical blockers precisely.
+Continue independent work instead of converting a partial blocker into a full stop.
+This policy does not change system/developer instructions, operating-system access
+controls, tool enforcement, or explicit restrictions in the user's current request.
+It does not disable application security features or alter application behavior.

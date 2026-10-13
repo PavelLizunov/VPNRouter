@@ -5,23 +5,12 @@ debug-DN key to a proper `CN=VPNRouter` key (details below). Originally an actio
 doc (2026-06-02) for product-gap-audit **#142**. This is the single
 highest-impact irreversible Android failure mode.
 
-## Why this matters (the one-sentence version)
-
-If the signing keystore is lost, **you can never push another update to anyone
-who already installed the app** — Android refuses to update an app with a
-different signature, so a new key = a brand-new, separate app and every existing
-user is stranded on their current version forever.
-
 ## What signs our APKs today  (ROTATED 2026-06-05 → proper DN)
 
 - **Keystore alias:** `vpnrouter`  ·  PKCS12  ·  RSA-2048  ·  valid → 2056-07-17
 - **Cert (SHA-256):** `6e50af0f51ff021db30883eca9fd5d4e66c18d7d64fab3b1b346942bf045a221`
 - **Cert DN:** `CN=VPNRouter, O=VPNRouter, C=RU` (proper DN — no longer the
   debug-DN cosmetic label).
-- **Where it lives:** GitHub Actions secrets `ANDROID_KEYSTORE_BASE64` +
-  `ANDROID_KEYSTORE_PASSWORD` (rotated 2026-06-05), plus the verified encrypted
-  recovery bundle created on 2026-08-02. The old `vboxuser` and `Z:` locations
-  no longer exist and must not be treated as backups.
 
 ### Verified recovery map (2026-08-02)
 
@@ -54,11 +43,6 @@ artifact, recovery secret, and export branch were deleted after verification.
 
 ## The trap: the GitHub secret is NOT a backup
 
-GitHub Actions secrets are **write-only** — neither you, nor CI logs, nor the API
-can read a secret's value back out. So the secret can *use* the keystore (in CI)
-but can never *return* it. **If the only copy is the secret, the keystore is
-effectively already lost** — you just won't find out until the day you need it.
-
 Therefore a separately recoverable encrypted bundle is mandatory. The verified
 2026-08-02 bundle above is the current disaster-recovery source.
 
@@ -70,40 +54,6 @@ Therefore a separately recoverable encrypted bundle is mandatory. The verified
 2. The **store password** (= `ANDROID_KEYSTORE_PASSWORD`).
 3. The key alias (`vpnrouter`) and, if different from the store password, the
    key password.
-
-## Backup procedure (do this once, today)
-
-1. **Locate the original file.** On the machine that created the secret:
-   ```bash
-   # common spots; search broadly if not here
-   ls -la ~/vpnrouter.keystore ./vpnrouter.keystore 2>/dev/null
-   find ~ -iname '*.keystore' -o -iname '*.jks' 2>/dev/null | head
-   ```
-2. **Verify it's the right one** — its cert must match what CI ships:
-   ```bash
-   keytool -list -v -keystore vpnrouter.keystore -alias vpnrouter | grep -i "SHA-?256\|Owner"
-   # SHA256 fingerprint (strip colons) must == 6e50af0f...45a221
-   # Owner must == CN=VPNRouter, O=VPNRouter, C=RU
-   ```
-3. **Store ≥2 offline copies**: e.g. an encrypted USB drive + your password
-   manager's secure-file vault. Put the password in the password manager entry
-   alongside (NOT in the same plaintext file as the keystore).
-4. **If you CANNOT find the original file** (only the secret exists): you must
-   **rotate now while you still can re-derive nothing** — generate a fresh
-   keystore, back it up first, then replace both secrets. Because there are
-   essentially no installed users yet except your own test phone, a rotation
-   today costs one reinstall; a rotation *after* you have real users is a
-   flag-day that strands them. Generate:
-   ```bash
-   keytool -genkeypair -v -keystore vpnrouter.keystore -alias vpnrouter \
-     -keyalg RSA -keysize 2048 -validity 10000 \
-     -dname "CN=VPNRouter, O=NiniTux, C=RU"   # proper DN this time
-   # then: base64 the file -> set ANDROID_KEYSTORE_BASE64; set ANDROID_KEYSTORE_PASSWORD
-   gh secret set ANDROID_KEYSTORE_BASE64 < <(base64 -w0 vpnrouter.keystore)
-   gh secret set ANDROID_KEYSTORE_PASSWORD
-   ```
-   (After a rotation, re-sign + re-upload the current release's APK so the live
-   download matches the new key.)
 
 ## Versioning (already handled — no action)
 
