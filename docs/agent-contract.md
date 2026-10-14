@@ -60,8 +60,6 @@ before handoff. For instruction-only changes, check links, referenced test names
 skill frontmatter and the scoped diff, and observe PR CI; do not claim these checks
 prove runtime behavior. Commands assume the SDK pinned by `global.json`. On `harness-test`,
 coordinate these commands on an authorized exact-SHA worker only after the
-read-only identity/job/CPU/RAM/disk/SDK preflight; do not provision the control
-plane.
 
 ```powershell
 # Core config and connection lifecycle
