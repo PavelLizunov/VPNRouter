@@ -2,7 +2,6 @@
 
 ## Reporting a vulnerability
 
-Please report security vulnerabilities **privately**, never in a public issue.
 Disclosing publicly before a fix exists puts users at risk.
 
 - Preferred: GitHub private vulnerability reporting — open
