@@ -193,12 +193,6 @@ gh api --method POST repos/PavelLizunov/homebrew-vpnrouter/dispatches `
   -f event_type=vpnrouter-release -f "client_payload[version]=$version" -f "client_payload[tag]=$tag"
 ```
 
-Keep credentials outside commands/logs. Inspect the tap's `update-cask.yml` run
-and resulting cask version/hash; missing access is an explicit blocker, not an
-automatic-success claim. Do not rerun the macOS uploader against a published
-release just to notify Homebrew. Published artifact corrections need a new
-version, not replacement assets or a moved tag.
-
 ## Mandatory stable post-ship verification
 
 Run the same fail-closed gate against the final stable:
@@ -231,6 +225,7 @@ Only after final stable verification:
 The user report must list PASS/FAIL per platform, exact asset count, live-update
 result, connection cycles, log scan, True Split bundle result and any external
 mirror limitation.
+
 
 ## User-directed execution: prohibiting invented prohibitions
 
