@@ -338,6 +338,13 @@ public sealed class ZapretActionsTests : IDisposable
     }
 
     [Fact]
+    public void OpenHostsEditHelpers_ValidPathsOnNonWindows_DoesNotThrow()
+    {
+        // On Non-Windows, OpenHostsEditHelpers returns immediately without invoking Process.Start
+        ZapretActions.OpenHostsEditHelpers("C:\\temp\\file.txt", "C:\\Windows\\System32\\drivers\\etc\\hosts");
+    }
+
+    [Fact]
     public void OpenServiceMenu_PathOutsideZapretDir_ThrowsArgumentException()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_test_{Guid.NewGuid():N}");
