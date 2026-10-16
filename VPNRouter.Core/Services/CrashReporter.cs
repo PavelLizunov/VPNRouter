@@ -127,7 +127,8 @@ public static class CrashReporter
     {
         if (string.IsNullOrEmpty(input)) return input ?? string.Empty;
 
-        var s = _proxyUriPattern.Replace(input, m => $"{m.Groups[1].Value}://[redacted]");
+        var s = DiagnosticsRedactor.RedactLogText(input);
+        s = _proxyUriPattern.Replace(s, m => $"{m.Groups[1].Value}://[redacted]");
         s = _httpUrlPattern.Replace(s, m =>
             m.Groups[3].Success && m.Groups[3].Length > 0
                 ? $"{m.Groups[1].Value}{m.Groups[2].Value}/[redacted]"
