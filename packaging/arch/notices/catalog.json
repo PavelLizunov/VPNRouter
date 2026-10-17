@@ -1,0 +1,380 @@
+{
+  "schema_version": 1,
+  "components": [
+    {
+      "id": "Serilog",
+      "version": "4.4.0",
+      "repository_url": "https://github.com/serilog/serilog",
+      "revision": "497f80fda4f9e8f98b9c13ba34b1f0530f8c4449",
+      "license_expression": "Apache-2.0",
+      "files": [
+        {
+          "path": "Serilog/LICENSE",
+          "sha256": "73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68",
+          "source_url": "https://raw.githubusercontent.com/serilog/serilog/497f80fda4f9e8f98b9c13ba34b1f0530f8c4449/LICENSE"
+        }
+      ],
+      "coverage": "verified_texts",
+      "unresolved": []
+    },
+    {
+      "id": "YamlDotNet",
+      "version": "18.1.0",
+      "repository_url": "https://github.com/aaubry/YamlDotNet",
+      "revision": "748334a8fa7c227740018b284b71ad95cc6b7fc7",
+      "license_expression": "MIT",
+      "files": [
+        {
+          "path": "YamlDotNet/LICENSE.txt",
+          "sha256": "daea8b7f1b2bab48ea12ad50b0ce91634669d99d7dd0cb64aed8dffeeef69ed3",
+          "source_url": "https://raw.githubusercontent.com/aaubry/YamlDotNet/748334a8fa7c227740018b284b71ad95cc6b7fc7/LICENSE.txt"
+        },
+        {
+          "path": "YamlDotNet/LICENSE-libyaml",
+          "sha256": "cb65f46df0d9125ba60862117200ec6631fef3a8169cd0b4513ffcad4ef5cb9b",
+          "source_url": "https://raw.githubusercontent.com/aaubry/YamlDotNet/748334a8fa7c227740018b284b71ad95cc6b7fc7/LICENSE-libyaml"
+        }
+      ],
+      "coverage": "verified_texts",
+      "unresolved": []
+    },
+    {
+      "id": "Microsoft.NETCore.App.Host.linux-x64",
+      "version": "10.0.9",
+      "repository_url": "https://github.com/dotnet/dotnet",
+      "revision": "901ca941248413c79832d2fdbd709da0c4386353",
+      "license_expression": "MIT",
+      "template_sha256": "a3f840d0dfed7e18034444f55d86a43f731fd27ef1fc10668e9a97a4879ef064",
+      "files": [
+        {
+          "path": "Microsoft.NETCore.App.Host.linux-x64/LICENSE.TXT",
+          "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310",
+          "source_url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.linux-x64/10.0.9/microsoft.netcore.app.host.linux-x64.10.0.9.nupkg#LICENSE.TXT"
+        },
+        {
+          "path": "Microsoft.NETCore.App.Host.linux-x64/THIRD-PARTY-NOTICES.TXT",
+          "sha256": "66f1d4e44973185519bb4aa8a9718eb22fc7af2cc532e3ae9cfc4c127ee7fc54",
+          "source_url": "https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.linux-x64/10.0.9/microsoft.netcore.app.host.linux-x64.10.0.9.nupkg#THIRD-PARTY-NOTICES.TXT"
+        }
+      ],
+      "coverage": "verified_texts",
+      "unresolved": []
+    },
+    {
+      "id": "sing-box-vpnctl",
+      "version": "1.14.0-vpnctl.5",
+      "repository_url": "https://github.com/PavelLizunov/sing-box-vpnctl",
+      "revision": "8688eab3c51d07ff89a124ce247044409b9f93fd",
+      "license_expression": "GPL-3.0-or-later",
+      "payload_sha256": "dfce0ac6fa3c1c0dda7218464ebb9b61de53a623503b12d984683205017d4eab",
+      "files": [
+        {
+          "path": "sing-box-vpnctl/LICENSE",
+          "sha256": "650d5e3b99a446fb38e820fa87a49562e0c79eab868fff58618ac487a58e554c",
+          "source_url": "https://raw.githubusercontent.com/PavelLizunov/sing-box-vpnctl/8688eab3c51d07ff89a124ce247044409b9f93fd/LICENSE"
+        }
+      ],
+      "coverage": "partial",
+      "unresolved": [
+        "embedded-go-notices",
+        "corresponding-source-distribution"
+      ]
+    },
+    {
+      "id": "Cronet",
+      "version": "1.13.14",
+      "repository_url": "https://github.com/SagerNet/cronet-go",
+      "revision": "def9ff0fb992d0360f56ddbd4b43d65d29849771",
+      "license_expression": "BSD-3-Clause",
+      "payload_sha256": "dc7293a929dffa695aae1a89555e7366158fa0a3f40bbe3012d445bc05c99672",
+      "provenance": {
+        "repository_url": "https://github.com/SagerNet/naiveproxy",
+        "revision": "888e114241c89b05fac4e4ee01482d7bd89ca15a",
+        "chromium_version": "148.0.7778.96",
+        "fork_expected_lib_revision": "f80ef37265e5ae43b62021553a3bfc763414656d",
+        "source_chain_unverified": true,
+        "relationship": "candidate_upstream_source_superset",
+        "note": "Candidate upstream source superset; exact Chromium build not asserted without rebuild"
+      },
+      "coverage": "partial",
+      "unresolved": [
+        "linked-dependency-selection",
+        "generated-Chromium-credits",
+        "fork-vs-donor-abi-mismatch",
+        "source-chain-unverified"
+      ],
+      "files": [
+        {
+          "path": "Cronet/cronet-go/LICENSE",
+          "sha256": "2f02b7486bcfa90d115c71a20437f3906b6fd5bef81c5dc0efd341399e89d0fd",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/cronet-go/def9ff0fb992d0360f56ddbd4b43d65d29849771/LICENSE",
+          "role": "wrapper"
+        },
+        {
+          "path": "Cronet/naiveproxy/LICENSE",
+          "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/AUTHORS",
+          "sha256": "a629c8410a1033be3b5566d90e53bda0b0a487e29924ab301c17d7db2d6f010c",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/AUTHORS",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/LICENSE",
+          "sha256": "368cca1106be99d39ecd32a38d8305585d802a475effb66380b91ffc9bcf709b",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/allocator/partition_allocator/src/partition_alloc/third_party/apple_apsl/LICENSE",
+          "sha256": "b23e682fda7310afe43505ed6041919ccff8f9e0c6799ebd7542cbcef11102e3",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/allocator/partition_allocator/src/partition_alloc/third_party/apple_apsl/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/third_party/cityhash/COPYING",
+          "sha256": "3ed00dd93c75655599456c83cba2f69c6824fd53f24fc24206ba27b65057709d",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/third_party/cityhash/COPYING",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/third_party/cityhash_v103/COPYING",
+          "sha256": "3ed00dd93c75655599456c83cba2f69c6824fd53f24fc24206ba27b65057709d",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/third_party/cityhash_v103/COPYING",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/third_party/double_conversion/LICENSE",
+          "sha256": "4af93c12062c58058378de2397dc1c92bbff9ddfb1d583a01c84127557ce97ca",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/third_party/double_conversion/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/third_party/icu/LICENSE",
+          "sha256": "5d85142a5609ad177a2d7a2e7cae060b886b8b42f25c5b9803cf0cb5ee04ad2f",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/third_party/icu/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/third_party/nspr/LICENSE",
+          "sha256": "61d26380ecf0ef651fb1c25bd6d5840042d750e0d67be42e35b4cb1059474dde",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/third_party/nspr/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/third_party/superfasthash/LICENSE",
+          "sha256": "90b2201c340cee36b40a443f949d9eb416f0a0d204c32d350aff87fedeb67ae8",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/third_party/superfasthash/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/third_party/symbolize/LICENSE",
+          "sha256": "538edc6f52c563cf06eca1bac8dd785ff60ef5a371a950265700d5d40386db6e",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/third_party/symbolize/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/base/third_party/xdg_user_dirs/LICENSE",
+          "sha256": "18351de3d7e2dc469cc83e77d38a3e25d010251e34eb348bbd1a76275e313997",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/base/third_party/xdg_user_dirs/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/build/android/incremental_install/third_party/AndroidHiddenApiBypass/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/build/android/incremental_install/third_party/AndroidHiddenApiBypass/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/net/third_party/mozilla_security_manager/LICENSE",
+          "sha256": "bed70fc84f1bea2b4b144564b9a0f9a5a3bc7b0d78f6e62092aeb689cac56bdd",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/net/third_party/mozilla_security_manager/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/net/third_party/mozilla_win/LICENSE",
+          "sha256": "6d29b685206b28617dd9ac13818ccc943e57df68aeea1db0f4a5539f4507a9aa",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/net/third_party/mozilla_win/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/net/third_party/quiche/src/LICENSE",
+          "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/net/third_party/quiche/src/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/net/third_party/uri_template/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/net/third_party/uri_template/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/abseil-cpp/AUTHORS",
+          "sha256": "1fd39030c119b4c97014f59e0ad0ed65f23475bbdf55a52740f31eb82b34b4ee",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/abseil-cpp/AUTHORS",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/abseil-cpp/LICENSE",
+          "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/abseil-cpp/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/apple_apsl/LICENSE",
+          "sha256": "b23e682fda7310afe43505ed6041919ccff8f9e0c6799ebd7542cbcef11102e3",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/apple_apsl/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/boringssl/src/AUTHORS",
+          "sha256": "6e5283f25977ae2fbbf5fd8a840b7184b2b48915279c10bf01107263d3f26936",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/boringssl/src/AUTHORS",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/boringssl/src/LICENSE",
+          "sha256": "827c8d8fc207c2392794eef9e00fe246f9f61fdcc132556c275be3dd8c3cd97f",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/boringssl/src/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/boringssl/src/third_party/benchmark/AUTHORS",
+          "sha256": "7ba6f34ad92df42a79c85c117be3689fd58f1caca11f43aaab413d20df1f9f0e",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/boringssl/src/third_party/benchmark/AUTHORS",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/boringssl/src/third_party/benchmark/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/boringssl/src/third_party/benchmark/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/boringssl/src/third_party/fiat/AUTHORS",
+          "sha256": "ad74c036a6afaedc418fed65f171c877c2f74a4c70938a03930aa11c98a20508",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/boringssl/src/third_party/fiat/AUTHORS",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/boringssl/src/third_party/fiat/LICENSE",
+          "sha256": "9eacbcb81be660840c714a560a9d65ba07913db98dd4baf969f78dd499fdd60f",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/boringssl/src/third_party/fiat/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/brotli/LICENSE",
+          "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/brotli/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/cpu_features/src/LICENSE",
+          "sha256": "af272c1b4dd08dd61d43e001d3134119d03ca7a2b057a64f7355fdf27fbea3dd",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/cpu_features/src/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/jni_zero/LICENSE",
+          "sha256": "57faf03e216d5628169a779df31a842347e55c8e6567e1107b6cb8fb90175b59",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/jni_zero/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/libc++/src/CREDITS.TXT",
+          "sha256": "054e099bf5954c8821b880f5751d2fbf221bf43cf7c57ac1c2c5ff6263d6d9c3",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/libc++/src/CREDITS.TXT",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/libc++/src/LICENSE.TXT",
+          "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/libc++/src/LICENSE.TXT",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/libc++abi/src/CREDITS.TXT",
+          "sha256": "a259fff28a51623f14917dd68f97f3af7804984087ddc1bfd8196d08ebb75b83",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/libc++abi/src/CREDITS.TXT",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/libc++abi/src/LICENSE.TXT",
+          "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/libc++abi/src/LICENSE.TXT",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/libunwind/src/LICENSE.TXT",
+          "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/libunwind/src/LICENSE.TXT",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/llvm-libc/src/LICENSE.TXT",
+          "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/llvm-libc/src/LICENSE.TXT",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/modp_b64/LICENSE",
+          "sha256": "d47e8390fb0d7ad4a18f26aedd6283c7ab6b5b4fabab536ccb4db7f9f6d90c08",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/modp_b64/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/nasm/AUTHORS",
+          "sha256": "8a7bd0cc6c517a220265548bf2ecf62fe89bf682b6a9938afb7521008679149e",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/nasm/AUTHORS",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/nasm/LICENSE",
+          "sha256": "1563996c52e220e15ef2418e67d39488255aa8c28c89e617074d3afe3ee329e0",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/nasm/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/protobuf/third_party/utf8_range/LICENSE",
+          "sha256": "02de69b64fc36d9e938f418e52723e42f0b2b226d58a9cb3c8dcbdf7059f5074",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/protobuf/third_party/utf8_range/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/simdutf/LICENSE",
+          "sha256": "fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/simdutf/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/zlib/LICENSE",
+          "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/zlib/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/zstd/src/COPYING",
+          "sha256": "f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/zstd/src/COPYING",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/third_party/zstd/src/LICENSE",
+          "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/third_party/zstd/src/LICENSE",
+          "role": "source_superset"
+        },
+        {
+          "path": "Cronet/naiveproxy/src/url/third_party/mozilla/LICENSE.txt",
+          "sha256": "284545e873c704952e5b1b39d457dd83a3b115a51d9f1eb5175137bd69b8fa1b",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/src/url/third_party/mozilla/LICENSE.txt",
+          "role": "source_superset"
+        }
+      ]
+    }
+  ]
+}
