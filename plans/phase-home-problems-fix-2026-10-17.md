@@ -53,6 +53,29 @@ and offers Hide and Undo. Repair never runs by itself. Rollback: revert the comm
 5. Independent review of the diff by GPT Sol.
 6. Live check on fixed WINBRAT before a release candidate.
 
+## Scope added on 2026-10-17 (owner)
+
+- MTU risks, including the button's own MTU change: while VPNRouter-TUN is up a DF ping to 8.8.8.8 measures the tunnel
+  (TUN MTU minus 28), so the existing health check always called MTU 1420 too large while connected (the warning in the
+  user's diagnostics was taken while connected), and an automatic fix would have lowered the MTU again on every check.
+  `HealthCheck.ProbePathMtuPayload` now returns `SkippedTunnelUp` while our adapter is up; the home check measures at
+  startup and after a disconnect only; the "Pick from IPv4 ping" button asks to disconnect first; the fix only lowers
+  (never below 1332) and restores the previous MTU when the tunnel does not come back with the new one.
+- Short "what to press" videos opened from the app: `packaging/help-page` (published as vpn.ninitux.com/help with the
+  site by `publish-apt.yml`), four guides (games lag, yellow card, older version, send logs) in Russian and English,
+  built by `tools/help-videos/make_help_videos.py` from headless renders (UI probe scenarios `problems`, `versions`).
+  Entry points: home row "Video guides" and the card link "Video: what to press" (opens the guide of the first problem).
+
 ## Outcome
 
-Pending.
+- PR #590, branch `dsh/home-problems-fix`; 26 files, about +1270 lines (of them about 360 KB of eight MP4 files).
+- CI on d2f7d948: build, compile, test (3233 total, 3156 passed, 77 skipped, 0 failed), characterization-windows
+  (3316 total, 3297 passed, 19 skipped, 0 failed), go-test-windows, grep: all green.
+- Headless renders of the card: Russian light 520 px and English dark 360 px, no lint warnings except the expected
+  "below the scroll viewport" ones of a long page.
+- GPT Sol design review (before coding): routing-first fix, no blind MTU tuning, Undo; adopted, with the owner's
+  decision to include the MTU fix guarded as above. GPT Sol diff review: two attempts timed out at 900 s and 1200 s
+  (the gateway answers short prompts in 3 s); a third, smaller attempt is pending.
+- Not yet verified: live run on WINBRAT (card appears in full tunnel with game-like flows, Fix switches to split and
+  reconnects, Undo), publication of the help page.
+- Rollback: revert the PR; no settings schema change.
