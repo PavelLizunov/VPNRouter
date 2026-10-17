@@ -168,7 +168,7 @@ public partial class MainWindowViewModel
             {
                 var generation = Volatile.Read(ref _connectionGeneration);
                 await Task.Delay(delay).ConfigureAwait(false);
-                if (IsConnected || IsConnecting) return;
+                if (IsConnected || IsConnecting || !OperatingSystem.IsWindows()) return;
                 var probe = HealthCheck.ProbePathMtuPayload();
                 // Any connect or disconnect during the pings may have put them through the tunnel: drop the result.
                 if (probe.SkippedTunnelUp || IsConnected || IsConnecting
