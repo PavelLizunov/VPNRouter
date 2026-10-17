@@ -55,6 +55,7 @@ public static class Scenarios
         {
             vm.IsConnecting = false;
             vm.IsConnected = true;
+            vm.StatusText = "Connected";
             var updates = vm.UpdateVm;
             updates.StableVersions.Clear();
             updates.StableVersions.Add(new RollbackReleaseItemViewModel("2.50.3", true, null, null));

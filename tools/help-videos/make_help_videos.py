@@ -29,9 +29,9 @@ L = {
            "updates": "Обновления", "versions": "Другие версии", "install": "Установить",
            "diagnostics": "Собрать диагностику", "fix": "Исправить", "undo": "Отменить",
            "fixed": "Готово. Проверьте, всё ли работает. Если стало хуже — нажмите «Отменить»."},
-    "en": {"apps": "Apps", "advanced": "Advanced settings", "settings": "Settings",
+    "en": {"apps": "Selected apps", "advanced": "Advanced settings", "settings": "Settings",
            "updates": "Updates", "versions": "Other versions", "install": "Install",
-           "diagnostics": "Collect diagnostics", "fix": "Fix", "undo": "Undo",
+           "diagnostics": "Export diagnostics", "fix": "Fix", "undo": "Undo",
            "fixed": "Done. Check that everything works. If it got worse, press Undo."},
 }
 

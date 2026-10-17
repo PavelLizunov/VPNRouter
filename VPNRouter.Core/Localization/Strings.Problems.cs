@@ -11,7 +11,7 @@ public static partial class Strings
         : "Games and calls go through the VPN";
     public static string ProblemGameTrafficBody => Ru
         ? "Включён режим «Весь трафик», поэтому игры идут через далёкий сервер и могут лагать. Исправление вернёт режим «Приложения»: через VPN пойдут только выбранные программы, игры — напрямую."
-        : "\"All traffic\" is on, so games go through a distant server and may lag. The fix switches back to \"Apps\": only the selected apps use the VPN, games go direct.";
+        : "\"All traffic\" is on, so games go through a distant server and may lag. The fix switches back to \"Selected apps\": only the selected apps use the VPN, games go direct.";
 
     public static string ProblemMtuTitle => Ru
         ? "Слишком большой размер пакета"
