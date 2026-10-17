@@ -74,8 +74,23 @@ and offers Hide and Undo. Repair never runs by itself. Rollback: revert the comm
 - Headless renders of the card: Russian light 520 px and English dark 360 px, no lint warnings except the expected
   "below the scroll viewport" ones of a long page.
 - GPT Sol design review (before coding): routing-first fix, no blind MTU tuning, Undo; adopted, with the owner's
-  decision to include the MTU fix guarded as above. GPT Sol diff review: two attempts timed out at 900 s and 1200 s
-  (the gateway answers short prompts in 3 s); a third, smaller attempt is pending.
-- Not yet verified: live run on WINBRAT (card appears in full tunnel with game-like flows, Fix switches to split and
-  reconnects, Undo), publication of the help page.
+  decision to include the MTU fix guarded as above. GPT Sol diff review: three attempts timed out (900 s, 1200 s,
+  900 s; the gateway answers a short prompt in 3 s). Independent diff review by gemini-opus-latest through the same pi
+  gateway (isolation probe passed): 7 findings; 2 accepted and fixed (Undo kept app selections edited after the fix only
+  while the profile is unchanged; an MTU measurement overlapping any connect or connecting change is discarded), 5
+  rejected after checking the code (payload instead of payload+28 is the existing auto-tune convention; Undo after an MTU
+  revert restores the working MTU; Undo is already disabled while fixing; intermediate saves happen before the single
+  restart; a reconnect re-runs the server selection for timeouts).
+- Live run on WINBRAT (2026-10-17, branch build e7d12f7, Windows Server 2019 17763, simple mode, subscription with 13
+  servers): MTU measured at startup with the tunnel down (no DF payload passed there, so no MTU problem is offered);
+  connect 4.3 s; "All traffic"; five TCP connects to portquiz.net ports 8101/8102/8103/8455/27015 through the proxy;
+  card "Games and calls go through the VPN" after 35 s; Fix: split selected, VPN reconnected, Undo shown after 4.3 s,
+  sing-box alive; Undo: full selected, VPN still connected. App log: `scan: fullTunnel=true ... ->
+  GameTrafficThroughFullTunnel`, `fixed: split=true mtu=1420 reconnect=true`, `fix undone`. WINBRAT was restored to
+  v2.50.3 and its config.yaml byte-for-byte afterwards; a restored-app start was checked.
+- Live-run lesson: copying a build over `C:\Program Files\VPNRouter\app` with `robocopy /E` left the old
+  `VPNRouter.Core.dll`/`VPNRouter.App.dll` in place (the app then crashed with TypeLoadException on the new type); a
+  per-file `Copy-Item -Force` with a size check worked. Also, a second instance launched right after a kill exits on the
+  single-instance check: wait for the old process to end.
+- Not done: publication of the help page (goes live with the next release by `publish-apt.yml`), release candidate.
 - Rollback: revert the PR; no settings schema change.
