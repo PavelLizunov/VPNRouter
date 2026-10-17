@@ -470,14 +470,16 @@
                                    Foreground="{DynamicResource WarningFgBrush}"
                                    TextWrapping="Wrap"/>
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Button Classes="solid"
+                            <Button Classes="cta go"
                                     Content="{Binding L_ProblemsFix}"
                                     Command="{Binding FixProblemsCommand}"
                                     IsVisible="{Binding HasHomeProblems}"
                                     IsEnabled="{Binding CanFixProblems}"
                                     AutomationProperties.Name="{Binding L_ProblemsFix}"
-                                    Padding="14,6"
-                                    CornerRadius="{StaticResource RadiusLg}"/>
+                                    HorizontalAlignment="Left"
+                                    MinHeight="34"
+                                    FontSize="{StaticResource FsMd}"
+                                    Padding="18,6"/>
                             <Button Content="{Binding L_ProblemsUndo}"
                                     Command="{Binding UndoProblemFixCommand}"
                                     IsVisible="{Binding CanUndoProblemFix}"

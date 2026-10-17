@@ -37,10 +37,10 @@ public static class Scenarios
         }),
         new("problems", "Tunnel up in full mode, the home problems card lists game traffic through the VPN and a too large MTU", vm =>
         {
-            AddOneServer(vm);
+            vm.IsSplitTunnel = false;
             vm.IsConnecting = false;
             vm.IsConnected = true;
-            vm.IsSplitTunnel = false;
+            vm.StatusText = "Connected";
             typeof(MainWindowViewModel).GetMethod("SetHomeProblems", BindingFlags.NonPublic | BindingFlags.Instance)
                 ?.Invoke(vm, new object[]
                 {
@@ -53,7 +53,6 @@ public static class Scenarios
         }),
         new("versions", "Tunnel up, the version list of Settings > Updates is open with two older stable versions", vm =>
         {
-            AddOneServer(vm);
             vm.IsConnecting = false;
             vm.IsConnected = true;
             var updates = vm.UpdateVm;
