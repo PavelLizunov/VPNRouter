@@ -26,7 +26,14 @@ public partial class MainWindowViewModel
     private static readonly TimeSpan ProblemScanDelay = TimeSpan.FromSeconds(40);
 
     private IReadOnlyList<DetectedProblem> _homeProblems = Array.Empty<DetectedProblem>();
-    private HealthCheck.PathMtuProbeResult? _sessionPathMtu;
+    private readonly object _pathMtuLock = new();
+    private HealthCheck.PathMtuProbeResult? _sessionPathMtuValue;
+
+    private HealthCheck.PathMtuProbeResult? _sessionPathMtu
+    {
+        get { lock (_pathMtuLock) return _sessionPathMtuValue; }
+        set { lock (_pathMtuLock) _sessionPathMtuValue = value; }
+    }
     private CancellationTokenSource? _problemScanCts;
     private ProblemFixSnapshot? _problemFixSnapshot;
     private bool _suppressRoutingAutoApply;
@@ -82,7 +89,13 @@ public partial class MainWindowViewModel
     {
         _problemScanCts?.Cancel();
         _problemScanCts = null;
-        if (!connected || IsFixingProblems) return;
+        if (!connected)
+        {
+            // The TUN adapter is removed a few seconds after a stop; measure the network once it is gone.
+            ScheduleMtuMeasurement(TimeSpan.FromSeconds(10));
+            return;
+        }
+        if (IsFixingProblems) return;
 
         ProblemsDismissed = false;
         var cts = new CancellationTokenSource();
@@ -105,12 +118,11 @@ public partial class MainWindowViewModel
     {
         var fullTunnel = !IsSplitTunnel;
         var mtu = TunMtu;
+        var pathMtu = _sessionPathMtu;
         var problems = await Task.Run(() =>
         {
-            if (OperatingSystem.IsWindows() && _sessionPathMtu == null)
-                _sessionPathMtu = HealthCheck.ProbePathMtuPayload();
             var (json, log) = ReadProblemInputs();
-            return ProblemDetector.Detect(fullTunnel, mtu, _sessionPathMtu, json, log);
+            return ProblemDetector.Detect(fullTunnel, mtu, pathMtu, json, log);
         }, token).ConfigureAwait(false);
 
         token.ThrowIfCancellationRequested();
@@ -119,6 +131,32 @@ public partial class MainWindowViewModel
             if (problems.Count > 0)
                 _logger.Information("[Problems] detected: {Kinds}", string.Join(", ", problems.Select(p => p.Kind)));
             SetHomeProblems(problems);
+        });
+    }
+
+    /// <summary>
+    /// Measures the network path for the MTU check while the tunnel is down (at startup and after a disconnect).
+    /// A ping with the tunnel up measures the tunnel itself, so such a result is never stored.
+    /// </summary>
+    private void ScheduleMtuMeasurement(TimeSpan delay)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delay).ConfigureAwait(false);
+                if (IsConnected || IsConnecting) return;
+                var probe = HealthCheck.ProbePathMtuPayload();
+                if (probe.SkippedTunnelUp || IsConnected || IsConnecting) return;
+                _sessionPathMtu = probe;
+                _logger.Information("[Problems] MTU path measured: payload={Payload} blocked={Blocked}",
+                    probe.BestPayload?.ToString() ?? "-", probe.PlainPingBlocked);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "[Problems] MTU path measurement failed");
+            }
         });
     }
 
@@ -151,15 +189,26 @@ public partial class MainWindowViewModel
         try
         {
             ApplyProblemSettings(plan.SwitchToSplit ? true : null, plan.NewMtu);
-            if (plan.Reconnect)
-                await ApplyPendingChangesInternalAsync(forceRestart: true);
+            var status = plan.Reconnect ? CoreStrings.ProblemsFixed : CoreStrings.ProblemsFixedOffline;
+            if (plan.Reconnect && !await ApplyPendingChangesInternalAsync(forceRestart: true))
+            {
+                if (plan.NewMtu == null)
+                    throw new InvalidOperationException("tunnel restart after the fix failed");
+
+                // The tunnel did not come back with the new MTU: keep the routing fix, return the old MTU.
+                _logger.Warning("[Problems] restart with MTU {Mtu} failed, restoring MTU {Old}", plan.NewMtu, snapshot.Mtu);
+                ApplyProblemSettings(null, snapshot.Mtu);
+                if (!await ApplyPendingChangesInternalAsync(forceRestart: true))
+                    throw new InvalidOperationException("tunnel restart with the previous MTU failed");
+                status = CoreStrings.ProblemsMtuReverted;
+            }
 
             _problemFixSnapshot = snapshot;
             CanUndoProblemFix = true;
             SetHomeProblems(Array.Empty<DetectedProblem>());
-            ProblemFixStatus = plan.Reconnect ? CoreStrings.ProblemsFixed : CoreStrings.ProblemsFixedOffline;
+            ProblemFixStatus = status;
             _logger.Information("[Problems] fixed: split={Split} mtu={Mtu} reconnect={Reconnect}",
-                plan.SwitchToSplit, plan.NewMtu?.ToString() ?? "-", plan.Reconnect);
+                plan.SwitchToSplit, TunMtu, plan.Reconnect);
         }
         catch (Exception ex)
         {

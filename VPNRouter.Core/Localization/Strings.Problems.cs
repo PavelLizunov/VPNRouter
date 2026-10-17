@@ -37,6 +37,9 @@ public static partial class Strings
     public static string ProblemsFixedOffline => Ru
         ? "Готово. Изменения применятся при следующем подключении."
         : "Done. The changes apply on the next connect.";
+    public static string ProblemsMtuReverted => Ru
+        ? "Режим исправлен. С новым размером пакета VPN не поднялся, поэтому размер возвращён прежний."
+        : "Routing fixed. The VPN did not come up with the new packet size, so the previous size is back.";
     public static string ProblemsUndone => Ru ? "Изменения отменены." : "Changes undone.";
     public static string ProblemsFixFailed => Ru
         ? "Не удалось исправить. Попробуйте ещё раз или соберите диагностику."

@@ -91,6 +91,44 @@ public sealed class ProblemDetectorTests
     }
 
     [Fact]
+    public void SuggestMtu_ProbeSkippedBecauseTunnelIsUp_SuggestsNothing()
+    {
+        // A ping through our own TUN (MTU 1420) tops out at payload 1392 and would always look too small.
+        Assert.Null(ProblemDetector.SuggestMtu(1420, new HealthCheck.PathMtuProbeResult(null, false, SkippedTunnelUp: true)));
+    }
+
+    [Theory]
+    [InlineData(1380)]
+    [InlineData(1400)]
+    [InlineData(1332)]
+    public void SuggestMtu_AfterTheFix_TheSamePathSuggestsNothingMore(int payload)
+    {
+        var probe = new HealthCheck.PathMtuProbeResult(payload, false);
+        var first = ProblemDetector.SuggestMtu(1500, probe);
+
+        Assert.NotNull(first);
+        Assert.Null(ProblemDetector.SuggestMtu(first!.Value, probe));
+    }
+
+    [Fact]
+    public void SuggestMtu_NeverRaisesTheMtu()
+    {
+        Assert.Null(ProblemDetector.SuggestMtu(1350, new HealthCheck.PathMtuProbeResult(1340, false)));
+        Assert.Null(ProblemDetector.SuggestMtu(1300, new HealthCheck.PathMtuProbeResult(1420, false)));
+    }
+
+    [Theory]
+    [InlineData("VPNRouter-TUN", true)]
+    [InlineData("vpnrouter-tun", true)]
+    [InlineData("sing-box-tun", true)]
+    [InlineData("Ethernet", false)]
+    [InlineData("Wi-Fi", false)]
+    public void IsOwnTunnelInterface_MatchesOnlyOurAdapters(string name, bool expected)
+    {
+        Assert.Equal(expected, HealthCheck.IsOwnTunnelInterface(name));
+    }
+
+    [Fact]
     public void Detect_RepeatedEndpointTimeoutsSinceLastStart_ReportsServerTimeouts()
     {
         const string log = """

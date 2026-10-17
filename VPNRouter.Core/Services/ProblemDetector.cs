@@ -79,10 +79,12 @@ public static class ProblemDetector
     /// <summary>
     /// The same conservative value the "Pick from IPv4 ping" button writes, offered only when the configured MTU is
     /// above the measured IPv4 path (payload + 28) and the payload is not below <see cref="MinimumAutoMtu"/>.
+    /// Only a lower value is ever suggested, and only from a measurement taken with the tunnel down, so a fixed MTU
+    /// stays fixed: the next measurement of the same path suggests nothing.
     /// </summary>
     internal static int? SuggestMtu(int configuredMtu, HealthCheck.PathMtuProbeResult? pathMtu)
     {
-        if (pathMtu is not { PlainPingBlocked: false, BestPayload: { } payload })
+        if (pathMtu is not { PlainPingBlocked: false, SkippedTunnelUp: false, BestPayload: { } payload })
             return null;
         if (configuredMtu <= payload + 28 || payload < MinimumAutoMtu)
             return null;

@@ -185,6 +185,11 @@ public partial class MainWindowViewModel
         try
         {
             var probe = await Task.Run(VPNRouter.Core.Services.HealthCheck.ProbePathMtuPayload);
+            if (probe.SkippedTunnelUp)
+            {
+                MtuAutoTuneStatus = Strings.MtuAutoTuneDisconnectFirst;
+                return;
+            }
             if (probe.PlainPingBlocked)
             {
                 MtuAutoTuneStatus = Strings.MtuAutoTuneBlocked;
@@ -832,9 +837,10 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
-    private async Task ApplyPendingChangesInternalAsync(bool forceRestart)
+    /// <returns>True when the running tunnel picked up the settings (or the service was asked to restart).</returns>
+    private async Task<bool> ApplyPendingChangesInternalAsync(bool forceRestart)
     {
-        if (!CanApplyAppChanges) return;
+        if (!CanApplyAppChanges) return false;
         IsApplying = true;
         var appliedRevision = Volatile.Read(ref _routingSettingsRevision);
         try
@@ -851,14 +857,14 @@ public partial class MainWindowViewModel
                         : "Restarting service with new settings...";
                     await ServiceVm.RestartServiceCommand.ExecuteAsync(null);
                     ClearPendingIfRevisionUnchanged(appliedRevision);
-                    return;
+                    return true;
                 }
 
                 ClearPendingIfRevisionUnchanged(appliedRevision);
                 StatusText = IsRussian
                     ? "Настройки сохранены. Остановите и запустите VPN, чтобы они применились (служба перечитает config.yaml при старте)."
                     : "Settings saved. Stop and Start VPN to apply — the service re-reads config.yaml on start.";
-                return;
+                return false;
             }
 
             var ok = await Task.Run(() => _engine.ApplyAsync(_settings, CancellationToken.None, forceRestart));
@@ -871,11 +877,13 @@ public partial class MainWindowViewModel
             {
                 StatusText = IsRussian ? "Не удалось применить" : "Apply failed";
             }
+            return ok;
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] ApplyPendingChanges failed");
             StatusText = $"{(IsRussian ? "Не удалось применить" : "Apply failed")}: {ex.Message}";
+            return false;
         }
         finally { IsApplying = false; }
     }

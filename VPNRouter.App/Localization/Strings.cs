@@ -309,6 +309,7 @@ public static class Strings
     public static string MtuAutoTuneWindowsOnly => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneWindowsOnly;
     public static string MtuAutoTuneApplied(int mtu) => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneApplied(mtu);
     public static string MtuAutoTuneBlocked => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneBlocked;
+    public static string MtuAutoTuneDisconnectFirst => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneDisconnectFirst;
     public static string MtuAutoTuneNoResult => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneNoResult;
     public static string MtuAutoTuneTooLow(int mtu) => global::VPNRouter.Core.Localization.Strings.MtuAutoTuneTooLow(mtu);
     public static string ForceIpv4Label => global::VPNRouter.Core.Localization.Strings.ForceIpv4Label;
