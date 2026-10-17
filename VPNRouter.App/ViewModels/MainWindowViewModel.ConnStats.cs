@@ -49,6 +49,8 @@ public partial class MainWindowViewModel
                 _statsApi = null;
             }
         }
+
+        OnConnectedForProblems(value);
     }
 
     private void MaybePollConnStats()

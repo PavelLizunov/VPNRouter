@@ -35,6 +35,22 @@ public static class Scenarios
             typeof(MainWindowViewModel).GetMethod("RaiseSimpleAlertProps", BindingFlags.NonPublic | BindingFlags.Instance)
                 ?.Invoke(vm, null);
         }),
+        new("problems", "Tunnel up in full mode, the home problems card lists game traffic through the VPN and a too large MTU", vm =>
+        {
+            AddOneServer(vm);
+            vm.IsConnecting = false;
+            vm.IsConnected = true;
+            vm.IsSplitTunnel = false;
+            typeof(MainWindowViewModel).GetMethod("SetHomeProblems", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.Invoke(vm, new object[]
+                {
+                    new[]
+                    {
+                        new VPNRouter.Core.Services.DetectedProblem(VPNRouter.Core.Services.DetectedProblemKind.GameTrafficThroughFullTunnel),
+                        new VPNRouter.Core.Services.DetectedProblem(VPNRouter.Core.Services.DetectedProblemKind.MtuAbovePath, 1380),
+                    }
+                });
+        }),
         new("many-servers", "200 servers, every tenth with a very long name", vm =>
         {
             for (var i = 0; i < 200; i++)

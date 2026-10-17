@@ -649,7 +649,7 @@ public partial class MainWindowViewModel
 
         MarkRoutingSettingsChanged();
 
-        if (IsSimpleMode && IsConnected && !IsConnecting)
+        if (IsSimpleMode && IsConnected && !IsConnecting && !_suppressRoutingAutoApply)
         {
             _ = ApplyPendingChangesInternalAsync(forceRestart: true);
         }
