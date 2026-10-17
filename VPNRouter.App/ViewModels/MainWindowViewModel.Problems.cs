@@ -106,6 +106,7 @@ public partial class MainWindowViewModel
         if (IsFixingProblems) return;
 
         ProblemsDismissed = false;
+        _logger.Information("[Problems] scan scheduled in {Delay}s", ProblemScanDelay.TotalSeconds);
         var cts = new CancellationTokenSource();
         _problemScanCts = cts;
         _ = ScanProblemsAfterDelayAsync(cts.Token);
@@ -149,8 +150,9 @@ public partial class MainWindowViewModel
         token.ThrowIfCancellationRequested();
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            if (problems.Count > 0)
-                _logger.Information("[Problems] detected: {Kinds}", string.Join(", ", problems.Select(p => p.Kind)));
+            _logger.Information("[Problems] scan: fullTunnel={Full} mtu={Mtu} pathPayload={Payload} -> {Kinds}",
+                fullTunnel, mtu, pathMtu?.BestPayload?.ToString() ?? "-",
+                problems.Count == 0 ? "none" : string.Join(", ", problems.Select(p => p.Kind)));
             SetHomeProblems(problems);
         });
     }
@@ -168,11 +170,19 @@ public partial class MainWindowViewModel
             {
                 var generation = Volatile.Read(ref _connectionGeneration);
                 await Task.Delay(delay).ConfigureAwait(false);
-                if (IsConnected || IsConnecting || !OperatingSystem.IsWindows()) return;
+                if (IsConnected || IsConnecting || !OperatingSystem.IsWindows())
+                {
+                    _logger.Information("[Problems] MTU path measurement skipped: VPN connecting or connected");
+                    return;
+                }
                 var probe = HealthCheck.ProbePathMtuPayload();
                 // Any connect or disconnect during the pings may have put them through the tunnel: drop the result.
                 if (probe.SkippedTunnelUp || IsConnected || IsConnecting
-                    || generation != Volatile.Read(ref _connectionGeneration)) return;
+                    || generation != Volatile.Read(ref _connectionGeneration))
+                {
+                    _logger.Information("[Problems] MTU path measurement discarded: the tunnel was up or a connect overlapped");
+                    return;
+                }
                 _sessionPathMtu = probe;
                 _logger.Information("[Problems] MTU path measured: payload={Payload} blocked={Blocked}",
                     probe.BestPayload?.ToString() ?? "-", probe.PlainPingBlocked);
