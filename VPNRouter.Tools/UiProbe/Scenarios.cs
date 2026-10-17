@@ -51,6 +51,25 @@ public static class Scenarios
                     }
                 });
         }),
+        new("versions", "Tunnel up, the version list of Settings > Updates is open with two older stable versions", vm =>
+        {
+            AddOneServer(vm);
+            vm.IsConnecting = false;
+            vm.IsConnected = true;
+            var updates = vm.UpdateVm;
+            updates.StableVersions.Clear();
+            updates.StableVersions.Add(new RollbackReleaseItemViewModel("2.50.3", true, null, null));
+            foreach (var version in new[] { "2.50.2", "2.50.1" })
+            {
+                var info = new VPNRouter.Core.Services.UpdateSources.UpdateSourceInfo(
+                    version, "https://example.invalid", "app.zip", "https://example.invalid/app.zip", 1, null, false, string.Empty);
+                updates.StableVersions.Add(new RollbackReleaseItemViewModel(version, false, info, _ => { }));
+            }
+            var stateField = typeof(UpdateNotificationViewModel).GetField("_versionHistoryState", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (stateField != null)
+                stateField.SetValue(updates, Enum.Parse(stateField.FieldType, "Ready"));
+            updates.IsVersionHistoryVisible = true;
+        }),
         new("many-servers", "200 servers, every tenth with a very long name", vm =>
         {
             for (var i = 0; i < 200; i++)

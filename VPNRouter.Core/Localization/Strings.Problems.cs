@@ -44,4 +44,10 @@ public static partial class Strings
     public static string ProblemsFixFailed => Ru
         ? "Не удалось исправить. Попробуйте ещё раз или соберите диагностику."
         : "Could not fix it. Try again or collect diagnostics.";
+
+    public static string ProblemsHowTo => Ru ? "Видео: что нажать" : "Video: what to press";
+    public static string HelpVideosTitle => Ru ? "Видео-подсказки" : "Video guides";
+    public static string HelpVideosSubtitle => Ru
+        ? "Что нажать, если игры лагают, VPN не работает или нужна старая версия"
+        : "What to press when games lag, the VPN fails or you need an older version";
 }

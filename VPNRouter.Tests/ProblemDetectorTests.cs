@@ -166,3 +166,21 @@ public sealed class ProblemDetectorTests
         Assert.True(ProblemDetector.PlanFix(System.Array.Empty<DetectedProblem>(), connected: true).IsEmpty);
     }
 }
+
+public sealed class HelpVideoLinkTests
+{
+    [Theory]
+    [InlineData(null, true, "https://vpn.ninitux.com/help/")]
+    [InlineData("games", true, "https://vpn.ninitux.com/help/#games")]
+    [InlineData("rollback", false, "https://vpn.ninitux.com/help/?lang=en#rollback")]
+    public void HelpVideoUrl_OpensThePageInTheAppLanguageAtTheCase(string? anchor, bool russian, string expected)
+    {
+        Assert.Equal(expected, VPNRouter.App.ViewModels.MainWindowViewModel.HelpVideoUrl(anchor, russian));
+    }
+
+    [Fact]
+    public void HelpAnchor_GameTrafficOpensTheGamesGuide()
+    {
+        Assert.Equal("games", VPNRouter.App.ViewModels.MainWindowViewModel.HelpAnchor(DetectedProblemKind.GameTrafficThroughFullTunnel));
+    }
+}

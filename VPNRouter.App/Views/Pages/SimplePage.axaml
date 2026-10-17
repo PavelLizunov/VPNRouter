@@ -493,6 +493,24 @@
                                     BorderBrush="{DynamicResource WarningBorderBrush}"
                                     BorderThickness="1"/>
                         </StackPanel>
+                        <Button Command="{Binding OpenProblemHelpCommand}"
+                                IsVisible="{Binding HasHomeProblems}"
+                                AutomationProperties.Name="{Binding L_ProblemsHowTo}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="0,2"
+                                Cursor="Hand">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <icons:Pictogram Id="play" Width="14" Height="14"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{DynamicResource WarningFgBrush}"/>
+                                <TextBlock Text="{Binding L_ProblemsHowTo}"
+                                           FontSize="{StaticResource FsSm}"
+                                           TextDecorations="Underline"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource WarningFgBrush}"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Border>
 
@@ -718,6 +736,23 @@
                                                FontSize="{StaticResource FsMd}" FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextPrimaryBrush}"/>
                                     <TextBlock Text="{Binding L_SmpSetupCheckSubtitle}"
+                                               FontSize="{StaticResource FsXs}"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                </StackPanel>
+                                <icons:Pictogram Grid.Column="2" Classes="trail" Id="chevron-right"/>
+                            </Grid>
+                        </Button>
+                        <Button Classes="row"
+                                Command="{Binding OpenHelpVideosCommand}"
+                                AutomationProperties.Name="{Binding L_HelpVideosTitle}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <icons:Pictogram Classes="lead" Id="play"/>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding L_HelpVideosTitle}"
+                                               FontSize="{StaticResource FsMd}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding L_HelpVideosSubtitle}"
                                                FontSize="{StaticResource FsXs}"
                                                TextWrapping="Wrap"
                                                Foreground="{DynamicResource TextMutedBrush}"/>

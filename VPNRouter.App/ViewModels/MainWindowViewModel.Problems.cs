@@ -248,6 +248,30 @@ public partial class MainWindowViewModel
         }
     }
 
+    public const string HelpVideosUrl = "https://vpn.ninitux.com/help/";
+
+    public string L_ProblemsHowTo => CoreStrings.ProblemsHowTo;
+    public string L_HelpVideosTitle => CoreStrings.HelpVideosTitle;
+    public string L_HelpVideosSubtitle => CoreStrings.HelpVideosSubtitle;
+
+    /// <summary>The help page opens in the app's language, scrolled to the guide of the given case.</summary>
+    internal static string HelpVideoUrl(string? anchor, bool russian)
+        => HelpVideosUrl + (russian ? string.Empty : "?lang=en") + (string.IsNullOrEmpty(anchor) ? string.Empty : "#" + anchor);
+
+    internal static string HelpAnchor(DetectedProblemKind kind) => kind switch
+    {
+        DetectedProblemKind.GameTrafficThroughFullTunnel => "games",
+        DetectedProblemKind.MtuAbovePath => "fix",
+        _ => "fix"
+    };
+
+    [RelayCommand]
+    private void OpenHelpVideos() => OpenUrl(HelpVideoUrl(null, IsRussian));
+
+    [RelayCommand]
+    private void OpenProblemHelp()
+        => OpenUrl(HelpVideoUrl(_homeProblems.Count > 0 ? HelpAnchor(_homeProblems[0].Kind) : "fix", IsRussian));
+
     [RelayCommand]
     private void HideProblems()
     {
