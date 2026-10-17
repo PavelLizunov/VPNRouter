@@ -15,7 +15,9 @@ public static class HealthCheck
     public enum Level { Ok, Warn, Err }
 
     public readonly record struct Result(Level Severity, string Message);
-    public readonly record struct PathMtuProbeResult(int? BestPayload, bool PlainPingBlocked);
+    /// <param name="SkippedTunnelUp">No measurement: our TUN adapter is up, so a ping would measure the tunnel itself
+    /// (TUN MTU minus 28) instead of the physical path, and every lowered MTU would look too large again.</param>
+    public readonly record struct PathMtuProbeResult(int? BestPayload, bool PlainPingBlocked, bool SkippedTunnelUp = false);
 
     public static List<Result> RunAll()
     {
@@ -595,6 +597,11 @@ public static class HealthCheck
         try
         {
             var probe = ProbePathMtuPayload();
+            if (probe.SkippedTunnelUp)
+            {
+                results.Add(new(Level.Ok, "MTU path probe skipped: the VPN tunnel is up and would be measured instead of the network. Disconnect to measure."));
+                return;
+            }
             var warning = BuildPathMtuWarning(configuredMtu, probe.BestPayload, probe.PlainPingBlocked);
             if (warning != null)
                 results.Add(warning.Value);
@@ -608,6 +615,8 @@ public static class HealthCheck
     [SupportedOSPlatform("windows")]
     public static PathMtuProbeResult ProbePathMtuPayload()
     {
+        if (TunnelInterfaceUp())
+            return new(null, false, SkippedTunnelUp: true);
         if (!PingOk(null))
             return new(null, true);
 
@@ -652,6 +661,24 @@ public static class HealthCheck
                output.Contains("TTL=", StringComparison.OrdinalIgnoreCase) &&
                !output.Contains("fragmented", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool TunnelInterfaceUp()
+    {
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .Any(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up
+                          && IsOwnTunnelInterface(n.Name));
+        }
+        catch (System.Net.NetworkInformation.NetworkInformationException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool IsOwnTunnelInterface(string name)
+        => name.Equals("VPNRouter-TUN", StringComparison.OrdinalIgnoreCase)
+           || name.Equals("sing-box-tun", StringComparison.OrdinalIgnoreCase);
 
     internal static Result? BuildPathMtuWarning(int configuredMtu, int? bestPayload, bool plainPingBlocked)
     {

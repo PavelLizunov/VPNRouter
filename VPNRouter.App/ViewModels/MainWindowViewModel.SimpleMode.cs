@@ -1,3 +1,4 @@
+using System.Threading;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -120,6 +121,7 @@ public partial class MainWindowViewModel
 
     partial void OnIsConnectingChanged(bool value)
     {
+        Interlocked.Increment(ref _connectionGeneration);
         if (value && HasConnectionAlert)
         {
             _lastConnectionAlert = null;
@@ -649,7 +651,7 @@ public partial class MainWindowViewModel
 
         MarkRoutingSettingsChanged();
 
-        if (IsSimpleMode && IsConnected && !IsConnecting)
+        if (IsSimpleMode && IsConnected && !IsConnecting && !_suppressRoutingAutoApply)
         {
             _ = ApplyPendingChangesInternalAsync(forceRestart: true);
         }

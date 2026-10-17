@@ -561,6 +561,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             StartRuntimeStatusPolling();
 
             _ = BootstrapAutostartAsync();
+
+            ScheduleMtuMeasurement(TimeSpan.FromSeconds(2));
         }
 
         ConsumeSettingsRecoveryNotice();
@@ -830,6 +832,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _rulesToastCts?.Dispose();
             _rulesToastCts = null;
             _tgProxyToastToken++;
+            _problemScanCts?.Cancel();
+            _problemScanCts = null;
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: toast CTS cleanup failed"); }
     }

@@ -420,6 +420,102 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Problems card: what is wrong in plain words, one Fix button, then the result with Undo. -->
+                <Border IsVisible="{Binding IsProblemsCardVisible}"
+                        Margin="0,20,0,0"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource WarningBorderBrush}"
+                        Background="{DynamicResource WarningBgBrush}"
+                        CornerRadius="{StaticResource RadiusXl}"
+                        Padding="16,12">
+                    <StackPanel Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasHomeProblems}">
+                            <icons:Pictogram Id="shield-alert" Width="16" Height="16"
+                                             VerticalAlignment="Center"
+                                             Foreground="{DynamicResource WarningFgBrush}"/>
+                            <TextBlock Text="{Binding ProblemsTitleText}"
+                                       FontWeight="Bold"
+                                       FontSize="{StaticResource FsMd}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource WarningFgBrush}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding HomeProblemItems}" IsVisible="{Binding HasHomeProblems}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="8"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:HomeProblemItem">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding Title}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="{StaticResource FsSm}"
+                                                   Foreground="{DynamicResource WarningFgBrush}"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Body}"
+                                                   FontSize="{StaticResource FsSm}"
+                                                   LineHeight="16"
+                                                   Foreground="{DynamicResource WarningFgBrush}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding ProblemFixStatus}"
+                                   IsVisible="{Binding HasProblemFixStatus}"
+                                   FontSize="{StaticResource FsSm}"
+                                   LineHeight="16"
+                                   Foreground="{DynamicResource WarningFgBrush}"
+                                   TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Classes="cta go"
+                                    Content="{Binding L_ProblemsFix}"
+                                    Command="{Binding FixProblemsCommand}"
+                                    IsVisible="{Binding HasHomeProblems}"
+                                    IsEnabled="{Binding CanFixProblems}"
+                                    AutomationProperties.Name="{Binding L_ProblemsFix}"
+                                    HorizontalAlignment="Left"
+                                    MinHeight="34"
+                                    FontSize="{StaticResource FsMd}"
+                                    Padding="18,6"/>
+                            <Button Content="{Binding L_ProblemsUndo}"
+                                    Command="{Binding UndoProblemFixCommand}"
+                                    IsVisible="{Binding CanUndoProblemFix}"
+                                    IsEnabled="{Binding !IsFixingProblems}"
+                                    Padding="12,6"
+                                    CornerRadius="{StaticResource RadiusLg}"/>
+                            <Button Content="{Binding L_ProblemsHide}"
+                                    Command="{Binding HideProblemsCommand}"
+                                    IsEnabled="{Binding !IsFixingProblems}"
+                                    Padding="12,6"
+                                    CornerRadius="{StaticResource RadiusLg}"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource WarningBorderBrush}"
+                                    BorderThickness="1"/>
+                        </StackPanel>
+                        <Button Command="{Binding OpenProblemHelpCommand}"
+                                IsVisible="{Binding HasHomeProblems}"
+                                AutomationProperties.Name="{Binding L_ProblemsHowTo}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="0,2"
+                                Cursor="Hand">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <icons:Pictogram Id="play" Width="14" Height="14"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{DynamicResource WarningFgBrush}"/>
+                                <TextBlock Text="{Binding L_ProblemsHowTo}"
+                                           FontSize="{StaticResource FsSm}"
+                                           TextDecorations="Underline"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource WarningFgBrush}"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
                 <!-- Config input of the first-run step (no saved config); it sits above the button so the flow reads top-down: paste, then connect.
                      "Change" on the connection card opens its own panel inside that card, so the emblem and the button never move. -->
                 <Border Classes="card"
@@ -642,6 +738,23 @@
                                                FontSize="{StaticResource FsMd}" FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextPrimaryBrush}"/>
                                     <TextBlock Text="{Binding L_SmpSetupCheckSubtitle}"
+                                               FontSize="{StaticResource FsXs}"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                </StackPanel>
+                                <icons:Pictogram Grid.Column="2" Classes="trail" Id="chevron-right"/>
+                            </Grid>
+                        </Button>
+                        <Button Classes="row"
+                                Command="{Binding OpenHelpVideosCommand}"
+                                AutomationProperties.Name="{Binding L_HelpVideosTitle}">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <icons:Pictogram Classes="lead" Id="play"/>
+                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding L_HelpVideosTitle}"
+                                               FontSize="{StaticResource FsMd}" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding L_HelpVideosSubtitle}"
                                                FontSize="{StaticResource FsXs}"
                                                TextWrapping="Wrap"
                                                Foreground="{DynamicResource TextMutedBrush}"/>

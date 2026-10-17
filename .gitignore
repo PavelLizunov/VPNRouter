@@ -154,3 +154,6 @@ vpnrouter-keystore-credentials.txt
 
 # build/diag/release-extract artifacts (never track - 2.2GB incident 2026-07-10)
 .r-publish/
+
+!tools/help-videos/
+!tools/help-videos/**

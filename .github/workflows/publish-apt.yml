@@ -229,6 +229,9 @@ jobs:
 
           mkdir -p gh-pages-dir/android
           cp packaging/android-page/index.html gh-pages-dir/android/index.html
+          # Video guides opened from the app (home screen and the problems card).
+          mkdir -p gh-pages-dir/help
+          cp packaging/help-page/index.html packaging/help-page/*.mp4 gh-pages-dir/help/
           sed 's/\r$//' packaging/windows/repair.cmd > /tmp/repair-lf.cmd
           sed 's/$/\r/' /tmp/repair-lf.cmd > gh-pages-dir/repair.cmd
           chmod 755 gh-pages-dir/repair.cmd

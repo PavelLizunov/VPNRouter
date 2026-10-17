@@ -537,6 +537,9 @@ public static partial class Strings
     public static string MtuAutoTuneApplied(int mtu) => Ru
         ? $"По IPv4 DF ping до 8.8.8.8 сохранён консервативный MTU {mtu}. Переподключите VPN, чтобы применить."
         : $"IPv4 DF ping to 8.8.8.8 selected conservative MTU {mtu}. Reconnect VPN to apply.";
+    public static string MtuAutoTuneDisconnectFirst => Ru
+        ? "Пока VPN подключён, проверка измерит сам туннель, а не вашу сеть. Отключите VPN и нажмите ещё раз."
+        : "While the VPN is connected the probe would measure the tunnel, not your network. Disconnect and press again.";
     public static string MtuAutoTuneBlocked => Ru
         ? "Обычный IPv4 ping до 8.8.8.8 не проходит. Сначала выключите True Split/почините WFP."
         : "Plain IPv4 ping to 8.8.8.8 fails. Turn off True Split/fix WFP first.";
