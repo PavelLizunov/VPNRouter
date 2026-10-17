@@ -40,6 +40,38 @@ jobs:
           path: VPNRouter.Tests/TestResults/*.trx
           retention-days: 30
 
+  headless-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Publish headless without the GUI stack
+        run: |
+          dotnet publish VPNRouter.Headless/VPNRouter.Headless.csproj -c Release -r linux-x64 --self-contained false -o "$RUNNER_TEMP/vpnrouter-headless"
+          test -f "$RUNNER_TEMP/vpnrouter-headless/VPNRouter.Headless.dll"
+          if find "$RUNNER_TEMP/vpnrouter-headless" -iname '*Avalonia*' | grep -q .; then
+            echo "Avalonia leaked into the headless publish" >&2
+            exit 1
+          fi
+
+  headless-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Headless contract checks
+        run: dotnet test VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj -c Release --blame-hang-timeout 4m --blame-hang-dump-type none
+
   go-test-windows:
     runs-on: windows-latest
     timeout-minutes: 10

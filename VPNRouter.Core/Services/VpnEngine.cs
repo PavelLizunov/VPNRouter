@@ -42,6 +42,9 @@ public partial class VpnEngine : IDisposable
     private ClashLogStream? _connHealthStream;
 
     private bool _disposed;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public bool IsRunning => _singBox?.IsRunning() ?? false;
     public string ActiveProfileName => _activeProfile?.Name ?? string.Empty;
@@ -136,11 +139,16 @@ public partial class VpnEngine : IDisposable
             _splitDriver.EngagedChanged += engaged => TrueSplitEngagedChanged?.Invoke(engaged);
         _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
         _unixDns = unixDnsHardening ?? NullUnixDnsHardening.Default;
+        _policy = SingBoxRuntimePolicy.Current;
         try { _unixDns.RestoreStrandedIfAny(_logger); } catch { }
     }
 
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Start);
+
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
