@@ -312,6 +312,26 @@ app:
     }
 
     [Fact]
+    public void Logs_RedactQuotedSecretValuesWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta\"\n" +
+            "[DBG] token='x y'\n" +
+            "[DBG] userpassword=\"alpha beta\"\n" +
+            "[DBG] \"password\": \"alpha beta\"\n" +
+            "[DBG] unclosed_password=\"alpha beta");
+
+        Assert.DoesNotContain("alpha", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("x y", outp);
+        Assert.Contains("password=\"***\"", outp);
+        Assert.Contains("token='***'", outp);
+        Assert.Contains("userpassword=\"***\"", outp);
+        Assert.Contains("\"password\": \"***\"", outp);
+        Assert.Contains("unclosed_password=\"***\"", outp);
+    }
+
+    [Fact]
     public void RedactConfigYaml_RedactsAwgSecrets_KeepsHostPort()
     {
         var yaml =

@@ -95,6 +95,12 @@ public static class Sweeper
 
         for (var step = 1; step <= o.MaxSteps; step++)
         {
+            if (!window.IsVisible)
+            {
+                result.Notes.Add($"stopped step {step}: window closed");
+                break;
+            }
+
             if (clock.Elapsed.TotalSeconds > o.MaxSeconds)
             {
                 result.Truncated = true;
@@ -161,8 +167,12 @@ public static class Sweeper
 
     private static void RenderFrame(ProbeSession session)
     {
-        session.Layout();
-        _ = session.Window.CaptureRenderedFrame();
+        try
+        {
+            session.Layout();
+            _ = session.Window.CaptureRenderedFrame();
+        }
+        catch (ObjectDisposedException) { }
     }
 
     private static List<Candidate> Collect(Window window, SweepOptions o, List<string> skipped)
