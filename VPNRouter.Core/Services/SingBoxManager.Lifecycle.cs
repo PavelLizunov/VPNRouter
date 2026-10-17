@@ -15,6 +15,10 @@ public partial class SingBoxManager
 
     public void StartWithJson(string configJson)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Start);
+
         lock (_lifecycleGate)
         {
             if (Volatile.Read(ref _disposed) != 0)
@@ -50,9 +54,10 @@ public partial class SingBoxManager
                 "Stop the other instance (e.g. disable Windows Service autostart) and try again.");
         }
 
-        var exePath = OperatingSystem.IsWindows()
-            ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-            : AppPaths.SingBoxExePath;
+        var exePath = EffectivePolicy?.SelectedExecutablePath
+            ?? (OperatingSystem.IsWindows()
+                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+                : AppPaths.SingBoxExePath);
 
         ProcessOwnership.ConfiguredExePath = exePath;
 
@@ -478,6 +483,10 @@ public partial class SingBoxManager
 
     public void Restart()
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Restart);
+
         lock (_lifecycleGate)
             RestartCore();
     }
@@ -518,9 +527,10 @@ public partial class SingBoxManager
                 try { Thread.Sleep(750); } catch { }
             }
 
-            var exePath = OperatingSystem.IsWindows()
-                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-                : AppPaths.SingBoxExePath;
+            var exePath = EffectivePolicy?.SelectedExecutablePath
+                ?? (OperatingSystem.IsWindows()
+                    ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+                    : AppPaths.SingBoxExePath);
             LaunchProcess(exePath);
             if (_handle is null)
             {
@@ -681,6 +691,14 @@ public partial class SingBoxManager
                 _linuxUsedPkexec = false;
                 spawnExe = exePath;
                 spawnArgs = new[] { "run", "-c", _currentConfigPath };
+            }
+            else if (EffectivePolicy != null)
+            {
+                // A selected runtime is never escalated. Missing capability fails closed.
+                _linuxUsedPkexec = false;
+                throw new SingBoxRuntimePolicyException(
+                    SingBoxRuntimeOperation.Start,
+                    SingBoxRuntimeFailure.PrerequisiteUnavailable);
             }
             else
             {
