@@ -36,10 +36,16 @@ public partial class MainWindowViewModel
         set { lock (_pathMtuLock) _sessionPathMtuValue = value; }
     }
     private CancellationTokenSource? _problemScanCts;
+    private int _connectionGeneration;
     private ProblemFixSnapshot? _problemFixSnapshot;
     private bool _suppressRoutingAutoApply;
 
-    private sealed record ProblemFixSnapshot(bool SplitTunnel, string RoutingMode, string ActiveProfile, int Mtu);
+    /// <param name="ProfileAfterFix">The active profile the fix left; Undo restores <c>ActiveProfile</c> only while it is
+    /// unchanged, so app selections edited after the fix survive.</param>
+    private sealed record ProblemFixSnapshot(bool SplitTunnel, string RoutingMode, string ActiveProfile, int Mtu)
+    {
+        public string? ProfileAfterFix { get; init; }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsProblemsCardVisible))]
@@ -88,6 +94,7 @@ public partial class MainWindowViewModel
     /// <summary>Called from <c>OnIsConnectedChanged</c>: a new connect starts a fresh delayed scan.</summary>
     private void OnConnectedForProblems(bool connected)
     {
+        Interlocked.Increment(ref _connectionGeneration);
         _problemScanCts?.Cancel();
         _problemScanCts = null;
         if (!connected)
@@ -159,10 +166,13 @@ public partial class MainWindowViewModel
         {
             try
             {
+                var generation = Volatile.Read(ref _connectionGeneration);
                 await Task.Delay(delay).ConfigureAwait(false);
                 if (IsConnected || IsConnecting) return;
                 var probe = HealthCheck.ProbePathMtuPayload();
-                if (probe.SkippedTunnelUp || IsConnected || IsConnecting) return;
+                // Any connect or disconnect during the pings may have put them through the tunnel: drop the result.
+                if (probe.SkippedTunnelUp || IsConnected || IsConnecting
+                    || generation != Volatile.Read(ref _connectionGeneration)) return;
                 _sessionPathMtu = probe;
                 _logger.Information("[Problems] MTU path measured: payload={Payload} blocked={Blocked}",
                     probe.BestPayload?.ToString() ?? "-", probe.PlainPingBlocked);
@@ -217,7 +227,7 @@ public partial class MainWindowViewModel
                 status = CoreStrings.ProblemsMtuReverted;
             }
 
-            _problemFixSnapshot = snapshot;
+            _problemFixSnapshot = snapshot with { ProfileAfterFix = _settings.ActiveProfile ?? string.Empty };
             CanUndoProblemFix = true;
             SetHomeProblems(Array.Empty<DetectedProblem>());
             ProblemFixStatus = status;
@@ -321,7 +331,8 @@ public partial class MainWindowViewModel
             if (IsSplitTunnel != snapshot.SplitTunnel)
                 IsSplitTunnel = snapshot.SplitTunnel;
             _settings.App.RoutingMode = snapshot.RoutingMode;
-            _settings.ActiveProfile = snapshot.ActiveProfile;
+            if (string.Equals(_settings.ActiveProfile ?? string.Empty, snapshot.ProfileAfterFix, StringComparison.Ordinal))
+                _settings.ActiveProfile = snapshot.ActiveProfile;
             _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
             MarkRoutingSettingsChanged();
         }
