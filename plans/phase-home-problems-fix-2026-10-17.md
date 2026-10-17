@@ -92,5 +92,17 @@ and offers Hide and Undo. Repair never runs by itself. Rollback: revert the comm
   `VPNRouter.Core.dll`/`VPNRouter.App.dll` in place (the app then crashed with TypeLoadException on the new type); a
   per-file `Copy-Item -Force` with a size check worked. Also, a second instance launched right after a kill exits on the
   single-instance check: wait for the old process to end.
-- Not done: publication of the help page (goes live with the next release by `publish-apt.yml`), release candidate.
+- Release candidate v2.50.4-r1 (owner authorized merge and release on 2026-10-17): PR #590 squash-merged as
+  `71d51729` (AppVersion 2.50.4-r1), annotated tag `v2.50.4-r1` verified on GitHub, draft prerelease; Windows set (6
+  files, unsigned, no SignPath configuration) built on WINBRAT from the exact SHA with `build.ps1 -BundleSplitDriver
+  -Installer`, size, SHA-256 and sidecars compared on both ends, uploaded; macOS, Linux, Android, dotnet test and the
+  Windows update test from the tag: success; 18 assets; `check-open-p0`: no open P0/P1; integrity workflow on the draft:
+  success; strict CI gate: 8 green, 0 red; published as prerelease, Latest stays v2.50.3; release-event integrity, APT
+  and update test: success; vpn.ninitux.com/help and its videos answer 200; `post-ship-local.ps1 -Version 2.50.4-r1` on
+  WINBRAT: `POSTSHIP-LOCAL: PASS` (2 cold cycles, lifecycle clean). Not run: the screenshot gate (known failing), live
+  update from v2.50.3, real macOS/Linux/Android devices.
+- Worker lessons: a `-Command "& script *> file"` launch under Windows PowerShell 5.1 with `$ErrorActionPreference =
+  'Stop'` died on git's progress output; launch release scripts with `-File` as before. One `relbuild2.ps1` run ended
+  with an empty checkout (no `build.ps1`); a hand fetch of the same SHA worked, so the build ran from that verified
+  checkout (`relbuild3.ps1`, checks HEAD before building).
 - Rollback: revert the PR; no settings schema change.
