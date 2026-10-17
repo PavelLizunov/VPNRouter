@@ -6,6 +6,12 @@ When release or platform facts change, update this file.
 
 ## Releases
 
+- **Current candidate:** v2.50.4-r1 (2026-10-17, prerelease, tag on main `71d51729`;
+  Latest stays v2.50.3). Home problems card with a one-button Fix and Undo (game or
+  call traffic through the VPN in full tunnel, MTU above the measured path, endpoint
+  timeouts); the DF-ping MTU probe no longer measures the app's own tunnel; video
+  guides at vpn.ninitux.com/help opened from the app. Evidence:
+  `plans/phase-home-problems-fix-2026-10-17.md`. Main declares `AppVersion` 2.50.4-r1.
 - **Current stable:** v2.50.3 (2026-10-11), cut from the candidate v2.50.3-r1
   (same tree; `AppVersion` only loses the suffix) on the owner's order for a quick
   fix release. One fix after v2.50.2: a geo rule-set file that is damaged on disk
@@ -16,7 +22,7 @@ When release or platform facts change, update this file.
   Reproduced on WINBRAT with v2.50.2 and verified there with the candidate,
   including the live update from v2.50.2 with a zeroed file. Evidence of the
   candidate: `plans/phase-geo-ruleset-selfheal-2026-10-11.md`; the cut:
-  `plans/phase-stable-2.50.3-2026-10-11.md`. Main declares `AppVersion` 2.50.3.
+  `plans/phase-stable-2.50.3-2026-10-11.md`.
   Not verified anywhere: macOS, Linux and Android on real devices for this fix.
 - **Previous stable:** v2.50.2 (2026-10-06), cut from the candidate v2.50.2-r1
   (same tree; `AppVersion` only loses the suffix) on the owner's order to release
