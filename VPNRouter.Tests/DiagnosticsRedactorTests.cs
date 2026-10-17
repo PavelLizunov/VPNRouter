@@ -337,6 +337,24 @@ app:
     }
 
     [Fact]
+    public void Logs_RedactQuotedSecretValuesWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta\"\n" +
+            "[DBG] token='x y z'\n" +
+            "[DBG] userpassword=\"secret with spaces\"\n" +
+            "[DBG] Authorization: Bearer \"my secret bearer token\"");
+        Assert.DoesNotContain("alpha beta", outp);
+        Assert.DoesNotContain("x y z", outp);
+        Assert.DoesNotContain("secret with spaces", outp);
+        Assert.DoesNotContain("my secret bearer token", outp);
+        Assert.Contains("password=\"***", outp);
+        Assert.Contains("token='***", outp);
+        Assert.Contains("userpassword=\"***", outp);
+        Assert.Contains("Authorization: Bearer \"***", outp);
+    }
+
+    [Fact]
     public void Yaml_MalformedYaml_RedactsSecretsAndPreservesStructure()
     {
         var malformedYaml =
