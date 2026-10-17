@@ -24,6 +24,7 @@ public sealed record HomeProblemItem(string Title, string Body);
 public partial class MainWindowViewModel
 {
     private static readonly TimeSpan ProblemScanDelay = TimeSpan.FromSeconds(40);
+    private static readonly TimeSpan ProblemScanInterval = TimeSpan.FromMinutes(3);
 
     private IReadOnlyList<DetectedProblem> _homeProblems = Array.Empty<DetectedProblem>();
     private readonly object _pathMtuLock = new();
@@ -107,8 +108,21 @@ public partial class MainWindowViewModel
     {
         try
         {
+            // First look shortly after the connect, then again while connected: a mode change mid-session
+            // restarts the core without a new connect.
             await Task.Delay(ProblemScanDelay, token).ConfigureAwait(false);
-            await ScanProblemsAsync(token).ConfigureAwait(false);
+            while (true)
+            {
+                if (!IsFixingProblems)
+                {
+                    try { await ScanProblemsAsync(token).ConfigureAwait(false); }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.Warning(ex, "[Problems] scan failed");
+                    }
+                }
+                await Task.Delay(ProblemScanInterval, token).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _logger.Warning(ex, "[Problems] scan failed"); }
