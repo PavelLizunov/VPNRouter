@@ -50,4 +50,50 @@ Revert the PR. No settings schema change; the marker file `tray-hint-shown` is i
 
 ## Outcome
 
-Pending.
+### Root cause (found during the live check)
+
+There was no tray icon at all. Avalonia 12.1.3 changed `TrayIcon`: the constructor no longer creates the native icon, and `Attach()` creates it only for an icon in `TrayIcon.Icons` on the Application. 12.1.2 and earlier created it in the constructor.
+
+`App.axaml.cs` only constructed the icon. The 12.1.3 bump came in #324 (2026-09-28) and first shipped in v2.50.0, so v2.50.0 through v2.50.4-r1 have no tray icon on any desktop. Closing the window hid it, and only a second launch could bring it back.
+
+Fix: `TrayIcon.SetIcons(this, new TrayIcons { _trayIcon })`, guarded by a source contract test.
+
+### Guard
+
+The guard from the brief stays, as a safety net for a shell that is not ready or is gone:
+
+- `TrayGuard` checks the icon (in-process `NIM_MODIFY`) and re-adds it.
+- If the icon is still missing, the window is minimized to the taskbar instead of hidden.
+- The 10 s / 2 min watch does the same for a window that is already hidden.
+- The one-time balloon tells the user where the icon is.
+
+Files: `VPNRouter.App/App.axaml.cs`, `VPNRouter.App/Services/TrayGuard.cs` (new), `VPNRouter.Core/Localization/Strings.cs`, `VPNRouter.App/Localization/Strings.cs`, `VPNRouter.Tests/TrayGuardTests.cs` (new).
+
+### Verification
+
+Live on WINBRAT (Windows 10 1809), with App, Core and Service all from 9407182d:
+
+1. Close with the shell up: the window hides, the log says `icon in the notification area: True`, and the Russian balloon shows once. The penguin is in the tray and in the overflow.
+2. A second close hides again, with no second hint.
+3. Explorer killed (`AutoRestartShell=0`), then close: the window is minimized to the taskbar (`re-added: False` logged). After explorer restarts, Avalonia re-adds the icon and the next close hides it to the tray again.
+4. Explorer killed while the window is hidden: the watch shows the window minimized within one tick, in under a minute.
+5. A left click on the penguin restores the window. A right click opens the menu ("Настройки...", "Запустить VPN", "Выход").
+
+The first live run with the guard alone showed the probe always false, because the icon never existed. That run led to the root cause.
+
+Text shortened afterwards: Windows 10 cut the balloon after four lines.
+
+CI and the second-model review: see the PR.
+
+### Surprises
+
+- Deploying App and Core without a matching `VPNRouter.Service.dll` makes the next start reinstall the published build (`InstallHealthCheck` -> `SelfRepair`). The first test run silently tested v2.50.4-r1.
+- The shell answers tray queries only for the calling process's own icons.
+
+### Follow-ups
+
+- Not verified: Linux and macOS tray after the registration fix (same Avalonia path, expected to come back), and Windows 11 overflow behavior.
+
+### Rollback
+
+Revert the PR. Older builds ignore the `tray-hint-shown` marker.
