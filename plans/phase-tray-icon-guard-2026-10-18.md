@@ -89,7 +89,26 @@ Second-model review (pi `gpt-sol-latest` and `gemini-opus-latest`, both `-k medi
 - Rejected: "stale message window / icon id after an explorer restart". Avalonia's message window belongs to the app and survives an explorer restart, and the icon id is fixed per icon. Live test 3 probed true after the restart.
 - Rejected: "EnumWindows delegate may be collected". The marshaller keeps a delegate argument alive for the whole synchronous call.
 
-CI: see the PR.
+CI on PR #594: compile, test, characterization-windows, go-test-windows, grep and test-update all green on the final head.
+
+### Release v2.50.4-r2 (2026-10-18, owner order "можешь тогда релизить")
+
+- Squash merge #594 to main `35f86e92` with AppVersion 2.50.4-r2. Annotated tag `v2.50.4-r2` at that SHA (remote check equal), draft prerelease `--latest=false`.
+- SignPath has no secrets and no variables, so the Windows files are unsigned as before. The six Windows files were built on WINBRAT by `build.ps1 -BundleSplitDriver -Installer` from a checkout verified at `35f86e92`. Size and SHA-256 matched on both ends, and every sidecar matched. The macOS, Linux and Android sets came from the tag workflows, for 18 assets in total.
+- Gates before publication:
+  - all tag runs success;
+  - `verify-release-integrity` success at `35f86e92`;
+  - strict gate 8 green / 0 red;
+  - `check-open-p0` OK with no waiver.
+- Published as a prerelease. Latest stays v2.50.3. The release-event runs (integrity, Windows auto-update test, APT/site) all succeeded.
+- `post-ship-local.ps1 -Version 2.50.4-r2`: `POSTSHIP-LOCAL: PASS` (2 cold cycles).
+- Tray on the published build:
+  - close hides to the tray with the icon present, and the hint shows once;
+  - a tray click restores the window, in two rounds;
+  - with explorer killed, a close minimizes the window, and after explorer returns a tray click restores it as Normal (the review fix).
+- WINBRAT now has v2.50.4-r2 installed, the app closed and explorer running.
+
+Not verified: Linux, macOS and Windows 11 tray; a live update from v2.50.3; signed Windows files.
 
 ### Surprises
 

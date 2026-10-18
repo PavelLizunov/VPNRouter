@@ -6,12 +6,14 @@ When release or platform facts change, update this file.
 
 ## Releases
 
-- **Current candidate:** v2.50.4-r1 (2026-10-17, prerelease, tag on main `71d51729`;
-  Latest stays v2.50.3). Home problems card with a one-button Fix and Undo (game or
-  call traffic through the VPN in full tunnel, MTU above the measured path, endpoint
-  timeouts); the DF-ping MTU probe no longer measures the app's own tunnel; video
-  guides at vpn.ninitux.com/help opened from the app. Evidence:
-  `plans/phase-home-problems-fix-2026-10-17.md`. Main declares `AppVersion` 2.50.4-r1.
+- **Current candidate:** v2.50.4-r2 (2026-10-18, prerelease, tag on main `35f86e92`;
+  Latest stays v2.50.3). The tray icon is registered again: since v2.50.0 (Avalonia
+  12.1.3 creates the icon only for a `TrayIcon.Icons` entry) there was no tray icon and a
+  closed window was unreachable. On Windows a `TrayGuard` checks the icon before hiding
+  and minimizes to the taskbar when it cannot be shown; a one-time balloon says where the
+  icon is. Includes everything from v2.50.4-r1 (home problems card, MTU probe fix, video
+  guides). Evidence: `plans/phase-tray-icon-guard-2026-10-18.md`. Main declares
+  `AppVersion` 2.50.4-r2.
 - **Current stable:** v2.50.3 (2026-10-11), cut from the candidate v2.50.3-r1
   (same tree; `AppVersion` only loses the suffix) on the owner's order for a quick
   fix release. One fix after v2.50.2: a geo rule-set file that is damaged on disk
