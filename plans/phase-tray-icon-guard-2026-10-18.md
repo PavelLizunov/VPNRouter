@@ -83,7 +83,13 @@ The first live run with the guard alone showed the probe always false, because t
 
 Text shortened afterwards: Windows 10 cut the balloon after four lines.
 
-CI and the second-model review: see the PR.
+Second-model review (pi `gpt-sol-latest` and `gemini-opus-latest`, both `-k medium`, the diff plus `TrayGuard.cs` and `App.axaml.cs`):
+
+- Accepted: the tray click and "Settings" only did `Show()` + `Activate()`, which does not restore a window the guard minimized. Both now call `WindowForegroundHelper.BringToFront`, which sets `WindowState.Normal` first.
+- Rejected: "stale message window / icon id after an explorer restart". Avalonia's message window belongs to the app and survives an explorer restart, and the icon id is fixed per icon. Live test 3 probed true after the restart.
+- Rejected: "EnumWindows delegate may be collected". The marshaller keeps a delegate argument alive for the whole synchronous call.
+
+CI: see the PR.
 
 ### Surprises
 

@@ -159,11 +159,8 @@ public partial class App : Application
         var menu = new NativeMenu();
 
         var showItem = new NativeMenuItem(Localization.Strings.TraySettings);
-        showItem.Click += (_, _) =>
-        {
-            desktop.MainWindow?.Show();
-            desktop.MainWindow?.Activate();
-        };
+        // BringToFront also restores a window the tray guard minimized to the taskbar.
+        showItem.Click += (_, _) => VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
 
         var connectItem = new NativeMenuItem(Localization.Strings.TrayStart);
         connectItem.Click += (_, _) => _viewModel?.ToggleConnectionCommand.Execute(null);
@@ -216,11 +213,7 @@ public partial class App : Application
             };
         }
 
-        _trayIcon.Clicked += (_, _) =>
-        {
-            desktop.MainWindow?.Show();
-            desktop.MainWindow?.Activate();
-        };
+        _trayIcon.Clicked += (_, _) => VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
     }
 
     // The user closed the window: hide it to the tray only while the shell really shows our icon, otherwise keep it on the taskbar (see TrayGuard).
