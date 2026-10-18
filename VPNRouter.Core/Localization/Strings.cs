@@ -477,6 +477,10 @@ public static partial class Strings
     public static string TrayStop => Ru ? "Остановить VPN" : "Stop VPN";
     public static string TraySettings => Ru ? "Настройки..." : "Settings...";
     public static string TrayExit => Ru ? "Выход" : "Exit";
+    public static string TrayHintTitle => Ru ? "VPNRouter работает в фоне" : "VPNRouter keeps running";
+    public static string TrayHintBody => Ru
+        ? "Окно скрыто, VPN продолжает работать. Значок пингвина — в трее у часов; если его не видно, нажмите стрелку ^. Выйти можно из меню значка."
+        : "The window is hidden and the VPN keeps working. The penguin icon is in the tray next to the clock; if you do not see it, click the ^ arrow. Exit from the icon menu.";
 
     public static string FieldName => Ru ? "Имя:" : "Name:";
     public static string FieldServer => Ru ? "Сервер:" : "Server:";

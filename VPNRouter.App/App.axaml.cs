@@ -87,7 +87,10 @@ public partial class App : Application
             mainWindow.Closing += (_, e) =>
             {
                 e.Cancel = true;
-                mainWindow.Hide();
+                if (e.CloseReason == WindowCloseReason.WindowClosing)
+                    HideToTray(mainWindow);
+                else
+                    mainWindow.Hide();
             };
 
             desktop.ShutdownRequested += (_, _) =>
@@ -98,6 +101,7 @@ public partial class App : Application
             };
 
             SetupTrayIcon(desktop);
+            StartTrayWatch(desktop);
 
             VPNRouter.App.Services.SingleInstance.ShowWindowRequested += () =>
             {
@@ -214,6 +218,57 @@ public partial class App : Application
             desktop.MainWindow?.Show();
             desktop.MainWindow?.Activate();
         };
+    }
+
+    // The user closed the window: hide it to the tray only while the shell really shows our icon, otherwise keep it on the taskbar (see TrayGuard).
+    private void HideToTray(Window window)
+    {
+        var registered = _trayIcon is null ? null : VPNRouter.App.Services.TrayGuard.EnsureIconRegistered(_trayIcon, Serilog.Log.Logger);
+        if (VPNRouter.App.Services.TrayGuard.DecideClose(registered) == VPNRouter.App.Services.TrayCloseAction.MinimizeToTaskbar)
+        {
+            Serilog.Log.Warning("[Tray] the icon cannot be added to the notification area; window minimized to the taskbar instead of hidden");
+            window.WindowState = WindowState.Minimized;
+            return;
+        }
+
+        window.Hide();
+        Serilog.Log.Information("[Tray] window hidden to the tray (icon in the notification area: {Registered})", registered?.ToString() ?? "unknown");
+
+        if (VPNRouter.App.Services.TrayGuard.ShouldShowHint(registered, VPNRouter.App.Services.TrayGuard.HintShownBefore()))
+        {
+            var shown = VPNRouter.App.Services.TrayGuard.ShowHint(Localization.Strings.TrayHintTitle, Localization.Strings.TrayHintBody);
+            if (shown) VPNRouter.App.Services.TrayGuard.MarkHintShown();
+            Serilog.Log.Information("[Tray] one-time tray hint shown: {Shown}", shown);
+        }
+    }
+
+    // A lost icon (a shell that was not ready at autostart) is re-added; if it cannot be, a window hidden at start is put on the taskbar.
+    private void StartTrayWatch(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        var trayIcon = _trayIcon;
+        if (!System.OperatingSystem.IsWindows() || trayIcon is null) return;
+
+        bool? lastState = null;
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = System.TimeSpan.FromSeconds(10) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Interval = System.TimeSpan.FromMinutes(2);
+            var state = VPNRouter.App.Services.TrayGuard.EnsureIconRegistered(trayIcon, Serilog.Log.Logger);
+            if (state != lastState)
+            {
+                Serilog.Log.Information("[Tray] watch: icon in the notification area: {State}", state?.ToString() ?? "unknown");
+                lastState = state;
+            }
+
+            var window = desktop.MainWindow;
+            if (state == false && window is { IsVisible: false })
+            {
+                window.WindowState = WindowState.Minimized;
+                window.Show();
+                Serilog.Log.Warning("[Tray] the icon cannot be added; the hidden window is shown minimized on the taskbar");
+            }
+        };
+        timer.Start();
     }
 
     internal static string GetTrayIconUri(Avalonia.Styling.ThemeVariant theme)

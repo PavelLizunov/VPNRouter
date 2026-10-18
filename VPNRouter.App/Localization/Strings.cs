@@ -280,6 +280,8 @@ public static class Strings
     public static string TrayStop => global::VPNRouter.Core.Localization.Strings.TrayStop;
     public static string TraySettings => global::VPNRouter.Core.Localization.Strings.TraySettings;
     public static string TrayExit => global::VPNRouter.Core.Localization.Strings.TrayExit;
+    public static string TrayHintTitle => global::VPNRouter.Core.Localization.Strings.TrayHintTitle;
+    public static string TrayHintBody => global::VPNRouter.Core.Localization.Strings.TrayHintBody;
 
     public static string FieldName => global::VPNRouter.Core.Localization.Strings.FieldName;
     public static string FieldServer => global::VPNRouter.Core.Localization.Strings.FieldServer;
