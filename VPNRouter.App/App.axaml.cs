@@ -184,6 +184,9 @@ public partial class App : Application
             Menu = menu,
             IsVisible = true
         };
+        // Since Avalonia 12.1.3 a tray icon reaches the OS only once it is in the application's icon list; a TrayIcon that is only constructed shows
+        // nothing, and closing the window then left no way back to it.
+        TrayIcon.SetIcons(this, new TrayIcons { _trayIcon });
 
         ActualThemeVariantChanged += (_, _) =>
         {

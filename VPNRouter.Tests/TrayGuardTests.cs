@@ -56,4 +56,18 @@ public class TrayGuardTests
         Assert.InRange(VPNRouter.Core.Localization.Strings.TrayHintTitle.Length, 1, 63);
         Assert.InRange(VPNRouter.Core.Localization.Strings.TrayHintBody.Length, 1, 255);
     }
+
+    [Fact]
+    public void Tray_icon_is_registered_with_the_application()
+    {
+        // Avalonia 12.1.3 creates the native icon only for a TrayIcon in TrayIcon.Icons; v2.50.0 to v2.50.4-r1 constructed one without registering it
+        // and had no tray icon at all.
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "VPNRouter.sln")))
+            directory = directory.Parent;
+        Assert.NotNull(directory);
+
+        var app = File.ReadAllText(Path.Combine(directory!.FullName, "VPNRouter.App", "App.axaml.cs"));
+        Assert.Contains("TrayIcon.SetIcons(this, new TrayIcons { _trayIcon })", app);
+    }
 }
