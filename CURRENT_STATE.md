@@ -6,15 +6,19 @@ When release or platform facts change, update this file.
 
 ## Releases
 
-- **Current candidate:** v2.50.4-r2 (2026-10-18, prerelease, tag on main `35f86e92`;
-  Latest stays v2.50.3). The tray icon is registered again: since v2.50.0 (Avalonia
+- **Current stable:** v2.50.4 (2026-10-19), cut from the candidate v2.50.4-r2
+  (same tree; `AppVersion` only loses the suffix) after the owner tested r2 and
+  approved the release. The tray icon is registered again: since v2.50.0 (Avalonia
   12.1.3 creates the icon only for a `TrayIcon.Icons` entry) there was no tray icon and a
   closed window was unreachable. On Windows a `TrayGuard` checks the icon before hiding
   and minimizes to the taskbar when it cannot be shown; a one-time balloon says where the
-  icon is. Includes everything from v2.50.4-r1 (home problems card, MTU probe fix, video
-  guides). Evidence: `plans/phase-tray-icon-guard-2026-10-18.md`. Main declares
-  `AppVersion` 2.50.4-r2.
-- **Current stable:** v2.50.3 (2026-10-11), cut from the candidate v2.50.3-r1
+  icon is. Also after v2.50.3: the home problems card with a one-button fix, the MTU
+  probe fix and video guides (v2.50.4-r1). Evidence of the candidates:
+  `plans/phase-tray-icon-guard-2026-10-18.md` and
+  `plans/phase-home-problems-fix-2026-10-17.md`; the cut:
+  `plans/phase-stable-2.50.4-2026-10-19.md`.
+  Not verified anywhere: the tray on Linux, macOS and Windows 11.
+- **Previous stable:** v2.50.3 (2026-10-11), cut from the candidate v2.50.3-r1
   (same tree; `AppVersion` only loses the suffix) on the owner's order for a quick
   fix release. One fix after v2.50.2: a geo rule-set file that is damaged on disk
   but keeps its size (`geosite-ru.srs`, `geoip-ru.srs`; used by "Russian traffic
@@ -26,7 +30,7 @@ When release or platform facts change, update this file.
   candidate: `plans/phase-geo-ruleset-selfheal-2026-10-11.md`; the cut:
   `plans/phase-stable-2.50.3-2026-10-11.md`.
   Not verified anywhere: macOS, Linux and Android on real devices for this fix.
-- **Previous stable:** v2.50.2 (2026-10-06), cut from the candidate v2.50.2-r1
+- **Before that:** v2.50.2 (2026-10-06), cut from the candidate v2.50.2-r1
   (same tree; `AppVersion` only loses the suffix) on the owner's order to release
   without further checks: the live update from v2.50.1 and the live scenarios were
   NOT run for this stable. Android fixes after v2.50.1: the release APK is
