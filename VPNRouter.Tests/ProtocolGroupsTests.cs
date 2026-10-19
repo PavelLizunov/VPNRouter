@@ -24,6 +24,31 @@ public class ProtocolGroupsTests
         Transport = new VlessTransportConfig { Type = transport ?? "tcp" },
     };
 
+    [AvaloniaFact]
+    public void SimpleConfigServer_ResolvesSelectedGeneratedServer()
+    {
+        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+        var server = new ServerViewModel(Entry("hysteria2", null, "Germany HY2"));
+        vm.SubscriptionServers.Add(server);
+        vm.SelectedSubscriptionServer = server;
+        vm.Servers.Add(server);
+        vm.SelectedServer = server;
+
+        Assert.Same(server, vm.SmpConfigServer);
+        Assert.True(vm.SmpHasConfigServer);
+    }
+
+    [AvaloniaFact]
+    public void SimpleConfigServer_IsNullWithoutServers()
+    {
+        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+        vm.SubscriptionServers.Clear();
+        vm.Servers.Clear();
+
+        Assert.Null(vm.SmpConfigServer);
+        Assert.False(vm.SmpHasConfigServer);
+    }
+
     [Theory]
     [InlineData("vless", "tcp", ProtocolGroup.Daily)]
     [InlineData("vless", "xhttp", ProtocolGroup.StealthWeb)]

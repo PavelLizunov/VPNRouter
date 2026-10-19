@@ -58,6 +58,8 @@ public partial class AndroidApp : Avalonia.Application
 
     private TextBlock? _configRowLabel;
     private TextBlock? _configRowValue;
+    private Border? _configRowIcon;
+    private IconView? _configRowIconGlyph;
     private IconView? _configRowChevron;
     private TextBlock? _configRowToggleText;
 
@@ -868,6 +870,8 @@ public partial class AndroidApp : Avalonia.Application
             Child = flagGlyph,
         };
         flagIcon.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
+        _configRowIcon = flagIcon;
+        _configRowIconGlyph = flagGlyph;
 
         _configRowLabel = new TextBlock
         {
@@ -1485,9 +1489,28 @@ public partial class AndroidApp : Avalonia.Application
     private void UpdateConfigSummary()
     {
         if (_configRowValue is null) return;
+        var configMode = AndroidStorage.GetConfigMode();
+        if (_configRowIcon is not null && _configRowIconGlyph is not null)
+        {
+            var server = configMode != "custom" ? AndroidStorage.GetActiveServer() : null;
+            if (server is not null)
+            {
+                var group = ProtocolGroups.Of(server);
+                var prefix = ProtocolGroups.TokenPrefix(group);
+                _configRowIconGlyph.Icon = ProtocolGroups.Icon(group);
+                _configRowIconGlyph.BindToken(IconView.ForegroundProperty, prefix + "FgBrush");
+                _configRowIcon.BindToken(Border.BackgroundProperty, prefix + "BgBrush");
+            }
+            else
+            {
+                _configRowIconGlyph.Icon = UiIcons.Flag;
+                _configRowIconGlyph.BindToken(IconView.ForegroundProperty, "AccentFgBrush");
+                _configRowIcon.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
+            }
+        }
         var mode = _fullRadio?.IsChecked == true ? Localization.SmpFullOption : Localization.SmpSplitOption;
         string src;
-        switch (AndroidStorage.GetConfigMode())
+        switch (configMode)
         {
             case "subscribe":
                 src = Localization.SmpSourceSubscription;

@@ -14,6 +14,11 @@ public sealed class ProtocolDisc : Border
 
     public ProtocolGroup Group { get => GetValue(GroupProperty); set => SetValue(GroupProperty, value); }
 
+    public static readonly StyledProperty<double> GlyphSizeProperty =
+        AvaloniaProperty.Register<ProtocolDisc, double>(nameof(GlyphSize), 15);
+
+    public double GlyphSize { get => GetValue(GlyphSizeProperty); set => SetValue(GlyphSizeProperty, value); }
+
     private readonly Pictogram _glyph = new()
     {
         Width = 15, Height = 15,
@@ -36,6 +41,8 @@ public sealed class ProtocolDisc : Border
     {
         base.OnPropertyChanged(change);
         if (change.Property == GroupProperty) Apply();
+        if (change.Property == GlyphSizeProperty)
+            _glyph.Width = _glyph.Height = GlyphSize;
     }
 
     private void Apply()
