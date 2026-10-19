@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Owner report 2026-10-19 (main `7af9aaeb`)
+
+- [x] **P2** - GENERATED-RU-IP-BYPASS-MISSING: the enabled bypass registers `vpnrouter-geoip-ru` but the generated direct route references only `vpnrouter-geosite-ru`; Russian IP destinations outside the TLD list still use proxy in full/exclude mode or for included apps, contrary to the UI hint. Custom injection already includes both tags. Source and WINBRAT current.json confirmed; owner's exact site/device not yet known - `VPNRouter.Core/Services/ConfigGenerator.Rules.cs:357`; task `plans/phase-ru-ip-bypass-2026-10-19.md`. FIXED in PR #604, implementation `c45beb19`: both tags in generated routing; 72 focused tests and full Windows suite (3457 passed, 19 skipped); negative control fails only enabled cases; real installed core selects direct for 77.88.55.88 only with bypass on. Not released or installed on the owner's device.
+
 ### Owner report 2026-10-11 (stable v2.50.2, two diagnostics bundles of one Windows user)
 
 Found from the bundles of a user for whom no connect works; task `plans/phase-geo-ruleset-selfheal-2026-10-11.md` (target v2.50.3).
