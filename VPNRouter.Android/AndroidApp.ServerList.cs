@@ -820,6 +820,25 @@ public partial class AndroidApp
             };
         }
 
+        // The protocol group's icon on a tint of its colour, the same as on the desktop lists.
+        var group = ProtocolGroups.Of(srv);
+        var discSize = UiScale.Ic(24);
+        var protocolDisc = new Border
+        {
+            Width = discSize,
+            Height = discSize,
+            CornerRadius = new CornerRadius(discSize / 2),
+            Background = GetBrush(ProtocolGroups.TokenPrefix(group) + "BgBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new IconView(ProtocolGroups.Icon(group), UiScale.Ic(14))
+            {
+                Foreground = GetBrush(ProtocolGroups.TokenPrefix(group) + "FgBrush"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        protocolDisc.PointerReleased += (s, e) => ApplyServerSelection(srv);
+
         var displayName = string.IsNullOrWhiteSpace(srv.Name) ? srv.Server : srv.Name;
 
         var nameText = new TextBlock
@@ -906,15 +925,17 @@ public partial class AndroidApp
 
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("14,*,Auto,40"),
+            ColumnDefinitions = new ColumnDefinitions("14,Auto,*,Auto,40"),
             ColumnSpacing = 8,
             VerticalAlignment = VerticalAlignment.Center,
         };
         Grid.SetColumn(radioOuter, 0);
-        Grid.SetColumn(nameStack, 1);
-        Grid.SetColumn(pingBadge, 2);
-        Grid.SetColumn(testBtn, 3);
+        Grid.SetColumn(protocolDisc, 1);
+        Grid.SetColumn(nameStack, 2);
+        Grid.SetColumn(pingBadge, 3);
+        Grid.SetColumn(testBtn, 4);
         grid.Children.Add(radioOuter);
+        grid.Children.Add(protocolDisc);
         grid.Children.Add(nameStack);
         grid.Children.Add(pingBadge);
         grid.Children.Add(testBtn);

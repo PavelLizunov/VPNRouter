@@ -27,12 +27,14 @@ public static partial class UiIcons
     public const string CirclePlus = "circle-plus";
     public const string CircleX = "circle-x";
     public const string Circle = "circle";
+    public const string Compass = "compass";
     public const string Download = "download";
     public const string EllipsisVertical = "ellipsis-vertical";
     public const string Ellipsis = "ellipsis";
     public const string FileText = "file-text";
     public const string Flag = "flag";
     public const string FolderOpen = "folder-open";
+    public const string Ghost = "ghost";
     public const string Globe = "globe";
     public const string House = "house";
     public const string Info = "info";
@@ -55,6 +57,7 @@ public static partial class UiIcons
     public const string ShieldAlert = "shield-alert";
     public const string ShieldCheck = "shield-check";
     public const string Shield = "shield";
+    public const string Siren = "siren";
     public const string SlidersHorizontal = "sliders-horizontal";
     public const string SquarePlus = "square-plus";
     public const string Square = "square";
@@ -63,8 +66,10 @@ public static partial class UiIcons
     public const string Trash = "trash";
     public const string TriangleAlert = "triangle-alert";
     public const string Upload = "upload";
+    public const string VenetianMask = "venetian-mask";
     public const string Wrench = "wrench";
     public const string X = "x";
+    public const string Zap = "zap";
 
     public static readonly IReadOnlyDictionary<string, string> PathData = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -88,12 +93,14 @@ public static partial class UiIcons
         [CirclePlus] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M8,12 L16,12 M12,8 L12,16",
         [CircleX] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M15,9 L9,15 M9,9 L15,15",
         [Circle] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z",
+        [Compass] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M16.24,7.76 L14.436,13.171 A2,2 0 0 1 13.171,14.436 L7.76,16.24 L9.564,10.829 A2,2 0 0 1 10.829,9.564 Z",
         [Download] = "M12,15 L12,3 M21,15 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,15 M7,10 L12,15 L17,10",
         [EllipsisVertical] = "M11,12 A1,1 0 1 0 13,12 A1,1 0 1 0 11,12 Z M11,5 A1,1 0 1 0 13,5 A1,1 0 1 0 11,5 Z M11,19 A1,1 0 1 0 13,19 A1,1 0 1 0 11,19 Z",
         [Ellipsis] = "M11,12 A1,1 0 1 0 13,12 A1,1 0 1 0 11,12 Z M18,12 A1,1 0 1 0 20,12 A1,1 0 1 0 18,12 Z M4,12 A1,1 0 1 0 6,12 A1,1 0 1 0 4,12 Z",
         [FileText] = "M6,22 A2,2 0 0 1 4,20 L4,4 A2,2 0 0 1 6,2 L14,2 A2.4,2.4 0 0 1 15.704,2.706 L19.292,6.294 A2.4,2.4 0 0 1 20,8 L20,20 A2,2 0 0 1 18,22 Z M14,2 L14,7 A1,1 0 0 0 15,8 L20,8 M10,9 L8,9 M16,13 L8,13 M16,17 L8,17",
         [Flag] = "M4,22 L4,4 A1,1 0 0 1 4.4,3.2 A6,6 0 0 1 8,2 C11,2 13,4 15.333,4 Q17.333,4 18.4,3.2 A1,1 0 0 1 20,4 L20,14 A1,1 0 0 1 19.6,14.8 A6,6 0 0 1 16,16 C13,16 11,14 8,14 A6,6 0 0 0 4,15.528",
         [FolderOpen] = "M6,14 L7.5,11.1 A2,2 0 0 1 9.24,10 L20,10 A2,2 0 0 1 21.94,12.5 L20.4,18.5 A2,2 0 0 1 18.45,20 L4,20 A2,2 0 0 1 2,18 L2,5 A2,2 0 0 1 4,3 L7.9,3 A2,2 0 0 1 9.59,3.9 L10.4,5.1 A2,2 0 0 0 12.07,6 L18,6 A2,2 0 0 1 20,8 L20,10",
+        [Ghost] = "M15,10 L15,11 M7.528,20.472 A1.6,1.6 0 0 1 9.805,20.472 L10.862,21.528 A1.6,1.6 0 0 0 13.138,21.528 L14.195,20.472 A1.6,1.6 0 0 1 16.472,20.472 L17.586,21.586 A1.4,1.4 0 0 0 20,20.586 L20,10 A8,8 0 0 0 4,10 L4,20.586 A1.4,1.4 0 0 0 6.414,21.586 Z M9,10 L9,11",
         [Globe] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,2 A14.5,14.5 0 0 0 12,22 A14.5,14.5 0 0 0 12,2 M2,12 L22,12",
         [House] = "M15,21 L15,13 A1,1 0 0 0 14,12 L10,12 A1,1 0 0 0 9,13 L9,21 M3,10 A2,2 0 0 1 3.709,8.472 L10.709,2.472 A2,2 0 0 1 13.291,2.472 L20.291,8.472 A2,2 0 0 1 21,10 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 Z",
         [Info] = "M2,12 A10,10 0 1 0 22,12 A10,10 0 1 0 2,12 Z M12,16 L12,12 M12,8 L12.01,8",
@@ -116,6 +123,7 @@ public static partial class UiIcons
         [ShieldAlert] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z M12,8 L12,12 M12,16 L12.01,16",
         [ShieldCheck] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z M9,12 L11,14 L15,10",
         [Shield] = "M20,13 C20,18 16.5,20.5 12.34,21.95 A1,1 0 0 1 11.67,21.94 C7.5,20.5 4,18 4,13 L4,6 A1,1 0 0 1 5,5 C7,5 9.5,3.8 11.24,2.28 A1.17,1.17 0 0 1 12.76,2.28 C14.51,3.81 17,5 19,5 A1,1 0 0 1 20,6 Z",
+        [Siren] = "M7,18 L7,12 A5,5 0 1 1 17,12 L17,18 M5,21 A1,1 0 0 0 6,22 L18,22 A1,1 0 0 0 19,21 L19,20 A2,2 0 0 0 17,18 L7,18 A2,2 0 0 0 5,20 Z M21,12 L22,12 M18.5,4.5 L18,5 M2,12 L3,12 M12,2 L12,3 M4.929,4.929 L5.636,5.636 M12,12 L12,18",
         [SlidersHorizontal] = "M10,5 L3,5 M12,19 L3,19 M14,3 L14,7 M16,17 L16,21 M21,12 L12,12 M21,19 L16,19 M21,5 L14,5 M8,10 L8,14 M8,12 L3,12",
         [SquarePlus] = "M5,3 L19,3 A2,2 0 0 1 21,5 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,5 A2,2 0 0 1 5,3 Z M8,12 L16,12 M12,8 L12,16",
         [Square] = "M5,3 L19,3 A2,2 0 0 1 21,5 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,5 A2,2 0 0 1 5,3 Z",
@@ -124,7 +132,9 @@ public static partial class UiIcons
         [Trash] = "M10,11 L10,17 M14,11 L14,17 M19,6 L19,20 A2,2 0 0 1 17,22 L7,22 A2,2 0 0 1 5,20 L5,6 M3,6 L21,6 M8,6 L8,4 A2,2 0 0 1 10,2 L14,2 A2,2 0 0 1 16,4 L16,6",
         [TriangleAlert] = "M21.73,18 L13.73,4 A2,2 0 0 0 10.27,4 L2.27,18 A2,2 0 0 0 4,21 L20,21 A2,2 0 0 0 21.73,18 M12,9 L12,13 M11.995,17 L12.005,17",
         [Upload] = "M12,3 L12,15 M17,8 L12,3 L7,8 M21,15 L21,19 A2,2 0 0 1 19,21 L5,21 A2,2 0 0 1 3,19 L3,15",
+        [VenetianMask] = "M18,11 C16.5,11 15.5,11.5 15,13 M4,6 A2,2 0 0 0 2,8 L2,12 A5,5 0 0 0 7,17 A8,8 0 0 1 12,19 A8,8 0 0 1 17,17 A5,5 0 0 0 22,12 L22,8 A2,2 0 0 0 20,6 L17,6 A8,8 0 0 0 12,8 A8,8 0 0 0 7,6 Z M6,11 C7.5,11 8.5,11.5 9,13",
         [Wrench] = "M14.7,6.3 A1,1 0 0 0 14.7,7.7 L16.3,9.3 A1,1 0 0 0 17.7,9.3 L20.806,6.195 C21.126,5.873 21.669,5.975 21.789,6.413 A6,6 0 0 1 13.53,13.47 L5.62,21.38 A1,1 0 0 1 2.621,18.38 L10.531,10.47 A6,6 0 0 1 17.588,2.211 C18.026,2.331 18.128,2.873 17.807,3.195 Z",
         [X] = "M18,6 L6,18 M6,6 L18,18",
+        [Zap] = "M15.914,4 A1.5,1.5 0 0 0 13.44,2.439 L4.44,11.439 A1.5,1.5 0 0 0 5.5,14 L9.502,14 A0.5,0.5 0 0 1 9.973,14.666 L8.086,20 A1.5,1.5 0 0 0 10.561,21.56 L19.561,12.56 A1.5,1.5 0 0 0 18.5,10 L14.503,10 A0.5,0.5 0 0 1 14.031,9.333 Z",
     };
 }

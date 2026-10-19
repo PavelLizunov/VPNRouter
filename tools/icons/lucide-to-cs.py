@@ -67,7 +67,8 @@ def tokenize_path(d):
 
 
 def split_flags(tokens):
-    """Within arc commands a token like '012' is three numbers (flag, flag, coordinate)."""
+    """Within arc commands a token like '012' is three numbers (flag, flag, coordinate). A flag is always one digit, so
+    '01.471' is the flags 0 and 1 followed by the coordinate .471."""
     res = []
     cmd = None
     argi = 0
@@ -79,12 +80,12 @@ def split_flags(tokens):
             continue
         if cmd in ("A", "a"):
             pos = argi % 7
-            if pos in (3, 4) and len(t) > 1 and t[0] in "01" and not t.startswith(("0.", "1.")):
+            if pos in (3, 4) and len(t) > 1 and t[0] in "01":
                 res.append(t[0])
                 argi += 1
                 rest = t[1:]
                 pos = argi % 7
-                if pos == 4 and len(rest) > 1 and rest[0] in "01" and not rest.startswith(("0.", "1.")):
+                if pos == 4 and len(rest) > 1 and rest[0] in "01":
                     res.append(rest[0])
                     argi += 1
                     rest = rest[1:]
