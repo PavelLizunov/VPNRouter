@@ -33,4 +33,22 @@ UI only; the connection code is untouched. Rollback: revert the PR.
 
 ## Outcome
 
-(to be filled)
+- Files: `ProtocolGroups.cs` (new, Core), `ProtocolDisc.cs` (new, desktop control), `Pictogram.cs` (eight ids and
+  `Has`), `Tokens.axaml` (16 brushes per theme), `ServerViewModel.cs` (`ProtocolGroup`, chip text from the group),
+  `SubscribePage.axaml` and `ServersPage.axaml` (disc column), `AndroidApp.ServerList.cs` (disc in the shared row
+  builder), `UiIcons.cs` (generated, five icons added, existing path data unchanged), `lucide-to-cs.py` (arc flags),
+  `ProtocolGroupsTests.cs` (new). AppVersion `2.50.5-r1`.
+- Tests: `ProtocolGroupsTests` 19/19 on WINBRAT (mapping, unique icons known to both UIs, tokens in both themes, the
+  Subscribe list on screen with eight discs whose background is the group's token and whose icon is the group's icon);
+  `ServerViewModelSubtitleTests`, `DnsTunnelLabelTests`, `PictogramTextTests` pass. PR CI: compile, test,
+  characterization-windows, go-test-windows, grep and the Android compile check green.
+- `check-icons.py`: all checks passed.
+- Headless capture of the Subscribe list (light) inspected: discs in the colours and shapes of the preview.
+  The headless theme switch did not render dark (also with a `ThemeVariantScope`), so the dark theme is checked on the
+  real window after the release; the dark tokens are asserted by the token test.
+- Second-model review (pi `gpt-sol-latest`, medium): no defects. Its coverage note (the test did not check the actual
+  brushes) is addressed by the on-screen assertions.
+- Surprise: a compact arc in Lucide's `zap.svg` (`a.5.5 0 01.471.666`) was parsed as flag 0 and x 1.471; flags are now
+  always one digit.
+
+Rollback: revert the PR.
