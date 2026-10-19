@@ -6,10 +6,17 @@ When release or platform facts change, update this file.
 
 ## Releases
 
-- **Current candidate:** v2.50.5-r2 (2026-10-19, prerelease, tag on main `697d4ba7`; Latest stays v2.50.4).
-  A coloured protocol icon for each server: in the Subscribe and Servers lists (r1) and in the compact home mode,
-  the current-connection card and the Change picker, desktop and Android (r2; `ProtocolGroups` in Core).
-  Evidence: `plans/phase-protocol-icons-2026-10-19.md`. Main declares `AppVersion` 2.50.5-r2.
+- **Current candidate:** v2.50.5-r3 (2026-10-19, prerelease, tag `6b1304ec`; Latest stays v2.50.4).
+  The enabled Russian bypass now routes Russian IPs directly as documented, not
+  only Russian domains: generated routing includes the already-downloaded geoip
+  rule set. The protocol icons from r1/r2 remain. All 18 assets, tag-bound CI,
+  integrity, APT and strict checks passed; WINBRAT passed two cold connection
+  cycles with zero lifecycle errors and its current.json includes both geo tags.
+  Evidence: `plans/phase-release-2.50.5-r3-2026-10-19.md`. Main declares 2.50.5-r3.
+  Not verified on real macOS/Linux/Android devices or the owner's exact site.
+  Website help at ninitux.com now shows the three-dot menu and populated example
+  public-server results (site commit `b3ad554`, 27 CI checks and 30 live RU/EN
+  frame checks); the vpn.ninitux.com root remains the separate install page.
 - **Current stable:** v2.50.4 (2026-10-19), cut from the candidate v2.50.4-r2
   (same tree; `AppVersion` only loses the suffix) after the owner tested r2 and
   approved the release (tag on main `8ccffed4`, Latest). The tray icon is registered again: since v2.50.0 (Avalonia
