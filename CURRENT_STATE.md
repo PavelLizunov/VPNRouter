@@ -6,6 +6,9 @@ When release or platform facts change, update this file.
 
 ## Releases
 
+- **Current candidate:** v2.50.5-r1 (2026-10-19, prerelease, tag on main `0006fd0b`; Latest stays v2.50.4).
+  A coloured protocol icon in front of each server name in the Subscribe and Servers lists, desktop and Android
+  (`ProtocolGroups` in Core). Evidence: `plans/phase-protocol-icons-2026-10-19.md`. Main declares `AppVersion` 2.50.5-r1.
 - **Current stable:** v2.50.4 (2026-10-19), cut from the candidate v2.50.4-r2
   (same tree; `AppVersion` only loses the suffix) after the owner tested r2 and
   approved the release (tag on main `8ccffed4`, Latest). The tray icon is registered again: since v2.50.0 (Avalonia
