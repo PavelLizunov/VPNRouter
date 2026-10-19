@@ -136,8 +136,15 @@ public class ConfigGeneratorTests
         Assert.DoesNotContain(config.Dns.Servers, s => s.Tag == "vpnrouter-dns-ru");
     }
 
-    [Fact]
-    public void GeoBypass_DnsUsesTunnelResolverWithoutCountrySpecificServer()
+    [Theory]
+    [InlineData("full", "include", true)]
+    [InlineData("split", "include", true)]
+    [InlineData("split", "exclude", true)]
+    [InlineData("full", "include", false)]
+    [InlineData("split", "include", false)]
+    [InlineData("split", "exclude", false)]
+    public void GeoBypass_RoutesDomainsAndIpsBeforeAppRules_AndKeepsTunnelDns(
+        string routingMode, string appsMode, bool enabled)
     {
         var previousDataDir = AppPaths.DataDir;
         var tempDataDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-generated-geo-dns-{Guid.NewGuid():N}");
@@ -149,8 +156,42 @@ public class ConfigGeneratorTests
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
 
             var settings = CreateSettings();
-            settings.App.BypassRussianTraffic = true;
+            settings.App.BypassRussianTraffic = enabled;
+            settings.App.RoutingMode = routingMode;
+            settings.App.RoutingAppsMode = appsMode;
+            settings.App.RoutingAppsInclude = new List<string> { "firefox.exe" };
+            settings.App.RoutingAppsExclude = new List<string> { "firefox.exe" };
             var config = ConfigGenerator.Generate(CreateProfile(), Array.Empty<string>(), settings);
+            var serialized = System.Text.Json.Nodes.JsonNode.Parse(ConfigGenerator.Serialize(config))!;
+            var routeRules = serialized["route"]!["rules"]!.AsArray();
+            var bypassRules = routeRules.Where(r => r?["rule_set"]?.AsArray()
+                .Any(tag => tag?.ToString() == "vpnrouter-geosite-ru") == true).ToList();
+
+            Assert.Equal(routingMode == "full" || appsMode == "exclude" ? "proxy" : "direct", config.Route.Final);
+            if (!enabled)
+            {
+                Assert.Empty(bypassRules);
+                Assert.DoesNotContain("vpnrouter-geo", ConfigGenerator.Serialize(config), StringComparison.Ordinal);
+                return;
+            }
+
+            var routeRule = Assert.Single(bypassRules)!;
+            Assert.Equal(new[] { "vpnrouter-geosite-ru", "vpnrouter-geoip-ru" },
+                routeRule["rule_set"]!.AsArray().Select(tag => tag!.ToString()));
+            Assert.Equal("direct", routeRule["outbound"]!.ToString());
+            Assert.Equal("route", routeRule["action"]!.ToString());
+            Assert.Equal(3, routeRules.IndexOf(routeRule));
+            Assert.Equal("sniff", routeRules[0]!["action"]!.ToString());
+            Assert.Equal("hijack-dns", routeRules[1]!["action"]!.ToString());
+            Assert.True(routeRules[2]!["ip_is_private"]!.GetValue<bool>());
+            Assert.Contains(config.Route.RuleSet!, r => r.Tag == "vpnrouter-geoip-ru");
+            if (routingMode == "split")
+            {
+                var appRule = Assert.Single(config.Route.Rules.Where(r => r.ProcessName?.Contains("firefox.exe") == true
+                    && r.Action == "route"));
+                Assert.True(config.Route.Rules.IndexOf(appRule) > 3);
+                Assert.Equal(appsMode == "exclude" ? "direct" : "proxy", appRule.Outbound);
+            }
 
             var geoRule = config.Dns.Rules.Single(r =>
                 r.RuleSet?.Contains("vpnrouter-geosite-ru") == true);

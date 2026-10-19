@@ -356,7 +356,7 @@ public static partial class ConfigGenerator
 
         config.Route.Rules.Insert(insertAt, new RouteRule
         {
-            RuleSet = new List<string> { GeoSiteRuleSetTag },
+            RuleSet = new List<string> { GeoSiteRuleSetTag, GeoIpRuleSetTag },
             Action = "route",
             Outbound = "direct"
         });
