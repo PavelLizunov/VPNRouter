@@ -594,11 +594,17 @@
                             <Border Width="40" Height="40"
                                     CornerRadius="{StaticResource RadiusLg}"
                                     Background="{DynamicResource AccentBgSubtleBrush}"
+                                    IsVisible="{Binding !SmpHasConfigServer}"
                                     VerticalAlignment="Center">
                                 <icons:Pictogram Id="tab-servers" Width="20" Height="20"
                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
                                                  Foreground="{DynamicResource AccentFgBrush}"/>
                             </Border>
+                            <!-- The shown server's protocol icon, as in the server lists. -->
+                            <icons:ProtocolDisc Width="40" Height="40" GlyphSize="20" CornerRadius="20"
+                                                Group="{Binding SmpConfigServer.ProtocolGroup}"
+                                                IsVisible="{Binding SmpHasConfigServer}"
+                                                ToolTip.Tip="{Binding SmpConfigServer.ProtocolUseCaseTooltip}"/>
                             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding SmpConfigName}"
                                            FontSize="{StaticResource FsLg}" FontWeight="SemiBold"
@@ -643,12 +649,15 @@
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ServerViewModel">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                                <TextBlock Text="{Binding DisplayName}"
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                                <icons:ProtocolDisc Width="22" Height="22" GlyphSize="13" CornerRadius="11"
+                                                                    Group="{Binding ProtocolGroup}"
+                                                                    ToolTip.Tip="{Binding ProtocolUseCaseTooltip}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
                                                            TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Center"
                                                            ToolTip.Tip="{Binding DisplayName}"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding PingDisplay}"
+                                                <TextBlock Grid.Column="2" Text="{Binding PingDisplay}"
                                                            FontSize="{StaticResource FsXs}"
                                                            VerticalAlignment="Center"
                                                            Foreground="{DynamicResource TextMutedBrush}"/>

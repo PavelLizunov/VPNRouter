@@ -66,3 +66,17 @@ Rollback: revert the PR.
   into the config did not switch the window to light, so the light theme is covered only by the headless capture.
 
 Not verified: Android on a real phone; the light theme in the real window.
+
+### Follow-up v2.50.5-r2 (2026-10-19): compact mode
+
+The owner said the icons must also be in the compact (home) mode, not only in the advanced lists. Implemented by
+pi `gpt-sol-latest` from a written spec (patch reviewed and applied by the lead; one SimplePage hunk overlapped and
+was applied by hand):
+
+- Desktop home card: the 40 px tile shows the shown server's protocol disc (`SmpConfigServer`, resolved by name from
+  `DeriveConnectedServerLabel` in SubscriptionServers then Servers); the old servers tile stays for custom configs.
+- Desktop "Change" picker: a 22 px disc before each server name.
+- Android home config row: the flag tile switches to the active server's protocol icon and colours (not for custom).
+- `ProtocolDisc.GlyphSize`. Tests: `SmpConfigServer` resolves the selected server and is null without servers.
+
+Note: `MainWindowViewModelCharacterizationTests` only holds two hash constants and no test method, so it pins nothing.

@@ -571,6 +571,21 @@ public partial class MainWindowViewModel
         }
     }
 
+    public ServerViewModel? SmpConfigServer
+    {
+        get
+        {
+            var (name, _) = DeriveConnectedServerLabel();
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            return SubscriptionServers.FirstOrDefault(s =>
+                       string.Equals(s.DisplayName, name, StringComparison.Ordinal))
+                   ?? Servers.FirstOrDefault(s =>
+                       string.Equals(s.DisplayName, name, StringComparison.Ordinal));
+        }
+    }
+
+    public bool SmpHasConfigServer => SmpConfigServer is not null;
+
     public string SmpConfigKind
     {
         get
@@ -602,6 +617,7 @@ public partial class MainWindowViewModel
         nameof(SmpFirstRunEditorVisible), nameof(SmpPickerVisible), nameof(SmpHasSubscriptionServers),
         nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
         nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
+        nameof(SmpConfigServer), nameof(SmpHasConfigServer),
     };
 
     private void RaiseSimpleHomeProps()
