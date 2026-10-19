@@ -35,3 +35,21 @@ version string and documents; PR CI and the tag workflows run the tests again.
 
 A published stable tag is immutable; a correction is a new version. Emergency measure with the owner's approval: mark
 `v2.50.4` as a prerelease and make `v2.50.3` Latest again.
+
+## Outcome (2026-10-19)
+
+- PR #598 squash-merged to main `8ccffed4` (AppVersion `2.50.4`); PR CI green on the final head.
+- Annotated tag `v2.50.4` at `8ccffed4` (remote check equal), draft non-prerelease `--latest=false`.
+- SignPath has no secrets and no variables, so the Windows files are unsigned as before. The six Windows files were built
+  on WINBRAT by `build.ps1 -Version 2.50.4 -BundleSplitDriver -Installer` from a checkout verified at `8ccffed4`; size,
+  SHA-256 and every sidecar matched on both ends. macOS, Linux and Android came from the tag workflows: 18 assets.
+- Before publication: all tag runs success (dotnet test, Windows update test, macOS, Linux, Android);
+  `verify-release-integrity` success at `8ccffed4`; strict gate 8 green / 0 red; `check-open-p0` OK without waiver.
+- Published as Latest. Release-event runs: integrity, APT, Windows auto-update test all success.
+- Homebrew: tap dispatch, run success, cask `2.50.4` with the DMG hash equal to the published sidecar.
+- `post-ship-local.ps1 -Version 2.50.4`: `POSTSHIP-LOCAL: PASS` (2 cold cycles).
+- WINBRAT: v2.50.4 installed, app stopped, explorer running, task files removed; logs `post-2.50.4.log` and
+  `liveupd-2.50.4-r2.log` kept.
+
+Not verified: the tray on Linux, macOS and Windows 11; signed Windows files; the candidate-to-stable update path
+(update tooling did not change since v2.50.3, so it was not required).
