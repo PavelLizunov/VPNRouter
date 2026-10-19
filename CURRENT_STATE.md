@@ -8,7 +8,7 @@ When release or platform facts change, update this file.
 
 - **Current stable:** v2.50.4 (2026-10-19), cut from the candidate v2.50.4-r2
   (same tree; `AppVersion` only loses the suffix) after the owner tested r2 and
-  approved the release. The tray icon is registered again: since v2.50.0 (Avalonia
+  approved the release (tag on main `8ccffed4`, Latest). The tray icon is registered again: since v2.50.0 (Avalonia
   12.1.3 creates the icon only for a `TrayIcon.Icons` entry) there was no tray icon and a
   closed window was unreachable. On Windows a `TrayGuard` checks the icon before hiding
   and minimizes to the taskbar when it cannot be shown; a one-time balloon says where the
