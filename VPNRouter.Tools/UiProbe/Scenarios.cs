@@ -27,6 +27,7 @@ public static class Scenarios
         }),
         new("free-results", "Offline example results for the public-server help guide", vm =>
         {
+            vm.SelectedTabIndex = 5;
             var page = vm.FreeConfigsVm;
             var entries = new List<FreeConfigEntry>
             {

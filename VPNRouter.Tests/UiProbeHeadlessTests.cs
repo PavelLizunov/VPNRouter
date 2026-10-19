@@ -49,6 +49,7 @@ public class UiProbeHeadlessTests
         {
             Surface = "free", Scenario = "free-results", Width = 440, Height = 800,
         });
+        session.Vm.SelectedTabIndex = 5;
         var page = session.Vm.FreeConfigsVm;
         Assert.Equal(2, page.DisplayedConfigs.Count);
         Assert.False(page.IsEmpty);
