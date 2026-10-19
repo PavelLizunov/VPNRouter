@@ -52,3 +52,17 @@ UI only; the connection code is untouched. Rollback: revert the PR.
   always one digit.
 
 Rollback: revert the PR.
+
+### Release v2.50.5-r1 (2026-10-19)
+
+- PR #600 squash-merged to main `0006fd0b`; annotated tag `v2.50.5-r1` there (remote check equal), draft prerelease.
+- SignPath 0/0, so the six Windows files are unsigned; built on WINBRAT from a checkout verified at `0006fd0b`, size,
+  SHA-256 and sidecars matched. With the tag workflows: 18 assets.
+- Tag runs all success; `verify-release-integrity` success; strict gate 8 green; `check-open-p0` OK.
+- Published as a prerelease; Latest stays v2.50.4. Release-event integrity, APT and Windows update test success.
+- `post-ship-local.ps1 -Version 2.50.5-r1`: `POSTSHIP-LOCAL: PASS` (2 cold cycles).
+- Real window on WINBRAT (published build, dark theme, the worker's own subscription): Subscribe and Servers lists show
+  the mask disc for VLESS Reality, the zap disc for Hysteria2 and the globe disc for gRPC servers. Writing `theme: light`
+  into the config did not switch the window to light, so the light theme is covered only by the headless capture.
+
+Not verified: Android on a real phone; the light theme in the real window.
