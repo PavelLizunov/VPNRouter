@@ -81,14 +81,7 @@ public static class SelfRepair
             throw;
         }
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "powershell.exe",
-            Arguments = $"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"{bootstrapPath}\"",
-            UseShellExecute = true,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
-        };
+        var psi = BuildStartInfo(bootstrapPath);
 
         try
         {
@@ -100,5 +93,24 @@ public static class SelfRepair
             logger?.Error(ex, "[SelfRepair] failed to spawn repair helper — install must be repaired manually");
             throw;
         }
+    }
+
+    internal static ProcessStartInfo BuildStartInfo(string bootstrapPath)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-WindowStyle");
+        psi.ArgumentList.Add("Hidden");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(bootstrapPath);
+        return psi;
     }
 }
