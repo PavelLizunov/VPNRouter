@@ -60,17 +60,19 @@ public partial class AboutWindow : Window
             if (!System.IO.File.Exists(singboxPath))
                 return "not installed";
 
+            var psi = new ProcessStartInfo
+            {
+                FileName = singboxPath,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("version");
+
             using var proc = new Process
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = singboxPath,
-                    Arguments = "version",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                    CreateNoWindow = true
-                }
+                StartInfo = psi
             };
             proc.Start();
 
