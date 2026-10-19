@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.Tools.UiProbe;
 
@@ -23,6 +24,24 @@ public static class Scenarios
         {
             vm.IsConnected = false;
             vm.IsConnecting = true;
+        }),
+        new("free-results", "Offline example results for the public-server help guide", vm =>
+        {
+            vm.SelectedTabIndex = 5;
+            var page = vm.FreeConfigsVm;
+            var entries = new List<FreeConfigEntry>
+            {
+                new() { Id = "guide-de", Host = "203.0.113.10", Port = 443, CountryCode = "DE",
+                    Status = FreeConfigStatus.Verified, LatencyMs = 42, MeasuredBandwidthMbps = 30 },
+                new() { Id = "guide-nl", Host = "198.51.100.20", Port = 443, CountryCode = "NL",
+                    Status = FreeConfigStatus.Verified, LatencyMs = 68, MeasuredBandwidthMbps = 20 },
+            };
+            typeof(VPNRouter.App.ViewModels.FreeConfigs.FreeConfigsPageViewModel)
+                .GetField("_allConfigs", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(page, entries);
+            typeof(VPNRouter.App.ViewModels.FreeConfigs.FreeConfigsPageViewModel)
+                .GetMethod("ApplyFiltersAndStats", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(page, null);
+            page.StatusText = VPNRouter.App.Localization.Strings.Lang == "ru"
+                ? "Найдено 2 тестовых сервера" : "2 example servers found";
         }),
         new("configured", "One saved server link, not connected (add state IsConnected / IsConnecting / SmpErrorText)", AddOneServer),
         new("alert", "One saved server, the tunnel reported a failover alert (the dead-config warning of the home screen)", vm =>
