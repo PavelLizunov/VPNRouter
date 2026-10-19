@@ -114,6 +114,24 @@
             <SolidColorBrush x:Key="PillNeutralBgBrush" Color="#FFF1F5F9"/>
             <SolidColorBrush x:Key="PillNeutralFgBrush" Color="#FF334155"/>
 
+            <!-- Protocol groups (ProtocolGroups.TokenPrefix): the icon colour and the tinted disc behind it in the server lists. -->
+            <SolidColorBrush x:Key="ProtoDailyFgBrush" Color="#FF0276B4"/>
+            <SolidColorBrush x:Key="ProtoDailyBgBrush" Color="#1F0276B4"/>
+            <SolidColorBrush x:Key="ProtoStealthWebFgBrush" Color="#FF7C3AED"/>
+            <SolidColorBrush x:Key="ProtoStealthWebBgBrush" Color="#1F7C3AED"/>
+            <SolidColorBrush x:Key="ProtoWebFallbackFgBrush" Color="#FF475569"/>
+            <SolidColorBrush x:Key="ProtoWebFallbackBgBrush" Color="#1F475569"/>
+            <SolidColorBrush x:Key="ProtoGamesVoiceFgBrush" Color="#FFB45309"/>
+            <SolidColorBrush x:Key="ProtoGamesVoiceBgBrush" Color="#1FB45309"/>
+            <SolidColorBrush x:Key="ProtoLowPingFgBrush" Color="#FF15803D"/>
+            <SolidColorBrush x:Key="ProtoLowPingBgBrush" Color="#1F15803D"/>
+            <SolidColorBrush x:Key="ProtoWebOnlyFgBrush" Color="#FF0F766E"/>
+            <SolidColorBrush x:Key="ProtoWebOnlyBgBrush" Color="#1F0F766E"/>
+            <SolidColorBrush x:Key="ProtoFallbackFgBrush" Color="#FFC2410C"/>
+            <SolidColorBrush x:Key="ProtoFallbackBgBrush" Color="#1FC2410C"/>
+            <SolidColorBrush x:Key="ProtoEmergencyFgBrush" Color="#FFDC2626"/>
+            <SolidColorBrush x:Key="ProtoEmergencyBgBrush" Color="#1FDC2626"/>
+
             <BoxShadows x:Key="ShadowXs">0 1 1 0 #0A0F1320</BoxShadows>
             <BoxShadows x:Key="ShadowSm">0 1 2 0 #0F0F1320, 0 1 1 0 #0A0F1320</BoxShadows>
             <BoxShadows x:Key="ShadowMd">0 4 12 0 #120F1320, 0 1 2 0 #0A0F1320</BoxShadows>
@@ -241,6 +259,24 @@
             <Color x:Key="PillNeutralFg">#FF94A3B8</Color>
             <SolidColorBrush x:Key="PillNeutralBgBrush" Color="#FF1E2430"/>
             <SolidColorBrush x:Key="PillNeutralFgBrush" Color="#FF94A3B8"/>
+
+            <!-- Protocol groups (ProtocolGroups.TokenPrefix): the icon colour and the tinted disc behind it in the server lists. -->
+            <SolidColorBrush x:Key="ProtoDailyFgBrush" Color="#FF38BDF8"/>
+            <SolidColorBrush x:Key="ProtoDailyBgBrush" Color="#2938BDF8"/>
+            <SolidColorBrush x:Key="ProtoStealthWebFgBrush" Color="#FFA78BFA"/>
+            <SolidColorBrush x:Key="ProtoStealthWebBgBrush" Color="#29A78BFA"/>
+            <SolidColorBrush x:Key="ProtoWebFallbackFgBrush" Color="#FF94A3B8"/>
+            <SolidColorBrush x:Key="ProtoWebFallbackBgBrush" Color="#2994A3B8"/>
+            <SolidColorBrush x:Key="ProtoGamesVoiceFgBrush" Color="#FFFBBF24"/>
+            <SolidColorBrush x:Key="ProtoGamesVoiceBgBrush" Color="#29FBBF24"/>
+            <SolidColorBrush x:Key="ProtoLowPingFgBrush" Color="#FF4ADE80"/>
+            <SolidColorBrush x:Key="ProtoLowPingBgBrush" Color="#294ADE80"/>
+            <SolidColorBrush x:Key="ProtoWebOnlyFgBrush" Color="#FF2DD4BF"/>
+            <SolidColorBrush x:Key="ProtoWebOnlyBgBrush" Color="#292DD4BF"/>
+            <SolidColorBrush x:Key="ProtoFallbackFgBrush" Color="#FFFB923C"/>
+            <SolidColorBrush x:Key="ProtoFallbackBgBrush" Color="#29FB923C"/>
+            <SolidColorBrush x:Key="ProtoEmergencyFgBrush" Color="#FFF87171"/>
+            <SolidColorBrush x:Key="ProtoEmergencyBgBrush" Color="#29F87171"/>
 
             <BoxShadows x:Key="ShadowXs">0 1 1 0 #66000000</BoxShadows>
             <BoxShadows x:Key="ShadowSm">0 1 2 0 #80000000, 0 1 1 0 #66000000</BoxShadows>

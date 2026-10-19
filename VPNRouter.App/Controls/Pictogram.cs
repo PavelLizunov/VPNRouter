@@ -43,6 +43,9 @@ public sealed class Pictogram : Control
             context.DrawGeometry(part.Filled ? Foreground : null, part.Filled ? null : pen, part.Geometry);
     }
 
+    /// <summary>True when the id has a shape.</summary>
+    public static bool Has(string? id) => id is not null && Shapes.ContainsKey(id);
+
     private sealed record Part(Geometry Geometry, bool Filled = false);
     private static Part L(string lucide) => new(Geometry.Parse(UiIcons.PathData[lucide]));
     private static Part Dot(double radius) => new(new EllipseGeometry(new Rect(12 - radius, 12 - radius, radius * 2, radius * 2)), true);
@@ -63,14 +66,18 @@ public sealed class Pictogram : Control
         ["chevron-left"] = [L(UiIcons.ChevronLeft)],
         ["chevron-right"] = [L(UiIcons.ChevronRight)],
         ["close"] = [L(UiIcons.X)],
+        ["compass"] = [L(UiIcons.Compass)],
         ["delete"] = [L(UiIcons.Trash)],
         ["error"] = [L(UiIcons.CircleX)],
         ["find-working"] = [L(UiIcons.SearchCheck)],
         ["flag"] = [L(UiIcons.Flag)],
         ["folder"] = [L(UiIcons.FolderOpen)],
+        ["ghost"] = [L(UiIcons.Ghost)],
         ["globe"] = [L(UiIcons.Globe)],
         ["info"] = [L(UiIcons.Info)],
+        ["life-buoy"] = [L(UiIcons.LifeBuoy)],
         ["link"] = [L(UiIcons.Link)],
+        ["activity"] = [L(UiIcons.Activity)],
         ["running"] = [L(UiIcons.Activity)],
         ["more-horizontal"] = [L(UiIcons.Ellipsis)],
         ["play"] = [L(UiIcons.Play)],
@@ -86,6 +93,7 @@ public sealed class Pictogram : Control
         ["shield-alert"] = [L(UiIcons.ShieldAlert)],
         ["shield-bolt"] = [L(UiIcons.ShieldCheck)],
         ["shield-check"] = [L(UiIcons.ShieldCheck)],
+        ["siren"] = [L(UiIcons.Siren)],
         ["sort"] = [L(UiIcons.ArrowDownUp)],
         ["status"] = [Dot(6)],
         ["status-off"] = [Ring(6)],
@@ -100,7 +108,9 @@ public sealed class Pictogram : Control
         ["telegram"] = [L(UiIcons.Send)],
         ["timer"] = [L(UiIcons.Timer)],
         ["untested"] = [L(UiIcons.CircleDashed)],
+        ["venetian-mask"] = [L(UiIcons.VenetianMask)],
         ["verified"] = [L(UiIcons.CheckCheck)],
-        ["warning"] = [L(UiIcons.TriangleAlert)]
+        ["warning"] = [L(UiIcons.TriangleAlert)],
+        ["zap"] = [L(UiIcons.Zap)]
     };
 }

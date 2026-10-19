@@ -36,9 +36,9 @@
       <Border Grid.Row="0" Grid.RowSpan="2" Classes="list-card" MinHeight="170">
         <DockPanel>
           <Border DockPanel.Dock="Top" Classes="list-head" IsVisible="{Binding Servers.Count}">
-            <Grid ColumnDefinitions="22,*,Auto,70" ColumnSpacing="10">
-              <TextBlock Grid.Column="1" Text="{Binding L_ColServer}"/>
-              <TextBlock Grid.Column="2" Text="{Binding L_ColPing}"
+            <Grid ColumnDefinitions="22,26,*,Auto,70" ColumnSpacing="10">
+              <TextBlock Grid.Column="2" Text="{Binding L_ColServer}"/>
+              <TextBlock Grid.Column="3" Text="{Binding L_ColPing}"
                          ToolTip.Tip="{Binding L_ColPingTooltip}"
                          MinWidth="58" TextAlignment="Center"/>
             </Grid>
@@ -59,13 +59,17 @@
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:ServerViewModel">
                   <Border Classes="server-row" Classes.active="{Binding IsActive}">
-                    <Grid ColumnDefinitions="22,*,Auto,Auto,Auto" ColumnSpacing="10">
+                    <Grid ColumnDefinitions="22,26,*,Auto,Auto,Auto" ColumnSpacing="10">
                       <Panel Grid.Column="0" VerticalAlignment="Center">
                         <icons:Pictogram Id="radio-on" Width="18" Height="18" IsVisible="{Binding IsActive}" Foreground="{DynamicResource AccentSolidBrush}"/>
                         <icons:Pictogram Id="radio-off" Width="18" Height="18" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
                       </Panel>
 
-                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                      <icons:ProtocolDisc Grid.Column="1" Group="{Binding ProtocolGroup}"
+                                           ToolTip.Tip="{Binding ProtocolUseCaseTooltip}"
+                                           AutomationProperties.Name="{Binding ProtocolUseCase}"/>
+
+                      <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3">
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                           <TextBlock Classes="server-name" Text="{Binding DisplayName}" ToolTip.Tip="{Binding DisplayName}"/>
                           <Border Grid.Column="1" Classes="chip warn"
@@ -90,7 +94,7 @@
                                    ToolTip.Tip="{Binding HealthTooltip}"/>
                       </StackPanel>
 
-                      <Border Grid.Column="2" Classes="ping-pill"
+                      <Border Grid.Column="3" Classes="ping-pill"
                               Classes.good="{Binding IsPingGood}"
                               Classes.slow="{Binding IsPingSlow}"
                               Classes.bad="{Binding IsPingBad}"
@@ -98,7 +102,7 @@
                         <TextBlock Text="{Binding PingDisplay}"/>
                       </Border>
 
-                      <Button Grid.Column="3" Classes="row-icon"
+                      <Button Grid.Column="4" Classes="row-icon"
                               Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
                               CommandParameter="{Binding}"
                               IsEnabled="{Binding !IsTesting}"
@@ -106,7 +110,7 @@
                         <icons:Pictogram Id="retest"/>
                       </Button>
 
-                      <Button Grid.Column="4" Classes="row-icon danger"
+                      <Button Grid.Column="5" Classes="row-icon danger"
                               Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveServerByEntryCommand}"
                               CommandParameter="{Binding}"
                               ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipDeleteServer}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipDeleteServer}">

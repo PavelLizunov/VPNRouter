@@ -456,45 +456,32 @@ public partial class ServerViewModel : ViewModelBase
         }
     }
 
-    public string ProtocolUseCase
-    {
-        get
-        {
-            var protocol = ProtocolKey;
-            var transport = _originalEntry?.Transport?.Type?.ToLowerInvariant();
-            return protocol switch
-            {
-                "hysteria2" or "hy2" or "tuic" => Strings.ProtocolUseGamesVoice,
-                "naive" => HasUdpSibling ? Strings.ProtocolUseWebUdpPair : Strings.ProtocolUseWebOnly,
-                "amneziawg" or "awg" => Strings.ProtocolUseLowLatency,
-                "dns-tunnel" => Strings.ProtocolUseEmergency,
-                "shadowsocks" or "ss" => Strings.ProtocolUseFallback,
-                _ when transport is "xhttp" => Strings.ProtocolUseStealthWeb,
-                _ when transport is "ws" or "grpc" => Strings.ProtocolUseWebFallback,
-                _ => Strings.ProtocolUseDaily,
-            };
-        }
-    }
+    /// <summary>What the server is good for; the lists show it as the coloured icon in front of the name.</summary>
+    public ProtocolGroup ProtocolGroup => ProtocolGroups.Of(_originalEntry);
 
-    public string ProtocolUseCaseTooltip
+    public string ProtocolUseCase => ProtocolGroup switch
     {
-        get
-        {
-            var protocol = ProtocolKey;
-            var transport = _originalEntry?.Transport?.Type?.ToLowerInvariant();
-            return protocol switch
-            {
-                "hysteria2" or "hy2" or "tuic" => Strings.ProtocolUseGamesVoiceTip,
-                "naive" => HasUdpSibling ? Strings.ProtocolUseWebUdpPairTip : Strings.ProtocolUseWebOnlyTip,
-                "amneziawg" or "awg" => Strings.ProtocolUseLowLatencyTip,
-                "dns-tunnel" => Strings.ProtocolUseEmergencyTip,
-                "shadowsocks" or "ss" => Strings.ProtocolUseFallbackTip,
-                _ when transport is "xhttp" => Strings.ProtocolUseStealthWebTip,
-                _ when transport is "ws" or "grpc" => Strings.ProtocolUseWebFallbackTip,
-                _ => Strings.ProtocolUseDailyTip,
-            };
-        }
-    }
+        ProtocolGroup.GamesVoice => Strings.ProtocolUseGamesVoice,
+        ProtocolGroup.WebOnly => HasUdpSibling ? Strings.ProtocolUseWebUdpPair : Strings.ProtocolUseWebOnly,
+        ProtocolGroup.LowPing => Strings.ProtocolUseLowLatency,
+        ProtocolGroup.Emergency => Strings.ProtocolUseEmergency,
+        ProtocolGroup.Fallback => Strings.ProtocolUseFallback,
+        ProtocolGroup.StealthWeb => Strings.ProtocolUseStealthWeb,
+        ProtocolGroup.WebFallback => Strings.ProtocolUseWebFallback,
+        _ => Strings.ProtocolUseDaily,
+    };
+
+    public string ProtocolUseCaseTooltip => ProtocolGroup switch
+    {
+        ProtocolGroup.GamesVoice => Strings.ProtocolUseGamesVoiceTip,
+        ProtocolGroup.WebOnly => HasUdpSibling ? Strings.ProtocolUseWebUdpPairTip : Strings.ProtocolUseWebOnlyTip,
+        ProtocolGroup.LowPing => Strings.ProtocolUseLowLatencyTip,
+        ProtocolGroup.Emergency => Strings.ProtocolUseEmergencyTip,
+        ProtocolGroup.Fallback => Strings.ProtocolUseFallbackTip,
+        ProtocolGroup.StealthWeb => Strings.ProtocolUseStealthWebTip,
+        ProtocolGroup.WebFallback => Strings.ProtocolUseWebFallbackTip,
+        _ => Strings.ProtocolUseDailyTip,
+    };
 
     public static void RefreshUdpSiblingFlags(System.Collections.Generic.IEnumerable<ServerViewModel> vms)
     {
