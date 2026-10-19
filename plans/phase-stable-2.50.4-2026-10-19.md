@@ -24,7 +24,7 @@ written in the Suflyor session and relayed to this session by that session.
 | 3 | candidate commit CI | tag workflows, Windows update test, APT, integrity: success; strict gate 8 green |
 | 4 | 18 canonical files | 6 Windows, 4 macOS, 6 Linux, 2 Android |
 | 5 | post-ship | `POSTSHIP-LOCAL: PASS`, 2 cold cycles |
-| 6 | live update from the previous stable | LIVEUPDATE_RESULT |
+| 6 | live update from the previous stable | `LIVEUPDATE-LOCAL: PASS (baseline 2.50.3 -> 2.50.4-r2, 2 cold cycles)`: helper done, exact version, relaunch, receipt consumed; `geosite-ru.srs` zeroed before the update and repaired by the cycles; cleanup PASS |
 | 7 | `check-open-p0.ps1` | `OK: no open P0/P1` |
 | 8 | owner authorization | the approval quoted above |
 
