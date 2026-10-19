@@ -6,13 +6,16 @@ When release or platform facts change, update this file.
 
 ## Releases
 
-- **Current candidate:** v2.50.5-r3 (2026-10-19, prerelease, tag `6b1304ec`; Latest stays v2.50.4).
+- **Stable cut in progress:** 2.50.5, explicitly approved after the owner tested
+  v2.50.5-r3. Main declares 2.50.5; Latest stays v2.50.4 until publication.
+  Evidence: `plans/phase-stable-2.50.5-2026-10-20.md`.
+- **Verified candidate:** v2.50.5-r3 (2026-10-19, tag `6b1304ec`).
   The enabled Russian bypass now routes Russian IPs directly as documented, not
   only Russian domains: generated routing includes the already-downloaded geoip
   rule set. The protocol icons from r1/r2 remain. All 18 assets, tag-bound CI,
   integrity, APT and strict checks passed; WINBRAT passed two cold connection
   cycles with zero lifecycle errors and its current.json includes both geo tags.
-  Evidence: `plans/phase-release-2.50.5-r3-2026-10-19.md`. Main declares 2.50.5-r3.
+  Evidence: `plans/phase-release-2.50.5-r3-2026-10-19.md`.
   Not verified on real macOS/Linux/Android devices or the owner's exact site.
   Website help at ninitux.com now shows the three-dot menu and populated example
   public-server results (site commit `b3ad554`, 27 CI checks and 30 live RU/EN
