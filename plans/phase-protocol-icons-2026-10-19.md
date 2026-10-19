@@ -80,3 +80,9 @@ was applied by hand):
 - `ProtocolDisc.GlyphSize`. Tests: `SmpConfigServer` resolves the selected server and is null without servers.
 
 Note: `MainWindowViewModelCharacterizationTests` only holds two hash constants and no test method, so it pins nothing.
+
+Release v2.50.5-r2 (2026-10-19): PR #602 squash-merged to main `697d4ba7`, tag there, 18 assets (Windows built on
+WINBRAT, hashes and sidecars matched, unsigned), tag runs success, integrity success, strict gate 8 green,
+`check-open-p0` OK, published as a prerelease (Latest stays v2.50.4), release-event integrity/APT/update test success,
+`POSTSHIP-LOCAL: PASS` (2 cold cycles). Real window on WINBRAT: the home card shows the mask disc for the current
+VLESS server, the Change picker lists every server with its disc (zap for Hysteria2). Not verified: Android on a phone.
