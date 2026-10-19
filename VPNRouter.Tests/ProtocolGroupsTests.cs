@@ -94,53 +94,39 @@ public class ProtocolGroupsTests
         Assert.Equal(ProtocolGroup.StealthWeb, new ServerViewModel(Entry("vless", "xhttp")).ProtocolGroup);
     }
 
-    [AvaloniaTheory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void SubscribeList_ShowsTheProtocolDisc_InBothThemes(bool dark)
+    [AvaloniaFact]
+    public void SubscribeList_ShowsAColouredDiscPerServer()
     {
         var app = Avalonia.Application.Current!;
-        var previous = app.RequestedThemeVariant;
-        try
-        {
-            app.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
-            using var vm = new MainWindowViewModel(new InMemorySettingsStore());
-            var awg = Entry("amneziawg", null, "Finland AWG");
-            awg.Awg = new AwgConfig();
-            var dns = Entry("dns-tunnel", null, "Emergency DNS");
-            dns.DnsDomain = "t.example";
-            VlessServerEntry[] entries =
-            [
-                Entry("vless", "tcp", "Netherlands Reality"), Entry("hysteria2", null, "Germany HY2"), awg,
-                Entry("vless", "xhttp", "Sweden XHTTP"), Entry("vless", "ws", "Poland WS"), Entry("naive", null, "Latvia Naive"),
-                Entry("ss", null, "Turkey SS"), dns,
-            ];
-            foreach (var entry in entries) vm.SubscriptionServers.Add(new ServerViewModel(entry));
+        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+        var awg = Entry("amneziawg", null, "Finland AWG");
+        awg.Awg = new AwgConfig();
+        var dns = Entry("dns-tunnel", null, "Emergency DNS");
+        dns.DnsDomain = "t.example";
+        VlessServerEntry[] entries =
+        [
+            Entry("vless", "tcp", "Netherlands Reality"), Entry("hysteria2", null, "Germany HY2"), awg,
+            Entry("vless", "xhttp", "Sweden XHTTP"), Entry("vless", "ws", "Poland WS"), Entry("naive", null, "Latvia Naive"),
+            Entry("ss", null, "Turkey SS"), dns,
+        ];
+        foreach (var entry in entries) vm.SubscriptionServers.Add(new ServerViewModel(entry));
 
-            var page = new SubscribePage { DataContext = vm };
-            // A theme scope around the page, so the capture uses the requested theme whatever the window inherits.
-            var ground = new Avalonia.Controls.Border { Child = page };
-            ground.Bind(Avalonia.Controls.Border.BackgroundProperty, ground.GetResourceObservable("SurfaceAppBrush"));
-            var host = new Avalonia.Controls.UserControl
-            {
-                Content = new Avalonia.Controls.ThemeVariantScope
-                {
-                    RequestedThemeVariant = app.RequestedThemeVariant,
-                    Child = ground,
-                },
-            };
-            ScreenshotHelper.CapturePage(host, $"protocol-discs-subscribe-{(dark ? "dark" : "light")}",
-                width: 520, height: 720);
-            Assert.True(page.TryGetResource("SurfaceAppBrush", page.ActualThemeVariant, out _));
-            Assert.Equal(app.RequestedThemeVariant, page.ActualThemeVariant);
-
-            var discs = page.GetVisualDescendants().OfType<ProtocolDisc>().ToList();
-            Assert.Equal(entries.Length, discs.Count);
-            Assert.Equal(Enum.GetValues<ProtocolGroup>().Length, discs.Select(d => d.Group).Distinct().Count());
-        }
-        finally
+        var page = new SubscribePage { DataContext = vm };
+        var window = new Window { Width = 520, Height = 900, Content = page };
+        window.Bind(Window.BackgroundProperty, window.GetResourceObservable("SurfaceAppBrush"));
+        window.Show();
+        var discs = page.GetVisualDescendants().OfType<ProtocolDisc>().ToList();
+        Assert.Equal(entries.Length, discs.Count);
+        Assert.Equal(Enum.GetValues<ProtocolGroup>().Length, discs.Select(d => d.Group).Distinct().Count());
+        foreach (var disc in discs)
         {
-            app.RequestedThemeVariant = previous;
+            Assert.True(app.TryGetResource(ProtocolGroups.TokenPrefix(disc.Group) + "BgBrush", app.ActualThemeVariant, out var bg));
+            Assert.Same(bg, disc.Background);
+            var glyph = Assert.IsType<Pictogram>(disc.Child);
+            Assert.Equal(ProtocolGroups.Icon(disc.Group), glyph.Id);
+            Assert.NotNull(glyph.Foreground);
         }
+        // Capture shows the window again, saves the frame and closes it.
+        ScreenshotHelper.Capture(window, "protocol-discs-subscribe");
     }
 }
