@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using VPNRouter.Tests.Fakes;
 using VPNRouter.Tools.UiProbe;
 
@@ -42,12 +43,15 @@ public class UiProbeHeadlessTests
             string.Join("\n", result.Failures.Select(f => $"{f.Element}: {f.Error}")));
     }
 
-    [AvaloniaFact]
-    public void FreeResultsScenario_HasSelectedOfflineExamplesAndEnabledConnect()
+    [AvaloniaTheory]
+    [InlineData("ru", "Подключить")]
+    [InlineData("en", "Connect")]
+    public void FreeResultsScenario_HasSelectedOfflineExamplesAndEnabledConnect(string language, string connectLabel)
     {
         using var session = ProbeSession.Open(new ProbeOptions
         {
-            Surface = "free", Scenario = "free-results", Width = 440, Height = 800,
+            Surface = "window-advanced", Scenario = "free-results", Width = 440, Height = 800,
+            Language = language, Steps = new List<string> { language == "ru" ? "Публичные" : "Public" },
         });
         session.Vm.SelectedTabIndex = 5;
         var page = session.Vm.FreeConfigsVm;
@@ -57,6 +61,9 @@ public class UiProbeHeadlessTests
         Assert.Equal("203.0.113.10", page.SelectedItem!.Entry.Host);
         Assert.All(page.DisplayedConfigs, item =>
             Assert.Equal(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, item.Entry.Status));
+        var connect = Assert.Single(session.Window.GetVisualDescendants().OfType<Button>()
+            .Where(button => button.IsEffectivelyVisible && Describe.Label(button) == connectLabel));
+        Assert.True(connect.IsEffectivelyEnabled);
         Assert.True(session.CapturePng().Length > 1000);
     }
 
