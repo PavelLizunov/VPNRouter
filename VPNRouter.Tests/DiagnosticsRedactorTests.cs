@@ -198,6 +198,25 @@ app:
     }
 
     [Fact]
+    public void Logs_RedactQuotedKeyValueSecretsWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta\" ok\n" +
+            "[DBG] token='x y' set\n" +
+            "[DBG] userpassword=\"hello world 123\" ok");
+
+        Assert.DoesNotContain("alpha", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("x y", outp);
+        Assert.DoesNotContain("hello world 123", outp);
+        Assert.Equal(
+            $"[DBG] password=\"***\" ok{Environment.NewLine}" +
+            $"[DBG] token='***' set{Environment.NewLine}" +
+            "[DBG] userpassword=\"***\" ok",
+            outp);
+    }
+
+    [Fact]
     public void Yaml_NumericObfsPassword_IsRedacted()
     {
         var outp = DiagnosticsRedactor.RedactConfigYaml(
