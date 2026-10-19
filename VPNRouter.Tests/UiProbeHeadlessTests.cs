@@ -43,6 +43,23 @@ public class UiProbeHeadlessTests
     }
 
     [AvaloniaFact]
+    public void FreeResultsScenario_HasSelectedOfflineExamplesAndEnabledConnect()
+    {
+        using var session = ProbeSession.Open(new ProbeOptions
+        {
+            Surface = "free", Scenario = "free-results", Width = 440, Height = 800,
+        });
+        var page = session.Vm.FreeConfigsVm;
+        Assert.Equal(2, page.DisplayedConfigs.Count);
+        Assert.False(page.IsEmpty);
+        Assert.True(page.HasSelection);
+        Assert.Equal("203.0.113.10", page.SelectedItem!.Entry.Host);
+        Assert.All(page.DisplayedConfigs, item =>
+            Assert.Equal(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, item.Entry.Status));
+        Assert.True(session.CapturePng().Length > 1000);
+    }
+
+    [AvaloniaFact]
     public void FastTabSwitching_RaisesNoException()
     {
         var result = Sweeper.Run(new SweepOptions
