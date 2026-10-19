@@ -1,3 +1,5 @@
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
@@ -116,8 +118,21 @@ public class ProtocolGroupsTests
             foreach (var entry in entries) vm.SubscriptionServers.Add(new ServerViewModel(entry));
 
             var page = new SubscribePage { DataContext = vm };
-            ScreenshotHelper.CapturePage(page, $"protocol-discs-subscribe-{(dark ? "dark" : "light")}",
-                width: 520, height: 720, appBackground: true);
+            // A theme scope around the page, so the capture uses the requested theme whatever the window inherits.
+            var ground = new Avalonia.Controls.Border { Child = page };
+            ground.Bind(Avalonia.Controls.Border.BackgroundProperty, ground.GetResourceObservable("SurfaceAppBrush"));
+            var host = new Avalonia.Controls.UserControl
+            {
+                Content = new Avalonia.Controls.ThemeVariantScope
+                {
+                    RequestedThemeVariant = app.RequestedThemeVariant,
+                    Child = ground,
+                },
+            };
+            ScreenshotHelper.CapturePage(host, $"protocol-discs-subscribe-{(dark ? "dark" : "light")}",
+                width: 520, height: 720);
+            Assert.True(page.TryGetResource("SurfaceAppBrush", page.ActualThemeVariant, out _));
+            Assert.Equal(app.RequestedThemeVariant, page.ActualThemeVariant);
 
             var discs = page.GetVisualDescendants().OfType<ProtocolDisc>().ToList();
             Assert.Equal(entries.Length, discs.Count);
