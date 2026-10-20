@@ -6,10 +6,15 @@ When release or platform facts change, update this file.
 
 ## Releases
 
-- **Stable cut in progress:** 2.50.5, explicitly approved after the owner tested
-  v2.50.5-r3. Main declares 2.50.5; Latest stays v2.50.4 until publication.
+- **Current stable:** v2.50.5 (2026-10-20), cut from verified v2.50.5-r3
+  after explicit owner approval; tag `097393a7`, published as Latest.
+  All 18 assets and True Split bundles, canonical platform/update/test workflows,
+  integrity, APT and strict checks passed. Homebrew cask and APT serve 2.50.5.
+  Exact-tag Windows suite: 3459 passed, 19 skipped; visual/protocol slice 26/26.
+  Previous-stable 2.50.4 -> r3 updater and stable post-ship each passed two cold
+  connection cycles with zero lifecycle errors. No in-flight candidate.
   Evidence: `plans/phase-stable-2.50.5-2026-10-20.md`.
-- **Verified candidate:** v2.50.5-r3 (2026-10-19, tag `6b1304ec`).
+- **Candidate provenance:** v2.50.5-r3 (2026-10-19, tag `6b1304ec`).
   The enabled Russian bypass now routes Russian IPs directly as documented, not
   only Russian domains: generated routing includes the already-downloaded geoip
   rule set. The protocol icons from r1/r2 remain. All 18 assets, tag-bound CI,
@@ -20,9 +25,9 @@ When release or platform facts change, update this file.
   Website help at ninitux.com now shows the three-dot menu and populated example
   public-server results (site commit `b3ad554`, 27 CI checks and 30 live RU/EN
   frame checks); the vpn.ninitux.com root remains the separate install page.
-- **Current stable:** v2.50.4 (2026-10-19), cut from the candidate v2.50.4-r2
+- **Previous stable:** v2.50.4 (2026-10-19), cut from the candidate v2.50.4-r2
   (same tree; `AppVersion` only loses the suffix) after the owner tested r2 and
-  approved the release (tag on main `8ccffed4`, Latest). The tray icon is registered again: since v2.50.0 (Avalonia
+  approved the release (tag on main `8ccffed4`). The tray icon is registered again: since v2.50.0 (Avalonia
   12.1.3 creates the icon only for a `TrayIcon.Icons` entry) there was no tray icon and a
   closed window was unreachable. On Windows a `TrayGuard` checks the icon before hiding
   and minimizes to the taskbar when it cannot be shown; a one-time balloon says where the
@@ -32,7 +37,7 @@ When release or platform facts change, update this file.
   `plans/phase-home-problems-fix-2026-10-17.md`; the cut:
   `plans/phase-stable-2.50.4-2026-10-19.md`.
   Not verified anywhere: the tray on Linux, macOS and Windows 11.
-- **Previous stable:** v2.50.3 (2026-10-11), cut from the candidate v2.50.3-r1
+- **Earlier stable:** v2.50.3 (2026-10-11), cut from the candidate v2.50.3-r1
   (same tree; `AppVersion` only loses the suffix) on the owner's order for a quick
   fix release. One fix after v2.50.2: a geo rule-set file that is damaged on disk
   but keeps its size (`geosite-ru.srs`, `geoip-ru.srs`; used by "Russian traffic
