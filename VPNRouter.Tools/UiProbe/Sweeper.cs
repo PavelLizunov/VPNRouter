@@ -161,13 +161,20 @@ public static class Sweeper
 
     private static void RenderFrame(ProbeSession session)
     {
-        session.Layout();
-        _ = session.Window.CaptureRenderedFrame();
+        try
+        {
+            session.Layout();
+            _ = session.Window.CaptureRenderedFrame();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private static List<Candidate> Collect(Window window, SweepOptions o, List<string> skipped)
     {
         var list = new List<Candidate>();
+        if (!window.IsVisible) return list;
         var width = window.ClientSize.Width;
         var height = window.ClientSize.Height;
         foreach (var visual in window.GetVisualDescendants())
