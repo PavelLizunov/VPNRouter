@@ -1,0 +1,20 @@
+Package: vpnrouter
+Version: 2.50.5
+Architecture: amd64
+Depends: libx11-6, libice6, libsm6, libfontconfig1, libicu70 | libicu71 | libicu72 | libicu74 | libicu76 | libicu78, policykit-1 | polkitd, nftables
+Recommends: libayatana-appindicator3-1
+Maintainer: NiniTux <noreply@example.invalid>
+Installed-Size: 171212
+Homepage: https://github.com/PavelLizunov/VPNRouter
+Priority: optional
+Section: net
+Filename: pool/main/v/vpnrouter/vpnrouter_2.50.5_amd64.deb
+Size: 56283266
+SHA256: 0d5122787ab46e9a43e02f9bdc386282937308d10bd6001399d8274316114cb8
+SHA1: 3d6ae327d8e45b587bef99dcf34e53bde0bcf5aa
+MD5sum: 4692418a8b8110a58d9109dd1f69267c
+Description: Virtual Penguin Network — process-based split-tunnel VPN
+ Routes selected applications through a VLESS+Reality proxy via sing-box
+ TUN mode; everything else goes direct. Includes free-config aggregator,
+ deep-verify, and multiple subscriptions.
+
