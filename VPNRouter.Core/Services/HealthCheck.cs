@@ -19,7 +19,9 @@ public static class HealthCheck
     /// (TUN MTU minus 28) instead of the physical path, and every lowered MTU would look too large again.</param>
     public readonly record struct PathMtuProbeResult(int? BestPayload, bool PlainPingBlocked, bool SkippedTunnelUp = false);
 
-    public static List<Result> RunAll(bool firstLaunchAsInfo = false)
+    public static List<Result> RunAll() => RunAll(firstLaunchAsInfo: false);
+
+    public static List<Result> RunAll(bool firstLaunchAsInfo)
     {
         var results = new List<Result>();
         var firstLaunch = firstLaunchAsInfo && !File.Exists(AppPaths.ConfigYamlPath);

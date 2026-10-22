@@ -38,3 +38,7 @@ CI pending first push.
 
 First CI at dcd81afc exposed CS0103: RouterBackend needed the Lifecycle namespace
 for PlatformCapabilityVerifier. Add the missing using; rerun exact-head CI.
+
+Caller review found the desktop setup wizard passes HealthCheck.RunAll as a
+parameterless method group. Retain the original overload and add the explicit
+bool overload, preserving that consumer without touching UI source.
