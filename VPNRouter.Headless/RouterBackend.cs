@@ -9,6 +9,7 @@ using Serilog;
 using VPNRouter.Core;
 using VPNRouter.Core.Services;
 using VPNRouter.Headless.Features;
+using VPNRouter.Headless.Lifecycle;
 using VPNRouter.Headless.Storage;
 
 namespace VPNRouter.Headless;

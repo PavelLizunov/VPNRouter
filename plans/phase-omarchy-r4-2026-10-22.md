@@ -35,3 +35,6 @@ Implementation and fixture tests added. Direct diff review and git diff --check
 passed. No local .NET execution. Fixed-model OpenCode Gemini review attempt
 exited 1 before creating a session (stderr diagnostic); no independent acceptance.
 CI pending first push.
+
+First CI at dcd81afc exposed CS0103: RouterBackend needed the Lifecycle namespace
+for PlatformCapabilityVerifier. Add the missing using; rerun exact-head CI.
