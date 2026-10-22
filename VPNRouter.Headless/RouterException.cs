@@ -28,6 +28,7 @@ public class RouterException : Exception
         "unknown_method" => "Unknown method requested.",
         "busy" => "Another operation is currently in progress.",
         "conflict" => "Configuration revision mismatch.",
+        "not_removable" => "This server cannot be removed individually. Manage its subscription instead.",
         "not_found" => "The requested item was not found.",
         "cancelled" => "The operation was cancelled.",
         "unavailable" => "The requested service or feature is unavailable.",

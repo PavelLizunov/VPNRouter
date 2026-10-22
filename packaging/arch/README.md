@@ -28,8 +28,10 @@ SagerNet/sing-box 1.14.2 linux-amd64. Both archive hashes match
 [the desktop Linux workflow](../../.github/workflows/build-linux.yml).
 The [Arch CI workflow](../../.github/workflows/arch-headless.yml) builds from
 `github.sha`, installs and upgrades the result with pacman, verifies capabilities,
-and exercises the installed backend as a normal user, including TUN creation and
-disconnect. Its artifact is `vpnrouter-headless-arch`.
+and exercises the installed backend as a normal user with `installed_smoke.py --offline`
+(protocol, first-launch diagnostics and runtime policy, without starting TUN).
+The smoke script retains its separate TUN lifecycle mode for explicitly authorized
+network acceptance. Its artifact is `vpnrouter-headless-arch`.
 
 ## Install and verify
 

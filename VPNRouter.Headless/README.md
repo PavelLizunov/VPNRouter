@@ -73,6 +73,44 @@ Progress Event:
 {"v":1,"event":"progress","data":{"id":"req-1","stage":"testing","completed":3,"total":10}}
 ```
 
+## Offline application and server metadata
+
+Snapshot and state events include `unavailableReasonCode` (`runtime-missing`,
+`runtime-capabilities`, `runtime-untrusted`, `sandbox`, `ownership`, `other`, or
+null). `unavailableReason` retains the English diagnostic text. A connected or
+busy session alone does not imply an availability failure.
+
+`apps.list` retains `include`, `exclude` and `running`, and adds `runningApps`:
+
+```json
+{"name":"firefox","displayName":"Firefox","icon":"firefox","desktopId":"firefox.desktop","hasWindow":false}
+```
+
+On Linux, discovery reads current-UID `/proc` entries, skips empty command lines,
+and uses the executable symlink basename (falling back to `comm` when unreadable).
+Desktop Name/Icon/Exec/StartupWMClass metadata comes from
+`~/.local/share/applications` and `XDG_DATA_DIRS` (default
+`/usr/local/share:/usr/share`). Hidden/NoDisplay entries suppress metadata;
+user entries override system entries. Icon theme names are returned without
+reading image files; icon paths are omitted. Desktop matches sort first, followed
+by process-only entries. Results are deduplicated and limited to 200 entries.
+The desktop index has a 30-second TTL; discovery has bounded file counts, reads
+and a 150 ms work budget (best-effort under filesystem/scheduler delays).
+`hasWindow` is false because window ownership is unknown. Pass each exact `name`
+to `apps.set`; case and Linux executable spaces are preserved. Windows/macOS
+retain their existing `running` discovery and return an empty `runningApps` list.
+
+`servers.list.items` adds `source` (`manual` or `subscription`), `subscriptionId`
+(string or null), and `removable` (boolean). Subscription entries and synthesized
+legacy entries are not individually removable. `servers.remove` returns
+`not_removable` for these IDs without changing settings or revision; manage the
+subscription instead. Unknown IDs still return `not_found`.
+
+On first launch, `diagnostics.check` reports absent configuration/directories as
+`info` with "Not configured yet: add a subscription or a server". Existing
+invalid configurations and runtime/ownership failures retain their error/warning
+severity. These metadata endpoints require no VPN connection or network request.
+
 ## Security and Framing Invariants
 
 1. **Size and Depth Bounds**:

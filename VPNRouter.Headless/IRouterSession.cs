@@ -27,6 +27,9 @@ public interface IRouterSession : IAsyncDisposable
     /// </summary>
     bool CanConnect { get; }
 
+    /// <summary>Stable availability code, independent of transient connected/busy state.</summary>
+    string? UnavailableReasonCode => null;
+
     /// <summary>
     /// Whether firewall kill-switch is truthfully supported and verified on this host.
     /// </summary>

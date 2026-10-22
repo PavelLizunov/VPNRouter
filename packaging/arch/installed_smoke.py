@@ -70,6 +70,7 @@ def snapshot(expected, reason=None):
         assert result['capabilities'] == {'connect': expected, 'killSwitch': False, 'dnsLockdown': False}, result
         if reason:
             assert reason in result['unavailableReason'], result
+            assert result['unavailableReasonCode'] == ('runtime-capabilities' if reason == 'missing capabilities' else 'runtime-untrusted'), result
         return result
     finally:
         backend.close()
@@ -78,10 +79,21 @@ def snapshot(expected, reason=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-sha', required=True)
+    parser.add_argument('--offline', action='store_true', help='Check installed protocol and policy without starting TUN')
     args = parser.parse_args()
     manifest = json.loads((ROOT / 'manifest.json').read_text())
     assert manifest['source_commit'] == args.source_sha
-    snapshot(True)
+    current = snapshot(True)
+    assert current['unavailableReasonCode'] is None
+    backend = Backend()
+    try:
+        apps = backend.call('apps.list')
+        assert isinstance(apps['runningApps'], list) and len(apps['runningApps']) <= 200
+        assert all(set(app) == {'name', 'displayName', 'icon', 'desktopId', 'hasWindow'}
+                   for app in apps['runningApps'])
+        assert any(item['status'] == 'info' for item in backend.call('diagnostics.check')['items'])
+    finally:
+        backend.close()
 
     # Exercise the real policy through the normal-user installed backend.
     subprocess.run(['setcap', '-r', str(RUNTIME)], check=True)
@@ -114,6 +126,10 @@ def main():
     # NET_ADMIN alone must suffice; BIND_SERVICE and NET_RAW are not required.
     subprocess.run(['setcap', 'cap_net_admin+ep', str(RUNTIME)], check=True)
     snapshot(True)
+    if args.offline:
+        subprocess.run(['setcap', 'cap_net_admin,cap_net_raw+ep', str(RUNTIME)], check=True)
+        print('Installed offline protocol and runtime-policy checks passed; no TUN started', flush=True)
+        return
     backend = Backend()
     try:
         current = backend.call('snapshot')

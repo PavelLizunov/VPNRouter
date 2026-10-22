@@ -65,44 +65,60 @@ public static class PlatformCapabilityVerifier
         ILogger? logger = null,
         Func<bool>? capabilityReadinessFunc = null)
     {
+        return GetUnavailableReasonCode(ownershipProbe, logger, capabilityReadinessFunc) == null;
+    }
+
+    internal static string? RuntimeFailureCode(SingBoxRuntimeFailure failure) => failure switch
+    {
+        SingBoxRuntimeFailure.None => null,
+        SingBoxRuntimeFailure.Missing => "runtime-missing",
+        SingBoxRuntimeFailure.MissingCapabilities => "runtime-capabilities",
+        SingBoxRuntimeFailure.Untrusted or SingBoxRuntimeFailure.Changed => "runtime-untrusted",
+        SingBoxRuntimeFailure.PrerequisiteUnavailable => "sandbox",
+        _ => "other"
+    };
+
+    internal static string? GetUnavailableReasonCode(
+        Func<OwnershipCheckResult>? ownershipProbe = null,
+        ILogger? logger = null,
+        Func<bool>? capabilityReadinessFunc = null)
+    {
         try
         {
             if (capabilityReadinessFunc != null)
             {
-                if (!capabilityReadinessFunc())
-                    return false;
+                if (!capabilityReadinessFunc()) return "other";
             }
             else
             {
                 var policy = SingBoxRuntimePolicy.Current;
                 if (policy != null)
                 {
-                    if (!policy.IsAvailable)
-                        return false;
+                    if (!policy.TryAuthorize(SingBoxRuntimeOperation.Probe, out var failure))
+                        return RuntimeFailureCode(failure);
                 }
-                else
-                {
-                    var exePath = AppPaths.SingBoxExePath;
-                    if (!File.Exists(exePath))
-                        return false;
-                }
+                else if (!File.Exists(AppPaths.SingBoxExePath)) return "runtime-missing";
             }
 
-            var ownership = ownershipProbe != null
-                ? ownershipProbe()
-                : LinuxOwnershipGuard.CheckOwnership(logger);
-
-            // Fail closed: only positive Free status permits connection.
-            if (ownership.Status != OwnershipStatus.Free)
-                return false;
-
-            return true;
+            try
+            {
+                var ownership = ownershipProbe != null ? ownershipProbe() : LinuxOwnershipGuard.CheckOwnership(logger);
+                return ownership.Status == OwnershipStatus.Free ? null : "ownership";
+            }
+            catch
+            {
+                return "ownership";
+            }
+        }
+        catch (SingBoxRuntimePolicyException ex)
+        {
+            return RuntimeFailureCode(ex.Failure);
         }
         catch (Exception ex)
         {
             var scrubbed = BoundedTeardown.SanitizeExceptionMessage(ex);
             logger?.Warning("[PlatformCapabilityVerifier] Error during CanConnect check: {Message}; failing closed.", scrubbed);
-            return false;
+            return "other";
         }
     }
 

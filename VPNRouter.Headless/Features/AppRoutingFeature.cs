@@ -12,11 +12,18 @@ public sealed class AppRoutingFeature
 {
     private readonly ConfigStorage _storage;
     private readonly ILogger _logger;
+    private readonly LinuxRunningApps? _linuxApps;
 
     public AppRoutingFeature(ConfigStorage storage, ILogger? logger = null)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _logger = logger ?? Log.Logger;
+        _linuxApps = OperatingSystem.IsLinux() ? LinuxRunningApps.CreateDefault() : null;
+    }
+
+    internal AppRoutingFeature(ConfigStorage storage, LinuxRunningApps linuxApps) : this(storage)
+    {
+        _linuxApps = linuxApps;
     }
 
     public object List(JsonElement parameters = default)
@@ -27,13 +34,17 @@ public sealed class AppRoutingFeature
         var include = settings.App?.RoutingAppsInclude ?? new List<string>();
         var exclude = settings.App?.RoutingAppsExclude ?? new List<string>();
 
-        var running = GetRunningProcessNamesSafe();
+        var runningApps = _linuxApps?.Read() ?? new List<RunningApp>();
+        var running = _linuxApps != null
+            ? runningApps.Select(a => a.name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
+            : GetRunningProcessNamesSafe();
 
         return new
         {
             include = include.ToList(),
             exclude = exclude.ToList(),
-            running
+            running,
+            runningApps
         };
     }
 
@@ -64,7 +75,7 @@ public sealed class AppRoutingFeature
             if (item.ValueKind != JsonValueKind.String)
                 throw new RouterException("invalid_argument", "Process names must be strings");
 
-            var name = item.GetString()?.Trim();
+            var name = OperatingSystem.IsLinux() ? item.GetString() : item.GetString()?.Trim();
             if (string.IsNullOrWhiteSpace(name))
                 continue;
 

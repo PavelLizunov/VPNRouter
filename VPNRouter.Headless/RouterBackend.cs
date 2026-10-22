@@ -141,6 +141,24 @@ public sealed class RouterBackend : IAsyncDisposable
             activeServer = settings.Vless?.ActiveServer ?? string.Empty;
         }
 
+        var policy = EffectivePolicy;
+        string? unavailableReasonCode = policy != null && !policy.TryAuthorize(SingBoxRuntimeOperation.Probe, out var failure)
+            ? PlatformCapabilityVerifier.RuntimeFailureCode(failure)
+            : _session.UnavailableReasonCode;
+        var canConnect = _session.CanConnect;
+        if (unavailableReasonCode == null && !canConnect && _session.State is "disconnected" or "error" or "unavailable")
+            unavailableReasonCode = "other";
+        var unavailableReason = policy?.UnavailabilityReason ?? (unavailableReasonCode switch
+        {
+            "runtime-missing" => "sing-box runtime is missing; reinstall the vpnrouter-headless package",
+            "runtime-capabilities" => "sing-box runtime is missing capabilities; reinstall the vpnrouter-headless package",
+            "runtime-untrusted" => "sing-box runtime is untrusted; check package ownership and permissions",
+            "ownership" => "Another VPNRouter instance owns the session, or session ownership could not be verified.",
+            "sandbox" => "Linux sandbox blocks sing-box TUN privileges.",
+            "other" => "VPN connection is unavailable in the current environment.",
+            _ => null
+        });
+
         return new
         {
             state = _session.State,
@@ -152,10 +170,11 @@ public sealed class RouterBackend : IAsyncDisposable
             configMode,
             busy = _busyState != 0,
             errorCode = _session.ErrorCode,
-            unavailableReason = EffectivePolicy?.UnavailabilityReason,
+            unavailableReason,
+            unavailableReasonCode,
             capabilities = new
             {
-                connect = _session.CanConnect,
+                connect = canConnect,
                 killSwitch = _session.SupportsKillSwitch,
                 dnsLockdown = _session.SupportsDnsLockdown
             }

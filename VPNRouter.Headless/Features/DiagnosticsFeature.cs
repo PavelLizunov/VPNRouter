@@ -30,12 +30,13 @@ public sealed class DiagnosticsFeature
         using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
         RouterBackend.EnsureEmptyParameters(parameters);
 
-        var results = HealthCheck.RunAll();
+        var results = HealthCheck.RunAll(firstLaunchAsInfo: true);
         var items = results.Select(r =>
         {
             var status = r.Severity switch
             {
                 HealthCheck.Level.Ok => "ok",
+                HealthCheck.Level.Info => "info",
                 HealthCheck.Level.Warn => "warn",
                 HealthCheck.Level.Err => "error",
                 _ => "unknown"

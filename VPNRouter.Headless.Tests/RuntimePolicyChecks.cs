@@ -682,7 +682,7 @@ public static class RuntimePolicyChecks
         }
     }
 
-    private sealed class FakeLifecycleEngine : ILifecycleEngine
+    internal sealed class FakeLifecycleEngine : ILifecycleEngine
     {
         public bool IsRunning { get; set; }
         public string ActiveProfileName { get; set; } = "Default";

@@ -164,6 +164,20 @@ public sealed class RouterSession : IRouterSession
     }
 
     /// <inheritdoc />
+    public string? UnavailableReasonCode
+    {
+        get
+        {
+            using var _ = SingBoxRuntimePolicy.EnterScope(EffectivePolicy);
+            if (_disposed) return "other";
+            // Our own active lease is not an availability failure.
+            if (_ownsConnection && State is SessionStates.Connected or SessionStates.Connecting or SessionStates.Disconnecting)
+                return null;
+            return PlatformCapabilityVerifier.GetUnavailableReasonCode(_ownershipProbe, _logger, _capabilityReadinessProbe);
+        }
+    }
+
+    /// <inheritdoc />
     public bool SupportsKillSwitch => PlatformCapabilityVerifier.VerifyKillSwitchSupport(_killSwitchProbe, _logger);
 
     /// <inheritdoc />

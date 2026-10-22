@@ -87,7 +87,10 @@ public sealed class ServerFeature
                     name = displayName,
                     protocol = string.IsNullOrWhiteSpace(s.Protocol) ? "vless" : s.Protocol.ToLowerInvariant(),
                     selected = isSelected,
-                    latencyMs = (int?)null
+                    latencyMs = (int?)null,
+                    source = tuple.IsSubscription ? "subscription" : "manual",
+                    subscriptionId = tuple.SubscriptionId,
+                    removable = tuple.Removable
                 };
             })
             .ToList();
@@ -218,10 +221,12 @@ public sealed class ServerFeature
         _storage.ValidateRevision(revision);
 
         var settings = _storage.GetSettings();
-        var servers = settings.Vless?.Servers ?? new List<VlessServerEntry>();
-        var server = FindServerById(servers, id);
-        if (server == null)
+        var match = BuildUnifiedServerIdMap(settings).FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.Ordinal));
+        if (match.Server == null)
             throw new RouterException("not_found", "Server not found");
+        if (!match.Removable)
+            throw new RouterException("not_removable");
+        var server = match.Server;
 
         var wasActive = string.Equals(settings.Vless?.ActiveServer, server.Name, StringComparison.OrdinalIgnoreCase);
         settings.Vless!.Servers.Remove(server);
@@ -313,15 +318,15 @@ public sealed class ServerFeature
         };
     }
 
-    private static List<(VlessServerEntry Server, bool IsSubscription)> GetUnifiedServersWithSource(AppSettings settings)
+    private static List<(VlessServerEntry Server, bool IsSubscription, string? SubscriptionId, bool Removable)> GetUnifiedServersWithSource(AppSettings settings)
     {
-        var result = new List<(VlessServerEntry Server, bool IsSubscription)>();
-        if (settings.Vless?.Servers != null)
+        var result = new List<(VlessServerEntry Server, bool IsSubscription, string? SubscriptionId, bool Removable)>();
+        if (settings.Vless?.Servers is { Count: > 0 })
         {
             foreach (var s in settings.Vless.Servers)
             {
                 if (s != null && !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com")
-                    result.Add((s, false));
+                    result.Add((s, false, null, true));
             }
         }
         else if (settings.Vless != null)
@@ -329,34 +334,31 @@ public sealed class ServerFeature
             foreach (var s in settings.Vless.GetEffectiveServers())
             {
                 if (s != null && !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com")
-                    result.Add((s, false));
+                    result.Add((s, false, null, false));
             }
         }
 
         if (settings.App?.Subscriptions != null)
         {
-            var subServers = settings.App.Subscriptions
-                .Where(s => s != null && s.Enabled && s.Servers != null)
-                .SelectMany(s => s.Servers)
-                .Where(s => s != null && !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com");
-            foreach (var s in subServers)
+            foreach (var sub in settings.App.Subscriptions.Where(s => s != null && s.Enabled && s.Servers != null))
             {
-                result.Add((s, true));
+                foreach (var server in sub.Servers.Where(s => s != null && !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com"))
+                    result.Add((server, true, sub.Id, false));
             }
         }
 
         return result;
     }
 
-    private static List<(string Id, VlessServerEntry Server, bool IsSubscription)> BuildUnifiedServerIdMap(AppSettings settings)
+    private static List<(string Id, VlessServerEntry Server, bool IsSubscription, string? SubscriptionId, bool Removable)> BuildUnifiedServerIdMap(AppSettings settings)
     {
         var unified = GetUnifiedServersWithSource(settings);
-        var result = new List<(string Id, VlessServerEntry Server, bool IsSubscription)>(unified.Count);
+        var result = new List<(string Id, VlessServerEntry Server, bool IsSubscription, string? SubscriptionId, bool Removable)>(unified.Count);
         var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         for (int i = 0; i < unified.Count; i++)
         {
-            var (s, isSub) = unified[i];
+            var (s, isSub, subscriptionId, removable) = unified[i];
             if (s == null) continue;
             var key = $"{s.Protocol ?? "vless"}|{s.Name}|{s.Server}|{s.Port}|{s.Uuid}";
             counts.TryGetValue(key, out var count);
@@ -365,38 +367,10 @@ public sealed class ServerFeature
             var raw = $"{key}|{count}";
             var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
             var id = "srv_" + Convert.ToHexStringLower(hash)[..16];
-            result.Add((id, s, isSub));
+            result.Add((id, s, isSub, subscriptionId, removable));
         }
 
         return result;
     }
 
-    private static List<(string Id, VlessServerEntry Server)> BuildServerIdMap(List<VlessServerEntry> servers)
-    {
-        var result = new List<(string Id, VlessServerEntry Server)>(servers.Count);
-        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-        for (int i = 0; i < servers.Count; i++)
-        {
-            var s = servers[i];
-            if (s == null) continue;
-            var key = $"{s.Protocol ?? "vless"}|{s.Name}|{s.Server}|{s.Port}|{s.Uuid}";
-            counts.TryGetValue(key, out var count);
-            counts[key] = count + 1;
-
-            var raw = $"{key}|{count}";
-            var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
-            var id = "srv_" + Convert.ToHexStringLower(hash)[..16];
-            result.Add((id, s));
-        }
-
-        return result;
-    }
-
-    private static VlessServerEntry? FindServerById(List<VlessServerEntry> servers, string id)
-    {
-        var map = BuildServerIdMap(servers);
-        var match = map.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.Ordinal));
-        return match.Server;
-    }
 }
