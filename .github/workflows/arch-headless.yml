@@ -47,6 +47,8 @@ jobs:
           mkdir -p /dev/net
           if [ ! -e /dev/net/tun ]; then mknod /dev/net/tun c 10 200; fi
           chmod 666 /dev/net/tun
+          # Match the private runtime directory created by pam_systemd on Omarchy.
+          install -d -m 700 -o builder -g builder "/run/user/$(id -u builder)"
           python packaging/arch/installed_smoke.py --source-sha "$GITHUB_SHA"
           # Upgrade must restore the xattr after the package file is replaced.
           pacman -U --noconfirm /tmp/vpnrouter-arch-build/pkgbuild/*.pkg.tar.zst
