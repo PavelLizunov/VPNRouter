@@ -42,3 +42,21 @@ for PlatformCapabilityVerifier. Add the missing using; rerun exact-head CI.
 Caller review found the desktop setup wizard passes HealthCheck.RunAll as a
 parameterless method group. Retain the original overload and add the explicit
 bool overload, preserving that consumer without touching UI source.
+
+## Implementation acceptance
+
+At 865e3eaa60153e28ade2d271e7d45643ecd93ddc, all nine PR #616 checks passed;
+`gh pr checks 616 --watch` exited 0 and PR headRefOid matched local HEAD.
+Dotnet workflow 39852743312: Linux 3210 passed/77 skipped, Windows 3379 passed/
+19 skipped, headless runner 38 passed/0 failed, Python packaging 124 passed.
+Arch workflow 39852737249 passed installed offline protocol and runtime-policy
+checks with no TUN startup, and produced vpnrouter-headless-arch artifact
+12458980428. Fixture app discovery measured 0.93 ms cold and 10.80 ms warm with
+211 proc directories; this is not owner-host performance acceptance.
+
+Source review covered the new files, task-owned diff and affected callers.
+README protocol/runtime statements and package CI description were updated.
+No local .NET execution, owner-host install, shell interaction, VPN connection,
+merge, tag or release. Independent review remains unavailable as recorded above.
+The final documentation head, its CI/artifact IDs and JSON copied from actual
+test output are recorded in the owner's requested external r4-backend.md receipt.
