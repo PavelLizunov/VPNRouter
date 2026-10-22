@@ -18,6 +18,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ### Omarchy integration 2026-10-22 (PR #616)
 
+- [ ] **P2** - HEADLESS-TEST-API-DRIFT: real suite compilation at `ffbfcae2` fails on a missing two-argument `BuildProfileSources` seam and removed `AppConfig.DnsModeOverride`; stale assertions still expect writable DNS overrides despite the already-integrated rejection. Retarget tests to profile-owned DNS and add isolated data-directory source resolution - `VPNRouter.Headless.Tests/ProfileChecks.cs:370`, `VPNRouter.Headless.Tests/FeatureChecks.cs:1320`.
+- [ ] **P2** - LINUX-PROFILE-CATALOG-DIVERGENCE: Core assigns generic catalog priorities 78/83 before Linux 80/85, while the headless offline helper uses 82/87; `ProfileManager.LoadAsync` selects the first available source, so displayed Linux app names differ from the engine's Windows catalog. Keep non-Linux order unchanged and use platform-first Linux priorities - `VPNRouter.Core/Services/VpnEngine.ProfileSources.cs:166`, `VPNRouter.Headless/Features/ProfileFeature.cs:238`.
+
 - [ ] **P2** - HEADLESS-CI-NO-EXECUTION: `headless-contract` invokes `dotnet test` on a console executable without a test SDK; run 39830688652/job/120005702252 only restores and never executes `ProtocolTests.Main` - `.github/workflows/test.yml:84`, `VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj:4`, `VPNRouter.Headless.Tests/ProtocolTests.cs:18`. Fix in this PR by running the existing console suite with a bounded timeout; exact-head execution evidence pending.
 
 ### Owner report 2026-10-19 (main `7af9aaeb`)

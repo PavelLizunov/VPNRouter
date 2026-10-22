@@ -39,3 +39,10 @@ PR #616 is draft. Initial headless-contract job only restored the console projec
 it did not execute assertions. Corrected to `timeout 8m dotnet run --project ...`.
 PowerShell shim exists but cannot select a version; using `gh pr checks --watch`
 with exact-head identity instead of installing tools.
+
+Real headless execution at `ffbfcae2` exposed compile failures for removed DNS
+overrides and the missing isolated profile-source seam. Tests now assert the
+current unsupported override response, no mutation/revision change, profile DNS
+generation and custom-config semantics. Core gains an optional data directory
+for source isolation, and Linux generic catalogs follow platform catalogs as in
+the headless offline helper; Windows/macOS priorities remain unchanged.

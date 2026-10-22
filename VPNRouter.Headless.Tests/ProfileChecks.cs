@@ -720,7 +720,7 @@ public static class ProfileChecks
     }
 
     /// <summary>
-    /// Test 5: Custom DNS mode semantics and DnsModeOverride preservation.
+    /// Test 5: Custom DNS mode semantics and rejection of removed overrides.
     /// </summary>
     private static async Task CheckCustomDnsModeAsync(string baseDir)
     {
@@ -731,34 +731,32 @@ public static class ProfileChecks
         var backend = new RouterBackend(session, dir);
         var storage = new ConfigStorage(dir);
 
-        // 1. Standard mode: setting DnsModeOverride to "direct"
+        // Standard mode rejects the removed override without changing profile DNS or revision.
         var snap0 = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("snapshot", ToJsonElement(new { })));
         var rev0 = snap0.GetProperty("revision").GetString()!;
-
-        var setDirectSnap = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.set", ToJsonElement(new
+        foreach (var mode in new string?[] { "direct", null })
         {
-            revision = rev0,
-            values = new { dnsMode = "direct" }
-        })));
-        var rev1 = setDirectSnap.GetProperty("revision").GetString()!;
-
-        var getDirect = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.get", ToJsonElement(new { })));
-        Assert(getDirect.GetProperty("dnsModeOverride").GetString() == "direct", "Explicit override marker must survive settings.get");
-        Assert(getDirect.GetProperty("dnsMode").GetString() == "direct",
-            "settings.get must return explicit DnsModeOverride 'direct'");
-
-        // 2. Standard mode: reset DnsModeOverride to null
-        var setNullSnap = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.set", ToJsonElement(new
-        {
-            revision = rev1,
-            values = new { dnsMode = (string?)null }
-        })));
-        var rev2 = setNullSnap.GetProperty("revision").GetString()!;
-
-        var getNull = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.get", ToJsonElement(new { })));
-        Assert(getNull.GetProperty("dnsModeOverride").ValueKind == JsonValueKind.Null, "Reset must retain a null override marker after refresh");
-        Assert(getNull.GetProperty("dnsMode").GetString() == "vpn_only",
-            "settings.get must revert to profile default 'vpn_only' when DnsModeOverride is null");
+            bool rejected = false;
+            try
+            {
+                await backend.ExecuteAsync("settings.set", ToJsonElement(new
+                {
+                    revision = rev0,
+                    values = new { dnsMode = mode }
+                }));
+            }
+            catch (RouterException ex) when (ex.Code == "unsupported")
+            {
+                rejected = true;
+            }
+            Assert(rejected, "Removed DNS override must be rejected");
+        }
+        var getDefault = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.get", ToJsonElement(new { })));
+        Assert(getDefault.GetProperty("dnsModeOverride").ValueKind == JsonValueKind.Null, "Removed override marker must stay null");
+        Assert(getDefault.GetProperty("dnsMode").GetString() == "vpn_only", "Profile DNS mode must remain unchanged");
+        var snapAfter = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("snapshot", ToJsonElement(new { })));
+        Assert(snapAfter.GetProperty("revision").GetString() == rev0, "Rejected override must preserve revision");
+        var rev2 = rev0;
 
         // Verify no sidecar user_profiles.json was created
         var sidecarPath = Path.Combine(dir, "user_profiles.json");

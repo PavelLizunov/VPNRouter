@@ -1176,52 +1176,36 @@ public static class FeatureChecks
         Assert(settingsAfterFailedSet.GetProperty("dnsMode").GetString() == "vpn_only",
             "Settings must remain unmutated after failed later-field validation");
 
-        // 2. Set dnsMode to "smart"
-        var setSnap1 = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.set", ToJsonElement(new
+        // DNS mode belongs to profiles; the removed AppConfig override must stay rejected.
+        foreach (var mode in new string?[] { "smart", "direct", "vpn_only", null })
         {
-            revision = rev1,
-            values = new { dnsMode = "smart" }
-        })));
-        var rev2 = setSnap1.GetProperty("revision").GetString()!;
-
-        // Readback via settings.get: must be "smart"
-        var settingsAfterSmart = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.get", ToJsonElement(new { })));
-        Assert(settingsAfterSmart.GetProperty("dnsMode").GetString() == "smart", "dnsMode must read back 'smart' after being set");
-
-        // Disk check: sidecar user_profiles.json must NOT exist; setting is in config.yaml
-        Assert(!File.Exists(userProfilesPath), "user_profiles.json must not be created as sidecar");
-        var configYaml = File.ReadAllText(Path.Combine(dir, "config.yaml"));
-        Assert(configYaml.Contains("dns_mode_override: smart"), "config.yaml must persist dns_mode_override: smart");
-
-        // 3. Reload readback with a fresh RouterBackend instance
-        var reloadedBackend = new RouterBackend(session, dir);
+            bool unsupported = false;
+            try
+            {
+                await backend.ExecuteAsync("settings.set", ToJsonElement(new
+                {
+                    revision = rev1,
+                    values = new { dnsMode = mode, mtu = 1300 }
+                }));
+            }
+            catch (RouterException ex) when (ex.Code == "unsupported")
+            {
+                unsupported = true;
+            }
+            Assert(unsupported, "Profile-owned DNS mode must reject an AppConfig override");
+            var unchanged = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.get", ToJsonElement(new { })));
+            Assert(unchanged.GetProperty("dnsMode").GetString() == "vpn_only", "Rejected override must preserve profile DNS");
+            Assert(unchanged.GetProperty("mtu").GetInt32() == initSettings.GetProperty("mtu").GetInt32(),
+                "Rejected override must not persist another candidate field");
+            Assert(!File.Exists(userProfilesPath), "Rejected override must not create profile files");
+            var unchangedSnapshot = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("snapshot", ToJsonElement(new { })));
+            Assert(unchangedSnapshot.GetProperty("revision").GetString() == rev1, "Rejected override must preserve revision");
+        }
+        await using var reloadedBackend = new RouterBackend(session, dir);
         var reloadedSettings = JsonSerializer.SerializeToElement(await reloadedBackend.ExecuteAsync("settings.get", ToJsonElement(new { })));
-        Assert(reloadedSettings.GetProperty("dnsMode").GetString() == "smart", "dnsMode must survive backend reload and read back 'smart'");
-
-        // 4. Set dnsMode to "direct"
-        var setSnap2 = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.set", ToJsonElement(new
-        {
-            revision = rev2,
-            values = new { dnsMode = "direct" }
-        })));
-        var rev3 = setSnap2.GetProperty("revision").GetString()!;
-
-        // Readback via settings.get: must be "direct"
-        var settingsAfterDirect = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.get", ToJsonElement(new { })));
-        Assert(settingsAfterDirect.GetProperty("dnsMode").GetString() == "direct", "dnsMode must read back 'direct' after being set");
-        Assert(!File.Exists(userProfilesPath), "user_profiles.json must not be created on direct mode");
-
-        // 5. Reset to null (protocol reset back to profile default)
-        var resetSnap = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.set", ToJsonElement(new
-        {
-            revision = rev3,
-            values = new { dnsMode = (string?)null }
-        })));
-        var rev4 = resetSnap.GetProperty("revision").GetString()!;
-
-        var settingsAfterReset = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("settings.get", ToJsonElement(new { })));
-        Assert(settingsAfterReset.GetProperty("dnsMode").GetString() == "vpn_only", "dnsMode must reset to profile default 'vpn_only' on null");
-        Assert(!File.Exists(userProfilesPath), "user_profiles.json must not be created on null reset");
+        Assert(reloadedSettings.GetProperty("dnsModeOverride").ValueKind == JsonValueKind.Null,
+            "Backend reload must not restore the removed override");
+        var rev4 = rev1;
 
         // 6. Reject invalid dnsMode
         bool invalidDnsCaught = false;
@@ -1316,8 +1300,7 @@ public static class FeatureChecks
                 RoutingMode = "split",
                 RoutingAppsMode = "include",
                 RoutingAppsInclude = new List<string> { "chrome.exe" },
-                StrictDns = false,
-                DnsModeOverride = null
+                StrictDns = false
             },
             Tun = new TunSettings(),
             Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },
@@ -1343,10 +1326,10 @@ public static class FeatureChecks
             }
         };
 
-        // A. Null default preserves prior behavior (profile.DnsMode = "vpn_only" -> vpn-dns)
+        // A. Profile default preserves prior behavior (profile.DnsMode = "vpn_only" -> vpn-dns)
         var configDefault = ConfigGenerator.Generate(profile, processes, settings);
         var ruleDefault = configDefault.Dns.Rules.FirstOrDefault(r => r.ProcessName != null && r.ProcessName.Contains("chrome.exe"));
-        Assert(ruleDefault != null && ruleDefault.Server == "vpn-dns", "Null override must preserve profile default vpn-dns");
+        Assert(ruleDefault != null && ruleDefault.Server == "vpn-dns", "Profile default must route DNS to vpn-dns");
         Assert(profile.DnsMode == "vpn_only", "Profile must not be mutated");
 
         // Verify routing rule for chrome.exe is proxy (existing process rules unchanged)
@@ -1354,47 +1337,47 @@ public static class FeatureChecks
         Assert(routeRuleDefault != null && routeRuleDefault.Outbound == "proxy", "Process routing rule must route to proxy");
 
         // B. Generated JSON actually changes proper DNS rule for routed-process include branch
-        settings.App.DnsModeOverride = "smart";
+        profile.DnsMode = "smart";
         var configSmart = ConfigGenerator.Generate(profile, processes, settings);
         var ruleSmart = configSmart.Dns.Rules.FirstOrDefault(r => r.ProcessName != null && r.ProcessName.Contains("chrome.exe"));
-        Assert(ruleSmart != null && ruleSmart.Server == "local-dns", "Override 'smart' must change routed-process DNS rule to local-dns");
-        Assert(profile.DnsMode == "vpn_only", "Profile must not be mutated by override");
+        Assert(ruleSmart != null && ruleSmart.Server == "local-dns", "Profile mode 'smart' must change routed-process DNS rule to local-dns");
+        Assert(profile.DnsMode == "smart", "Generator must not mutate the supplied profile DNS mode");
 
         // Existing process routing rule unchanged: still proxy
         var routeRuleSmart = configSmart.Route.Rules.FirstOrDefault(r => r.Action == "route" && r.ProcessName != null && r.ProcessName.Contains("chrome.exe"));
         Assert(routeRuleSmart != null && routeRuleSmart.Outbound == "proxy", "Process routing rule must remain proxy under smart DNS");
 
-        // Override 'vpn_only' routes to vpn-dns
-        settings.App.DnsModeOverride = "vpn_only";
+        // Profile mode 'vpn_only' routes to vpn-dns
+        profile.DnsMode = "vpn_only";
         var configVpnOnly = ConfigGenerator.Generate(profile, processes, settings);
         var ruleVpnOnly = configVpnOnly.Dns.Rules.FirstOrDefault(r => r.ProcessName != null && r.ProcessName.Contains("chrome.exe"));
-        Assert(ruleVpnOnly != null && ruleVpnOnly.Server == "vpn-dns", "Override 'vpn_only' must route process DNS to vpn-dns");
+        Assert(ruleVpnOnly != null && ruleVpnOnly.Server == "vpn-dns", "Profile mode 'vpn_only' must route process DNS to vpn-dns");
 
-        // Override 'direct' in include branch tunnels DNS (vpn-dns)
-        settings.App.DnsModeOverride = "direct";
+        // Profile mode 'direct' in include branch tunnels DNS (vpn-dns)
+        profile.DnsMode = "direct";
         var configDirect = ConfigGenerator.Generate(profile, processes, settings);
         var ruleDirect = configDirect.Dns.Rules.FirstOrDefault(r => r.ProcessName != null && r.ProcessName.Contains("chrome.exe"));
-        Assert(ruleDirect != null && ruleDirect.Server == "vpn-dns", "Override 'direct' in include branch must route to vpn-dns");
+        Assert(ruleDirect != null && ruleDirect.Server == "vpn-dns", "Profile mode 'direct' in include branch must route to vpn-dns");
 
-        // C. Validate unexpected override fails closed to vpn-dns
-        settings.App.DnsModeOverride = "corrupt_unknown_override";
+        // C. Validate unexpected profile mode fails closed to vpn-dns
+        profile.DnsMode = "corrupt_unknown_profile mode";
         var configBogus = ConfigGenerator.Generate(profile, processes, settings);
         var ruleBogus = configBogus.Dns.Rules.FirstOrDefault(r => r.ProcessName != null && r.ProcessName.Contains("chrome.exe"));
-        Assert(ruleBogus != null && ruleBogus.Server == "vpn-dns", "Unexpected override must fail closed to vpn-dns");
+        Assert(ruleBogus != null && ruleBogus.Server == "vpn-dns", "Unexpected profile mode must fail closed to vpn-dns");
 
-        // D. StrictDns forced protection invariant: StrictDns=true must win over smart override
-        settings.App.DnsModeOverride = "smart";
+        // D. StrictDns forced protection invariant: StrictDns=true must win over smart profile mode
+        profile.DnsMode = "smart";
         settings.App.StrictDns = true;
         var configStrict = ConfigGenerator.Generate(profile, processes, settings);
         var ruleStrict = configStrict.Dns.Rules.FirstOrDefault(r => r.ProcessName != null && r.ProcessName.Contains("chrome.exe"));
-        Assert(ruleStrict != null && ruleStrict.Server == "vpn-dns", "StrictDns must override smart DNS and route to vpn-dns");
+        Assert(ruleStrict != null && ruleStrict.Server == "vpn-dns", "StrictDns must override smart profile DNS and route to vpn-dns");
 
         // E. Full tunnel forced protection invariant: routing_mode='full' must route all DNS via tunnel
         settings.App.StrictDns = false;
         settings.App.RoutingMode = "full";
-        settings.App.DnsModeOverride = "smart";
+        profile.DnsMode = "smart";
         var configFull = ConfigGenerator.Generate(profile, processes, settings);
-        Assert(configFull.Dns.Final == "vpn-dns", "Full tunnel must force dns.final to vpn-dns even with smart override");
+        Assert(configFull.Dns.Final == "vpn-dns", "Full tunnel must force dns.final to vpn-dns even with smart profile mode");
     }
 
     // ─── Regression: Free Config Verified Status Preservation & Cancelled Refresh ───
