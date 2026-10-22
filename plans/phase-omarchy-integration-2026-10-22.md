@@ -18,8 +18,8 @@ No local .NET SDK installation or .NET build/test execution.
 
 ## Verification gates
 
-1. Build: pending GitHub Actions at the integrated SHA.
-2. Tests: pending Python packaging tests and headless/full .NET CI.
+1. Build: CI headless publish, Core/test-project compilation and Android compile pass at code head 96b80782; final exact-head rollup is retained in PR #616.
+2. Tests: 121 local Python tests pass; real console contracts and Linux regression job pass at 96b80782. Windows/final-checkpoint evidence is retained in the PR rollup and external report.
 3. Documentation: this record plus the requested external source-referenced report.
 4. Review: direct correctness/security/test inspection; independent bug-hunt is
    unavailable in the loaded skill catalog, and no agent delegation is requested.
@@ -30,7 +30,25 @@ No local .NET SDK installation or .NET build/test execution.
 
 ## Outcome
 
-In progress. Final source report will distinguish executed evidence from reading.
+Integrated all three draft branches by merge; all three original tips are ancestors
+of the integration branch. Main base c3ebc46e and the original dirty checkout/index
+were preserved. Draft PR: https://github.com/PavelLizunov/VPNRouter/pull/616.
+
+Follow-up fixes execute the previously inert console CI suite, reconcile removed
+DNS override tests, align Linux profile catalogs, and isolate firewall lifecycle
+fixtures from platform defaults. At code head 96b80782, headless-contract (37
+aggregate/top-level checks), headless-publish, packaging-arch, Linux test, Go,
+Android compile and grep pass; Windows characterization is still running at this
+recording point. The final documentation checkpoint will be monitored again via
+`gh pr checks 616 --watch`; the PR exact-head rollup and owner-requested external
+report retain the final verdict and SHA.
+
+The source report is delivered to the owner's requested scratchpad path ending
+`scratchpad/codex/r1-backend.md`, with protocol, Linux launch/privilege model,
+process routing, package/runtime pins and numbered estimates. Deferred gaps are
+recorded in OPEN-DEFECTS.md. No install, live TUN or Quattro load was performed.
+No main merge, tags, releases or edits to PRs 296/558/559/560. Rollback remains
+reverting/rejecting the isolated task branch, with no live deployment to undo.
 
 Initial merge `7659f5f` applied without conflicts. Local packaging Python suite:
 121 tests pass. Exact notice files preserve upstream whitespace (unfiltered
