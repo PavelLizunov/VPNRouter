@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### Omarchy integration 2026-10-22 (PR #616)
+
+- [ ] **P2** - HEADLESS-CI-NO-EXECUTION: `headless-contract` invokes `dotnet test` on a console executable without a test SDK; run 39830688652/job/120005702252 only restores and never executes `ProtocolTests.Main` - `.github/workflows/test.yml:84`, `VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj:4`, `VPNRouter.Headless.Tests/ProtocolTests.cs:18`. Fix in this PR by running the existing console suite with a bounded timeout; exact-head execution evidence pending.
+
 ### Owner report 2026-10-19 (main `7af9aaeb`)
 
 - [x] **P2** - GENERATED-RU-IP-BYPASS-MISSING: the enabled bypass registers `vpnrouter-geoip-ru` but the generated direct route references only `vpnrouter-geosite-ru`; Russian IP destinations outside the TLD list still use proxy in full/exclude mode or for included apps, contrary to the UI hint. Custom injection already includes both tags. Source and WINBRAT current.json confirmed; owner's exact site/device not yet known - `VPNRouter.Core/Services/ConfigGenerator.Rules.cs:357`; task `plans/phase-ru-ip-bypass-2026-10-19.md`. FIXED in PR #604, implementation `c45beb19`: both tags in generated routing; 72 focused tests and full Windows suite (3457 passed, 19 skipped); negative control fails only enabled cases; real installed core selects direct for 77.88.55.88 only with bypass on. Not released or installed on the owner's device.

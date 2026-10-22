@@ -70,7 +70,7 @@ jobs:
         with:
           global-json-file: global.json
       - name: Headless contract checks
-        run: dotnet test VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj -c Release --blame-hang-timeout 4m --blame-hang-dump-type none
+        run: timeout 8m dotnet run --project VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj -c Release
 
   packaging-arch:
     runs-on: ubuntu-latest

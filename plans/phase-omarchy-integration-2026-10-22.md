@@ -31,3 +31,11 @@ No local .NET SDK installation or .NET build/test execution.
 ## Outcome
 
 In progress. Final source report will distinguish executed evidence from reading.
+
+Initial merge `7659f5f` applied without conflicts. Local packaging Python suite:
+121 tests pass. Exact notice files preserve upstream whitespace (unfiltered
+`git diff --check` reports notice whitespace); code-only whitespace check passes.
+PR #616 is draft. Initial headless-contract job only restored the console project;
+it did not execute assertions. Corrected to `timeout 8m dotnet run --project ...`.
+PowerShell shim exists but cannot select a version; using `gh pr checks --watch`
+with exact-head identity instead of installing tools.
