@@ -121,15 +121,14 @@ def main():
             'log': {'level': 'info'},
             'inbounds': [{'type': 'tun', 'tag': 'tun-in', 'interface_name': 'vpnrouter-ci',
                           'address': ['172.30.20.1/30'], 'auto_route': False, 'stack': 'system'}],
-            'outbounds': [{'type': 'direct', 'tag': 'direct'}],
+            'outbounds': [{'type': 'direct', 'tag': 'direct'},
+                          {'type': 'socks', 'tag': 'proxy', 'server': '127.0.0.1', 'server_port': 10808}],
         }
         imported = backend.call('custom.import', {'revision': current['revision'], 'name': 'ci-tun',
                                                    'text': json.dumps(config)})
         identity = backend.send('connect', {'revision': imported['revision']})
-        deadline = time.monotonic() + 60
-        while not Path('/sys/class/net/vpnrouter-ci').exists() and time.monotonic() < deadline:
-            assert backend.process.poll() is None
-            time.sleep(0.2)
+        connected = backend.response(identity)
+        assert connected['state'] == 'connected', connected
         assert Path('/sys/class/net/vpnrouter-ci').exists(), 'Backend did not create the real TUN'
         print('Normal-user backend created vpnrouter-ci TUN with CAP_NET_ADMIN only', flush=True)
         backend.call('disconnect')
