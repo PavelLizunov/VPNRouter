@@ -46,3 +46,10 @@ current unsupported override response, no mutation/revision change, profile DNS
 generation and custom-config semantics. Core gains an optional data directory
 for source isolation, and Linux generic catalogs follow platform catalogs as in
 the headless offline helper; Windows/macOS priorities remain unchanged.
+
+At `97245a82`, real headless runner: 37 top-level checks pass; headless publish,
+packaging, grep and Go pass. Linux full suite exposed four catalog-dependent
+lifecycle tests (3185 passed, 4 failed, 77 skipped): they relied on the Windows
+Discord profile's firewall flag. Tests now provide isolated explicit local profile
+intent, keeping the intended firewall teardown/cancellation assertions intact.
+This is task-owned regression repair, not a pre-existing-main failure waiver.

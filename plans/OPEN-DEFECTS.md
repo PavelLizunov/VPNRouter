@@ -18,6 +18,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ### Omarchy integration 2026-10-22 (PR #616)
 
+- [ ] **P2** - LIFECYCLE-TEST-CATALOG-COUPLING: Linux `test` at `97245a82` reports four failures after selecting the proper platform catalog: lifecycle/firewall fixtures expect Windows `Discord_Privacy.block_on_vpn_fail=true` but Linux correctly disables it. Supply explicit isolated local profiles so teardown/cancellation tests reach their intended firewall seam without platform catalog assumptions - `VPNRouter.Tests/VpnEngineStartAsyncSeamTests.cs:460`, `VPNRouter.Tests/StartupPipelineTests.cs:277`.
+
 - [ ] **P2** - HEADLESS-TEST-API-DRIFT: real suite compilation at `ffbfcae2` fails on a missing two-argument `BuildProfileSources` seam and removed `AppConfig.DnsModeOverride`; stale assertions still expect writable DNS overrides despite the already-integrated rejection. Retarget tests to profile-owned DNS and add isolated data-directory source resolution - `VPNRouter.Headless.Tests/ProfileChecks.cs:370`, `VPNRouter.Headless.Tests/FeatureChecks.cs:1320`.
 - [ ] **P2** - LINUX-PROFILE-CATALOG-DIVERGENCE: Core assigns generic catalog priorities 78/83 before Linux 80/85, while the headless offline helper uses 82/87; `ProfileManager.LoadAsync` selects the first available source, so displayed Linux app names differ from the engine's Windows catalog. Keep non-Linux order unchanged and use platform-first Linux priorities - `VPNRouter.Core/Services/VpnEngine.ProfileSources.cs:166`, `VPNRouter.Headless/Features/ProfileFeature.cs:238`.
 

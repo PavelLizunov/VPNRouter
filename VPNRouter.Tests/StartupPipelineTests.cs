@@ -286,6 +286,9 @@ public sealed class StartupPipelineTests : IDisposable
         settings.Vless.Servers = new List<VlessServerEntry> { MakeServer("main", "104.194.156.93", 443) };
         settings.Vless.ActiveServer = "main";
 
+        using var profile = new LocalProfileFixture(
+            settings, activeProfile ?? "FirewallLifecycle", blockOnVpnFail: activeProfile == "Discord_Privacy");
+
         var fakeBin = OperatingSystem.IsWindows()
             ? Path.Combine(Path.GetTempPath(), $"vpnrouter-fake-singbox-{Guid.NewGuid():N}.exe")
             : AppPaths.SingBoxExePath;
