@@ -234,7 +234,7 @@ def resolve_dotnet() -> str:
     raise FileNotFoundError("dotnet binary not found in PATH or DOTNET_ROOT")
 
 
-def publish_headless(source_tree: Path, publish_dir: Path, work_dir: Path) -> None:
+def publish_headless(source_tree: Path, publish_dir: Path, work_dir: Path) -> str:
     if not (source_tree / "global.json").is_file():
         raise FileNotFoundError(f"global.json not found in source tree: {source_tree / 'global.json'}")
 
@@ -272,8 +272,17 @@ def publish_headless(source_tree: Path, publish_dir: Path, work_dir: Path) -> No
     if ver_res.returncode != 0:
         raise RuntimeError(f"Failed to check dotnet version (exit {ver_res.returncode}): {ver_res.stderr.strip()}")
     actual_ver = ver_res.stdout.strip()
-    if actual_ver != DOTNET_REQUIRED_VERSION:
-        raise ValueError(f"dotnet version {actual_ver!r} does not match required {DOTNET_REQUIRED_VERSION}")
+    sdk = json.loads((source_tree / "global.json").read_text())["sdk"]
+    required = sdk["version"]
+    # The SDK resolver already enforces global.json. Honor its latestPatch policy
+    # instead of rejecting the servicing SDK selected by actions/setup-dotnet.
+    if actual_ver != required:
+        expected_parts = tuple(map(int, required.split(".")))
+        actual_parts = tuple(map(int, actual_ver.split(".")))
+        if not (sdk.get("rollForward") == "latestPatch" and len(actual_parts) == 3 and
+                actual_parts[:2] == expected_parts[:2] and
+                actual_parts[2] // 100 == expected_parts[2] // 100 and actual_parts >= expected_parts):
+            raise ValueError(f"dotnet version {actual_ver!r} does not match required {required}")
 
     cmd = [
         dotnet_bin, "publish", str(proj_path), "-c", "Release", "-r", "linux-x64",
@@ -282,6 +291,7 @@ def publish_headless(source_tree: Path, publish_dir: Path, work_dir: Path) -> No
     res = subprocess.run(cmd, cwd=source_tree, env=env, capture_output=True, text=True, check=False)
     if res.returncode != 0:
         raise RuntimeError(f"dotnet publish failed (exit {res.returncode}):\n{res.stderr or res.stdout}")
+    return actual_ver
 
 
 def validate_publish(publish_dir: Path) -> list[dict[str, Any]]:
@@ -665,7 +675,7 @@ def main(argv: list[str] | None = None) -> int:
     staging_tools.safe_extract(cronet_tar, extracted_cronet, CRONET_SHA256)
 
     publish_dir = work_dir / "publish"
-    publish_headless(source_tree, publish_dir, work_dir)
+    dotnet_version = publish_headless(source_tree, publish_dir, work_dir)
 
     pub_inv = validate_publish(publish_dir)
 
@@ -758,7 +768,7 @@ def main(argv: list[str] | None = None) -> int:
         "tool_versions": get_tool_versions(
             resolve_dotnet(),
             source_tree=source_tree,
-            dotnet_version=DOTNET_REQUIRED_VERSION,
+            dotnet_version=dotnet_version,
         ),
         "arch": "x86_64",
         "runtime_version": RUNTIME_VERSION,

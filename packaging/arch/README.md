@@ -7,7 +7,7 @@ the logged-in user. The package contains no GUI or system service.
 ## Build
 
 Use an Arch CI container or build worker with base-devel, Python, git, libarchive,
-libcap and the .NET SDK selected by `global.json` (10.0.301). The driver supports
+libcap and the .NET SDK selected by `global.json` (10.0.301 with `latestPatch` servicing roll-forward). The driver supports
 `DOTNET_ROOT` for a private SDK install. It runs makepkg as an unprivileged user.
 
 ```bash

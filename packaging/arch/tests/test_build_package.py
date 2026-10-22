@@ -387,6 +387,16 @@ class TestPublishHeadless(unittest.TestCase):
         self.assertTrue(str(self.work_dir) in pub_env["NUGET_PACKAGES"])
         self.assertTrue(str(self.work_dir) in pub_env["XDG_CONFIG_HOME"])
 
+    def test_publish_accepts_global_json_latest_patch_and_records_actual_sdk(self) -> None:
+        (self.source_tree / "global.json").write_text(
+            '{"sdk":{"version":"10.0.301","rollForward":"latestPatch"}}')
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout="10.0.303\n", stderr="")
+        with mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
+             mock.patch("subprocess.run", side_effect=fake_run):
+            actual = build_package.publish_headless(self.source_tree, self.publish_dir, self.work_dir)
+        self.assertEqual(actual, "10.0.303")
+
     def test_publish_wrong_dotnet_version_rejected(self) -> None:
         """Verify non-10.0.301 dotnet version raises ValueError."""
         def fake_run(cmd, **kwargs):
