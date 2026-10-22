@@ -1,76 +1,71 @@
-# VPNRouter Arch Linux Runtime Packaging (Prototype)
+# VPNRouter Headless for Arch Linux
 
-Source-only Arch Linux packaging driver and PKGBUILD for `VPNRouter.Headless` and bundled `sing-box` runtime components.
+Builds `vpnrouter-headless-0.1.0-1-x86_64.pkg.tar.zst` for the Omarchy plugin.
+The plugin invokes `/usr/lib/vpnrouter-headless/VPNRouter.Headless --stdio` as
+the logged-in user. The package contains no GUI or system service.
 
-## 1. Prototype Notice & Security Boundaries
+## Build
 
-- **Source-only staging prototype**: This package is a reviewable staging artifact for the Omarchy Quattro shell plugin integration (`/usr/lib/vpnrouter-headless/`). It is not an authorized production release.
-- **No production trust root**: The package manifest (`manifest.json`) describes file inventory, modes, and SHA-256 integrity. It does **not** grant execution authority. Core runtime policy remains unchanged (`SingBoxRuntimePolicy.DefaultProduction` is strictly unavailable and untrusted).
-- **No installation instructions**: Live host installation, service activation, Polkit rules, sudoers integration, and `setcap` capabilities are intentionally excluded.
-
-## 2. Future Elevated Broker Boundary
-
-Full VPN operation requires privileged network manipulations:
-- Creating and configuring TUN interfaces (`tun0`).
-- Manipulating host routing tables and endpoint bypass routes.
-- Enforcing nftables/iptables kill-switch rules.
-- Hardening DNS resolvers and preventing DNS leaks.
-
-A future helper needs a separately approved contract, not a generic privileged
-command runner. That contract must define:
-
-- Explicit administrator consent for a bounded session and operation set; neither
-  an active desktop seat nor retained blanket authorization is sufficient.
-- Kernel-derived caller identity and host-global ownership across users. The
-  current per-UID flock is not a cross-user network lock.
-- Typed configuration validation and fixed trusted executable/dependency paths;
-  no caller-supplied executable, shell command, raw firewall rules or config path.
-  Root ownership and an adjacent manifest alone do not establish provenance.
-- Exact process generation and resource ownership for stop/restart, without
-  killing another application's process or deleting another owner's rules.
-- An explicit owner-loss policy and administrator recovery path: removing a
-  kill-switch may leak traffic, but retaining it can lock out the host. Neither
-  outcome may be selected implicitly as a cleanup convenience.
-
-No helper, authorization policy or elevation mechanism is implemented here.
-CAP_NET_ADMIN is broad network authority, not a TUN-only permission. This package
-does not grant it and does not replace the full VPN product with a status widget.
-
-## 3. Packaging & Runtime Architecture
-
-- **Framework-dependent deployment**: `VPNRouter.Headless` is compiled as framework-dependent (`linux-x64`, `--self-contained false`) to avoid bundling redundant .NET runtime binaries.
-- **Arch package dependencies**: Requires `glibc`, `gcc-libs`, `dotnet-runtime>=10` and `dotnet-runtime<11`. Native dependency inventory is recorded in the manifest; installed-host compatibility has not been tested.
-- **Worker build prerequisites**: Build workers use .NET SDK 10.0.301 resolved via private `DOTNET_ROOT` without requiring pacman SDK packages.
-- **Dependency verification**: Shared library dependencies are inspected statically using `readelf -d` (recording `(NEEDED)` DT_NEEDED entries). Invocation of `ldd` is strictly forbidden to prevent arbitrary code execution by the dynamic linker.
-- **Direct execution**: Installs directly into `/usr/lib/vpnrouter-headless/`. No shell wrapper is required as the plugin system path directly invokes the apphost executable.
-- **NuGet restore policy**: Full offline NuGet caching is not an approved requirement and no new offline cache CLI option is provided. Network restore is permitted during `dotnet publish` into an isolated `NUGET_PACKAGES` directory under `work_dir`.
-- **makepkg invocation**: Assembled with `makepkg --nodeps --noconfirm --config /etc/makepkg.conf` under isolated `HOME`/`XDG`/`TMPDIR` within `work_dir` and local package destination variables (`PKGDEST`, `SRCDEST`). Dependency check is skipped (`--nodeps`); automatic dependency installation (`-i`, `-s`) is strictly excluded. Options `!strip !debug` preserve cryptographic file hashes.
-- **License evidence collection & verification**: `build_package.py` imports `license_evidence` to execute offline evidence gathering (`collect_license_evidence`) into `/usr/lib/vpnrouter-headless/licenses/components.json` and mandatory verification (`verify_license_evidence`) both after manifest generation and during package inspection (`inspect_package`). Packaging file hashes in `manifest.json` include `license_evidence.py` and `notices/catalog.json`.
-
-## 4. Licensing & Distribution Disclaimer
-
-- **Incomplete license inventory**: The license metadata collected in `/usr/lib/vpnrouter-headless/licenses/` is structured evidence but does **not** constitute a legally complete distribution bundle. `license_inventory_complete` remains `false`.
-- **Managed dependencies (mapped text only, not legal release)**: Managed dependencies (`Serilog` 4.4.0, `YamlDotNet` 18.1.0) specify SPDX license expressions (`Apache-2.0`, `MIT`) in `.nuspec` metadata but do not package license files inside `.nupkg`. The collector validates `.nuspec` identity/version against package assets and matches them with reviewed, pinned upstream repository texts (`LICENSE`, `LICENSE.txt`, `LICENSE-libyaml`) and exact SHA-256 hashes in `packaging/arch/notices/catalog.json`. Marked `verified_texts` strictly denotes exact mapped text against catalog pins, not overall legal release clearance.
-- **.NET Apphost verification**: The native launcher executable (`VPNRouter.Headless`) is verified against the template binary from `Microsoft.NETCore.App.Host.linux-x64` (10.0.9, observed worker template SHA-256 `a3f840d0dfed7e18034444f55d86a43f731fd27ef1fc10668e9a97a4879ef064`) to ensure only embedded application DLL name customization occurred, pairing it with authoritative upstream `LICENSE.TXT` and `THIRD-PARTY-NOTICES.TXT`. Verification confirms mapped template/notice text only, not overall legal release authorization.
-- **Native dependencies & partial sources (no complete native notices claimed)**:
-  - `sing-box-vpnctl`: Bundles exact 791-byte upstream `sing-box-vpnctl/LICENSE` notice file (preserving nekohasekai copyright, GPL-3.0-or-later terms, and the top GPL extra branding restriction: *"In addition, no derivative work may use the name or imply association with this application without prior consent."*). The full GPL-3.0 text is copied from the pinned project root `LICENSE` to `licenses/VPNRouter-LICENSE`. Documenting this binding for the 791-byte notice does **not** infer that GPL release obligations are fulfilled: native dependency inventory (embedded Go dependency notices and corresponding source distribution) remains unresolved and coverage is marked partial text-only.
-  - `Cronet`: The offline notice catalog packages 51 texts across 5 components, including 45 candidate third-party texts harvested from `SagerNet/naiveproxy` and `cronet-go`. These 45 texts represent an unverified candidate upstream source superset (`source_chain_unverified: true`), **not** linked-specific compiled credits or verified build provenance (source build provenance remains unknown without a source rebuild). Worker observed `libcronet.so` payload SHA-256 is `dc7293a929dffa695aae1a89555e7366158fa0a3f40bbe3012d445bc05c99672` (matching git blob `5b8e36ad9cd406f5ab783712631ca7c0532b6176` in `cronet-go/lib/linux_amd64` at commit `def9ff0fb992` upstream GitHub contents, verified parent of the blob). This confirms the parent commit of the prebuilt binary blob, but is **not** evidence of a full source build chain to naiveproxy.
-  - Native components remain marked as partial coverage; under no circumstances does this prototype claim complete native notices or fulfilled release obligations.
-- **Explicit unresolved evidence tracking**: Any unresolved item (such as `Cronet:linked-dependency-selection` or `sing-box-vpnctl:embedded-go-notices`) is flattened into `missing_licenses` in `manifest.json` and preserved alongside missing source repository license files.
-- **Offline collector invariants**: License evidence collection is strictly offline and network-free, operating solely on the extracted source tree, publish output, local .NET SDK directory, and trusted local `packaging/arch/notices/catalog.json` (51 texts across 5 components). No new CLI options or offline flags are added. Current runtime pins and binary behavior are fully preserved.
-- **No release authorization**: This prototype cannot be published or distributed. Incomplete native notices gate legal release authorization; no release approval is granted or implied.
-
-## 5. Build Driver Usage
+Use an Arch CI container or build worker with base-devel, Python, git, libarchive,
+libcap and the .NET SDK selected by `global.json` (10.0.301). The driver supports
+`DOTNET_ROOT` for a private SDK install. It runs makepkg as an unprivileged user.
 
 ```bash
 python3 packaging/arch/build_package.py \
-  --repo /path/to/VPNRouter \
-  --work-dir /path/to/new-scratch-dir \
-  --archive-cache /path/to/archive-cache
+  --repo "$PWD" --source-sha "$(git rev-parse HEAD)" \
+  --work-dir /absolute/path/to/new-build-directory
 ```
 
-### Invariants:
-- `--repo` must contain the exact approved backend commit `05c0bcaee08a5defb1ceeb1cdaab83b3bc1a2a8a`.
-- `--work-dir` must be a new, absolute, private directory (pre-existing, non-empty directories or symlinks are rejected).
-- Pinned runtime archives are verified against exact SHA-256 hashes prior to extraction using `staging_tools.safe_extract`.
-- Outputs the finalized `.pkg.tar.zst` package path and SHA-256 sidecar file.
+`--source-sha` defaults to the checkout HEAD. The driver exports that commit,
+publishes framework-dependent linux-x64, verifies pinned native archives,
+assembles and inspects the package, and writes its SHA256 sidecar. The manifest
+records `source_commit`, runtime archive hashes, file inventory and build tools.
+`--work-dir` must be new and absolute. `--archive-cache` optionally reads an
+existing directory of verified archives.
+
+The core is sing-box-vpnctl 1.14.2-vpnctl.2 linux-amd64; the libcronet donor is
+SagerNet/sing-box 1.14.2 linux-amd64. Both archive hashes match
+[the desktop Linux workflow](../../.github/workflows/build-linux.yml).
+The [Arch CI workflow](../../.github/workflows/arch-headless.yml) builds from
+`github.sha`, installs and upgrades the result with pacman, verifies capabilities,
+and exercises the installed backend as a normal user, including TUN creation and
+disconnect. Its artifact is `vpnrouter-headless-arch`.
+
+## Install and verify
+
+Download the package and sidecar from the same CI run, then in that directory:
+
+```bash
+sha256sum -c vpnrouter-headless-0.1.0-1-x86_64.pkg.tar.zst.sha256
+sudo pacman -U ./vpnrouter-headless-0.1.0-1-x86_64.pkg.tar.zst
+getcap /usr/lib/vpnrouter-headless/runtime/sing-box
+{ printf '%s\n' '{"v":1,"id":"check-1","method":"snapshot","params":{}}'; sleep 2; } | \
+  /usr/lib/vpnrouter-headless/VPNRouter.Headless --stdio
+```
+
+Dependencies are glibc, gcc-libs, libcap and .NET runtime >=10 and <11.
+The pacman install/upgrade script applies `cap_net_admin,cap_net_raw+ep` to
+`/usr/lib/vpnrouter-headless/runtime/sing-box`. Package inspection accepts only
+that exact install script. Production trusts this fixed regular file when it
+and every ancestor are root-owned and not group/other writable, and the file
+has effective and permitted CAP_NET_ADMIN. Symlinks are rejected. NET_RAW is
+optional; NET_BIND_SERVICE is not required by the generated configuration.
+No binary SHA pin is used for runtime authorization: the package manager owns
+that trust decision. Test-file policies retain their SHA checks.
+
+A disconnected normal-user snapshot reports `capabilities.connect=true` when
+runtime and ownership checks pass. A failed runtime check sets it false and
+includes `unavailableReason`, also shown by HealthCheck. Reinstalling the package
+restores capabilities after file replacement. NoNewPrivs/user namespaces can
+prevent file capabilities from taking effect. Kill switch and DNS lockdown
+remain false on Linux. The ownership lock coordinates cooperating processes of
+the same UID. Installed-owner traffic routing and plugin loading require their
+own end-to-end checks.
+
+## Package evidence
+
+The manifest verifies file hashes and modes; ELF dependencies are inventoried
+with readelf. Managed and native notice evidence is collected offline from the
+source, SDK and [notice catalog](notices/catalog.json). Native corresponding
+source and linked Cronet notice coverage remain partial; this CI artifact is
+not a tagged release and does not claim complete license inventory.

@@ -11,7 +11,7 @@ Covers all 9 coordinator source-verified findings:
 5. reject publish links via inventory before copying, no Avalonia in publish artifacts.
 6. get_elf_needed mandatory readelf, mandatory bsdtar inspection, convert via bsdtar
    then safe_extract and require manifest, reject files outside metadata/subtree,
-   hooks .INSTALL forbidden, owner root (0:0) validated, exact 1 package artifact.
+   only the exact owned .INSTALL allowed, owner root (0:0) validated, exact 1 package artifact.
 7. --skip-makepkg CLI bypass removed.
 8. isolated HOME/XDG/NUGET_PACKAGES in work_dir, source archive includes Version.props
    and all tracked root .props/.targets/.json/.config.
@@ -157,6 +157,27 @@ prepare
         )
         self.assertNotEqual(res_sym.returncode, 0, "prepare must fail when original payload.tar is a symlink")
         self.assertIn("symlink", (res_sym.stderr + res_sym.stdout).lower())
+
+    def test_source_selection_defaults_to_head_and_accepts_exact_sha(self) -> None:
+        subprocess.run(["git", "init", str(self.tmp / "repo")], check=True, capture_output=True)
+        repo = self.tmp / "repo"
+        for text in ("first", "second"):
+            (repo / "source").write_text(text)
+            subprocess.run(["git", "add", "source"], cwd=repo, check=True)
+            subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                            "commit", "-m", text], cwd=repo, check=True, capture_output=True)
+            if text == "first":
+                first = build_package.verify_repo_commit(repo)
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
+        self.assertEqual(build_package.verify_repo_commit(repo), head)
+        self.assertEqual(build_package.verify_repo_commit(repo, first), first)
+        self.assertNotEqual(first, head)
+
+    def test_runtime_pins_match_desktop_linux(self) -> None:
+        desktop = (PROJECT_ROOT / ".github/workflows/build-linux.yml").read_text()
+        for pin in (build_package.RUNTIME_VERSION, build_package.RUNTIME_SHA256,
+                    build_package.CRONET_VERSION, build_package.CRONET_SHA256):
+            self.assertIn(pin, desktop)
 
     def test_pkgbuild_composite_licenses_and_dependencies(self) -> None:
         """Verify PKGBUILD declares composite licenses and glibc/gcc-libs dependencies."""
@@ -534,7 +555,7 @@ class TestLicensesAndNotices(unittest.TestCase):
                 (dest / "libcronet.so").write_bytes(b"cronet")
                 (dest / "LICENSE").write_bytes(b"lic")
 
-        with mock.patch("build_package.verify_repo_commit"), \
+        with mock.patch("build_package.verify_repo_commit", return_value="a" * 40), \
              mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
              mock.patch("build_package.export_source", return_value=(fake_work / "source.tar", "a" * 64)), \
              mock.patch("staging_tools.safe_extract", side_effect=fake_safe_extract), \
@@ -676,7 +697,7 @@ class TestLicensesAndNotices(unittest.TestCase):
         def fake_verify_lic(payload_root):
             verified_payloads.append(payload_root)
 
-        with mock.patch("build_package.verify_repo_commit"), \
+        with mock.patch("build_package.verify_repo_commit", return_value="a" * 40), \
              mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet/sdk/bin/dotnet"), \
              mock.patch("build_package.export_source", return_value=(fake_work / "source.tar", "a" * 64)), \
              mock.patch("staging_tools.safe_extract", side_effect=fake_safe_extract), \
@@ -707,6 +728,7 @@ class TestLicensesAndNotices(unittest.TestCase):
         # 2. Assert written manifest metadata
         self.assertEqual(len(written_manifests), 1)
         meta = written_manifests[0]
+        self.assertEqual(meta["source_commit"], "a" * 40)
         self.assertFalse(meta["license_inventory_complete"])
         expected_missing = [
             "Cronet:generated-Chromium-credits",
@@ -771,7 +793,7 @@ class TestReadelfAndPackageInspection(unittest.TestCase):
              mock.patch("subprocess.run", side_effect=fake_run):
             with self.assertRaises(ValueError) as ctx:
                 build_package.inspect_package(pkg_file, self.tmp)
-            self.assertIn("Package hooks (.INSTALL) are strictly forbidden", str(ctx.exception))
+            self.assertIn("Unexpected package install script", str(ctx.exception))
 
     def test_inspect_package_files_outside_subtree_rejected(self) -> None:
         """Verify files outside allowed metadata and usr/lib/vpnrouter-headless are rejected."""
@@ -913,7 +935,10 @@ class TestReadelfAndPackageInspection(unittest.TestCase):
         ti_manifest.mode = 0o644
         ti_manifest.uid = ti_manifest.gid = 0
 
+        ti_install = tarfile.TarInfo(".INSTALL")
+        ti_install.mode = 0o644
         entries = [
+            (ti_install, (ARCH_DIR / "vpnrouter-headless.install").read_bytes()),
             (ti_pkginfo, b"pkgname = vpnrouter-headless\n"),
             (ti_usr, None),
             (ti_usrlib, None),

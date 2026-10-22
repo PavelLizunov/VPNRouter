@@ -206,7 +206,7 @@ public partial class SingBoxManager
                 if (!targetHandle.HasExited)
                 {
                     targetHandle.SuppressExitedEvent();
-                    targetHandle.Kill(entireProcessTree: true);
+                    targetHandle.Kill(entireProcessTree: false);
                     try
                     {
                         using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -590,33 +590,7 @@ public partial class SingBoxManager
         if (!OperatingSystem.IsLinux()) return false;
         if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath)) return false;
 
-        try
-        {
-            var psi = new ProcessStartInfo("getcap")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            psi.ArgumentList.Add(exePath);
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            var output = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(2000);
-            if (!p.HasExited || p.ExitCode != 0) return false;
-
-            if (string.IsNullOrWhiteSpace(output)) return false;
-            if (output.IndexOf("cap_net_admin", StringComparison.OrdinalIgnoreCase) < 0) return false;
-            if (output.IndexOf("cap_net_bind_service", StringComparison.OrdinalIgnoreCase) < 0) return false;
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug(ex, "[SingBoxManager] getcap probe failed — falling back to pkexec path");
-            return false;
-        }
+        return SingBoxRuntimePolicy.HasNetAdminCapability(exePath);
     }
 
     internal static bool TryColocateCronet(string singBoxExePath, string bundledDir, ILogger? logger)
@@ -657,7 +631,8 @@ public partial class SingBoxManager
             Array.Clear(_capturedStderr, 0, _capturedStderr.Length);
         }
 
-        TryColocateCronet(exePath, AppContext.BaseDirectory, _logger);
+        if (EffectivePolicy == null)
+            TryColocateCronet(exePath, AppContext.BaseDirectory, _logger);
 
         if (OperatingSystem.IsWindows())
         {
@@ -702,7 +677,7 @@ public partial class SingBoxManager
             }
             else
             {
-                _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_bind_service=+eip {Exe}' once)",
+                _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_raw+ep {Exe}' once)",
                     exePath);
                 _linuxUsedPkexec = true;
                 spawnExe = LinuxRuntimeEnvironment.ResolvePkexec()

@@ -34,20 +34,19 @@ try:
 except ImportError as err:
     raise ImportError(f"Failed to import license_evidence from {ARCH_DIR}: {err}") from err
 
-BACKEND_COMMIT: str = "05c0bcaee08a5defb1ceeb1cdaab83b3bc1a2a8a"
 RUNTIME_URL: str = (
     "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/"
-    "v1.14.0-vpnctl.5/sing-box-1.14.0-vpnctl.5-linux-amd64.tar.gz"
+    "v1.14.2-vpnctl.2/sing-box-1.14.2-vpnctl.2-linux-amd64.tar.gz"
 )
-RUNTIME_SHA256: str = "5f98eacc95b9ed9c1d53592605d812d9d2cb8c496fa95723cfb7c5f9447fe46e"
-RUNTIME_VERSION: str = "1.14.0-vpnctl.5"
+RUNTIME_SHA256: str = "095a575fb412e5520b5c16449002073a5ba587646b96e3dddd2c59473d5be2d8"
+RUNTIME_VERSION: str = "1.14.2-vpnctl.2"
 
 CRONET_URL: str = (
     "https://github.com/SagerNet/sing-box/releases/download/"
-    "v1.13.14/sing-box-1.13.14-linux-amd64.tar.gz"
+    "v1.14.2/sing-box-1.14.2-linux-amd64.tar.gz"
 )
-CRONET_SHA256: str = "f48703461a15476951ac4967cdad339d986f4b8096b4eb3ff0829a500502d697"
-CRONET_VERSION: str = "1.13.14"
+CRONET_SHA256: str = "a684484d7477d1437282ee411f4d131d0340aaad60a7868841ebd5d87dd8a0c6"
+CRONET_VERSION: str = "1.14.2"
 
 ALLOWED_DOWNLOADS: dict[str, tuple[str, str]] = {
     RUNTIME_URL: (RUNTIME_SHA256, "runtime.tar.gz"),
@@ -97,11 +96,11 @@ def validate_work_dir(work_dir_arg: str | Path) -> Path:
     return work_dir
 
 
-def verify_repo_commit(repo_dir: Path, commit_sha: str) -> None:
+def verify_repo_commit(repo_dir: Path, commit_sha: str = "HEAD") -> str:
     if not repo_dir.is_dir():
         raise ValueError(f"--repo directory does not exist: {repo_dir}")
     res = subprocess.run(
-        ["git", "cat-file", "-e", f"{commit_sha}^{{commit}}"],
+        ["git", "rev-parse", "--verify", f"{commit_sha}^{{commit}}"],
         cwd=repo_dir,
         capture_output=True,
         text=True,
@@ -109,6 +108,8 @@ def verify_repo_commit(repo_dir: Path, commit_sha: str) -> None:
     )
     if res.returncode != 0:
         raise ValueError(f"Git object {commit_sha} not found in repository {repo_dir}: {res.stderr.strip()}")
+
+    return res.stdout.strip()
 
 
 def export_source(repo_dir: Path, commit_sha: str, work_dir: Path) -> tuple[Path, str]:
@@ -532,8 +533,14 @@ def inspect_package(pkg_file: Path, work_dir: Path) -> None:
                 if not norm or norm == ".":
                     continue
                 base_name = Path(norm).name
+                if norm == ".INSTALL" and member.isreg():
+                    hook = tf.extractfile(member)
+                    expected = (ARCH_DIR / "vpnrouter-headless.install").read_bytes()
+                    if hook is None or hook.read(len(expected) + 1) != expected:
+                        raise ValueError("Unexpected package install script")
+                    continue
                 if base_name.upper() == ".INSTALL" or norm.endswith(".install"):
-                    raise ValueError(f"Package hooks (.INSTALL) are strictly forbidden: {norm}")
+                    raise ValueError(f"Unexpected package install script: {norm}")
                 if norm in allowed_metadata or norm in ("usr", "usr/lib", "usr/lib/vpnrouter-headless"):
                     continue
                 if norm.startswith("usr/lib/vpnrouter-headless/"):
@@ -568,6 +575,7 @@ def build_makepkg(
 ) -> tuple[Path, str]:
     shutil.copy2(payload_tar, pkg_dir / "payload.tar")
     shutil.copy2(staging_tools_py, pkg_dir / "staging_tools.py")
+    shutil.copy2(template_pkgbuild.parent / "vpnrouter-headless.install", pkg_dir / "vpnrouter-headless.install")
     rendered_pkgbuild = render_pkgbuild(template_pkgbuild, payload_sha256)
     (pkg_dir / "PKGBUILD").write_text(rendered_pkgbuild, encoding="utf-8")
 
@@ -637,13 +645,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional existing directory for caching downloaded runtime archives (read-only)",
     )
+    parser.add_argument("--source-sha", default="HEAD", help="Source commit (defaults to checkout HEAD)")
     args = parser.parse_args(argv)
 
     work_dir = validate_work_dir(args.work_dir)
     repo_dir = args.repo.resolve()
-    verify_repo_commit(repo_dir, BACKEND_COMMIT)
+    source_commit = verify_repo_commit(repo_dir, args.source_sha)
 
-    source_tar, source_sha256 = export_source(repo_dir, BACKEND_COMMIT, work_dir)
+    source_tar, source_sha256 = export_source(repo_dir, source_commit, work_dir)
     source_tree = work_dir / "source_tree"
     staging_tools.safe_extract(source_tar, source_tree, source_sha256)
 
@@ -736,10 +745,11 @@ def main(argv: list[str] | None = None) -> int:
     catalog_json = ARCH_DIR / "notices" / "catalog.json"
 
     metadata = {
-        "source_commit": BACKEND_COMMIT,
+        "source_commit": source_commit,
         "source_archive_sha256": source_sha256,
         "packaging_files_sha256": {
             "PKGBUILD": compute_file_sha256(template_pkgbuild),
+            "vpnrouter-headless.install": compute_file_sha256(ARCH_DIR / "vpnrouter-headless.install"),
             "staging_tools.py": compute_file_sha256(staging_tools_py),
             "build_package.py": compute_file_sha256(build_package_py),
             "license_evidence.py": compute_file_sha256(license_evidence_py),
@@ -756,12 +766,12 @@ def main(argv: list[str] | None = None) -> int:
         "archive_urls": {"runtime": RUNTIME_URL, "cronet": CRONET_URL},
         "archive_hashes": {"runtime": RUNTIME_SHA256, "cronet": CRONET_SHA256},
         "dependencies": {
-            "arch_packages": ["glibc", "gcc-libs", "dotnet-runtime>=10", "dotnet-runtime<11"],
+            "arch_packages": ["glibc", "gcc-libs", "libcap", "dotnet-runtime>=10", "dotnet-runtime<11"],
             "elf_needed": needed_deps,
         },
         "license_inventory_complete": len(missing_licenses) == 0 and bool(evidence.get("complete", False)),
         "missing_licenses": sorted(set(missing_licenses)),
-        "execution_authorized": False,
+        "runtime_trust": "package-manager-root-ownership-and-file-capabilities",
     }
     staging_tools.write_manifest(payload_dir, metadata)
     staging_tools.verify_manifest(payload_dir)

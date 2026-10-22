@@ -1,0 +1,64 @@
+name: Arch headless package
+
+on:
+  push:
+    branches: [main, dsh/omarchy-mvp-2026-10-22]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  arch-headless-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: archlinux:latest
+      options: --cap-add NET_ADMIN --device-cgroup-rule "c 10:200 rwm"
+    env:
+      DOTNET_INSTALL_DIR: /opt/vpnrouter-dotnet
+    steps:
+      - name: Install build and runtime tools
+        run: pacman -Syu --noconfirm --needed base-devel git python dotnet-sdk-10.0 libcap libarchive iproute2
+      - name: Checkout exact source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - name: Install repository-pinned .NET SDK in CI
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Build and inspect package as unprivileged builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- env DOTNET_ROOT="$DOTNET_ROOT" python packaging/arch/build_package.py \
+            --repo "$GITHUB_WORKSPACE" --work-dir /tmp/vpnrouter-arch-build --source-sha "$GITHUB_SHA"
+      - name: Install package and verify file capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          pacman -U --noconfirm /tmp/vpnrouter-arch-build/pkgbuild/*.pkg.tar.zst
+          getcap /usr/lib/vpnrouter-headless/runtime/sing-box | tee /tmp/vpnrouter-arch-build/getcap.txt
+          grep -F 'cap_net_admin,cap_net_raw=ep' /tmp/vpnrouter-arch-build/getcap.txt
+          mkdir -p /dev/net
+          if [ ! -e /dev/net/tun ]; then mknod /dev/net/tun c 10 200; fi
+          chmod 666 /dev/net/tun
+          python packaging/arch/installed_smoke.py --source-sha "$GITHUB_SHA"
+          # Upgrade must restore the xattr after the package file is replaced.
+          pacman -U --noconfirm /tmp/vpnrouter-arch-build/pkgbuild/*.pkg.tar.zst
+          getcap /usr/lib/vpnrouter-headless/runtime/sing-box | grep -F 'cap_net_admin,cap_net_raw=ep'
+      - name: Upload exact-head Arch package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: vpnrouter-headless-arch
+          path: |
+            /tmp/vpnrouter-arch-build/pkgbuild/*.pkg.tar.zst
+            /tmp/vpnrouter-arch-build/pkgbuild/*.pkg.tar.zst.sha256
+            /tmp/vpnrouter-arch-build/stage/usr/lib/vpnrouter-headless/manifest.json
+            /tmp/vpnrouter-arch-build/getcap.txt
+          if-no-files-found: error
+          retention-days: 30

@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -23,7 +24,8 @@ internal enum SingBoxRuntimeFailure
     Missing,
     Untrusted,
     Changed,
-    PrerequisiteUnavailable
+    PrerequisiteUnavailable,
+    MissingCapabilities
 }
 
 internal sealed class SingBoxRuntimePolicyException : InvalidOperationException
@@ -55,7 +57,7 @@ internal sealed class SingBoxRuntimePolicy
     /// - DefaultProduction dominates current/retained always.
     /// - Latches the first fixture if retained is null.
     /// - A differing fixture never silently switches identity.
-    /// Uses an Interlocked CAS loop with Volatile.Read so races cannot overwrite denial with a fixture.
+    /// Uses an Interlocked CAS loop with Volatile.Read to retain the production trust policy.
     /// Refuses concurrent identity replacement claims beyond actual capability.
     /// </summary>
     internal static SingBoxRuntimePolicy? Capture(ref SingBoxRuntimePolicy? retained)
@@ -75,7 +77,7 @@ internal sealed class SingBoxRuntimePolicy
             if (ReferenceEquals(current, DefaultProduction))
             {
                 // Current is DefaultProduction: it dominates always and must be latched.
-                // Race cannot overwrite denial with fixture.
+                // A fixture cannot replace the production trust policy.
                 if (Interlocked.CompareExchange(ref retained, DefaultProduction, initial) == initial)
                 {
                     return DefaultProduction;
@@ -150,19 +152,19 @@ internal sealed class SingBoxRuntimePolicy
     }
 
     /// <summary>
-    /// Default production policy for Linux Headless: Unavailable / Untrusted
-    /// because no production trusted artifact is yet authorized.
-    /// SelectedExecutablePath is strictly null as no trusted binary is selected.
+    /// Production trusts the package manager's fixed root-owned runtime and file capabilities.
     /// </summary>
     public static SingBoxRuntimePolicy DefaultProduction { get; } = new(
-        isProductionUnavailable: true,
-        path: null,
+        isPackaged: true,
+        path: PackagedExecutablePath,
         expectedSha256: null,
         prerequisites: null);
 
+    internal const string PackagedExecutablePath = "/usr/lib/vpnrouter-headless/runtime/sing-box";
+
     private const long MaxFileSizeBytes = 256L * 1024 * 1024; // 256 MiB
 
-    private readonly bool _isProductionUnavailable;
+    private readonly bool _isPackaged;
     private readonly string? _path;
     private readonly string? _expectedSha256;
     private readonly Func<bool>? _prerequisites;
@@ -173,12 +175,12 @@ internal sealed class SingBoxRuntimePolicy
     internal static Func<uint>? GeteuidOverrideForTests { get; set; }
 
     private SingBoxRuntimePolicy(
-        bool isProductionUnavailable,
+        bool isPackaged,
         string? path,
         string? expectedSha256,
         Func<bool>? prerequisites)
     {
-        _isProductionUnavailable = isProductionUnavailable;
+        _isPackaged = isPackaged;
         _path = path;
         _expectedSha256 = expectedSha256;
         _prerequisites = prerequisites;
@@ -197,7 +199,7 @@ internal sealed class SingBoxRuntimePolicy
         ValidateExpectedSha256(expectedSha256);
 
         return new SingBoxRuntimePolicy(
-            isProductionUnavailable: false,
+            isPackaged: false,
             path: absolutePath,
             expectedSha256: expectedSha256.Trim().ToLowerInvariant(),
             prerequisites: prerequisites);
@@ -206,9 +208,9 @@ internal sealed class SingBoxRuntimePolicy
     /// <summary>
     /// Single selected executable path used across availability, start/restart,
     /// feature probes, deep verifiers, and diagnostic metadata.
-    /// Strictly null when no production binary is authorized.
+    /// Production always selects the fixed package path; authorization is checked separately.
     /// </summary>
-    public string? SelectedExecutablePath => _isProductionUnavailable ? null : _path;
+    public string? SelectedExecutablePath => _path;
 
     /// <summary>
     /// Fork features are strictly false until authorized by approved metadata;
@@ -219,15 +221,12 @@ internal sealed class SingBoxRuntimePolicy
 
     /// <summary>
     /// Availability indicates whether the runtime can be authorized for executable operations.
-    /// Unavailable when production policy is active, UID is root (0), or validation fails.
+    /// Unavailable when UID is root (0) or validation fails.
     /// </summary>
     public bool IsAvailable
     {
         get
         {
-            if (_isProductionUnavailable)
-                return false;
-
             return TryAuthorize(SingBoxRuntimeOperation.Probe, out _);
         }
     }
@@ -242,12 +241,6 @@ internal sealed class SingBoxRuntimePolicy
 
     public bool TryAuthorize(SingBoxRuntimeOperation operation, out SingBoxRuntimeFailure failure)
     {
-        if (_isProductionUnavailable)
-        {
-            failure = SingBoxRuntimeFailure.Untrusted;
-            return false;
-        }
-
         lock (_validationLock)
         {
             // Reentrancy guard: deny recursive authorization to prevent stack overflow from callbacks
@@ -360,23 +353,46 @@ internal sealed class SingBoxRuntimePolicy
                 return false;
             }
 
+            if (_isPackaged && !IsTrustedPackageMetadata(beforeStat.stx_mask, beforeStat.stx_uid, beforeStat.stx_mode, directory: false))
+            {
+                failure = SingBoxRuntimeFailure.Untrusted;
+                return false;
+            }
+
             // Check ancestor directories are regular directories and not symlinks
             // Note: Ancestor directory checks verify current path components are not symlinks,
             // but cannot guarantee race-free execution against subsequent path replacement without fexecve/descriptor execution support.
             string? current = Path.GetDirectoryName(_path!);
-            while (!string.IsNullOrEmpty(current) && current != "/" && current != Path.GetPathRoot(current))
+            while (!string.IsNullOrEmpty(current))
             {
-                if (Statx(AT_FDCWD, current, AT_SYMLINK_NOFOLLOW, STATX_TYPE | STATX_MODE, out var dirBuf) != 0)
+                if (Statx(AT_FDCWD, current, AT_SYMLINK_NOFOLLOW, STATX_BASIC_STATS, out var dirBuf) != 0)
                 {
                     failure = SingBoxRuntimeFailure.Untrusted;
                     return false;
                 }
-                if ((dirBuf.stx_mode & S_IFMT) != S_IFDIR)
+                if ((dirBuf.stx_mode & S_IFMT) != S_IFDIR ||
+                    (_isPackaged && !IsTrustedPackageMetadata(dirBuf.stx_mask, dirBuf.stx_uid, dirBuf.stx_mode, directory: true)))
                 {
                     failure = SingBoxRuntimeFailure.Untrusted;
                     return false;
                 }
                 current = Path.GetDirectoryName(current);
+            }
+
+            if (_isPackaged)
+            {
+                if (!HasNetAdminCapability(fd))
+                {
+                    failure = SingBoxRuntimeFailure.MissingCapabilities;
+                    return false;
+                }
+                if (LinuxRuntimeEnvironment.GetTunPrivilegeBlocker() != null)
+                {
+                    failure = SingBoxRuntimeFailure.PrerequisiteUnavailable;
+                    return false;
+                }
+                failure = SingBoxRuntimeFailure.None;
+                return true;
             }
 
             // Check launch/runtime prerequisites
@@ -618,6 +634,56 @@ internal sealed class SingBoxRuntimePolicy
         return false;
     }
 
+    public string? UnavailabilityReason
+    {
+        get
+        {
+            if (TryAuthorize(SingBoxRuntimeOperation.Probe, out var failure)) return null;
+            return failure switch
+            {
+                SingBoxRuntimeFailure.Missing => "sing-box runtime is missing; reinstall the vpnrouter-headless package",
+                SingBoxRuntimeFailure.MissingCapabilities => "sing-box runtime is missing capabilities; reinstall the vpnrouter-headless package",
+                SingBoxRuntimeFailure.PrerequisiteUnavailable => "Linux sandbox blocks sing-box TUN privileges (NoNewPrivs or user namespace)",
+                _ => "sing-box runtime is untrusted; check root ownership and permissions or reinstall the vpnrouter-headless package (run the backend as a normal user)"
+            };
+        }
+    }
+
+    internal static bool IsTrustedPackageMetadata(uint mask, uint uid, uint mode, bool directory)
+        => (mask & (STATX_TYPE | STATX_MODE | STATX_UID)) == (STATX_TYPE | STATX_MODE | STATX_UID) &&
+           uid == 0 && (mode & 0x12) == 0 &&
+           (mode & S_IFMT) == (directory ? S_IFDIR : S_IFREG);
+
+    // Linux vfs_cap_data: effective flag plus CAP_NET_ADMIN in the permitted set.
+    // Revision 3 includes a namespace root ID, which must be the host root.
+    internal static bool HasEffectiveNetAdmin(ReadOnlySpan<byte> data)
+    {
+        if (data.Length != 20 && data.Length != 24) return false;
+        uint magic = BinaryPrimitives.ReadUInt32LittleEndian(data);
+        if (magic != (data.Length == 20 ? 0x02000001u : 0x03000001u)) return false;
+        if (data.Length == 24 && BinaryPrimitives.ReadUInt32LittleEndian(data[20..]) != 0) return false;
+        return (BinaryPrimitives.ReadUInt32LittleEndian(data[4..]) & (1u << 12)) != 0;
+    }
+
+    private static bool HasNetAdminCapability(int fd)
+    {
+        byte[] data = new byte[24];
+        long size = Fgetxattr(fd, "security.capability", data, (nuint)data.Length);
+        return size >= 0 && size <= data.Length && HasEffectiveNetAdmin(data.AsSpan(0, (int)size));
+    }
+
+    internal static bool HasNetAdminCapability(string path)
+    {
+        try
+        {
+            int fd = Open(path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC, 0);
+            if (fd < 0) return false;
+            using var handle = new SafeFileHandle((nint)fd, ownsHandle: true);
+            return HasNetAdminCapability(fd);
+        }
+        catch { return false; }
+    }
+
     private static void ValidatePathBoundedAndFormatted(string absolutePath)
     {
         if (string.IsNullOrWhiteSpace(absolutePath))
@@ -714,6 +780,7 @@ internal sealed class SingBoxRuntimePolicy
 
     private const uint STATX_TYPE = 0x0001;
     private const uint STATX_MODE = 0x0002;
+    private const uint STATX_UID = 0x0008;
     private const uint STATX_SIZE = 0x0200;
     private const uint STATX_BASIC_STATS = 0x07FF;
 
@@ -772,6 +839,9 @@ internal sealed class SingBoxRuntimePolicy
 
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int Open(string pathname, int flags, int mode);
+
+    [DllImport("libc", EntryPoint = "fgetxattr", SetLastError = true)]
+    private static extern nint Fgetxattr(int fd, string name, byte[] value, nuint size);
 
     [DllImport("libc", EntryPoint = "geteuid")]
     private static extern uint Geteuid();

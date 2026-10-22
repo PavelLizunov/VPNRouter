@@ -504,18 +504,12 @@ public class HeadlessRuntimePolicyTests : IDisposable
     }
 
     [Fact]
-    public void DefaultProduction_SelectedExecutablePath_IsNull_AndAlwaysDenied()
+    public void DefaultProduction_SelectsOnlyPackagePath_AndRejectsMissingInstallation()
     {
         var prod = SingBoxRuntimePolicy.DefaultProduction;
-        Assert.Null(prod.SelectedExecutablePath);
+        Assert.Equal("/usr/lib/vpnrouter-headless/runtime/sing-box", prod.SelectedExecutablePath);
         Assert.False(prod.IsAvailable);
-
-        foreach (var op in Enum.GetValues<SingBoxRuntimeOperation>())
-        {
-            var ex = Assert.Throws<SingBoxRuntimePolicyException>(() => prod.Authorize(op));
-            Assert.Equal(SingBoxRuntimeFailure.Untrusted, ex.Failure);
-            Assert.Equal(op, ex.Operation);
-        }
+        Assert.NotNull(prod.UnavailabilityReason);
     }
 
     [Fact]

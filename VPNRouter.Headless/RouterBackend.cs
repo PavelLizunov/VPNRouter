@@ -152,6 +152,7 @@ public sealed class RouterBackend : IAsyncDisposable
             configMode,
             busy = _busyState != 0,
             errorCode = _session.ErrorCode,
+            unavailableReason = EffectivePolicy?.UnavailabilityReason,
             capabilities = new
             {
                 connect = _session.CanConnect,

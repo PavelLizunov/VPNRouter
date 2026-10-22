@@ -62,16 +62,16 @@
     },
     {
       "id": "sing-box-vpnctl",
-      "version": "1.14.0-vpnctl.5",
+      "version": "1.14.2-vpnctl.2",
       "repository_url": "https://github.com/PavelLizunov/sing-box-vpnctl",
-      "revision": "8688eab3c51d07ff89a124ce247044409b9f93fd",
+      "revision": "f62085aa7cc0f3ee665ac3043d35698760a386e9",
       "license_expression": "GPL-3.0-or-later",
-      "payload_sha256": "dfce0ac6fa3c1c0dda7218464ebb9b61de53a623503b12d984683205017d4eab",
+      "payload_sha256": "c9c0e66020575b4eea57c2f77ad4df0a5bebee1d8500c715eb9430982638bea3",
       "files": [
         {
           "path": "sing-box-vpnctl/LICENSE",
           "sha256": "650d5e3b99a446fb38e820fa87a49562e0c79eab868fff58618ac487a58e554c",
-          "source_url": "https://raw.githubusercontent.com/PavelLizunov/sing-box-vpnctl/8688eab3c51d07ff89a124ce247044409b9f93fd/LICENSE"
+          "source_url": "https://raw.githubusercontent.com/PavelLizunov/sing-box-vpnctl/f62085aa7cc0f3ee665ac3043d35698760a386e9/LICENSE"
         }
       ],
       "coverage": "partial",
@@ -82,11 +82,11 @@
     },
     {
       "id": "Cronet",
-      "version": "1.13.14",
-      "repository_url": "https://github.com/SagerNet/cronet-go",
-      "revision": "def9ff0fb992d0360f56ddbd4b43d65d29849771",
+      "version": "1.14.2",
+      "repository_url": "https://github.com/SagerNet/sing-box",
+      "revision": "v1.14.2",
       "license_expression": "BSD-3-Clause",
-      "payload_sha256": "dc7293a929dffa695aae1a89555e7366158fa0a3f40bbe3012d445bc05c99672",
+      "payload_sha256": "23109c55b08829bb1a68682a61a64852b1bbf243753b153cbd8f6e4ea2c05294",
       "provenance": {
         "repository_url": "https://github.com/SagerNet/naiveproxy",
         "revision": "888e114241c89b05fac4e4ee01482d7bd89ca15a",
@@ -94,7 +94,7 @@
         "fork_expected_lib_revision": "f80ef37265e5ae43b62021553a3bfc763414656d",
         "source_chain_unverified": true,
         "relationship": "candidate_upstream_source_superset",
-        "note": "Candidate upstream source superset; exact Chromium build not asserted without rebuild"
+        "note": "Candidate notice source superset retained from the earlier donor; not verified against the 1.14.2 donor build"
       },
       "coverage": "partial",
       "unresolved": [

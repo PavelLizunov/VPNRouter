@@ -181,7 +181,7 @@ public static class HealthCheck
             }
             catch
             {
-                results.Add(new(Level.Err, "sing-box binary unavailable or untrusted under runtime policy"));
+                results.Add(new(Level.Err, policy.UnavailabilityReason ?? "sing-box runtime policy validation failed"));
             }
             return;
         }
@@ -209,9 +209,11 @@ public static class HealthCheck
     {
         if (OperatingSystem.IsLinux())
         {
-            if (SingBoxRuntimePolicy.Current != null)
+            if (SingBoxRuntimePolicy.Current is { } policy)
             {
-                results.Add(new(Level.Warn, "runtime policy unavailable"));
+                var reason = policy.UnavailabilityReason;
+                results.Add(new(reason == null ? Level.Ok : Level.Err,
+                    reason ?? "sing-box package has effective CAP_NET_ADMIN; normal-user TUN launch available"));
                 return;
             }
 

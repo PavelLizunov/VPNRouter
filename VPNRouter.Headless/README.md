@@ -4,14 +4,13 @@
 
 ## Development status
 
-This is a draft integration, not an installable or accepted Linux VPN release.
+The Arch package is built and installed in CI; see [packaging](../packaging/arch/README.md).
 Linux firewall kill-switch and DNS-lockdown capabilities remain unavailable.
-Under the Linux Headless runtime policy (`SingBoxRuntimePolicy`), connection readiness
-defaults to unavailable (`untrusted`) because no production trusted artifact is yet authorized.
-Mere file presence on disk at `AppPaths.SingBoxExePath` or within the application directory
-does not establish trust, integrity, or authority to launch code. Production launch,
-probing, and verification fail closed before any engine side effects occur.
-Runtime binary distribution and privileged protection integration remain unresolved.
+Production uses only `/usr/lib/vpnrouter-headless/runtime/sing-box`, trusting package
+root ownership, non-writable file/ancestor permissions and effective/permitted
+CAP_NET_ADMIN. It does not select a user-data binary or pin its SHA.
+Snapshot includes `unavailableReason` when runtime validation fails; HealthCheck
+reports the same reason. A trusted installation permits normal-user TUN startup.
 The Linux lock coordinates cooperating processes of the same UID, not all users.
 
 Verification covers isolated protocol/lifecycle/storage tests and selected Core
