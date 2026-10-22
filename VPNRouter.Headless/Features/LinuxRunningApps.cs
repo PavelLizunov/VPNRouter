@@ -6,7 +6,7 @@ using System.Text;
 namespace VPNRouter.Headless.Features;
 
 internal sealed record RunningApp(string name, string displayName, string? icon, string? desktopId, bool hasWindow);
-internal sealed record DesktopApp(string Id, string Name, string? Icon, string[] MatchNames);
+internal sealed record DesktopApp(string Id, string Name, string? Icon, string[] IdentityNames, string? ExecName);
 
 /// <summary>Best-effort, bounded Linux process discovery. Desktop files are metadata, never executed.</summary>
 internal sealed class LinuxRunningApps
@@ -111,7 +111,7 @@ internal sealed class LinuxRunningApps
 
     internal static IReadOnlyDictionary<string, DesktopApp> ReadDesktopIndex(IEnumerable<string> directories)
     {
-        var result = new Dictionary<string, DesktopApp>(StringComparer.OrdinalIgnoreCase);
+        var entries = new List<DesktopApp>();
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var timer = Stopwatch.StartNew();
         int count = 0;
@@ -124,14 +124,16 @@ internal sealed class LinuxRunningApps
                     AttributesToSkip = 0, MaxRecursionDepth = 4 };
                 foreach (var path in Directory.EnumerateFiles(dir, "*.desktop", options))
                 {
-                    if (++count > 4096 || timer.ElapsedMilliseconds >= 70) return result;
+                    // A partial scan cannot establish that an Exec match is unique.
+                    if (++count > 4096 || timer.ElapsedMilliseconds >= 70)
+                        return BuildDesktopIndex(entries, includeExec: false);
                     var id = Path.GetRelativePath(dir, path).Replace(Path.DirectorySeparatorChar, '-');
                     if (id.Length > 256 || !ids.Add(id)) continue;
                     try
                     {
                         var entry = ParseDesktop(id, ReadBounded(path, 32768));
                         if (entry == null) continue;
-                        foreach (var key in entry.MatchNames) result.TryAdd(key, entry);
+                        entries.Add(entry);
                     }
                     catch (IOException) { }
                     catch (UnauthorizedAccessException) { }
@@ -140,7 +142,27 @@ internal sealed class LinuxRunningApps
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
-        return result;
+        return BuildDesktopIndex(entries);
+    }
+
+    private static IReadOnlyDictionary<string, DesktopApp> BuildDesktopIndex(
+        IEnumerable<DesktopApp> entries, bool includeExec = true)
+    {
+        var identities = new Dictionary<string, DesktopApp?>(StringComparer.OrdinalIgnoreCase);
+        var executables = new Dictionary<string, DesktopApp?>(StringComparer.OrdinalIgnoreCase);
+        static void Add(Dictionary<string, DesktopApp?> map, string key, DesktopApp entry)
+        {
+            if (!map.TryAdd(key, entry) && map[key]?.Id != entry.Id) map[key] = null;
+        }
+        foreach (var entry in entries)
+        {
+            foreach (var key in entry.IdentityNames) Add(identities, key, entry);
+            if (includeExec && entry.ExecName != null) Add(executables, entry.ExecName, entry);
+        }
+        // Even an ambiguous identity blocks fallback to an unrelated Exec match.
+        foreach (var pair in identities) executables[pair.Key] = pair.Value;
+        return executables.Where(p => p.Value != null)
+            .ToDictionary(p => p.Key, p => p.Value!, StringComparer.OrdinalIgnoreCase);
     }
 
     internal static DesktopApp? ParseDesktop(string id, string text)
@@ -159,13 +181,14 @@ internal sealed class LinuxRunningApps
             (fields.TryGetValue("Type", out var type) && type != "Application")) return null;
         var name = Unescape(fields.GetValueOrDefault("Name", ""));
         if (string.IsNullOrWhiteSpace(name) || name.Length > 256) return null;
-        var keys = new[] { ExecBasename(fields.GetValueOrDefault("Exec", "")),
-                fields.GetValueOrDefault("StartupWMClass"), Path.GetFileNameWithoutExtension(id) }
+        var stem = Path.GetFileNameWithoutExtension(id);
+        var keys = new[] { fields.GetValueOrDefault("StartupWMClass"), stem,
+                stem.Contains('.') ? stem[(stem.LastIndexOf('.') + 1)..] : null }
             .Where(s => !string.IsNullOrWhiteSpace(s) && s.Length <= 256).Select(s => s!).ToArray();
         var icon = Unescape(fields.GetValueOrDefault("Icon", ""));
         // Only icon theme names go on the wire. Never read an Icon path.
         if (icon.Length == 0 || icon.Length > 256 || icon.Contains('/') || icon.Contains('\\')) icon = null;
-        return new DesktopApp(id, name, icon, keys);
+        return new DesktopApp(id, name, icon, keys, ExecBasename(fields.GetValueOrDefault("Exec", "")));
     }
 
     internal static string? ExecBasename(string exec)
@@ -186,10 +209,26 @@ internal sealed class LinuxRunningApps
         }
         if (word.Length > 0) words.Add(word.ToString());
         if (words.Count == 0 || quoted || escaped) return null;
-        var command = words[0];
-        if (Path.GetFileName(command) == "env")
-            command = words.Skip(1).FirstOrDefault(w => !w.Contains('=') && !w.StartsWith('-'));
-        return string.IsNullOrWhiteSpace(command) || command.StartsWith('%') ? null : Path.GetFileName(command);
+        int target = 0;
+        if (Path.GetFileName(words[0]) == "env")
+        {
+            target++;
+            while (target < words.Count)
+            {
+                var value = words[target];
+                if (value == "--") { target++; break; }
+                if (value is "-i" or "--ignore-environment" || (value.Contains('=') && !value.StartsWith('-')))
+                    target++;
+                else break;
+            }
+        }
+        if (target >= words.Count || words[target].StartsWith('-') || words[target].StartsWith('%')) return null;
+        var command = Path.GetFileName(words[target]);
+        // Do not guess shell syntax, sandbox app IDs, launcher scripts or wrapper options.
+        if (command is "sh" or "bash" or "dash" or "zsh" or "fish" or "ksh" or "env" or
+            "flatpak" or "gtk-launch" or "uwsm" || command.StartsWith("omarchy-launch-", StringComparison.Ordinal))
+            return null;
+        return string.IsNullOrWhiteSpace(command) ? null : command;
     }
 
     private static string Unescape(string value) => value.Replace("\\s", " ").Replace("\\n", "\n")

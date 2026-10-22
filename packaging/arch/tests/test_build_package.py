@@ -104,7 +104,7 @@ class TestPkgbuildAndPrepare(unittest.TestCase):
         payload_sha256 = hashlib.sha256(tar_bytes).hexdigest()
 
         # Render PKGBUILD
-        rendered = build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", payload_sha256)
+        rendered = build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", payload_sha256, "0.1.0.r123.gabcdef0", "1")
         pkgbuild_path = quoted_dir / "PKGBUILD"
         pkgbuild_path.write_text(rendered, encoding="utf-8")
 
@@ -199,22 +199,47 @@ prepare
     def test_render_pkgbuild_validation(self) -> None:
         """Verify template SHA validation in render_pkgbuild."""
         valid_sha = "a" * 64
-        rendered = build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", valid_sha)
+        rendered = build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", valid_sha, "0.1.0.r123.gabcdef0", "1")
         self.assertIn(f"sha256sums=('{valid_sha}')", rendered)
 
         # Invalid SHA formats
         with self.assertRaises(ValueError):
-            build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", "short_sha")
+            build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", "short_sha", "0.1.0.r123.gabcdef0", "1")
         with self.assertRaises(ValueError):
-            build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", "g" * 64)
+            build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", "g" * 64, "0.1.0.r123.gabcdef0", "1")
         with self.assertRaises(ValueError):
-            build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", valid_sha + "'evil")
+            build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", valid_sha + "'evil", "0.1.0.r123.gabcdef0", "1")
 
         # Missing placeholder template
         bad_tpl = self.tmp / "bad_pkgbuild"
         bad_tpl.write_text("pkgname=test\n", encoding="utf-8")
         with self.assertRaises(ValueError):
-            build_package.render_pkgbuild(bad_tpl, valid_sha)
+            build_package.render_pkgbuild(bad_tpl, valid_sha, "0.1.0.r123.gabcdef0", "1")
+
+
+class TestCiPackageVersion(unittest.TestCase):
+    def test_reproducible_version_and_strict_inputs(self) -> None:
+        sha = "abcdef0" + "1" * 33
+        self.assertEqual(build_package.package_version("123", sha), "0.1.0.r123.gabcdef0")
+        self.assertEqual(build_package.package_version("124", sha), "0.1.0.r124.gabcdef0")
+        for value in ("", "0", "-1", "01", "1.5", "1;exit", "1\n", "١"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                build_package.package_version(value, sha)
+        for value in ("abcdef0", "g" * 40, "a" * 39, "A" * 40, sha + "\n"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                build_package.package_version("123", value)
+        for version, release in (("0.1.0-1", "1"), ("0.1.0.r1.gabcdef0;exit", "1"),
+                                 ("0.1.0.r1.gabcdef0", "0"), ("0.1.0.r1.gabcdef0", "1;exit")):
+            with self.subTest(version=version, release=release), self.assertRaises(ValueError):
+                build_package.render_pkgbuild(ARCH_DIR / "PKGBUILD", "a" * 64, version, release)
+
+    @unittest.skipUnless(shutil.which("vercmp"), "pacman vercmp available in Arch CI")
+    def test_pacman_upgrade_order(self) -> None:
+        versions = ["0.1.0-1", "0.1.0.r9.gfffffff-1", "0.1.0.r9.gfffffff-2",
+                    "0.1.0.r10.g0000000-1", "0.1.0.r100.g0000000-1"]
+        for old, new in zip(versions, versions[1:]):
+            with self.subTest(old=old, new=new):
+                self.assertGreater(int(subprocess.check_output(["vercmp", new, old], text=True)), 0)
 
 
 class TestAcquireArchive(unittest.TestCase):
@@ -583,7 +608,7 @@ class TestLicensesAndNotices(unittest.TestCase):
              mock.patch("build_package.create_payload_tar", return_value="b" * 64), \
              mock.patch("build_package.build_makepkg", return_value=(fake_work / "pkg.tar.zst", "c" * 64)), \
              mock.patch("builtins.print"):
-            ret = build_package.main(["--repo", str(fake_repo), "--work-dir", str(fake_work)])
+            ret = build_package.main(["--repo", str(fake_repo), "--work-dir", str(fake_work), "--run-number", "123", "--run-attempt", "2"])
             self.assertEqual(ret, 0)
 
         self.assertGreater(len(forwarded_source_trees), 0)
@@ -724,7 +749,7 @@ class TestLicensesAndNotices(unittest.TestCase):
              mock.patch("build_package.create_payload_tar", return_value="b" * 64), \
              mock.patch("build_package.build_makepkg", return_value=(fake_work / "pkg.tar.zst", "c" * 64)), \
              mock.patch("builtins.print"):
-            ret = build_package.main(["--repo", str(fake_repo), "--work-dir", str(fake_work)])
+            ret = build_package.main(["--repo", str(fake_repo), "--work-dir", str(fake_work), "--run-number", "123", "--run-attempt", "2"])
             self.assertEqual(ret, 0)
 
         # 1. Assert collect_license_evidence called with expected parameters
@@ -739,6 +764,10 @@ class TestLicensesAndNotices(unittest.TestCase):
         self.assertEqual(len(written_manifests), 1)
         meta = written_manifests[0]
         self.assertEqual(meta["source_commit"], "a" * 40)
+        self.assertEqual(meta["package_version"], "0.1.0.r123.gaaaaaaa")
+        self.assertEqual(meta["package_release"], "2")
+        self.assertEqual(meta["ci_run_number"], "123")
+        self.assertEqual(meta["ci_run_attempt"], "2")
         self.assertFalse(meta["license_inventory_complete"])
         expected_missing = [
             "Cronet:generated-Chromium-credits",
@@ -1090,7 +1119,7 @@ class TestBuildMakepkg(unittest.TestCase):
 
         def fake_run(cmd, cwd=None, env=None, capture_output=None, text=None, check=None):
             recorded_calls.append({"cmd": cmd, "cwd": cwd, "env": env})
-            pkg_artifact = self.pkg_dir / "vpnrouter-headless-0.1.0-1-x86_64.pkg.tar.zst"
+            pkg_artifact = self.pkg_dir / "vpnrouter-headless-0.1.0.r123.gabcdef0-2-x86_64.pkg.tar.zst"
             pkg_artifact.write_bytes(b"mock package content")
             return subprocess.CompletedProcess(cmd, 0, stdout="makepkg ok", stderr="")
 
@@ -1110,8 +1139,13 @@ class TestBuildMakepkg(unittest.TestCase):
                 self.template_pkgbuild,
                 self.staging_tools_py,
                 self.work_dir,
+                "0.1.0.r123.gabcdef0",
+                "2",
             )
 
+        self.assertIn("pkgver=0.1.0.r123.gabcdef0", (self.pkg_dir / "PKGBUILD").read_text())
+        self.assertIn("pkgrel=2", (self.pkg_dir / "PKGBUILD").read_text())
+        self.assertEqual(pkg_file.name, "vpnrouter-headless-0.1.0.r123.gabcdef0-2-x86_64.pkg.tar.zst")
         self.assertEqual(len(recorded_calls), 1)
         call = recorded_calls[0]
         cmd = call["cmd"]

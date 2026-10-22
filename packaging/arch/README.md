@@ -1,6 +1,6 @@
 # VPNRouter Headless for Arch Linux
 
-Builds `vpnrouter-headless-0.1.0-1-x86_64.pkg.tar.zst` for the Omarchy plugin.
+Builds `vpnrouter-headless-0.1.0.r<run_number>.g<sha7>-<run_attempt>-x86_64.pkg.tar.zst` for the Omarchy plugin.
 The plugin invokes `/usr/lib/vpnrouter-headless/VPNRouter.Headless --stdio` as
 the logged-in user. The package contains no GUI or system service.
 
@@ -13,13 +13,18 @@ libcap and the .NET SDK selected by `global.json` (10.0.301 with `latestPatch` s
 ```bash
 python3 packaging/arch/build_package.py \
   --repo "$PWD" --source-sha "$(git rev-parse HEAD)" \
-  --work-dir /absolute/path/to/new-build-directory
+  --work-dir /absolute/path/to/new-build-directory \
+  --run-number "$GITHUB_RUN_NUMBER" --run-attempt "$GITHUB_RUN_ATTEMPT"
 ```
 
 `--source-sha` defaults to the checkout HEAD. The driver exports that commit,
 publishes framework-dependent linux-x64, verifies pinned native archives,
 assembles and inspects the package, and writes its SHA256 sidecar. The manifest
-records `source_commit`, runtime archive hashes, file inventory and build tools.
+records `source_commit`, `package_version`, `package_release`, `ci_run_number`,
+`ci_run_attempt`, runtime archive hashes, file inventory and build tools. The
+required positive decimal `--run-number` determines pkgver; `--run-attempt`
+(default 1) determines pkgrel. Identical inputs reproduce the version; later
+workflow runs or rerun attempts compare newer in pacman.
 `--work-dir` must be new and absolute. `--archive-cache` optionally reads an
 existing directory of verified archives.
 
@@ -31,15 +36,16 @@ The [Arch CI workflow](../../.github/workflows/arch-headless.yml) builds from
 and exercises the installed backend as a normal user with `installed_smoke.py --offline`
 (protocol, first-launch diagnostics and runtime policy, without starting TUN).
 The smoke script retains its separate TUN lifecycle mode for explicitly authorized
-network acceptance. Its artifact is `vpnrouter-headless-arch`.
+network acceptance. Its artifact is
+`vpnrouter-headless-arch-0.1.0.r<run_number>.g<sha7>-<run_attempt>`.
 
 ## Install and verify
 
-Download the package and sidecar from the same CI run, then in that directory:
+Download the package and sidecar from the same CI run into an empty directory, then:
 
 ```bash
-sha256sum -c vpnrouter-headless-0.1.0-1-x86_64.pkg.tar.zst.sha256
-sudo pacman -U ./vpnrouter-headless-0.1.0-1-x86_64.pkg.tar.zst
+sha256sum -c vpnrouter-headless-*.pkg.tar.zst.sha256
+sudo pacman -U ./vpnrouter-headless-*.pkg.tar.zst
 getcap /usr/lib/vpnrouter-headless/runtime/sing-box
 { printf '%s\n' '{"v":1,"id":"check-1","method":"snapshot","params":{}}'; sleep 2; } | \
   /usr/lib/vpnrouter-headless/VPNRouter.Headless --stdio

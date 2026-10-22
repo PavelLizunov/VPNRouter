@@ -91,8 +91,13 @@ and uses the executable symlink basename (falling back to `comm` when unreadable
 Desktop Name/Icon/Exec/StartupWMClass metadata comes from
 `~/.local/share/applications` and `XDG_DATA_DIRS` (default
 `/usr/local/share:/usr/share`). Hidden/NoDisplay entries suppress metadata;
-user entries override system entries. Icon theme names are returned without
-reading image files; icon paths are omitted. Desktop matches sort first, followed
+user entries override system entries with the same desktop file ID. Matching
+prefers a case-insensitive desktop ID, reverse-DNS ID last segment, or
+StartupWMClass equal to the executable basename. Otherwise only a unique Exec
+basename supplies metadata; ambiguous matches return the process name and null
+icon/desktopId. Simple env prefixes are unwrapped; shell, flatpak, gtk-launch,
+uwsm and omarchy-launch-* wrappers are ignored for Exec matching. Icon theme
+names are returned without reading image files; icon paths are omitted. Desktop matches sort first, followed
 by process-only entries. Results are deduplicated and limited to 200 entries.
 The desktop index has a 30-second TTL; discovery has bounded file counts, reads
 and a 150 ms work budget (best-effort under filesystem/scheduler delays).

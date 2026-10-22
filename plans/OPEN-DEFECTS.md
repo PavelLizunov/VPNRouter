@@ -18,6 +18,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ### Omarchy integration 2026-10-22 (PR #616)
 
+- [ ] **P2** - OMARCHY-R5-DESKTOP-PRECISION: owner observed Ghostty labelled DSH TUI/icon dsh; at 8194f44b LinuxRunningApps merges identity and Exec keys with first-entry wins. Separate priority/ambiguity and wrapper fixtures required; plans/phase-omarchy-r5-2026-10-23.md.
+- [ ] **P2** - OMARCHY-R5-PACKAGE-VERSION: every CI build produces 0.1.0-1, so pacman reinstalls instead of upgrading. Derive package/artifact versions from explicit CI inputs; plans/phase-omarchy-r5-2026-10-23.md.
+
 Source-mapped MVP follow-ups below are deferred from Step 1; they are not live-host acceptance claims or new execution tasks.
 
 - [ ] **P3** - HEADLESS-SNAPSHOT-DISPATCH-DIVERGENCE: constants/backend classify snapshot read-only, but wire ProtocolDispatcher treats it as ordinary and returns busy during another command; progress request-ID stamping only handles dictionaries while production features emit anonymous objects - `VPNRouter.Headless/Protocol/ProtocolConstants.cs:62`, `VPNRouter.Headless/Protocol/ProtocolDispatcher.cs:69`, `:227`. Source-read compatibility/documentation gap; clients must not assume urgent snapshots or request-correlated progress. Deferred.

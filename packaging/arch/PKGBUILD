@@ -1,7 +1,7 @@
 # Maintainer: VPNRouter Team
 pkgname=vpnrouter-headless
-pkgver=0.1.0
-pkgrel=1
+pkgver=@PKGVER@
+pkgrel=@PKGREL@
 pkgdesc="VPNRouter Headless daemon and packaged sing-box runtime"
 arch=('x86_64')
 url="https://github.com/PavelLizunov/VPNRouter"

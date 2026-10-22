@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import stat
@@ -447,7 +448,19 @@ def create_payload_tar(stage_root: Path, output_tar: Path) -> str:
     return compute_file_sha256(output_tar)
 
 
-def render_pkgbuild(template_path: Path, payload_sha256: str) -> str:
+def ci_number(value: str) -> str:
+    if not re.fullmatch(r"[1-9][0-9]*", value):
+        raise ValueError("CI run number/attempt must be a positive decimal integer")
+    return value
+
+
+def package_version(run_number: str, source_commit: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+        raise ValueError("Package version requires a full lowercase source commit SHA")
+    return f"0.1.0.r{ci_number(run_number)}.g{source_commit[:7]}"
+
+
+def render_pkgbuild(template_path: Path, payload_sha256: str, pkgver: str, pkgrel: str) -> str:
     if not template_path.is_file() or template_path.is_symlink():
         raise ValueError(f"Template PKGBUILD is not a valid regular file: {template_path}")
     validated_sha = validate_sha256(payload_sha256, "payload_sha256")
@@ -455,10 +468,13 @@ def render_pkgbuild(template_path: Path, payload_sha256: str) -> str:
     placeholder = "@PAYLOAD_SHA256@"
     if placeholder not in template_text:
         raise ValueError(f"Template PKGBUILD missing required placeholder: {placeholder}")
+    if not re.fullmatch(r"0\.1\.0\.r[1-9][0-9]*\.g[0-9a-f]{7}", pkgver):
+        raise ValueError("Invalid CI package version")
     rendered = template_text.replace(placeholder, validated_sha)
-    for line in rendered.splitlines():
-        if line.startswith("sha256sums=") and "@" in line:
-            raise ValueError(f"Unexpanded placeholder remaining in PKGBUILD: {line}")
+    for placeholder, value in (("@PKGVER@", pkgver), ("@PKGREL@", ci_number(pkgrel))):
+        if placeholder not in rendered:
+            raise ValueError(f"Template PKGBUILD missing required placeholder: {placeholder}")
+        rendered = rendered.replace(placeholder, value)
     return rendered
 
 
@@ -582,11 +598,13 @@ def build_makepkg(
     template_pkgbuild: Path,
     staging_tools_py: Path,
     work_dir: Path,
+    pkgver: str,
+    pkgrel: str,
 ) -> tuple[Path, str]:
     shutil.copy2(payload_tar, pkg_dir / "payload.tar")
     shutil.copy2(staging_tools_py, pkg_dir / "staging_tools.py")
     shutil.copy2(template_pkgbuild.parent / "vpnrouter-headless.install", pkg_dir / "vpnrouter-headless.install")
-    rendered_pkgbuild = render_pkgbuild(template_pkgbuild, payload_sha256)
+    rendered_pkgbuild = render_pkgbuild(template_pkgbuild, payload_sha256, pkgver, pkgrel)
     (pkg_dir / "PKGBUILD").write_text(rendered_pkgbuild, encoding="utf-8")
 
     makepkg_bin = shutil.which("makepkg")
@@ -656,11 +674,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional existing directory for caching downloaded runtime archives (read-only)",
     )
     parser.add_argument("--source-sha", default="HEAD", help="Source commit (defaults to checkout HEAD)")
+    parser.add_argument("--run-number", required=True, type=ci_number, help="GitHub workflow run_number")
+    parser.add_argument("--run-attempt", default="1", type=ci_number, help="GitHub workflow run_attempt (pkgrel)")
     args = parser.parse_args(argv)
 
     work_dir = validate_work_dir(args.work_dir)
     repo_dir = args.repo.resolve()
     source_commit = verify_repo_commit(repo_dir, args.source_sha)
+    pkgver = package_version(args.run_number, source_commit)
+    pkgrel = args.run_attempt
 
     source_tar, source_sha256 = export_source(repo_dir, source_commit, work_dir)
     source_tree = work_dir / "source_tree"
@@ -756,6 +778,10 @@ def main(argv: list[str] | None = None) -> int:
 
     metadata = {
         "source_commit": source_commit,
+        "package_version": pkgver,
+        "package_release": pkgrel,
+        "ci_run_number": args.run_number,
+        "ci_run_attempt": args.run_attempt,
         "source_archive_sha256": source_sha256,
         "packaging_files_sha256": {
             "PKGBUILD": compute_file_sha256(template_pkgbuild),
@@ -793,7 +819,7 @@ def main(argv: list[str] | None = None) -> int:
     pkg_dir = work_dir / "pkgbuild"
     pkg_dir.mkdir(parents=True, mode=0o700)
     pkg_file, pkg_sha256 = build_makepkg(
-        pkg_dir, payload_tar, payload_sha256, template_pkgbuild, staging_tools_py, work_dir
+        pkg_dir, payload_tar, payload_sha256, template_pkgbuild, staging_tools_py, work_dir, pkgver, pkgrel
     )
 
     print(f"Package: {pkg_file}")
