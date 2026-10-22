@@ -403,7 +403,7 @@ public class HeadlessRuntimePolicyTests : IDisposable
         using (manager)
         {
             var ex = Assert.Throws<SingBoxRuntimePolicyException>(() => manager.StartWithJson("{}"));
-            Assert.Equal(SingBoxRuntimeFailure.Untrusted, ex.Failure);
+            Assert.Equal(SingBoxRuntimeFailure.Missing, ex.Failure);
             Assert.Equal(SingBoxRuntimeOperation.Start, ex.Operation);
             Assert.Empty(fakeRunner.StartCalls);
         }
