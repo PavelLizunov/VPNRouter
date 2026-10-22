@@ -18,8 +18,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ### Omarchy integration 2026-10-22 (PR #616)
 
-- [ ] **P2** - OMARCHY-R5-DESKTOP-PRECISION: owner observed Ghostty labelled DSH TUI/icon dsh; at 8194f44b LinuxRunningApps merges identity and Exec keys with first-entry wins. Separate priority/ambiguity and wrapper fixtures required; plans/phase-omarchy-r5-2026-10-23.md.
-- [ ] **P2** - OMARCHY-R5-PACKAGE-VERSION: every CI build produces 0.1.0-1, so pacman reinstalls instead of upgrading. Derive package/artifact versions from explicit CI inputs; plans/phase-omarchy-r5-2026-10-23.md.
+- [x] **P2 RESOLVED IN PR #616** - OMARCHY-R5-DESKTOP-PRECISION: owner observed Ghostty labelled DSH TUI/icon dsh; at 8194f44b LinuxRunningApps merges identity and Exec keys with first-entry wins. Implemented priority/ambiguity handling and wrapper fixtures in 469b69a1; headless-contract 39859423663 passes 39/0. See plans/phase-omarchy-r5-2026-10-23.md.
+- [x] **P2 RESOLVED IN PR #616** - OMARCHY-R5-PACKAGE-VERSION: every CI build produces 0.1.0-1, so pacman reinstalls instead of upgrading. Implemented explicit CI package/artifact versioning in 469b69a1; Arch 39859419326 passes 126 tests including pacman vercmp and installed offline smoke, artifact 12460354392 is 0.1.0.r12.g469b69a-1. See plans/phase-omarchy-r5-2026-10-23.md.
 
 Source-mapped MVP follow-ups below are deferred from Step 1; they are not live-host acceptance claims or new execution tasks.
 
