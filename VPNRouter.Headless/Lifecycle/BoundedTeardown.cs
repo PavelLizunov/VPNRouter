@@ -12,7 +12,9 @@ namespace VPNRouter.Headless.Lifecycle;
 /// </summary>
 public static class BoundedTeardown
 {
-    public static readonly TimeSpan DefaultStopTimeout = TimeSpan.FromSeconds(5);
+    // Must outlast SingBoxManager's own stop: 5 s after SIGTERM, then 5 s after SIGKILL.
+    // A WireGuard/AWG core with live traffic can take several seconds to exit gracefully.
+    public static readonly TimeSpan DefaultStopTimeout = TimeSpan.FromSeconds(15);
 
     /// <summary>
     /// Bounded stop execution. Guarantees completion within the allocated timeout,
