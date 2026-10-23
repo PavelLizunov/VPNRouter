@@ -213,11 +213,12 @@ internal sealed class SingBoxRuntimePolicy
     public string? SelectedExecutablePath => _path;
 
     /// <summary>
-    /// Fork features are strictly false until authorized by approved metadata;
-    /// runtime binary execution is not trusted for capability discovery.
+    /// The packaged runtime is the sing-box-vpnctl release pinned by RUNTIME_SHA256 in
+    /// packaging/arch/build_package.py, built with with_awg and with_xhttp, so production
+    /// declares both. Test fixtures stay false; the binary is never run to discover features.
     /// </summary>
-    public bool AwgAvailable => false;
-    public bool XhttpAvailable => false;
+    public bool AwgAvailable => _isPackaged;
+    public bool XhttpAvailable => _isPackaged;
 
     /// <summary>
     /// Availability indicates whether the runtime can be authorized for executable operations.

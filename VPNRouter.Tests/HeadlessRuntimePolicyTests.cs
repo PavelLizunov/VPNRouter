@@ -374,19 +374,20 @@ public class HeadlessRuntimePolicyTests : IDisposable
     [Fact]
     public void SingBoxFeatures_PolicyCheckedBeforeGlobalOrOverride()
     {
-        SingBoxFeatures.OverrideAwg = true;
-        SingBoxFeatures.OverrideXhttp = true;
+        SingBoxFeatures.OverrideAwg = false;
+        SingBoxFeatures.OverrideXhttp = false;
 
         using (SingBoxRuntimePolicy.EnterScope(SingBoxRuntimePolicy.DefaultProduction))
         {
-            // Policy must be checked BEFORE test overrides or cached probe results
-            Assert.False(SingBoxFeatures.AwgAvailable);
-            Assert.False(SingBoxFeatures.XhttpAvailable);
+            // Policy must be checked BEFORE test overrides or cached probe results;
+            // the pinned packaged fork runtime carries AWG and XHTTP.
+            Assert.True(SingBoxFeatures.AwgAvailable);
+            Assert.True(SingBoxFeatures.XhttpAvailable);
         }
 
         // Outside policy scope, override takes effect again
-        Assert.True(SingBoxFeatures.AwgAvailable);
-        Assert.True(SingBoxFeatures.XhttpAvailable);
+        Assert.False(SingBoxFeatures.AwgAvailable);
+        Assert.False(SingBoxFeatures.XhttpAvailable);
     }
 
     [Fact]

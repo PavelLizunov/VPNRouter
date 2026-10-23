@@ -435,17 +435,21 @@ public static class RuntimePolicyChecks
             Assert(SingBoxFeatures.AwgAvailable, "Outside policy, OverrideAwg=true must yield AwgAvailable=true");
             Assert(SingBoxFeatures.XhttpAvailable, "Outside policy, OverrideXhttp=true must yield XhttpAvailable=true");
 
-            // Inside restricted policy scope: fork features are strictly false
+            // Inside the production policy scope: the pinned packaged fork declares its features
+            SingBoxFeatures.OverrideAwg = false;
+            SingBoxFeatures.OverrideXhttp = false;
             using (SingBoxRuntimePolicy.EnterScope(SingBoxRuntimePolicy.DefaultProduction))
             {
-                Assert(!SingBoxFeatures.AwgAvailable, "Under restricted policy, AwgAvailable must remain false");
-                Assert(!SingBoxFeatures.XhttpAvailable, "Under restricted policy, XhttpAvailable must remain false");
+                Assert(SingBoxFeatures.AwgAvailable, "Under production policy, AwgAvailable must be true");
+                Assert(SingBoxFeatures.XhttpAvailable, "Under production policy, XhttpAvailable must be true");
             }
+            SingBoxFeatures.OverrideAwg = true;
+            SingBoxFeatures.OverrideXhttp = true;
 
             // Outside scope again: overrides take effect again
             Assert(SingBoxFeatures.AwgAvailable, "Outside scope, OverrideAwg=true must yield AwgAvailable=true");
 
-            // Feature constructed under policy retains policy and enforces restricted behavior in operations
+            // Feature constructed under policy retains policy and applies it in operations
             var tempDir = Path.Combine(Path.GetTempPath(), "vpnrouter-retained-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
             try
@@ -458,22 +462,14 @@ public static class RuntimePolicyChecks
                 }
 
                 // Call Import under ambient null scope: retained policy re-enters DefaultProduction
+                SingBoxFeatures.OverrideXhttp = false;
                 var uri = "vless://00000000-0000-0000-0000-000000000001@192.0.2.1:443?security=none&type=xhttp#fixture";
-                Assert(ServerUriParser.ParseMultiple(uri).Count == 1,
-                    "Positive control must parse with legacy feature override outside policy");
+                Assert(ServerUriParser.ParseMultiple(uri).Count == 0,
+                    "Negative control must reject XHTTP with the legacy override off outside policy");
                 var revision = storage.CurrentRevision;
-                var rejected = false;
-                try
-                {
-                    serverFeature.Import(JsonSerializer.SerializeToElement(new { revision, text = uri }));
-                }
-                catch (RouterException ex) when (ex.Code == "invalid_argument")
-                {
-                    rejected = true;
-                }
-                Assert(rejected, "Retained restricted policy must reject unsupported XHTTP import");
-                Assert(storage.CurrentRevision == revision, "Rejected import must not alter storage");
-                Assert(SingBoxFeatures.XhttpAvailable, "Feature call must restore outer legacy scope");
+                serverFeature.Import(JsonSerializer.SerializeToElement(new { revision, text = uri }));
+                Assert(storage.CurrentRevision != revision, "Retained production policy must accept XHTTP import");
+                Assert(!SingBoxFeatures.XhttpAvailable, "Feature call must restore outer legacy scope");
             }
             finally
             {
