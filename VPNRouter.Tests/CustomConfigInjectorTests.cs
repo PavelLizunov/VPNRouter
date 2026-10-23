@@ -341,7 +341,7 @@ public class CustomConfigInjectorTests
         var tun = inbounds!.OfType<JsonObject>().FirstOrDefault(t => t["type"]?.ToString() == "tun");
         Assert.NotNull(tun);
         Assert.Equal(false, StjNodeHelpers.AsBool(tun["strict_route"]));
-        Assert.Equal("system", tun["stack"]?.ToString());
+        Assert.Equal(ConfigGenerator.PlatformTunStack(), tun["stack"]?.ToString());
 
         var outbounds = json["outbounds"] as JsonArray;
         Assert.DoesNotContain(outbounds!, o => o?["type"]?.ToString() == "block");

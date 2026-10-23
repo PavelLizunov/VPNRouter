@@ -12,17 +12,20 @@ namespace VPNRouter.Core.Services;
 
 public static class HealthCheck
 {
-    public enum Level { Ok, Warn, Err }
+    public enum Level { Ok, Warn, Err, Info }
 
     public readonly record struct Result(Level Severity, string Message);
     /// <param name="SkippedTunnelUp">No measurement: our TUN adapter is up, so a ping would measure the tunnel itself
     /// (TUN MTU minus 28) instead of the physical path, and every lowered MTU would look too large again.</param>
     public readonly record struct PathMtuProbeResult(int? BestPayload, bool PlainPingBlocked, bool SkippedTunnelUp = false);
 
-    public static List<Result> RunAll()
+    public static List<Result> RunAll() => RunAll(firstLaunchAsInfo: false);
+
+    public static List<Result> RunAll(bool firstLaunchAsInfo)
     {
         var results = new List<Result>();
-        var parsedSettings = SingBoxFeatures.EmbeddedCore ? null : CheckConfigYaml(results);
+        var firstLaunch = firstLaunchAsInfo && !File.Exists(AppPaths.ConfigYamlPath);
+        var parsedSettings = SingBoxFeatures.EmbeddedCore ? null : CheckConfigYaml(results, firstLaunch);
         CheckUserCatalogue(results);
         CheckSingBoxBinary(results);
 
@@ -38,7 +41,7 @@ public static class HealthCheck
         CheckStateFile(results);
         CheckLockFile(results);
         CheckProcessInventory(results);
-        CheckDirectories(results);
+        CheckDirectories(results, firstLaunch);
 
         foreach (var advice in RunAdvice(parsedSettings))
             results.Add(new(MapAdviceLevel(advice.Severity), FormatAdvice(advice)));
@@ -46,7 +49,7 @@ public static class HealthCheck
         return results;
     }
 
-    private static AppSettings? CheckConfigYaml(List<Result> results)
+    private static AppSettings? CheckConfigYaml(List<Result> results, bool firstLaunch)
     {
         AppSettings? parsedSettings = null;
 
@@ -107,8 +110,9 @@ public static class HealthCheck
         }
         else
         {
-            results.Add(new(Level.Warn,
-                $"config.yaml missing at {configPath} (will be created on first launch)"));
+            results.Add(firstLaunch
+                ? new(Level.Info, "Not configured yet: add a subscription or a server")
+                : new(Level.Warn, $"config.yaml missing at {configPath} (will be created on first launch)"));
         }
 
         return parsedSettings;
@@ -164,6 +168,28 @@ public static class HealthCheck
             return;
         }
 
+        var policy = SingBoxRuntimePolicy.Current;
+        if (policy != null)
+        {
+            try
+            {
+                policy.Authorize(SingBoxRuntimeOperation.Inspect);
+                var path = policy.SelectedExecutablePath;
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    var size = new FileInfo(path).Length;
+                    results.Add(new(Level.Ok, $"sing-box at {path} ({size / 1024 / 1024} MB)"));
+                }
+                else
+                    results.Add(new(Level.Err, "sing-box binary missing or unavailable under runtime policy"));
+            }
+            catch
+            {
+                results.Add(new(Level.Err, policy.UnavailabilityReason ?? "sing-box runtime policy validation failed"));
+            }
+            return;
+        }
+
         var singboxPath = AppPaths.SingBoxExePath;
         if (File.Exists(singboxPath))
         {
@@ -187,6 +213,14 @@ public static class HealthCheck
     {
         if (OperatingSystem.IsLinux())
         {
+            if (SingBoxRuntimePolicy.Current is { } policy)
+            {
+                var reason = policy.UnavailabilityReason;
+                results.Add(new(reason == null ? Level.Ok : Level.Err,
+                    reason ?? "sing-box package has effective CAP_NET_ADMIN; normal-user TUN launch available"));
+                return;
+            }
+
             var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
             if (blocker != null)
             {
@@ -258,7 +292,7 @@ public static class HealthCheck
         }
         else
         {
-            results.Add(new(Level.Ok, "no running-state file (app is stopped)"));
+            results.Add(new(Level.Ok, "no desktop running-state file"));
         }
     }
 
@@ -322,12 +356,14 @@ public static class HealthCheck
         }
     }
 
-    private static void CheckDirectories(List<Result> results)
+    private static void CheckDirectories(List<Result> results, bool firstLaunch)
     {
         foreach (var dir in new[] { AppPaths.DataDir, AppPaths.LogsDir, AppPaths.CacheDir, AppPaths.BinDir, AppPaths.ProfilesDir })
         {
             if (!Directory.Exists(dir))
-                results.Add(new(Level.Warn, $"directory missing: {dir} (will be created on first launch)"));
+                results.Add(firstLaunch
+                    ? new(Level.Info, "Not configured yet: add a subscription or a server")
+                    : new(Level.Warn, $"directory missing: {dir} (will be created on first launch)"));
         }
     }
 
@@ -845,6 +881,7 @@ public static class HealthCheck
             var tag = r.Severity switch
             {
                 Level.Ok   => "[OK]  ",
+                Level.Info => "[INFO]",
                 Level.Warn => "[WARN]",
                 Level.Err  => "[ERR] ",
                 _          => "[?]   "

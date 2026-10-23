@@ -237,6 +237,27 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
     }
 
     [Fact]
+    public void Stop_LinuxCapabilityMode_TerminatesBeforeKill()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux(),
+            "Linux-only — exercises the capability-mode Stop branch.");
+
+        using var manager = new SingBoxManager(
+            DefaultSettings(), null, new FakeHttpClient(), new FakeProcessRunner());
+        SetLockOwnedForTest(TunOwnershipLock.Instance(null), manager);
+
+        var handle = new GracefulProcessHandle(pid: NewFakePid());
+        SetField(manager, "_handle", handle);
+
+        manager.Stop();
+
+        // A graceful exit lets sing-box remove its auto_route ip rules.
+        Assert.Equal(1, handle.TerminateCallCount);
+        Assert.Equal(0, handle.KillCallCount);
+        Assert.Equal(SingBoxState.Stopped, manager.State);
+    }
+
+    [Fact]
     public void Stop_LinuxCapabilityMode_FailedExactStop_PreservesLockAndReportsFailed()
     {
         Assert.SkipUnless(OperatingSystem.IsLinux(),
@@ -730,6 +751,29 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         public void Dispose() { }
     }
 
+    private sealed class GracefulProcessHandle(int pid) : IProcessHandle
+    {
+        private volatile bool _hasExited;
+        public int Pid { get; } = pid;
+        public bool HasExited => _hasExited;
+        public int KillCallCount { get; private set; }
+        public int TerminateCallCount { get; private set; }
+        public event EventHandler<string>? OutputLine { add { } remove { } }
+        public event EventHandler<string>? ErrorLine { add { } remove { } }
+        public event EventHandler<int>? Exited { add { } remove { } }
+
+        public Task<int> WaitForExitAsync(CancellationToken ct)
+            => _hasExited
+                ? Task.FromResult(0)
+                : Task.FromException<int>(new OperationCanceledException(ct));
+
+        public void Kill(bool entireProcessTree = true) { KillCallCount++; _hasExited = true; }
+        public void Terminate() { TerminateCallCount++; _hasExited = true; }
+        public void SuppressExitedEvent() { }
+        public ProcessSnapshot? TryGetSnapshot() => null;
+        public void Dispose() { }
+    }
+
     private sealed class StubbornProcessHandle(int pid) : IProcessHandle
     {
         private volatile bool _hasExited;
@@ -747,6 +791,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
                 : Task.FromException<int>(new OperationCanceledException(ct));
 
         public void Kill(bool entireProcessTree = true) => KillCallCount++;
+        public void Terminate() { } // ignores SIGTERM, like a wedged sing-box
         public void SuppressExitedEvent() { }
         public ProcessSnapshot? TryGetSnapshot() => null;
         public void Dispose() => DisposeCalled = true;

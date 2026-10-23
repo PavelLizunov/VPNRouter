@@ -128,7 +128,7 @@ public partial class VpnEngine
         return name;
     }
 
-    internal static List<IProfileSource> BuildProfileSources(AppSettings settings)
+    internal static List<IProfileSource> BuildProfileSources(AppSettings settings, string? dataDir = null)
     {
         var sources = new List<IProfileSource>();
         int priority = 10;
@@ -156,16 +156,18 @@ public partial class VpnEngine
         if (File.Exists(platformBundled))
             sources.Add(new LocalProfileSource(platformBundled, 80));
 
+        // Linux must agree with the headless catalog; other platforms retain their existing order.
         var defaultJson = Path.Combine(appDir, "profiles", "default.json");
         if (File.Exists(defaultJson))
-            sources.Add(new LocalProfileSource(defaultJson, 78));
+            sources.Add(new LocalProfileSource(defaultJson, OperatingSystem.IsLinux() ? 82 : 78));
 
-        var platformProfiles = Path.Combine(AppPaths.ProfilesDir, platformDefaultName);
+        var profilesDir = dataDir == null ? AppPaths.ProfilesDir : Path.Combine(dataDir, "profiles");
+        var platformProfiles = Path.Combine(profilesDir, platformDefaultName);
         if (File.Exists(platformProfiles))
             sources.Add(new LocalProfileSource(platformProfiles, 85));
-        var userDefault = Path.Combine(AppPaths.ProfilesDir, "default.json");
+        var userDefault = Path.Combine(profilesDir, "default.json");
         if (File.Exists(userDefault) && !userDefault.Equals(platformProfiles, StringComparison.Ordinal))
-            sources.Add(new LocalProfileSource(userDefault, 83));
+            sources.Add(new LocalProfileSource(userDefault, OperatingSystem.IsLinux() ? 87 : 83));
 
         sources.Add(new BuiltInProfileSource());
         return sources;
@@ -182,9 +184,10 @@ public partial class VpnEngine
         var platformBundled = Path.Combine(appDir, "profiles", platformDefaultName);
         if (File.Exists(platformBundled))
             sources.Add(new LocalProfileSource(platformBundled, 80));
+        // Linux must agree with the headless catalog; other platforms retain their existing order.
         var defaultJson = Path.Combine(appDir, "profiles", "default.json");
         if (File.Exists(defaultJson))
-            sources.Add(new LocalProfileSource(defaultJson, 78));
+            sources.Add(new LocalProfileSource(defaultJson, OperatingSystem.IsLinux() ? 82 : 78));
         sources.Add(new BuiltInProfileSource());
         return sources;
     }

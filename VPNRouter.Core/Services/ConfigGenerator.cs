@@ -14,8 +14,13 @@ public static partial class ConfigGenerator
             ? TunSettings.DefaultMtu
             : mtu;
 
-    internal static string SelectTunStack(bool isMacOS)
-        => isMacOS ? "gvisor" : "system";
+    // The system stack delivers TUN traffic as inbound packets to a local
+    // listener, which host firewalls such as ufw on Linux drop; gvisor does not.
+    internal static string SelectTunStack(bool isMacOS, bool isLinux)
+        => isMacOS || isLinux ? "gvisor" : "system";
+
+    internal static string PlatformTunStack()
+        => SelectTunStack(OperatingSystem.IsMacOS(), OperatingSystem.IsLinux());
 
     internal const int AwgEndpointMtu = 1420;
 
@@ -166,7 +171,7 @@ public static partial class ConfigGenerator
                                             ? routeExcludes
                                             : null,
                 EndpointIndependentNat  = true,
-                Stack                   = SelectTunStack(OperatingSystem.IsMacOS())
+                Stack                   = PlatformTunStack()
             }
         };
     }

@@ -5,8 +5,9 @@ namespace VPNRouter.Tests;
 public sealed class TunStackPlatformTests
 {
     [Theory]
-    [InlineData(true, "gvisor")]
-    [InlineData(false, "system")]
-    public void SelectTunStack_UsesGvisorOnlyOnMacOS(bool isMacOS, string expected)
-        => Assert.Equal(expected, ConfigGenerator.SelectTunStack(isMacOS));
+    [InlineData(true, false, "gvisor")]
+    [InlineData(false, true, "gvisor")]
+    [InlineData(false, false, "system")]
+    public void SelectTunStack_UsesGvisorOnMacOSAndLinux(bool isMacOS, bool isLinux, string expected)
+        => Assert.Equal(expected, ConfigGenerator.SelectTunStack(isMacOS, isLinux));
 }

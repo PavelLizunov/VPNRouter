@@ -38,6 +38,9 @@ public interface IProcessHandle : IDisposable
 
     void Kill(bool entireProcessTree = true);
 
+    /// <summary>Asks the process to exit (SIGTERM on Unix) so it can clean up; falls back to Kill elsewhere.</summary>
+    void Terminate() => Kill(entireProcessTree: false);
+
     event EventHandler<string>? OutputLine;
 
     event EventHandler<string>? ErrorLine;

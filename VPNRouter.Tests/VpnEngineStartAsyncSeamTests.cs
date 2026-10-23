@@ -4,6 +4,7 @@ using VPNRouter.Core;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -465,6 +466,8 @@ public sealed class VpnEngineStartAsyncSeamTests
         PopulateValidServer(settings);
         settings.ActiveProfile = "Discord_Privacy";
 
+        using var profile = new LocalProfileFixture(settings, "FirewallLifecycle", blockOnVpnFail: true);
+
         using var dummyBin = EnsureDummySingBoxBinary(settings);
         using var engine = BuildEngine(firewall: firewall);
 
@@ -487,6 +490,8 @@ public sealed class VpnEngineStartAsyncSeamTests
         PopulateValidServer(settings);
         settings.ActiveProfile = "Discord_Privacy";
         settings.App.RoutingMode = "split";
+
+        using var profile = new LocalProfileFixture(settings, "FirewallLifecycle", blockOnVpnFail: true);
 
         using var dummyBin = EnsureDummySingBoxBinary(settings);
         using var engine = BuildEngine(firewall: firewall);

@@ -15,6 +15,10 @@ public partial class SingBoxManager
 
     public void StartWithJson(string configJson)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Start);
+
         lock (_lifecycleGate)
         {
             if (Volatile.Read(ref _disposed) != 0)
@@ -50,9 +54,10 @@ public partial class SingBoxManager
                 "Stop the other instance (e.g. disable Windows Service autostart) and try again.");
         }
 
-        var exePath = OperatingSystem.IsWindows()
-            ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-            : AppPaths.SingBoxExePath;
+        var exePath = EffectivePolicy?.SelectedExecutablePath
+            ?? (OperatingSystem.IsWindows()
+                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+                : AppPaths.SingBoxExePath);
 
         ProcessOwnership.ConfiguredExePath = exePath;
 
@@ -201,14 +206,14 @@ public partial class SingBoxManager
                 if (!targetHandle.HasExited)
                 {
                     targetHandle.SuppressExitedEvent();
-                    targetHandle.Kill(entireProcessTree: true);
-                    try
+                    // SIGTERM first: sing-box removes its auto_route ip rules only on a
+                    // graceful exit; SIGKILL leaves them behind after every disconnect.
+                    targetHandle.Terminate();
+                    if (!WaitForHandleExit(targetHandle, TimeSpan.FromSeconds(5)))
                     {
-                        using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                        targetHandle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
-                    }
-                    catch (OperationCanceledException)
-                    {
+                        _logger.Warning("[SingBoxManager] sing-box ignored SIGTERM; killing");
+                        targetHandle.Kill(entireProcessTree: false);
+                        WaitForHandleExit(targetHandle, TimeSpan.FromSeconds(5));
                     }
                 }
 
@@ -239,6 +244,19 @@ public partial class SingBoxManager
                 "[SingBoxManager] Linux capability-mode stop completed={Stopped}",
                 capabilityStopped);
         }
+    }
+
+    private static bool WaitForHandleExit(IProcessHandle handle, TimeSpan timeout)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            handle.WaitForExitAsync(cts.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        return handle.HasExited;
     }
 
     private void StopUnixEscalated(bool releaseLock)
@@ -478,6 +496,10 @@ public partial class SingBoxManager
 
     public void Restart()
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Restart);
+
         lock (_lifecycleGate)
             RestartCore();
     }
@@ -518,9 +540,10 @@ public partial class SingBoxManager
                 try { Thread.Sleep(750); } catch { }
             }
 
-            var exePath = OperatingSystem.IsWindows()
-                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-                : AppPaths.SingBoxExePath;
+            var exePath = EffectivePolicy?.SelectedExecutablePath
+                ?? (OperatingSystem.IsWindows()
+                    ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+                    : AppPaths.SingBoxExePath);
             LaunchProcess(exePath);
             if (_handle is null)
             {
@@ -580,33 +603,7 @@ public partial class SingBoxManager
         if (!OperatingSystem.IsLinux()) return false;
         if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath)) return false;
 
-        try
-        {
-            var psi = new ProcessStartInfo("getcap")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            psi.ArgumentList.Add(exePath);
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            var output = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(2000);
-            if (!p.HasExited || p.ExitCode != 0) return false;
-
-            if (string.IsNullOrWhiteSpace(output)) return false;
-            if (output.IndexOf("cap_net_admin", StringComparison.OrdinalIgnoreCase) < 0) return false;
-            if (output.IndexOf("cap_net_bind_service", StringComparison.OrdinalIgnoreCase) < 0) return false;
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug(ex, "[SingBoxManager] getcap probe failed — falling back to pkexec path");
-            return false;
-        }
+        return SingBoxRuntimePolicy.HasNetAdminCapability(exePath);
     }
 
     internal static bool TryColocateCronet(string singBoxExePath, string bundledDir, ILogger? logger)
@@ -647,7 +644,8 @@ public partial class SingBoxManager
             Array.Clear(_capturedStderr, 0, _capturedStderr.Length);
         }
 
-        TryColocateCronet(exePath, AppContext.BaseDirectory, _logger);
+        if (EffectivePolicy == null)
+            TryColocateCronet(exePath, AppContext.BaseDirectory, _logger);
 
         if (OperatingSystem.IsWindows())
         {
@@ -682,9 +680,17 @@ public partial class SingBoxManager
                 spawnExe = exePath;
                 spawnArgs = new[] { "run", "-c", _currentConfigPath };
             }
+            else if (EffectivePolicy != null)
+            {
+                // A selected runtime is never escalated. Missing capability fails closed.
+                _linuxUsedPkexec = false;
+                throw new SingBoxRuntimePolicyException(
+                    SingBoxRuntimeOperation.Start,
+                    SingBoxRuntimeFailure.PrerequisiteUnavailable);
+            }
             else
             {
-                _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_bind_service=+eip {Exe}' once)",
+                _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_raw+ep {Exe}' once)",
                     exePath);
                 _linuxUsedPkexec = true;
                 spawnExe = LinuxRuntimeEnvironment.ResolvePkexec()

@@ -42,6 +42,9 @@ public partial class VpnEngine : IDisposable
     private ClashLogStream? _connHealthStream;
 
     private bool _disposed;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public bool IsRunning => _singBox?.IsRunning() ?? false;
     public string ActiveProfileName => _activeProfile?.Name ?? string.Empty;
@@ -73,6 +76,20 @@ public partial class VpnEngine : IDisposable
     public event Action<int>? SingBoxStarted;
 
     public event Action<int>? Connected;
+
+    // Names the first readiness condition that fails for pid, or null when ready.
+    internal string? DescribeReadiness(int pid)
+    {
+        if (_disposed) return "disposed";
+        if (!_warmupConfirmed) return "warmup not confirmed";
+        if (_singBox == null) return "no sing-box manager";
+        if (_sessionCts == null || _sessionCts.IsCancellationRequested) return "no live session";
+        var handle = _singBox.OwnedProcessHandle;
+        if (handle == null || handle.HasExited) return "no live process handle";
+        if (_singBox.Pid != pid) return $"pid {_singBox.Pid} != {pid}";
+        if (_singBox.State != SingBoxState.Running) return $"sing-box state {_singBox.State}";
+        return null;
+    }
 
     internal Func<bool> CaptureReadinessGuard(int pid)
     {
@@ -136,11 +153,16 @@ public partial class VpnEngine : IDisposable
             _splitDriver.EngagedChanged += engaged => TrueSplitEngagedChanged?.Invoke(engaged);
         _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
         _unixDns = unixDnsHardening ?? NullUnixDnsHardening.Default;
+        _policy = SingBoxRuntimePolicy.Current;
         try { _unixDns.RestoreStrandedIfAny(_logger); } catch { }
     }
 
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
     {
+        var policy = EffectivePolicy;
+        using var _ = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Start);
+
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -355,27 +377,13 @@ public partial class VpnEngine : IDisposable
 
             forceRestart |= configModeChanged || routingModeChanged || tunChanged || appRoutingChanged;
 
-            if (!forceRestart && _singBox.TryReloadConfigJson(configJson))
-            {
-                ActiveConfigMode = newConfigMode;
-                ActiveRoutingMode = newRoutingMode;
-                TunFingerprint = newTunFingerprint;
-                ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
-                configCommitted = true;
-                ResetFailoverContext(settings);
-                UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
-                OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
-                _logger?.Information("[VpnEngine] Applied via hot-reload");
-                await TryEngageSplitDriverAsync(settings, CancellationToken.None).ConfigureAwait(false);
-                return true;
-            }
+            // sing-box's Clash API accepts PUT /configs but does not reload anything,
+            // so a "hot reload" left the old server and rules running. Restart instead.
+            _logger?.Information(forceRestart
+                ? "[VpnEngine] Forced full restart (structural change)"
+                : "[VpnEngine] Applying config via full restart");
 
-            if (forceRestart)
-                _logger?.Information("[VpnEngine] Forced full restart (structural change)");
-            else
-                _logger?.Warning("[VpnEngine] Hot-reload failed, falling back to full restart");
-
-            if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart))
+            if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart: true))
             {
                 RestoreActiveBaseline();
                 _logger?.Error("[VpnEngine] Apply failed: sing-box reload or restart was not confirmed");
