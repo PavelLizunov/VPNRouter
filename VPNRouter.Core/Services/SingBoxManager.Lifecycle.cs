@@ -206,14 +206,14 @@ public partial class SingBoxManager
                 if (!targetHandle.HasExited)
                 {
                     targetHandle.SuppressExitedEvent();
-                    targetHandle.Kill(entireProcessTree: false);
-                    try
+                    // SIGTERM first: sing-box removes its auto_route ip rules only on a
+                    // graceful exit; SIGKILL leaves them behind after every disconnect.
+                    targetHandle.Terminate();
+                    if (!WaitForHandleExit(targetHandle, TimeSpan.FromSeconds(5)))
                     {
-                        using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                        targetHandle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
-                    }
-                    catch (OperationCanceledException)
-                    {
+                        _logger.Warning("[SingBoxManager] sing-box ignored SIGTERM; killing");
+                        targetHandle.Kill(entireProcessTree: false);
+                        WaitForHandleExit(targetHandle, TimeSpan.FromSeconds(5));
                     }
                 }
 
@@ -244,6 +244,19 @@ public partial class SingBoxManager
                 "[SingBoxManager] Linux capability-mode stop completed={Stopped}",
                 capabilityStopped);
         }
+    }
+
+    private static bool WaitForHandleExit(IProcessHandle handle, TimeSpan timeout)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            handle.WaitForExitAsync(cts.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        return handle.HasExited;
     }
 
     private void StopUnixEscalated(bool releaseLock)
