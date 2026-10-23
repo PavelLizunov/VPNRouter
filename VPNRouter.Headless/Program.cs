@@ -104,9 +104,9 @@ public static class Program
             }
 
             // stdout carries the protocol, so diagnostics go to a private file.
-            AppPaths.EnsureDirectories();
+            // Errors only: snapshots log warnings, and read-only requests must not create data.
             Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Information()
+                .MinimumLevel.Error()
                 .WriteTo.Sink(new Lifecycle.PrivateFileLogSink(Path.Combine(AppPaths.LogsDir, "headless.log")))
                 .CreateLogger();
 

@@ -5,6 +5,7 @@ namespace VPNRouter.Headless.Lifecycle;
 
 /// <summary>
 /// Appends log events to one private file; stdout is reserved for the protocol.
+/// The directory and file are created on the first event only.
 /// Starts over when the file passes <see cref="MaxBytes"/>, keeping one previous file.
 /// </summary>
 internal sealed class PrivateFileLogSink(string path) : ILogEventSink
@@ -22,6 +23,11 @@ internal sealed class PrivateFileLogSink(string path) : ILogEventSink
         {
             try
             {
+                var dir = Path.GetDirectoryName(path)!;
+                if (OperatingSystem.IsWindows())
+                    Directory.CreateDirectory(dir);
+                else
+                    Directory.CreateDirectory(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
                 var info = new FileInfo(path);
                 if (info.Exists && info.Length > MaxBytes)
                     File.Move(path, path + ".1", overwrite: true);
