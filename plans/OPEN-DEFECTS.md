@@ -18,6 +18,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ### Omarchy integration 2026-10-22 (PR #616)
 
+- [ ] **P1** - OMARCHY-N2-VERIFY-DETOUR: servers.verify drops DetourVia by passing a chained target to a single-outbound verifier; return UnsupportedByVerifier before core launch until verification can resolve the upstream chain - `VPNRouter.Headless/Features/ServerFeature.cs:305`, `plans/phase-omarchy-night2-backend-2026-10-24.md`. Fix prepared; CI pending.
+
 - [x] **P2 RESOLVED IN PR #616** - OMARCHY-R5-DESKTOP-PRECISION: owner observed Ghostty labelled DSH TUI/icon dsh; at 8194f44b LinuxRunningApps merges identity and Exec keys with first-entry wins. Implemented priority/ambiguity handling and wrapper fixtures in 469b69a1; headless-contract 39859423663 passes 39/0. See plans/phase-omarchy-r5-2026-10-23.md.
 - [x] **P2 RESOLVED IN PR #616** - OMARCHY-R5-PACKAGE-VERSION: every CI build produces 0.1.0-1, so pacman reinstalls instead of upgrading. Implemented explicit CI package/artifact versioning in 469b69a1; Arch 39859419326 passes 126 tests including pacman vercmp and installed offline smoke, artifact 12460354392 is 0.1.0.r12.g469b69a-1. See plans/phase-omarchy-r5-2026-10-23.md.
 
