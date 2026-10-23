@@ -436,7 +436,7 @@ public sealed class RouterSession : IRouterSession
             {
                 throw new RouterException("internal_error", "Failed to apply configuration changes to live engine.");
             }
-            RefreshReadinessGuardAfterApply();
+            await RefreshReadinessGuardAfterApplyAsync(ct).ConfigureAwait(false);
             _applyRestartInProgress = false;
         }
         catch (OperationCanceledException)
@@ -475,8 +475,12 @@ public sealed class RouterSession : IRouterSession
 
     // Apply restarts sing-box (new PID) and bumps the failover generation, so the
     // guard captured at connect no longer matches; recapture it for the new process.
-    private void RefreshReadinessGuardAfterApply()
+    private async Task RefreshReadinessGuardAfterApplyAsync(CancellationToken ct)
     {
+        // On Linux IsRunning probes the Clash API, which comes up shortly after the new process.
+        for (var i = 0; i < 25 && !_engine.IsRunning; i++)
+            await Task.Delay(200, ct).ConfigureAwait(false);
+
         var pid = _engine.SingBoxPid;
         Func<bool>? guard = null;
         if (pid is int livePid && livePid > 0 && _engine.IsRunning)
