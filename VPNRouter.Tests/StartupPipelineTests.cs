@@ -83,6 +83,31 @@ public sealed class StartupPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveProfile_NoProfileButExplicitApps_DoesNotRequireProfile()
+    {
+        var settings = BuildBaseSettings();
+        settings.Vless.Servers = new List<VlessServerEntry> { MakeServer("m", "1.2.3.4") };
+        settings.Vless.ActiveServer = "m";
+        settings.ActiveProfile = "";
+        settings.App.RoutingMode = "split";
+        settings.App.RoutingAppsMode = "include";
+        settings.App.RoutingAppsInclude = new List<string> { "curl" };
+        settings.App.RoutingAppsIncludeInitialized = true;
+
+        var host = new TestStartupHost();
+        var pipeline = new StartupPipeline(host, _store);
+
+        var ex = await Record.ExceptionAsync(async () =>
+            await pipeline.ExecuteAsync(
+                new StartupContext(settings, StartupMode.HotReload),
+                TestContext.Current.CancellationToken));
+
+        Assert.False(ex is InvalidOperationException ioe
+            && ioe.Message.Contains("No active profile", StringComparison.OrdinalIgnoreCase),
+            ex?.Message);
+    }
+
+    [Fact]
     public async Task ResolveServers_EmptyConfig_ThrowsWithActionableMessage()
     {
         var settings = BuildBaseSettings(configMode: "subscribe");

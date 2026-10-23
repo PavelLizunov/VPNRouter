@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Serilog;
 using VPNRouter.Core;
 using VPNRouter.Core.Services;
 using VPNRouter.Headless.Protocol;
@@ -101,6 +102,13 @@ public static class Program
             {
                 AppPaths.OverrideDataDir(Path.GetFullPath(dataDir));
             }
+
+            // stdout carries the protocol, so diagnostics go to a private file.
+            AppPaths.EnsureDirectories();
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .WriteTo.Sink(new Lifecycle.PrivateFileLogSink(Path.Combine(AppPaths.LogsDir, "headless.log")))
+                .CreateLogger();
 
             // Wire up lifecycle session and backend as defined in protocol v1 contract
             await using var session = new RouterSession();

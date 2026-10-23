@@ -400,7 +400,8 @@ internal sealed class StartupPipeline
             .Equals("full", StringComparison.OrdinalIgnoreCase);
         var profileName = settings.ActiveProfile;
 
-        if (string.IsNullOrEmpty(profileName) && !isFullTunnel && !isCustomConfig)
+        if (string.IsNullOrEmpty(profileName) && !isFullTunnel && !isCustomConfig
+            && !HasExplicitAppSelection(settings.App))
             throw new InvalidOperationException("No active profile specified in config.");
 
         if (SafeMode.Enabled)
@@ -445,6 +446,10 @@ internal sealed class StartupPipeline
         {
             activeProfile = new Profile { Name = "CustomConfig", DnsMode = "vpn_only" };
         }
+        else if (!isFullTunnel)
+        {
+            activeProfile = new Profile { Name = "SelectedApps", DnsMode = "vpn_only" };
+        }
         else
         {
             activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
@@ -452,6 +457,13 @@ internal sealed class StartupPipeline
 
         return activeProfile;
     }
+
+    // The Linux shell picks apps directly instead of a profile; the app list
+    // alone then defines split routing.
+    private static bool HasExplicitAppSelection(AppConfig app)
+        => string.Equals(app.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase)
+            || app.RoutingAppsIncludeInitialized
+            || app.RoutingAppsInclude?.Count > 0;
 
     private static void AddCustomAppsToProfile(Profile activeProfile, AppSettings settings)
     {

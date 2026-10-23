@@ -70,7 +70,7 @@ public sealed class RouterSession : IRouterSession
         _policy = SingBoxRuntimePolicy.Current ?? (OperatingSystem.IsLinux() ? SingBoxRuntimePolicy.DefaultProduction : null);
         _ownershipProbe = ownershipProbe;
         _killSwitchProbe = killSwitchProbe;
-        _logger = logger;
+        _logger = logger ?? Log.Logger;
         _capabilityReadinessProbe = capabilityReadinessProbe ?? engine.CapabilityReadinessFunc;
         _stopTimeout = stopTimeout;
 
@@ -370,6 +370,7 @@ public sealed class RouterSession : IRouterSession
                 TransitionState(SessionStates.Error, "connect_failed");
             }
             var scrubbed = BoundedTeardown.SanitizeExceptionMessage(ex);
+            _logger?.Error("[RouterSession] Connect failed: {Message}", scrubbed);
             throw new RouterException("connect_failed", scrubbed);
         }
         finally
@@ -644,6 +645,7 @@ public sealed class RouterSession : IRouterSession
 
     private async Task TeardownAfterStartFailureAsync(string errorCode, string errorMessage)
     {
+        _logger?.Error("[RouterSession] Connect failed ({Code}): {Message}", errorCode, errorMessage);
         var stopped = await BoundedTeardown.StopBoundedAsync(_engine, timeout: _stopTimeout, logger: _logger).ConfigureAwait(false);
         if (!stopped || _engine.IsRunning || _engine.SingBoxPid != null)
         {
