@@ -292,7 +292,7 @@ public static class HealthCheck
         }
         else
         {
-            results.Add(new(Level.Ok, "no running-state file (app is stopped)"));
+            results.Add(new(Level.Ok, "no desktop running-state file"));
         }
     }
 

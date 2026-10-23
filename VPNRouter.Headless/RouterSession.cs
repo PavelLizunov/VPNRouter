@@ -433,6 +433,7 @@ public sealed class RouterSession : IRouterSession
             {
                 throw new RouterException("internal_error", "Failed to apply configuration changes to live engine.");
             }
+            RefreshReadinessGuardAfterApply();
         }
         catch (OperationCanceledException)
         {
@@ -458,6 +459,41 @@ public sealed class RouterSession : IRouterSession
             {
                 // Safe if gate was disposed during concurrent teardown
             }
+        }
+    }
+
+    // Apply restarts sing-box (new PID) and bumps the failover generation, so the
+    // guard captured at connect no longer matches; recapture it for the new process.
+    private void RefreshReadinessGuardAfterApply()
+    {
+        var pid = _engine.SingBoxPid;
+        Func<bool>? guard = null;
+        if (pid is int livePid && livePid > 0 && _engine.IsRunning)
+        {
+            try
+            {
+                var rawGuard = _engine.CaptureReadinessGuard(livePid);
+                if (rawGuard != null)
+                {
+                    guard = () =>
+                    {
+                        try { return rawGuard(); }
+                        catch { return false; }
+                    };
+                }
+            }
+            catch
+            {
+                guard = null;
+            }
+        }
+
+        lock (_stateLock)
+        {
+            if (_disposed || _disconnectStarted || !_ownsConnection || _state != SessionStates.Connected)
+                return;
+            _retainedReadinessGuard = guard;
+            _connectedPid = guard != null ? pid : null;
         }
     }
 

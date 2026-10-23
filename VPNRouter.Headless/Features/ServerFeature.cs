@@ -266,7 +266,8 @@ public sealed class ServerFeature
         {
             id,
             reachable,
-            latencyMs = reachable ? (int?)probe.LatencyMs : null
+            // A silent UDP port (Hysteria2, TUIC) reports the probe timeout, not a latency.
+            latencyMs = reachable && probe.IsVerified ? (int?)probe.LatencyMs : null
         };
     }
 

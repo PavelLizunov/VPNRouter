@@ -41,8 +41,9 @@ internal sealed class LinuxRunningApps
 
     internal List<RunningApp> Read()
     {
-        var timer = Stopwatch.StartNew();
         var index = GetDesktopIndex();
+        // The /proc budget starts after the index: a cold index read used to spend it all.
+        var timer = Stopwatch.StartNew();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {

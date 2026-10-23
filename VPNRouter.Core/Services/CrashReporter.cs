@@ -123,6 +123,18 @@ public static class CrashReporter
         @"([?&])((?:[a-z0-9_]*[_-])?(?:token|secret|api[_-]?key|auth|pass(?:word|wd)?|private[_-]?key|psk|session|session[_-]?id|sig|signature|credential|sid|short[_-]?id|key)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)=[^&\s]+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // "/usr/lib/vpnrouter-headless/runtime/sing-box" matched the key pattern; real keys
+    // are mixed-case and have long runs between slashes.
+    private static bool LooksLikeFilesystemPath(string token)
+    {
+        if (!token.Contains('/')) return false;
+        foreach (var segment in token.Split('/'))
+        {
+            if (segment.Length > 24 || segment.Any(char.IsUpper)) return false;
+        }
+        return true;
+    }
+
     public static string ScrubSecrets(string? input)
     {
         if (string.IsNullOrEmpty(input)) return input ?? string.Empty;
@@ -133,7 +145,7 @@ public static class CrashReporter
                 ? $"{m.Groups[1].Value}{m.Groups[2].Value}/[redacted]"
                 : $"{m.Groups[1].Value}{m.Groups[2].Value}");
         s = _uuidPattern.Replace(s, "<uuid>");
-        s = _longBase64Pattern.Replace(s, "<key>");
+        s = _longBase64Pattern.Replace(s, m => LooksLikeFilesystemPath(m.Value) ? m.Value : "<key>");
         s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}{m.Groups[2].Value}=[REDACTED]");
         return s;
     }

@@ -363,27 +363,13 @@ public partial class VpnEngine : IDisposable
 
             forceRestart |= configModeChanged || routingModeChanged || tunChanged || appRoutingChanged;
 
-            if (!forceRestart && _singBox.TryReloadConfigJson(configJson))
-            {
-                ActiveConfigMode = newConfigMode;
-                ActiveRoutingMode = newRoutingMode;
-                TunFingerprint = newTunFingerprint;
-                ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
-                configCommitted = true;
-                ResetFailoverContext(settings);
-                UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
-                OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
-                _logger?.Information("[VpnEngine] Applied via hot-reload");
-                await TryEngageSplitDriverAsync(settings, CancellationToken.None).ConfigureAwait(false);
-                return true;
-            }
+            // sing-box's Clash API accepts PUT /configs but does not reload anything,
+            // so a "hot reload" left the old server and rules running. Restart instead.
+            _logger?.Information(forceRestart
+                ? "[VpnEngine] Forced full restart (structural change)"
+                : "[VpnEngine] Applying config via full restart");
 
-            if (forceRestart)
-                _logger?.Information("[VpnEngine] Forced full restart (structural change)");
-            else
-                _logger?.Warning("[VpnEngine] Hot-reload failed, falling back to full restart");
-
-            if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart))
+            if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart: true))
             {
                 RestoreActiveBaseline();
                 _logger?.Error("[VpnEngine] Apply failed: sing-box reload or restart was not confirmed");
