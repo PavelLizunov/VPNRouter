@@ -77,6 +77,20 @@ public partial class VpnEngine : IDisposable
 
     public event Action<int>? Connected;
 
+    // Names the first readiness condition that fails for pid, or null when ready.
+    internal string? DescribeReadiness(int pid)
+    {
+        if (_disposed) return "disposed";
+        if (!_warmupConfirmed) return "warmup not confirmed";
+        if (_singBox == null) return "no sing-box manager";
+        if (_sessionCts == null || _sessionCts.IsCancellationRequested) return "no live session";
+        var handle = _singBox.OwnedProcessHandle;
+        if (handle == null || handle.HasExited) return "no live process handle";
+        if (_singBox.Pid != pid) return $"pid {_singBox.Pid} != {pid}";
+        if (_singBox.State != SingBoxState.Running) return $"sing-box state {_singBox.State}";
+        return null;
+    }
+
     internal Func<bool> CaptureReadinessGuard(int pid)
     {
         if (_disposed) return () => false;

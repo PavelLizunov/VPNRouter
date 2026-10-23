@@ -499,6 +499,17 @@ public sealed class RouterSession : IRouterSession
             }
         }
 
+        var guardPassed = false;
+        try { guardPassed = guard?.Invoke() == true; }
+        catch { guardPassed = false; }
+        if (!guardPassed)
+        {
+            _logger?.Error(
+                "[RouterSession] Readiness after apply failed: state={State}, owns={Owns}, pid={Pid}, running={Running}, reason={Reason}",
+                _state, _ownsConnection, pid, _engine.IsRunning,
+                pid is int p ? _engine.DescribeReadiness(p) ?? "guard false" : "no pid");
+        }
+
         lock (_stateLock)
         {
             if (_disposed || _disconnectStarted || !_ownsConnection || _state != SessionStates.Connected)

@@ -34,6 +34,8 @@ public interface ILifecycleEngine : IAsyncDisposable, IDisposable
     /// </summary>
     Func<bool>? CaptureReadinessGuard(int pid);
 
+    string? DescribeReadiness(int pid) => null;
+
     /// <summary>
     /// Optional capability readiness probe. When null, production real-checks sing-box binary on disk.
     /// Injected for fake engines to simulate capability readiness without requiring real binary on disk.

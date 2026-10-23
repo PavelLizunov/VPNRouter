@@ -80,6 +80,9 @@ public sealed class VpnEngineAdapter : ILifecycleEngine
     public Func<bool>? CaptureReadinessGuard(int pid)
         => _engine.CaptureReadinessGuard(pid);
 
+    public string? DescribeReadiness(int pid)
+        => _engine.DescribeReadiness(pid);
+
     public Func<bool>? CapabilityReadinessFunc => null;
 
     public void Dispose()
