@@ -1435,8 +1435,12 @@ public static class FeatureChecks
             LastAggregatedAt = DateTime.UtcNow
         });
 
-        // 1. Perform free.test on the Verified entry: must NOT demote status to Ok!
-        await backend.ExecuteAsync("free.test", ToJsonElement(new { id = verifiedId }));
+        // Invalid port makes this probe fail before network I/O; historical verification remains.
+        verifiedEntry.Port = -1;
+        cache.Save(new FreeConfigCache.CacheFile { Configs = new List<FreeConfigEntry> { verifiedEntry } });
+        var testResult = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("free.test", ToJsonElement(new { id = verifiedId })));
+        Assert(!testResult.GetProperty("reachable").GetBoolean(), "A failed repeat probe must not report historical verification as reachability");
+        Assert(testResult.GetProperty("latencyMs").ValueKind == JsonValueKind.Null, "A failed repeat probe must not return stale latency");
 
         var cacheAfterTest = cache.Load();
         var entryAfterTest = cacheAfterTest.Configs.First(c => c.Id == verifiedId);
