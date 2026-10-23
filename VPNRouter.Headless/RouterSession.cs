@@ -36,6 +36,8 @@ public sealed class RouterSession : IRouterSession
     private bool _ownsConnection;
     private bool _disconnectStarted;
     private Func<bool>? _retainedReadinessGuard;
+    // Set while a live apply restarts sing-box, so its planned stop is not a lost connection.
+    private volatile bool _applyRestartInProgress;
     private int? _connectedPid;
 
     /// <summary>
@@ -428,12 +430,14 @@ public sealed class RouterSession : IRouterSession
 
         try
         {
+            _applyRestartInProgress = true;
             var success = await _engine.ApplyAsync(settings, ct).ConfigureAwait(false);
             if (!success)
             {
                 throw new RouterException("internal_error", "Failed to apply configuration changes to live engine.");
             }
             RefreshReadinessGuardAfterApply();
+            _applyRestartInProgress = false;
         }
         catch (OperationCanceledException)
         {
@@ -451,6 +455,13 @@ public sealed class RouterSession : IRouterSession
         }
         finally
         {
+            if (_applyRestartInProgress)
+            {
+                // The apply failed after a planned stop: report what the engine now shows.
+                _applyRestartInProgress = false;
+                if (!_engine.IsRunning && _state == SessionStates.Connected)
+                    TransitionState(SessionStates.Error, "connection_lost");
+            }
             try
             {
                 _gate.Release();
@@ -715,7 +726,7 @@ public sealed class RouterSession : IRouterSession
 
         if (string.Equals(status, "Stopped", StringComparison.OrdinalIgnoreCase))
         {
-            if (_state == SessionStates.Connected)
+            if (_state == SessionStates.Connected && !_applyRestartInProgress)
             {
                 // Retain _ownsConnection so ongoing recovery or subsequent disconnect/teardown can manage the owned session
                 TransitionState(SessionStates.Error, "connection_lost");
