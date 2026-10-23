@@ -241,6 +241,15 @@ public sealed class SubscriptionFeature
         _logger.Information("[SubscriptionFeature] Refreshed {Count} subscriptions", targets.Count);
     }
 
+    private static bool HasUsableManualServer(AppSettings settings)
+    {
+        var active = settings.Vless?.ActiveServer;
+        return !string.IsNullOrWhiteSpace(active)
+            && (settings.Vless?.Servers ?? new List<VlessServerEntry>()).Any(s =>
+                string.Equals(s.Name, active, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com");
+    }
+
     private static void ReconcileActiveSubscriptionServer(AppSettings settings)
     {
         var subs = settings.App?.Subscriptions ?? new List<SubscriptionEntry>();
@@ -278,6 +287,16 @@ public sealed class SubscriptionFeature
                     settings.Vless.ActiveServer = match.Name;
                 }
             }
+        }
+        else if (remainingServers.Count > 0 && !HasUsableManualServer(settings)
+                 && !string.Equals(settings.App?.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase))
+        {
+            // Nothing else to connect with: start using the
+            // subscription that just brought servers instead of leaving none selected.
+            settings.App!.ConfigMode = "subscribe";
+            settings.App.ActiveSubscriptionServer = remainingServers[0].Name;
+            settings.Vless ??= new VlessConfig();
+            settings.Vless.ActiveServer = remainingServers[0].Name;
         }
         else
         {
