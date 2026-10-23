@@ -568,7 +568,7 @@ public static partial class CustomConfigInjector
 
                     obj["strict_route"] = false;
                     if (obj["stack"] == null)
-                        obj["stack"] = "system";
+                        obj["stack"] = ConfigGenerator.PlatformTunStack();
 
                     if (excludeAddresses != null && excludeAddresses.Count > 0)
                     {

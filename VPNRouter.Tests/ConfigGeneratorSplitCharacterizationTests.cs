@@ -75,7 +75,7 @@ public sealed class ConfigGeneratorSplitCharacterizationTests : IDisposable
 
         Assert.Single(config.Inbounds);
         Assert.Equal("tun-in", config.Inbounds[0].Tag);
-        Assert.Equal(OperatingSystem.IsMacOS() ? "gvisor" : "system", config.Inbounds[0].Stack);
+        Assert.Equal(ConfigGenerator.PlatformTunStack(), config.Inbounds[0].Stack);
 
         Assert.Contains(config.Outbounds, o => o.Tag == "proxy");
         Assert.Contains(config.Outbounds, o => o.Tag == "proxy-udp");
