@@ -57,7 +57,7 @@ public static class DiagnosticsRedactor
         @"^(\w+://)(?:[^@/?#\s]+@)?([^/?#\s]+).*$", RegexOptions.Compiled);
 
     private static readonly Regex _logKeyValueSecret = new(
-        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)([""']?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
+        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)(?:([""'])(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^""'\r\n]*)(?:\3|(?=[\r\n]|$))|()(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+))",
         RegexOptions.Compiled);
 
     private static readonly Regex _yamlKeyValuePair = new(
@@ -141,8 +141,14 @@ public static class DiagnosticsRedactor
         for (int i = 0; i < lines.Length; i++)
         {
             var scrubbed = CrashReporter.ScrubSecrets(lines[i]);
-            lines[i] = _logKeyValueSecret.Replace(scrubbed,
-                m => $"{m.Groups[1].Value}{m.Groups[2].Value}{m.Groups[3].Value}{Redacted}");
+            lines[i] = _logKeyValueSecret.Replace(scrubbed, m =>
+            {
+                var key = m.Groups[1].Value;
+                var op = m.Groups[2].Value;
+                var quote = m.Groups[3].Success && m.Groups[3].Length > 0 ? m.Groups[3].Value : "";
+                var closingQuote = quote.Length > 0 && m.Value.EndsWith(quote) ? quote : "";
+                return $"{key}{op}{quote}{Redacted}{closingQuote}";
+            });
         }
         return string.Join(Environment.NewLine, lines);
     }
