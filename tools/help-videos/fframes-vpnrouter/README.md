@@ -14,7 +14,7 @@ The renderer does not install, run or change VPNRouter. No release is published 
 
 ## Render
 
-Use a Linux build worker with a current stable Rust toolchain, a C/C++ linker, Clang/libclang, pkg-config, FFmpeg, nasm and zip. The CPU backend works without a GPU. The initial fframes build downloads its static FFmpeg dependencies; internet access is required for a clean build.
+Use an Ubuntu 24.04 build worker with a current stable Rust toolchain, a C/C++ linker, Clang/libclang, pkg-config, FFmpeg, libx264-dev, nasm and zip. The CPU backend works without a GPU. `export.sh` uses the committed Cargo.lock and builds fframes' static FFmpeg from source against the worker's x264 rather than downloading an archive built for a different x264 ABI; internet access is required for a clean build. Start with an empty renderer target directory when switching from an older prebuilt-FFmpeg build; the CI cache uses a separate source-build namespace.
 
 From this directory:
 

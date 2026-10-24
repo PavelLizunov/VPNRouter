@@ -24,7 +24,7 @@ jobs:
   render-film:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 50
     defaults:
       run:
         working-directory: tools/help-videos/fframes-vpnrouter
@@ -73,8 +73,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             tools/help-videos/fframes-vpnrouter/target
-          key: fframes-film-${{ runner.os }}-v1-${{ hashFiles('tools/help-videos/fframes-vpnrouter/Cargo.toml', 'tools/help-videos/fframes-vpnrouter/Cargo.lock') }}
-          restore-keys: fframes-film-${{ runner.os }}-v1-
+          key: fframes-film-${{ runner.os }}-ubuntu24-source-v2-${{ hashFiles('tools/help-videos/fframes-vpnrouter/Cargo.toml', 'tools/help-videos/fframes-vpnrouter/Cargo.lock') }}
+          restore-keys: fframes-film-${{ runner.os }}-ubuntu24-source-v2-
       - name: Build, inspect, render and validate delivery files
         run: bash export.sh
       - name: Upload complete film and measured review evidence

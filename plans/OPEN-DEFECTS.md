@@ -16,6 +16,14 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### fframes film review 2026-10-24 (PR #623, implementation `24205d9f`)
+
+- [ ] **P1** - FFRAMES-X264-ABI: isolated media CI cannot link because the downloaded FFmpeg archive references `x264_encoder_open_163` but Ubuntu 24.04 provides ABI 164; reproduced by Actions run `40122584593`, job `120957143355`, exit 101. No product/runtime impact. Source: `.github/workflows/render-fframes-film.yml:26`, `tools/help-videos/fframes-vpnrouter/export.sh:7`; dependency `ffmpeg-sys-fframes` 9.0.0 `build_prebuilt.rs:84` and `build.rs:1131`. Fix the owning build path with a source-built FFmpeg and fresh cache; verify the exact-head exported media before closing. Task: `plans/phase-fframes-vpnrouter-film-2026-10-24.md`.
+
+- [x] **P2 RESOLVED IN SOURCE** - FFRAMES-DEPENDENCY-LOCK: reviewer `0ddc6479`, confirmed by the absent lock at `24205d9f`: direct fframes pin did not lock transitive dependency resolution. Recovered the exact Actions lockfile, retained its hash in the task record, and changed build/test commands to `--locked`; added to the pending PR #623 repair commit.
+- [ ] **P2** - FFRAMES-UNUSED-LIGHT-FIXTURE: reviewer `3e5ff279` and lead source scan confirm `media/home-light.png` is not referenced by any shot; it is a 51491-byte optional editing fixture and has no playback impact. Deferred, retained with documented provenance rather than deleting a source asset during the ABI repair; PR #623.
+- [x] **P2 RESOLVED IN SOURCE** - FFRAMES-FONT-WEIGHT-INTENT: reviewer `3e5ff279`, confirmed at `src/lib.rs:131` and `src/graphics.rs:35`: the header requested 600 but the helper clamps to the bundled maximum 500. Changed the call to 500; the rendered weight remains unchanged. PR #623.
+
 ### Owner report 2026-10-19 (main `7af9aaeb`)
 
 - [x] **P2** - GENERATED-RU-IP-BYPASS-MISSING: the enabled bypass registers `vpnrouter-geoip-ru` but the generated direct route references only `vpnrouter-geosite-ru`; Russian IP destinations outside the TLD list still use proxy in full/exclude mode or for included apps, contrary to the UI hint. Custom injection already includes both tags. Source and WINBRAT current.json confirmed; owner's exact site/device not yet known - `VPNRouter.Core/Services/ConfigGenerator.Rules.cs:357`; task `plans/phase-ru-ip-bypass-2026-10-19.md`. FIXED in PR #604, implementation `c45beb19`: both tags in generated routing; 72 focused tests and full Windows suite (3457 passed, 19 skipped); negative control fails only enabled cases; real installed core selects direct for 77.88.55.88 only with bypass on. Not released or installed on the owner's device.

@@ -128,7 +128,7 @@ impl Video for Film {
                 <rect width="1920" height="1080" fill={BG} />
                 {ctx.render_scenes(&frame)}
                 {graphics::image(ctx, "logo.png", 112.0, 49.0, 40.0, 40.0)}
-                {text(167.0, 78.0, 26.0, WHITE, 600, "VPNRouter")}
+                {text(167.0, 78.0, 26.0, WHITE, 500, "VPNRouter")}
                 {text(1320.0, 77.0, 21.0, MUTED, 400, "PavelLizunov / VPNRouter")}
                 <rect x="112" y="118" width="1696" height="1" fill="#263040" />
                 {chapter_marks}

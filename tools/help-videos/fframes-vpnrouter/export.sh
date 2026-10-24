@@ -3,9 +3,11 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 mkdir -p out/frames
 export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-2}"
+# Prebuilt FFmpeg may target a different system x264 ABI. Compile it here instead.
+export FFMPEG_FORCE_BUILD=1
 
-cargo build --release
-cargo test --release
+cargo build --release --locked
+cargo test --release --locked
 bin=./target/release/vpnrouter-film
 "$bin" timeline --json > out/timeline.json
 "$bin" inspect --all-frames --fail-on warning --json > out/inspection.json
