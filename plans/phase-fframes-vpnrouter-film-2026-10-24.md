@@ -51,6 +51,7 @@ Motion explainer for developers browsing GitHub, rooted in VPNRouter's dark appl
 - First fframes dependency build and static FFmpeg prebuilt availability on the CI runner.
 - Available generated music and exact generator restoration result.
 - Final encoded size; provide a smaller preview if necessary for easy GitHub use.
+- Audio update: the Host audio generator rejected both calls before submission because of its configured-workspace gate; no GPU job was accepted. A direct controller status check timed out. Do not retry generation or alter the tool configuration. Use the existing CC0 instrumental "Interchange" by TRG Banks instead; CC0 and instrumental status were checked at the original Free Music Archive page as well as Wikimedia Commons. This changes only the optional music implementation, not the video or its claims.
 
 ## Outcome
 

@@ -1,0 +1,95 @@
+name: Render fframes film
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/help-videos/fframes-vpnrouter/**'
+      - '.github/workflows/render-fframes-film.yml'
+  push:
+    branches: ['dsh/fframes-vpnrouter-film']
+    paths:
+      - 'tools/help-videos/fframes-vpnrouter/**'
+      - '.github/workflows/render-fframes-film.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fframes-film-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  render-film:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: tools/help-videos/fframes-vpnrouter
+    env:
+      CARGO_BUILD_JOBS: '2'
+      RAYON_NUM_THREADS: '2'
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Record read-only resource and SDK preflight
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          {
+            date -u
+            git rev-parse HEAD
+            hostname
+            uname -a
+            nproc
+            uptime
+            free -m
+            df -m .
+            ps -eo pid,comm,pcpu,pmem --sort=-pcpu | head -20 || true
+            rustc --version
+            cargo --version
+            command -v clang || true
+            command -v ffmpeg || true
+          } | tee out/preflight.txt
+          python3 - <<'PY'
+          import os, shutil
+          available = int(next(line.split()[1] for line in open('/proc/meminfo') if line.startswith('MemAvailable:'))) * 1024
+          assert available > 3 * 1024**3, 'Less than 3 GiB RAM available'
+          assert shutil.disk_usage('.').free > 8 * 1024**3, 'Less than 8 GiB disk free'
+          assert os.getloadavg()[0] < os.cpu_count() * 2, 'Runner is overloaded'
+          PY
+      - name: Install disposable renderer prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pkg-config clang libclang-dev nasm yasm ninja-build ffmpeg libx264-dev libx265-dev libopus-dev libvpx-dev libasound2-dev zip
+      - name: Cache Rust dependencies for this renderer
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/help-videos/fframes-vpnrouter/target
+          key: fframes-film-${{ runner.os }}-v1-${{ hashFiles('tools/help-videos/fframes-vpnrouter/Cargo.toml', 'tools/help-videos/fframes-vpnrouter/Cargo.lock') }}
+          restore-keys: fframes-film-${{ runner.os }}-v1-
+      - name: Build, inspect, render and validate delivery files
+        run: bash export.sh
+      - name: Upload complete film and measured review evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vpnrouter-film-${{ github.sha }}
+          path: tools/help-videos/fframes-vpnrouter/out/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Upload resolved dependency lockfile
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vpnrouter-film-lock-${{ github.sha }}
+          path: tools/help-videos/fframes-vpnrouter/Cargo.lock
+          retention-days: 30
+          if-no-files-found: warn
