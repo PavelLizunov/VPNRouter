@@ -134,10 +134,14 @@ public sealed class FreeConfigFeature
         if (entry == null)
             throw new RouterException("not_found", "Free config not found in cache");
 
-        // Finding 1 fix: if already verified, use TcpPingOnlyAsync to preserve Verified status for subsequent apply.
+        // Keep historical verification for apply, but report this probe's outcome.
         if (entry.Status == FreeConfigStatus.Verified)
         {
-            await _tester.TcpPingOnlyAsync(entry, ct);
+            var (ok, latency, _) = await TcpTlsProbe.ProbeTcpAsync(
+                entry.Host, entry.Port, TimeSpan.FromMilliseconds(1500), ct);
+            entry.LatencyMs = ok ? latency : 0;
+            _cache.Save(cacheFile);
+            return new { id, reachable = ok, latencyMs = ok ? (int?)latency : null };
         }
         else
         {
@@ -153,7 +157,7 @@ public sealed class FreeConfigFeature
         {
             id,
             reachable,
-            latencyMs = entry.LatencyMs > 0 ? (int?)entry.LatencyMs : null
+            latencyMs = reachable ? (int?)entry.LatencyMs : null
         };
     }
 

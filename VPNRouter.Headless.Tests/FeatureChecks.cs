@@ -35,6 +35,7 @@ public static class FeatureChecks
             await CheckAllowlistedSettingsAsync(tempDir);
             await CheckAppRoutingPreservedCasingAsync(tempDir);
             await CheckServerImportSelectRemoveAsync(tempDir);
+            await CheckChainedServerVerificationAsync(tempDir);
             await CheckSubscriptionsWriteOnlyUrlsAsync(tempDir);
             await CheckFreeConfigsVerifiedOnlyApplyAsync(tempDir);
             await CheckCustomConfigsValidationAndStorageAsync(tempDir);
@@ -71,6 +72,27 @@ public static class FeatureChecks
                 // Best effort test cleanup
             }
         }
+    }
+
+    private static async Task CheckChainedServerVerificationAsync(string baseDir)
+    {
+        var storage = new ConfigStorage(Path.Combine(baseDir, "verify-detour"));
+        var settings = storage.GetSettings();
+        settings.Vless.Servers.Add(new VlessServerEntry
+        {
+            Name = "Chained fixture", Server = "192.0.2.1", Port = 443,
+            DetourVia = "upstream-fixture"
+        });
+        storage.SaveSettings(settings, storage.CurrentRevision);
+        var feature = new ServerFeature(storage);
+        var page = JsonSerializer.SerializeToElement(feature.List(ToJsonElement(new { })));
+        var id = page.GetProperty("items")[0].GetProperty("id").GetString();
+        var progress = false;
+        var result = JsonSerializer.SerializeToElement(await feature.VerifyAsync(
+            ToJsonElement(new { id }), _ => progress = true, CancellationToken.None));
+        Assert(!result.GetProperty("ok").GetBoolean(), "A direct probe cannot verify a detour chain");
+        Assert(result.GetProperty("error").GetString() == "UnsupportedByVerifier", "Detour verification must be explicit");
+        Assert(!progress, "Unsupported chain must be rejected before verification starts");
     }
 
     private static Task CheckNoStartupMutationsAsync(string baseDir)
@@ -1413,8 +1435,12 @@ public static class FeatureChecks
             LastAggregatedAt = DateTime.UtcNow
         });
 
-        // 1. Perform free.test on the Verified entry: must NOT demote status to Ok!
-        await backend.ExecuteAsync("free.test", ToJsonElement(new { id = verifiedId }));
+        // Invalid port makes this probe fail before network I/O; historical verification remains.
+        verifiedEntry.Port = -1;
+        cache.Save(new FreeConfigCache.CacheFile { Configs = new List<FreeConfigEntry> { verifiedEntry } });
+        var testResult = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("free.test", ToJsonElement(new { id = verifiedId })));
+        Assert(!testResult.GetProperty("reachable").GetBoolean(), "A failed repeat probe must not report historical verification as reachability");
+        Assert(testResult.GetProperty("latencyMs").ValueKind == JsonValueKind.Null, "A failed repeat probe must not return stale latency");
 
         var cacheAfterTest = cache.Load();
         var entryAfterTest = cacheAfterTest.Configs.First(c => c.Id == verifiedId);

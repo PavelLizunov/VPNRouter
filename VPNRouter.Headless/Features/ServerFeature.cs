@@ -288,6 +288,11 @@ public sealed class ServerFeature
             throw new RouterException("not_found", "Server not found");
 
         var server = match.Server;
+        // This verifier has no server pool and cannot resolve an upstream detour.
+        // Do not silently verify the target over a direct connection instead.
+        if (!string.IsNullOrEmpty(server.DetourVia))
+            return new { id, ok = false, latencyMs = (int?)null, error = "UnsupportedByVerifier" };
+
         progress?.Invoke(new { id, stage = "verify_start", completed = 0, total = 1 });
 
         var verifier = new VlessDeepVerifier(_logger);
