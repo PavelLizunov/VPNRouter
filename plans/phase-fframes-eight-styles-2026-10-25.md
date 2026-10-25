@@ -619,3 +619,45 @@ system was found. Each style has a deliberate visual mechanism:
   selection/footprint. Do not rerun the completed export or implement a 24-frame
   replay until capture bounds and semantic ownership are supported. Production,
   frozen evaluators, encoder settings, padding and delivered outputs stay fixed.
+- Capture-prerequisite decision: reject both advisors' unsupported SIMD/root-cause
+  and complete-input-equality claims. The actual render path uses `FramePool` and
+  `RgbaFrameConverter` (`frame_export.rs`), not the older `EncoderFrame` path.
+  There are 45 closed encoder lifetimes per style/batch, not two. Disabled stat
+  read/write and absent NAL callbacks are already observed; changing
+  `b_cpu_independent` or hashing unproven full strides is not selected.
+- Next implementation scope: one provenance-only CI workflow and a dependency-free
+  Python collector/contracts under `.github/native-provenance/`, plus this task
+  record. Restore the existing exact-source Cargo cache read-only; do not build,
+  execute the cached renderer, render, decode or rerun all-eight exports. Retain
+  the actual cached FFmpeg wrapper/allocation sources, Git/source/build/object/
+  library hashes, Cargo fingerprint/link evidence and runner x264 package/library
+  identity. Preserve ambiguous cache entries as unverified, never active by fiat.
+- Verification: bounded allowlisted files, path/symlink confinement, missing/ambiguous
+  cache and subprocess failures, manifest/hash binding, actual extracted workflow
+  shell/Python, independent correctness/evidence review and exact-head CI. Missing
+  source/cache is a diagnostic blocker with retained evidence, not a reason to
+  rebuild or accept a baseline. No new dependency or source/configuration fix.
+  Risk: low, read-only diagnostic collection. Rollback only this checkpoint by
+  revert; retain evidence. Runtime/UI/product gates N/A for this no-render step.
+- Provenance-only local verification: 9 new collector, 11 unchanged diagnostic,
+  7 frozen evaluator and 3 frozen workflow contracts pass without native work.
+  Actual workflow YAML/extracted Bash and Python AST parse. Real-Git fixtures
+  cover absent native metadata and same-size modified files with cached helpers;
+  neither parent HEAD discovery nor helper execution is allowed. Command failures,
+  timeouts, bounded partial output, input changes and incomplete sources/build/
+  caller evidence fail closed while retaining a manifest.
+- Review `6b1a3056` confirmed missing-source acceptance and parent Git discovery;
+  both are corrected. Review `95a47274` reproduced cached clean-filter execution
+  through native `git status`; status/diff were removed, leaving only explicit
+  metadata revision lookup with worktree cleanliness unverified. It also found
+  hidden checksum upload exclusion; scoped hidden-file inclusion now preserves
+  the allowlisted `.cargo-checksum.json`. Lead checked the pinned action input.
+  All four findings are recorded in the defect ledger before correction.
+- Final correction review `38c732f7` verified collector fixes and 9 passing tests
+  but repeated the hidden-file finding against the same workflow hash that
+  already contains the input at line 94. Lead parsed that actual input as true;
+  independent focused review `1bd2acb1` read the same files, reran all 9 tests
+  and confirms the known exclusion mechanism closed. No remaining source-confirmed
+  blocker; real cache/package/readelf/upload evidence is still pending exact CI.
+  Cache entries remain explicitly unbound to the active historical executable;
+  zero optimization attempts is separate from the number of cached candidates.
