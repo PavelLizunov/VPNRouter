@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+### fframes music discovery 2026-10-25 (PR #627)
+
+- [x] **P2 RESOLVED IN SOURCE** - FFRAMES-MUSIC-DISCOVERY: source inspection at `a3690437` found only Interchange provenance and a fixed soundtrack, with no reusable music-source guide. Added `docs/fframes-music-sources.md` and root agent routing. Review `a2857a02` verified Mixkit's remix restriction, CC modification/notices requirements and source-specific credit placement; all three are incorporated. Final documentation review `cc9a51e0` found no additional material issues. Task `plans/phase-fframes-music-sources-2026-10-25.md`, PR #627; no media or renderer change. Implementation-head CI is tracked in the PR.
+
 ### Owner report 2026-10-19 (main `7af9aaeb`)
 
 - [x] **P2** - GENERATED-RU-IP-BYPASS-MISSING: the enabled bypass registers `vpnrouter-geoip-ru` but the generated direct route references only `vpnrouter-geosite-ru`; Russian IP destinations outside the TLD list still use proxy in full/exclude mode or for included apps, contrary to the UI hint. Custom injection already includes both tags. Source and WINBRAT current.json confirmed; owner's exact site/device not yet known - `VPNRouter.Core/Services/ConfigGenerator.Rules.cs:357`; task `plans/phase-ru-ip-bypass-2026-10-19.md`. FIXED in PR #604, implementation `c45beb19`: both tags in generated routing; 72 focused tests and full Windows suite (3457 passed, 19 skipped); negative control fails only enabled cases; real installed core selects direct for 77.88.55.88 only with bypass on. Not released or installed on the owner's device.
