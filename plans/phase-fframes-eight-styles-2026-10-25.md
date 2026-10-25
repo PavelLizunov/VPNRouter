@@ -730,3 +730,34 @@ system was found. Each style has a deliberate visual mechanism:
   The frozen evaluator helper verifies all seven files and reports blocked with
   baseline/current-best null and zero experiments. Production/exporter/media bytes
   remain unchanged from the frozen baseline source. No rollback performed.
+- Implemented and pushed correction `94e9eb6b49c72aff6a948e6651cf9ac0e13bc1dc`.
+  Exact-head provenance run `40217925329` passed in 42s without native execution.
+  Artifact `12608078778` is 1358515 bytes with 53 entries, SHA256
+  `3520393dc5a4ca358030978f42280813b50f517c7e91eb7100590265d7188418`.
+  Downloaded verification checks all 51 copied-file hashes/sizes, 12 hash-only
+  records, seven successful command receipts, the uploaded crate's locked SHA256
+  and all six caller member hashes. Prior collected-file hashes are unchanged.
+  Generated checksum remains honestly missing; native candidates remain unbound.
+- Exact local/remote/PR implementation head is green: inspect-native 42s, test
+  4m02s, characterization-windows 7m56s, go-test-windows 37s and grep 5s. Normal
+  render intentionally skipped. Watcher `bash-9b5b5fca3f02447a` and collection
+  `bash-ebc671ff63064ea6` exited 0. Final checks and verification are retained under
+  `out/native-provenance-40217925329/`. Failed run `40215299149` remains preserved.
+- Further read-only provenance: downloaded the exact Ubuntu x264 source descriptor,
+  orig/debian archives and amd64 binary package from the
+  [Ubuntu archive](https://archive.ubuntu.com/ubuntu/pool/universe/x/x264/), version
+  `2:0.164.3108+git31e19f9-1`. Both source archive SHA256/size values match the
+  descriptor; its PGP signature was not independently verified. Read the binary
+  package as data, without installation or package scripts: its libx264.so.164
+  SHA256 equals both the collected runner library and historical smoke record.
+  Five retained upstream source members also match the distro orig archive.
+  Patch series has only properly_detect_x32.patch touching common/common.h and
+  configure; matched frame/importer/encoder files are not directly patched.
+  Compilation effects, runtime importer selection and reproducible source-to-binary
+  build are not proven. Evidence is under `out/repeatability-analysis/x264-ubuntu-3108-1/`.
+- Current decision: provenance acquisition is verified, but historical renderer-to-
+  static-FFmpeg binding and safe complete capture/importer bounds remain unresolved.
+  Do not rerun completed diagnostics or infer a padding/heap/FP/x264 fix from this
+  collection. Next work is bounded source/binary/caller provenance only; no native
+  execution or configuration variant was added. Fresh strict-repeatability baseline,
+  performance candidates and confirmation remain pending, with 0/10 attempts.
