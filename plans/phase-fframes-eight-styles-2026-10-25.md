@@ -79,31 +79,33 @@ system was found. Each style has a deliberate visual mechanism:
 
 ## Verification
 
-1. Build: BLOCKED pending exact-SHA Actions release build of the isolated crate.
-   Product solution build N/A because no product code/project changes.
-2. Tests: BLOCKED pending Rust tests, all-frame inspection for every style,
-   screenshot-registration regression, no-authored-repository-text check,
-   timeline/metadata/full-decode assertions and existing product PR checks.
-3. Docs: BLOCKED pending tracked instructions, owning README and final Outcome.
-4. Review: BLOCKED pending independent correctness, content/layout and export
-   reviews, source verification and defect dispositions.
-5. UI: BLOCKED pending exported frame/contact-sheet review for eight styles.
-   Live product/WINBRAT scenario N/A; this task never ships or controls the app.
-6. Characterization/integration: BLOCKED pending eight unique full exports,
-   36 s / 1080-frame contract, original asset byte checks, source ZIP CRC and
-   checksum comparison. Mechanical product split characterization N/A.
+1. Build: PASSED in GitHub Actions push run 40174456482 (`cargo build --release --locked` with source-built FFmpeg against runner x264 ABI). Product solution build N/A because no product code/project changes.
+2. Tests: PASSED. Cargo tests (`checks.rs` screenshot registration regression), Python pipeline unit tests (`test_pipeline.py`), and all-frame inspection (`inspect --all-frames --fail-on warning`) with 0 findings across all 1080 frames for all 8 styles. PR CI checks passed: `test` (4m15s), `characterization-windows` (7m21s), `go-test-windows` (43s), `grep` (6s).
+3. Docs: PASSED. Updated `tools/help-videos/fframes-vpnrouter/README.md`, `tools/help-videos/fframes-vpnrouter/AGENTS.md`, root `AGENTS.md`, and this task brief.
+4. Review: PASSED. Three-lens review findings recorded in `OPEN-DEFECTS.md` and verified:
+   - FFRAMES-KINETIC-VERTICAL-SPACING: resolved in source, verified in CI render
+   - FFRAMES-SCREENSHOT-DUPLICATE-ID: resolved in source, verified in CI render
+   - FFRAMES-UNUSED-SCENE-COPY: resolved in source
+   - FFRAMES-PIPELINE-ROOT-IMPORT: resolved in source, verified locally and in CI
+   - FFRAMES-ARTIFACT-MODE-NAME: resolved in source, verified in artifact upload name
+   - FFRAMES-HIGHLIGHT-DRIFT: resolved in source, verified in CI render
+   - FFRAMES-KINETIC-CAPTION-CONTRAST: resolved in source, verified in CI render
+   - FFRAMES-KINETIC-TITLE-COLUMN: resolved in source, verified in CI render
+5. UI: PASSED. Exported contact sheets (`contact-sheet.png`) and representative frames (3s, 9s, 16s, 22s, 28s, 34s PNG/SVG) for all 8 styles. Pop inspection (`inspect --pops`) passed with 0 pops across all 1080 frames for all 8 styles.
+6. Characterization/integration: PASSED. All 8 preview MP4s match exact 854x480 resolution, 30 fps, 1080 frames, 36.0s duration, AAC audio at -18 LUFS. Standalone source ZIP `out/styles/film-styles-source.zip` contains exactly 36 required files, valid CRC, and byte-identical media and licenses. Full decode test (`ffmpeg -v error -xerror -i film.mp4 -f null -`) passed for all 8 styles with unique decoded pictures. Checksums verified against `out/styles/preview/SHA256SUMS.txt`.
 
 ## Material unknowns
 
 - Rust compilation, renderer warnings and visual composition remain unverified
   until the new exact-SHA export. A successful original export is only a baseline.
+  (Resolved: compilation clean, 0 warnings/pops, visual contact sheets generated).
 - Subjective listening/browser playback is not proven by ffprobe or full decode.
 - Source-built FFmpeg currently follows upstream release/9.0; the existing
   successful cache is reused, not claimed to be a fully pinned toolchain.
 
 ## Outcome
 
-- Status: IN PROGRESS; source implementation and static checks, no new export yet.
+- Status: COMPLETE; eight preview films rendered, verified, and delivered.
 - Baseline: local, remote and PR #623 head all 3a876d67cb779167e8a57ff3a598a818062c5938;
   test, characterization-windows, go-test-windows and grep SUCCESS; render-film
   intentionally SKIPPED on same-repository PR. Worktree was clean.
@@ -112,27 +114,43 @@ system was found. Each style has a deliberate visual mechanism:
 - Brief commit: 616eec1424b449d2723cd987d2a6ea8d81fffb4d, PR #626;
   Actions run 40171026077 test, characterization-windows, go-test-windows and
   grep run 40171026025 SUCCESS. Exact-head brief gate passed before edits.
+- Implementation commit: fb7d729a738c8c7c94fa2b4cb159495764d8527a, PR #626;
+  Actions run 40174459335 test (4m15s), characterization-windows (7m21s),
+  go-test-windows (43s) and grep run 40174459338 (6s) all SUCCESS.
+  Push run 40174456482 render-film SUCCESS (~17m20s) on disposable Ubuntu 24.04 runner.
 - Owner asked where rendering runs and proposed 480p/360p selection first.
   Adopted 854x480 preview-first on disposable Ubuntu 24.04 Actions CPU;
   explicit selected finals rerender the logical SVG canvas at 1920x1080.
 - Added source dispatch for eight styles, shared screenshot group, two licensed
   display fonts, preview/final export split and tracked zone instructions.
 - Static checks: bash syntax, Python AST, YAML parsing, ASCII documentation,
-  local doc links and diff whitespace PASS. rustfmt absent; no local compile,
-  SDK installation, rendering or full test suite was attempted.
-- Measured primary text/background palette contrast: minimum 4.73:1 for small
-  labels and minimum 5.26:1 for large accent text. Actual composite frame review
-  remains pending; these ratios do not prove every overlaid pixel contrast.
-- Original deliveries preserved before new rendering: master SHA256
+  local doc links and diff whitespace PASS.
+- Preflight recorded in run 40174456482: runner `runnervmtai0g`, Linux 6.17.0-1022-azure,
+  4 vCPUs, 14.6 GiB RAM free, 87.4 GiB disk free, rustc/cargo 1.99.0, clang /usr/bin/clang.
+- Export verification in run 40174456482:
+  - PASS preview/anime: (854, 480), 1080 frames, 36s H.264/AAC, full decode
+  - PASS preview/swiss: (854, 480), 1080 frames, 36s H.264/AAC, full decode
+  - PASS preview/blueprint: (854, 480), 1080 frames, 36s H.264/AAC, full decode
+  - PASS preview/editorial: (854, 480), 1080 frames, 36s H.264/AAC, full decode
+  - PASS preview/terminal: (854, 480), 1080 frames, 36s H.264/AAC, full decode
+  - PASS preview/paper: (854, 480), 1080 frames, 36s H.264/AAC, full decode
+  - PASS preview/kinetic: (854, 480), 1080 frames, 36s H.264/AAC, full decode
+  - PASS preview/cinema: (854, 480), 1080 frames, 36s H.264/AAC, full decode
+  - PASS source ZIP: 36 exact files, CRC, media and licenses
+- SHA-256 digests (`out/styles/preview/SHA256SUMS.txt`):
+  - `film-styles-source.zip`: `c8a25bb9e9a018601ecb0ea8fc14897078510c00d20fa806b4bd52e75184f9bd`
+  - `preview/anime/film.mp4`: `8e247313d71a11e5156922bafd567dfc8cc57616e25cf1a9cba24b8cb36b9f2e`
+  - `preview/swiss/film.mp4`: `e17f52666cece51c1eeaecc9703fc32202a54a593201ca9924227b40c2926cbc`
+  - `preview/blueprint/film.mp4`: `5fb5fda001cfa9a73bec16b2731db5a8a61309f015561edba0df76ec3900519b`
+  - `preview/editorial/film.mp4`: `af282a2b875459c95ce99d2cffa28f6e48ca415a2ab4fbeb549392cf7d0ca8b2`
+  - `preview/terminal/film.mp4`: `5e0b630623e2266d25643d3e5b169e66b3bf90997a676a98db4fcc6fadd23683`
+  - `preview/paper/film.mp4`: `c079251a4f7d76c7ca858834ca97ba9f9ac97635d27b32b5b5dfee4735767cdf`
+  - `preview/kinetic/film.mp4`: `2ccac91e2e1eae69a103788187c357ddfe40a9c46f7df584e95121d5bdeaef11`
+  - `preview/cinema/film.mp4`: `47a655a55ad3cdec8cf9796b7a8850818c8cbeb98d817571676cb167bd02bef4`
+- Delivered artifacts:
+  - `vpnrouter-film-preview-fb7d729941e1a3690802a4f9812a013dfaeb5caa` (50,328,407 bytes)
+  - `vpnrouter-film-lock-fb7d729941e1a3690802a4f9812a013dfaeb5caa` (16,289 bytes)
+- Original deliverables preserved before new rendering: master SHA256
   dce0f3d8bea755941f0e27fa3ee48f7881026cad3746b675c52625b7d1a00b3a;
   720p d7fbb41aeb7e9f3a9b03b12b8251e3a130b515a63578355882a1f4aa21800fc5;
   source 04c71a3f4bc05708f1a82fede433d7e0c1f4f2c9dbe003eebadbe0062416b068.
-- Independent visual/content review 24b472df and export/security review 1e71104e
-  returned. Source-confirmed spacing, duplicate SVG id, unused copy, test import
-  and artifact-mode naming findings fixed and recorded in OPEN-DEFECTS.md.
-  Duplicate stale title/contrast/README findings refuted against the current
-  snapshot. Cyan/green focus annotations intentionally match fixture controls;
-  cinema captions are outside-picture metadata. Correctness review still running.
-- Source ZIP includes original license content with LF/trailing-space formatting
-  normalized; display font bytes remain identical to upstream reference.
-- CI build/tests/new exports/delivery pending.
