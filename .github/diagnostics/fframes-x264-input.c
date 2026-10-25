@@ -1,9 +1,11 @@
 /* CI-only observation at the real x264 boundary; never changes encoder inputs. */
 #define _GNU_SOURCE
+/* Stack-only SHA256 avoids per-frame provider/EVP allocations in this observer. */
+#define OPENSSL_API_COMPAT 0x10100000L
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <inttypes.h>
-#include <openssl/evp.h>
+#include <openssl/sha.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -68,20 +70,18 @@ static void flush_trace(FILE *file)
 
 static void plane_hash(const uint8_t *data, int stride, int width, int height, char hex[65])
 {
-    unsigned char digest[EVP_MAX_MD_SIZE];
-    unsigned int size = 0;
+    unsigned char digest[SHA256_DIGEST_LENGTH];
+    SHA256_CTX ctx;
     if (!data || stride < width || width <= 0 || height <= 0)
         fail("invalid visible plane");
-    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-    if (!ctx || EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) != 1)
+    if (SHA256_Init(&ctx) != 1)
         fail("cannot initialize SHA256");
     for (int row = 0; row < height; ++row)
-        if (EVP_DigestUpdate(ctx, data + (size_t)row * (size_t)stride, (size_t)width) != 1)
+        if (SHA256_Update(&ctx, data + (size_t)row * (size_t)stride, (size_t)width) != 1)
             fail("cannot hash plane");
-    if (EVP_DigestFinal_ex(ctx, digest, &size) != 1 || size != 32)
+    if (SHA256_Final(digest, &ctx) != 1)
         fail("cannot finish SHA256");
-    EVP_MD_CTX_free(ctx);
-    for (unsigned int i = 0; i < size; ++i)
+    for (unsigned int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
         snprintf(hex + i * 2, 3, "%02x", digest[i]);
 }
 

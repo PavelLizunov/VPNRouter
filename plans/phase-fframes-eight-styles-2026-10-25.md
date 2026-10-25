@@ -396,4 +396,47 @@ system was found. Each style has a deliberate visual mechanism:
   and fixed with regressions. Follow-up `46c709ea` confirms both resolved:
   four contracts and 34 independent synthetic evidence cases pass. Observer
   timing perturbation and unobserved x264 metadata remain explicit limits.
+- Diagnostic implementation `8ea38c0c121b3afa993fd23e236284a11d98294e`
+  passed exact-head PR checks. Actions `40198389530` completed in 10m55s;
+  both watchers and artifact collection exited 0. Artifact `12601525490`
+  (`vpnrouter-repeatability-40198389530`, 107751176 bytes) was downloaded.
+- Recomputed analysis from all 16 real traces: every style/batch contains exactly
+  PTS 0..1079 and 45 encoder-open lifetimes of 24 frames. Pointer reuse between
+  encoder lifetimes is valid. Visible Y/U/V input hashes, all decoded frame rows,
+  audio, silent video and final/silent container bytes match between batches.
+  Downloaded media hashes match the saved runner hashes. Actual segment settings
+  are threads=1, lookahead_threads=1, sync_lookahead=0, deterministic=1.
+- The original failure did not reproduce in this instrumented pair. This is not
+  repeatability recovery, a baseline or evidence excluding the renderer/encoder.
+  Per-frame EVP allocations, hashing and synchronous trace flushing perturb the
+  process. Existing uninstrumented failures remain valid; V2 stays blocked with
+  no baseline/current best and 0/10 candidates. Local verification only parsed
+  saved traces and hashed file bytes; no local build/render/decode was run.
+- Next bounded diagnostic: remove per-frame EVP heap allocation from the CI-only
+  hook, retain exact SHA256 visible-plane coverage and byte-transparency smoke,
+  and compare one uninstrumented pair with one reduced-allocation instrumented
+  pair on the same runner/source. Record frame scalar metadata/strides if needed
+  to separate identical visible pixels from hidden input state. A matching pair
+  remains inconclusive. Do not alter production Rust/media/encoder options or
+  either frozen evaluator. Test real extracted shell/Python, malformed traces,
+  failure preservation and probe smoke; independent source review before push.
+  Heavy work remains exact-SHA disposable CI. Revert only the exact diagnostic
+  change if invalid; preserve all old evidence and delivered exports.
+- Reduced-allocation diagnostic local checks: 6 diagnostic, 7 frozen evaluator
+  and 3 frozen workflow contracts pass, including the actual extracted loop with
+  plain/traced pairing, preload removal and export/inspect/decode error injection.
+  YAML/Bash/Python parsing, scoped ASCII additions and diff checks pass. All seven
+  frozen V2 files verify; helper still reports blocked, 0 candidates/3 records.
+  All eight delivered preview MP4s and source ZIP retain their original hashes.
+- Independent source review `5a30fc47` found no confirmed blocking defect and
+  independently passed the 16 contracts plus 13 all-eight synthetic workflow
+  scenarios, including every failure stage in every batch. Stack SHA256 lifetime,
+  actual API calls, unchanged row bounds, pair identity and cleanup were checked.
+  Real C compile/transparency smoke and the four-batch diagnostic remain CI-only;
+  hashing/flush/stack-layout effects and unobserved padding/metadata remain limits.
+- Security/test review `54a119af` independently passed all 16 contracts and a
+  45-segment trace fixture, confirmed preload/path/permission isolation and no
+  new acceptance receipts. No confirmed blocking defect was found. Failed batch
+  artifacts can still contain stale prior-style files, as previously recorded;
+  they are not accepted exports. No product or frozen source changed.
 - Fresh baseline, paired optimization and confirmation remain pending.

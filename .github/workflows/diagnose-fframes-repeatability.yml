@@ -107,7 +107,7 @@ jobs:
               assert row[3:] == expected
           print('PASS transparent encoded bytes and exact visible-plane SHA256 smoke test')
           PY
-      - name: Compare two exact-source batches and repeated decodes
+      - name: Compare traced and plain exact-source pairs
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
@@ -126,15 +126,20 @@ jobs:
                   json.dump(value, stream, indent=2)
                   stream.write('\n')
           (out/'ffmpeg-version.txt').write_text(subprocess.check_output(['ffmpeg', '-version'], text=True))
-          batches = []
-          for index in range(2):
+          # Plain/traced/traced/plain, with source and renderer settings unchanged.
+          execution_order = ((2, False), (0, True), (1, True), (3, False))
+          assert 'LD_PRELOAD' not in os.environ and 'FFRAMES_INPUT_TRACE' not in os.environ
+          batches = {}
+          for index, traced in execution_order:
               folder = out/f'batch-{index}'
               folder.mkdir()
               traces = folder/'input-traces'
               traces.mkdir()
               try:
-                  os.environ['FFRAMES_INPUT_TRACE'] = str(traces)
-                  os.environ['LD_PRELOAD'] = str(Path(os.environ['RUNNER_TEMP'])/'fframes-x264-input.so')
+                  save(folder/'observation.json', {'input_probe': traced, 'metric': None})
+                  if traced:
+                      os.environ['FFRAMES_INPUT_TRACE'] = str(traces)
+                      os.environ['LD_PRELOAD'] = str(Path(os.environ['RUNNER_TEMP'])/'fframes-x264-input.so')
                   try:
                       bench.run_export(root, root/'target', folder/'export.log')
                   finally:
@@ -158,7 +163,7 @@ jobs:
                           '-f', 'framehash', '-hash', 'sha256', '-'], text=True)
                       (folder/f'{style}-frames.sha256').write_text(framehash)
                   save(folder/'repeated-decodes.json', repeated)
-                  batches.append((signatures, repeated))
+                  batches[index] = (signatures, repeated)
               finally:
                   if (root/'out/styles').is_dir():
                       shutil.copytree(root/'out/styles', folder/'outputs')
@@ -167,21 +172,30 @@ jobs:
 
               'github_run_id': os.environ['GITHUB_RUN_ID'], 'metric': None,
               'not_a_measurement_or_quality_receipt': True, 'styles': {}}
-          for style in bench.STYLES:
-              one, two = (batch[0][style] for batch in batches)
-              rows = []
-              for index in range(2):
-                  rows.append([line for line in (out/f'batch-{index}/{style}-frames.sha256').read_text().splitlines()
-                      if line and not line.startswith('#')])
-              changed = [i for i, (a, b) in enumerate(zip(*rows)) if a != b]
-              summary['styles'][style] = {'between_batches': {kind: one[kind] == two[kind] for kind in ('video', 'audio')},
-                  'same_file_redecode': [{kind: batch[0][style][kind] == batch[1][style][kind]
-                      for kind in ('video', 'audio')} for batch in batches],
-                  'silent_video_equal': batches[0][1][style]['silent_video'] == batches[1][1][style]['silent_video'],
-                  'frame_rows': [len(r) for r in rows], 'different_frame_rows': len(changed),
-                  'first_different_frames': changed[:12]}
+          plain = {**summary, 'styles': {}}
+          for indices, report in (((0, 1), summary), ((2, 3), plain)):
+              report['batch_indices'] = list(indices)
+              report['input_probe'] = indices == (0, 1)
+              for style in bench.STYLES:
+                  one, two = (batches[index][0][style] for index in indices)
+                  rows = []
+                  for index in indices:
+                      rows.append([line for line in (out/f'batch-{index}/{style}-frames.sha256').read_text().splitlines()
+                          if line and not line.startswith('#')])
+                  assert [len(row) for row in rows] == [1080, 1080]
+                  changed = [i for i, (a, b) in enumerate(zip(*rows)) if a != b]
+                  report['styles'][style] = {'between_batches': {kind: one[kind] == two[kind] for kind in ('video', 'audio')},
+                      'same_file_redecode': [{kind: batches[index][0][style][kind] == batches[index][1][style][kind]
+                          for kind in ('video', 'audio')} for index in indices],
+                      'silent_video_equal': batches[indices[0]][1][style]['silent_video'] == batches[indices[1]][1][style]['silent_video'],
+                      'frame_rows': [len(r) for r in rows], 'different_frame_rows': len(changed),
+                      'first_different_frames': changed[:12]}
+          for index in (2, 3):
+              assert not list((out/f'batch-{index}/input-traces').iterdir()), 'Probe leaked into plain batch'
           save(out/'summary.json', summary)
-          print(json.dumps(summary, indent=2))
+          save(out/'plain-summary.json', plain)
+          save(out/'execution-order.json', [{'batch': index, 'input_probe': traced} for index, traced in execution_order])
+          print(json.dumps({'traced': summary, 'plain': plain}, indent=2))
           PY
           python3 "$GITHUB_WORKSPACE/diagnostic-code/.github/diagnostics/analyze_fframes_input.py" out/repeatability
       - name: Upload diagnostic evidence only
