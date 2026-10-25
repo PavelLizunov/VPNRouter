@@ -169,6 +169,11 @@ public static partial class ConfigGenerator
                                             ? Math.Min(mtu, AwgEndpointMtu)
                                             : mtu,
                 AutoRoute               = settings.Tun.AutoRoute,
+                // Since 1.14, sing-box also runs native resolvectl helpers by default.
+                // They can prompt and retain the TUN fd after exit, breaking immediate
+                // restarts. Our Unix DNS adapter owns noninteractive resolver steering;
+                // the explicit hijack-dns route below still handles captured DNS.
+                DnsMode                 = OperatingSystem.IsLinux() ? "disabled" : null,
                 StrictRoute             = false,
                 RouteExcludeAddress     = routeExcludes.Count > 0
                                             ? routeExcludes

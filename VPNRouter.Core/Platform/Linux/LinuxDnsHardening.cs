@@ -101,7 +101,7 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
             }
             else
             {
-                logger?.Warning(
+                logger?.Error(
                     "[LinuxDnsHardening] FAILED to pin {Iface} DNS -> {Target} (resolvectl non-zero — " +
                     "polkit/CAP_NET_ADMIN missing? DNS is NOT hardened and may leak)", iface, dnsTarget);
             }

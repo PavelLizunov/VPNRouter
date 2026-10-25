@@ -6,6 +6,19 @@ namespace VPNRouter.Tests;
 
 public class ConfigGeneratorTests
 {
+    [Fact]
+    public void LinuxTun_DnsIsOwnedByTheApplication_NotNativeInteractiveHelpers()
+    {
+        var config = ConfigGenerator.Generate(CreateProfile(), [], CreateSettings());
+        Assert.Equal(OperatingSystem.IsLinux() ? "disabled" : null, config.Inbounds.Single().DnsMode);
+        Assert.Contains(config.Route.Rules, rule => rule.Action == "hijack-dns");
+        var json = ConfigGenerator.Serialize(config);
+        if (OperatingSystem.IsLinux())
+            Assert.Contains("\"dns_mode\": \"disabled\"", json);
+        else
+            Assert.DoesNotContain("\"dns_mode\"", json);
+    }
+
     private static AppSettings CreateSettings(int serverCount = 1)
     {
         var settings = new AppSettings

@@ -157,3 +157,7 @@ severity. These metadata endpoints require no VPN connection or network request.
    - A write-plus-flush stalled for three seconds, or a broken output pipe, triggers bounded teardown. Delivery to a dead peer is not guaranteed; clients must not replay mutations automatically.
 6. **Graceful Shutdown**:
    - EOF on standard input, SIGINT, or SIGTERM cancels active operations and starts engine teardown. Handler disposal has a 20-second deadline, allowing the session's three-second gate wait and 15-second bounded stop to finish. Output drain runs concurrently. An unresponsive engine can outlive these deadlines.
+
+Generated Linux TUNs disable sing-box's implicit native-DNS helper. VPNRouter owns
+resolver changes with noninteractive commands; a helper waiting for polkit must
+not retain the TUN device across a settings restart.
