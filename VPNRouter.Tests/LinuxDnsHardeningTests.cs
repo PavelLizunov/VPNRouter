@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using VPNRouter.Core.Platform.Linux;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 using Xunit;
@@ -98,6 +99,47 @@ public class LinuxDnsHardeningTests : IDisposable
 
         Assert.False(File.Exists(_statePath));
         Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("dns"));
+    }
+
+    [Fact]
+    public void Apply_local_address_never_changes_loopback_dns()
+    {
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "resolvectl", Ok());
+        fake.OnRun(r => r.ExecutablePath == "ip", Ok("local 172.19.0.1 dev lo table local"));
+        new LinuxDnsHardening(fake, _statePath).Apply("172.19.0.1", null);
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("dns"));
+        Assert.False(File.Exists(_statePath));
+    }
+
+    [Theory]
+    [InlineData("172.19.0.1/30", "172.19.0.2")]
+    [InlineData("10.7.0.1/24", "10.7.0.2")]
+    [InlineData("172.19.0.2/30", null)]
+    [InlineData("172.19.0.1/32", null)]
+    [InlineData("invalid", null)]
+    [InlineData("::1/64", null)]
+    public void Dns_target_is_the_nonlocal_tun_peer(string cidr, string? target)
+        => Assert.Equal(target, LinuxDnsHardening.DeriveDnsTarget(cidr));
+
+    [Theory]
+    [InlineData("full", "include", false, true, "generated", true)]
+    [InlineData("full", "include", false, true, "subscribe", true)]
+    [InlineData("split", "include", false, true, "generated", false)]
+    [InlineData("split", "include", true, true, "generated", true)]
+    [InlineData("split", "exclude", false, true, "generated", true)]
+    [InlineData("full", "include", false, false, "generated", false)]
+    [InlineData("full", "include", false, true, "custom", false)]
+    public void Resolver_steering_follows_generated_routing_policy(
+        string mode, string appsMode, bool strict, bool autoRoute, string configMode, bool expected)
+    {
+        var settings = new AppSettings();
+        settings.App.RoutingMode = mode;
+        settings.App.RoutingAppsMode = appsMode;
+        settings.App.StrictDns = strict;
+        settings.App.ConfigMode = configMode;
+        settings.Tun.AutoRoute = autoRoute;
+        Assert.Equal(expected, LinuxDnsHardening.ShouldSteerResolver(settings));
     }
 
     [Fact]

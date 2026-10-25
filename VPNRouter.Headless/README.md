@@ -6,6 +6,12 @@
 
 The Arch package is built and installed in CI; see [packaging](../packaging/arch/README.md).
 Linux firewall kill-switch and DNS-lockdown capabilities remain unavailable.
+On Linux with systemd-resolved, generated full-tunnel, exclude-app and strict-DNS
+sessions steer the system resolver through the TUN. The Arch package grants the
+active local session only DNS/domain/revert operations on `VPNRouter-TUN`, without
+password prompts. This is resolver routing, not firewall DNS lockdown; custom
+configs, manually named TUN links and hosts without resolved need their own DNS
+integration. Failed steering is logged and does not stop the VPN.
 Production uses only `/usr/lib/vpnrouter-headless/runtime/sing-box`, trusting package
 root ownership, non-writable file/ancestor permissions and effective/permitted
 CAP_NET_ADMIN. It does not select a user-data binary or pin its SHA.

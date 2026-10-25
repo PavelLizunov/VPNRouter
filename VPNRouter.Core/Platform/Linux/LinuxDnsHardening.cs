@@ -2,6 +2,9 @@ using System.Text.Json;
 using Serilog;
 using VPNRouter.Core.Platform.Unix;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Models;
+using System.Net;
+using System.Net.Sockets;
 
 namespace VPNRouter.Core.Platform.Linux;
 
@@ -14,6 +17,35 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
     private const string Ip = "ip";
 
     private const string DefaultRoutingDomain = "~.";
+
+    // Resolver steering is needed even without firewall DNS lockdown: DHCP DNS on
+    // a private LAN bypasses the TUN's mandatory private-route exclusions.
+    internal static bool ShouldSteerResolver(AppSettings settings)
+        => settings.Tun.AutoRoute
+            && !string.Equals(settings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(settings.App.RoutingMode, "full", StringComparison.OrdinalIgnoreCase)
+                || settings.App.StrictDns
+                || string.Equals(settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase));
+
+    internal static string? DeriveDnsTarget(string? tunIpv4Cidr)
+    {
+        // sing-tun uses the next address as its virtual peer. The interface's own
+        // address is a local route (dev lo), so it cannot receive DNS via the TUN.
+        var parts = tunIpv4Cidr?.Split('/');
+        if (parts is not { Length: 2 }
+            || !IPAddress.TryParse(parts[0], out var address)
+            || address.AddressFamily != AddressFamily.InterNetwork
+            || !int.TryParse(parts[1], out var prefix) || prefix < 1 || prefix > 30)
+            return null;
+        var bytes = address.GetAddressBytes();
+        var value = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes);
+        var mask = uint.MaxValue << (32 - prefix);
+        var next = value + 1;
+        if ((next & mask) != (value & mask) || (next | mask) == uint.MaxValue)
+            return null;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes, next);
+        return new IPAddress(bytes).ToString();
+    }
 
     public LinuxDnsHardening(IProcessRunner? runner = null, string? statePath = null)
     {
@@ -45,6 +77,12 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
                 logger?.Warning(
                     "[LinuxDnsHardening] Apply: could not resolve the TUN interface for {Target} " +
                     "(ip route get returned no device) — skipping", dnsTarget);
+                return;
+            }
+
+            if (iface == "lo")
+            {
+                logger?.Warning("[LinuxDnsHardening] Refusing a local DNS target on loopback");
                 return;
             }
 

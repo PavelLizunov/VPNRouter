@@ -22,6 +22,7 @@ import urllib.error
 import urllib.request
 
 ARCH_DIR = Path(__file__).resolve().parent
+RESOLVED_POLICY = "usr/share/polkit-1/rules.d/49-vpnrouter-headless-resolved.rules"
 if str(ARCH_DIR) not in sys.path:
     sys.path.insert(0, str(ARCH_DIR))
 
@@ -567,6 +568,14 @@ def inspect_package(pkg_file: Path, work_dir: Path) -> None:
                     continue
                 if base_name.upper() == ".INSTALL" or norm.endswith(".install"):
                     raise ValueError(f"Unexpected package install script: {norm}")
+                if norm == RESOLVED_POLICY and member.isreg():
+                    policy = tf.extractfile(member)
+                    expected = (ARCH_DIR / Path(RESOLVED_POLICY).name).read_bytes()
+                    if member.mode != 0o644 or policy is None or policy.read(len(expected) + 1) != expected:
+                        raise ValueError("Unexpected resolved policy")
+                    continue
+                if member.isdir() and norm in ("usr/share", "usr/share/polkit-1", "usr/share/polkit-1/rules.d"):
+                    continue
                 if norm in allowed_metadata or norm in ("usr", "usr/lib", "usr/lib/vpnrouter-headless"):
                     continue
                 if norm.startswith("usr/lib/vpnrouter-headless/"):
@@ -579,6 +588,8 @@ def inspect_package(pkg_file: Path, work_dir: Path) -> None:
         manifest_root = verify_pkg_dir / "usr" / "lib" / "vpnrouter-headless"
         if not (manifest_root / "manifest.json").is_file():
             raise FileNotFoundError("Package missing required manifest.json")
+        if not (verify_pkg_dir / RESOLVED_POLICY).is_file():
+            raise FileNotFoundError("Package missing required resolved policy")
         staging_tools.verify_manifest(manifest_root)
         license_evidence.verify_license_evidence(manifest_root)
     finally:
@@ -704,6 +715,10 @@ def main(argv: list[str] | None = None) -> int:
     stage_root = work_dir / "stage"
     payload_dir = stage_root / "usr" / "lib" / "vpnrouter-headless"
     payload_dir.mkdir(parents=True, mode=0o755)
+    policy_dest = stage_root / RESOLVED_POLICY
+    policy_dest.parent.mkdir(parents=True, mode=0o755)
+    shutil.copyfile(ARCH_DIR / policy_dest.name, policy_dest)
+    os.chmod(policy_dest, 0o644)
 
     for item in sorted(publish_dir.iterdir()):
         dest_item = payload_dir / item.name
@@ -786,6 +801,7 @@ def main(argv: list[str] | None = None) -> int:
         "packaging_files_sha256": {
             "PKGBUILD": compute_file_sha256(template_pkgbuild),
             "vpnrouter-headless.install": compute_file_sha256(ARCH_DIR / "vpnrouter-headless.install"),
+            "49-vpnrouter-headless-resolved.rules": compute_file_sha256(ARCH_DIR / Path(RESOLVED_POLICY).name),
             "staging_tools.py": compute_file_sha256(staging_tools_py),
             "build_package.py": compute_file_sha256(build_package_py),
             "license_evidence.py": compute_file_sha256(license_evidence_py),

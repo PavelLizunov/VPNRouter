@@ -245,12 +245,22 @@ public partial class VpnEngine : IDisposable
             _scanResult?.ProcessNames ?? [],
             settings);
 
-        if (settings.App.DnsLeakLockdown)
+        ApplyUnixDnsSettings(settings);
+
+        await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
+    }
+
+    private void ApplyUnixDnsSettings(AppSettings settings)
+    {
+        var isLinux = OperatingSystem.IsLinux();
+        if (settings.App.DnsLeakLockdown
+            || (isLinux && Platform.Linux.LinuxDnsHardening.ShouldSteerResolver(settings)))
         {
             try
             {
-                var gateway = VPNRouter.Core.Platform.Unix.MacDnsParsers
-                    .DeriveDnsTarget(settings.Tun?.Ipv4Address);
+                var gateway = isLinux
+                    ? Platform.Linux.LinuxDnsHardening.DeriveDnsTarget(settings.Tun?.Ipv4Address)
+                    : Platform.Unix.MacDnsParsers.DeriveDnsTarget(settings.Tun?.Ipv4Address);
                 if (!string.IsNullOrEmpty(gateway))
                     _unixDns.Apply(gateway!, _logger);
             }
@@ -259,8 +269,10 @@ public partial class VpnEngine : IDisposable
                 _logger?.Warning(ex, "[VpnEngine] Unix DNS hardening Apply failed (non-fatal)");
             }
         }
-
-        await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
+        else
+        {
+            _unixDns.Restore(_logger);
+        }
     }
 
     public async Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct = default, bool forceRestart = false)
@@ -399,6 +411,8 @@ public partial class VpnEngine : IDisposable
             TunFingerprint = newTunFingerprint;
             ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
             configCommitted = true;
+            // Restart replaces the link and resolved drops its per-link settings.
+            ApplyUnixDnsSettings(settings);
             ResetFailoverContext(settings);
             UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
