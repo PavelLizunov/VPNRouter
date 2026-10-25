@@ -163,4 +163,81 @@ system was found. Each style has a deliberate visual mechanism:
 - Audio measurement reports -18.0 LUFS integrated loudness and -6.9 dBFS peak for all eight files. This is a measurement, not a subjective listening pass. Original CC0 music and all supplied image bytes are retained.
 - Before reconciliation, local Git, the remote task branch and PR #626 all matched 2bcc6c36cda9a9381273fcbf40d752cd56a9cfe6. Run 40175985324 passed `test` (4m6s), `characterization-windows` (6m24s), `go-test-windows` (35s); guard 40175985321 passed (6s). Render 40175985328 was intentionally skipped. The collected watcher exited 0.
 - Documentation delivery gate: PASS for evidence-backed numbers, scoped facts and explicit limits. Runtime/UI product tests are N/A for this evidence-only correction; source/render evidence remains tied to the implementation SHA.
-- Next owner action: select one or more of anime, swiss, blueprint, editorial, terminal, paper, kinetic or cinema. Then render only those styles at 1920x1080 from source, verify the new exact-SHA output, and deliver selected finals. No final-resolution run has been requested or launched.
+- Owner amendment after delivery: defer style selection and optimize the existing pipeline, including research into ready-made solutions. No final-resolution run has been requested or launched. The earlier delivery and acceptance limits above remain unchanged.
+
+## Performance amendment - 2026-10-25
+
+### Why and scope
+
+- Reduce actual build/export turnaround, not the verification surface. Reuse this
+  task branch and PR #626 because the amendment depends on its unmerged renderer
+  and branch-scoped Cargo cache. Accepted starting head: `314e006651a5b5fa61558744859a66cca0fd9213`.
+- Own only the style exporter, renderer-local performance evaluator/documentation,
+  render workflow and this task/defect record. Preserve Rust scene code, source
+  images/fonts/music/licenses, original deliveries and delivered previews.
+- Excluded: engine migration, product runtime/root README changes, SDK installation
+  on the control plane, merge/release/deployment and unselected 1080p exports.
+  Disposable 480p benchmark outputs are test fixtures, not replacement deliveries.
+- Risk: MEDIUM, shell/process/CI changes. Rollback: revert each attributable
+  candidate commit using its exact SHA; never reset published history or outputs.
+
+### Method and fixed scope
+
+1. Complete two bounded, primary-source research assignments: built-in animation
+   APIs/examples and existing build/cache solutions. Record compatibility,
+   licenses, uncertainty and an Adopt/Extend/Compose/Build verdict before adoption.
+2. Add an immutable evaluator before performance edits. Fix one optimization part:
+   `warm-export`, covering build/test invocation, all-eight 480p export, inspection,
+   checksums, archive and full consumer verification. Cache/cold-build observations
+   are separate diagnostics, not counted as accepted optimization attempts.
+3. Use short mode: at most 10 candidate attempts and stop after 3 consecutive
+   non-KEEP outcomes. Hypothesis lanes: shared soundtrack preparation, native
+   renderer concurrency, and duplicate orchestration work only if fresh stage
+   profiles justify them. One attributable implementation change per candidate.
+4. Use disposable Ubuntu 24.04 Actions CPU runners at exact SHAs with recorded
+   CPU/load/RAM/swap/disk/jobs/toolchain preflight. No build/render/full test on
+   the control plane. Confirm the existing cache restoration rather than assume it.
+5. Measure a fresh warm baseline and stage profile, then balanced AB/BA comparisons
+   on the same runner. Search: three paired all-eight exports, at most one retest
+   up to five pairs. Holdout confirmation: fresh all-eight exports with reversed
+   pair order, independent warm-up and evidence. Primary metric: complete warm
+   export wall seconds; report cold/cache/setup time separately.
+6. Keep only quality-passing improvements above both 2% and 1 second, and above
+   max(0.5 seconds, 2 * paired MAD). Confirmation also limits peak RSS growth to
+   10%. Compare original-versus-combined implementation freshly before completion;
+   with one fixed part its confirmation is also the overall E2E comparison.
+
+### Quality and negative controls
+
+- Keep all existing Rust/Python checks, 1080-frame inspection/continuity coverage,
+  full H.264/AAC decode, dimensions/fps/duration/title checks, eight distinct
+  decoded pictures, checksums and exact source/media/license ZIP fidelity.
+- Lock the existing consumer checker separately from candidate code. Before its
+  lock, run mutation controls for corrupt checksums, wrong dimensions/title and
+  duplicate/invalid style selection. Archive mutations must be rejected too.
+- Hash protected Rust/media/license files; no candidate may silently change them.
+  Require full decoded video and PCM audio equality against contemporaneous
+  control outputs, not just unique container hashes. Subjective browser motion
+  and listening acceptance remain outside this performance claim.
+
+### Six amendment gates
+
+1. Build: PENDING exact-SHA locked release build on CI; product build N/A.
+2. Tests: PENDING Rust/Python suite, evaluator negative controls and full exports.
+3. Documentation: brief recorded before implementation; research/outcome pending.
+4. Independent review: PENDING correctness, test/evidence and process/CI lenses.
+5. Product UI/WINBRAT: N/A, no product/UI/installed-app changes.
+6. Integration: PENDING paired raw measurements, quality/resource gates, fresh
+   confirmation, native report delivery, exact remote head and green PR checks.
+
+### Current observations and unknowns
+
+- Historical run `40174456482`: cold release compilation 14m47s; export/validation
+  after tests about 134s; per-style rendering 6.1-7.7s. These are not fresh pairs.
+- Cache `9470884563` exists on this branch (965244878 bytes); its restore and the
+  next build duration have not been measured. Do not claim a cache speedup yet.
+- Export lines 51-56 repeat identical soundtrack filtering/AAC encoding per style.
+  Reusing one prepared track is a hypothesis, not an accepted speed improvement.
+- Existing FFmpeg source build avoids the proven x264 ABI mismatch; preserve it.
+  Mutable upstream release/9.0 remains a reproducibility limitation.
+- Implementation, campaign ledger and final outcome: PENDING.
