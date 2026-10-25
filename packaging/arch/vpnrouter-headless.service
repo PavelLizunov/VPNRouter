@@ -1,0 +1,12 @@
+[Unit]
+Description=VPNRouter independent session service
+
+[Service]
+Type=exec
+ExecStart=/usr/lib/vpnrouter-headless/VPNRouter.Headless --service
+UMask=0077
+RuntimeDirectory=vpnrouter-headless
+RuntimeDirectoryMode=0700
+KillMode=mixed
+TimeoutStopSec=45s
+Restart=no

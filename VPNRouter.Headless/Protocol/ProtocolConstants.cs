@@ -22,6 +22,7 @@ public static class ProtocolConstants
         "snapshot",
         "connect",
         "disconnect",
+        "quit",
         "cancel",
         "servers.list",
         "servers.import",

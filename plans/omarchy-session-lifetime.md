@@ -47,3 +47,23 @@ ip rules/routes before/after. Also test daemon crash and hung-stop recovery.
 This round covers EOF wiring with a fake engine and reads existing Core tests;
 it cannot establish kernel route cleanup. Arch CI uses offline smoke; the
 optional TUN smoke has auto_route=false and does not test EOF while connected.
+
+## Option A candidate (D3)
+
+Implemented on separate lifetime branches; not merged into the MVP/PR 622.
+`--service` owns backend and shared dispatcher; `--attach` relays the same NDJSON.
+The systemd user unit starts on demand, independent of graphical-session.target.
+Socket mode is 0600 in a 0700 runtime directory, SO_PEERCRED requires same UID;
+nonblocking flock locks protect data-directory exclusivity and stale-socket
+cleanup. EOF/write failure detaches a controller, preserving operations and
+session state. One controller at a time; reattach receives a fresh state event,
+and read-only snapshot bypasses ordinary admission under the bounded control
+budget. Explicit disconnect stops the session; quit terminates the service.
+Stdio keeps EOF teardown. The plugin falls back only when the unit is absent or
+a local payload is selected, never after a failure of an installed service.
+
+Automated and offline VM evidence is recorded in the D3 task outcome. This
+candidate cannot yet establish connected-session, TUN or egress survival across
+a shell restart: connecting is not authorized in D3. Linux kill-switch remains
+unavailable; service/core crash, forced cgroup kill, logout and hung-stop recovery
+remain separate acceptance risks.

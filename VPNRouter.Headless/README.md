@@ -1,6 +1,6 @@
 # VPNRouter.Headless
 
-`VPNRouter.Headless` is the CLI daemon and standard I/O NDJSON protocol adapter for the Omarchy Quattro shell plugin (`io.github.pavellizunov.vpnrouter`). It connects native QML widgets and services to `VPNRouter.Core` and the underlying sing-box engine without requiring Avalonia desktop dependencies.
+`VPNRouter.Headless` is the CLI daemon and NDJSON protocol adapter for the Omarchy Quattro shell plugin (`io.github.pavellizunov.vpnrouter`). It connects native QML widgets and services to `VPNRouter.Core` and the underlying sing-box engine without requiring Avalonia desktop dependencies.
 
 ## Development status
 
@@ -18,14 +18,24 @@ regressions. Exact-snapshot outcomes and remaining live acceptance gaps are in
 [the integration record](../plans/phase-omarchy-integration-2026-10-22.md) and
 [the defect ledger](../plans/OPEN-DEFECTS.md).
 
-The plugin starts Headless as a child over stdio. Closing or restarting the shell
-stops the active VPN; traffic can then go directly because Linux has no kill-switch.
-Headless does not restore the previous connection automatically. See
-[session lifetime options](../plans/omarchy-session-lifetime.md).
+The lifetime candidate uses `vpnrouter-headless.service` (systemd user service)
+and a private Unix socket. The service owns the session independently of the
+shell. Detaching a client preserves the session and its admitted operation;
+reattaching sends a fresh state event, and `snapshot` remains available during
+an operation. A second controller receives `controller_busy` and is closed.
+The coordinated plugin starts the unit and runs `--attach`. Without that unit
+(or with a plugin-local payload), it falls back to stdio: closing or restarting
+the shell then stops the active VPN. No automatic reconnect or Linux kill-switch
+is provided. A real connected session across shell restart still requires live
+acceptance; see [session lifetime](../plans/omarchy-session-lifetime.md).
 
 ## Usage
 
 ```bash
+# Start the independent Linux session service
+systemctl --user start vpnrouter-headless.service
+VPNRouter.Headless --attach
+
 # Run over standard input and output
 VPNRouter.Headless --stdio
 
@@ -35,12 +45,15 @@ VPNRouter.Headless --stdio --data-dir /path/to/isolated/datadir
 
 ### CLI Arguments
 
-- `--stdio`: Launches the protocol loop over `stdin` and `stdout`. Required.
+- Select exactly one mode: `--stdio`, `--service`, or `--attach`.
+- `--stdio`: Runs the protocol over `stdin` and `stdout`, with EOF teardown.
+- `--service` (Linux): Owns the session at `$XDG_RUNTIME_DIR/vpnrouter-headless/control.sock` (0600 in a 0700 directory). Same-UID peers only; socket and data-directory locks reject another daemon. A stale socket is replaced only while holding both locks.
+- `--attach` (Linux): Relays standard I/O to that socket; EOF or SIGTERM detaches only this client. It cannot take `--data-dir`.
 - `--data-dir <ABSOLUTE_PATH>`: Optional directory path for isolated configurations and tests. Must be an absolute path. The CLI sets Core AppPaths before creating the backend. Offline profile reads use only this directory's cache, without falling back to the process-global data tree; bundled profiles remain available. Explicit local profile sources still refer to their configured paths. This option does not isolate TUN/network resources or grant permission to connect.
 
 ## Protocol Specification (v1)
 
-Communication is conducted via newline-delimited UTF-8 JSON frames over standard input and output. Standard output is reserved strictly for protocol frames; diagnostic logs or arbitrary text are never emitted to stdout.
+Communication uses identical newline-delimited UTF-8 JSON frames over standard I/O or the private Unix socket. Standard output is reserved strictly for protocol frames; diagnostic logs or arbitrary text are never emitted to stdout.
 
 ### Request Format
 
@@ -141,7 +154,7 @@ severity. These metadata endpoints require no VPN connection or network request.
    - Error messages are fixed, sanitized descriptions. They never echo input payloads, inner exception text, stack traces, subscription URLs, or credentials.
 4. **Concurrency and Urgent Control**:
    - At most one ordinary operation may run concurrently. Additional ordinary requests receive an immediate `busy` error response.
-   - `cancel` and `disconnect` bypass the ordinary execution slot once admitted; invalid control parameters are rejected before cancellation effects. They cannot bypass blocked transport input.
+   - `cancel`, `disconnect` and `quit` bypass the ordinary execution slot once admitted; invalid control parameters are rejected before cancellation effects. They cannot bypass blocked transport input.
    - Handler calls run on workers after synchronous slot reservation. A blocking handler does not occupy the reader, but retains its slot until it settles; this is not forced interruption of synchronous work.
    - Mutations reject cancellation observed before invoking their mutation action. Later cancellation does not interrupt synchronous persistence; a failed connected-session apply uses guarded compensation.
 5. **Output Queue and Backpressure**:
@@ -150,4 +163,14 @@ severity. These metadata endpoints require no VPN connection or network request.
    - Responses drain while the transport remains usable. Temporary backpressure pauses input admission. EOF cancels pending response enqueues; keep stdin open until receiving required responses.
    - A write-plus-flush stalled for three seconds, or a broken output pipe, triggers bounded teardown. Delivery to a dead peer is not guaranteed; clients must not replay mutations automatically.
 6. **Graceful Shutdown**:
-   - EOF on standard input, SIGINT, or SIGTERM cancels active operations and starts engine teardown. Handler disposal has a 20-second deadline, allowing the session's three-second gate wait and 15-second bounded stop to finish. Output drain runs concurrently. An unresponsive engine can outlive these deadlines.
+   - In stdio mode, EOF on standard input, SIGINT, or SIGTERM cancels active operations and starts engine teardown. Handler disposal has a 20-second deadline, allowing the session's three-second gate wait and 15-second bounded stop to finish. Output drain runs concurrently. An unresponsive engine can outlive these deadlines.
+
+In service mode, client EOF, broken pipes and output stalls detach the controller
+without cancelling its admitted operation. `disconnect` stops the session while
+keeping the service available. `quit` disconnects and terminates the service; its
+last response is best-effort. Service SIGTERM cancels active work and disposes the
+backend with the same bounded stop. The unit uses `KillMode=mixed` and a 45-second
+stop deadline, so Headless gets SIGTERM before systemd's final cgroup SIGKILL.
+The service is started on demand, with no graphical-session dependency or auto
+restart. Logout, service/core crashes, forced kills, and machine shutdown are
+separate boundaries; the candidate does not enable lingering or restore intent.

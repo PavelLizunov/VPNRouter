@@ -1,8 +1,11 @@
 # VPNRouter Headless for Arch Linux
 
 Builds `vpnrouter-headless-0.1.0.r<run_number>.g<sha7>-<run_attempt>-x86_64.pkg.tar.zst` for the Omarchy plugin.
-The plugin invokes `/usr/lib/vpnrouter-headless/VPNRouter.Headless --stdio` as
-the logged-in user. The package contains no GUI or system service.
+The package ships `/usr/lib/systemd/user/vpnrouter-headless.service`, running
+Headless as the logged-in user with `--service`. The coordinated plugin starts
+that unit on demand and attaches to its private Unix socket. It is not enabled
+at boot; no GUI or root service is installed. Older plugins can still use
+`--stdio`. See [session modes](../../VPNRouter.Headless/README.md#usage).
 
 ## Build
 
@@ -47,6 +50,8 @@ Download the package and sidecar from the same CI run into an empty directory, t
 sha256sum -c vpnrouter-headless-*.pkg.tar.zst.sha256
 sudo pacman -U ./vpnrouter-headless-*.pkg.tar.zst
 getcap /usr/lib/vpnrouter-headless/runtime/sing-box
+systemctl --user daemon-reload
+systemctl --user start vpnrouter-headless.service
 { printf '%s\n' '{"v":1,"id":"check-1","method":"snapshot","params":{}}'; sleep 2; } | \
   /usr/lib/vpnrouter-headless/VPNRouter.Headless --stdio
 ```
@@ -54,7 +59,8 @@ getcap /usr/lib/vpnrouter-headless/runtime/sing-box
 Dependencies are glibc, gcc-libs, libcap and .NET runtime >=10 and <11.
 The pacman install/upgrade script applies `cap_net_admin,cap_net_raw+ep` to
 `/usr/lib/vpnrouter-headless/runtime/sing-box`. Package inspection accepts only
-that exact install script. Production trusts this fixed regular file when it
+that exact install script and the exact shipped user unit. The unit is included
+in packaging source hashes; all unrelated systemd package paths remain forbidden. Production trusts this fixed regular file when it
 and every ancestor are root-owned and not group/other writable, and the file
 has effective and permitted CAP_NET_ADMIN. Symlinks are rejected. NET_RAW is
 optional; NET_BIND_SERVICE is not required by the generated configuration.

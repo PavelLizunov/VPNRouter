@@ -7,11 +7,13 @@ public sealed class ProtocolServer : IAsyncDisposable
     private readonly Stream _output;
     private readonly ProtocolDispatcher _dispatcher;
     private readonly TimeSpan? _outputWriteTimeout;
+    private readonly bool _leaveSessionOpen;
     private readonly TimeSpan _handlerDisposalTimeout;
     private ProtocolOutputQueue? _outputQueue;
+    private CancellationTokenSource? _runCancellation;
 
     public ProtocolServer(IProtocolHandler handler, Stream input, Stream output, TimeSpan? outputWriteTimeout = null,
-        TimeSpan? handlerDisposalTimeout = null)
+        TimeSpan? handlerDisposalTimeout = null, ProtocolDispatcher? sessionDispatcher = null)
     {
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
         _input = input ?? throw new ArgumentNullException(nameof(input));
@@ -19,12 +21,17 @@ public sealed class ProtocolServer : IAsyncDisposable
         _outputWriteTimeout = outputWriteTimeout;
         _handlerDisposalTimeout = handlerDisposalTimeout
             ?? TimeSpan.FromSeconds(ProtocolConstants.HandlerDisposalTimeoutSeconds);
-        _dispatcher = new ProtocolDispatcher(_handler);
+        _leaveSessionOpen = sessionDispatcher != null;
+        _dispatcher = sessionDispatcher ?? new ProtocolDispatcher(_handler, quitRequested: () =>
+        {
+            try { _runCancellation?.Cancel(); } catch (ObjectDisposedException) { }
+        });
     }
 
     public async Task<int> RunAsync(CancellationToken cancellationToken)
     {
         using var serverCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _runCancellation = serverCts;
         using var outputCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         _outputQueue = new ProtocolOutputQueue(_output, () =>
@@ -59,6 +66,12 @@ public sealed class ProtocolServer : IAsyncDisposable
 
         try
         {
+            if (_leaveSessionOpen)
+            {
+                var snapshot = await _handler.ExecuteAsync("snapshot", default, cancellationToken).ConfigureAwait(false);
+                _outputQueue.EnqueueStateEvent(snapshot);
+            }
+
             while (!serverCts.IsCancellationRequested)
             {
                 var lineResult = await reader.ReadLineAsync(serverCts.Token).ConfigureAwait(false);
@@ -67,7 +80,7 @@ public sealed class ProtocolServer : IAsyncDisposable
                 {
                     // On EOF on standard input: cancel server and active operations immediately
                     serverCts.Cancel();
-                    _dispatcher.CancelActiveOperation();
+                    if (!_leaveSessionOpen) _dispatcher.CancelActiveOperation();
                     break;
                 }
 
@@ -125,7 +138,7 @@ public sealed class ProtocolServer : IAsyncDisposable
                 }
 
                 // Synchronously invoke async dispatcher so busy check occurs before first await
-                var dispatchTask = _dispatcher.DispatchAsync(request, serverCts.Token);
+                var dispatchTask = _dispatcher.DispatchAsync(request, _leaveSessionOpen ? cancellationToken : serverCts.Token);
 
                 if (dispatchTask.IsCompleted)
                 {
@@ -197,7 +210,7 @@ public sealed class ProtocolServer : IAsyncDisposable
             {
                 pending = inFlightTasks.ToArray();
             }
-            if (pending.Length > 0)
+            if (!_leaveSessionOpen && pending.Length > 0)
             {
                 try
                 {
@@ -209,16 +222,21 @@ public sealed class ProtocolServer : IAsyncDisposable
                 }
             }
         }
+        catch (IOException) when (_leaveSessionOpen)
+        {
+            // A dead socket only detaches this controller.
+        }
         catch (OperationCanceledException)
         {
             // Clean shutdown triggered
         }
         finally
         {
+            serverCts.Cancel();
             _handler.StateChanged -= OnStateChanged;
             _handler.ProgressChanged -= OnProgressChanged;
 
-            _dispatcher.CancelActiveOperation();
+            if (!_leaveSessionOpen) _dispatcher.CancelActiveOperation();
 
             // Ensure any remaining tasks are awaited with bounded deadline
             Task[] remaining;
@@ -226,7 +244,7 @@ public sealed class ProtocolServer : IAsyncDisposable
             {
                 remaining = inFlightTasks.ToArray();
             }
-            if (remaining.Length > 0)
+            if (!_leaveSessionOpen && remaining.Length > 0)
             {
                 try
                 {
@@ -259,7 +277,7 @@ public sealed class ProtocolServer : IAsyncDisposable
     private async Task PerformTeardownAsync()
     {
         // Initiate bounded handler disposal without waiting for output drain
-        var handlerDisposalTask = DisposeHandlerBoundedAsync();
+        var handlerDisposalTask = _leaveSessionOpen ? Task.CompletedTask : DisposeHandlerBoundedAsync();
 
         var outputDrainTask = Task.Run(async () =>
         {

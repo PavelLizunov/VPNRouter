@@ -11,6 +11,8 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         bool stdioMode = false;
+        bool serviceMode = false;
+        bool attachMode = false;
         string? dataDir = null;
 
         for (int i = 0; i < args.Length; i++)
@@ -20,6 +22,8 @@ public static class Program
             {
                 stdioMode = true;
             }
+            else if (arg == "--service") serviceMode = true;
+            else if (arg == "--attach") attachMode = true;
             else if (arg == "--data-dir")
             {
                 if (i + 1 >= args.Length)
@@ -44,7 +48,8 @@ public static class Program
             }
         }
 
-        if (!stdioMode)
+        if ((stdioMode ? 1 : 0) + (serviceMode ? 1 : 0) + (attachMode ? 1 : 0) != 1 ||
+            (attachMode && dataDir != null) || ((serviceMode || attachMode) && !OperatingSystem.IsLinux()))
         {
             PrintUsage();
             return 1;
@@ -97,6 +102,10 @@ public static class Program
 
         try
         {
+            if (attachMode)
+                return await UnixSocketClient.RunAsync(UnixSocketSecurity.DefaultSocketPath(),
+                    Console.OpenStandardInput(), Console.OpenStandardOutput(), cts.Token).ConfigureAwait(false);
+
             // Override AppPaths before creating session as required by lifecycle and storage contracts
             if (!string.IsNullOrWhiteSpace(dataDir))
             {
@@ -114,6 +123,11 @@ public static class Program
             await using var session = new RouterSession();
             await using var backend = new RouterBackend(session, dataDir);
             await using var handler = new RouterBackendHandler(backend);
+            if (serviceMode)
+            {
+                var service = new UnixSocketServer(handler, UnixSocketSecurity.DefaultSocketPath(), AppPaths.DataDir);
+                return await service.RunAsync(cts.Token).ConfigureAwait(false);
+            }
             await using var server = new ProtocolServer(handler, Console.OpenStandardInput(), Console.OpenStandardOutput());
 
             return await server.RunAsync(cts.Token).ConfigureAwait(false);
@@ -131,7 +145,7 @@ public static class Program
 
     private static void PrintUsage()
     {
-        Console.Error.WriteLine("Usage: VPNRouter.Headless --stdio [--data-dir ABSOLUTE_PATH]");
-        Console.Error.WriteLine("Runs the headless VPNRouter protocol service over standard I/O.");
+        Console.Error.WriteLine("Usage: VPNRouter.Headless (--stdio | --service) [--data-dir ABSOLUTE_PATH] | --attach");
+        Console.Error.WriteLine("Runs NDJSON over standard I/O, a private Linux socket, or attaches to the user service.");
     }
 }

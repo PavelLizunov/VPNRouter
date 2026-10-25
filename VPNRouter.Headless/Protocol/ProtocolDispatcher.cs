@@ -9,10 +9,14 @@ public sealed class ProtocolDispatcher
     private string? _activeOperationId;
     private CancellationTokenSource? _activeOperationCts;
     private int _activeUrgentCount;
+    private readonly Action? _quitRequested;
+    private readonly bool _concurrentSnapshots;
 
-    public ProtocolDispatcher(IProtocolHandler handler)
+    public ProtocolDispatcher(IProtocolHandler handler, bool concurrentSnapshots = false, Action? quitRequested = null)
     {
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+        _concurrentSnapshots = concurrentSnapshots;
+        _quitRequested = quitRequested;
     }
 
     public bool HasActiveOrdinaryOperation
@@ -76,9 +80,9 @@ public sealed class ProtocolDispatcher
         }
 
         // 2. Urgent control: disconnect
-        if (request.Method == "disconnect")
+        if (request.Method is "disconnect" or "quit" || (_concurrentSnapshots && request.Method == "snapshot"))
         {
-            return await HandleDisconnectAsync(request, serverShutdownToken).ConfigureAwait(false);
+            return await HandleControlAsync(request, serverShutdownToken).ConfigureAwait(false);
         }
 
         // All non-control methods, including snapshot, are ordinary operations.
@@ -177,7 +181,7 @@ public sealed class ProtocolDispatcher
         return ProtocolResponseFrame.CreateSuccess(request.Id, resultDict);
     }
 
-    private async Task<ProtocolResponseFrame> HandleDisconnectAsync(ProtocolRequest request, CancellationToken serverShutdownToken)
+    private async Task<ProtocolResponseFrame> HandleControlAsync(ProtocolRequest request, CancellationToken serverShutdownToken)
     {
         // Validate before cancelling another operation or claiming an urgent slot.
         if (request.Params.ValueKind != JsonValueKind.Undefined &&
@@ -195,12 +199,13 @@ public sealed class ProtocolDispatcher
         }
 
         // Cancel any active ordinary operation immediately
-        CancelActiveOperation();
+        if (request.Method != "snapshot") CancelActiveOperation();
 
         try
         {
-            var result = await Task.Run(() => _handler.ExecuteAsync("disconnect", request.Params, serverShutdownToken),
+            var result = await Task.Run(() => _handler.ExecuteAsync(request.Method == "quit" ? "disconnect" : request.Method, request.Params, serverShutdownToken),
                 CancellationToken.None).ConfigureAwait(false);
+            if (request.Method == "quit") _quitRequested?.Invoke();
             return ProtocolResponseFrame.CreateSuccess(request.Id, result);
         }
         catch (RouterException rx)
