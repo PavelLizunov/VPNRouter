@@ -368,4 +368,32 @@ system was found. Each style has a deliberate visual mechanism:
   repeat thread-count tuning, change frozen inputs or relax decoded equality.
   Any required reproducibility/evaluator correction needs a reviewed linked
   replacement lock and fresh strict baseline before orchestration candidates.
+- Recovery checkpoint `ab0c595d12aebd14e610c39623acea3b4c5e2a9e` is exact-head
+  green: test 3m26s, characterization-windows 7m8s, go-test-windows 42s,
+  grep 5s; normal render skipped. Current-run notes now match collected evidence.
+- Saved text forensics show many differences ending at fixed 24-frame segment
+  boundaries. All twelve sparse PNG/SVG captures per affected style match, which
+  does not prove equality of stateful full-render input frames. Both delegated
+  forensic jobs failed; the partial source response's x264-lookahead root-cause
+  assertion is rejected: no raw inputs were compared, and x264 enables its
+  deterministic mode by default. Cache correctness is not established either.
+- Bounded next diagnostic: use a transparent CI-only LD_PRELOAD x264 input probe
+  to hash visible YUV planes immediately before the real encoder call, retain
+  actual encoder thread/determinism settings, and compare two unchanged-source
+  all-eight 480p batches against their decoded video hashes. Production Rust,
+  media, encoder options and frozen evaluators remain byte-identical. Require
+  exact frame/PTS coverage and two complete probe traces; a pair with no video
+  difference cannot localize the original failure. The probe is not a candidate
+  and its timings cannot become baseline receipts. Keep compilation/decode on CI.
+- Local diagnostic contracts: 4/4 pass; existing frozen evaluator/workflow
+  contracts: 10/10 pass. Extracted shell syntax, embedded Python AST, YAML,
+  protected source hashes and diff checks pass. CI-only C compile, transparent
+  three-frame smoke and two complete real input traces remain pending.
+- Independent reviews `0c76f81b` (ABI/correctness) and `7b02efc6`
+  (security/isolation) found no remaining blocking source defect. Reviewer
+  `121f584f` verified failure-path preservation and found two conclusion gaps:
+  equal-video raw differences and unstable same-file decoding. Both are recorded
+  and fixed with regressions. Follow-up `46c709ea` confirms both resolved:
+  four contracts and 34 independent synthetic evidence cases pass. Observer
+  timing perturbation and unobserved x264 metadata remain explicit limits.
 - Fresh baseline, paired optimization and confirmation remain pending.

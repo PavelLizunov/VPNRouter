@@ -3,7 +3,9 @@ name: Diagnose fframes repeatability
 on:
   push:
     branches: ['dsh/fframes-eight-styles']
-    paths: ['.github/workflows/diagnose-fframes-repeatability.yml']
+    paths:
+      - '.github/workflows/diagnose-fframes-repeatability.yml'
+      - '.github/diagnostics/**'
 
 permissions:
   contents: read
@@ -30,6 +32,14 @@ jobs:
         with:
           ref: ac5ac03c4475c32dea13738e5941db00115c8da6
           persist-credentials: false
+      - name: Checkout exact diagnostic implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: diagnostic-code
+          persist-credentials: false
+      - name: Check diagnostic contracts without rendering
+        run: python3 "$GITHUB_WORKSPACE/diagnostic-code/.github/diagnostics/test_fframes_input.py"
       - name: Record read-only resource and SDK preflight
         run: |
           set -euo pipefail
@@ -59,7 +69,7 @@ jobs:
       - name: Install disposable renderer prerequisites
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends pkg-config clang libclang-dev nasm yasm ninja-build ffmpeg libx264-dev libx265-dev libopus-dev libvpx-dev libasound2-dev zip
+          sudo apt-get install -y --no-install-recommends pkg-config clang libclang-dev nasm yasm ninja-build ffmpeg libx264-dev libx265-dev libopus-dev libvpx-dev libasound2-dev libssl-dev zip
       - name: Restore existing renderer cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
@@ -69,6 +79,34 @@ jobs:
             tools/help-videos/fframes-vpnrouter/target
           key: fframes-film-${{ runner.os }}-ubuntu24-source-v2-${{ hashFiles('tools/help-videos/fframes-vpnrouter/Cargo.toml', 'tools/help-videos/fframes-vpnrouter/Cargo.lock') }}
           restore-keys: fframes-film-${{ runner.os }}-ubuntu24-source-v2-
+      - name: Compile transparent x264 input probe on disposable CI
+        run: |
+          set -euo pipefail
+          cc -shared -fPIC -O2 -Wall -Wextra -Werror \
+            "$GITHUB_WORKSPACE/diagnostic-code/.github/diagnostics/fframes-x264-input.c" \
+            -o "$RUNNER_TEMP/fframes-x264-input.so" -ldl -lcrypto -pthread
+          cc -O2 -Wall -Wextra -Werror \
+            "$GITHUB_WORKSPACE/diagnostic-code/.github/diagnostics/x264-probe-smoke.c" \
+            -o "$RUNNER_TEMP/x264-probe-smoke" -lx264
+          mkdir out/repeatability/probe-smoke
+          "$RUNNER_TEMP/x264-probe-smoke" out/repeatability/probe-smoke/plain.h264
+          FFRAMES_INPUT_TRACE="$PWD/out/repeatability/probe-smoke" FILM_STYLE=smoke \
+            LD_PRELOAD="$RUNNER_TEMP/fframes-x264-input.so" \
+            "$RUNNER_TEMP/x264-probe-smoke" out/repeatability/probe-smoke/traced.h264
+          cmp out/repeatability/probe-smoke/plain.h264 out/repeatability/probe-smoke/traced.h264
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          folder = Path('out/repeatability/probe-smoke')
+          trace, = folder.glob('smoke-*.tsv')
+          frames = [row.split('\t') for row in trace.read_text().splitlines() if row.startswith('frame\t')]
+          assert [int(row[2]) for row in frames] == [0, 1, 2]
+          for index, row in enumerate(frames):
+              expected = [hashlib.sha256(bytes([32+index*20])*854*480).hexdigest()]
+              expected += [hashlib.sha256(bytes([128])*427*240).hexdigest()]*2
+              assert row[3:] == expected
+          print('PASS transparent encoded bytes and exact visible-plane SHA256 smoke test')
+          PY
       - name: Compare two exact-source batches and repeated decodes
         env:
           PYTHONDONTWRITEBYTECODE: '1'
@@ -92,8 +130,16 @@ jobs:
           for index in range(2):
               folder = out/f'batch-{index}'
               folder.mkdir()
+              traces = folder/'input-traces'
+              traces.mkdir()
               try:
-                  bench.run_export(root, root/'target', folder/'export.log')
+                  os.environ['FFRAMES_INPUT_TRACE'] = str(traces)
+                  os.environ['LD_PRELOAD'] = str(Path(os.environ['RUNNER_TEMP'])/'fframes-x264-input.so')
+                  try:
+                      bench.run_export(root, root/'target', folder/'export.log')
+                  finally:
+                      os.environ.pop('LD_PRELOAD', None)
+                      os.environ.pop('FFRAMES_INPUT_TRACE', None)
                   signatures = bench.inspect(root)
                   save(folder/'signatures.json', signatures)
                   repeated = {}
@@ -137,6 +183,7 @@ jobs:
           save(out/'summary.json', summary)
           print(json.dumps(summary, indent=2))
           PY
+          python3 "$GITHUB_WORKSPACE/diagnostic-code/.github/diagnostics/analyze_fframes_input.py" out/repeatability
       - name: Upload diagnostic evidence only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
