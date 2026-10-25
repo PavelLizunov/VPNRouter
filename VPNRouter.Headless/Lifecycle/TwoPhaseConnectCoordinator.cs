@@ -19,7 +19,8 @@ public readonly record struct TwoPhaseResult(
     TwoPhaseOutcome Outcome,
     int? Pid = null,
     string? ErrorMessage = null,
-    Func<bool>? ReadinessGuard = null);
+    Func<bool>? ReadinessGuard = null,
+    string? ErrorCode = null);
 
 /// <summary>
 /// Coordinates the two-phase start lifecycle:
@@ -66,7 +67,10 @@ public static class TwoPhaseConnectCoordinator
         var startedTcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var connectedTcs = new TaskCompletionSource<(int Pid, Func<bool>? Guard)>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        var crashedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         void OnStarted(int pid) => startedTcs.TrySetResult(pid);
+        void OnCrashed() => crashedTcs.TrySetResult();
 
         void OnConnected(int pid)
         {
@@ -100,6 +104,7 @@ public static class TwoPhaseConnectCoordinator
         // Subscribe BEFORE starting startTask to avoid event-before-subscription race
         engine.SingBoxStarted += OnStarted;
         engine.Connected += OnConnected;
+        engine.SingBoxCrashed += OnCrashed;
 
         if (engine.SingBoxPid is { } existingPid && existingPid > 0)
         {
@@ -133,8 +138,7 @@ public static class TwoPhaseConnectCoordinator
                 {
                     if (startTask.IsFaulted)
                     {
-                        var ex = startTask.Exception?.GetBaseException();
-                        return new TwoPhaseResult(TwoPhaseOutcome.Failed, null, BoundedTeardown.SanitizeExceptionMessage(ex));
+                        return StartFailed(startTask);
                     }
                     if (startTask.IsCanceled || cancellationToken.IsCancellationRequested)
                     {
@@ -157,31 +161,36 @@ public static class TwoPhaseConnectCoordinator
             Task phaseBCompleted;
             if (!startTask.IsCompleted)
             {
-                phaseBCompleted = await Task.WhenAny(connectedTcs.Task, startTask, phaseBTimer).ConfigureAwait(false);
+                phaseBCompleted = await Task.WhenAny(connectedTcs.Task, startTask, crashedTcs.Task, phaseBTimer).ConfigureAwait(false);
             }
             else
             {
-                phaseBCompleted = await Task.WhenAny(connectedTcs.Task, phaseBTimer).ConfigureAwait(false);
+                phaseBCompleted = await Task.WhenAny(connectedTcs.Task, crashedTcs.Task, phaseBTimer).ConfigureAwait(false);
             }
 
             if (cancellationToken.IsCancellationRequested)
                 return new TwoPhaseResult(TwoPhaseOutcome.Cancelled);
 
+            // A crash before the Connected signal fails now instead of waiting out the budget.
+            if (phaseBCompleted == crashedTcs.Task)
+                return new TwoPhaseResult(TwoPhaseOutcome.Failed, null, "sing-box exited during startup");
+
             if (phaseBCompleted == startTask)
             {
                 if (startTask.IsFaulted)
                 {
-                    var ex = startTask.Exception?.GetBaseException();
-                    return new TwoPhaseResult(TwoPhaseOutcome.Failed, null, BoundedTeardown.SanitizeExceptionMessage(ex));
+                    return StartFailed(startTask);
                 }
                 if (startTask.IsCanceled || cancellationToken.IsCancellationRequested)
                 {
                     return new TwoPhaseResult(TwoPhaseOutcome.Cancelled);
                 }
                 // startTask completed cleanly; wait for connected or timer
-                var waitConnected = await Task.WhenAny(connectedTcs.Task, phaseBTimer).ConfigureAwait(false);
+                var waitConnected = await Task.WhenAny(connectedTcs.Task, crashedTcs.Task, phaseBTimer).ConfigureAwait(false);
                 if (cancellationToken.IsCancellationRequested)
                     return new TwoPhaseResult(TwoPhaseOutcome.Cancelled);
+                if (waitConnected == crashedTcs.Task)
+                    return new TwoPhaseResult(TwoPhaseOutcome.Failed, null, "sing-box exited during startup");
                 if (waitConnected == phaseBTimer)
                 {
                     return new TwoPhaseResult(TwoPhaseOutcome.PhaseBTimeout, null, "TUN warmup and route confirmation timed out");
@@ -230,6 +239,17 @@ public static class TwoPhaseConnectCoordinator
         {
             engine.SingBoxStarted -= OnStarted;
             engine.Connected -= OnConnected;
+            engine.SingBoxCrashed -= OnCrashed;
         }
+    }
+
+    private static TwoPhaseResult StartFailed(Task startTask)
+    {
+        var ex = startTask.Exception?.GetBaseException();
+        return new TwoPhaseResult(
+            TwoPhaseOutcome.Failed,
+            null,
+            BoundedTeardown.SanitizeExceptionMessage(ex),
+            ErrorCode: ex is VPNRouter.Core.Services.ConflictingVpnException ? "vpn_conflict" : null);
     }
 }

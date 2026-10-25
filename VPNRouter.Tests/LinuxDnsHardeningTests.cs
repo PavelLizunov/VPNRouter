@@ -44,7 +44,7 @@ public class LinuxDnsHardeningTests : IDisposable
         var dns = fake.RunCalls.FirstOrDefault(c =>
             c.ExecutablePath == "resolvectl" && c.Arguments.Contains("dns"));
         Assert.NotNull(dns);
-        Assert.Equal(new[] { "dns", "VPNRouter-TUN", "172.19.0.1" }, dns!.Arguments.ToArray());
+        Assert.Equal(new[] { "--no-ask-password", "dns", "VPNRouter-TUN", "172.19.0.1" }, dns!.Arguments.ToArray());
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class LinuxDnsHardeningTests : IDisposable
         var domain = fake.RunCalls.FirstOrDefault(c =>
             c.ExecutablePath == "resolvectl" && c.Arguments.Contains("domain"));
         Assert.NotNull(domain);
-        Assert.Equal(new[] { "domain", "VPNRouter-TUN", "~." }, domain!.Arguments.ToArray());
+        Assert.Equal(new[] { "--no-ask-password", "domain", "VPNRouter-TUN", "~." }, domain!.Arguments.ToArray());
     }
 
     [Fact]

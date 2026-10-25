@@ -40,12 +40,14 @@ public sealed class VpnEngineAdapter : ILifecycleEngine
         _engine.Connected += OnConnected;
         _engine.StatusChanged += OnStatusChanged;
         _engine.Warning += OnWarning;
+        _engine.SingBoxCrashed += OnSingBoxCrashed;
     }
 
     private void OnSingBoxStarted(int pid) => SingBoxStarted?.Invoke(pid);
     private void OnConnected(int pid) => Connected?.Invoke(pid);
     private void OnStatusChanged(string status) => StatusChanged?.Invoke(status);
     private void OnWarning(string warning) => Warning?.Invoke(warning);
+    private void OnSingBoxCrashed() => SingBoxCrashed?.Invoke();
 
     public bool IsRunning => _engine.IsRunning;
     public string ActiveProfileName => _engine.ActiveProfileName;
@@ -58,6 +60,7 @@ public sealed class VpnEngineAdapter : ILifecycleEngine
     public event Action<int>? Connected;
     public event Action<string>? StatusChanged;
     public event Action<string>? Warning;
+    public event Action? SingBoxCrashed;
 
     public Task StartAsync(AppSettings settings, CancellationToken ct)
     {
@@ -94,6 +97,7 @@ public sealed class VpnEngineAdapter : ILifecycleEngine
         _engine.Connected -= OnConnected;
         _engine.StatusChanged -= OnStatusChanged;
         _engine.Warning -= OnWarning;
+        _engine.SingBoxCrashed -= OnSingBoxCrashed;
         _engine.Dispose();
     }
 

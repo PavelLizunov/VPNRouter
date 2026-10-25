@@ -24,6 +24,9 @@ public interface ILifecycleEngine : IAsyncDisposable, IDisposable
     event Action<string>? StatusChanged;
     event Action<string>? Warning;
 
+    /// <summary>The engine's sing-box process exited unexpectedly. Engines without crash reporting never raise it.</summary>
+    event Action? SingBoxCrashed { add { } remove { } }
+
     Task StartAsync(AppSettings settings, CancellationToken ct);
     Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct);
     void Stop();

@@ -120,6 +120,11 @@ public partial class VpnEngine
         {
             _singBoxManager = manager;
             _engine._singBox = manager;
+            manager.Crashed += (_, _) =>
+            {
+                if (ReferenceEquals(_engine._singBox, manager))
+                    _engine.SingBoxCrashed?.Invoke();
+            };
         }
 
         public void StartDnsTunnelTransport(VlessServerEntry activeServer, AppSettings settings)

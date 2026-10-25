@@ -234,6 +234,15 @@ internal sealed class StartupPipeline
                     "If routed apps lose internet, stop it and reconnect.",
                     c.ProcessName, c.Pid);
             }
+
+            var foreignTun = ConflictingVpnDetector.DetectForeignFullTunnelTun(settings.Tun.InterfaceName, _host.Logger);
+            if (foreignTun.Count > 0)
+            {
+                throw new ConflictingVpnException(
+                    Array.Empty<ConflictingVpnDetector.ConflictingProcessInfo>(),
+                    $"Another VPN already routes all traffic through {foreignTun[0]}. " +
+                    "Turn it off before connecting VPNRouter.");
+            }
         }
         else
         {

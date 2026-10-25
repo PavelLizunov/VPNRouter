@@ -36,6 +36,7 @@ public class RouterException : Exception
         "subscription_refresh_failed" => "Subscription refresh failed or returned no usable servers. Cached servers were kept.",
         "storage_error" => "A configuration storage error occurred.",
         "connect_failed" => "Failed to initiate VPN connection.",
+        "vpn_conflict" => "Another VPN already routes all traffic. Turn it off before connecting.",
         "stop_failed" => "Failed to stop VPN connection.",
         "internal_error" => "An internal error occurred.",
         _ => "An error occurred."

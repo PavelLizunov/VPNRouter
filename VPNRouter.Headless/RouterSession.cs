@@ -319,7 +319,7 @@ public sealed class RouterSession : IRouterSession
 
                 case TwoPhaseOutcome.Failed:
                 default:
-                    await TeardownAfterStartFailureAsync("connect_failed", outcome.ErrorMessage ?? "Connection startup failed.").ConfigureAwait(false);
+                    await TeardownAfterStartFailureAsync(outcome.ErrorCode ?? "connect_failed", outcome.ErrorMessage ?? "Connection startup failed.").ConfigureAwait(false);
                     break;
             }
         }

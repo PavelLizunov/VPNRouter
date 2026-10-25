@@ -77,6 +77,9 @@ public partial class VpnEngine : IDisposable
 
     public event Action<int>? Connected;
 
+    /// <summary>The current sing-box process exited unexpectedly.</summary>
+    public event Action? SingBoxCrashed;
+
     // Names the first readiness condition that fails for pid, or null when ready.
     internal string? DescribeReadiness(int pid)
     {
