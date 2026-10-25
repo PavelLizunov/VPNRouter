@@ -27,12 +27,14 @@ public sealed class DeepVerifierConfigPermissionsTests
             runner.OnStart(_ => true, request =>
             {
                 configPath = request.Arguments[2];
-                configMode = File.GetUnixFileMode(configPath);
+                if (OperatingSystem.IsLinux())
+                    configMode = File.GetUnixFileMode(configPath);
                 throw new InvalidOperationException("Simulated spawn failure; no process or network probe");
             });
             var verifier = new VlessDeepVerifier(Log.Logger, runner);
 
-            var result = await verifier.VerifyAsync(VlessDeepVerifierTests.CleanVlessEntry(), measureBandwidth: false);
+            var result = await verifier.VerifyAsync(VlessDeepVerifierTests.CleanVlessEntry(), measureBandwidth: false,
+                ct: TestContext.Current.CancellationToken);
 
             Assert.Equal(DeepVerifyFailurePhase.LocalSpawn, result.FailurePhase);
             Assert.Single(runner.StartCalls);

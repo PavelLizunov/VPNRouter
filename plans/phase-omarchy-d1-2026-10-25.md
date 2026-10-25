@@ -1,85 +1,80 @@
-# D1: Linux backend defect and contradiction review
+# D1: Linux backend defects and contradictions
 
 ## Intent and scope
 
-Review Linux additions against origin/main at ddf97f80, including Headless,
-Core runtime/ownership seams, Arch packaging, CI, and the plugin wire consumer.
-The accepted base origin/dsh/omarchy-mvp-2026-10-22 is already an ancestor.
-Keep PR 622 stacked and preserve all platform behavior outside confirmed fixes.
-No live VPN, package installation, release, merge, or workstation .NET execution.
+Review Linux additions against origin/main c3ebc46e at initial head ddf97f80:
+Headless lifecycle/protocol/storage, Core runtime and ownership seams, Arch
+packaging/CI, and the read-only Service.qml consumer contract. The accepted
+base origin/dsh/omarchy-mvp-2026-10-22 (75ac570c) was already an ancestor.
+Keep PR 622 stacked. No VPN operation, installation on the workstation, shell
+change, release, tag, merge, or local SDK build/full test run.
 
-## Confirmed defect and correction
+## Corrections and invariants
 
-The protocol server abandons handler disposal after three seconds, while a
-session stop allows fifteen seconds and Core allows five seconds each for
-SIGTERM and SIGKILL. Program's repeated disposal returns immediately after the
-session sets its disposed flag. EOF/SIGTERM can therefore exit before stopping
-an owned child. Give production handler teardown time for session gate wait
-and bounded stop. Keep a short injected deadline for uncooperative-handler tests.
-Add a fake-handler regression that remains in teardown beyond the old deadline.
-Risk: shutdown waits longer for an uncooperative handler. Rollback: revert the
-fix commit. No protocol schema change or network operation is required.
+- 98532b24: server handler disposal allowed only 3 s while session teardown
+  allows a 3 s gate wait and 15 s stop. Allow 20 s; retain a short injectable
+  hang deadline and add an EOF regression beyond the old deadline. The owning
+  Headless README now describes bounded shutdown rather than guaranteeing
+  cleanup of an unresponsive engine. Risk: longer shutdown for a hung handler.
+- 408a51b7: lowercase base64 keys with short slash-separated runs bypassed
+  CrashReporter redaction as apparent paths. Preserve only the fixed public
+  package path; test a canonical synthetic 32-byte key and retain the existing
+  public-path negative control. Risk: other long paths can be redacted.
+- 74113e74: both deep verifiers wrote credentials to temp JSON with permissions
+  inherited from umask. Reuse AppPaths.CreatePrivateFile(CreateNew), preserving
+  asynchronous writes, cancellation and final cleanup. No new dependency or
+  public protocol/command change. This shared defect also existed on main.
+- 1c2e8e57: put the new permission/cleanup regression in
+  DeepVerifierConfigPermissionsTests. The first attempt was in a Headless-named
+  class excluded by the Linux CI filter; that existing test was restored.
+  The dedicated test inspects mode 0600 before fake spawn and deletion after
+  spawn failure. It starts no real process or network probe.
+- Final test cleanup adds the platform guard inside the callback and passes
+  TestContext cancellation, addressing its CA1416 and xUnit1051 warnings.
 
-## Verification gates
+All confirmed findings were recorded in OPEN-DEFECTS before implementation.
+Rollback is a revert of the scoped correction commits. Runtime trust policy,
+package capabilities, protocol schema and other platform entry points are intact.
 
-1. Build: pending exact-SHA test.yml headless publish and existing build jobs.
-2. Tests: pending existing Headless regression suite and Core suite in CI.
-3. Documentation: record defect ledger and final observed outcomes here.
-4. Review: direct source review in this round; independent lead review follows.
-5. UI/remote: N/A, no UI or live VPN change; Arch offline CI package check pending.
-6. Integration: verify the real server disposal boundary and consumer budgets;
-   no local SDK execution. Read-only triage of PRs 617-620, 624 and 625.
+## Observed gates at source/test head 1c2e8e57
 
-## Outcome
+1. PASS (scoped builds): test.yml builds/publishes Core, tests, CLI and Headless;
+   Arch builds/installs/upgrades and checks the normal-user offline consumer.
+   No full VPNRouter.sln or release/all-platform build was run.
+2. PASS (CI scopes): Linux xUnit 3294 tests; Windows 3385 passed / 20 skipped;
+   Headless console suite 40 passed / 0 failed. Both new Core regression names
+   appear as Passed in the Linux log. GUI/pixel suites remain excluded by CI.
+3. PASS: scoped diff and whitespace checks; README matches the 20 s handler
+   deadline. Documentation claims name observed evidence and its limits.
+4. BLOCKED for independent acceptance: direct source/diff review completed in
+   this worker round; Claude lead review follows handoff. No independent
+   acceptance claim or recursive worker dispatch.
+5. N/A: no UI change or live VPN acceptance in D1. Active-core SIGTERM/EOF,
+   crash/SIGKILL orphan and route cleanup, egress/leaks and shell loading were
+   not exercised. The Free writer uses the same private factory, but its
+   process integration was inspected only in source.
+6. PASS (bounded consumer checks): actual ProtocolServer teardown boundary and
+   VLESS temp file at fake spawn; Arch offline install/upgrade. These checks do
+   not establish live dataplane behavior or full Linux feature parity.
 
-Initial SHA ddf97f806b192a879ef5e0df940c2d6f949103a4 passed test.yml run
-40030549271 and Arch run 40074333153. New checks are pending.
+## CI and handoff
 
-Preparation commit 6b16848b passed all six test.yml jobs in run 40170672727.
-The shutdown correction changes the handler deadline to 20 s, retains an
-injectable short hang deadline, and adds an EOF test whose handler completes
-only after the old three-second deadline. Scoped diff review and `git diff
---check` passed; .NET execution awaits exact-head CI. The owning Headless
-README now states the bounded shutdown behavior rather than promising cleanup
-of an unresponsive engine. No full solution build or live engine stop was run.
+| SHA | test.yml | Arch headless package |
+|---|---|---|
+| 98532b24 | 40171223816 success | 40171225782 success |
+| 408a51b7 | 40176568895 success | 40176570811 success |
+| 74113e74 | 40177179288 success | 40177181002 success |
+| 1c2e8e57 | 40177760288 success | 40177761981 success |
 
-Shutdown commit 98532b24 passed all six test.yml jobs in run 40171223816 and
-Arch build/install/upgrade/offline smoke in run 40171225782. No deployment.
+The repository CI verifier returned exit 0 at each completed correction head;
+1c2e8e57 has eight green checks and no tolerated failures. PowerShell 7.6.7 was
+already installed and invoked directly because the mise shim had no selection;
+no tool installation or configuration change was made. Final exact-head CI and
+remote SHA are recorded in the owner-requested external D1 handoff report.
 
-Two more confirmed findings are recorded in OPEN-DEFECTS before implementation:
-1. The new filesystem-path scrubber exception admits valid lowercase base64
-   secrets with short slash-separated runs. Keep only the fixed public package
-   path exception; add a synthetic canonical 32-byte-key regression.
-2. Existing deep verifiers now called by Headless write secret-bearing JSON in
-   the shared temp directory without an explicit private create mode. Reuse the
-   existing AppPaths private-file mechanism and test permissions before the
-   VLESS fake spawn. Preserve cancellation and final cleanup. No real probe or
-   new dependency is needed; CI is the .NET execution environment.
-
-The key-path correction removes the broad path heuristic and preserves only
-the public packaged runtime path. Its regression uses a canonical synthetic
-32-byte base64 key; no live secret. Direct diff review and `git diff --check`
-passed; native test execution awaits CI. The existing packaged-path regression
-remains the negative control. No public API, setup, or command change.
-
-Key-path commit 408a51b7 passed all six test.yml jobs in run 40176568895,
-Arch run 40176570811, and Android compile. The repository CI verifier returned
-exit 0 with eight green checks and no tolerated failures. Its new regression
-passed in the Linux xUnit log.
-
-Both probe-config writers now create the file through AppPaths.CreatePrivateFile
-with CreateNew, then use an async StreamWriter. The existing fake-runner VLESS
-test checks 0600 before spawn and absence after the simulated spawn failure;
-no actual child or SOCKS/HTTP probe runs in that test. The Free writer uses the
-same file factory but was checked by source inspection only. Diff review and
-`git diff --check` passed; native tests await exact-head CI. No README command,
-setup, or public protocol change is needed for these private-file corrections.
-
-Probe-config commit 74113e74 passed test.yml run 40177179288, Arch run
-40177181002, and Android compile. The CI verifier returned exit 0 / eight green.
-Verification correction: the Linux test.yml filter excludes all class names
-containing Headless, so the mode assertion added in HeadlessRuntimePolicyTests
-would only run on Windows, where its Unix branch is inactive. Move the new
-permission/cleanup regression into DeepVerifierConfigPermissionsTests and
-restore the existing policy test. This tests the real VLESS file at fake spawn
-on Linux without broadening the CI filter or starting a process/network probe.
+Read-only triage of PRs 617-620, 624 and 625 confirms the existing main
+LOG-REDACT-QUOTED-SPACE defect. Prefer #617 for that narrow scope; #620 duplicates
+it with unrelated changes. The other variants have missing truncation/quote
+cases, and none fully handles escaped delimiters. Native .NET Regex checks used
+synthetic inputs and translated match evaluators, not full PR test suites.
+No PR comment, closure or merge. No files were deleted; no package was deployed.
