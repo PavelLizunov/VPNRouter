@@ -34,3 +34,11 @@ fix commit. No protocol schema change or network operation is required.
 
 Initial SHA ddf97f806b192a879ef5e0df940c2d6f949103a4 passed test.yml run
 40030549271 and Arch run 40074333153. New checks are pending.
+
+Preparation commit 6b16848b passed all six test.yml jobs in run 40170672727.
+The shutdown correction changes the handler deadline to 20 s, retains an
+injectable short hang deadline, and adds an EOF test whose handler completes
+only after the old three-second deadline. Scoped diff review and `git diff
+--check` passed; .NET execution awaits exact-head CI. The owning Headless
+README now states the bounded shutdown behavior rather than promising cleanup
+of an unresponsive engine. No full solution build or live engine stop was run.

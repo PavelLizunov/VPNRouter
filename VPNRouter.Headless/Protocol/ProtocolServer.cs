@@ -7,14 +7,18 @@ public sealed class ProtocolServer : IAsyncDisposable
     private readonly Stream _output;
     private readonly ProtocolDispatcher _dispatcher;
     private readonly TimeSpan? _outputWriteTimeout;
+    private readonly TimeSpan _handlerDisposalTimeout;
     private ProtocolOutputQueue? _outputQueue;
 
-    public ProtocolServer(IProtocolHandler handler, Stream input, Stream output, TimeSpan? outputWriteTimeout = null)
+    public ProtocolServer(IProtocolHandler handler, Stream input, Stream output, TimeSpan? outputWriteTimeout = null,
+        TimeSpan? handlerDisposalTimeout = null)
     {
         _handler = handler ?? throw new ArgumentNullException(nameof(handler));
         _input = input ?? throw new ArgumentNullException(nameof(input));
         _output = output ?? throw new ArgumentNullException(nameof(output));
         _outputWriteTimeout = outputWriteTimeout;
+        _handlerDisposalTimeout = handlerDisposalTimeout
+            ?? TimeSpan.FromSeconds(ProtocolConstants.HandlerDisposalTimeoutSeconds);
         _dispatcher = new ProtocolDispatcher(_handler);
     }
 
@@ -274,7 +278,7 @@ public sealed class ProtocolServer : IAsyncDisposable
         var pending = Task.Run(async () => await _handler.DisposeAsync().ConfigureAwait(false));
         try
         {
-            await pending.WaitAsync(TimeSpan.FromSeconds(ProtocolConstants.HandlerDisposalTimeoutSeconds)).ConfigureAwait(false);
+            await pending.WaitAsync(_handlerDisposalTimeout).ConfigureAwait(false);
         }
         catch
         {

@@ -45,6 +45,7 @@ public static class ProtocolTests
         await RunTestAsync(nameof(TestOutputQueueStallPreventsEnqueueAsync), TestOutputQueueStallPreventsEnqueueAsync);
         await RunTestAsync(nameof(TestImmediateSnapshotHandshakeBeforeEofAsync), TestImmediateSnapshotHandshakeBeforeEofAsync);
         await RunTestAsync(nameof(TestHandlerDisposalDeadlineEnforcedAsync), TestHandlerDisposalDeadlineEnforcedAsync);
+        await RunTestAsync(nameof(TestShutdownWaitsForGracefulHandlerDisposalAsync), TestShutdownWaitsForGracefulHandlerDisposalAsync);
         await RunTestAsync(nameof(TestServerDisposalExactlyOnceAsync), TestServerDisposalExactlyOnceAsync);
         await RunTestAsync(nameof(TestLineReaderOwnedBoundedMemoryAsync), TestLineReaderOwnedBoundedMemoryAsync);
         await RunTestAsync(nameof(TestUnknownArgvDoesNotEchoSecretAsync), TestUnknownArgvDoesNotEchoSecretAsync);
@@ -1030,7 +1031,8 @@ public static class ProtocolTests
         using var input = new MemoryStream();
         using var output = new MemoryStream();
 
-        var server = new ProtocolServer(fakeHandler, input, output);
+        var server = new ProtocolServer(fakeHandler, input, output,
+            handlerDisposalTimeout: TimeSpan.FromMilliseconds(100));
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         int exitCode = await server.RunAsync(CancellationToken.None);
@@ -1039,6 +1041,39 @@ public static class ProtocolTests
         AssertEqual(0, exitCode, "Exit code must be 0 even when handler disposal hangs");
         Assert(disposalStarted.Task.IsCompleted, "Disposal must have started");
         Assert(sw.Elapsed < TimeSpan.FromSeconds(5), $"Shutdown must enforce disposal deadline under 5s, took {sw.Elapsed.TotalSeconds}s");
+    }
+
+    private static async Task TestShutdownWaitsForGracefulHandlerDisposalAsync()
+    {
+        var disposalStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseStop = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool stopFinished = false;
+        var handler = new FakeProtocolHandler
+        {
+            CustomDisposeAsync = async () =>
+            {
+                disposalStarted.TrySetResult(true);
+                await releaseStop.Task;
+                stopFinished = true;
+            }
+        };
+        using var input = new MemoryStream();
+        using var output = new MemoryStream();
+        await using var server = new ProtocolServer(handler, input, output);
+        var run = server.RunAsync(CancellationToken.None);
+        try
+        {
+            await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // A normal SIGTERM stop may exceed the old three-second server deadline.
+            await Task.Delay(TimeSpan.FromSeconds(4));
+            Assert(!run.IsCompleted, "EOF shutdown must wait for the owned engine's graceful stop");
+        }
+        finally
+        {
+            releaseStop.TrySetResult(true);
+            await run.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        Assert(stopFinished, "Server must not return before handler teardown finishes");
     }
 
     private static async Task TestServerDisposalExactlyOnceAsync()

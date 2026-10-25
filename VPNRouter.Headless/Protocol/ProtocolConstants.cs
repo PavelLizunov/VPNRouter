@@ -11,7 +11,8 @@ public static class ProtocolConstants
     public const int PageSize = 100;                    // Default pagination row limit
 
     public const int MaxUrgentOperations = 4;           // Max concurrent urgent/read-only operations
-    public const int HandlerDisposalTimeoutSeconds = 3; // Deadline for handler disposal on shutdown
+    // Outlast RouterSession's 3 s gate wait and 15 s bounded engine stop.
+    public const int HandlerDisposalTimeoutSeconds = 20;
     public const int OutputDrainTimeoutSeconds = 3;     // Deadline for output queue drain
     public const int InFlightDrainTimeoutSeconds = 2;   // Deadline for in-flight task drain on EOF
     public const int OutputWriteTimeoutSeconds = 3;     // Deadline for per-frame write+flush stall

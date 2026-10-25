@@ -137,4 +137,4 @@ severity. These metadata endpoints require no VPN connection or network request.
    - Responses drain while the transport remains usable. Temporary backpressure pauses input admission. EOF cancels pending response enqueues; keep stdin open until receiving required responses.
    - A write-plus-flush stalled for three seconds, or a broken output pipe, triggers bounded teardown. Delivery to a dead peer is not guaranteed; clients must not replay mutations automatically.
 6. **Graceful Shutdown**:
-   - Reception of EOF on standard input, SIGINT, or SIGTERM terminates active operations, stops the engine, and disposes resources cleanly.
+   - EOF on standard input, SIGINT, or SIGTERM cancels active operations and starts engine teardown. Handler disposal has a 20-second deadline, allowing the session's three-second gate wait and 15-second bounded stop to finish. Output drain runs concurrently. An unresponsive engine can outlive these deadlines.
