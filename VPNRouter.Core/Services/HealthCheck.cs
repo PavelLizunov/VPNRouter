@@ -235,9 +235,8 @@ public static class HealthCheck
             else
             {
                 results.Add(new(Level.Warn,
-                    "trusted pkexec not found — auto-update + " +
-                    "elevated Stop will fail unless NOPASSWD sudoers is " +
-                    "configured. Install policykit-1 (apt) or polkit (dnf)."));
+                    "trusted pkexec not found — privileged desktop auto-update is unavailable. " +
+                    "Normal Linux connections require sing-box file capabilities."));
             }
         }
     }
