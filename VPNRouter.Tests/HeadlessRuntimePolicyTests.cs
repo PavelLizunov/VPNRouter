@@ -837,7 +837,7 @@ public class HeadlessRuntimePolicyTests : IDisposable
     }
 
     [Fact]
-    public async Task VlessDeepVerifier_ConstructedOutsidePolicy_UsesFixturePathAndPrivateTemporaryConfig()
+    public async Task VlessDeepVerifier_ConstructedOutsidePolicy_UsesFixturePathInsideScope()
     {
         var tempFile = Path.Combine(_testDataDir, "vless-dv-" + Guid.NewGuid().ToString("N") + ".bin");
         var bytes = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
@@ -851,15 +851,7 @@ public class HeadlessRuntimePolicyTests : IDisposable
 
             var fakeRunner = new FakeProcessRunner();
             var sentinel = new InvalidOperationException("Sentinel: avoid ANY SOCKS probes or process execution");
-            string? temporaryConfig = null;
-            UnixFileMode? configMode = null;
-            fakeRunner.OnStart(_ => true, request =>
-            {
-                temporaryConfig = request.Arguments[2];
-                if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                    configMode = File.GetUnixFileMode(temporaryConfig);
-                throw sentinel;
-            });
+            fakeRunner.OnStart(_ => true, _ => throw sentinel);
 
             // Construct verifier OUTSIDE policy scope
             Assert.Null(SingBoxRuntimePolicy.Current);
@@ -885,10 +877,6 @@ public class HeadlessRuntimePolicyTests : IDisposable
                 // Assert recorded request despite returned LocalSpawn, using the fixture path
                 Assert.Single(fakeRunner.StartCalls);
                 Assert.Equal(tempFile, fakeRunner.StartCalls[0].ExecutablePath);
-                Assert.NotNull(temporaryConfig);
-                Assert.False(File.Exists(temporaryConfig));
-                if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                    Assert.Equal((UnixFileMode?)AppPaths.PrivateUnixFileMode, configMode);
             }
         }
         finally

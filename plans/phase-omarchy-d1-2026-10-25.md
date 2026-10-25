@@ -74,3 +74,12 @@ no actual child or SOCKS/HTTP probe runs in that test. The Free writer uses the
 same file factory but was checked by source inspection only. Diff review and
 `git diff --check` passed; native tests await exact-head CI. No README command,
 setup, or public protocol change is needed for these private-file corrections.
+
+Probe-config commit 74113e74 passed test.yml run 40177179288, Arch run
+40177181002, and Android compile. The CI verifier returned exit 0 / eight green.
+Verification correction: the Linux test.yml filter excludes all class names
+containing Headless, so the mode assertion added in HeadlessRuntimePolicyTests
+would only run on Windows, where its Unix branch is inactive. Move the new
+permission/cleanup regression into DeepVerifierConfigPermissionsTests and
+restore the existing policy test. This tests the real VLESS file at fake spawn
+on Linux without broadening the CI filter or starting a process/network probe.
