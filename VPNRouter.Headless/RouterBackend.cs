@@ -16,7 +16,7 @@ namespace VPNRouter.Headless;
 
 /// <summary>
 /// Headless router backend coordinating Linux feature endpoints and session lifecycle.
-/// Implements protocol v1 contract (omarchy-protocol-v1.md).
+/// Implements the protocol v1 contract documented in README.md.
 /// Invariants:
 /// - Strictly serialized ordinary operations; urgent controls bypass busy.
 /// - Detached candidate mutations preserving settings on validation, save, or apply failures.

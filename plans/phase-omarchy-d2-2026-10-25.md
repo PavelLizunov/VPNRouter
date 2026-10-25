@@ -34,3 +34,28 @@ arch-headless.yml in CI; distinguish fake-engine tests from kernel route evidenc
 5. UI/live: N/A for this local-reading/CI-only round; kernel ip rules unverified.
 6. Consumer characterization: pending EOF and structured-error boundary checks;
    renames must preserve all test bodies and runner registration.
+
+## Implementation checkpoint
+
+- Added 49-line session-lifetime comparison; recommend independent user service
+  and socket. No runtime intent persistence; README now exposes shell coupling.
+- Refresh rejects zero usable servers with a fixed safe error before saving;
+  post-fetch cancellation takes precedence. Eight hermetic wire/persistence
+  cases cover HTTP, transport, empty, invalid, cancellation, partial batch,
+  success and no targets. The existing detached candidate makes failure atomic.
+- Added connected-session EOF coverage through the real adapter chain to a fake
+  engine. Existing Core tests assert Terminate before Kill and retained ownership
+  on failed exact stop; no fake assertion claims to inspect host ip rules.
+- Hygiene scripts: two broken README links corrected; one unused admission helper
+  removed after caller/registration inspection. Renamed two test classes/files;
+  explicit substitution comparison proves all fixture/assertion bodies preserved.
+- Removed only phase-omarchy-resume-2026-10-07.md: obsolete step history with one
+  active map reference, now replaced. Recover with git show c1bafab1:plans/phase-omarchy-resume-2026-10-07.md.
+  Other Omarchy plans retain distinct scope/verification receipts. Root README
+  pair and Arch README were read; no changed claims there require edits.
+
+Local checks so far: fact_check on Headless AGENTS/README, Arch README and design
+note: zero broken paths/links, zero unknown symbols; Headless dead_names: zero
+remaining candidates; git diff --check: clean. No local .NET execution.
+Prepared brief d41e0119 passed Android compile CI 40179218276; repository verifier
+returned exit 0 before implementation. Product CI is still pending.

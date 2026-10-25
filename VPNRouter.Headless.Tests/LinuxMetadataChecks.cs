@@ -10,12 +10,12 @@ using VPNRouter.Headless.Storage;
 
 namespace VPNRouter.Headless.Tests;
 
-/// <summary>Offline contract-r4 fixtures. No engine start, network probe or desktop shell access.</summary>
-public static class Round4Checks
+/// <summary>Offline Linux metadata contract fixtures. No engine start, network probe or desktop shell access.</summary>
+public static class LinuxMetadataChecks
 {
     public static async Task RunAsync()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "vpnrouter-r4-" + Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(Path.GetTempPath(), "vpnrouter-metadata-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         var previousDataDir = AppPaths.DataDir;
         try
@@ -25,7 +25,7 @@ public static class Round4Checks
             CheckServers(dir);
             await CheckUnavailableCodes(dir);
             CheckDiagnostics();
-            Console.WriteLine("[Round4Checks] All offline shared contract checks passed");
+            Console.WriteLine("[LinuxMetadataChecks] All offline shared contract checks passed");
         }
         finally
         {
@@ -93,7 +93,7 @@ public static class Round4Checks
         for (int i = 100; i < 300; i++) ProcessFixture(proc, i, 1000, "fallback-" + i, null);
         timer.Restart();
         var bounded = scanner.Read();
-        Console.WriteLine($"[Round4Checks] Fixture apps discovery: cold={cold:F2} ms, warm/211 proc dirs={timer.Elapsed.TotalMilliseconds:F2} ms");
+        Console.WriteLine($"[LinuxMetadataChecks] Fixture apps discovery: cold={cold:F2} ms, warm/211 proc dirs={timer.Elapsed.TotalMilliseconds:F2} ms");
         Assert(bounded.Count == 200 && bounded.Any(a => a.name == browser), "Bounded proc reader retains desktop matches");
         var storage = new ConfigStorage(Path.Combine(dir, "apps"));
         var feature = new AppRoutingFeature(storage, scanner);
@@ -236,7 +236,7 @@ public static class Round4Checks
     private static void WriteDesktop(string dir, string id, string fields) =>
         File.WriteAllText(Path.Combine(dir, id), "[Desktop Entry]\nType=Application\n" + fields);
     private static JsonElement Json(object value) => JsonSerializer.SerializeToElement(value);
-    private static void Sample(string method, object value) => Console.WriteLine("R4_SAMPLE " + method + " " + JsonSerializer.Serialize(value));
+    private static void Sample(string method, object value) => Console.WriteLine("METADATA_SAMPLE " + method + " " + JsonSerializer.Serialize(value));
     private static void Assert(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
     private static void ExpectCode(string code, Action action)
     {

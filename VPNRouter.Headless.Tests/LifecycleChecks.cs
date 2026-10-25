@@ -11,6 +11,7 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Headless;
 using VPNRouter.Headless.Lifecycle;
+using VPNRouter.Headless.Protocol;
 
 namespace VPNRouter.Headless.Tests;
 
@@ -60,6 +61,9 @@ public static class LifecycleChecks
 
         await CheckUnsupportedUnsafeStateRefusalAsync();
         Console.WriteLine("  ✓ CheckUnsupportedUnsafeStateRefusal passed");
+
+        await CheckConnectedSessionEofStopsOwnedEngineAsync();
+        Console.WriteLine("  CheckConnectedSessionEofStopsOwnedEngine passed");
 
         await CheckDisposeAsync();
         Console.WriteLine("  ✓ CheckDispose passed");
@@ -147,7 +151,7 @@ public static class LifecycleChecks
 
         await CheckErrorRetryRequiresCapabilityAsync();
         Console.WriteLine("  CheckErrorRetryRequiresCapability passed");
-        Console.WriteLine("[LifecycleChecks] All 41 lifecycle checks passed successfully.");
+        Console.WriteLine("[LifecycleChecks] All lifecycle checks passed successfully.");
     }
 
     private static async Task CheckErrorRetryRequiresCapabilityAsync()
@@ -562,6 +566,36 @@ public static class LifecycleChecks
             await session.DisposeAsync();
             directory.Delete(recursive: true);
         }
+    }
+
+    private static async Task CheckConnectedSessionEofStopsOwnedEngineAsync()
+    {
+        var fake = new FakeLifecycleEngine
+        {
+            OnStartAction = f =>
+            {
+                f.FireSingBoxStarted(3333);
+                f.FireConnected(3333);
+            },
+            ReadinessGuardFactory = _ => () => true
+        };
+        await using var session = new RouterSession(fake, () => OwnershipCheckResult.Free(), () => true);
+        await session.ConnectAsync(new AppSettings(), CancellationToken.None);
+        AssertEqual(SessionStates.Connected, session.State, "Session must be connected before EOF");
+        await using var backend = new RouterBackend(session);
+        await using var handler = new RouterBackendHandler(backend);
+        using var input = new MemoryStream();
+        using var output = new MemoryStream();
+        await using (var server = new ProtocolServer(handler, input, output))
+        {
+            AssertEqual(0, await server.RunAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)),
+                "EOF must finish through the real handler/backend/session disposal chain");
+        }
+        AssertEqual(1, fake.StopCallCount, "EOF must stop the owned engine exactly once");
+        AssertTrue(fake.DisposeCalled, "Successful stop must dispose the engine");
+        AssertFalse(fake.IsRunning, "EOF must not retain a running engine");
+        AssertEqual<int?>(null, fake.SingBoxPid, "EOF must clear the owned PID");
+        AssertEqual(SessionStates.Disconnected, session.State, "Successful EOF teardown must disconnect");
     }
 
     private static async Task CheckDisposeAsync()

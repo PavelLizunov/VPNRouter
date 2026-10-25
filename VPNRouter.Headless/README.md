@@ -14,10 +14,14 @@ reports the same reason. A trusted installation permits normal-user TUN startup.
 The Linux lock coordinates cooperating processes of the same UID, not all users.
 
 Verification covers isolated protocol/lifecycle/storage tests and selected Core
-regressions, not live shell interaction or VPN dataplane acceptance. See the
-[backend verification report](../plans/omarchy-integrated-candidate-2026-09-18.md)
-and [runtime-contract evidence](../plans/omarchy-runtime-verification-2026-09-19.md).
-Do not interpret a passing build or CI run as permission to install or connect.
+regressions. Exact-snapshot outcomes and remaining live acceptance gaps are in
+[the integration record](../plans/phase-omarchy-integration-2026-10-22.md) and
+[the defect ledger](../plans/OPEN-DEFECTS.md).
+
+The plugin starts Headless as a child over stdio. Closing or restarting the shell
+stops the active VPN; traffic can then go directly because Linux has no kill-switch.
+Headless does not restore the previous connection automatically. See
+[session lifetime options](../plans/omarchy-session-lifetime.md).
 
 ## Usage
 
@@ -72,6 +76,15 @@ Progress Event:
 ```json
 {"v":1,"event":"progress","data":{"id":"req-1","stage":"testing","completed":3,"total":10}}
 ```
+
+## Subscription refresh failures
+
+`subscriptions.refresh` returns an error with code `subscription_refresh_failed`
+and a fixed safe message if a fetch fails or yields no usable servers. Cached
+servers, configuration revision and the active connection remain unchanged.
+Refreshing multiple subscriptions commits only when all requested refreshes
+succeed. Cancellation returns `cancelled` instead. URLs, HTTP bodies and raw
+exception text are not returned to the client.
 
 ## Offline application and server metadata
 

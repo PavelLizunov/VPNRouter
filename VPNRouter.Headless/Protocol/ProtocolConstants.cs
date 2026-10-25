@@ -60,5 +60,4 @@ public static class ProtocolConstants
     };
 
     public static bool IsKnownMethod(string method) => s_knownMethods.Contains(method);
-    public static bool IsUrgentOrReadOnlyMethod(string method) => method is "cancel" or "disconnect" or "snapshot";
 }

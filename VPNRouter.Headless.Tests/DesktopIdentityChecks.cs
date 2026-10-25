@@ -5,12 +5,12 @@ using VPNRouter.Headless.Storage;
 namespace VPNRouter.Headless.Tests;
 
 /// <summary>Offline desktop identity regression fixtures; never launches a process or desktop app.</summary>
-public static class Round5Checks
+public static class DesktopIdentityChecks
 {
     public static Task RunAsync()
     {
         if (!OperatingSystem.IsLinux()) return Task.CompletedTask;
-        var root = Path.Combine(Path.GetTempPath(), "vpnrouter-r5-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "vpnrouter-desktop-identity-" + Guid.NewGuid().ToString("N"));
         var user = Path.Combine(root, "user");
         var system = Path.Combine(root, "system");
         var proc = Path.Combine(root, "proc", "1");
@@ -32,7 +32,7 @@ public static class Round5Checks
             }
             var scanner = new LinuxRunningApps(Path.GetDirectoryName(proc)!, 1000, new[] { user, system });
             var list = new AppRoutingFeature(new ConfigStorage(Path.Combine(root, "config")), scanner).List();
-            Console.WriteLine("R5_SAMPLE apps.list " + JsonSerializer.Serialize(list));
+            Console.WriteLine("DESKTOP_IDENTITY_SAMPLE apps.list " + JsonSerializer.Serialize(list));
             File.Delete(Path.Combine(system, "com.mitchellh.ghostty.desktop"));
             Write(system, "other.desktop", "Name=Other Terminal Launcher\nIcon=other\nExec=ghostty -e other\n");
             foreach (var dirs in new[] { new[] { user, system }, new[] { system, user } })
@@ -42,7 +42,7 @@ public static class Round5Checks
             }
             var ambiguous = new AppRoutingFeature(new ConfigStorage(Path.Combine(root, "ambiguous")),
                 new LinuxRunningApps(Path.GetDirectoryName(proc)!, 1000, new[] { user, system })).List();
-            Console.WriteLine("R5_SAMPLE apps.list.ambiguous " + JsonSerializer.Serialize(ambiguous));
+            Console.WriteLine("DESKTOP_IDENTITY_SAMPLE apps.list.ambiguous " + JsonSerializer.Serialize(ambiguous));
             File.Delete(Path.Combine(system, "other.desktop"));
             Assert(Match("ghostty").desktopId == "dsh.desktop", "Unique Exec fallback");
             Write(system, "ghostty.desktop", "Name=Exact ID\nExec=unrelated\n");
@@ -62,7 +62,7 @@ public static class Round5Checks
             Assert(LinuxRunningApps.ExecBasename("\"/opt/Space App\" %U") == "Space App", "Quoted target");
             Write(system, "wrapped.desktop", "Name=Wrapped\nExec=sh -c ghostty\n");
             Assert(Match("sh").desktopId == null, "Shell wrapper process gets no desktop metadata");
-            Console.WriteLine("[Round5Checks] Desktop identity, ambiguity and wrapper fixtures passed");
+            Console.WriteLine("[DesktopIdentityChecks] Desktop identity, ambiguity and wrapper fixtures passed");
 
             RunningApp Match(string name) => LinuxRunningApps.Match(new[] { name },
                 LinuxRunningApps.ReadDesktopIndex(new[] { user, system })).Single();

@@ -1,6 +1,8 @@
 # VPNRouter.Headless - Zone Agent Instructions
 
-This document governs the `VPNRouter.Headless` zone. Before any repository action, read `docs/agent-contract.md` and `plans/phase-omarchy-resume-2026-10-07.md`. The September protocol text is not in this tree yet.
+This document governs the `VPNRouter.Headless` zone. Follow the
+[project contract](../docs/agent-contract.md). The current protocol and lifecycle
+limits are documented in [README.md](README.md); dated plans are snapshot evidence.
 
 ## Purpose and Architecture
 

@@ -33,6 +33,7 @@ public class RouterException : Exception
         "cancelled" => "The operation was cancelled.",
         "unavailable" => "The requested service or feature is unavailable.",
         "unsupported" => "The requested operation or parameter is unsupported.",
+        "subscription_refresh_failed" => "Subscription refresh failed or returned no usable servers. Cached servers were kept.",
         "storage_error" => "A configuration storage error occurred.",
         "connect_failed" => "Failed to initiate VPN connection.",
         "stop_failed" => "Failed to stop VPN connection.",

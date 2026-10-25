@@ -55,12 +55,13 @@ public static class ProtocolTests
 
         // Feature and Lifecycle test suites
         await RunTestAsync(nameof(FeatureChecks), FeatureChecks.RunAsync);
+        await RunTestAsync(nameof(SubscriptionRefreshChecks), SubscriptionRefreshChecks.RunAsync);
         await RunTestAsync(nameof(LifecycleChecks), LifecycleChecks.RunAsync);
         await RunTestAsync(nameof(StorageChecks), StorageChecks.RunAsync);
         await RunTestAsync(nameof(ProfileChecks), ProfileChecks.RunAsync);
         await RunTestAsync(nameof(RuntimePolicyChecks), RuntimePolicyChecks.RunAsync);
-        await RunTestAsync(nameof(Round4Checks), Round4Checks.RunAsync);
-        await RunTestAsync(nameof(Round5Checks), Round5Checks.RunAsync);
+        await RunTestAsync(nameof(LinuxMetadataChecks), LinuxMetadataChecks.RunAsync);
+        await RunTestAsync(nameof(DesktopIdentityChecks), DesktopIdentityChecks.RunAsync);
 
         Console.WriteLine($"\nTest Results: {s_passedTests} passed, {s_failedTests} failed.");
         return s_failedTests == 0 ? 0 : 1;

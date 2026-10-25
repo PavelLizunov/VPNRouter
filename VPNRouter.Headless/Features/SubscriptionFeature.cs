@@ -230,7 +230,10 @@ public sealed class SubscriptionFeature
         {
             ct.ThrowIfCancellationRequested();
             progress?.Invoke(new { stage = "refresh_subscription", completed = done, total });
-            await SubscriptionFetcher.RefreshEntryAsync(sub, _logger, ct);
+            var count = await SubscriptionFetcher.RefreshEntryAsync(sub, _logger, ct);
+            ct.ThrowIfCancellationRequested();
+            if (count == 0)
+                throw new RouterException("subscription_refresh_failed");
             done++;
             progress?.Invoke(new { stage = "refresh_subscription", completed = done, total });
         }
