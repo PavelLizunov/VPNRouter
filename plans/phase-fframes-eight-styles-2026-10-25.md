@@ -352,10 +352,20 @@ system was found. Each style has a deliberate visual mechanism:
   kinetic (24/1080). Their silent-video hashes differ too; encoded packet payloads
   differ while packet timing matches. This localizes the observed failure before
   final soundtrack mux, not to a proven rasterizer/cache defect.
-- Next controlled diagnostic changes only `FFRAMES_NUM_THREADS=1`, keeping
-  `RAYON_NUM_THREADS=2`, exact source, workload, media and checker unchanged.
-  Published fframes `renderer.rs:342-350` reads that native override for CPU
-  backend concurrency; no temporary Rust adapter or upstream patch is needed.
-  Run the same two batches and strict hashes. This tests rendering concurrency
-  without serializing parallel media/font loading. It is not a speedup candidate.
+- Controlled diagnostic `40195226933` at checkpoint
+  `e1f9d5650c8b9a4701a64647a9399bf247f252ad` completed successfully on exact
+  `ac5ac03` source with native `FFRAMES_NUM_THREADS=1` and unchanged Rayon=2.
+  It still failed cross-export equality: anime 72/1080, swiss 3/1080,
+  editorial 72/1080 and paper 24/1080 video frames differ. Other styles match;
+  all audio and same-file redecodes match. Each differing style also differs
+  before soundtrack mux. Collection success is not repeatability acceptance.
+- Exact local/remote/PR checkpoint and all four product checks are green; normal
+  render intentionally skipped. Diagnostic artifacts and watcher were collected.
+  All seven frozen V2 files verify; helper remains blocked with no baseline,
+  no current best and zero candidates. Delivered previews remain unchanged.
+- Next recovery: inspect saved frame/packet ranges and the exact crate source,
+  then choose one discriminating raw-input-versus-encoder diagnostic. Do not
+  repeat thread-count tuning, change frozen inputs or relax decoded equality.
+  Any required reproducibility/evaluator correction needs a reviewed linked
+  replacement lock and fresh strict baseline before orchestration candidates.
 - Fresh baseline, paired optimization and confirmation remain pending.
