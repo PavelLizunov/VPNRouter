@@ -500,3 +500,9 @@ See phase-omarchy-n4-lifetime-2026-10-26.md. Live evidence is pending.
 - Severity: P1; status: investigating on task branch `dsh/omarchy-n4-net`.
 - Evidence: r33 on the authorized Omarchy VM connects a TUN-only inbound, but resolved has no TUN DNS scope and public lookups use DHCP resolver over ens18; nft observes LAN UDP/53. Private route exclusions bypass the generated DNS hijack rule. Linux Headless rejects DNS lockdown, so the existing Unix DNS adapter is never applied with ordinary settings.
 - Repair scope: per-link resolver steering for full tunnel, separately from the stronger DNS-lockdown capability; narrowly scoped noninteractive package authorization; lifecycle and regression checks.
+
+## Omarchy N4 native DNS helper retains TUN (2026-10-26)
+
+- Severity: P1; status: reproduced, repair in progress on `dsh/omarchy-n4-net`.
+- Packaged sing-box 1.14 defaults TUN `dns_mode` to hijack, including native resolved configuration. A resolvectl child was observed holding `/dev/net/tun` for VPNRouter-TUN after sing-box exited; link release took 24.64 seconds. Rapid restarts fail with TUNSETIFF device/resource busy (5/6). A real connected MTU update failed with connection_lost.
+- Candidate repair: explicitly disable sing-box's native DNS integration on generated Linux TUNs and retain the bounded noninteractive application-owned adapter. Test rapid restart and real connected MTU update. Do not hide the failure with a fixed sleep or lower default MTU.

@@ -262,6 +262,9 @@ public class SingBoxInbound
     [JsonPropertyName("auto_route")]
     public bool AutoRoute { get; set; } = true;
 
+    [JsonPropertyName("dns_mode")]
+    public string? DnsMode { get; set; }
+
     [JsonPropertyName("strict_route")]
     public bool StrictRoute { get; set; } = false;
 
