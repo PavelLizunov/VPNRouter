@@ -36,9 +36,9 @@ tar.gz users: run setcap once to unlock passwordless mode —
      sudo setcap cap_net_admin,cap_net_bind_service=+eip ~/.config/vpnrouter/bin/sing-box
 
 AppImage users: AppImage is a read-only squashfs so setcap on the
-embedded binary is impossible. An unsandboxed AppImage falls back to
-the host pkexec, which pops a GUI password prompt via your desktop
-polkit agent.
+embedded binary is impossible. Use a native package that installs sing-box
+with file capabilities. Linux Connect does not fall back to an interactive
+pkexec prompt when capabilities are absent.
 
 Do not wrap the AppImage in bubblewrap or a user namespace when using
 host TUN mode. In particular, NixOS appimageTools.wrapType2 cannot
@@ -47,10 +47,12 @@ interface: a visible file capability does not override NoNewPrivs or
 the user-namespace boundary. Use a native package that deploys and
 grants capability to a verified sing-box binary outside that sandbox.
 
-If both capability and pkexec are unavailable (headless distro with no
-polkit agent), you can still run VPNRouter.App, but Connect will fail
-with a clear error. Install a polkit agent (e.g. policykit-1) or apply
-setcap manually to proceed.
+If capabilities are unavailable or stripped after a binary replacement,
+Connect reports the exact one-time setcap repair command. If the filesystem
+does not support extended attributes, install on a filesystem that does.
+Normal connect/disconnect does not ask for a password. Privileged desktop
+self-update remains a separate operation; Omarchy Headless updates through
+the system package manager and has no self-update protocol method.
 
 
 GNOME users — tray icon
