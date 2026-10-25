@@ -62,6 +62,8 @@ public static class LifecycleChecks
         await CheckUnsupportedUnsafeStateRefusalAsync();
         Console.WriteLine("  ✓ CheckUnsupportedUnsafeStateRefusal passed");
 
+        await CheckConnectedSessionServiceDetachKeepsOwnedEngineAsync();
+        Console.WriteLine("  CheckConnectedSessionServiceDetachKeepsOwnedEngine passed");
         await CheckConnectedSessionEofStopsOwnedEngineAsync();
         Console.WriteLine("  CheckConnectedSessionEofStopsOwnedEngine passed");
 
@@ -596,6 +598,38 @@ public static class LifecycleChecks
         AssertFalse(fake.IsRunning, "EOF must not retain a running engine");
         AssertEqual<int?>(null, fake.SingBoxPid, "EOF must clear the owned PID");
         AssertEqual(SessionStates.Disconnected, session.State, "Successful EOF teardown must disconnect");
+    }
+
+    private static async Task CheckConnectedSessionServiceDetachKeepsOwnedEngineAsync()
+    {
+        var fake = new FakeLifecycleEngine
+        {
+            OnStartAction = f =>
+            {
+                f.FireSingBoxStarted(3333);
+                f.FireConnected(3333);
+            },
+            ReadinessGuardFactory = _ => () => true
+        };
+        await using var session = new RouterSession(fake, () => OwnershipCheckResult.Free(), () => true);
+        await session.ConnectAsync(new AppSettings(), CancellationToken.None);
+        AssertEqual(SessionStates.Connected, session.State, "Session must be connected before EOF");
+        await using var backend = new RouterBackend(session);
+        await using var handler = new RouterBackendHandler(backend);
+        using var input = new MemoryStream();
+        using var output = new MemoryStream();
+        await using (var server = new ProtocolServer(handler, input, output, sessionDispatcher: new ProtocolDispatcher(handler)))
+        {
+            AssertEqual(0, await server.RunAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)),
+                "EOF must finish through the real handler/backend/session disposal chain");
+        }
+        AssertEqual(0, fake.StopCallCount, "Service client EOF must not stop the engine");
+        AssertFalse(fake.DisposeCalled, "Client detach must not dispose the engine");
+        AssertTrue(fake.IsRunning, "Engine must remain running after detach");
+        AssertEqual<int?>(3333, fake.SingBoxPid, "Owned engine PID must survive detach");
+        AssertEqual(SessionStates.Connected, session.State, "Service retains connected state");
+        await handler.ExecuteAsync("disconnect", default, CancellationToken.None);
+        AssertEqual(1, fake.StopCallCount, "Explicit disconnect still stops owned engine");
     }
 
     private static async Task CheckDisposeAsync()

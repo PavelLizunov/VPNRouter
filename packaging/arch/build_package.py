@@ -569,6 +569,14 @@ def inspect_package(pkg_file: Path, work_dir: Path) -> None:
                     raise ValueError(f"Unexpected package install script: {norm}")
                 if norm in allowed_metadata or norm in ("usr", "usr/lib", "usr/lib/vpnrouter-headless"):
                     continue
+                if norm in ("usr/lib/systemd", "usr/lib/systemd/user") and member.isdir():
+                    continue
+                if norm == "usr/lib/systemd/user/vpnrouter-headless.service" and member.isreg():
+                    unit = tf.extractfile(member)
+                    expected = (ARCH_DIR / "vpnrouter-headless.service").read_bytes()
+                    if unit is None or unit.read(len(expected) + 1) != expected:
+                        raise ValueError("Unexpected user service unit")
+                    continue
                 if norm.startswith("usr/lib/vpnrouter-headless/"):
                     continue
                 raise ValueError(f"Forbidden file in package outside allowed metadata and usr/lib/vpnrouter-headless: {norm}")
@@ -718,6 +726,11 @@ def main(argv: list[str] | None = None) -> int:
             mode = 0o755 if (item.stat().st_mode & 0o111) or item.name == "VPNRouter.Headless" else 0o644
             os.chmod(dest_item, mode)
 
+    unit_dir = stage_root / "usr" / "lib" / "systemd" / "user"
+    unit_dir.mkdir(parents=True, mode=0o755)
+    shutil.copy2(ARCH_DIR / "vpnrouter-headless.service", unit_dir / "vpnrouter-headless.service")
+    os.chmod(unit_dir / "vpnrouter-headless.service", 0o644)
+
     runtime_dest_dir = payload_dir / "runtime"
     runtime_dest_dir.mkdir(parents=True, mode=0o755)
     for src_root, fname, dst_name in [
@@ -785,6 +798,7 @@ def main(argv: list[str] | None = None) -> int:
         "source_archive_sha256": source_sha256,
         "packaging_files_sha256": {
             "PKGBUILD": compute_file_sha256(template_pkgbuild),
+            "vpnrouter-headless.service": compute_file_sha256(ARCH_DIR / "vpnrouter-headless.service"),
             "vpnrouter-headless.install": compute_file_sha256(ARCH_DIR / "vpnrouter-headless.install"),
             "staging_tools.py": compute_file_sha256(staging_tools_py),
             "build_package.py": compute_file_sha256(build_package_py),

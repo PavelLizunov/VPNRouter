@@ -53,6 +53,8 @@ public static class ProtocolTests
         await RunTestAsync(nameof(TestSubprocessSigtermWithOpenStdinPipeAsync), TestSubprocessSigtermWithOpenStdinPipeAsync);
         await RunTestAsync(nameof(TestSubprocessEofTeardownAsync), TestSubprocessEofTeardownAsync);
 
+        await RunTestAsync(nameof(SocketChecks), SocketChecks.RunAsync);
+
         // Feature and Lifecycle test suites
         await RunTestAsync(nameof(FeatureChecks), FeatureChecks.RunAsync);
         await RunTestAsync(nameof(SubscriptionRefreshChecks), SubscriptionRefreshChecks.RunAsync);
