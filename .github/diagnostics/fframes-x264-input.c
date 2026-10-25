@@ -11,8 +11,14 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <x264.h>
+#include <xmmintrin.h>
+
+_Static_assert(X264_BUILD == 164, "Named state observation requires the retained ABI-164 header");
+_Static_assert(sizeof(float) == sizeof(uint32_t), "Float fingerprint requires 32-bit float");
+_Static_assert(INT_MAX == INT32_MAX && UINT_MAX == UINT32_MAX, "State parser requires 32-bit int");
 
 #define STRING_VALUE_(x) #x
 #define STRING_VALUE(x) STRING_VALUE_(x)
@@ -144,6 +150,53 @@ static void nal_sizes(FILE *file, x264_nal_t *nals, int count)
     flush_trace(file);
 }
 
+/* Source-supported input fields only; never read optional pointer payloads. */
+static void state_row(FILE *file, struct encoder_trace *item, const x264_param_t *p,
+                      const x264_picture_t *input, unsigned mxcsr, unsigned x87)
+{
+    fprintf(file, "state\t%u\t%u\t%d\tfp.mxcsr_control=%u\tfp.x87_control=%u",
+            item->id, item->calls, input == NULL, mxcsr, x87);
+    /* Integer/float field encodings do not include padding or native addresses. */
+#define PARAM_INT(name) fprintf(file, "\tparam." #name "=%d", p->name);
+#define PARAM_UINT(name) fprintf(file, "\tparam." #name "=%" PRIu32, (uint32_t)p->name);
+#define PARAM_INT64(name) fprintf(file, "\tparam." #name "=%" PRId64, p->name);
+#define PARAM_PRESENT(name) fprintf(file, "\tparam." #name "=%d", p->name != NULL);
+#define PARAM_FLOAT(name) do { \
+    uint32_t bits; \
+    memcpy(&bits, &p->name, sizeof(bits)); \
+    fprintf(file, "\tparam." #name "=%08" PRIx32, bits); \
+} while (0);
+#define PARAM_CQM(name) do { \
+    char hash[65]; \
+    plane_hash(p->name, (int)sizeof(p->name), (int)sizeof(p->name), 1, hash); \
+    fprintf(file, "\tparam." #name "=%s", hash); \
+} while (0);
+#include "x264-state-fields.inc"
+#undef PARAM_INT
+#undef PARAM_UINT
+#undef PARAM_INT64
+#undef PARAM_PRESENT
+#undef PARAM_FLOAT
+#undef PARAM_CQM
+    if (input) {
+        fprintf(file, "\tpic.i_type=%d\tpic.i_qpplus1=%d\tpic.i_pic_struct=%d"
+                "\tpic.img.i_csp=%d\tpic.img.i_plane=%d"
+                "\tpic.img.i_stride[0]=%d\tpic.img.i_stride[1]=%d\tpic.img.i_stride[2]=%d"
+                "\tpic.param=%d\tpic.prop.quant_offsets=%d\tpic.prop.quant_offsets_free=%d"
+                "\tpic.prop.mb_info=%d\tpic.prop.mb_info_free=%d"
+                "\tpic.extra_sei.num_payloads=%d\tpic.extra_sei.payloads=%d\tpic.extra_sei.sei_free=%d",
+                input->i_type, input->i_qpplus1, input->i_pic_struct,
+                input->img.i_csp, input->img.i_plane,
+                input->img.i_stride[0], input->img.i_stride[1], input->img.i_stride[2],
+                input->param != NULL, input->prop.quant_offsets != NULL,
+                input->prop.quant_offsets_free != NULL, input->prop.mb_info != NULL,
+                input->prop.mb_info_free != NULL, input->extra_sei.num_payloads,
+                input->extra_sei.payloads != NULL, input->extra_sei.sei_free != NULL);
+    }
+    fputc('\n', file);
+    flush_trace(file);
+}
+
 x264_t *x264_encoder_open(x264_param_t *parameters)
 {
     pthread_once(&symbols_once, load_symbols);
@@ -172,23 +225,32 @@ int x264_encoder_encode(x264_t *encoder, x264_nal_t **nals, int *count,
 {
     pthread_once(&symbols_once, load_symbols);
     int observing = getenv("FFRAMES_INPUT_TRACE") != NULL;
-    if (input && observing) {
+    if (observing) {
+        /* Capture modes, not sticky status; do not change the caller's FP state. */
+        unsigned mxcsr = _mm_getcsr() & 0xffc0U;
+        unsigned short x87;
+        __asm__ volatile("fnstcw %0" : "=m" (x87));
         x264_param_t actual;
         char hashes[3][65];
         real_parameters(encoder, &actual);
-        if (input->img.i_csp != X264_CSP_I420 || input->img.i_plane != 3)
-            fail("only exact 8-bit planar I420 is supported");
-        for (int plane = 0; plane < 3; ++plane)
-            plane_hash(input->img.plane[plane], input->img.i_stride[plane],
-                       plane ? (actual.i_width + 1) / 2 : actual.i_width,
-                       plane ? (actual.i_height + 1) / 2 : actual.i_height, hashes[plane]);
+        if (input) {
+            if (input->img.i_csp != X264_CSP_I420 || input->img.i_plane != 3)
+                fail("only exact 8-bit planar I420 is supported");
+            for (int plane = 0; plane < 3; ++plane)
+                plane_hash(input->img.plane[plane], input->img.i_stride[plane],
+                           plane ? (actual.i_width + 1) / 2 : actual.i_width,
+                           plane ? (actual.i_height + 1) / 2 : actual.i_height, hashes[plane]);
+        }
         pthread_mutex_lock(&trace_mutex);
         struct encoder_trace *item = lookup(encoder);
         FILE *file = trace_file();
-        fprintf(file, "frame\t%u\t%" PRId64 "\t%s\t%s\t%s\n", item->id,
-                input->i_pts, hashes[0], hashes[1], hashes[2]);
-        ++item->inputs;
-        flush_trace(file);
+        state_row(file, item, &actual, input, mxcsr, x87);
+        if (input) {
+            fprintf(file, "frame\t%u\t%" PRId64 "\t%s\t%s\t%s\n", item->id,
+                    input->i_pts, hashes[0], hashes[1], hashes[2]);
+            ++item->inputs;
+            flush_trace(file);
+        }
         pthread_mutex_unlock(&trace_mutex);
     }
     int result = real_encode(encoder, nals, count, input, output);

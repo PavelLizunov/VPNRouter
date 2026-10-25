@@ -107,7 +107,17 @@ jobs:
           spec.loader.exec_module(analysis)
           folder = Path('out/repeatability/probe-smoke')
           trace, = folder.glob('smoke-*.tsv')
-          boundary = analysis.read_boundary(trace, expected_frames=3, segment_frames=3)
+          boundary = analysis.read_boundary(trace, expected_frames=3, segment_frames=3, require_state=True)
+          states = boundary['segments'][0]['states']
+          assert len(states) == len(boundary['segments'][0]['calls'])
+          for state in states:
+              assert state['param.i_threads'] == '1'
+              assert state['param.i_width'] == '854' and state['param.i_height'] == '480'
+              assert state['param.rc.b_stat_read'] == '0'
+              if 'pic.i_type' in state:
+                  assert state['pic.i_type'] == '0' and state['pic.i_qpplus1'] == '0'
+                  assert all(state[key] == '0' for key in ('pic.param', 'pic.prop.quant_offsets',
+                      'pic.prop.mb_info', 'pic.extra_sei.num_payloads', 'pic.extra_sei.payloads'))
           for index, hashes in boundary['frames'].items():
               expected = [hashlib.sha256(bytes([32+index*20])*854*480).hexdigest()]
               expected += [hashlib.sha256(bytes([128])*427*240).hexdigest()]*2
@@ -218,7 +228,7 @@ jobs:
           save(out/'execution-order.json', [{'batch': index, 'input_probe': traced} for index, traced in execution_order])
           print(json.dumps({'traced': summary, 'plain': plain}, indent=2))
           PY
-          python3 "$GITHUB_WORKSPACE/diagnostic-code/.github/diagnostics/analyze_fframes_input.py" out/repeatability
+          python3 "$GITHUB_WORKSPACE/diagnostic-code/.github/diagnostics/analyze_fframes_input.py" out/repeatability --require-state
       - name: Upload diagnostic evidence only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

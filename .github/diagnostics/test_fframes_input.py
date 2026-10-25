@@ -22,6 +22,39 @@ workflow_contract = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(workflow_contract)
 
 
+def state_row(encoder, call, flush, updates=None):
+    values = {'fp.mxcsr_control': '8064', 'fp.x87_control': '895'}
+    for name, kind in analysis.PARAM_FIELDS.items():
+        values[name] = 'a'*64 if kind == 'CQM' else '00000000' if kind == 'FLOAT' else '0'
+    values.update({'param.i_width': '854', 'param.i_height': '480', 'param.i_csp': '2',
+                   'param.i_threads': '1'})
+    if not flush:
+        values.update({'pic.' + name: '0' for name in analysis.PICTURE_FIELDS})
+        values.update({'pic.img.i_csp': '2', 'pic.img.i_plane': '3',
+                       'pic.img.i_stride[0]': '896', 'pic.img.i_stride[1]': '448',
+                       'pic.img.i_stride[2]': '448'})
+    values.update(updates or {})
+    return f'state\t{encoder}\t{call}\t{flush}\t' + '\t'.join(f'{key}={value}' for key, value in values.items())
+
+
+def with_state(value, changes=None):
+    rows = []
+    calls = {}
+    for row in value.splitlines():
+        fields = row.split('\t')
+        kind, encoder = fields[:2]
+        if kind == 'open':
+            calls[encoder] = 0
+        if kind == 'frame' or kind == 'output' and fields[3] == '1':
+            call = calls[encoder]
+            rows.append(state_row(encoder, call, int(kind == 'output'),
+                                  (changes or {}).get((int(encoder), call))))
+        rows.append(row)
+        if kind == 'output':
+            calls[encoder] += 1
+    return '\n'.join(rows) + '\n'
+
+
 def trace(changed=None, output_changed=None, header_changed=None):
     rows = []
     for segment in range(45):
@@ -116,7 +149,7 @@ class TraceTests(unittest.TestCase):
             self.assertEqual(order_report['different_header_segments'], [])
             self.assertEqual(order_report['different_native_output_frames'], [])
             self.assertEqual(order_report['different_native_call_segments'], [0])
-            self.assertIn('inspect_hidden_inputs_and_encoder_path', order_report['conclusion'])
+            self.assertIn('without_native_payload_divergence', order_report['conclusion'])
             decoded['styles']['swiss']['same_file_redecode'][0]['video'] = False
             (root/'summary.json').write_text(json.dumps(decoded))
             self.assertIn('same_file_video_decode_unstable',
@@ -156,6 +189,93 @@ class TraceTests(unittest.TestCase):
             path.write_text(path.read_text().replace(rows[3] + '\n', ''))
             with self.assertRaises(AssertionError):
                 analysis.read_boundary(path, expected_frames=3, segment_frames=3)
+
+    def test_named_state_complete_coverage_and_malformed_fields(self):
+        good = with_state(trace())
+        first = next(row for row in good.splitlines() if row.startswith('state\t'))
+        invalid = (
+            trace(), good.replace(first + '\n', '', 1), good + first + '\n',
+            good.replace(first, first + '\tparam.i_threads=1', 1),
+            good.replace('\tparam.i_threads=1', '', 1),
+            good.replace('fp.mxcsr_control=8064', 'fp.mxcsr_control=8065', 1),
+            good.replace('param.psz_cqm_file=0', 'param.psz_cqm_file=2', 1),
+            good.replace('pic.img.i_stride[1]=448', 'pic.img.i_stride[1]=426', 1),
+            good.replace('state\t1\t0\t0', 'state\t1\t1\t0', 1),
+            good.replace('state\t1\t24\t1', 'state\t1\t24\t0', 1),
+            good.replace('param.analyse.f_psy_rd=00000000', 'param.analyse.f_psy_rd=nan', 1),
+            good.replace('param.cqm_4iy=' + 'a'*64, 'param.cqm_4iy=bad', 1),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)/'trace.tsv'
+            path.write_text(good)
+            boundary = analysis.read_boundary(path, require_state=True)
+            self.assertEqual(sum(len(item['states']) for item in boundary['segments'].values()), 1125)
+            self.assertTrue(boundary['named_state_observed'])
+            for value in invalid:
+                with self.subTest(value=value[:70]):
+                    path.write_text(value)
+                    with self.assertRaises((AssertionError, ValueError)):
+                        analysis.read_boundary(path, require_state=True)
+            path.write_text(trace())
+            self.assertFalse(analysis.read_boundary(path)['named_state_observed'])
+
+    def test_named_state_native_scalar_widths(self):
+        for field, low, high in (
+            ('param.cpu', 0, 2**32-1),
+            ('param.i_threads', -2**31, 2**31-1),
+            ('param.mastering_display.i_display_max', -2**63, 2**63-1),
+            ('pic.i_type', -2**31, 2**31-1),
+        ):
+            for value in (low-1, low, high, high+1):
+                with self.subTest(field=field, value=value):
+                    fields = state_row(1, 0, 0, {field: str(value)}).split('\t')[4:]
+                    if low <= value <= high:
+                        self.assertEqual(analysis.read_state(fields, 0)[field], str(value))
+                    else:
+                        with self.assertRaises((AssertionError, ValueError)):
+                            analysis.read_state(fields, 0)
+
+    def test_named_state_differences_and_optional_payloads_never_prove_input_equality(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            decoded = {'styles': {style: {'between_batches': {'video': False},
+                'same_file_redecode': [{'video': True}, {'video': True}],
+                'frame_rows': [1080, 1080]} for style in analysis.STYLES}}
+            (root/'summary.json').write_text(json.dumps(decoded))
+            for batch in range(2):
+                folder = root/f'batch-{batch}/input-traces'
+                folder.mkdir(parents=True)
+                for style in analysis.STYLES:
+                    changes = {(1, 0): {'pic.i_qpplus1': '24'}} if batch == 1 and style == 'anime' else {}
+                    # Same non-NULL flags cannot stand in for equal pointed-to content.
+                    if style == 'blueprint':
+                        changes = {(1, 0): {'pic.prop.quant_offsets': '1'}}
+                    value = trace(output_changed=17 if batch == 1 else None)
+                    (folder/f'{style}-123.tsv').write_text(with_state(value, changes))
+            report = analysis.analyze(root, require_state=True)
+            anime = report['styles']['anime']
+            self.assertIn('named_state_differs', anime['conclusion'])
+            self.assertEqual(anime['different_named_state_calls'],
+                [{'segment': 0, 'call': 0, 'fields': ['pic.i_qpplus1']}])
+            self.assertIn('named_fields_equal', report['styles']['swiss']['conclusion'])
+            blueprint = report['styles']['blueprint']
+            self.assertEqual(blueprint['optional_payloads_not_dereferenced'], ['pic.prop.quant_offsets'])
+            self.assertFalse(blueprint['complete_semantic_input_equality_established'])
+            swiss = root/'batch-1/input-traces/swiss-123.tsv'
+            rows = with_state(trace()).splitlines()
+            header = rows.pop(1)
+            rows.insert(4, header)  # Native payloads equal; only call/header order moves.
+            swiss.write_text('\n'.join(rows) + '\n')
+            order = analysis.analyze(root, require_state=True)['styles']['swiss']
+            self.assertEqual(order['different_native_output_frames'], [])
+            self.assertEqual(order['different_header_segments'], [])
+            self.assertEqual(order['different_named_state_calls'], [])
+            self.assertEqual(order['different_native_call_segments'], [0])
+            self.assertIn('without_native_payload_divergence', order['conclusion'])
+            decoded['styles']['anime']['between_batches']['video'] = True
+            (root/'summary.json').write_text(json.dumps(decoded))
+            self.assertIn('original_failure_not_localized',
+                          analysis.analyze(root, require_state=True)['styles']['anime']['conclusion'])
 
     def test_real_workflow_pair_order_preload_isolation_and_failure_collection(self):
         source = (ROOT/'.github/workflows/diagnose-fframes-repeatability.yml').read_text()
@@ -229,6 +349,47 @@ class TraceTests(unittest.TestCase):
                     for index in (2, 3):
                         self.assertFalse(list((out/f'batch-{index}/input-traces').iterdir()))
 
+    def test_actual_extracted_smoke_requires_and_checks_named_state(self):
+        source = (ROOT/'.github/workflows/diagnose-fframes-repeatability.yml').read_text()
+        blocks = workflow_contract.run_blocks(source)
+        body, = [body for block in blocks for body in
+                 re.findall(r"(?ms)^ *python3 - <<'PY'\n(.*?)^PY$", block)
+                 if "folder = Path('out/repeatability/probe-smoke')" in body]
+        for failure in (None, 'missing-state', 'bad-picture', 'bad-nal'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:
+                folder = Path(temp)/'out/repeatability/probe-smoke'
+                folder.mkdir(parents=True)
+                rows = ['open\t1\t854\t480\t2\t1\t1\t0\t1',
+                        'headers\t1\t1\t1\t' + analysis.hashlib.sha256(b'H').hexdigest() + '\t1']
+                for index in range(3):
+                    hashes = [analysis.hashlib.sha256(bytes([32+index*20])*854*480).hexdigest()]
+                    hashes += [analysis.hashlib.sha256(bytes([128])*427*240).hexdigest()]*2
+                    rows += [f'frame\t1\t{index}\t' + '\t'.join(hashes),
+                             f'output\t1\t{index}\t0\t1\t1\t{index}\t'
+                             + analysis.hashlib.sha256(b'V').hexdigest() + '\t1']
+                rows += ['output\t1\t3\t1\t0\t0\t-\t' + analysis.EMPTY_SHA256,
+                         'close\t1\t3\t3\t4\t1\t1']
+                value = '\n'.join(rows) + '\n'
+                if failure != 'missing-state':
+                    value = with_state(value, {(1, 0): {'pic.i_type': '1'}} if failure == 'bad-picture' else None)
+                (folder/'smoke-123.tsv').write_text(value)
+                (folder/'traced.h264').write_bytes(b'HVVX' if failure == 'bad-nal' else b'HVVV')
+                cwd = os.getcwd()
+                try:
+                    os.chdir(temp)
+                    with patch.dict(os.environ, {'GITHUB_WORKSPACE': str(ROOT.parent)}), patch('builtins.print'):
+                        # Only resolve the extracted smoke's diagnostic-code import.
+                        real_spec = importlib.util.spec_from_file_location
+                        with patch.object(importlib.util, 'spec_from_file_location',
+                            side_effect=lambda name, path: real_spec(name, HERE/'analyze_fframes_input.py')):
+                            if failure:
+                                with self.assertRaises(AssertionError):
+                                    exec(compile(body, '<smoke>', 'exec'), {})
+                            else:
+                                exec(compile(body, '<smoke>', 'exec'), {})
+                finally:
+                    os.chdir(cwd)
+
     def test_probe_uses_stack_sha256_without_evp_heap_allocations(self):
         source = (HERE/'fframes-x264-input.c').read_text()
         self.assertIn('SHA256_CTX ctx;', source)
@@ -255,6 +416,8 @@ class TraceTests(unittest.TestCase):
         self.assertIn("os.environ.pop('LD_PRELOAD', None)", source)
         self.assertIn("shutil.copytree(root/'out/styles', folder/'outputs')", source)
         self.assertIn('if: always()', source)
+        self.assertIn('out/repeatability --require-state', source)
+        self.assertIn('segment_frames=3, require_state=True', source)
         self.assertNotIn('cargo run', source)
 
 

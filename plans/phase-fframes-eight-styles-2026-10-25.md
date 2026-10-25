@@ -501,4 +501,91 @@ system was found. Each style has a deliberate visual mechanism:
   baseline acceptance. Native ABI, smoke/transparency and real outputs remain
   unverified until the next disposable exact-head CI. All nine delivered preview/
   archive files retain their original checksums; no rollback or product change.
-- Fresh baseline, paired optimization and confirmation remain pending.
+- Output-boundary checkpoint `44c74615aa4d89c0e6b01036415eeebeb61be92e` is
+  exact-head green: test 3m18s, characterization-windows 7m12s,
+  go-test-windows 35s, grep 4s, diagnose 12m12s; normal render skipped.
+  Actions `40205357873` compiled the CI-only hook and passed encoded-byte
+  transparency, complete-lifetime, visible-plane and native-NAL SHA256 smoke.
+  Watcher `bash-5b5bf7198c244d4a` and collection `bash-7d5c0aaa43b24b58`
+  completed with exit 0. Artifact `12603573609` (214572206 bytes, 793 entries)
+  has verified SHA256
+  `a4f1b434aa8be66a376d6bb03105bc3de95d47def1cdbc4d0d3cb8ce7aca346e`.
+- Saved-evidence verification checked 64 media hashes and 34560 decoded rows.
+  Traced video differences: anime 24, blueprint 48, editorial 261 frames;
+  plain controls: anime 24, editorial 261, kinetic 144. Other styles match.
+  All 16 traces have equal visible inputs and complete 45x24 closed lifetimes,
+  matching headers, recorded settings 1/1/0/1 and output-PTS/flush sequences.
+  Returned native NAL hashes differ at anime 7, blueprint 22, editorial 132 PTS.
+  This establishes native-output divergence before MP4 assembly, not its cause.
+- Independent audit `202a125e` parsed the raw TSVs without the analyzer: 720
+  closed lifetimes, 17280 inputs/outputs, 35280 calls and 18000 NULL flush calls.
+  It verified 26736 actual MP4 packet-byte hashes in the six changed-style films.
+  Every one of 6480 video packets reproduces the native return/count/hash/lengths
+  after separating SEI and converting 4-byte NAL lengths to Annex-B prefixes;
+  zero mismatches and exactly equal native/packet divergence PTS sets. Report:
+  `out/repeatability-analysis/native-result-audit-40205357873.json`, SHA256
+  `a42ac8de3819d1d5f6355c7ff1390ea7bab3b6c46d9ed756c6a5615a2f5a27f8`.
+- Equal visible hashes are not equal full picture controls, full effective params,
+  unseen storage or encoder state. Exact retained CI header matches upstream
+  `31e19f92f00c7003fa115047ce50978bc98c3a0d`; this is not proof of exact compiled
+  source or absence of distribution patches. No API violation, padding cause,
+  x264 defect or data race is established. No new local compile/render/decode.
+- Next bounded scope, recorded before implementation: extend only the CI observer,
+  analyzer, smoke/contracts and diagnostic workflow to fingerprint named scalar
+  effective x264 parameters and CQM arrays before each real encode/flush call.
+  Record source-supported picture inputs (type, forced QP, pic_struct, image
+  descriptors/strides) and optional control-pointer presence/counts without
+  dereferencing unknown pointer payloads. Record read-only x86 FP control modes,
+  excluding sticky exception status. Never hash raw struct storage or addresses.
+- Compare state by segment and call, retain full visible/native-output evidence and
+  the plain/traced/traced/plain controls. Require complete new state coverage in
+  this run while keeping historical trace parsing available. A differing semantic
+  field identifies an omitted interface difference, not causality. Equal named
+  state narrows only those observed fields; present optional payloads remain
+  explicitly incomplete. A non-reproducing pair remains inconclusive.
+- Saved x264 `common/frame.c:392-468` consumes picture controls and visible I420
+  dimensions, followed by internal mod16 edge expansion (`encoder.c:3372-3377`,
+  `common/frame.c:640-665`). This does not prove SIMD access footprints or caller
+  padding consumption. Do not read unproven backing bounds, normalize/zero padding,
+  replace input buffers, alter codec settings or change production/evaluator bytes.
+- Acceptance: malformed/missing/duplicate/state-order controls fail the actual
+  analyzer; optional state cannot masquerade as complete input equality; extracted
+  workflow success/failure and transparency smoke remain covered. Run focused
+  local parsing/contracts only, independent review, normal-hook commit/push,
+  exact-SHA CI native compile/smoke and collect/recompute all real results. Roll
+  back only this diagnostic checkpoint with a revert if invalid; retain evidence.
+- Independent source analysis `2d93a7a3` found no concrete reachable uninitialized
+  read or API violation. It recommends one 24-frame capture/replay as the next
+  causal test once the full capture contract is known: exact binary/importer
+  footprint, original striding/alignment, parameters and delayed auxiliary-pointee
+  ownership. The named-state run is narrower observation, not that causal proof;
+  its optional-payload presence and actual descriptors supply missing facts needed
+  to bound a safe capture. Do not treat CPU-independent as disabling SIMD.
+- Named-state local checks: 10 diagnostic, 7 evaluator and 3 workflow contracts
+  pass; actual extracted smoke tests cover success, missing state, bad picture
+  control and bad native hash. Historical raw-output deltas still recompute as
+  7/22/132. Frozen source/exporter/assets/evaluator bytes verify unchanged.
+  All 17 delivery-manifest hashes verify (including the nine delivered MP4/ZIP
+  files). Test/evidence reviewer `e36ab6b8` found a new event-only conclusion
+  incorrectly claiming native payload divergence. Lead reproduced it, recorded
+  FFRAMES-NAMED-STATE-OUTPUT-CLAIM, split payload versus event/settings branches
+  and added named-state ordering coverage alongside the legacy regression.
+  The same reviewer found native scalar-width overflow acceptance; lead reproduced
+  it, enforced 32/64-bit bounds with boundary tests and a C width assertion, and
+  recorded FFRAMES-NAMED-STATE-NATIVE-WIDTH. These are diagnostic-only corrections,
+  not semantic x264 sentinel validation or baseline acceptance. The lead's final
+  11+7+3 suite passes; reviewer `e36ab6b8` independently confirms both reproducers
+  fixed and 11 diagnostic contracts pass. Both final reviewers `4e07fbdf` (ABI,
+  correctness/lifetime) and `e36ab6b8` (test/evidence/security) found no remaining
+  confirmed blocker and matched all 161 parameter names/types to the retained
+  ABI-164 header. The latter also exercised real CLI legacy/named success and
+  strict missing/partial/duplicate/invalid/order failure paths without passed
+  reports. Native compile/transparency and real-state CI remain pending.
+- Review limits retained: inactive-field initialization in the actual FFmpeg caller
+  is not proven by available source; equal or differing inactive fields are not
+  causal evidence. The pre-call parameter query does not observe parameters applied
+  later during encode or the contents/lifetimes of optional pointers. FP modes are
+  from the calling thread at entry, not internal encoder workers or the whole call.
+  Extra trace/query/hash overhead can perturb execution. No input normalization.
+- Fresh baseline, paired optimization and confirmation remain pending; 0/10
+  candidates, no current best, no accepted improvement and no rollback.
