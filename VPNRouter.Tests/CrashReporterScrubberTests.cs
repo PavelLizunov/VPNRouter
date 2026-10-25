@@ -134,6 +134,16 @@ public sealed class CrashReporterScrubberTests
     }
 
     [Fact]
+    public void ScrubSecrets_RedactsLowercaseBase64KeyWithShortPathSegments()
+    {
+        var key = new string('a', 20) + "/" + new string('a', 21) + "w=";
+        Assert.Equal(32, Convert.FromBase64String(key).Length);
+        var scrubbed = CrashReporter.ScrubSecrets($"key {key}");
+        Assert.DoesNotContain(key, scrubbed);
+        Assert.Contains("<key>", scrubbed);
+    }
+
+    [Fact]
     public void ScrubSecrets_RedactsRealityPublicKey()
     {
         const string pbk = "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU";

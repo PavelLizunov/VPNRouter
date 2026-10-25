@@ -42,3 +42,22 @@ only after the old three-second deadline. Scoped diff review and `git diff
 --check` passed; .NET execution awaits exact-head CI. The owning Headless
 README now states the bounded shutdown behavior rather than promising cleanup
 of an unresponsive engine. No full solution build or live engine stop was run.
+
+Shutdown commit 98532b24 passed all six test.yml jobs in run 40171223816 and
+Arch build/install/upgrade/offline smoke in run 40171225782. No deployment.
+
+Two more confirmed findings are recorded in OPEN-DEFECTS before implementation:
+1. The new filesystem-path scrubber exception admits valid lowercase base64
+   secrets with short slash-separated runs. Keep only the fixed public package
+   path exception; add a synthetic canonical 32-byte-key regression.
+2. Existing deep verifiers now called by Headless write secret-bearing JSON in
+   the shared temp directory without an explicit private create mode. Reuse the
+   existing AppPaths private-file mechanism and test permissions before the
+   VLESS fake spawn. Preserve cancellation and final cleanup. No real probe or
+   new dependency is needed; CI is the .NET execution environment.
+
+The key-path correction removes the broad path heuristic and preserves only
+the public packaged runtime path. Its regression uses a canonical synthetic
+32-byte base64 key; no live secret. Direct diff review and `git diff --check`
+passed; native test execution awaits CI. The existing packaged-path regression
+remains the negative control. No public API, setup, or command change.
