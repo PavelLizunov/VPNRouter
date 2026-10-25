@@ -49,6 +49,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Check evaluator and extracted workflow syntax
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s performance/evaluators/warm-export-v2 -p 'test_*.py' -v
       - name: Record read-only resource and SDK preflight
         run: |
           set -euo pipefail
@@ -97,27 +99,27 @@ jobs:
           if [ "$EXPORT_MODE" = preview ] && [ -f performance/request.json ]; then
             echo 'FILM_ARTIFACT_MODE=performance' >> "$GITHUB_ENV"
             python3 - <<'PY'
-            import json, os, subprocess
-            from pathlib import Path
-            request = json.loads(Path('performance/request.json').read_text())
-            phase = request['phase']
-            assert phase in ('baseline', 'search', 'confirmation')
-            assert os.environ['EXPORT_MODE'] == 'preview', 'Benchmarks never select finals'
-            if phase == 'baseline':
-                control = os.environ['GITHUB_SHA']
-                assert not request.get('control') or request['control'] == control
-            else:
-                control = request['control']
-                assert control, 'Comparison requires an explicit control SHA'
-            candidate = request.get('candidate') or os.environ['GITHUB_SHA']
-            command = ['python3', 'performance/evaluator/benchmark.py',
-                       '--repo', os.environ['GITHUB_WORKSPACE'], '--phase', phase,
-                       '--control', control, '--pairs', str(request.get('pairs', 3)),
-                       '--evidence', str(Path.cwd()/'out/performance'/os.environ['GITHUB_RUN_ID'])]
-            if phase != 'baseline':
-                command += ['--candidate', candidate]
-            subprocess.run(command, check=True)
-            PY
+          import json, os, subprocess
+          from pathlib import Path
+          request = json.loads(Path('performance/request.json').read_text())
+          phase = request['phase']
+          assert phase in ('baseline', 'search', 'confirmation')
+          assert os.environ['EXPORT_MODE'] == 'preview', 'Benchmarks never select finals'
+          if phase == 'baseline':
+              control = os.environ['GITHUB_SHA']
+              assert not request.get('control') or request['control'] == control
+          else:
+              control = request['control']
+              assert control, 'Comparison requires an explicit control SHA'
+          candidate = request.get('candidate') or os.environ['GITHUB_SHA']
+          command = ['python3', 'performance/evaluators/warm-export-v2/benchmark.py',
+                     '--repo', os.environ['GITHUB_WORKSPACE'], '--phase', phase,
+                     '--control', control, '--pairs', str(request.get('pairs', 3)),
+                     '--evidence', str(Path.cwd()/'out/performance'/os.environ['GITHUB_RUN_ID'])]
+          if phase != 'baseline':
+              command += ['--candidate', candidate]
+          subprocess.run(command, check=True)
+          PY
           elif [ "${GITHUB_REF_NAME:-}" = "dsh/fframes-eight-styles" ] || [ "${GITHUB_HEAD_REF:-}" = "dsh/fframes-eight-styles" ]; then
             if [ "$EXPORT_MODE" = final ]; then
               read -r -a selected <<< "$SELECTED_STYLES"

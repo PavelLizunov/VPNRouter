@@ -270,3 +270,49 @@ system was found. Each style has a deliberate visual mechanism:
   on downloaded immutable receipts; do not build a duplicate comparator or call
   CI collection success a KEEP. All three independent reviews are collected.
 - Evaluator implementation, campaign ledger and final outcome: PENDING CI.
+
+### Baseline collection repair
+
+- Owner explicitly approved temporary all-eight 480p CI benchmark fixtures in
+  this continuation. Do not replace delivered previews or start 1080p finals.
+- Actions `40190544592` at `9ca1dd6b67740924a8d4735f556133b60e046d1c`
+  failed before Python, compilation or measurement: the YAML-extracted Bash
+  retained two spaces before the Python heredoc body and closing `PY`.
+  `bash -n` reproduces exit 2; YAML parsing alone missed the error.
+- Cache restoration succeeded (965244878 bytes; 11 seconds). This is not an
+  export/build speedup. All four product PR checks passed at that head.
+- `warm-export-v1` is cancelled by an append-only status record with hashes of
+  its Actions log/run receipt. Helper status is `concluded`, no baseline/current
+  best and zero candidate attempts. Its evaluator files and Git lock remain
+  unchanged; there are no invented measurement or passed-quality receipts.
+- Repair workflow shell syntax, failed-collection receipt ordering and their
+  lightweight regressions. Freeze a separate linked `warm-export-v2` evaluator root
+  with the repaired workflow hash; establish a fresh lock and baseline before
+  any exporter candidate. Keep the existing 10/3 budget and quality thresholds.
+- Verification: isolated old-source red/new-source green `bash -n`, embedded
+  Python parsing, evaluator contracts/negative controls, hashes, scoped diff,
+  independent review and exact-head CI. No local build, render or media decode.
+- Recovery changes are not optimization attempts. The only optimization part
+  remains `warm-export`; replacing a pre-baseline broken evaluator does not reset
+  any consumed candidate budget (zero so far).
+- Local recovery checks: ten lightweight contracts pass, including eight real
+  checker mutation controls. Old YAML-extracted shell reproduces exit 2; every
+  repaired YAML-extracted run block passes `bash -n`, embedded Python parses,
+  and mocked baseline/search/confirmation dispatch forwards exact SHAs and pair
+  counts while rejecting a missing comparison control before execution.
+- V1 evaluator bytes, Rust/media/licenses and exporter bytes match the old lock.
+  V2 checker/protected inputs are byte-identical to v1; policy changes only its
+  protected root. Runner receipt publication now follows successful output copy
+  and worktree cleanup. Synthetic copy/cleanup failures publish no passed receipts;
+  success-path coverage is not a real measurement. Seven-file manifest coverage and
+  repaired workflow hash pass. No compiler, render or media decoding ran locally.
+- Independent read-only review `a1198fd7` verified actual YAML extraction,
+  old-source red/new-source green contracts, stubbed routing/failure propagation
+  and exact workflow hash without build/render/decode. Review `d03cacb3` confirmed
+  nested evaluator root/identity/cleanup and found premature passed receipts;
+  source-confirmed and repaired only in unfrozen v2. Follow-up `4dfc643b` is clean:
+  independently ran seven evaluator contracts, reproduced both failures against
+  frozen v1 in memory, checked v1 cancellation evidence and exact v2 manifest.
+  The unchanged three workflow contracts retain `a1198fd7` coverage. These reviews
+  do not establish real CI export or performance results.
+- Fresh baseline, paired optimization and confirmation remain pending.
