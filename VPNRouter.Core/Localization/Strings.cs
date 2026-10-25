@@ -461,10 +461,6 @@ public static partial class Strings
     public static string LinuxTunSandboxUnsupported => Ru
         ? "Эта песочница не позволяет sing-box создать системный TUN-интерфейс. Запустите VPNRouter вне AppImage/bubblewrap, например из нативного пакета дистрибутива."
         : "This sandbox cannot let sing-box create the host TUN interface. Run VPNRouter outside AppImage/bubblewrap, for example from a native distro package.";
-    public static string LinuxTunCapabilitiesMissing(string executablePath) => Ru
-        ? $"У sing-box нет CAP_NET_ADMIN. Выполните один раз в терминале: sudo setcap cap_net_admin,cap_net_raw+ep '{executablePath.Replace("'", "'\"'\"'")}'. Если файловая система не поддерживает capability, установите пакет на файловую систему с поддержкой xattr."
-        : $"sing-box lacks CAP_NET_ADMIN. Run once in a terminal: sudo setcap cap_net_admin,cap_net_raw+ep '{executablePath.Replace("'", "'\"'\"'")}'. If the filesystem does not support capabilities, install on a filesystem with xattr support.";
-
     public static string LinuxPkexecUnavailable => Ru
         ? "Не найден доверенный pkexec. Установите polkit или выдайте capability файлу sing-box вне песочницы."
         : "No trusted pkexec was found. Install polkit or grant the sing-box file capability outside a sandbox.";

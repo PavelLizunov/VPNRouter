@@ -56,27 +56,6 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
     }
 
     [Fact]
-    public void LaunchProcess_LinuxWithoutCapabilities_RefusesBeforeAnyElevation()
-    {
-        if (!OperatingSystem.IsLinux()) return;
-        var fake = new FakeProcessRunner();
-        var exe = CreateStubExe();
-        try
-        {
-            using var manager = BuildManager(fake, exe);
-            var launch = typeof(SingBoxManager).GetMethod("LaunchProcess", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            var error = Assert.Throws<TargetInvocationException>(() => launch.Invoke(manager, new object[] { exe }));
-            Assert.IsType<InvalidOperationException>(error.InnerException);
-            Assert.Empty(fake.StartCalls);
-            Assert.Empty(fake.RunCalls);
-            // A sandbox may deny privileges before the missing-capability check.
-            if (LinuxRuntimeEnvironment.GetTunPrivilegeBlocker() == null)
-                Assert.Contains("sudo setcap cap_net_admin,cap_net_raw+ep", error.InnerException!.Message);
-        }
-        finally { File.Delete(exe); }
-    }
-
-    [Fact]
     public void LaunchProcess_ArgvShapePin_Windows()
     {
         if (!OperatingSystem.IsWindows()) return;

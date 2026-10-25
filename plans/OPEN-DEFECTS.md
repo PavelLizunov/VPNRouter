@@ -489,8 +489,8 @@ Historical original #240 evidence only: the twelve repairs were recorded as reso
 
 ## N4-U: repeated Linux authentication (2026-10-26)
 
-P2. Source-confirmed: generic SingBoxManager Linux start fell back to interactive
-pkexec without CAP_NET_ADMIN; legacy escalated Stop could do the same. Packaged
-Headless already blocks these via retained runtime policy. This round removes the
-interactive fallbacks and supplies a precise one-time capability repair instruction.
-CI and live evidence are recorded in phase-n4-auth-2026-10-26.md.
+P2. Packaged Headless already refuses pkexec/sudo escalation via its runtime
+policy, but a stripped sing-box capability only said "reinstall". Headless now
+reports the exact one-time setcap repair command. The generic desktop Linux
+pkexec fallback (portable tarball/AppImage path) is unchanged on purpose.
+Evidence: phase-n4-auth-2026-10-26.md.

@@ -686,12 +686,16 @@ public partial class SingBoxManager
                 _linuxUsedPkexec = false;
                 throw new SingBoxRuntimePolicyException(
                     SingBoxRuntimeOperation.Start,
-                    SingBoxRuntimeFailure.MissingCapabilities);
+                    SingBoxRuntimeFailure.PrerequisiteUnavailable);
             }
             else
             {
-                _linuxUsedPkexec = false;
-                throw new InvalidOperationException(Strings.LinuxTunCapabilitiesMissing(exePath));
+                _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_raw+ep {Exe}' once)",
+                    exePath);
+                _linuxUsedPkexec = true;
+                spawnExe = LinuxRuntimeEnvironment.ResolvePkexec()
+                    ?? throw new InvalidOperationException(Strings.LinuxPkexecUnavailable);
+                spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
             }
         }
         else

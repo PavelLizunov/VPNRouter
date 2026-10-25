@@ -17,3 +17,5 @@ On authorized omarchy-test, the exact r39.g5c59867 package was installed (replac
 Source inventory: plugin setup/wrapper do not elevate; Core launch no longer falls back to pkexec; Linux stop retains direct owned-process signals and noninteractive sudo -n fallback only; all resolvectl mutations already use --no-ask-password in the accepted base; Linux firewall already uses sudo -n and is unavailable in Headless; Headless has no self-update method or UpdateChecker. Desktop privileged self-update remains separate and can authenticate. Older installed binaries need upgrading; changing source does not patch a running old daemon.
 
 Independent integration review remains with the requesting lead Claude. This round does not merge, release or deploy to the owner's workstation.
+
+Lead review (2026-10-26): the Core changes (desktop pkexec start/stop fallback removal, HealthCheck and Strings) were reverted; they would break the portable desktop Linux app, and packaged Headless already refuses escalation. Kept: the Headless/runtime-policy repair instruction, the Arch docs and smoke assertion.

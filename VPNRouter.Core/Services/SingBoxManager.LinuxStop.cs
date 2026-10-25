@@ -74,6 +74,32 @@ public partial class SingBoxManager
                 return false;
             }
 
+            var pkexec = LinuxRuntimeEnvironment.ResolvePkexec();
+            if (pkexec != null)
+            {
+                _ = TrySpawnAndWait(
+                    pkexec,
+                    BuildLinuxOwnedSignalHelperArguments(hostPath, owned, signal: 9),
+                    30_000,
+                    "pkexec exact pidfd SIGKILL");
+                Thread.Sleep(500);
+
+                var state = InspectOwnedTarget(owned);
+                if (state == OwnedTargetState.GoneOrReplaced)
+                {
+                    _logger.Information(
+                        "[SingBoxManager] Linux stop: exact PID {Pid} exited after pkexec pidfd SIGKILL",
+                        owned.Pid);
+                    return true;
+                }
+                if (state == OwnedTargetState.IdentityUnavailable)
+                    return RefuseUnknownIdentity(owned.Pid);
+            }
+            else
+            {
+                _logger.Warning("[SingBoxManager] Linux stop: trusted pkexec not found");
+            }
+
             _ = TrySpawnAndWait(
                 "/usr/bin/sudo",
                 BuildLinuxOwnedSignalHelperArguments(hostPath, owned, signal: 9, nonInteractiveSudo: true),
@@ -124,7 +150,7 @@ public partial class SingBoxManager
 
         var causes = OperatingSystem.IsMacOS()
             ? "sudoers NOPASSWD exact-kill grant is missing or invalid"
-            : "noninteractive exact-kill permission is unavailable";
+            : "pkexec/polkit agent is unavailable and sudo NOPASSWD is not configured";
         _logger.Error(
             "[SingBoxManager] Unix stop failed: exact VPNRouter-owned PID {Pid} remains alive. " +
             "Manual intervention: verify that PID's start time and executable path, then run `sudo /bin/kill -KILL -- {Pid}`. " +
