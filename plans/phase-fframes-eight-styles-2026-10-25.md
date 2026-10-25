@@ -240,4 +240,33 @@ system was found. Each style has a deliberate visual mechanism:
   Reusing one prepared track is a hypothesis, not an accepted speed improvement.
 - Existing FFmpeg source build avoids the proven x264 ABI mismatch; preserve it.
   Mutable upstream release/9.0 remains a reproducibility limitation.
-- Implementation, campaign ledger and final outcome: PENDING.
+- Research decision recorded in renderer `performance/solutions.md`: extend
+  existing fframes primitives and actions/cache; no new animation/cache dependency.
+  Crates registry corrected Animato 1.7.3 to 2026-10-21 and Keyframe 1.1.1 to
+  2022-07-11. Native FFmpeg make uses num_cpus, not Cargo's two-job limit; reject
+  the research worker's unmeasured 2x/7-8 minute extrapolation.
+- Brief commit `6560d51d248e7e13c196614c872cf9a8ee020b13` passed exact-head
+  test/characterization-windows/go-test-windows/grep; render intentionally skipped.
+- Prelock review `a3282f60`: fixed explicit comparison control, current-head
+  renderer equivalence, performance artifact labelling, preview-only interception
+  and unconditional scoped temporary-worktree cleanup. Worktrees are outside the
+  uploaded evidence tree. An arbitrary explicitly named accepted candidate is
+  permitted only with source equivalence to current head, needed for independent
+  confirmation without changing candidate identity.
+- Rejected review claims: copied checker direct CLI is not a supported entrypoint;
+  `benchmark.py` supplies its exact consumer root. Baseline samples intentionally
+  use the search workload; warmup and instrumented profile are excluded and saved
+  separately. No fake separate baseline workload is added.
+- Correctness review `edc7b653` partly read the earlier working-tree snapshot:
+  shared targets, in-output worktrees and missing pairs forwarding are superseded.
+  Confirmed archive missing-input weakness is logged; evaluator checks required
+  source entries before invoking the frozen checker. Failure collection now saves
+  failure.json and keeps logs outside scratch. Worktree-root calculation has an
+  explicit fixture test and deletion target assertions.
+- Rejected PS4-freeze claim by running a three-command fixture: timestamps
+  1792928887.556033/.556084/.556096 advance per line with the current PS4. Added
+  dynamic timestamp regression. Do not escape the expression into literal text.
+- Statistical decisions/failure budgets use the existing research_state.py helper
+  on downloaded immutable receipts; do not build a duplicate comparator or call
+  CI collection success a KEEP. All three independent reviews are collected.
+- Evaluator implementation, campaign ledger and final outcome: PENDING CI.

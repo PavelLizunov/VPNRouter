@@ -73,7 +73,7 @@ FILM_STYLE=paper cargo run --release --locked -- --scale 0.4444444444444444 rend
 
 Run commands from this directory because media paths are relative. The standalone source archive has the same directory layout. `export.sh` and `export-styles.sh` compile the renderer, check every frame, render the visual master, add music, validate encoded files and package the sources. `ffmpeg` does not generate or animate the graphics: it muxes music and encodes distribution copies.
 
-The repository's Actions workflow builds an exact checkout on a disposable GitHub-hosted runner. Its read-only preflight records CPU/load, available RAM/swap, disk, active compiler processes and toolchain before compiling. Build/render work is not performed on the DSH control plane.
+The repository's Actions workflow builds an exact checkout on a disposable GitHub-hosted runner. Its read-only preflight records CPU/load, available RAM/swap, disk, active compiler processes and toolchain before compiling. Build/render work is not performed on the DSH control plane. The repository's [performance evaluator](https://github.com/PavelLizunov/VPNRouter/blob/dsh/fframes-eight-styles/tools/help-videos/fframes-vpnrouter/performance/README.md) describes isolated 480p measurements and quality gates; [existing-solutions research](https://github.com/PavelLizunov/VPNRouter/blob/dsh/fframes-eight-styles/tools/help-videos/fframes-vpnrouter/performance/solutions.md) records the dependency/cache decisions without claiming unmeasured speedups. These internal evaluation files are not needed to render the standalone source archive.
 
 ## Edit
 
