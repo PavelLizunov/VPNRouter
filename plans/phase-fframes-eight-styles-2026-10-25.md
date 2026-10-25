@@ -661,3 +661,72 @@ system was found. Each style has a deliberate visual mechanism:
   blocker; real cache/package/readelf/upload evidence is still pending exact CI.
   Cache entries remain explicitly unbound to the active historical executable;
   zero optimization attempts is separate from the number of cached candidates.
+- Provenance run `40215299149` at `4e843ffcb03890ff60baa0757a1698e4d4d00484`
+  failed its collection gate, not cache restore. Artifact `12607426070` is 1148212
+  bytes, 52 entries, SHA256
+  `4b288e9763792355ddf757ba1c913ed2dc8eccb77ec5c02f516c241f8030858c`.
+  All 50 copied files match manifest hashes; 12 object/library/renderer entries
+  are hash-only and were not uploaded. All seven recorded commands succeeded.
+  Two native candidates have HEAD `6882969ce9fd2aa6aa1d0008b2bfe1c838aac11d`;
+  only candidate 0 has the required object/build evidence. Neither is bound to
+  the historical active binary or proven worktree-clean.
+- The decisive missing caller evidence is `fframes-0/.cargo-checksum.json`, absent
+  before upload; scoped hidden-file inclusion worked and did not cause this loss.
+  The separately saved fframes 1.3.0 crate has the Cargo.lock SHA256
+  `24719b199dd9da6c5d8aed3fa50bd4bc89af1b3dc9e096a6472cf774634ee0c0`, and
+  all six copied caller/source files match its regular archive members exactly.
+  Record FFRAMES-NATIVE-PROVENANCE-CRATE-IDENTITY before correction. Watcher
+  `bash-233a4c1949374b1a` exited 1: inspect-native failed; test, characterization-
+  windows, go-test-windows and grep passed; normal render was intentionally skipped.
+- Bounded correction scope: use the existing cached fframes crate under the same
+  registry cache, verify its compressed SHA256 against the exact checkout's lock,
+  and compare each required allowlisted caller file to one unique regular tar
+  member without extracting or executing it. Collect generated checksum metadata
+  when present but do not fabricate it. Missing/mismatched archive or caller files
+  must retain failure evidence and fail the acquisition gate. No network fallback,
+  native compilation, renderer execution, render/decode, source changes or new
+  dependency. This is provenance collection, not repeatability recovery.
+- Verification for this correction: actual-collector red/green fixture with absent
+  generated metadata and valid locked archive; wrong lock/archive/file bytes,
+  missing/duplicate/nonregular/oversized members and path confinement negatives;
+  focused existing Python contracts, workflow syntax/AST, independent review and
+  one exact-head provenance CI. Build/UI/characterization runtime gates are N/A
+  for this no-native-execution step; real collected archive hashes are required.
+  Risk remains bounded read-only input parsing; rollback is a scoped revert,
+  retaining failed evidence and both frozen evaluator locks. Baseline stays
+  unaccepted, no current best or confirmation, and optimization attempts remain 0/10.
+- Correction checks: the new absent-generated-checksum/valid-archive fixture fails
+  against the original collector and passes after archive verification. All 13
+  collector contracts pass, including main manifest success and wrong checksum,
+  changed/missing/duplicate/nonregular/oversized member, missing archive/source,
+  symlink, malformed lock and expanded-archive bound negatives. The unchanged
+  11 diagnostic, 7 frozen evaluator and 3 frozen workflow contracts also pass.
+  The actual new verifier accepts the six retained CI caller files against the
+  separately retained locked crate; this is a saved-data test, not new CI evidence.
+- Copied runner x264 library/header bytes also exactly match historical run
+  `40209722318` smoke hashes. This establishes cross-run package-file identity,
+  not the historical renderer executable, static FFmpeg binding or active importer.
+  Candidate 0 enables libx264/GPL and has its wrapper object; candidate 1 explicitly
+  disables libx264/GPL. Do not mistake its expected absent object for a build error
+  or select candidate 0 as historically active solely from this consistency.
+- Independent review `c664b3b5` reproduced a mixed-caller false-success edge case:
+  `any(verified)` hid a second discovered caller with changed source or missing
+  archive. Lead independently reproduced both before fixing the gate to require
+  a nonempty all-verified caller set. The actual main/manifest regression now
+  requires exit 1 and retained failed-candidate errors for both cases; all 13
+  collector tests pass. Record FFRAMES-NATIVE-PROVENANCE-MIXED-CALLERS. The first
+  review is bound only to its original hashes because the lead applied the fix
+  before its final snapshot assertion. Preserve that failed hash assertion rather
+  than counting it as corrected-source review. A separate frozen review
+  `ebdd6f7e` checks the corrected hashes; no active-binary or baseline claim follows.
+- Final review `ebdd6f7e` confirms the all-caller correction at stable hashes
+  `2c6104cbdad861be7a72f60aea3ede41d3ec0be30c8743accba7d2415e215f14`
+  (collector) and `5b8d4d97ba65e2fb4727855eda1a92d8aec78ace3e8b4a8ecf55582c25bb9fd2`
+  (tests), with no remaining substantive finding. It passed 11 Python tests
+  (explicitly excluding existing Git/Bash tests), additional two-valid/mixed-invalid
+  caller and corrupt-archive fixtures, and detected the previous gate via in-memory
+  mutation. Lead ran all 13 collector tests, including the two omitted by review.
+  Both reviews remain source/synthetic evidence; real cache/archive upload awaits CI.
+  The frozen evaluator helper verifies all seven files and reports blocked with
+  baseline/current-best null and zero experiments. Production/exporter/media bytes
+  remain unchanged from the frozen baseline source. No rollback performed.

@@ -1,7 +1,9 @@
 """Lightweight native-provenance contracts; no native execution or compilation."""
 import ast
 import importlib.util
+import io
 import json
+import tarfile
 from pathlib import Path
 import subprocess
 import tempfile
@@ -36,7 +38,170 @@ class CollectorTests(unittest.TestCase):
             path.write_text('crate-source')
         film = repo / 'target/release/vpnrouter-film'
         film.write_bytes(b'not-an-executable')
+        self.locked_crate(repo, registry)
         return repo, source, registry
+
+    def locked_crate(self, repo, registry, *, changed=None, missing=None,
+                     duplicate=None, special=None, size=None, wrong_checksum=False):
+        crate = registry / 'registry-id/fframes-1.3.0'
+        archive = registry.parent / 'cache/registry-id/fframes-1.3.0.crate'
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        names = ('Cargo.toml', 'src/renderer/frame_export.rs',
+                 'src/renderer/encoder_frame.rs', 'src/renderer/encoder.rs',
+                 'src/renderer/segment_writer.rs', 'src/renderer/stream.rs')
+        with tarfile.open(archive, 'w:gz') as stream:
+            for name in names:
+                if name == missing:
+                    continue
+                data = (crate / name).read_bytes()
+                if name == changed:
+                    data += b'changed'
+                member = tarfile.TarInfo('fframes-1.3.0/' + name)
+                member.size = size if name == special and size is not None else len(data)
+                if name == special and size is None:
+                    member.type = tarfile.SYMTYPE
+                    member.linkname = 'outside'
+                payload = b'X' * member.size if name == special and size is not None else data
+                stream.addfile(member, io.BytesIO(payload) if member.isfile() else None)
+                if name == duplicate:
+                    stream.addfile(member, io.BytesIO(data))
+        checksum = '0' * 64 if wrong_checksum else collector.digest(archive)
+        (repo / 'Cargo.lock').write_text(
+            'version = 4\n[[package]]\nname = "fframes"\nversion = "1.3.0"\n'
+            'source = "registry+https://github.com/rust-lang/crates.io-index"\n'
+            f'checksum = "{checksum}"\n')
+        return archive
+
+    def build_evidence(self, repo, source):
+        (source.parent.parent / 'output').write_text('cargo-link-data')
+        for base, names in ((source, ('libavcodec/libx264.o', 'libavutil/frame.o', 'libavutil/buffer.o')),
+                            (source.parent / 'dist/lib', ('libavcodec.a', 'libavutil.a', 'libavformat.a'))):
+            for name in names:
+                path = base / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'object-bytes')
+        fingerprint = repo / 'target/release/.fingerprint/ffmpeg-sys-fframes-abc/lib.json'
+        fingerprint.parent.mkdir(parents=True)
+        fingerprint.write_text('{}')
+
+    def test_locked_crate_proves_caller_without_generated_checksum_metadata(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo, source, registry = self.fixture(root)
+            self.build_evidence(repo, source)
+            self.locked_crate(repo, registry)
+            (registry / 'registry-id/fframes-1.3.0/.cargo-checksum.json').unlink()
+            c = collector.Collector(root / 'evidence')
+            candidates = collector.collect_cache(c, repo, registry)
+            self.assertTrue(collector.evidence_complete(c, candidates))
+            self.assertIn('fframes-0/.cargo-checksum.json', c.missing)
+            self.assertFalse(c.commands)
+            self.assertFalse(candidates[0]['active_binary_binding_established'])
+            self.assertTrue(c.callers[0]['locked_archive_matches_sources'])
+
+    def test_locked_crate_rejects_missing_modified_or_ambiguous_members(self):
+        name = 'src/renderer/frame_export.rs'
+        variants = ({'wrong_checksum': True}, {'changed': name}, {'missing': name},
+                    {'duplicate': name}, {'special': name},
+                    {'special': name, 'size': collector.MAX_COPY_BYTES + 1})
+        for options in variants:
+            with self.subTest(options=options), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                repo, source, registry = self.fixture(root)
+                self.build_evidence(repo, source)
+                self.locked_crate(repo, registry, **options)
+                c = collector.Collector(root / 'evidence')
+                candidates = collector.collect_cache(c, repo, registry)
+                self.assertFalse(collector.evidence_complete(c, candidates))
+                self.assertFalse(c.callers[0]['locked_archive_matches_sources'])
+                self.assertTrue(c.callers[0]['error'])
+                self.assertFalse(c.commands)
+
+    def test_archive_missing_symlink_and_decompression_bound_fail_closed(self):
+        for case in ('missing', 'symlink', 'expanded', 'missing-source', 'bad-lock'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                repo, source, registry = self.fixture(root)
+                self.build_evidence(repo, source)
+                archive = self.locked_crate(repo, registry)
+                if case in ('missing', 'symlink'):
+                    data = archive.read_bytes()
+                    archive.unlink()
+                    if case == 'symlink':
+                        outside = root / 'outside.crate'
+                        outside.write_bytes(data)
+                        archive.symlink_to(outside)
+                if case == 'missing-source':
+                    (registry / 'registry-id/fframes-1.3.0/src/renderer/frame_export.rs').unlink()
+                if case == 'bad-lock':
+                    (repo / 'Cargo.lock').write_text('version = [')
+                c = collector.Collector(root / 'evidence')
+                with patch.object(collector, 'MAX_CRATE_TAR_BYTES', 1 if case == 'expanded' else collector.MAX_CRATE_TAR_BYTES):
+                    candidates = collector.collect_cache(c, repo, registry)
+                self.assertFalse(collector.evidence_complete(c, candidates))
+                self.assertFalse(c.callers[0]['locked_archive_matches_sources'])
+                self.assertTrue(c.callers[0]['error'])
+
+    def test_main_accepts_verified_caller_without_fabricating_missing_metadata(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo, source, registry = self.fixture(root)
+            self.build_evidence(repo, source)
+            (registry / 'registry-id/fframes-1.3.0/.cargo-checksum.json').unlink()
+            output = root / 'evidence'
+            def command(c, arguments, label):
+                c.commands.append({'label': label, 'argv': list(map(str, arguments)), 'returncode': 0,
+                                   'stdout': collector.SOURCE if label == 'checkout-head' else '',
+                                   'stdout_truncated': False, 'stderr': '', 'stderr_truncated': False})
+                return SimpleNamespace(returncode=0, stdout=c.commands[-1]['stdout'])
+            original = collector.Collector.file
+            def file(c, path, base, label, copy=True):
+                # System packages are not part of this source-cache fixture.
+                if label.startswith('runner/'):
+                    return None
+                return original(c, path, base, label, copy=copy)
+            original_resolve = Path.resolve
+            def resolve(path, *args, **kwargs):
+                if str(path) == '/usr/lib/x86_64-linux-gnu/libx264.so.164':
+                    return root / 'system-library-fixture'
+                return original_resolve(path, *args, **kwargs)
+            def invoke(output):
+                argv = ['collect.py', '--repo', str(repo), '--registry', str(registry), '--output', str(output)]
+                with patch('sys.argv', argv), patch.object(collector.Collector, 'command', command), \
+                     patch.object(collector.Collector, 'file', file), patch.object(Path, 'resolve', resolve), \
+                     patch('builtins.print'):
+                    return collector.main()
+            code = invoke(output)
+            report = json.loads((output / 'manifest.json').read_text())
+            self.assertEqual(code, 0, report.get('error', report['status']))
+            self.assertTrue(report['required_evidence_complete'])
+            self.assertTrue(report['caller_candidates'][0]['locked_archive_matches_sources'])
+            self.assertIn('fframes-0/.cargo-checksum.json', report['missing'])
+            self.assertFalse((output / 'fframes-0/.cargo-checksum.json').exists())
+            self.assertFalse(report['active_binary_binding_established'])
+            self.assertFalse(report['cached_code_executed'])
+            # A verified caller cannot hide another discovered caller's failure.
+            second = registry / 'registry-second/fframes-1.3.0'
+            second.mkdir(parents=True)
+            for name in collector.REQUIRED_FFRAMES_FILES:
+                path = second / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes((registry / 'registry-id/fframes-1.3.0' / name).read_bytes())
+            archive = registry.parent / 'cache/registry-second/fframes-1.3.0.crate'
+            archive.parent.mkdir(parents=True)
+            archive.write_bytes((registry.parent / 'cache/registry-id/fframes-1.3.0.crate').read_bytes())
+            (second / 'src/renderer/frame_export.rs').write_text('changed caller bytes')
+            for case in ('changed-source', 'missing-archive'):
+                if case == 'missing-archive':
+                    archive.unlink()
+                destination = root / case
+                self.assertEqual(invoke(destination), 1)
+                failed = json.loads((destination / 'manifest.json').read_text())
+                self.assertEqual(failed['status'], 'required_evidence_missing')
+                self.assertFalse(failed['required_evidence_complete'])
+                self.assertEqual([row['locked_archive_matches_sources'] for row in failed['caller_candidates']], [True, False])
+                self.assertTrue(failed['caller_candidates'][1]['error'])
+                self.assertFalse(failed['cached_code_executed'])
 
     def test_copies_only_allowlisted_sources_and_hashes_binary(self):
         with tempfile.TemporaryDirectory() as temp:

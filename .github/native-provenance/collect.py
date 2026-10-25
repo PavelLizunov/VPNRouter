@@ -1,7 +1,11 @@
 """Collect cached native source/build evidence without executing cached code."""
 import argparse
+import gzip
 import hashlib
+import io
 import json
+import tarfile
+import tomllib
 from pathlib import Path
 import shutil
 import subprocess
@@ -21,6 +25,8 @@ FFRAMES_FILES = (
     'src/renderer/segment_writer.rs', 'src/renderer/stream.rs',
 )
 MAX_COPY_BYTES = 8 * 1024**2
+MAX_CRATE_TAR_BYTES = 64 * 1024**2
+REQUIRED_FFRAMES_FILES = tuple(name for name in FFRAMES_FILES if name != '.cargo-checksum.json')
 REQUIRED_FFMPEG_FILES = ('libavcodec/libx264.c', 'libavcodec/encode.c',
     'libavutil/frame.c', 'libavutil/frame.h', 'libavutil/buffer.c',
     'libavutil/buffer.h', 'libavutil/imgutils.c', 'libavutil/mem.c',
@@ -56,6 +62,7 @@ class Collector:
         self.files = {}
         self.missing = []
         self.commands = []
+        self.callers = []
 
     def file(self, path, root, label, copy=True):
         assert label not in self.files, f'Duplicate evidence label: {label}'
@@ -99,6 +106,50 @@ class Collector:
                     receipt[name + '_truncated'] = size > MAX_COPY_BYTES
         return subprocess.CompletedProcess(arguments, result.returncode,
                                            receipt['stdout'], receipt['stderr'])
+
+
+def verify_caller_archive(collector, registry, source, prefix):
+    """Bind allowlisted caller bytes to the locked crate, not to a historical binary."""
+    row = {'cache_relative_path': str(source.relative_to(registry)),
+           'locked_archive_matches_sources': False, 'active_binary_binding_established': False}
+    collector.callers.append(row)
+    try:
+        lock = tomllib.loads((collector.output / 'checkout/Cargo.lock').read_text())
+        packages = [package for package in lock['package']
+                    if package['name'] == 'fframes' and package['version'] == '1.3.0'
+                    and package.get('source') == 'registry+https://github.com/rust-lang/crates.io-index']
+        assert len(packages) == 1, 'Expected one locked crates.io fframes 1.3.0 package'
+        checksum = packages[0]['checksum']
+        assert isinstance(checksum, str) and len(checksum) == 64 and all(c in '0123456789abcdef' for c in checksum)
+        archive = registry.parent / 'cache' / source.parent.name / 'fframes-1.3.0.crate'
+        record = collector.file(archive, registry.parent, f'{prefix}/package.crate')
+        assert record is not None, 'Locked cached crate archive missing'
+        assert record['sha256'] == checksum, 'Cached crate SHA256 does not match Cargo.lock'
+        row['archive_sha256'] = checksum
+        # No extractall, link following or unbounded decompression of cache input.
+        with gzip.open(collector.output / f'{prefix}/package.crate', 'rb') as stream:
+            data = stream.read(MAX_CRATE_TAR_BYTES + 1)
+        assert len(data) <= MAX_CRATE_TAR_BYTES, 'Expanded crate exceeds evidence bound'
+        checked = {}
+        with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as stream:
+            members = stream.getmembers()
+            assert len(members) <= 4096, 'Too many crate members'
+            for name in REQUIRED_FFRAMES_FILES:
+                matches = [member for member in members if member.name == 'fframes-1.3.0/' + name]
+                assert len(matches) == 1, f'Missing or duplicate crate member: {name}'
+                member = matches[0]
+                assert member.isfile() and 0 <= member.size <= MAX_COPY_BYTES, f'Invalid crate member: {name}'
+                with stream.extractfile(member) as content:
+                    value = content.read(MAX_COPY_BYTES + 1)
+                assert len(value) == member.size, f'Truncated crate member: {name}'
+                sha = hashlib.sha256(value).hexdigest()
+                actual = collector.files.get(f'{prefix}/{name}')
+                assert actual and actual['sha256'] == sha and actual['bytes'] == len(value), f'Caller differs from locked crate: {name}'
+                checked[name] = sha
+        row.update(locked_archive_matches_sources=True, verified_files=checked)
+    except (AssertionError, OSError, ValueError, KeyError, TypeError, tarfile.TarError, EOFError) as error:
+        row['error'] = str(error)
+    return row
 
 
 def collect_cache(collector, repo, registry):
@@ -158,12 +209,12 @@ def collect_cache(collector, repo, registry):
     for index, source in enumerate(registry_sources):
         for name in FFRAMES_FILES:
             collector.file(source / name, registry, f'fframes-{index}/{name}')
+        verify_caller_archive(collector, registry, source, f'fframes-{index}')
     return candidates
 
 
 def evidence_complete(collector, candidates):
-    caller = any(all(f'fframes-{index}/{name}' in collector.files for name in FFRAMES_FILES)
-                 for index in range(4))
+    caller = bool(collector.callers) and all(row['locked_archive_matches_sources'] for row in collector.callers)
     native = any(row['required_sources_present'] and row['required_build_evidence_present']
                  for row in candidates)
     return bool(caller and native and 'renderer/vpnrouter-film' in collector.files
@@ -213,7 +264,8 @@ def main():
         report['status'] = 'collection_failed'
         report['error'] = str(error)
     finally:
-        report.update(files=collector.files, missing=collector.missing, commands=collector.commands)
+        report.update(files=collector.files, missing=collector.missing, commands=collector.commands,
+                      caller_candidates=collector.callers)
         report['exit_code'] = code
         with (collector.output / 'manifest.json').open('x') as stream:
             json.dump(report, stream, indent=2)
