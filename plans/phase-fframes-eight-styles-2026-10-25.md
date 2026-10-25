@@ -80,7 +80,7 @@ system was found. Each style has a deliberate visual mechanism:
 ## Verification
 
 1. Build: PASSED in GitHub Actions push run 40174456482 (`cargo build --release --locked` with source-built FFmpeg against runner x264 ABI). Product solution build N/A because no product code/project changes.
-2. Tests: PASSED. Cargo tests (`checks.rs` screenshot registration regression), Python pipeline unit tests (`test_pipeline.py`), and all-frame inspection (`inspect --all-frames --fail-on warning`) with 0 findings across all 1080 frames for all 8 styles. PR CI checks passed: `test` (4m15s), `characterization-windows` (7m21s), `go-test-windows` (43s), `grep` (6s).
+2. Tests: PASSED in implementation run 40174456482: 5 Rust tests, 5 Python pipeline tests, and all-frame inspection with empty findings over 1080 frames for each style. Implementation PR CI passed: `test` (4m15s), `characterization-windows` (7m21s), `go-test-windows` (43s), `grep` (6s). Documentation checkpoint 2bcc6c36cda9a9381273fcbf40d752cd56a9cfe6 also passed all four checks; its render job was intentionally skipped because renderer/workflow bytes did not change.
 3. Docs: PASSED. Updated `tools/help-videos/fframes-vpnrouter/README.md`, `tools/help-videos/fframes-vpnrouter/AGENTS.md`, root `AGENTS.md`, and this task brief.
 4. Review: PASSED. Three-lens review findings recorded in `OPEN-DEFECTS.md` and verified:
    - FFRAMES-KINETIC-VERTICAL-SPACING: resolved in source, verified in CI render
@@ -91,21 +91,19 @@ system was found. Each style has a deliberate visual mechanism:
    - FFRAMES-HIGHLIGHT-DRIFT: resolved in source, verified in CI render
    - FFRAMES-KINETIC-CAPTION-CONTRAST: resolved in source, verified in CI render
    - FFRAMES-KINETIC-TITLE-COLUMN: resolved in source, verified in CI render
-5. UI: PASSED. Exported contact sheets (`contact-sheet.png`) and representative frames (3s, 9s, 16s, 22s, 28s, 34s PNG/SVG) for all 8 styles. Pop inspection (`inspect --pops`) passed with 0 pops across all 1080 frames for all 8 styles.
+5. Visual samples: REVIEWED all eight six-scene contact sheets and representative 16-second frames. PNG/SVG captures exist at 3s, 9s, 16s, 22s, 28s and 34s. Native continuity reports cover 1080 frames per style with empty findings. This is not full subjective motion or listening acceptance; distinct-file browser playback remains NOT VERIFIED (see continuation evidence below).
 6. Characterization/integration: PASSED. All 8 preview MP4s match exact 854x480 resolution, 30 fps, 1080 frames, 36.0s duration, AAC audio at -18 LUFS. Standalone source ZIP `out/styles/film-styles-source.zip` contains exactly 36 required files, valid CRC, and byte-identical media and licenses. Full decode test (`ffmpeg -v error -xerror -i film.mp4 -f null -`) passed for all 8 styles with unique decoded pictures. Checksums verified against `out/styles/preview/SHA256SUMS.txt`.
 
 ## Material unknowns
 
-- Rust compilation, renderer warnings and visual composition remain unverified
-  until the new exact-SHA export. A successful original export is only a baseline.
-  (Resolved: compilation clean, 0 warnings/pops, visual contact sheets generated).
-- Subjective listening/browser playback is not proven by ffprobe or full decode.
+- Compilation and native frame/continuity inspection passed at the implementation SHA. Reduced-scale frame/strip clipping notices use upstream pixel dimensions against logical viewBox coordinates; they are not proof of actual clipping and are not called a clean warning stream.
+- Full subjective motion/listening acceptance is not proven by samples or full decode. A browser probe repeated anime bytes under eight labels and is rejected as coverage of eight distinct files; the exact-file retry was denied by the browser MCP allowed roots. No file-access bypass was attempted.
 - Source-built FFmpeg currently follows upstream release/9.0; the existing
   successful cache is reused, not claimed to be a fully pinned toolchain.
 
 ## Outcome
 
-- Status: COMPLETE; eight preview films rendered, verified, and delivered.
+- Status: PREVIEWS DELIVERED; eight rendered previews and the source ZIP have native presentation receipts. Await owner style selection before any 1080p export; the overall preview-first task is not complete. Full distinct-file browser playback and subjective listening remain unverified.
 - Baseline: local, remote and PR #623 head all 3a876d67cb779167e8a57ff3a598a818062c5938;
   test, characterization-windows, go-test-windows and grep SUCCESS; render-film
   intentionally SKIPPED on same-repository PR. Worktree was clean.
@@ -114,10 +112,10 @@ system was found. Each style has a deliberate visual mechanism:
 - Brief commit: 616eec1424b449d2723cd987d2a6ea8d81fffb4d, PR #626;
   Actions run 40171026077 test, characterization-windows, go-test-windows and
   grep run 40171026025 SUCCESS. Exact-head brief gate passed before edits.
-- Implementation commit: fb7d729a738c8c7c94fa2b4cb159495764d8527a, PR #626;
+- Implementation commit: fb7d729941e1a3690802a4f9812a013dfaeb5caa, PR #626;
   Actions run 40174459335 test (4m15s), characterization-windows (7m21s),
   go-test-windows (43s) and grep run 40174459338 (6s) all SUCCESS.
-  Push run 40174456482 render-film SUCCESS (~17m20s) on disposable Ubuntu 24.04 runner.
+  Push run 40174456482 render-film SUCCESS (07:52:56-08:10:43 UTC, 17m47s wall time) on a disposable Ubuntu 24.04 runner.
 - Owner asked where rendering runs and proposed 480p/360p selection first.
   Adopted 854x480 preview-first on disposable Ubuntu 24.04 Actions CPU;
   explicit selected finals rerender the logical SVG canvas at 1920x1080.
@@ -147,10 +145,22 @@ system was found. Each style has a deliberate visual mechanism:
   - `preview/paper/film.mp4`: `c079251a4f7d76c7ca858834ca97ba9f9ac97635d27b32b5b5dfee4735767cdf`
   - `preview/kinetic/film.mp4`: `2ccac91e2e1eae69a103788187c357ddfe40a9c46f7df584e95121d5bdeaef11`
   - `preview/cinema/film.mp4`: `47a655a55ad3cdec8cf9796b7a8850818c8cbeb98d817571676cb167bd02bef4`
-- Delivered artifacts:
-  - `vpnrouter-film-preview-fb7d729941e1a3690802a4f9812a013dfaeb5caa` (50,328,407 bytes)
-  - `vpnrouter-film-lock-fb7d729941e1a3690802a4f9812a013dfaeb5caa` (16,289 bytes)
+- CI artifacts, not native delivery receipts:
+  - `vpnrouter-film-preview-fb7d729941e1a3690802a4f9812a013dfaeb5caa` (50,328,407 bytes), downloaded for review.
+  - `vpnrouter-film-lock-fb7d729941e1a3690802a4f9812a013dfaeb5caa` (16,289 bytes), published by CI; local download not evidenced.
+- Native user delivery occurred during the continuation after 08:32 UTC via `present`, not at checkpoint 2bcc6c36. Successful call receipts: `call_SAN5yIEnie2xNZ4Dp01fpvb6` (anime, swiss, blueprint, editorial), `call_LssEcFrqZSkvsVneVdCdNfez` (terminal, paper, kinetic, cinema), and `call_1JlKZKf4Ti1EgSf4GnNT9G7P` (source ZIP). All paths use `out/review-40174456482/styles/`. The image-generation evidence reader confirms these presentation receipts but reports no image generation; this task uses CI-rendered video, not generated images.
 - Original deliverables preserved before new rendering: master SHA256
   dce0f3d8bea755941f0e27fa3ee48f7881026cad3746b675c52625b7d1a00b3a;
   720p d7fbb41aeb7e9f3a9b03b12b8251e3a130b515a63578355882a1f4aa21800fc5;
   source 04c71a3f4bc05708f1a82fede433d7e0c1f4f2c9dbe003eebadbe0062416b068.
+
+## Continuation evidence and remaining gate
+
+- Reconciliation scope: correct evidence labels and the implementation SHA only; do not change renderer/workflow bytes, overwrite original exports, rerender previews or start unselected finals. Check exact local/remote/PR head, scoped diff, normal hooks and exact-head CI after the documentation push.
+- Independent read-only reviewer `4e9e0192` found no new acceptance-blocking source defect. Screenshot and focus share their parent transform, opacity, entrance, drift and scale. Actual scene ranges are [0,150), [138,360), [348,570), [558,750), [738,900), [888,1080); overlaps do not shorten the 1080-frame film.
+- Limits of that review: the regression samples one fixture/pose over 240 local frames; it is not an all-style pixel oracle. The verifier asserts continuity coverage, not absence of findings, although all downloaded continuity reports actually have empty findings.
+- Browser request `preview-40174456482-playback-v1` ran 08:22:08-08:26:57 UTC and reached `ended` in each labelled slot, but all eight slots reported 3071925 bytes. Only anime has that downloaded size; the other seven sizes are distinct. Reject the run as proof of eight-style playback. Exact-file upload for v2 was denied outside the MCP allowed roots, cancelled without bypass, and the owned browser tab was closed. CI full decoding is independent and remains valid.
+- Audio measurement reports -18.0 LUFS integrated loudness and -6.9 dBFS peak for all eight files. This is a measurement, not a subjective listening pass. Original CC0 music and all supplied image bytes are retained.
+- Before reconciliation, local Git, the remote task branch and PR #626 all matched 2bcc6c36cda9a9381273fcbf40d752cd56a9cfe6. Run 40175985324 passed `test` (4m6s), `characterization-windows` (6m24s), `go-test-windows` (35s); guard 40175985321 passed (6s). Render 40175985328 was intentionally skipped. The collected watcher exited 0.
+- Documentation delivery gate: PASS for evidence-backed numbers, scoped facts and explicit limits. Runtime/UI product tests are N/A for this evidence-only correction; source/render evidence remains tied to the implementation SHA.
+- Next owner action: select one or more of anime, swiss, blueprint, editorial, terminal, paper, kinetic or cinema. Then render only those styles at 1920x1080 from source, verify the new exact-SHA output, and deliver selected finals. No final-resolution run has been requested or launched.

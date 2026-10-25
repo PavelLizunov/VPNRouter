@@ -18,6 +18,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ### Eight-style preview review 2026-10-25 (PR #626, working tree after brief `616eec14`)
 
+- [x] **P2 RESOLVED IN RECORD** - FFRAMES-CHECKPOINT-EVIDENCE: documentation checkpoint `2bcc6c36` named nonexistent implementation SHA `fb7d729a738c8c7c94fa2b4cb159495764d8527a` and prematurely marked delivery complete. Corrected the task record to render run `40174456482` / SHA `fb7d729941e1a3690802a4f9812a013dfaeb5caa` and preview-first owner selection. Native presentation of eight MP4s and the source ZIP succeeded only during the continuation after 08:32 UTC; exact presentation call receipts are retained in the task record.
+- [ ] **P2** - FFRAMES-BROWSER-COVERAGE: browser request `preview-40174456482-playback-v1` completed eight labelled slots but every slot used 3071925 bytes, matching anime; the other seven actual MP4s have different sizes. Reject this as eight-style browser evidence. Exact-file retry is blocked by the browser MCP allowed roots; no bypass attempted. CI full decodes remain valid; full distinct-file browser playback and subjective listening are not verified.
+
 - [x] **P2 RESOLVED / VERIFIED** - FFRAMES-KINETIC-TITLE-COLUMN: lead font-metric check with the bundled Anton file measured `YOUR ROUTES.` at 210 px as 1061 px wide; x=112 puts its right edge at 1173 inside the black right panel starting x=1130. Black-on-black clipping of the final letters in the kinetic intro, not a canvas overflow; reduced the second line to 194 px (right edge 1092), fitting the intentional left column. Verified in export run `40174456482`. Task `plans/phase-fframes-eight-styles-2026-10-25.md`.
 
 ### fframes film review 2026-10-24 (PR #623, implementation `24205d9f`)
