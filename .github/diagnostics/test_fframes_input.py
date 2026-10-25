@@ -22,11 +22,21 @@ workflow_contract = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(workflow_contract)
 
 
-def trace(changed=None):
-    rows = ['open\t0x1234\t854\t480\t2\t1\t1\t0\t1']
-    for index in range(1080):
-        digest = 'b' * 64 if index == changed else 'a' * 64
-        rows.append(f'frame\t0x1234\t{index}\t{digest}\t{digest}\t{digest}')
+def trace(changed=None, output_changed=None, header_changed=None):
+    rows = []
+    for segment in range(45):
+        encoder = segment + 1
+        rows.append(f'open\t{encoder}\t854\t480\t2\t1\t1\t0\t1')
+        header = 'e' * 64 if segment == header_changed else 'c' * 64
+        rows.append(f'headers\t{encoder}\t3\t1\t{header}\t3')
+        for call in range(24):
+            index = segment*24 + call
+            digest = 'b' * 64 if index == changed else 'a' * 64
+            rows.append(f'frame\t{encoder}\t{index}\t{digest}\t{digest}\t{digest}')
+            native = 'f' * 64 if index == output_changed else 'd' * 64
+            rows.append(f'output\t{encoder}\t{call}\t0\t4\t1\t{index}\t{native}\t4')
+        rows.append(f'output\t{encoder}\t24\t1\t0\t0\t-\t{analysis.EMPTY_SHA256}')
+        rows.append(f'close\t{encoder}\t24\t24\t25\t1\t1')
     return '\n'.join(rows) + '\n'
 
 
@@ -43,11 +53,21 @@ class TraceTests(unittest.TestCase):
         good = trace()
         invalid = (
             good.rsplit('frame', 1)[0],
-            good + good.splitlines()[1] + '\n',
+            good + good.splitlines()[2] + '\n',
             good.replace('\t1079\t', '\t1080\t'),
             '\n'.join(good.splitlines()[1:]),
             good.replace('\t854\t480\t', '\t1920\t1080\t'),
             good.replace('a' * 64, 'invalid'),
+            good.replace('close\t45\t24\t24\t25\t1\t1\n', ''),
+            good.replace('close\t1\t24\t24\t25\t1\t1', 'close\t1\t24\t23\t25\t1\t1'),
+            good.replace('output\t1\t0\t0\t4\t1\t0', 'output\t1\t1\t0\t4\t1\t0'),
+            good.replace('output\t1\t0\t0\t4\t1\t0', 'output\t1\t0\t0\t-1\t1\t0'),
+            good.replace('output\t1\t1\t0\t4\t1\t1', 'output\t1\t1\t0\t4\t1\t0'),
+            good.replace('\t4\t1\t0\t' + 'd'*64 + '\t4', '\t4\t1\t0\t' + 'd'*64 + '\t3'),
+            good.replace('\t0\t0\t-\t' + analysis.EMPTY_SHA256, '\t0\t0\t-\t' + 'a'*64),
+            good.replace('headers\t1\t3\t1\t' + 'c'*64 + '\t3\n', ''),
+            good.replace('output\t1\t24\t1\t0\t0', 'output\t1\t24\t0\t0\t0'),
+            good.replace('open\t2\t', 'open\t1\t'),
         )
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp)/'trace.tsv'
@@ -77,8 +97,26 @@ class TraceTests(unittest.TestCase):
             self.assertEqual(report['styles']['anime']['different_visible_input_frames'], [17])
             self.assertIn('inspect_upstream_input_path', report['styles']['anime']['conclusion'])
             self.assertIn('original_failure_not_localized', report['styles']['blueprint']['conclusion'])
-            self.assertIn('inspect_encoder_or_hidden_frame_state', report['styles']['swiss']['conclusion'])
+            self.assertIn('inspect_downstream_path', report['styles']['swiss']['conclusion'])
             self.assertIn('no_difference_reproduced', report['styles']['paper']['conclusion'])
+            swiss = root/'batch-1/input-traces/swiss-123.tsv'
+            swiss.write_text(trace(output_changed=17))
+            native_report = analysis.analyze(root)['styles']['swiss']
+            self.assertEqual(native_report['different_native_output_frames'], [17])
+            self.assertIn('inspect_hidden_inputs_and_encoder_path', native_report['conclusion'])
+            swiss.write_text(trace(header_changed=2))
+            header_report = analysis.analyze(root)['styles']['swiss']
+            self.assertEqual(header_report['different_header_segments'], [2])
+            self.assertIn('inspect_hidden_inputs_and_encoder_path', header_report['conclusion'])
+            rows = trace().splitlines()
+            header = rows.pop(1)
+            rows.insert(3, header)  # Move headers across the first completed encode.
+            swiss.write_text('\n'.join(rows) + '\n')
+            order_report = analysis.analyze(root)['styles']['swiss']
+            self.assertEqual(order_report['different_header_segments'], [])
+            self.assertEqual(order_report['different_native_output_frames'], [])
+            self.assertEqual(order_report['different_native_call_segments'], [0])
+            self.assertIn('inspect_hidden_inputs_and_encoder_path', order_report['conclusion'])
             decoded['styles']['swiss']['same_file_redecode'][0]['video'] = False
             (root/'summary.json').write_text(json.dumps(decoded))
             self.assertIn('same_file_video_decode_unstable',
@@ -97,6 +135,27 @@ class TraceTests(unittest.TestCase):
             (root/'batch-1/input-traces/paper-456.tsv').write_text(trace())
             with self.assertRaises(AssertionError):
                 analysis.analyze(root)
+
+    def test_delayed_output_flush_reordering_and_exact_lifetimes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)/'trace.tsv'
+            rows = ['open\t1\t854\t480\t2\t1\t1\t0\t1',
+                    'headers\t1\t3\t1\t' + 'c'*64 + '\t3']
+            for index in range(3):
+                rows += [f'frame\t1\t{index}\t' + '\t'.join(['a'*64]*3),
+                         f'output\t1\t{index}\t0\t0\t0\t-\t{analysis.EMPTY_SHA256}']
+            for call, pts in enumerate((0, 2, 1), 3):
+                rows.append(f'output\t1\t{call}\t1\t4\t1\t{pts}\t' + 'd'*64 + '\t4')
+            rows.append('close\t1\t3\t3\t6\t3\t1')
+            path.write_text('\n'.join(rows) + '\n')
+            value = analysis.read_boundary(path, expected_frames=3, segment_frames=3)
+            self.assertEqual(value['segments'][0]['outputs'], [0, 2, 1])
+            self.assertEqual(value['segments'][0]['flushes'], 3)
+            self.assertEqual(set(value['outputs']), {0, 1, 2})
+            # A missing empty-output call must not silently pass complete PTS coverage.
+            path.write_text(path.read_text().replace(rows[3] + '\n', ''))
+            with self.assertRaises(AssertionError):
+                analysis.read_boundary(path, expected_frames=3, segment_frames=3)
 
     def test_real_workflow_pair_order_preload_isolation_and_failure_collection(self):
         source = (ROOT/'.github/workflows/diagnose-fframes-repeatability.yml').read_text()

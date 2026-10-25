@@ -89,23 +89,44 @@ jobs:
             "$GITHUB_WORKSPACE/diagnostic-code/.github/diagnostics/x264-probe-smoke.c" \
             -o "$RUNNER_TEMP/x264-probe-smoke" -lx264
           mkdir out/repeatability/probe-smoke
+          cp /usr/include/x264.h /usr/include/x264_config.h out/repeatability/probe-smoke/
+          sha256sum /usr/include/x264.h /usr/include/x264_config.h \
+            /usr/lib/x86_64-linux-gnu/libx264.so.164 > out/repeatability/probe-smoke/native-sha256.txt
+          dpkg-query -W libx264-dev libx264-164 > out/repeatability/probe-smoke/native-packages.txt
           "$RUNNER_TEMP/x264-probe-smoke" out/repeatability/probe-smoke/plain.h264
           FFRAMES_INPUT_TRACE="$PWD/out/repeatability/probe-smoke" FILM_STYLE=smoke \
             LD_PRELOAD="$RUNNER_TEMP/fframes-x264-input.so" \
             "$RUNNER_TEMP/x264-probe-smoke" out/repeatability/probe-smoke/traced.h264
           cmp out/repeatability/probe-smoke/plain.h264 out/repeatability/probe-smoke/traced.h264
           python3 - <<'PY'
-          import hashlib
+          import hashlib, importlib.util, os
           from pathlib import Path
+          spec = importlib.util.spec_from_file_location('probe_analysis',
+              Path(os.environ['GITHUB_WORKSPACE'])/'diagnostic-code/.github/diagnostics/analyze_fframes_input.py')
+          analysis = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(analysis)
           folder = Path('out/repeatability/probe-smoke')
           trace, = folder.glob('smoke-*.tsv')
-          frames = [row.split('\t') for row in trace.read_text().splitlines() if row.startswith('frame\t')]
-          assert [int(row[2]) for row in frames] == [0, 1, 2]
-          for index, row in enumerate(frames):
+          boundary = analysis.read_boundary(trace, expected_frames=3, segment_frames=3)
+          for index, hashes in boundary['frames'].items():
               expected = [hashlib.sha256(bytes([32+index*20])*854*480).hexdigest()]
               expected += [hashlib.sha256(bytes([128])*427*240).hexdigest()]*2
-              assert row[3:] == expected
-          print('PASS transparent encoded bytes and exact visible-plane SHA256 smoke test')
+              assert list(hashes) == expected
+          # Smoke writes exactly headers then native NAL bytes in call order.
+          data = (folder/'traced.h264').read_bytes()
+          offset = 0
+          for line in trace.read_text().splitlines():
+              row = line.split('\t')
+              if row[0] == 'headers':
+                  size, digest = int(row[2]), row[4]
+              elif row[0] == 'output':
+                  size, digest = int(row[4]), row[7]
+              else:
+                  continue
+              assert hashlib.sha256(data[offset:offset+size]).hexdigest() == digest
+              offset += size
+          assert offset == len(data)
+          print('PASS transparent encoded bytes, complete lifetimes, visible-plane and native-output SHA256 smoke test')
           PY
       - name: Compare traced and plain exact-source pairs
         env:

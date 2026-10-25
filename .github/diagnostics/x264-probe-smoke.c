@@ -30,10 +30,16 @@ int main(int argc, char **argv)
     parameters.i_fps_num = 30;
     parameters.i_fps_den = 1;
     parameters.i_log_level = X264_LOG_NONE;
+    parameters.b_repeat_headers = 0;
     x264_t *encoder = x264_encoder_open(&parameters);
     x264_picture_t input, output;
     if (!encoder || x264_picture_alloc(&input, X264_CSP_I420, 854, 480) < 0)
         return 5;
+    x264_nal_t *headers;
+    int header_count;
+    if (x264_encoder_headers(encoder, &headers, &header_count) < 0
+        || write_nals(file, headers, header_count))
+        return 8;
     for (int index = 0; index < 3; ++index) {
         for (int plane = 0; plane < 3; ++plane)
             for (int row = 0; row < (plane ? 240 : 480); ++row)

@@ -1,51 +1,125 @@
-"""Validate CI-only x264 input traces; never emit benchmark acceptance receipts."""
+"""Validate CI-only x264 boundary traces; never emit benchmark acceptance receipts."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
 
 STYLES = ('anime', 'swiss', 'blueprint', 'editorial', 'terminal', 'paper', 'kinetic', 'cinema')
+EMPTY_SHA256 = hashlib.sha256(b'').hexdigest()
+
+
+def payload(fields, result, count, sha, sizes):
+    assert result >= 0 and 0 <= count <= 4096, f'Invalid native result: {fields}'
+    assert len(sizes) == count and all(size > 0 for size in sizes), f'Invalid NAL sizes: {fields}'
+    assert sum(sizes) == result, f'NAL byte count mismatch: {fields}'
+    assert re.fullmatch('[0-9a-f]{64}', sha), f'Invalid NAL hash: {fields}'
+    assert count or sha == EMPTY_SHA256, f'Invalid empty output hash: {fields}'
+
+
+def read_boundary(path, expected_frames=1080, segment_frames=24):
+    frames, outputs, opened, active, segments = {}, {}, {}, set(), {}
+    for row in path.read_text().splitlines():
+        fields = row.split('\t')
+        assert len(fields) >= 2, f'Malformed row: {path}'
+        kind, encoder = fields[:2]
+        if kind == 'open':
+            assert len(fields) == 9 and encoder == str(len(opened) + 1), f'Invalid open generation: {path}'
+            values = tuple(map(int, fields[2:]))
+            assert values[:3] == (854, 480, 2), f'Invalid geometry: {path}'
+            opened[encoder] = {'settings': values[3:], 'inputs': [], 'outputs': [], 'headers': [],
+                               'calls': [], 'events': [], 'flushes': 0, 'pending_input': False, 'draining': False}
+            active.add(encoder)
+            continue
+        assert encoder in active, f'Call outside open lifetime: {path}:{encoder}'
+        item = opened[encoder]
+        # Retain relative header/input/output order, not just separate projections.
+        item['events'].append(tuple(fields[0:1] + fields[2:]))
+        if kind == 'frame':
+            assert len(fields) == 6 and not item['pending_input'] and not item['draining']
+            index = int(fields[2])
+            assert 0 <= index < expected_frames and index not in frames, f'Invalid/duplicate PTS: {path}'
+            assert all(re.fullmatch('[0-9a-f]{64}', value) for value in fields[3:])
+            frames[index] = tuple(fields[3:])
+            item['inputs'].append(index)
+            item['pending_input'] = True
+        elif kind in ('headers', 'output'):
+            if kind == 'headers':
+                assert len(fields) >= 5 and not item['pending_input'] and not item['draining']
+                result, count = map(int, fields[2:4])
+                sha, sizes = fields[4], tuple(map(int, fields[5:]))
+            else:
+                assert len(fields) >= 8
+                call, flush, result, count = map(int, fields[2:6])
+                pts, sha, sizes = fields[6], fields[7], tuple(map(int, fields[8:]))
+                assert call == len(item['calls']) and flush in (0, 1), f'Invalid call order: {path}'
+                if flush:
+                    assert not item['pending_input'] and item['inputs']
+                    item['draining'] = True
+                    item['flushes'] += 1
+                else:
+                    assert item['pending_input'] and not item['draining']
+                    item['pending_input'] = False
+                if count:
+                    index = int(pts)
+                    assert index in item['inputs'] and index not in outputs, f'Invalid output PTS: {path}'
+                    outputs[index] = (result, count, sha, sizes)
+                    item['outputs'].append(index)
+                else:
+                    assert pts == '-', f'PTS on empty output: {path}'
+                item['calls'].append((flush, result, count, pts, sha, sizes))
+            payload(fields, result, count, sha, sizes)
+            if kind == 'headers':
+                assert count > 0, f'Missing encoder headers: {path}'
+                item['headers'].append((result, count, sha, sizes))
+        elif kind == 'close':
+            assert len(fields) == 7 and not item['pending_input']
+            assert list(map(int, fields[2:])) == [len(item['inputs']), len(item['outputs']),
+                len(item['calls']), item['flushes'], len(item['headers'])], f'Incorrect close totals: {path}'
+            assert item['flushes'] and item['headers'], f'Missing flush/header coverage: {path}'
+            assert len(item['inputs']) == segment_frames
+            start = item['inputs'][0]
+            assert start % segment_frames == 0
+            assert item['inputs'] == list(range(start, start + segment_frames)), f'Input order: {path}'
+            assert sorted(item['outputs']) == item['inputs'], f'Incomplete native output: {path}'
+            segment = start // segment_frames
+            assert segment not in segments
+            segments[segment] = item
+            active.remove(encoder)
+        else:
+            raise AssertionError(f'Unknown trace row: {path}:{kind}')
+    assert not active and set(frames) == set(outputs) == set(range(expected_frames)), f'Incomplete trace: {path}'
+    assert set(segments) == set(range(expected_frames // segment_frames)), f'Incomplete lifetimes: {path}'
+    settings = sorted({item['settings'] for item in opened.values()})
+    return {'frames': frames, 'outputs': outputs, 'segments': segments, 'settings': settings}
 
 
 def read_trace(path):
-    frames = {}
-    settings = set()
-    opened = set()
-    for row in path.read_text().splitlines():
-        fields = row.split('\t')
-        if fields[0] == 'open':
-            assert len(fields) == 9, f'Malformed open row: {path}'
-            _, encoder, width, height, csp, threads, lookahead, sync, deterministic = fields
-            assert (int(width), int(height), int(csp)) == (854, 480, 2)
-            opened.add(encoder)
-            settings.add((int(threads), int(lookahead), int(sync), int(deterministic)))
-        else:
-            assert len(fields) == 6 and fields[0] == 'frame', f'Malformed frame row: {path}'
-            _, encoder, pts, *hashes = fields
-            assert encoder in opened, f'Frame before open: {path}'
-            index = int(pts)
-            assert 0 <= index < 1080 and index not in frames, f'Invalid/duplicate PTS: {path}:{pts}'
-            assert all(re.fullmatch('[0-9a-f]{64}', value) for value in hashes)
-            frames[index] = tuple(hashes)
-    assert set(frames) == set(range(1080)), f'Incomplete trace: {path} ({len(frames)} frames)'
-    assert settings, f'No encoder settings: {path}'
-    return frames, sorted(settings)
+    boundary = read_boundary(path)
+    return boundary['frames'], boundary['settings']
 
 
 def analyze(root):
     decoded = json.loads((root/'summary.json').read_text())
-    result = {'kind': 'x264_input_diagnostic', 'metric': None,
+    result = {'kind': 'x264_boundary_diagnostic', 'metric': None,
               'not_a_measurement_or_quality_receipt': True, 'styles': {}}
     for style in STYLES:
         batches = []
-        settings = []
         for index in range(2):
             paths = list((root/f'batch-{index}/input-traces').glob(f'{style}-*.tsv'))
             assert len(paths) == 1, f'Expected one complete render trace: {style}, batch {index}'
-            frames, actual = read_trace(paths[0])
-            batches.append(frames)
-            settings.append(actual)
-        changed = [i for i in range(1080) if batches[0][i] != batches[1][i]]
+            batches.append(read_boundary(paths[0]))
+        changed = [i for i in range(1080) if batches[0]['frames'][i] != batches[1]['frames'][i]]
+        native = [i for i in range(1080) if batches[0]['outputs'][i] != batches[1]['outputs'][i]]
+        headers, calls, settings = [], [], []
+        for segment in range(45):
+            a, b = (batch['segments'][segment] for batch in batches)
+            if a['headers'] != b['headers']:
+                headers.append(segment)
+            if a['events'] != b['events']:
+                calls.append(segment)
+            if a['settings'] != b['settings']:
+                settings.append(segment)
         item = decoded['styles'][style]
         video_equal = item['between_batches']['video']
         assert type(video_equal) is bool, f'Invalid decoded equality: {style}'
@@ -56,16 +130,25 @@ def analyze(root):
         if not decoding_stable:
             conclusion = 'same_file_video_decode_unstable; original_failure_not_localized'
         elif video_equal:
-            conclusion = ('raw_input_differs_but_decoded_video_matches; original_failure_not_localized'
-                          if changed else 'no_difference_reproduced_in_this_instrumented_pair')
+            conclusion = ('observed_boundary_differs_but_decoded_video_matches; original_failure_not_localized'
+                          if changed or native or headers or calls or settings
+                          else 'no_difference_reproduced_in_this_instrumented_pair')
         elif changed:
             conclusion = 'raw_encoder_input_and_decoded_video_differ; inspect_upstream_input_path'
+        elif native or headers or calls or settings:
+            conclusion = 'visible_input_equal_but_native_output_or_state_differs; inspect_hidden_inputs_and_encoder_path'
         else:
-            conclusion = 'visible_input_equal_but_decoded_video_differs; inspect_encoder_or_hidden_frame_state'
+            conclusion = 'observed_native_boundary_equal_but_decoded_video_differs; inspect_downstream_path'
         result['styles'][style] = {
-            'input_frame_count': [len(batch) for batch in batches],
-            'actual_encoder_settings_threads_lookahead_sync_deterministic': settings,
+            'input_frame_count': [len(batch['frames']) for batch in batches],
+            'native_output_frame_count': [len(batch['outputs']) for batch in batches],
+            'closed_encoder_lifetimes': [len(batch['segments']) for batch in batches],
+            'actual_encoder_settings_threads_lookahead_sync_deterministic': [batch['settings'] for batch in batches],
             'different_visible_input_frames': changed,
+            'different_native_output_frames': native,
+            'different_header_segments': headers,
+            'different_native_call_segments': calls,
+            'different_recorded_setting_segments': settings,
             'decoded_video_equal': video_equal,
             'same_file_video_decoding_stable': decoding_stable,
             'conclusion': conclusion,

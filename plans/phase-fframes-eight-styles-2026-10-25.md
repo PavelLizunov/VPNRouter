@@ -439,4 +439,66 @@ system was found. Each style has a deliberate visual mechanism:
   new acceptance receipts. No confirmed blocking defect was found. Failed batch
   artifacts can still contain stale prior-style files, as previously recorded;
   they are not accepted exports. No product or frozen source changed.
+- Reduced-allocation head `2a97a1dda49e093f92feaf3d2a36fbcf625021eb` is exact
+  local/remote/PR head with all five applicable checks green; normal render skipped.
+  Actions `40201533838` completed in 12m55s. Watcher and artifact collection exited
+  0. Artifact `12602696265` (213651298 bytes) has verified archive SHA256
+  `9fed114cdd72e290e37b7dded5cd57d6e172e148a9702a8596211e64a2f7afe0`.
+- Recomputed both reports from saved signatures and all 34560 decoded frame rows;
+  verified 64 media byte hashes against runner records and the nested checksum
+  manifests. All 16 traces have 45 open lifetimes with monotonic 24-frame ranges
+  and exactly PTS 0..1079. The uploaded archive omits empty plain trace directories;
+  the runner explicitly asserted them empty before upload. No local decode ran.
+- Both pairs reproduce video differences. Traced batches 0/1: anime 168, editorial
+  389, paper 24 frames. Plain batches 2/3: anime 120, blueprint 24, editorial 24.
+  Other pairwise styles match. Audio and same-file repeated decodes are stable;
+  silent video already differs. All 1080 visible Y/U/V input hash triples match
+  across traced batches for every style, with actual settings 1/1/0/1 unchanged.
+  This narrows the reproduced failure past observed visible samples, but does not
+  exclude hidden input state, mutation after observation, encoder or downstream
+  packet handling. It does not prove an x264, padding, cache or lookahead cause.
+- Independent saved-byte audit `d7401b6a` verifies 142592 packet payload hashes
+  against positions/sizes in all 32 final MP4s, with zero mismatches. Traced packet
+  differences: anime 106, editorial 249, paper 24; plain: anime 70, blueprint 24,
+  editorial 7. Pairwise packet timing/order/flags and saved extradata hashes match.
+  This is real encoded-payload divergence, not merely changed container offsets.
+  Editorial also has changes within segment 600..623 while keyframe 600 matches;
+  do not generalize the first changed segment's keyframe alignment to all changes.
+- Next bounded diagnostic: retain the current full input observer, exact source,
+  encoder options and plain/traced/traced/plain order. Add SHA256 of returned NAL
+  payload bytes immediately after each real encode call (including NULL flush)
+  and encoder-header call, with returned byte count, NAL count and output PTS.
+  Record encoder close and distinguish each open lifetime despite pointer reuse.
+  Compare complete 1080-output-PTS maps and per-lifetime header/output structure.
+  No further hot-path minimization is justified merely to reproduce: it reproduced.
+- Allowed implementation scope: CI-only hook, analyzer, smoke/tests and diagnostic
+  workflow plus this record and existing defect entry. Preserve source/media,
+  padding, encoder arguments, frozen evaluators and delivered previews. Header and
+  library version/hash evidence may be retained from the same disposable runner.
+  No new dependency, production fix, baseline acceptance or optimization candidate.
+- Next-step acceptance: real CI compile; encoded-byte transparency plus exact input
+  and NAL-output smoke; reject missing/duplicate/out-of-range PTS, incomplete
+  lifetimes, failed calls and missing close/flush/output evidence; exercise actual
+  workflow success/failure paths. Run lightweight syntax/regression checks locally,
+  independent correctness/security review, normal-hook commit/push and exact-head
+  CI. Build/render/decode stay on the recorded disposable runner. If output and
+  headers differ, inspect hidden inputs/encoder state; if equal while decoded video
+  differs, inspect downstream handling without claiming an established root cause.
+  A non-reproducing pair stays inconclusive. Roll back only this diagnostic commit
+  with history preserved if invalid. Fresh strict baseline is still required.
+- Output-boundary local checks: 7 diagnostic, 7 evaluator and 3 workflow contracts
+  pass without native compilation/render/decode; source hashes, YAML, extracted
+  Bash/Python and seven-file scope verify. Reviewer `c7070336` found lost relative
+  header/encode order in the precommit analyzer. Lead reproduced it, recorded it
+  in the defect ledger, retained combined per-lifetime event sequences and added
+  an actual-analyzer moved-header regression. Independent correctness `63daa067`
+  and security `fc91bbeb` reviews found no further confirmed blocker and reran all
+  7 diagnostic contracts after the correction. Test review `c7070336` independently
+  exercised 29 parser, 24 conclusion, 9 extracted-smoke and 4 correction scenarios;
+  it ran a no-write 7-contract subset, not the full 17-contract suite. The lead's
+  full 7+7+3 rerun passes. The minor malformed-setting domain gap is recorded and
+  deferred until the exact CI header establishes legal auto sentinels. It is not
+  baseline acceptance. Native ABI, smoke/transparency and real outputs remain
+  unverified until the next disposable exact-head CI. All nine delivered preview/
+  archive files retain their original checksums; no rollback or product change.
 - Fresh baseline, paired optimization and confirmation remain pending.
