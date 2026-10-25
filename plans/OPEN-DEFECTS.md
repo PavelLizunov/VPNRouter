@@ -494,3 +494,12 @@ stdio helper is a child of the shared shell; EOF disposes its owned VPN session.
 Round L integrates the private user service and reattach snapshot; inspection also
 found missing logout coupling, package replacement coordination and telemetry.
 See phase-omarchy-n4-lifetime-2026-10-26.md. Live evidence is pending.
+
+
+## N4-L native close: Linux gVisor leaves policy rules (P1, implementing)
+
+A clean r40 service connection survives UI reloads, but explicit Disconnect leaves
+rules 8900-8910. Direct native SIGTERM with a 45-second unit grace also fails:
+core's ten-second close monitor aborts with TUN inbound still closing. Backport
+the pinned runtime's gVisor close order so the interface/routes close before the
+stack wait. This is a live discovery, not a passed cleanup acceptance.
