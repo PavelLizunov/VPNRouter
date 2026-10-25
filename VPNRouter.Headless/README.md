@@ -171,6 +171,7 @@ keeping the service available. `quit` disconnects and terminates the service; it
 last response is best-effort. Service SIGTERM cancels active work and disposes the
 backend with the same bounded stop. The unit uses `KillMode=mixed` and a 45-second
 stop deadline, so Headless gets SIGTERM before systemd's final cgroup SIGKILL.
-The service is started on demand, with no graphical-session dependency or auto
-restart. Logout, service/core crashes, forced kills, and machine shutdown are
+The service is started on demand, with no graphical-session dependency or systemd
+restart policy. An enabled plugin retries a lost connection and starts the unit
+again; disable the plugin before stopping the service to keep it stopped. Logout, service/core crashes, forced kills, and machine shutdown are
 separate boundaries; the candidate does not enable lingering or restore intent.

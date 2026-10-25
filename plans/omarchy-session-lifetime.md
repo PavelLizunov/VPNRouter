@@ -62,7 +62,8 @@ budget. Explicit disconnect stops the session; quit terminates the service.
 Stdio keeps EOF teardown. The plugin falls back only when the unit is absent or
 a local payload is selected, never after a failure of an installed service.
 
-Automated and offline VM evidence is recorded in the D3 task outcome. This
+Automated and offline VM evidence is recorded in the
+[D3 task outcome](phase-omarchy-session-service-2026-10-25.md). This
 candidate cannot yet establish connected-session, TUN or egress survival across
 a shell restart: connecting is not authorized in D3. Linux kill-switch remains
 unavailable; service/core crash, forced cgroup kill, logout and hung-stop recovery
