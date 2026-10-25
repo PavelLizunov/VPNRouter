@@ -589,3 +589,33 @@ system was found. Each style has a deliberate visual mechanism:
   Extra trace/query/hash overhead can perturb execution. No input normalization.
 - Fresh baseline, paired optimization and confirmation remain pending; 0/10
   candidates, no current best, no accepted improvement and no rollback.
+- Named-state checkpoint `600daaa2153bd1922878a84de1815db0d74d53fe` is exact
+  local/remote/PR head and green: diagnose 21m03s, test 4m04s,
+  characterization-windows 6m10s, go-test-windows 49s, grep 6s; normal render
+  intentionally skipped. Actions `40209722318` completed successfully, including
+  native compilation and encoded-byte-transparency smoke. Watcher
+  `bash-86985b15d7d44b6f` and collection `bash-983f16646d704354` exited 0.
+- Artifact `12605741457` is 216352367 bytes with 793 entries; archive SHA256 is
+  `344f65837ce259c8a687cea115c71969d2e5bf192e95c70831689b79dc8eaec1`.
+  Saved verification recomputes strict named-state/native analysis and decoded
+  summaries, validating 64 media hashes and 34560 decoded-frame rows. Use
+  `out/repeatability-40209722318/final-actions-run.json` for final status; retain
+  the earlier in-progress receipt as history, not the current result.
+- Traced decoded differences are anime 48, editorial 216 and kinetic 96 frames;
+  plain controls differ for anime 188 and editorial 48. The other styles match.
+  All visible YUV and recorded named state match, while returned native payloads
+  differ for the three traced styles. Actual optional `rc.psz_stat_in` and
+  `rc.psz_stat_out` pointers are present, with both stat-read/write flags zero;
+  pointer contents were not dereferenced. Exact native differing PTS are in
+  `out/repeatability-analysis/named-state-40209722318-verification.json`.
+- Complete semantic input equality remains unproven. Inactive caller fields,
+  delayed application/mutation, exact importer footprint and internal worker
+  state remain limits; no x264 defect, padding cause, API violation or race is
+  established. Native compilation passing is not repeatability or baseline
+  acceptance. The mutable current-run record is reconciled to completed/collected.
+- Next decision is bounded to establishing capture prerequisites from the saved
+  actual caller, retained header and native source/package evidence. Two disjoint
+  read-only assignments inspect caller ownership/initialization and native importer
+  selection/footprint. Do not rerun the completed export or implement a 24-frame
+  replay until capture bounds and semantic ownership are supported. Production,
+  frozen evaluators, encoder settings, padding and delivered outputs stay fixed.
