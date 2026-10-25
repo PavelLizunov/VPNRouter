@@ -10,7 +10,7 @@ at boot; no GUI or root service is installed. Older plugins can still use
 ## Build
 
 Use an Arch CI container or build worker with base-devel, Python, git, libarchive,
-libcap, Go 1.26.8 and the .NET SDK selected by `global.json` (10.0.301 with `latestPatch` servicing roll-forward). The driver supports
+libcap and the .NET SDK selected by `global.json` (10.0.301 with `latestPatch` servicing roll-forward). The driver supports
 `DOTNET_ROOT` for a private SDK install. It runs makepkg as an unprivileged user.
 
 ```bash
@@ -31,14 +31,7 @@ workflow runs or rerun attempts compare newer in pacman.
 `--work-dir` must be new and absolute. `--archive-cache` optionally reads an
 existing directory of verified archives.
 
-The core is rebuilt from sing-box-vpnctl commit
-`f62085aa7cc0f3ee665ac3043d35698760a386e9` with production protocol tags and the
-[Linux gVisor close-order backport](runtime-close.patch). The unpatched order
-fails the included Go regression before the patch is applied; the patched test
-must pass before building. Version is `1.14.2-vpnctl.2+omarchy-close1`. The manifest
-records source commit, patch/test hashes, toolchain, tags and final binary hash.
-The original runtime archive is retained for its pinned license/README evidence;
-its executable is replaced by this source build. The libcronet donor is
+The core is sing-box-vpnctl 1.14.2-vpnctl.2 linux-amd64; the libcronet donor is
 SagerNet/sing-box 1.14.2 linux-amd64. Both archive hashes match
 [the desktop Linux workflow](../../.github/workflows/build-linux.yml).
 The [Arch CI workflow](../../.github/workflows/arch-headless.yml) builds from

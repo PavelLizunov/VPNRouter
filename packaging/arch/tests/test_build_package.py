@@ -394,7 +394,6 @@ class TestPublishHeadless(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
         with mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
-             mock.patch("build_package.build_runtime.build_runtime", return_value={"version":"fixture"}), \
              mock.patch.dict(os.environ, {}, clear=False), \
              mock.patch("subprocess.run", side_effect=fake_run):
             build_package.publish_headless(self.source_tree, self.publish_dir, self.work_dir)
@@ -419,7 +418,6 @@ class TestPublishHeadless(unittest.TestCase):
         def fake_run(cmd, **kwargs):
             return subprocess.CompletedProcess(cmd, 0, stdout="10.0.303\n", stderr="")
         with mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
-             mock.patch("build_package.build_runtime.build_runtime", return_value={"version":"fixture"}), \
              mock.patch("subprocess.run", side_effect=fake_run):
             actual = build_package.publish_headless(self.source_tree, self.publish_dir, self.work_dir)
         self.assertEqual(actual, "10.0.303")
@@ -430,7 +428,6 @@ class TestPublishHeadless(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, stdout="10.0.200\n", stderr="")
 
         with mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
-             mock.patch("build_package.build_runtime.build_runtime", return_value={"version":"fixture"}), \
              mock.patch("subprocess.run", side_effect=fake_run):
             with self.assertRaises(ValueError) as ctx:
                 build_package.publish_headless(self.source_tree, self.publish_dir, self.work_dir)
@@ -443,7 +440,6 @@ class TestPublishHeadless(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, stdout="10.0.301\n", stderr="")
 
         with mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
-             mock.patch("build_package.build_runtime.build_runtime", return_value={"version":"fixture"}), \
              mock.patch("subprocess.run", side_effect=fake_run):
             with self.assertRaises(FileNotFoundError) as ctx:
                 build_package.publish_headless(self.source_tree, self.publish_dir, self.work_dir)
@@ -596,7 +592,6 @@ class TestLicensesAndNotices(unittest.TestCase):
 
         with mock.patch("build_package.verify_repo_commit", return_value="a" * 40), \
              mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
-             mock.patch("build_package.build_runtime.build_runtime", return_value={"version":"fixture"}), \
              mock.patch("build_package.export_source", return_value=(fake_work / "source.tar", "a" * 64)), \
              mock.patch("staging_tools.safe_extract", side_effect=fake_safe_extract), \
              mock.patch("build_package.acquire_archive", side_effect=fake_acquire), \
@@ -739,7 +734,6 @@ class TestLicensesAndNotices(unittest.TestCase):
 
         with mock.patch("build_package.verify_repo_commit", return_value="a" * 40), \
              mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet/sdk/bin/dotnet"), \
-             mock.patch("build_package.build_runtime.build_runtime", return_value={"version":"fixture"}), \
              mock.patch("build_package.export_source", return_value=(fake_work / "source.tar", "a" * 64)), \
              mock.patch("staging_tools.safe_extract", side_effect=fake_safe_extract), \
              mock.patch("build_package.acquire_archive", side_effect=fake_acquire), \

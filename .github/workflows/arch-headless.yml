@@ -30,11 +30,6 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           global-json-file: global.json
-      - name: Install pinned runtime source-build Go toolchain
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v6.0.0
-        with:
-          go-version: '1.26.8'
-          cache: false
       - name: Build and inspect package as unprivileged builder
         id: build
         shell: bash
@@ -74,6 +69,5 @@ jobs:
             /tmp/vpnrouter-arch-build/pkgbuild/*.pkg.tar.zst.sha256
             /tmp/vpnrouter-arch-build/stage/usr/lib/vpnrouter-headless/manifest.json
             /tmp/vpnrouter-arch-build/getcap.txt
-            /tmp/vpnrouter-arch-build/runtime-close-red.log
           if-no-files-found: error
           retention-days: 30

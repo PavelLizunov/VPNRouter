@@ -27,7 +27,6 @@ if str(ARCH_DIR) not in sys.path:
 
 try:
     import staging_tools
-    import build_runtime
 except ImportError as err:
     raise ImportError(f"Failed to import staging_tools from {ARCH_DIR}: {err}") from err
 
@@ -743,8 +742,6 @@ def main(argv: list[str] | None = None) -> int:
         shutil.copy2(sf, df)
         os.chmod(df, 0o755)
 
-    runtime_build = build_runtime.build_runtime(work_dir, runtime_dest_dir / "sing-box")
-
     licenses_dest_dir = payload_dir / "licenses"
     licenses_dest_dir.mkdir(parents=True, mode=0o755)
     missing_licenses: list[str] = []
@@ -805,9 +802,6 @@ def main(argv: list[str] | None = None) -> int:
             "vpnrouter-headless.install": compute_file_sha256(ARCH_DIR / "vpnrouter-headless.install"),
             "staging_tools.py": compute_file_sha256(staging_tools_py),
             "build_package.py": compute_file_sha256(build_package_py),
-            "build_runtime.py": compute_file_sha256(ARCH_DIR / "build_runtime.py"),
-            "runtime-close.patch": compute_file_sha256(ARCH_DIR / "runtime-close.patch"),
-            "runtime-close_test.go": compute_file_sha256(ARCH_DIR / "runtime-close_test.go"),
             "license_evidence.py": compute_file_sha256(license_evidence_py),
             "notices/catalog.json": compute_file_sha256(catalog_json),
         },
@@ -817,13 +811,12 @@ def main(argv: list[str] | None = None) -> int:
             dotnet_version=dotnet_version,
         ),
         "arch": "x86_64",
-        "runtime_version": runtime_build["version"],
-        "runtime_source_build": runtime_build,
+        "runtime_version": RUNTIME_VERSION,
         "cronet_version": CRONET_VERSION,
         "archive_urls": {"runtime": RUNTIME_URL, "cronet": CRONET_URL},
         "archive_hashes": {"runtime": RUNTIME_SHA256, "cronet": CRONET_SHA256},
         "dependencies": {
-            "arch_packages": ["glibc", "gcc-libs", "libcap", "iproute2", "dotnet-runtime>=10", "dotnet-runtime<11"],
+            "arch_packages": ["glibc", "gcc-libs", "libcap", "dotnet-runtime>=10", "dotnet-runtime<11"],
             "elf_needed": needed_deps,
         },
         "license_inventory_complete": len(missing_licenses) == 0 and bool(evidence.get("complete", False)),
