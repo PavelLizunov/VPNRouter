@@ -89,6 +89,17 @@ remain false on Linux. The ownership lock coordinates cooperating processes of
 the same UID. Installed-owner traffic routing and plugin loading require their
 own end-to-end checks.
 
+The package installs `49-vpnrouter-headless-resolved.rules` under
+`/usr/share/polkit-1/rules.d`. Only an active local session can set DNS servers,
+set routing domains or revert DNS on the `VPNRouter-TUN` link. Generated full
+tunnels steer resolved through the virtual TUN peer with routing domain `~.`;
+DHCP DNS on private LAN routes would otherwise bypass the TUN. Exclude-app and
+strict-DNS sessions use the same steering. Physical-link DNS is unchanged and
+resolved removes the per-link settings when the TUN disappears. A restart reapplies
+them. This does not block applications using their own resolvers, and does not
+enable the DNS-lockdown capability. Without resolved or this local-session grant,
+steering fails without opening an authentication dialog and is logged.
+
 ## Package evidence
 
 The manifest verifies file hashes and modes; ELF dependencies are inventoried

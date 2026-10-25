@@ -783,6 +783,11 @@ class TestLicensesAndNotices(unittest.TestCase):
         self.assertIn("notices/catalog.json", pkg_shas)
         self.assertEqual(len(pkg_shas["license_evidence.py"]), 64)
         self.assertEqual(len(pkg_shas["notices/catalog.json"]), 64)
+        self.assertEqual(
+            (fake_work / "stage" / build_package.RESOLVED_POLICY).read_bytes(),
+            (ARCH_DIR / Path(build_package.RESOLVED_POLICY).name).read_bytes(),
+        )
+        self.assertIn("49-vpnrouter-headless-resolved.rules", pkg_shas)
 
         # 4. Assert verify_license_evidence was called after manifest generation
         self.assertEqual(len(verified_payloads), 1)
@@ -856,6 +861,23 @@ class TestReadelfAndPackageInspection(unittest.TestCase):
             with self.assertRaises(ValueError) as ctx:
                 build_package.inspect_package(pkg_file, self.tmp)
             self.assertIn("outside allowed metadata", str(ctx.exception))
+
+    def test_inspect_package_rejects_changed_resolved_policy(self) -> None:
+        pkg_file = self.tmp / "test.pkg.tar.zst"
+        pkg_file.write_bytes(b"dummy")
+        member = tarfile.TarInfo(build_package.RESOLVED_POLICY)
+        member.mode = 0o644
+        member.uid = member.gid = 0
+        data = _create_tar_bytes([(member, b"polkit.addRule(function() { return polkit.Result.YES; });")])
+
+        def fake_run(cmd, **kwargs):
+            Path(cmd[2]).write_bytes(data)
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with mock.patch("shutil.which", return_value="/bin/bsdtar"), \
+             mock.patch("subprocess.run", side_effect=fake_run):
+            with self.assertRaisesRegex(ValueError, "Unexpected resolved policy"):
+                build_package.inspect_package(pkg_file, self.tmp)
 
     def test_inspect_package_original_writable_mode_rejected(self) -> None:
         for mode in (0o664, 0o666, 0o777):
@@ -976,8 +998,11 @@ class TestReadelfAndPackageInspection(unittest.TestCase):
 
         ti_install = tarfile.TarInfo(".INSTALL")
         ti_install.mode = 0o644
+        ti_policy = tarfile.TarInfo(build_package.RESOLVED_POLICY)
+        ti_policy.mode = 0o644
         entries = [
             (ti_install, (ARCH_DIR / "vpnrouter-headless.install").read_bytes()),
+            (ti_policy, (ARCH_DIR / Path(build_package.RESOLVED_POLICY).name).read_bytes()),
             (ti_pkginfo, b"pkgname = vpnrouter-headless\n"),
             (ti_usr, None),
             (ti_usrlib, None),

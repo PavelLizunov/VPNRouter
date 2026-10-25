@@ -494,3 +494,9 @@ stdio helper is a child of the shared shell; EOF disposes its owned VPN session.
 Round L integrates the private user service and reattach snapshot; inspection also
 found missing logout coupling, package replacement coordination and telemetry.
 See phase-omarchy-n4-lifetime-2026-10-26.md. Live evidence is pending.
+
+## Omarchy N4 Linux DNS steering (2026-10-26)
+
+- Severity: P1; status: investigating on task branch `dsh/omarchy-n4-net`.
+- Evidence: r33 on the authorized Omarchy VM connects a TUN-only inbound, but resolved has no TUN DNS scope and public lookups use DHCP resolver over ens18; nft observes LAN UDP/53. Private route exclusions bypass the generated DNS hijack rule. Linux Headless rejects DNS lockdown, so the existing Unix DNS adapter is never applied with ordinary settings.
+- Repair scope: per-link resolver steering for full tunnel, separately from the stronger DNS-lockdown capability; narrowly scoped noninteractive package authorization; lifecycle and regression checks.
