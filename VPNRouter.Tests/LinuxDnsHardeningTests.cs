@@ -113,7 +113,7 @@ public class LinuxDnsHardeningTests : IDisposable
         var revert = fake.RunCalls.FirstOrDefault(c =>
             c.ExecutablePath == "resolvectl" && c.Arguments.Contains("revert"));
         Assert.NotNull(revert);
-        Assert.Equal(new[] { "revert", "VPNRouter-TUN" }, revert!.Arguments.ToArray());
+        Assert.Equal(new[] { "--no-ask-password", "revert", "VPNRouter-TUN" }, revert!.Arguments.ToArray());
         Assert.False(File.Exists(_statePath));
     }
 

@@ -150,6 +150,9 @@ public static partial class ConfigGenerator
         return JsonSerializer.Serialize(config, Json.AppJsonContext.Default.SingBoxConfig);
     }
 
+    private const int LinuxIproute2TableIndex = 2350;
+    private const int LinuxIproute2RuleIndex = 8900;
+
     private static List<SingBoxInbound> BuildInbounds(AppSettings settings, bool proxyIsUdpNative = false)
     {
         var routeExcludes = settings.Tun.GetEffectiveRouteExcludeAddress();
@@ -171,7 +174,12 @@ public static partial class ConfigGenerator
                                             ? routeExcludes
                                             : null,
                 EndpointIndependentNat  = true,
-                Stack                   = PlatformTunStack()
+                Stack                   = PlatformTunStack(),
+                // sing-tun defaults (table 2022, rules from 9000) are shared with mihomo and
+                // other sing-box clients; a collision fails our start and our cleanup deletes
+                // the other client's routes.
+                Iproute2TableIndex      = OperatingSystem.IsLinux() ? LinuxIproute2TableIndex : null,
+                Iproute2RuleIndex       = OperatingSystem.IsLinux() ? LinuxIproute2RuleIndex : null
             }
         };
     }

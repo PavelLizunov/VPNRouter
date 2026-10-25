@@ -99,7 +99,8 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
                 return;
             }
 
-            if (RunResolvectl(new[] { "revert", state.Interface }, logger))
+            // Never block teardown on a polkit password dialog; the link usually no longer exists.
+            if (RunResolvectl(new[] { "--no-ask-password", "revert", state.Interface }, logger))
             {
                 FlushDnsCache(logger);
                 logger?.Information("[LinuxDnsHardening] {Context}: reverted {Iface} DNS", context, state.Interface);
