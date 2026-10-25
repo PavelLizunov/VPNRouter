@@ -23,3 +23,18 @@ contracts and package install checks run in exact-SHA CI. Under the shared VM lo
 install the exact artifact, deploy this plugin, connect, rescan and restart shell;
 compare engine PID, TUN, exit IP, server and elapsed time. Explicit disconnect must
 remove TUN and VPNRouter rules. Record screenshots and limits in Round L evidence.
+
+## Live root cause and dependency integration
+
+The route cleanup failure on r40 was not a demonstrated gVisor close-order bug.
+Round N independently identified the pinned runtime's interactive native resolved
+helpers inheriting its TUN fd. NativeTun also waits for `resolvectl revert` before
+route cleanup. The generator did not disable this second DNS owner. Round N's
+7fadf156 and eb31d7c2 supply managed DNS steering/authorization and explicit
+`dns_mode: disabled`, preserving the explicit DNS hijack route. They are included
+as required dependencies of the lifetime acceptance, with their original tests.
+The speculative source-build change 1d258e61 was reverted by 45c50fb; the trusted
+runtime archive, binary hash and license checks remain unchanged. Its failed Arch
+CI was a binary-hash catalog mismatch, not an accepted cleanup fix. No production
+runtime fork, release or tag was created. Repeat all live lifecycle scenarios on
+the combined exact-SHA artifact before accepting cleanup.
