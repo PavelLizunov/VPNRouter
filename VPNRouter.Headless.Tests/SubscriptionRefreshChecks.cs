@@ -29,7 +29,7 @@ public static class SubscriptionRefreshChecks
     private static async Task CheckAsync(string dir, string scenario)
     {
         const string safeMessage = "Subscription refresh failed or returned no usable servers. Cached servers were kept.";
-        const string validBody = "trojan://synthetic-password@192.0.2.8:443#fresh";
+        const string validBody = "ss://aes-256-gcm:synthetic-password@192.0.2.8:443#fresh";
         var storage = new ConfigStorage(dir);
         var settings = storage.GetSettings();
         settings.App.Subscriptions = scenario == "none" ? new() : new() { Entry("first") };
@@ -68,7 +68,7 @@ public static class SubscriptionRefreshChecks
         Assert(wire.GetProperty("id").GetString() == "refresh-1", "Response must retain the request identity");
         if (scenario is "success" or "none")
         {
-            Assert(wire.TryGetProperty("result", out _), "Valid refresh or no targets must succeed");
+            Assert(wire.TryGetProperty("result", out _), $"{scenario}: valid refresh or no targets must succeed");
             if (scenario == "success")
             {
                 Assert(storage.GetSettings().App.Subscriptions[0].Servers.Single().Name == "fresh", "Fresh servers must persist");

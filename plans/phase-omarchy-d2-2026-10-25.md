@@ -59,3 +59,11 @@ note: zero broken paths/links, zero unknown symbols; Headless dead_names: zero
 remaining candidates; git diff --check: clean. No local .NET execution.
 Prepared brief d41e0119 passed Android compile CI 40179218276; repository verifier
 returned exit 0 before implementation. Product CI is still pending.
+
+First product CI 40179594796: the new EOF check and renamed suites passed;
+SubscriptionRefreshChecks failed its success control because its test payload
+used unsupported trojan://. Current ServerUriParser.IsSupportedScheme confirms
+that omission. Corrected only the fixture to supported plain-method Shadowsocks
+(ss://aes-256-gcm:synthetic-password@192.0.2.8:443#fresh), matching the existing
+ServerUriParserTests pattern. Product error behavior is unchanged. Success and
+partial-batch acceptance remain pending the corrected CI; no red-green claim.
