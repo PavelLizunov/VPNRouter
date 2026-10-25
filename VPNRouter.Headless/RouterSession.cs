@@ -39,6 +39,7 @@ public sealed class RouterSession : IRouterSession
     // Set while a live apply restarts sing-box, so its planned stop is not a lost connection.
     private volatile bool _applyRestartInProgress;
     private int? _connectedPid;
+    private long? _connectedSinceUnixMs;
 
     /// <summary>
     /// Default constructor for production use.
@@ -132,6 +133,20 @@ public sealed class RouterSession : IRouterSession
                 }
 
                 return _errorCode;
+            }
+        }
+    }
+
+    public ConnectionTelemetry? Telemetry
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                if (State != SessionStates.Connected || !_ownsConnection || _connectedSinceUnixMs == null)
+                    return null;
+                var (download, upload) = ConnectionTelemetry.ReadTunCounters();
+                return new ConnectionTelemetry(_connectedSinceUnixMs.Value, download, upload);
             }
         }
     }
@@ -927,6 +942,10 @@ public sealed class RouterSession : IRouterSession
 
             if (_state != newState || _errorCode != errorCode)
             {
+                if (newState == SessionStates.Connected)
+                    _connectedSinceUnixMs ??= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                else if (newState is SessionStates.Disconnected or SessionStates.Connecting)
+                    _connectedSinceUnixMs = null;
                 _state = newState;
                 _errorCode = errorCode;
                 changedHandler = Changed;

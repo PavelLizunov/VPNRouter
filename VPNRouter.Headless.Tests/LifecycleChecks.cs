@@ -584,6 +584,8 @@ public static class LifecycleChecks
         await using var session = new RouterSession(fake, () => OwnershipCheckResult.Free(), () => true);
         await session.ConnectAsync(new AppSettings(), CancellationToken.None);
         AssertEqual(SessionStates.Connected, session.State, "Session must be connected before EOF");
+        var connectedSince = session.Telemetry?.ConnectedSinceUnixMs;
+        AssertTrue(connectedSince > 0, "Connection clock belongs to the live session");
         await using var backend = new RouterBackend(session);
         await using var handler = new RouterBackendHandler(backend);
         using var input = new MemoryStream();
@@ -614,6 +616,8 @@ public static class LifecycleChecks
         await using var session = new RouterSession(fake, () => OwnershipCheckResult.Free(), () => true);
         await session.ConnectAsync(new AppSettings(), CancellationToken.None);
         AssertEqual(SessionStates.Connected, session.State, "Session must be connected before EOF");
+        var connectedSince = session.Telemetry?.ConnectedSinceUnixMs;
+        AssertTrue(connectedSince > 0, "Connection clock belongs to the live session");
         await using var backend = new RouterBackend(session);
         await using var handler = new RouterBackendHandler(backend);
         using var input = new MemoryStream();
@@ -628,8 +632,10 @@ public static class LifecycleChecks
         AssertTrue(fake.IsRunning, "Engine must remain running after detach");
         AssertEqual<int?>(3333, fake.SingBoxPid, "Owned engine PID must survive detach");
         AssertEqual(SessionStates.Connected, session.State, "Service retains connected state");
+        AssertEqual(connectedSince, session.Telemetry?.ConnectedSinceUnixMs, "Reattach retains the connection clock");
         await handler.ExecuteAsync("disconnect", default, CancellationToken.None);
         AssertEqual(1, fake.StopCallCount, "Explicit disconnect still stops owned engine");
+        AssertTrue(session.Telemetry == null, "Disconnected session cannot report live counters");
     }
 
     private static async Task CheckDisposeAsync()

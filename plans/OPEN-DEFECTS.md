@@ -486,3 +486,11 @@ Historical original #240 evidence only: the twelve repairs were recorded as reso
 - [x] **P2 FIXED IN PR #622** - HEADLESS-SUBSCRIPTION-REFRESH-SILENT-FAILURE: at c1bafab1, `SubscriptionFetcher.RefreshEntryAsync` returns zero on HTTP/transport/empty-result failure while preserving cache; `SubscriptionFeature.RefreshAsync` ignores that result, saves and reports success. Plugin receives no structured failure. 04089901 adds safe `subscription_refresh_failed` code/message, cancellation precedence and atomic failure without saving candidates. Corrected fixture head 17752be7 passes eight offline wire/persistence scenarios in CI 40179759509 (41 Headless checks); Arch 40179761405 is green. Independent lead acceptance pending.
 - [x] **P3 FIXED IN PR #622** - HEADLESS-HISTORY-REFERENCES: at c1bafab1, Headless README links absent September evidence files; Headless AGENTS requires a dated resume plan and claims protocol text is still absent. Round4Checks/Round5Checks identify work rounds instead of protected behavior. 04089901 fixes the links/map, removes obsolete resume history and renames the checks to LinuxMetadataChecks/DesktopIdentityChecks. Explicit-substitution comparison preserves fixture bodies; both suites pass at 17752be7, fact_check reports zero broken links. Other distinct task receipts remain.
 - [x] **P3 FIXED IN PR #622** - HEADLESS-UNUSED-ADMISSION-HELPER: at c1bafab1, `ProtocolConstants.IsUrgentOrReadOnlyMethod` has no callers or registration, and lists snapshot as urgent even though ProtocolDispatcher treats it as ordinary. Confirmed with dead_names.py plus repository-wide name/registration search. 04089901 removes the obsolete helper; admission remains in ProtocolDispatcher. Headless dead_names reports zero remaining candidates; scoped builds/tests pass at 17752be7. This is not a whole-program reachability claim.
+
+## N4-L: shell-owned VPN lifetime (2026-10-26, P1, implementing)
+
+Owner reports lost state after plugin reload on another Omarchy laptop. The
+stdio helper is a child of the shared shell; EOF disposes its owned VPN session.
+Round L integrates the private user service and reattach snapshot; inspection also
+found missing logout coupling, package replacement coordination and telemetry.
+See phase-omarchy-n4-lifetime-2026-10-26.md. Live evidence is pending.

@@ -6,7 +6,7 @@ pkgdesc="VPNRouter Headless daemon and packaged sing-box runtime"
 arch=('x86_64')
 url="https://github.com/PavelLizunov/VPNRouter"
 license=('GPL-3.0-or-later' 'GPL-3.0-only' 'Apache-2.0' 'MIT' 'BSD-3-Clause')
-depends=('glibc' 'gcc-libs' 'libcap' 'dotnet-runtime>=10' 'dotnet-runtime<11')
+depends=('glibc' 'gcc-libs' 'libcap' 'iproute2' 'dotnet-runtime>=10' 'dotnet-runtime<11')
 install=vpnrouter-headless.install
 options=(!strip !debug)
 source=('payload.tar')

@@ -13,6 +13,17 @@ public static class SocketChecks
         var directory = Path.Combine(Path.GetTempPath(), "vpn-socket-" + Guid.NewGuid().ToString("N"));
         var socketPath = Path.Combine(directory, "runtime", "control.sock");
         var data = Path.Combine(directory, "data");
+        var counters = Path.Combine(directory, "counters");
+        Directory.CreateDirectory(counters);
+        File.WriteAllText(Path.Combine(counters, "rx_bytes"), "12345\n");
+        File.WriteAllText(Path.Combine(counters, "tx_bytes"), "67890\n");
+        Check(ConnectionTelemetry.ReadTunCounters(counters) == (12345L, 67890L), "TUN directions and numeric counters");
+        File.WriteAllText(Path.Combine(counters, "rx_bytes"), "-1");
+        File.WriteAllText(Path.Combine(counters, "tx_bytes"), new string('9', 100));
+        Check(ConnectionTelemetry.ReadTunCounters(counters) == (null, null), "Invalid counters stay unknown");
+        File.Delete(Path.Combine(counters, "rx_bytes"));
+        Check(ConnectionTelemetry.ReadTunCounters(counters).Download == null, "Missing counter stays unknown");
+        Console.WriteLine("  LiveTunCounterBounds passed");
         var handler = new SessionHandler();
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var service = new UnixSocketServer(handler, socketPath, data).RunAsync(stop.Token);

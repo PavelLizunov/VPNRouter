@@ -171,6 +171,7 @@ public sealed class RouterBackend : IAsyncDisposable
             configMode,
             busy = _busyState != 0,
             errorCode = _session.ErrorCode,
+            telemetry = _session.Telemetry,
             unavailableReason,
             unavailableReasonCode,
             capabilities = new

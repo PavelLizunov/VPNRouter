@@ -56,7 +56,20 @@ systemctl --user start vpnrouter-headless.service
   /usr/lib/vpnrouter-headless/VPNRouter.Headless --stdio
 ```
 
-Dependencies are glibc, gcc-libs, libcap and .NET runtime >=10 and <11.
+The unit is part of `graphical-session.target`: logout stops the VPN even with
+user lingering enabled. Shell/plugin reload only detaches the controller. A
+service crash triggers up to three restarts per minute, with a two-second delay;
+the new session starts disconnected. The whole service cgroup receives SIGTERM
+on stop, allowing sing-box to remove its TUN and routes.
+
+During package upgrade, active user services are runtime-masked and stopped before
+files are replaced, then unmasked and started disconnected after capabilities are
+restored. The panel retries its attachment. Removal stops them without restarting.
+An interrupted transaction may leave a runtime mask; finish/reinstall the package
+or run `systemctl --user unmask --runtime vpnrouter-headless.service` before
+starting it again.
+
+Dependencies are glibc, gcc-libs, libcap, iproute2 and .NET runtime >=10 and <11.
 The pacman install/upgrade script applies `cap_net_admin,cap_net_raw+ep` to
 `/usr/lib/vpnrouter-headless/runtime/sing-box`. Package inspection accepts only
 that exact install script and the exact shipped user unit. The unit is included

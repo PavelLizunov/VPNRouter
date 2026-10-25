@@ -17,6 +17,9 @@ public interface IRouterSession : IAsyncDisposable
     /// </summary>
     string State { get; }
 
+    /// <summary>Live connection telemetry; absent when disconnected or unsupported.</summary>
+    ConnectionTelemetry? Telemetry => null;
+
     /// <summary>
     /// Sanitized error code when State is "error"; null otherwise.
     /// </summary>

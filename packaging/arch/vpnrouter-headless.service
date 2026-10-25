@@ -1,5 +1,9 @@
 [Unit]
 Description=VPNRouter independent session service
+PartOf=graphical-session.target
+After=graphical-session.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=exec
@@ -7,6 +11,7 @@ ExecStart=/usr/lib/vpnrouter-headless/VPNRouter.Headless --service
 UMask=0077
 RuntimeDirectory=vpnrouter-headless
 RuntimeDirectoryMode=0700
-KillMode=mixed
+KillMode=control-group
 TimeoutStopSec=45s
-Restart=no
+Restart=on-failure
+RestartSec=2s

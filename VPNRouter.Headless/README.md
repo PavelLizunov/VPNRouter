@@ -18,7 +18,7 @@ regressions. Exact-snapshot outcomes and remaining live acceptance gaps are in
 [the integration record](../plans/phase-omarchy-integration-2026-10-22.md) and
 [the defect ledger](../plans/OPEN-DEFECTS.md).
 
-The lifetime candidate uses `vpnrouter-headless.service` (systemd user service)
+The Linux session transport uses `vpnrouter-headless.service` (systemd user service)
 and a private Unix socket. The service owns the session independently of the
 shell. Detaching a client preserves the session and its admitted operation;
 reattaching sends a fresh state event, and `snapshot` remains available during
@@ -26,8 +26,7 @@ an operation. A second controller receives `controller_busy` and is closed.
 The coordinated plugin starts the unit and runs `--attach`. Without that unit
 (or with a plugin-local payload), it falls back to stdio: closing or restarting
 the shell then stops the active VPN. No automatic reconnect or Linux kill-switch
-is provided. A real connected session across shell restart still requires live
-acceptance; see [session lifetime](../plans/omarchy-session-lifetime.md).
+is provided. Connected-session and restart evidence is recorded per tested revision; see [session lifetime](../plans/omarchy-session-lifetime.md).
 
 ## Usage
 
@@ -89,6 +88,16 @@ Progress Event:
 ```json
 {"v":1,"event":"progress","data":{"id":"req-1","stage":"testing","completed":3,"total":10}}
 ```
+
+### Live connection telemetry
+
+Snapshots and state events add nullable `telemetry`. While connected it contains
+`connectedSinceUnixMs` (UTC Unix milliseconds) and nullable `downloadBytes` /
+`uploadBytes`, read from the owned Linux `VPNRouter-TUN` kernel interface. Missing,
+invalid or unreadable counters stay null. The timestamp belongs to RouterSession,
+so UI detachment never resets it; explicit disconnect clears it. Counters are
+interface totals and restart when the TUN is recreated. No bandwidth, elapsed
+clock or connection state is inferred from a proxy listener.
 
 ## Subscription refresh failures
 
@@ -169,9 +178,10 @@ In service mode, client EOF, broken pipes and output stalls detach the controlle
 without cancelling its admitted operation. `disconnect` stops the session while
 keeping the service available. `quit` disconnects and terminates the service; its
 last response is best-effort. Service SIGTERM cancels active work and disposes the
-backend with the same bounded stop. The unit uses `KillMode=mixed` and a 45-second
-stop deadline, so Headless gets SIGTERM before systemd's final cgroup SIGKILL.
-The service is started on demand, with no graphical-session dependency or systemd
-restart policy. An enabled plugin retries a lost connection and starts the unit
-again; disable the plugin before stopping the service to keep it stopped. Logout, service/core crashes, forced kills, and machine shutdown are
-separate boundaries; the candidate does not enable lingering or restore intent.
+backend with the same bounded stop. The unit uses `KillMode=control-group` and a 45-second stop deadline so both
+Headless and sing-box receive SIGTERM before final cgroup SIGKILL. It is part of
+`graphical-session.target`, independent of shell process lifetime, and stops on
+logout. Failed services restart with a two-second delay and a three-start/minute
+limit; VPN intent is never replayed. Package upgrades quiesce active services
+before file replacement and start a fresh disconnected session afterwards. See
+[Arch lifecycle handling](../packaging/arch/README.md#install-and-verify).
