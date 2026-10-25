@@ -18,8 +18,11 @@ because they are not clickable; put the real link beside the delivered files.
 
 ## What
 
-- Eight separate 36-second, 1920x1080, 30 fps H.264/AAC films, with the existing
-  licensed soundtrack, six-part explanation and public sample-data UI fixtures.
+- Owner amendment: preview first. Eight separate full 36-second, 854x480,
+  30 fps H.264/AAC previews with the existing licensed soundtrack, six-part
+  explanation and public sample-data UI fixtures. After the owner selects,
+  rerender only the selected styles from sources at 1920x1080; never upscale
+  preview pixels. Do not start eight final-resolution exports automatically.
 - Different composition, typography, graphical treatment and motion, not palette
   swaps: anime, Swiss, blueprint, editorial, terminal, paper, kinetic, cinema.
 - No repository name, owner name or GitHub URL in authored video titles. Original
@@ -100,10 +103,36 @@ system was found. Each style has a deliberate visual mechanism:
 
 ## Outcome
 
-- Status: IN PROGRESS; brief only.
+- Status: IN PROGRESS; source implementation and static checks, no new export yet.
 - Baseline: local, remote and PR #623 head all 3a876d67cb779167e8a57ff3a598a818062c5938;
   test, characterization-windows, go-test-windows and grep SUCCESS; render-film
   intentionally SKIPPED on same-repository PR. Worktree was clean.
 - Existing fixtures inspected: applications.png and home-connected.png contain
   sample UI, not the repository name. No original image modification is planned.
-- Implementation, new exports, independent review and delivery: pending.
+- Brief commit: 616eec1424b449d2723cd987d2a6ea8d81fffb4d, PR #626;
+  Actions run 40171026077 test, characterization-windows, go-test-windows and
+  grep run 40171026025 SUCCESS. Exact-head brief gate passed before edits.
+- Owner asked where rendering runs and proposed 480p/360p selection first.
+  Adopted 854x480 preview-first on disposable Ubuntu 24.04 Actions CPU;
+  explicit selected finals rerender the logical SVG canvas at 1920x1080.
+- Added source dispatch for eight styles, shared screenshot group, two licensed
+  display fonts, preview/final export split and tracked zone instructions.
+- Static checks: bash syntax, Python AST, YAML parsing, ASCII documentation,
+  local doc links and diff whitespace PASS. rustfmt absent; no local compile,
+  SDK installation, rendering or full test suite was attempted.
+- Measured primary text/background palette contrast: minimum 4.73:1 for small
+  labels and minimum 5.26:1 for large accent text. Actual composite frame review
+  remains pending; these ratios do not prove every overlaid pixel contrast.
+- Original deliveries preserved before new rendering: master SHA256
+  dce0f3d8bea755941f0e27fa3ee48f7881026cad3746b675c52625b7d1a00b3a;
+  720p d7fbb41aeb7e9f3a9b03b12b8251e3a130b515a63578355882a1f4aa21800fc5;
+  source 04c71a3f4bc05708f1a82fede433d7e0c1f4f2c9dbe003eebadbe0062416b068.
+- Independent visual/content review 24b472df and export/security review 1e71104e
+  returned. Source-confirmed spacing, duplicate SVG id, unused copy, test import
+  and artifact-mode naming findings fixed and recorded in OPEN-DEFECTS.md.
+  Duplicate stale title/contrast/README findings refuted against the current
+  snapshot. Cyan/green focus annotations intentionally match fixture controls;
+  cinema captions are outside-picture metadata. Correctness review still running.
+- Source ZIP includes original license content with LF/trailing-space formatting
+  normalized; display font bytes remain identical to upstream reference.
+- CI build/tests/new exports/delivery pending.

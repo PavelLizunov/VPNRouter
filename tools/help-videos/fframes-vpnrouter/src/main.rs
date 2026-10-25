@@ -1,11 +1,13 @@
 use fframes::{EncoderOptions, MediaDirectory, RenderOptions, YuvMatrix};
 use std::{error::Error, path::PathBuf, process::ExitCode};
-use vpnrouter_film::Film;
+use vpnrouter_film::{Film, Style};
 
 fn run() -> Result<ExitCode, Box<dyn Error>> {
     let directory = MediaDirectory::read_folder("media")?;
     let media = directory.process_media_source()?;
-    let film = Film::new();
+    let value = std::env::var("FILM_STYLE").unwrap_or_else(|_| "original".to_owned());
+    let style = Style::parse(&value).map_err(std::io::Error::other)?;
+    let film = Film::with_style(style);
     let temporary = PathBuf::from("render-tmp");
     std::fs::create_dir_all(&temporary)?;
     Ok(fframes::cli::new(

@@ -21,7 +21,7 @@ bin=./target/release/vpnrouter-film
 ffmpeg -hide_banner -y -i out/vpnrouter-film-silent.mp4 -i media/interchange.mp3 \
   -map 0:v:0 -map 1:a:0 -t 36 -c:v copy -c:a aac -b:a 160k \
   -af 'atrim=0:36,asetpts=PTS-STARTPTS,loudnorm=I=-18:TP=-1.5:LRA=9,afade=t=in:d=0.7,afade=t=out:st=33:d=3' \
-  -movflags +faststart -metadata title='VPNRouter | Choose your routes' \
+  -movflags +faststart -metadata title='Choose your routes' \
   -metadata comment='Rust/SVG motion rendered with fframes. UI images are sample-data renders. Music: Interchange by TRG Banks (CC0).' \
   out/vpnrouter-film.mp4
 ffmpeg -hide_banner -y -i out/vpnrouter-film.mp4 -vf 'scale=1280:720' \
@@ -35,5 +35,5 @@ python3 verify_export.py
 # Keep the deliverable source archive self-contained, with media and licenses,
 # without the compiled binary, build cache or source-repository credentials.
 zip -q -r out/vpnrouter-film-source.zip Cargo.toml Cargo.lock README.md LICENSE \
-  src media licenses export.sh verify_export.py .gitignore
+  src media licenses AGENTS.md export.sh export-styles.sh verify_export.py verify_styles.py test_pipeline.py .gitignore
 sha256sum out/vpnrouter-film.mp4 out/vpnrouter-github.mp4 out/vpnrouter-film-source.zip > out/SHA256SUMS.txt

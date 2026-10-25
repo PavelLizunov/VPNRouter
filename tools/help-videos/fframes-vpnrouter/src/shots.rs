@@ -36,7 +36,7 @@ pub fn choose<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
         {reveal(t, 0.8, text(116.0, 583.0, 35.0, MUTED, 400, "Keep the rest direct."))}
         {reveal(t, 0.8, image(ctx, "logo.png", 116.0, 716.0, 98.0, 98.0))}
         {reveal(t, 1.0, text(238.0, 757.0, 27.0, WHITE, 500, "Virtual Penguin Network"))}
-        {reveal(t, 1.1, label(238.0, 795.0, "VPNRouter"))}
+        {reveal(t, 1.1, label(238.0, 795.0, "Application-based routing"))}
         {rows}
         {reveal(t, 1.25, label(1060.0, 847.0, "An example split, not a network trace"))}
     </g>)
@@ -110,20 +110,16 @@ pub fn applications<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
             {text(174.0, *y, 35.0, WHITE, 400, name)}
         </g>))
     }).collect::<Vec<_>>();
-    let focus = ease(t, 2.0, 0.6) * (1.0 - ease(t, 5.8, 0.4));
     fframes::svgr!(<g>
         {heading(t, "SET THE RULE", "Pick the apps.", "Keep control.")}
         {rows}
         {reveal(t, 1.5, text(116.0, 819.0, 29.0, MUTED, 400, "No proxy setup inside each app."))}
-        {screenshot(t, ctx, "applications.png", 1170.0, 166.0, 0.96)}
-        <rect x="1310" y="322" width="382" height="44" rx="8" fill="none" stroke={CYAN} stroke-width="3" opacity={focus} />
+        {screenshot(t, ctx, "applications.png", ScreenshotPose::at(t, 1170.0, 166.0, 0.96), Focus::Application, CYAN)}
         {reveal(t, 1.0, label(1170.0, 943.0, "Actual UI / sample data"))}
     </g>)
 }
 
 pub fn connect<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
-    let ring = 2.0 + (t * 2.0).sin() * 1.4;
-    let ring_alpha = ease(t, 0.8, 0.7) * 0.8;
     let lines = [
         ("01", "Bring your server or subscription.", 535.0),
         ("02", "Choose a routing mode.", 623.0),
@@ -147,8 +143,7 @@ pub fn connect<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
         {heading(t, "YOUR CONNECTION", "One screen.", "Two paths.")}
         {lines}
         {reveal(t, 1.6, text(116.0, 851.0, 29.0, MUTED, 400, "Your infrastructure. Your choice of apps."))}
-        {screenshot(t, ctx, "home-connected.png", 1170.0, 166.0, 0.96)}
-        <circle cx="1439" cy="313" r={69.0+ring} fill="none" stroke={GREEN} stroke-width="2" opacity={ring_alpha} />
+        {screenshot(t, ctx, "home-connected.png", ScreenshotPose::at(t, 1170.0, 166.0, 0.96), Focus::Connection, GREEN)}
         {reveal(t, 1.0, label(1170.0, 943.0, "Actual UI / sample data"))}
     </g>)
 }
@@ -171,7 +166,7 @@ pub fn platforms<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
         .collect::<Vec<_>>();
     let turn = smooth(t, 0.5, 4.0);
     fframes::svgr!(<g>
-        {reveal(t, 0.1, label(112.0, 212.0, "VPNROUTER"))}
+        {reveal(t, 0.1, label(112.0, 212.0, "DESKTOP + MOBILE"))}
         {reveal(t, 0.2, text(112.0, 324.0, 87.0, WHITE, 500, "Choose your platform."))}
         {rows}
         <g transform={format!("translate({}, {})", 18.0*turn, -8.0*turn)}>
@@ -181,7 +176,7 @@ pub fn platforms<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
     </g>)
 }
 
-pub fn repository<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
+pub fn finish<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
     let draw = ease(t, 0.6, 1.0);
     let images = [
         ("applications.png", 1445.0, 318.0, 0.48),
@@ -195,13 +190,13 @@ pub fn repository<'a>(t: f32, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
     }).collect::<Vec<_>>();
     fframes::svgr!(<g>
         {reveal(t, 0.1, label(112.0, 210.0, "VIRTUAL PENGUIN NETWORK"))}
-        {reveal(t, 0.2, text(112.0, 363.0, 137.0, WHITE, 500, "VPNRouter"))}
+        {reveal(t, 0.2, text(112.0, 363.0, 86.0, WHITE, 500, "Your apps. Your rules."))}
         {reveal(t, 0.4, text(118.0, 451.0, 42.0, CYAN, 400, "Choose what goes through the VPN."))}
         <path d="M 120 529 L 965 529" fill="none" stroke={CYAN} stroke-width="3" stroke-dasharray="845 845" stroke-dashoffset={845.0*(1.0-draw)} />
-        {reveal(t, 0.85, label(118.0, 593.0, "SOURCE + DOWNLOADS"))}
-        {reveal(t, 1.0, text(118.0, 658.0, 37.0, WHITE, 500, "github.com/PavelLizunov/VPNRouter"))}
+        {reveal(t, 0.85, label(118.0, 593.0, "PER-APPLICATION ROUTING"))}
+        {reveal(t, 1.0, text(118.0, 658.0, 37.0, WHITE, 500, "Selected apps via VPN. The rest direct."))}
         {reveal(t, 1.15, text(118.0, 727.0, 29.0, MUTED, 400, "Windows / macOS / Linux / Android"))}
-        {reveal(t, 1.4, text(118.0, 859.0, 25.0, MUTED, 400, "GPL-3.0-or-later   /   Pavel Lizunov"))}
+        {reveal(t, 1.4, text(118.0, 859.0, 25.0, MUTED, 400, "Open source / GPL-3.0-or-later"))}
         {images}
         {reveal(t, 1.25, label(1170.0, 897.0, "UI shown with sample data"))}
     </g>)

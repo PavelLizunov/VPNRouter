@@ -159,19 +159,69 @@ pub fn endpoint(
     )
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ScreenshotPose {
+    pub x: f32,
+    pub y: f32,
+    pub scale: f32,
+    pub alpha: f32,
+}
+
+impl ScreenshotPose {
+    pub fn at(time: f32, x: f32, y: f32, scale: f32) -> Self {
+        let alpha = ease(time, 0.35, 0.95);
+        Self {
+            x,
+            y: y + (1.0 - alpha) * 44.0 - smooth(time, 1.0, 6.0) * 8.0,
+            scale,
+            alpha,
+        }
+    }
+
+    pub fn source_point(self, x: f32, y: f32) -> (f32, f32) {
+        (self.x + x * self.scale, self.y + y * self.scale)
+    }
+
+    pub fn transform(self) -> String {
+        format!("translate({},{}) scale({})", self.x, self.y, self.scale)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Focus {
+    None,
+    Application,
+    Connection,
+}
+
+pub fn focus(time: f32, kind: Focus, color: &str) -> Svgr<'static> {
+    let color = color.to_owned();
+    match kind {
+        Focus::None => Svgr::empty(),
+        Focus::Application => {
+            let alpha = ease(time, 2.0, 0.6) * (1.0 - ease(time, 5.8, 0.4));
+            fframes::svgr!(<rect id="application-focus" x="147" y="171" width="402" height="41" rx="9" fill="none" stroke={color} stroke-width="3" opacity={alpha} />)
+        }
+        Focus::Connection => {
+            let radius = 66.0 + (time * 2.0).sin() * 1.4;
+            fframes::svgr!(<circle id="connection-focus" cx="280" cy="151" r={radius} fill="none" stroke={color} stroke-width="2" opacity={ease(time, 0.8, 0.7) * 0.8} />)
+        }
+    }
+}
+
 pub fn screenshot<'a>(
     time: f32,
     ctx: &FFramesContext<'a, '_>,
     asset: &str,
-    x: f32,
-    y: f32,
-    scale: f32,
+    pose: ScreenshotPose,
+    annotation: Focus,
+    color: &str,
 ) -> Svgr<'a> {
-    let appear = ease(time, 0.35, 0.95);
-    let drift = smooth(time, 1.0, 6.0) * 8.0;
-    let sy = y + (1.0 - appear) * 44.0 - drift;
-    fframes::svgr!(<g opacity={appear}>
-        <rect x={x-7.0} y={sy-7.0} width={560.0*scale+14.0} height={780.0*scale+14.0} rx="17" fill="#202C3C" />
-        {image(ctx, asset, x, sy, 560.0*scale, 780.0*scale)}
+    // One source-coordinate group owns the image AND its annotation, including
+    // entrance, drift and scale. Never add a separately positioned focus overlay.
+    fframes::svgr!(<g id={format!("registered-screenshot-{asset}")} opacity={pose.alpha} transform={pose.transform()}>
+        <rect x="-7" y="-7" width="574" height="794" rx="17" fill="#202C3C" />
+        {image(ctx, asset, 0.0, 0.0, 560.0, 780.0)}
+        {focus(time, annotation, color)}
     </g>)
 }

@@ -2,6 +2,11 @@
 mod checks;
 mod graphics;
 mod shots;
+mod styles;
+mod variants;
+mod elements;
+
+pub use styles::Style;
 
 use fframes::{AudioMap, Duration, FFramesContext, Frame, Overlap, Scene, Scenes, Svgr, Video};
 use graphics::{BG, MUTED, WHITE, text};
@@ -14,17 +19,19 @@ pub const SHOTS: [(&str, f32); 6] = [
     ("Applications", 7.0),
     ("Connect", 6.0),
     ("Platforms", 5.0),
-    ("Repository", 6.0),
+    ("Choice", 6.0),
 ];
 
 #[derive(Debug)]
 pub struct Shot {
     index: usize,
+    style: Style,
 }
 
 #[derive(Debug)]
 pub struct Film {
     shots: [Shot; 6],
+    style: Style,
 }
 
 impl Default for Film {
@@ -35,8 +42,13 @@ impl Default for Film {
 
 impl Film {
     pub fn new() -> Self {
+        Self::with_style(Style::Original)
+    }
+
+    pub fn with_style(style: Style) -> Self {
         Self {
-            shots: std::array::from_fn(|index| Shot { index }),
+            shots: std::array::from_fn(|index| Shot { index, style }),
+            style,
         }
     }
 }
@@ -65,17 +77,21 @@ impl Scene for Shot {
         } else {
             (time / 0.4).clamp(0.0, 1.0)
         };
-        let content = match self.index {
-            0 => shots::choose(time, ctx),
-            1 => shots::split(time, ctx),
-            2 => shots::applications(time, ctx),
-            3 => shots::connect(time, ctx),
-            4 => shots::platforms(time, ctx),
-            _ => shots::repository(time, ctx),
+        let content = if self.style == Style::Original {
+            match self.index {
+                0 => shots::choose(time, ctx),
+                1 => shots::split(time, ctx),
+                2 => shots::applications(time, ctx),
+                3 => shots::connect(time, ctx),
+                4 => shots::platforms(time, ctx),
+                _ => shots::finish(time, ctx),
+            }
+        } else {
+            variants::render(self.style, self.index, time, ctx)
         };
         fframes::svgr!(
             <g opacity={alpha}>
-                <rect width="1920" height="1080" fill={BG} />
+                <rect width="1920" height="1080" fill={self.style.palette().bg} />
                 {content}
             </g>
         )
@@ -108,6 +124,19 @@ impl Video for Film {
     fn render_frame<'a>(&'a self, frame: Frame, ctx: &FFramesContext<'a, '_>) -> Svgr<'a> {
         let time = frame.seconds();
         let progress = (time / SECONDS).clamp(0.0, 1.0);
+        if self.style != Style::Original {
+            let p = self.style.palette();
+            return fframes::svgr!(
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width={ctx.current_video_size.width} height={ctx.current_video_size.height}>
+                    <rect width="1920" height="1080" fill={p.bg} />
+                    {ctx.render_scenes(&frame)}
+                    <rect x="112" y="1005" width="1696" height="2" fill={p.muted} opacity="0.3" />
+                    <rect x="112" y="1005" width={(progress*1696.0).max(0.01)} height="3" fill={p.accent} />
+                    {self.style.label(112.0, 1050.0, "PER-APPLICATION ROUTING")}
+                    {self.style.label(1500.0, 1050.0, &format!("{:02} / 36 SEC", time as usize))}
+                </svg>
+            );
+        }
         let mut start = 0.0;
         let chapter_marks = SHOTS
             .iter()
@@ -128,8 +157,7 @@ impl Video for Film {
                 <rect width="1920" height="1080" fill={BG} />
                 {ctx.render_scenes(&frame)}
                 {graphics::image(ctx, "logo.png", 112.0, 49.0, 40.0, 40.0)}
-                {text(167.0, 78.0, 26.0, WHITE, 500, "VPNRouter")}
-                {text(1320.0, 77.0, 21.0, MUTED, 400, "PavelLizunov / VPNRouter")}
+                {text(167.0, 78.0, 26.0, WHITE, 500, "Per-application routing")}
                 <rect x="112" y="118" width="1696" height="1" fill="#263040" />
                 {chapter_marks}
                 <rect x="112" y="974" width={(progress * 1696.0).max(0.01)} height="3" fill="#38BDF8" />

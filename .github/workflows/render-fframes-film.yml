@@ -7,11 +7,23 @@ on:
       - 'tools/help-videos/fframes-vpnrouter/**'
       - '.github/workflows/render-fframes-film.yml'
   push:
-    branches: ['dsh/fframes-vpnrouter-film']
+    branches:
+      - 'dsh/fframes-vpnrouter-film'
+      - 'dsh/fframes-eight-styles'
     paths:
       - 'tools/help-videos/fframes-vpnrouter/**'
       - '.github/workflows/render-fframes-film.yml'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Preview all styles or render owner-selected finals'
+        type: choice
+        options: [preview, final]
+        default: preview
+      styles:
+        description: 'Final only: space-separated selected style slugs'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -24,7 +36,7 @@ jobs:
   render-film:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 100
     defaults:
       run:
         working-directory: tools/help-videos/fframes-vpnrouter
@@ -76,12 +88,26 @@ jobs:
           key: fframes-film-${{ runner.os }}-ubuntu24-source-v2-${{ hashFiles('tools/help-videos/fframes-vpnrouter/Cargo.toml', 'tools/help-videos/fframes-vpnrouter/Cargo.lock') }}
           restore-keys: fframes-film-${{ runner.os }}-ubuntu24-source-v2-
       - name: Build, inspect, render and validate delivery files
-        run: bash export.sh
+        env:
+          EXPORT_MODE: ${{ inputs.mode || 'preview' }}
+          SELECTED_STYLES: ${{ inputs.styles }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_NAME:-}" = "dsh/fframes-eight-styles" ] || [ "${GITHUB_HEAD_REF:-}" = "dsh/fframes-eight-styles" ]; then
+            if [ "$EXPORT_MODE" = final ]; then
+              read -r -a selected <<< "$SELECTED_STYLES"
+              bash export-styles.sh final "${selected[@]}"
+            else
+              bash export-styles.sh "$EXPORT_MODE"
+            fi
+          else
+            bash export.sh
+          fi
       - name: Upload complete film and measured review evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: vpnrouter-film-${{ github.sha }}
+          name: vpnrouter-film-${{ inputs.mode || 'preview' }}-${{ github.sha }}
           path: tools/help-videos/fframes-vpnrouter/out/
           retention-days: 30
           if-no-files-found: error
