@@ -343,4 +343,19 @@ system was found. Each style has a deliberate visual mechanism:
   This is a hypothesis, not a proven source of the failed hash. Parallel font
   registration is another source path, but no fallback warning is observed.
   Changing Rayon threads alone would confound both paths and is not adopted.
+- Diagnostic checkpoint `5cccb4688804b0788b7b1345b88f891ee525af38` is exact-head
+  green (four product checks, diagnostic success, normal render intentionally
+  skipped). Diagnostic Actions `40194340852` completed in 5m49s at exact source
+  `ac5ac03c4475c32dea13738e5941db00115c8da6`. Downloaded container hashes match.
+- Two all-eight batches show stable audio and stable same-file repeated decoding.
+  Cross-export video differs for swiss (47/1080 frames), editorial (251/1080) and
+  kinetic (24/1080). Their silent-video hashes differ too; encoded packet payloads
+  differ while packet timing matches. This localizes the observed failure before
+  final soundtrack mux, not to a proven rasterizer/cache defect.
+- Next controlled diagnostic changes only `FFRAMES_NUM_THREADS=1`, keeping
+  `RAYON_NUM_THREADS=2`, exact source, workload, media and checker unchanged.
+  Published fframes `renderer.rs:342-350` reads that native override for CPU
+  backend concurrency; no temporary Rust adapter or upstream patch is needed.
+  Run the same two batches and strict hashes. This tests rendering concurrency
+  without serializing parallel media/font loading. It is not a speedup candidate.
 - Fresh baseline, paired optimization and confirmation remain pending.

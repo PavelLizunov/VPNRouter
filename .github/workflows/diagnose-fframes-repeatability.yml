@@ -22,6 +22,7 @@ jobs:
     env:
       CARGO_BUILD_JOBS: '2'
       RAYON_NUM_THREADS: '2'
+      FFRAMES_NUM_THREADS: '1'
       TARGET_SHA: ac5ac03c4475c32dea13738e5941db00115c8da6
     steps:
       - name: Checkout exact failed-baseline source
@@ -116,6 +117,8 @@ jobs:
                   if (root/'out/styles').is_dir():
                       shutil.copytree(root/'out/styles', folder/'outputs')
           summary = {'kind': 'repeatability_diagnostic', 'commit': os.environ['TARGET_SHA'],
+              'environment': {name: os.environ.get(name) for name in ('RAYON_NUM_THREADS', 'FFRAMES_NUM_THREADS')},
+
               'github_run_id': os.environ['GITHUB_RUN_ID'], 'metric': None,
               'not_a_measurement_or_quality_receipt': True, 'styles': {}}
           for style in bench.STYLES:
