@@ -1,0 +1,144 @@
+name: Diagnose fframes repeatability
+
+on:
+  push:
+    branches: ['dsh/fframes-eight-styles']
+    paths: ['.github/workflows/diagnose-fframes-repeatability.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fframes-repeatability-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: tools/help-videos/fframes-vpnrouter
+    env:
+      CARGO_BUILD_JOBS: '2'
+      RAYON_NUM_THREADS: '2'
+      TARGET_SHA: ac5ac03c4475c32dea13738e5941db00115c8da6
+    steps:
+      - name: Checkout exact failed-baseline source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ac5ac03c4475c32dea13738e5941db00115c8da6
+          persist-credentials: false
+      - name: Record read-only resource and SDK preflight
+        run: |
+          set -euo pipefail
+          mkdir -p out/repeatability
+          {
+            date -u
+            git rev-parse HEAD
+            hostname
+            uname -a
+            nproc
+            uptime
+            free -m
+            df -m .
+            ps -eo pid,comm,pcpu,pmem --sort=-pcpu | head -20 || true
+            rustc --version
+            cargo --version
+            command -v clang
+          } | tee out/repeatability/preflight.txt
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          python3 - <<'PY'
+          import os, shutil
+          available = int(next(line.split()[1] for line in open('/proc/meminfo') if line.startswith('MemAvailable:'))) * 1024
+          assert available > 3 * 1024**3, 'Less than 3 GiB RAM available'
+          assert shutil.disk_usage('.').free > 8 * 1024**3, 'Less than 8 GiB disk free'
+          assert os.getloadavg()[0] < os.cpu_count() * 2, 'Runner is overloaded'
+          PY
+      - name: Install disposable renderer prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pkg-config clang libclang-dev nasm yasm ninja-build ffmpeg libx264-dev libx265-dev libopus-dev libvpx-dev libasound2-dev zip
+      - name: Restore existing renderer cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/help-videos/fframes-vpnrouter/target
+          key: fframes-film-${{ runner.os }}-ubuntu24-source-v2-${{ hashFiles('tools/help-videos/fframes-vpnrouter/Cargo.toml', 'tools/help-videos/fframes-vpnrouter/Cargo.lock') }}
+          restore-keys: fframes-film-${{ runner.os }}-ubuntu24-source-v2-
+      - name: Compare two exact-source batches and repeated decodes
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, importlib.util, json, os, shutil, subprocess
+          from pathlib import Path
+          root = Path.cwd()
+          out = root/'out/repeatability'
+          evaluator = root/'performance/evaluators/warm-export-v2/benchmark.py'
+          spec = importlib.util.spec_from_file_location('locked_benchmark', evaluator)
+          bench = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(bench)
+          def save(path, value):
+              with path.open('x') as stream:
+                  json.dump(value, stream, indent=2)
+                  stream.write('\n')
+          (out/'ffmpeg-version.txt').write_text(subprocess.check_output(['ffmpeg', '-version'], text=True))
+          batches = []
+          for index in range(2):
+              folder = out/f'batch-{index}'
+              folder.mkdir()
+              try:
+                  bench.run_export(root, root/'target', folder/'export.log')
+                  signatures = bench.inspect(root)
+                  save(folder/'signatures.json', signatures)
+                  repeated = {}
+                  for style in bench.STYLES:
+                      film = root/f'out/styles/preview/{style}/film.mp4'
+                      silent = film.with_name('film-silent.mp4')
+                      repeated[style] = {kind: bench.decoded_signature(film, kind) for kind in ('video', 'audio')}
+                      repeated[style]['silent_video'] = bench.decoded_signature(silent, 'video')
+                      repeated[style]['container_sha256'] = {name: hashlib.sha256(path.read_bytes()).hexdigest()
+                          for name, path in (('film', film), ('silent', silent))}
+                      probe = subprocess.check_output(['ffprobe', '-v', 'error', '-show_streams',
+                          '-show_packets', '-show_data_hash', 'sha256', '-of', 'json', str(film)], text=True)
+                      (folder/f'{style}-packets.json').write_text(probe)
+                      framehash = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', str(film),
+                          '-map', '0:v:0', '-an', '-pix_fmt', 'yuv420p', '-c:v', 'rawvideo',
+                          '-f', 'framehash', '-hash', 'sha256', '-'], text=True)
+                      (folder/f'{style}-frames.sha256').write_text(framehash)
+                  save(folder/'repeated-decodes.json', repeated)
+                  batches.append((signatures, repeated))
+              finally:
+                  if (root/'out/styles').is_dir():
+                      shutil.copytree(root/'out/styles', folder/'outputs')
+          summary = {'kind': 'repeatability_diagnostic', 'commit': os.environ['TARGET_SHA'],
+              'github_run_id': os.environ['GITHUB_RUN_ID'], 'metric': None,
+              'not_a_measurement_or_quality_receipt': True, 'styles': {}}
+          for style in bench.STYLES:
+              one, two = (batch[0][style] for batch in batches)
+              rows = []
+              for index in range(2):
+                  rows.append([line for line in (out/f'batch-{index}/{style}-frames.sha256').read_text().splitlines()
+                      if line and not line.startswith('#')])
+              changed = [i for i, (a, b) in enumerate(zip(*rows)) if a != b]
+              summary['styles'][style] = {'between_batches': {kind: one[kind] == two[kind] for kind in ('video', 'audio')},
+                  'same_file_redecode': [{kind: batch[0][style][kind] == batch[1][style][kind]
+                      for kind in ('video', 'audio')} for batch in batches],
+                  'silent_video_equal': batches[0][1][style]['silent_video'] == batches[1][1][style]['silent_video'],
+                  'frame_rows': [len(r) for r in rows], 'different_frame_rows': len(changed),
+                  'first_different_frames': changed[:12]}
+          save(out/'summary.json', summary)
+          print(json.dumps(summary, indent=2))
+          PY
+      - name: Upload diagnostic evidence only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vpnrouter-repeatability-${{ github.run_id }}
+          path: tools/help-videos/fframes-vpnrouter/out/repeatability/
+          retention-days: 30
+          if-no-files-found: error

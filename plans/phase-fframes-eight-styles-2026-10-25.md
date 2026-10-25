@@ -315,4 +315,32 @@ system was found. Each style has a deliberate visual mechanism:
   frozen v1 in memory, checked v1 cancellation evidence and exact v2 manifest.
   The unchanged three workflow contracts retain `a1198fd7` coverage. These reviews
   do not establish real CI export or performance results.
+- Recovery commit/evaluator lock: `ac5ac03c4475c32dea13738e5941db00115c8da6`,
+  exact local/remote/PR head. V2 initialized with `previous_campaign=warm-export-v1`;
+  helper verifies seven locked files. Four product checks passed at that SHA.
+- Actions `40192719205` ran 9m17s, passed workflow contracts and capacity/toolchain
+  preflight, restored cache and completed warmup/profile/sample-0 exports. Each
+  batch passed existing media/archive checks, but decoded output equality failed
+  against warmup before a baseline measurement/quality receipt was published.
+  Warmup/profile seconds are diagnostics, not a valid baseline or speedup.
+- V2 remains frozen; a blocked collection status records original failure
+  artifact hashes and zero candidate attempts. Failure logs lack per-style signatures,
+  so differing stream/style and mechanism are still unknown.
+- Next recovery scope: a task-owned diagnostic CI workflow checks out the exact
+  V2 lock and runs two temporary all-eight 480p exports, saving each output set,
+  per-stream hashes, per-frame video hashes, repeated decoder hashes and FFmpeg
+  version. This distinguishes unstable rendering from unstable decoding without
+  changing the locked evaluator or weakening strict decoded equality. The
+  diagnostic job is not a baseline/candidate and creates no passed measurements.
+  Reuse existing preflight/cache/build settings; never decode/render locally.
+  Review `abe2a4a4` found failed-batch evidence could be lost before copy; fixed
+  with finally-path preservation. Actual extracted-loop synthetic export/inspect/
+  decode failures propagate while preserving available output; success retains
+  both batches. YAML/Bash/Python parsing passes. Preserved failed batches may
+  contain partial/stale files and must not be accepted as passed exports.
+- Read-only diagnosis `13b46a1e` found dynamic frame stealing despite fixed
+  encoded segments; worker-local render caches have timing-dependent histories.
+  This is a hypothesis, not a proven source of the failed hash. Parallel font
+  registration is another source path, but no fallback warning is observed.
+  Changing Rayon threads alone would confound both paths and is not adopted.
 - Fresh baseline, paired optimization and confirmation remain pending.
