@@ -108,7 +108,8 @@ public sealed class FreeConfigDeepVerifier
             var vless = ServerUriParser.Parse(cfg.RawUri);
             var configJson = BuildSingleOutboundConfig(vless, socksPort, clashPort);
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-verify-{Guid.NewGuid():N}.json");
-            await File.WriteAllTextAsync(tmpConfigPath, configJson, overallCts.Token);
+            await using (var writer = new StreamWriter(AppPaths.CreatePrivateFile(tmpConfigPath, FileMode.CreateNew)))
+                await writer.WriteAsync(configJson.AsMemory(), overallCts.Token);
 
             var startInfo = new ProcessStartInfo
             {

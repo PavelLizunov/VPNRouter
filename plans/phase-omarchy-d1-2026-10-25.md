@@ -61,3 +61,16 @@ the public packaged runtime path. Its regression uses a canonical synthetic
 32-byte base64 key; no live secret. Direct diff review and `git diff --check`
 passed; native test execution awaits CI. The existing packaged-path regression
 remains the negative control. No public API, setup, or command change.
+
+Key-path commit 408a51b7 passed all six test.yml jobs in run 40176568895,
+Arch run 40176570811, and Android compile. The repository CI verifier returned
+exit 0 with eight green checks and no tolerated failures. Its new regression
+passed in the Linux xUnit log.
+
+Both probe-config writers now create the file through AppPaths.CreatePrivateFile
+with CreateNew, then use an async StreamWriter. The existing fake-runner VLESS
+test checks 0600 before spawn and absence after the simulated spawn failure;
+no actual child or SOCKS/HTTP probe runs in that test. The Free writer uses the
+same file factory but was checked by source inspection only. Diff review and
+`git diff --check` passed; native tests await exact-head CI. No README command,
+setup, or public protocol change is needed for these private-file corrections.

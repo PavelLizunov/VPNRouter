@@ -222,7 +222,8 @@ public sealed class VlessDeepVerifier
         {
             var configJson = BuildSingleOutboundConfig(entry, socksPort, clashPort);
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-dv-{Guid.NewGuid():N}.json");
-            await File.WriteAllTextAsync(tmpConfigPath, configJson, overallCts.Token);
+            await using (var writer = new StreamWriter(AppPaths.CreatePrivateFile(tmpConfigPath, FileMode.CreateNew)))
+                await writer.WriteAsync(configJson.AsMemory(), overallCts.Token);
 
             var request = new ProcessRequest(
                 ExecutablePath: policy?.SelectedExecutablePath ?? _singBoxPath,
