@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CI EVIDENCE; CAUSE UNVERIFIED** - CI-OWNED-SIGNAL-CHILD-EXIT: PR #632 automatic general Linux suite failed only UnixOwnedProcessSignalTests.LinuxPidFdSignal_RejectsWrongIdentityAndPreservesChild at 715811d4 (TargetGone instead of IdentityMismatch); initial a81dea3b also observed unexpected child exit. No live product reproduction or pre-existing/flaky classification established; see phase-omarchy-tailscale-profiles-2026-10-26.md.
+
 - [ ] **P2 IMPLEMENTED ON TASK BRANCH; UNVERIFIED** - OMARCHY-PROFILE-GROUPS: prior plugin sends a single ID and hides membership; ActiveProfile is overridden by explicit RoutingAppsInclude after Apps edits. Coordinated group/process toggles now reuse apps.set and expose profile members; source checkpoint is not installed or live-verified. See phase-omarchy-tailscale-profiles-2026-10-26.md.
 - [ ] **P2 IMPLEMENTED ON TASK BRANCH; TARGET CAUSE UNVERIFIED** - OMARCHY-TAILSCALE-BYPASS: prior CGNAT exclusion depends on an already-up Tailscale adapter and full/exclude routing has no early Linux process bypass. Source adds mandatory CGNAT and generated/custom tailscaled/tailscale direct routing. Owner host remains uninspected; no installed/live recovery claim. See phase-omarchy-tailscale-profiles-2026-10-26.md.
 

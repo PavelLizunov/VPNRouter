@@ -64,6 +64,15 @@ The UnixOwnedProcessSignal wrong-identity failure is separately observed, not
 attributed to these route changes or declared pre-existing without evidence.
 No test files or local tests were added/changed/run.
 
+Follow-up automatic CI at 715811d4025afe28d5c1d5b661b7731dedb0b961:
+Headless publish/contracts, Android compile, Windows characterization, packaging
+and Go checks passed. General Linux suite: 3316 total, 3238 passed, 77 skipped,
+1 failed: UnixOwnedProcessSignalTests.LinuxPidFdSignal_RejectsWrongIdentityAndPreservesChild
+returned TargetGone instead of IdentityMismatch (line 99). All earlier routing
+and custom reinjection failures are absent from this run. Why the controlled
+child exited is unverified; no test weakening or unrelated process-code edit.
+The remaining failure is reported, not treated as green or automatically waived.
+
 Implemented source changes: mandatory CGNAT exclusion; early Linux Tailscale
 process bypass in generated and custom routing; system bypass metadata; profile
 description/process metadata; legacy catalog baseline in apps.list before the
@@ -71,6 +80,9 @@ explicit include list is initialized. Plugin app-group controls reuse apps.set,
 show concrete process toggles and mode applicability, and refresh the shared list.
 No claim of live Tailscale recovery, visual acceptance or full Windows parity.
 
-Task-owned source/diff inspected. Main and installed packages are unchanged;
-this batch is delivered as a separate task checkpoint/PR, not a release or target
-installation. No tests/build/runtime checks were requested or run locally.
+Task-owned source/diff inspected and pushed to the existing GitHub remote on
+dsh/omarchy-tailscale-profiles-20261026. Exact implementation remote observed:
+715811d4025afe28d5c1d5b661b7731dedb0b961, PR #632. Coordinated plugin checkpoint
+40db2662ea6759d619f3fdc1efd2878ec0a8cb38, PR #7, has green automatic CI.
+Main, bundled backend r59 and installed software are unchanged. No merge,
+release or live recovery is claimed. No local tests/build/runtime checks run.
