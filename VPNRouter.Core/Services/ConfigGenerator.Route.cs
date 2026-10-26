@@ -7,6 +7,12 @@ public static partial class ConfigGenerator
 {
     private static string SlipstreamProcessName => Path.GetFileName(AppPaths.SlipstreamExePath);
 
+    // The Headless runtime owns these system exclusions. Other frontends retain
+    // their explicit application-routing policy.
+    internal static IReadOnlyList<string> SystemBypassProcesses =>
+        OperatingSystem.IsLinux() && SingBoxRuntimePolicy.Current != null
+            ? new[] { "tailscaled", "tailscale" } : Array.Empty<string>();
+
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes, string tunAddress,
         string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
         bool blockQuicOnTcpProxy = true, bool isDnsTunnel = false,
@@ -14,10 +20,16 @@ public static partial class ConfigGenerator
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
-        var rules = new List<RouteRule>
-        {
-            new() { Action = "sniff", Timeout = "300ms" },
-        };
+        var rules = new List<RouteRule>();
+        if (SystemBypassProcesses.Count > 0)
+            rules.Add(new RouteRule
+            {
+                ProcessName = SystemBypassProcesses.ToList(),
+                Action = "route",
+                Outbound = "direct",
+                IsInfrastructure = true
+            });
+        rules.Add(new RouteRule { Action = "sniff", Timeout = "300ms" });
 
         // DNS-tunnel self-exclusion must precede hijack-dns and the proxy final, or slipstream's own resolver traffic loops back into the tunnel.
         if (isDnsTunnel)

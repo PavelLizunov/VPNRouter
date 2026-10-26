@@ -76,6 +76,39 @@ public static partial class CustomConfigInjector
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
         EnsureUrltest(config);
+        // Add last so full-tunnel sanitization and process-rule replacement
+        // cannot remove the infrastructure bypass. It must precede DNS/QUIC.
+        if (ConfigGenerator.SystemBypassProcesses.Count > 0)
+        {
+            var route = (JsonObject)config["route"]!;
+            if (route["auto_detect_interface"] == null && string.IsNullOrEmpty(StjNodeHelpers.AsString(route["default_interface"])))
+                route["auto_detect_interface"] = true;
+            if (route["rules"] is not JsonArray bypassRules)
+            {
+                bypassRules = new JsonArray();
+                route["rules"] = bypassRules;
+            }
+            var outbounds = config["outbounds"] as JsonArray ?? new JsonArray();
+            if (config["outbounds"] == null) config["outbounds"] = outbounds;
+            var directTag = "vpnrouter-system-direct";
+            for (var suffix = 2; ; suffix++)
+            {
+                var existing = outbounds.OfType<JsonObject>().FirstOrDefault(o => StjNodeHelpers.AsString(o["tag"]) == directTag);
+                if (existing == null)
+                {
+                    outbounds.Add(new JsonObject { ["type"] = "direct", ["tag"] = directTag });
+                    break;
+                }
+                if (existing.Count == 2 && StjNodeHelpers.AsString(existing["type"]) == "direct") break;
+                directTag = $"vpnrouter-system-direct-{suffix}";
+            }
+            bypassRules.Insert(0, new JsonObject
+            {
+                ["process_name"] = BuildProcessNameArray(ConfigGenerator.SystemBypassProcesses),
+                ["action"] = "route",
+                ["outbound"] = directTag
+            });
+        }
         EnsureTunSelfRouteGuard(config);
 
         return config.ToJsonString(InjectorOutputOptions);

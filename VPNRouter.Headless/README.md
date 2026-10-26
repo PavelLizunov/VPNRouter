@@ -128,7 +128,16 @@ Snapshot and state events include `unavailableReasonCode` (`runtime-missing`,
 null). `unavailableReason` retains the English diagnostic text. A connected or
 busy session alone does not imply an availability failure.
 
-`apps.list` retains `include`, `exclude` and `running`, and adds `runningApps`:
+`apps.list` retains `include`, `exclude` and `running`, and adds `runningApps`.
+It also reports `systemBypass` (Linux: `tailscaled`, `tailscale`), separately from
+the editable app lists. These processes route directly before DNS interception,
+QUIC rejection and per-app/proxy rules, including full/custom mode. Tailnet IPv4
+`100.64.0.0/10` is always excluded from TUN capture, including Quad100 and when
+Tailscale starts after VPNRouter; IPv6 tailnet addresses are covered by the
+existing `fc00::/7` exclusion. This is not a live coexistence guarantee for
+exit-node, subnet-router, DNS or other host-specific configurations.
+
+The `runningApps` field contains:
 
 ```json
 {"name":"firefox","displayName":"Firefox","icon":"firefox","desktopId":"firefox.desktop","hasWindow":false}
@@ -152,6 +161,13 @@ and a 150 ms work budget (best-effort under filesystem/scheduler delays).
 `hasWindow` is false because window ownership is unknown. Pass each exact `name`
 to `apps.set`; case and Linux executable spaces are preserved. Windows/macOS
 retain their existing `running` discovery and return an empty `runningApps` list.
+
+`profiles.list.items` adds `description` and `processes` (concrete executable
+names, not wildcard patterns). Application-group consumers edit the shared
+include list through `apps.set`, not the legacy single-profile selection UI.
+Until that explicit list is initialized, `apps.list.include` exposes the selected
+legacy profiles and custom apps so the first edit preserves other selections.
+Group selection is applicable only to split/include routing.
 
 `servers.list.items` adds `source` (`manual` or `subscription`), `subscriptionId`
 (string or null), and `removable` (boolean). Subscription entries and synthesized

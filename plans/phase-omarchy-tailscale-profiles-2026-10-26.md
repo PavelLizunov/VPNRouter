@@ -1,0 +1,88 @@
+# Omarchy profiles and Tailscale coexistence (2026-10-26)
+
+## Intent
+
+The owner reports unclear single-choice routing profiles in Omarchy, unlike the
+Windows app groups, and Tailscale failing to connect on another machine. Recover
+the intended application-group semantics and close source-confirmed coexistence
+gaps. The reporting host is not available in this task; no causal live claim.
+
+## Observed owning sources
+
+- ProfilesView.qml sends only [modelData.id] and displays no description/apps.
+- ProfileFeature.SelectAsync changes ActiveProfile but not the explicit include
+  list; ResolveEffectiveAppProcesses prefers that explicit list after Apps edits.
+- TunSettings excludes CGNAT only via startup detection of an already-up Tailscale
+  adapter, not in mandatory ranges. Generated full/exclude routing has no service
+  bypass before DNS/QUIC/proxy rules. IPv6 ULA is already excluded by fc00::/7.
+- Windows has a bypass suggestion catalog, not proof of an always-active default
+  Tailscale process exclusion. Do not promise parity that sources do not show.
+- Counterevidence: normal Linux Tailscale policy rules use priorities 5200-5500,
+  earlier than our 8900 start index. Missing exclusions alone therefore do not
+  prove interception or explain service startup. See official routing docs:
+  https://tailscale.com/docs/reference/troubleshooting/network-configuration/lan-traffic-overlapping-subnets
+  Reserved addresses: https://tailscale.com/docs/reference/reserved-ip-addresses
+
+## Scope
+
+Add a persistent effective CGNAT route exclusion shared by generated/custom
+configs. Route Linux Tailscale processes directly before DNS/QUIC/app rules in
+both paths. Surface system process bypass separately from user app lists.
+Expose profile descriptions and exact process names. The plugin reuses apps.set
+for group and individual checkboxes instead of the legacy ActiveProfile selector;
+all controls therefore edit the real explicit include list and reflect overlap.
+No second profile-to-app synchronization layer is needed. Describe when groups
+apply, preserve unrelated manual selections, and show concrete applications.
+
+## Invariants, risk and rollback
+
+Keep exact process casing, schema/storage revision checks, manual app selections,
+other-platform process routing, private LAN and existing IPv6 exclusions. No
+change to Tailscale service, live system routes, remote hosts or application
+security. This is a route-exclusion change: CGNAT/Tailscale traffic is intentionally
+direct. Revert the scoped commits to roll back; no automatic reconnect.
+
+## Verification
+
+1. Build: no build requested yet; source change will be checkpointed.
+2. Tests: no tests or new test writing requested; do not run them locally.
+3. Docs: record actual files/behavior and retain target-cause uncertainty.
+4. Review: owning source and task diff only, no additional model review.
+5. UI/live: no QML preview, VPN connection or target probes requested.
+6. Integration: cover generated/custom consumers and plugin/backend response.
+
+## Outcome
+
+Automatic CI at a81dea3b built Headless/Android and passed Headless contracts and
+Windows characterization, but the general Linux suite failed 21 cases. Most
+asserted pre-existing generic route ordering/process membership, revealing that
+Headless system exclusions were applied to every Linux frontend. An actual
+custom-config reinjection issue also accumulated direct outbounds. Scope the
+process bypass to the active Headless runtime policy and reuse its plain direct
+outbound, retaining the TUN-self guard as the first custom infrastructure rule.
+The UnixOwnedProcessSignal wrong-identity failure is separately observed, not
+attributed to these route changes or declared pre-existing without evidence.
+No test files or local tests were added/changed/run.
+
+Follow-up automatic CI at 715811d4025afe28d5c1d5b661b7731dedb0b961:
+Headless publish/contracts, Android compile, Windows characterization, packaging
+and Go checks passed. General Linux suite: 3316 total, 3238 passed, 77 skipped,
+1 failed: UnixOwnedProcessSignalTests.LinuxPidFdSignal_RejectsWrongIdentityAndPreservesChild
+returned TargetGone instead of IdentityMismatch (line 99). All earlier routing
+and custom reinjection failures are absent from this run. Why the controlled
+child exited is unverified; no test weakening or unrelated process-code edit.
+The remaining failure is reported, not treated as green or automatically waived.
+
+Implemented source changes: mandatory CGNAT exclusion; early Linux Tailscale
+process bypass in generated and custom routing; system bypass metadata; profile
+description/process metadata; legacy catalog baseline in apps.list before the
+explicit include list is initialized. Plugin app-group controls reuse apps.set,
+show concrete process toggles and mode applicability, and refresh the shared list.
+No claim of live Tailscale recovery, visual acceptance or full Windows parity.
+
+Task-owned source/diff inspected and pushed to the existing GitHub remote on
+dsh/omarchy-tailscale-profiles-20261026. Exact implementation remote observed:
+715811d4025afe28d5c1d5b661b7731dedb0b961, PR #632. Coordinated plugin checkpoint
+40db2662ea6759d619f3fdc1efd2878ec0a8cb38, PR #7, has green automatic CI.
+Main, bundled backend r59 and installed software are unchanged. No merge,
+release or live recovery is claimed. No local tests/build/runtime checks run.
