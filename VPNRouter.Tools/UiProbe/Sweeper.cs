@@ -86,6 +86,18 @@ public static class Sweeper
         return result;
     }
 
+    private static bool IsWindowOpen(Window window)
+    {
+        try
+        {
+            return window.IsVisible;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void Loop(ProbeSession session, SweepOptions o, SweepResult result, List<string> errors)
     {
         var window = session.Window;
@@ -95,7 +107,7 @@ public static class Sweeper
 
         for (var step = 1; step <= o.MaxSteps; step++)
         {
-            if (!window.IsVisible) break;
+            if (!IsWindowOpen(window)) break;
 
             if (clock.Elapsed.TotalSeconds > o.MaxSeconds)
             {
@@ -134,9 +146,14 @@ public static class Sweeper
             try
             {
                 Act(session, pick);
+                if (!IsWindowOpen(window)) break;
                 if (o.SpeedMs > 0) ProbeSession.Pump(o.SpeedMs);
                 else Dispatcher.UIThread.RunJobs();
                 if (o.RenderEvery > 0 && step % o.RenderEvery == 0) RenderFrame(session);
+            }
+            catch (ObjectDisposedException)
+            {
+                break;
             }
             catch (Exception ex)
             {
@@ -163,7 +180,7 @@ public static class Sweeper
 
     private static void RenderFrame(ProbeSession session)
     {
-        if (!session.Window.IsVisible) return;
+        if (!IsWindowOpen(session.Window)) return;
         try
         {
             session.Layout();
@@ -178,6 +195,7 @@ public static class Sweeper
     private static List<Candidate> Collect(Window window, SweepOptions o, List<string> skipped)
     {
         var list = new List<Candidate>();
+        if (!IsWindowOpen(window)) return list;
         var width = window.ClientSize.Width;
         var height = window.ClientSize.Height;
         foreach (var visual in window.GetVisualDescendants())
@@ -230,18 +248,28 @@ public static class Sweeper
     private static void Act(ProbeSession session, Candidate pick)
     {
         var window = session.Window;
+        if (!IsWindowOpen(window)) return;
         var point = pick.Center;
-        window.MouseMove(point, RawInputModifiers.None);
-        window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
-        window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
-
-        if (pick.Control is TextBox)
-            window.KeyTextInput("probe 123 <&> \"q\"");
-
-        if (pick.Control is ComboBox { IsDropDownOpen: true })
+        try
         {
-            window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
-            window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+            window.MouseMove(point, RawInputModifiers.None);
+            window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
+
+            if (!IsWindowOpen(window)) return;
+
+            if (pick.Control is TextBox)
+                window.KeyTextInput("probe 123 <&> \"q\"");
+
+            if (pick.Control is ComboBox { IsDropDownOpen: true })
+            {
+                window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+                window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Window was closed/disposed by interaction
         }
     }
 
