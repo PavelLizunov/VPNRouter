@@ -1,0 +1,172 @@
+name: Recover owned sleep CI fixture
+
+on:
+  push:
+    branches: ['dsh/fframes-eight-styles']
+    paths:
+      - '.github/workflows/recover-owned-sleep-fixture.yml'
+      - '.github/ci-recovery/owned-sleep.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: owned-sleep-ci-recovery-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  repair-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact recovery parent
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Prepare disposable SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - name: Verify exact patch and worker headroom before gates
+        run: |
+          set -euo pipefail
+          mkdir repair-evidence
+          exec > >(tee repair-evidence/prepare.log) 2>&1
+          python3 - <<'PY'
+          import base64, hashlib, json, os, shutil, subprocess
+          from pathlib import Path
+          evidence = Path('repair-evidence')
+          fixture = Path('VPNRouter.Tests/UnixOwnedProcessSignalTests.cs')
+          (evidence/'fixture-original.cs').write_bytes(fixture.read_bytes())
+          payload = Path('.github/ci-recovery/owned-sleep.json')
+          (evidence/'patch-payload.json').write_bytes(payload.read_bytes())
+          patch = evidence/'owned-sleep.patch'
+          patch.write_bytes(base64.b64decode(json.loads(payload.read_text())['patch_base64'], validate=True))
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert head == os.environ['GITHUB_SHA']
+          assert hashlib.sha256(patch.read_bytes()).hexdigest() == '661146079f21202f114c5f9504e31bda11060a1fbf3c612ea715ee89c8c79290'
+          names = subprocess.check_output(['git', 'apply', '--numstat', str(patch)], text=True).splitlines()
+          assert len(names) == 1 and names[0].split('\t')[2] == 'VPNRouter.Tests/UnixOwnedProcessSignalTests.cs'
+          memory = {r.split(':')[0]: int(r.split()[1])*1024 for r in Path('/proc/meminfo').read_text().splitlines()}
+          conflicts = []
+          for p in Path('/proc').iterdir():
+              if p.name.isdigit():
+                  try:
+                      name = (p/'comm').read_text().strip()
+                  except (FileNotFoundError, PermissionError, ProcessLookupError):
+                      continue
+                  if name in {'dotnet', 'msbuild', 'VBCSCompiler', 'java', 'cargo', 'rustc'}:
+                      conflicts.append({'pid': int(p.name), 'name': name})
+          receipt = {'parent': head, 'cpus': os.cpu_count(), 'load_average': list(os.getloadavg()),
+                     'ram_available_bytes': memory['MemAvailable'],
+                     'swap_used_bytes': memory['SwapTotal']-memory['SwapFree'],
+                     'disk_available_bytes': shutil.disk_usage('.').free, 'conflicts': conflicts,
+                     'sdk': subprocess.check_output(['dotnet', '--version'], text=True).strip()}
+          Path('repair-evidence/preflight.json').write_text(json.dumps(receipt, indent=2)+'\n')
+          assert receipt['ram_available_bytes'] >= 4*1024**3
+          assert receipt['disk_available_bytes'] >= 12*1024**3
+          assert receipt['swap_used_bytes'] <= 1024**3
+          assert receipt['load_average'][0] < receipt['cpus']*2 and not conflicts
+          PY
+      - name: Create test-only commit with unchanged hooks enabled
+        run: |
+          set -euo pipefail
+          exec > >(tee repair-evidence/commit-step.log) 2>&1
+          parent=$(git rev-parse HEAD)
+          git switch -c ci/owned-sleep-repair
+          git config core.hooksPath .githooks
+          git config user.name "$(git show -s --format=%an HEAD)"
+          git config user.email "$(git show -s --format=%ae HEAD)"
+          git apply --check repair-evidence/owned-sleep.patch
+          git apply repair-evidence/owned-sleep.patch
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          p = Path('VPNRouter.Tests/UnixOwnedProcessSignalTests.cs')
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == '598d5286e720d350dd8a5dd8fa57729c61d0d3034dea4fed7c021151a63aeaf4'
+          PY
+          git add -- VPNRouter.Tests/UnixOwnedProcessSignalTests.cs
+          git diff --cached --check
+          git commit -m "test: preserve multicall sleep basename in owned signal fixture" 2>&1 | tee repair-evidence/commit-gates.log
+          test "$(git rev-parse HEAD^)" = "$parent"
+          test "$(git diff --name-only HEAD^ HEAD)" = VPNRouter.Tests/UnixOwnedProcessSignalTests.cs
+      - name: Run original affected tests and complete Linux CI test path
+        run: |
+          set -euo pipefail
+          dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
+            --filter 'FullyQualifiedName~UnixOwnedProcessSignalTests|FullyQualifiedName~ProcessOwnershipTests' \
+            --logger 'trx;LogFileName=owned-sleep-focused.trx' 2>&1 | tee repair-evidence/focused-tests.log
+          dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
+            --filter 'FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff' \
+            --logger 'trx;LogFileName=owned-sleep-full-linux.trx' 2>&1 | tee repair-evidence/full-linux-tests.log
+      - name: Retain successful exact-parent Git bundle
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, subprocess
+          from pathlib import Path
+          preflight = json.loads(Path('repair-evidence/preflight.json').read_text())
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip() == preflight['parent']
+          assert subprocess.check_output(['git', 'config', '--get', 'core.hooksPath'], text=True).strip() == '.githooks'
+          assert not subprocess.check_output(['git', 'diff', '--cached', '--name-only'])
+          subprocess.run(['git', 'bundle', 'create', 'repair-evidence/repair.bundle', 'refs/heads/ci/owned-sleep-repair', '^'+preflight['parent']], check=True)
+          subprocess.run(['git', 'bundle', 'verify', 'repair-evidence/repair.bundle'], check=True)
+          receipt = {'parent': preflight['parent'], 'head': head,
+                     'tree': subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip(),
+                     'hooks_enabled': True, 'hook_bypass_used': False,
+                     'bundle_sha256': hashlib.sha256(Path('repair-evidence/repair.bundle').read_bytes()).hexdigest(),
+                     'only_changed_file': 'VPNRouter.Tests/UnixOwnedProcessSignalTests.cs',
+                     'focused_and_full_linux_path_passed': True, 'product_code_changed': False,
+                     'native_film_experiment_launched': False}
+          Path('repair-evidence/success.json').write_text(json.dumps(receipt, indent=2)+'\n')
+          PY
+      - name: Snapshot exact recovery operands and failed Git state
+        if: always()
+        env:
+          RECOVERY_JOB_STATUS: ${{ job.status }}
+        run: |
+          python3 - <<'PY'
+          import json, os, shutil, subprocess
+          from pathlib import Path
+          evidence = Path('repair-evidence')
+          evidence.mkdir(exist_ok=True)
+          for source, name in (('.github/ci-recovery/owned-sleep.json', 'patch-payload-final.json'),
+                               ('VPNRouter.Tests/UnixOwnedProcessSignalTests.cs', 'fixture-final.cs'),
+                               ('.githooks/pre-commit', 'pre-commit'), ('.githooks/commit-msg', 'commit-msg')):
+              path = Path(source)
+              if path.is_file():
+                  shutil.copyfile(path, evidence/name)
+          commands = {'working.diff': ['git', 'diff', '--binary'],
+                      'staged.diff': ['git', 'diff', '--cached', '--binary'],
+                      'status.txt': ['git', 'status', '--porcelain'],
+                      'tree.txt': ['git', 'write-tree'], 'head.txt': ['git', 'show', '--format=fuller', '--stat', 'HEAD'],
+                      'last-commit.diff': ['git', 'diff', '--binary', 'HEAD^', 'HEAD']}
+          results = {'observed_job_status': os.environ['RECOVERY_JOB_STATUS'],
+                     'success_receipt_present': (evidence/'success.json').is_file()}
+          for name, argv in commands.items():
+              result = subprocess.run(argv, capture_output=True)
+              (evidence/name).write_bytes(result.stdout+result.stderr)
+              results[name] = result.returncode
+          head = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True)
+          if head.returncode == 0 and head.stdout.strip() != os.environ['GITHUB_SHA']:
+              result = subprocess.run(['git', 'bundle', 'create', str(evidence/'partial-commit.bundle'),
+                                       'refs/heads/ci/owned-sleep-repair', '^'+os.environ['GITHUB_SHA']], capture_output=True)
+              (evidence/'partial-bundle.log').write_bytes(result.stdout+result.stderr)
+              results['partial_bundle'] = result.returncode
+          (evidence/'snapshot-status.json').write_text(json.dumps(results, indent=2)+'\n')
+          PY
+      - name: Retain all recovery evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: owned-sleep-ci-recovery-${{ github.run_id }}
+          path: |
+            repair-evidence/
+            VPNRouter.Tests/TestResults/*.trx
+          retention-days: 30
+          if-no-files-found: error

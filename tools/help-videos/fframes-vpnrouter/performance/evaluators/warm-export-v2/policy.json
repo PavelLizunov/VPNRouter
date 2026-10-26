@@ -1,0 +1,13 @@
+{
+  "goal": "Reduce complete warm eight-style export latency without changing decoded media or weakening verification",
+  "scope": "export-styles.sh orchestration only; Rust/media/licenses/checker/evaluator/workflow stay locked",
+  "target": {"id": "actions-ubuntu24-cpu", "description": "Same disposable Ubuntu 24.04 GitHub-hosted runner for each balanced control/candidate comparison; capacity and toolchain recorded per job"},
+  "metric": {"name": "end_to_end_wall_seconds", "unit": "s", "direction": "lower"},
+  "workloads": {"search": "all-eight-480p-search-v1", "confirmation": "all-eight-480p-fresh-reversed-order-v1"},
+  "protected_roots": ["tools/help-videos/fframes-vpnrouter/performance/evaluators/warm-export-v2"],
+  "quality_checks": ["export_checks", "locked_checker", "protected_sources", "decoded_media_equal"],
+  "negative_controls": ["changed_checksum", "path_escape", "wrong_dimensions", "wrong_title", "duplicate_style", "implicit_final", "archive_changed_bytes", "archive_extra_entry"],
+  "resource_limits": {"peak_rss_bytes": 0.10},
+  "thresholds": {"min_relative_effect": 0.02, "min_absolute_effect": 1.0, "noise_multiplier": 2.0, "noise_floor": 0.5, "min_pairs": 3, "max_pairs": 5},
+  "budget": {"max_experiments": 10, "lane_failure_limit": 3, "global_failure_limit": 3}
+}

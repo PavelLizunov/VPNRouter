@@ -1,0 +1,85 @@
+name: Observe bounded fframes full history
+
+on:
+  push:
+    branches: ['dsh/fframes-eight-styles']
+    paths:
+      - '.github/workflows/observe-fframes-full-history.yml'
+      - '.github/full-history-observation/**'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: fframes-full-history-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-history-observation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: '2'
+      RAYON_NUM_THREADS: '2'
+      FFRAMES_NUM_THREADS: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact frozen film source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ac5ac03c4475c32dea13738e5941db00115c8da6
+          persist-credentials: false
+      - name: Checkout exact isolated diagnostic implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: observation-code
+          persist-credentials: false
+      - name: Record preflight and retain exact source and historical operands
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 observation-code/.github/full-history-observation/ci.py prepare \
+            --root "$GITHUB_WORKSPACE/tools/help-videos/fframes-vpnrouter" \
+            --output "$GITHUB_WORKSPACE/full-history-evidence" --work "$RUNNER_TEMP/full-history-work"
+      - name: Run source and saved-data mutation contracts
+        env:
+          FFH_TEST_X264_ARCHIVE: ${{ github.workspace }}/full-history-evidence/x264-source.tar.gz
+          FFH_TEST_MEDIA: ${{ github.workspace }}/full-history-evidence/saved-media-tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s observation-code/.github/full-history-observation -p 'test_*.py' -v \
+            2>&1 | tee full-history-evidence/source-data-tests.log
+      - name: Install prerequisites only in this disposable runner
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pkg-config clang libclang-dev nasm yasm \
+            ninja-build ffmpeg libx264-dev libx265-dev libopus-dev libvpx-dev libasound2-dev libssl-dev
+      - name: Build matched libraries and original film executable
+        run: |
+          python3 observation-code/.github/full-history-observation/ci.py build \
+            --root "$GITHUB_WORKSPACE/tools/help-videos/fframes-vpnrouter" \
+            --output "$GITHUB_WORKSPACE/full-history-evidence" --work "$RUNNER_TEMP/full-history-work"
+      - name: Run one finite controls and full-history series without retry
+        run: |
+          python3 observation-code/.github/full-history-observation/ci.py experiment \
+            --root "$GITHUB_WORKSPACE/tools/help-videos/fframes-vpnrouter" \
+            --output "$GITHUB_WORKSPACE/full-history-evidence" --work "$RUNNER_TEMP/full-history-work"
+      - name: Snapshot original and partial native build operands
+        if: always()
+        env:
+          DIAGNOSTIC_JOB_STATUS: ${{ job.status }}
+        run: |
+          python3 observation-code/.github/full-history-observation/ci.py snapshot \
+            --root "$GITHUB_WORKSPACE/tools/help-videos/fframes-vpnrouter" \
+            --output "$GITHUB_WORKSPACE/full-history-evidence" --work "$RUNNER_TEMP/full-history-work"
+      - name: Retain every successful failed and partial operand
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: vpnrouter-full-history-observation-${{ github.run_id }}
+          path: full-history-evidence/
+          retention-days: 30
+          if-no-files-found: error
