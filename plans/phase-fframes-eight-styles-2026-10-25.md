@@ -1226,3 +1226,92 @@ system was found. Each style has a deliberate visual mechanism:
   src/media/license files match frozen Git blobs. Prose check PASS: measured
   counts are receipt-bound, source resolution is separated from runtime evidence,
   and no causal, quality-acceptance or speedup claim is made.
+
+### Full-history terminal result and documentation checkpoint - 2026-10-26
+
+- Why/intent: preserve the sole authorized run's actual failure, verified partial
+  results and next authority boundary. This is an outcome-only checkpoint, not a
+  diagnostic repair or another native submission. The existing branch and PR #626
+  remain the task carrier; do not edit any native trigger path to publish it.
+- Scope: append this outcome and the attributable `FFRAMES-FULL-HISTORY-CONCAT-TRACK-CONTRACT`
+  ledger entry, reconcile existing records' runtime limits, and update ignored
+  continuity/evidence reports. Preserve the unrelated music ledger section and all
+  its working bytes/worktree. Both evaluator locks, source/media/fonts/licenses,
+  Cargo inputs, exporter, native code and all delivered previews remain unchanged.
+- Publication `c14168c20e8f58d333d7e87e49914a54453c6f21` was exact local/remote/PR
+  HEAD. Run [40394413177](https://github.com/PavelLizunov/VPNRouter/actions/runs/40394413177),
+  job `121823528697`, ended FAILURE after 22m24s at 20:40:36 UTC. Preflights, source
+  acquisition, all 42 source/data contracts, prerequisite installation and the fresh
+  matched native/Rust build succeeded. The finite experiment failed; always-run
+  snapshot and artifact upload succeeded. This supersedes the pre-publication
+  zero-submission/pending snapshots above: one series submitted, zero native retries.
+- Actual bounded execution: synthetic plain/off/on each completed two 24-frame
+  lifetimes, then film P/plain completed all 1080 frames and 45 lifetimes. Total
+  four completed render/synthetic processes, 1224 frames and 51 closed encoder
+  lifetimes, below the six/3384/141 caps. These counts exclude report/decoder helper
+  processes. Film A, film B, P/A transparency, historical binding and the full-film
+  internal comparison were not reached; there is no terminal verdict file. This is
+  neither `NO_REPRODUCTION_FULL_HISTORY` nor observed full-history divergence.
+- Failure mechanism: unchanged [media binder:125-138](<../.github/full-history-observation/media.py#L125-L138>)
+  requires one `trak` and one video stream before binding concat. The original
+  renderer's [final concat](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/run-40394413177/artifact/film-P/out/styles/preview/anime/film-silent.mp4>)
+  has video plus AAC audio despite its silent filename and `AudioMap::none()`. Retained
+  locked caller source unconditionally creates/stores an audio stream before
+  writing the output header. Its scene resolver returns `Some(empty audio map)`
+  for this scene timeline, so the later mixer/encoder traverses the full duration
+  even though no soundtrack is declared; the run log records `encoding audio`.
+  This source path explains track presence, not measured PCM silence. Actual
+  MP4 bytes have `vide` and `soun` tracks; the saved probe records 1080 H.264 video
+  packets and 1552 AAC packets. The unchanged actual binder reproduces
+  `BindingError: Missing/ambiguous b'trak'`. Record the contract mismatch as P2,
+  not an x264 cause, encoder failure, corrupt-film finding or relaxed acceptance.
+- Artifact `12686613147` is retained with original logs and ZIP: 593032228 packed
+  bytes, 883756908 unpacked bytes, 945 files, SHA256
+  `ba7053d1c430d2dd00337fcd91b1f7d5002074e060563d1a20f286767d313760`.
+  Lead standard-library audit verifies every extracted member against the original
+  archive, 27 frozen inputs, both retained x264 libraries, film/probe/smoke identity,
+  locked caller members and 216 unique retained media executable/library files.
+  All 45 film-P segment packet/native/header/timing bindings recompute; six
+  synthetic lifetime bindings and both synthetic transparency checks recompute.
+  The observed synthetic internal stream validates all five stages at 48 PTS,
+  59374080 packed pixel bytes and 1399872 typed-state bytes. No full-film internal
+  capture ran. Saved concat video decode/redecode agrees with every saved segment
+  decode, but concat acceptance remains FAILED and AAC PCM was not decoded/audited.
+  Framehash observations are not independent raw-pixel redecodes.
+- Verification carriers: [collection receipt](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/run-40394413177/collection.json>),
+  [lead byte audit](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/run-40394413177/result-verification.json>)
+  and [audit script](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/run-40394413177/verify-retained-result.py>).
+  Original runner files remain unchanged. No retained executable, local
+  native build/render/decode or new CI dispatch was executed by the collector/audit.
+- Ordinary exact-head CI `40394419899` succeeded: six standard jobs plus separate
+  `grep` passed, render-film skipped. Full-history check remained FAILED; watcher
+  `bash-f9a434dce6c14214` exited 1 for that failure. Do not call the implementation
+  fully green. [Terminal checks receipt](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/full-history-terminal-checks.json>).
+- Independent result reviewer `580a0cc5` completed a separate source/saved-byte audit
+  without native execution, Git operations, other-reviewer input or source changes.
+  All 945 archive members, actual process/lifetime counts, six synthetic/45 segment
+  bindings, synthetic raw extents, 2632 concat packet extents/hashes and the unchanged
+  binder failure independently agree. The report traces the empty scene-map audio
+  path inside the exact locked crate; it confirms only this diagnostic stop cause.
+  [Independent report](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/full-history-result-independent-report.md>)
+  SHA256 is `fb47e6850e9ff830ab62d5a23f8b9aa30f412c1ace38e6481c927db3967e2ff7`.
+  Retained raw loader aliases and canonical library files are corroborated by ELF
+  SONAME mapping, not an independent replay of unsaved runner symlink topology.
+  FFmpeg source/config retention is partial; neither historical binary replay nor
+  complete frozen film checkout/reproducible native build is claimed.
+- Checkpoint gates: native build PASS; 42 source/data tests and bounded synthetic
+  transparency PASS; full-history integration FAILED at original concat binding;
+  independent result audit COMPLETE within those limits; product/UI/release N/A
+  (no product mutation or release request). Documentation records the new P2 and
+  failed experiment, not a repaired gate. Scoped text/link/hash/preservation checks
+  and documentation-head ordinary CI remain the publication gates. No native
+  trigger/source edit or additional launch is permitted by this checkpoint.
+- Delivery prose check: PASS for receipt-bound counts, explicit failed/unreached
+  gates and no invented quality acceptance, causal explanation of the historical
+  fault, measured PCM silence, performance benefit or final-render readiness.
+- Stop/next: the single-series authority is spent. Retain this failure without
+  changing the parser/producer/settings, stripping an audio track or relaunching.
+  Any proposed contract repair and additional native series require a separate
+  owner scope. Baseline/best/confirmation/speedup remain absent; candidates 0/10.
+  Rollback remains a scoped history-preserving revert retaining all evidence,
+  deliveries, evaluator locks and unrelated work; no rollback was performed.
