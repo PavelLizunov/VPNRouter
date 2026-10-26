@@ -122,6 +122,10 @@ public static class Program
                 .WriteTo.Sink(new Lifecycle.PrivateFileLogSink(Path.Combine(AppPaths.LogsDir, "headless.log")))
                 .CreateLogger();
 
+            // A helper or sing-box left by an earlier instance would otherwise block every connect.
+            if (OperatingSystem.IsLinux() && string.IsNullOrWhiteSpace(dataDir))
+                await Lifecycle.LinuxStaleRuntimeReclaimer.ReclaimAsync(Log.Logger, cts.Token).ConfigureAwait(false);
+
             if (serviceMode)
             {
                 var service = new UnixSocketServer(() => CreateHandler(dataDir),
