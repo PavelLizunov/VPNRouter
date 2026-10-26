@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using VPNRouter.Core.Platform.Linux;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -29,7 +30,8 @@ public class LinuxDnsHardeningTests : IDisposable
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(r => r.ExecutablePath == "resolvectl" && r.Arguments[0] == "--version", Ok("systemd 255"));
-        fake.OnRun(r => r.ExecutablePath == "ip", Ok(RouteGetOut));
+        fake.OnRun(r => r.ExecutablePath == "ip" && r.Arguments.Contains("route"), Ok(RouteGetOut));
+        fake.OnRun(r => r.ExecutablePath == "ip" && r.Arguments.Contains("link"), Ok("[{\"linkinfo\":{\"info_kind\":\"tun\"}}]"));
         fake.OnRun(r => r.ExecutablePath == "resolvectl", Ok());
         return fake;
     }
@@ -71,6 +73,43 @@ public class LinuxDnsHardeningTests : IDisposable
         sut.Apply("", null);
 
         Assert.Empty(fake.RunCalls);
+        Assert.False(File.Exists(_statePath));
+    }
+
+    [Fact]
+    public void Apply_waits_for_replacement_tun_without_mutating_physical_dns()
+    {
+        var fake = new FakeProcessRunner();
+        var routes = 0;
+        fake.OnRun(r => r.ExecutablePath == "ip" && r.Arguments.Contains("route"),
+            _ => Task.FromResult(Ok(++routes < 3 ? "172.19.0.2 via 192.168.0.1 dev ens18" : RouteGetOut)));
+        fake.OnRun(r => r.ExecutablePath == "ip" && r.Arguments.Contains("link"),
+            r => Task.FromResult(Ok(r.Arguments.Contains("ens18")
+                ? "[{\"linkinfo\":{\"info_kind\":\"ether\"}}]"
+                : "[{\"linkinfo\":{\"info_kind\":\"tun\"}}]")));
+        fake.OnRun(r => r.ExecutablePath == "resolvectl", Ok());
+        File.WriteAllText(_statePath, "{\"Interface\":\"ens18\"}");
+
+        new LinuxDnsHardening(fake, _statePath).Apply("172.19.0.2", null);
+
+        Assert.Equal(3, routes);
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("dns") && c.Arguments.Contains("VPNRouter-TUN"));
+        Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "resolvectl" && c.Arguments.Contains("ens18"));
+        Assert.Contains("VPNRouter-TUN", File.ReadAllText(_statePath));
+    }
+
+    [Fact]
+    public void Apply_never_pins_dns_to_a_physical_link_when_tun_does_not_arrive()
+    {
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "resolvectl", Ok());
+        fake.OnRun(r => r.ExecutablePath == "ip" && r.Arguments.Contains("route"), Ok("172.19.0.2 via 192.168.0.1 dev ens18"));
+        fake.OnRun(r => r.ExecutablePath == "ip" && r.Arguments.Contains("link"), Ok("[{\"linkinfo\":{\"info_kind\":\"ether\"}}]"));
+
+        new LinuxDnsHardening(fake, _statePath).Apply("172.19.0.2", null);
+
+        Assert.Equal(20, fake.RunCalls.Count(c => c.ExecutablePath == "ip" && c.Arguments.Contains("route")));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("dns") || c.Arguments.Contains("domain"));
         Assert.False(File.Exists(_statePath));
     }
 

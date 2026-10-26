@@ -86,8 +86,7 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
                 return;
             }
 
-            if (!System.IO.File.Exists(_statePath))
-                SaveState(new LinuxDnsState { Interface = iface });
+            SaveState(new LinuxDnsState { Interface = iface });
 
             // Claim success only when both the resolver pin and the routing domain took effect.
             var dnsOk = RunResolvectl(new[] { "dns", iface, dnsTarget }, logger);
@@ -162,8 +161,29 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
 
     private string? GetTunInterface(string dnsTarget, ILogger? logger)
     {
-        var stdout = Run(Ip, new[] { "-o", "route", "get", dnsTarget }, logger);
-        return ParseRouteGetDevice(stdout);
+        // A restarted process can be alive before its TUN routes exist. During
+        // that window route-get returns the physical default interface instead.
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var iface = ParseRouteGetDevice(Run(Ip, new[] { "-o", "route", "get", dnsTarget }, logger));
+            if (iface == "lo") return null;
+            if (iface != null)
+            {
+                var link = Run(Ip, new[] { "-d", "-j", "link", "show", "dev", iface }, logger);
+                try
+                {
+                    using var json = JsonDocument.Parse(link);
+                    if (json.RootElement.GetArrayLength() == 1
+                        && json.RootElement[0].TryGetProperty("linkinfo", out var info)
+                        && info.TryGetProperty("info_kind", out var kind)
+                        && kind.GetString() == "tun")
+                        return iface;
+                }
+                catch (JsonException) { }
+            }
+            if (attempt < 19) System.Threading.Thread.Sleep(100);
+        }
+        return null;
     }
 
     // Never open a polkit password dialog from a background helper; an unauthorized

@@ -518,3 +518,13 @@ policy, but a stripped sing-box capability only said "reinstall". Headless now
 reports the exact one-time setcap repair command. The generic desktop Linux
 pkexec fallback (portable tarball/AppImage path) is unchanged on purpose.
 Evidence: phase-n4-auth-2026-10-26.md.
+
+## N4-M: DNS reapply races TUN restart (2026-10-26, P1, confirmed)
+
+Live r46/dce246bb: saving MTU 1280 from the plugin Settings keeps the
+tunnel connected but resolved loses its TUN DNS. LinuxDnsHardening queried
+the peer route before the replacement TUN routes appeared, selected ens18,
+and the narrow polkit rule correctly rejected that write. An uncached lookup
+then returned A+AAAA via ens18. Fix: wait briefly for a verified kernel TUN
+route, never mutate DNS on a physical link, and refresh the cleanup sentinel
+with that verified interface. Regression and exact-head CI pending.
