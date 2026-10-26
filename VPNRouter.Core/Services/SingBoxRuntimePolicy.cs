@@ -217,6 +217,7 @@ internal sealed class SingBoxRuntimePolicy
     /// packaging/arch/build_package.py, built with with_awg and with_xhttp, so production
     /// declares both. Test fixtures stay false; the binary is never run to discover features.
     /// </summary>
+    public bool IsPackaged => _isPackaged;
     public bool AwgAvailable => _isPackaged;
     public bool XhttpAvailable => _isPackaged;
 

@@ -603,6 +603,9 @@ public partial class SingBoxManager
         if (!OperatingSystem.IsLinux()) return false;
         if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath)) return false;
 
+        if (EffectivePolicy != null && !EffectivePolicy.IsPackaged)
+            return true;
+
         return SingBoxRuntimePolicy.HasNetAdminCapability(exePath);
     }
 
