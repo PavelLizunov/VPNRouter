@@ -643,7 +643,7 @@ internal sealed class SingBoxRuntimePolicy
             return failure switch
             {
                 SingBoxRuntimeFailure.Missing => "sing-box runtime is missing; reinstall the vpnrouter-headless package",
-                SingBoxRuntimeFailure.MissingCapabilities => "sing-box runtime is missing capabilities; reinstall the vpnrouter-headless package",
+                SingBoxRuntimeFailure.MissingCapabilities => "sing-box runtime lacks CAP_NET_ADMIN. Run once in a terminal: sudo setcap cap_net_admin,cap_net_raw+ep /usr/lib/vpnrouter-headless/runtime/sing-box. If setcap is unsupported, install the package on a filesystem with xattr support.",
                 SingBoxRuntimeFailure.PrerequisiteUnavailable => "Linux sandbox blocks sing-box TUN privileges (NoNewPrivs or user namespace)",
                 _ => "sing-box runtime is untrusted; check root ownership and permissions or reinstall the vpnrouter-headless package (run the backend as a normal user)"
             };

@@ -487,22 +487,34 @@ Historical original #240 evidence only: the twelve repairs were recorded as reso
 - [x] **P3 FIXED IN PR #622** - HEADLESS-HISTORY-REFERENCES: at c1bafab1, Headless README links absent September evidence files; Headless AGENTS requires a dated resume plan and claims protocol text is still absent. Round4Checks/Round5Checks identify work rounds instead of protected behavior. 04089901 fixes the links/map, removes obsolete resume history and renames the checks to LinuxMetadataChecks/DesktopIdentityChecks. Explicit-substitution comparison preserves fixture bodies; both suites pass at 17752be7, fact_check reports zero broken links. Other distinct task receipts remain.
 - [x] **P3 FIXED IN PR #622** - HEADLESS-UNUSED-ADMISSION-HELPER: at c1bafab1, `ProtocolConstants.IsUrgentOrReadOnlyMethod` has no callers or registration, and lists snapshot as urgent even though ProtocolDispatcher treats it as ordinary. Confirmed with dead_names.py plus repository-wide name/registration search. 04089901 removes the obsolete helper; admission remains in ProtocolDispatcher. Headless dead_names reports zero remaining candidates; scoped builds/tests pass at 17752be7. This is not a whole-program reachability claim.
 
-## N4-L: shell-owned VPN lifetime (2026-10-26, P1, implementing)
+## N4-L: shell-owned VPN lifetime (2026-10-26, P1, fixed on dsh/omarchy-n4-lifetime)
 
-Owner reports lost state after plugin reload on another Omarchy laptop. The
-stdio helper is a child of the shared shell; EOF disposes its owned VPN session.
-Round L integrates the private user service and reattach snapshot; inspection also
-found missing logout coupling, package replacement coordination and telemetry.
-See phase-omarchy-n4-lifetime-2026-10-26.md. Live evidence is pending.
+Owner reported lost state after plugin reload on another Omarchy laptop. The
+stdio helper was a child of the shared shell; EOF disposed its owned VPN session.
+Headless now runs as a private user service; the plugin reattaches and gets a
+fresh snapshot. Live on omarchy-test (r45): rescanPlugins and a full shell restart
+kept the same service/core PIDs and exit IP. Logout is verified by unit reading
+only. See phase-omarchy-n4-lifetime-2026-10-26.md.
 
-## Omarchy N4 Linux DNS steering (2026-10-26)
+## Omarchy N4 Linux DNS steering (2026-10-26, P1, fixed on dsh/omarchy-n4-net)
 
-- Severity: P1; status: investigating on task branch `dsh/omarchy-n4-net`.
-- Evidence: r33 on the authorized Omarchy VM connects a TUN-only inbound, but resolved has no TUN DNS scope and public lookups use DHCP resolver over ens18; nft observes LAN UDP/53. Private route exclusions bypass the generated DNS hijack rule. Linux Headless rejects DNS lockdown, so the existing Unix DNS adapter is never applied with ordinary settings.
-- Repair scope: per-link resolver steering for full tunnel, separately from the stronger DNS-lockdown capability; narrowly scoped noninteractive package authorization; lifecycle and regression checks.
+Full-tunnel lookups used the DHCP resolver over the LAN (private route
+exclusions bypassed the generated DNS hijack). Headless now steers resolved to
+the TUN peer with routing domain `~.`; the Arch package ships a narrow polkit rule
+(VPNRouter-TUN, local active session only). Live r42: 3/3 lookups via the TUN,
+0 LAN port-53 packets.
 
-## Omarchy N4 native DNS helper retains TUN (2026-10-26)
+## Omarchy N4 native DNS helper retains TUN (2026-10-26, P1, fixed on dsh/omarchy-n4-net)
 
-- Severity: P1; status: reproduced, repair in progress on `dsh/omarchy-n4-net`.
-- Packaged sing-box 1.14 defaults TUN `dns_mode` to hijack, including native resolved configuration. A resolvectl child was observed holding `/dev/net/tun` for VPNRouter-TUN after sing-box exited; link release took 24.64 seconds. Rapid restarts fail with TUNSETIFF device/resource busy (5/6). A real connected MTU update failed with connection_lost.
-- Candidate repair: explicitly disable sing-box's native DNS integration on generated Linux TUNs and retain the bounded noninteractive application-owned adapter. Test rapid restart and real connected MTU update. Do not hide the failure with a fixed sleep or lower default MTU.
+sing-box 1.14 native DNS integration left a resolvectl child holding
+`/dev/net/tun` for up to 24.64 s after exit, so rapid restarts and connected MTU
+changes failed. Linux TUNs now set `dns_mode: disabled`; rapid restart 6/6, MTU
+1420 -> 1280 -> 1420 stays connected.
+
+## N4-U: repeated Linux authentication (2026-10-26)
+
+P2. Packaged Headless already refuses pkexec/sudo escalation via its runtime
+policy, but a stripped sing-box capability only said "reinstall". Headless now
+reports the exact one-time setcap repair command. The generic desktop Linux
+pkexec fallback (portable tarball/AppImage path) is unchanged on purpose.
+Evidence: phase-n4-auth-2026-10-26.md.

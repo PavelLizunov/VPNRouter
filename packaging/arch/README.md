@@ -82,8 +82,16 @@ that trust decision. Test-file policies retain their SHA checks.
 
 A disconnected normal-user snapshot reports `capabilities.connect=true` when
 runtime and ownership checks pass. A failed runtime check sets it false and
-includes `unavailableReason`, also shown by HealthCheck. Reinstalling the package
-restores capabilities after file replacement. NoNewPrivs/user namespaces can
+includes `unavailableReason`, also shown by HealthCheck. After file replacement or stripped capabilities, repair once in a terminal:
+
+```bash
+sudo setcap cap_net_admin,cap_net_raw+ep /usr/lib/vpnrouter-headless/runtime/sing-box
+```
+
+If `setcap` reports that the operation is unsupported, install the package on a
+filesystem with extended-attribute support. Reinstalling the package also restores
+capabilities. Connect and disconnect never invoke an interactive privilege prompt;
+missing privileges are reported instead. NoNewPrivs/user namespaces can
 prevent file capabilities from taking effect. Kill switch and DNS lockdown
 remain false on Linux. The ownership lock coordinates cooperating processes of
 the same UID. Installed-owner traffic routing and plugin loading require their

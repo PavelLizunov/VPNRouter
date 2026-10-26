@@ -70,7 +70,7 @@ def snapshot(expected, reason=None):
         assert result['capabilities'] == {'connect': expected, 'killSwitch': False, 'dnsLockdown': False}, result
         if reason:
             assert reason in result['unavailableReason'], result
-            assert result['unavailableReasonCode'] == ('runtime-capabilities' if reason == 'missing capabilities' else 'runtime-untrusted'), result
+            assert result['unavailableReasonCode'] == ('runtime-capabilities' if reason == 'lacks CAP_NET_ADMIN' else 'runtime-untrusted'), result
         return result
     finally:
         backend.close()
@@ -98,7 +98,8 @@ def main():
     # Exercise the real policy through the normal-user installed backend.
     subprocess.run(['setcap', '-r', str(RUNTIME)], check=True)
     try:
-        snapshot(False, 'missing capabilities')
+        result = snapshot(False, 'lacks CAP_NET_ADMIN')
+        assert 'sudo setcap cap_net_admin,cap_net_raw+ep /usr/lib/vpnrouter-headless/runtime/sing-box' in result['unavailableReason'], result
     finally:
         subprocess.run(['setcap', 'cap_net_admin,cap_net_raw+ep', str(RUNTIME)], check=True)
     for target in (RUNTIME, RUNTIME.parent):

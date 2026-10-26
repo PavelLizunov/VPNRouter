@@ -152,7 +152,7 @@ public sealed class RouterBackend : IAsyncDisposable
         var unavailableReason = policy?.UnavailabilityReason ?? (unavailableReasonCode switch
         {
             "runtime-missing" => "sing-box runtime is missing; reinstall the vpnrouter-headless package",
-            "runtime-capabilities" => "sing-box runtime is missing capabilities; reinstall the vpnrouter-headless package",
+            "runtime-capabilities" => "sing-box runtime lacks CAP_NET_ADMIN. Run once in a terminal: sudo setcap cap_net_admin,cap_net_raw+ep /usr/lib/vpnrouter-headless/runtime/sing-box. If setcap is unsupported, install the package on a filesystem with xattr support.",
             "runtime-untrusted" => "sing-box runtime is untrusted; check package ownership and permissions",
             "ownership" => "Another VPNRouter instance owns the session, or session ownership could not be verified.",
             "sandbox" => "Linux sandbox blocks sing-box TUN privileges.",
