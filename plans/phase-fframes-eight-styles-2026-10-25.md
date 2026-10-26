@@ -906,3 +906,45 @@ system was found. Each style has a deliberate visual mechanism:
   fixture may not reproduce. Retain plain controls, identities, hashes and failure
   evidence; do not infer a fix from equality. Revert only the isolated diagnostic
   commit if rejected, preserving history/evidence and all unrelated work.
+
+### Bounded importer implementation checkpoint
+
+- Isolated adapter uses normal fframes::render with the full 1080-frame context
+  and original scheduler (one worker, min24). It discards other claims before SVG
+  and sends unchanged claims/PTS 768-791 to the original pooled CPU converter and
+  SegmentWriter. Only 0000000768.mp4 and claims.json are finished; no concat/audio.
+  Cold allocator/cache history is explicitly not the historical full-film history.
+- Disposable CI prepares two fresh r3108 libraries from archive SHA256
+  41606cb8e788a7f8c4514290646d4ba5c7bc68d9e1ccd1a73f446a90546913eb.
+  Identical configure/compiler settings preserve assembly/default CPU selection;
+  the instrumented source adds only before-copy visible I420 and post-mod16 NV12
+  coded-rectangle hashes. Three source-member hashes and unique anchors bind hook
+  placement. These are fresh diagnostic libraries, not the historical distro build.
+- Bound: three synthetic 24-frame controls (plain/instrumented-off/on), then at
+  most three executions of the one selected film lifetime: plain/observed-a for
+  transparency, observed-b only after that gate and historical observed-input
+  matching pass. Compare native headers/NALs, decoded rows, visible planes, named
+  state and call order. Stop immediately on failed transparency, historical input
+  mismatch or absent prospective divergence; no expansion to all-eight exports.
+- The dedicated workflow touches neither existing render/provenance triggers nor
+  evaluator assets. Preflight records CPU/load, available RAM/swap, disk, conflicts
+  and SDK before prerequisites, then repeats before native build. FFmpeg uses
+  FFMPEG_FORCE_BUILD=1 and a fresh isolated cache/target. Actual loader initialization
+  paths, library/binary/source hashes and FFmpeg source observations are retained.
+- Original historical ZIP, selected traces, all new operands/media/logs and failure
+  details stay under the always-uploaded evidence tree, including hash/extraction
+  failures. No renderer/cache/evaluator/media changes, local native build or replay
+  from lossy video. Strict baseline/best remain null and optimization attempts 0/10.
+- Independent source reviews: 3452dfbe found no Rust API/context/PTS blocker;
+  d2a8c7c0 found no native-hook/bounds/bit-depth blocker. Both explicitly leave
+  compiler/native acceptance untested. Reviewer 0a4abb8a found native TSV scalar
+  domains and historical ZIP retention gaps; both were source-confirmed and fixed
+  with actual-parser/driver negative controls. Historical input matching is also
+  fail-closed before the third lifetime. Final frozen-source review ad5e37a3
+  verified all eight file hashes, protected inventories and source/media/lock
+  preservation, with no additional source blocker; native gates remain pending.
+- Lightweight checks: 14 new Python contracts, 11 existing boundary contracts,
+  seven v2 evaluator tests, three workflow tests, YAML/extracted shell parsing and
+  both frozen manifests (13 assets). Native build/smoke/observation, actual exact-SHA
+  CI and outcome remain PENDING; these checks alone do not establish transparency,
+  reproduction, historical binary identity, a fix or measured acceleration.
