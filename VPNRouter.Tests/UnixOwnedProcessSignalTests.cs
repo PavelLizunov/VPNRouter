@@ -153,31 +153,35 @@ public sealed class UnixOwnedProcessSignalTests
     {
         var binDir = AppPaths.BinDir;
         Directory.CreateDirectory(binDir);
-        var testExe = Path.Combine(binDir, $"test-sleep-{Guid.NewGuid():N}");
-        File.Copy("/bin/sleep", testExe, overwrite: true);
-        if (OperatingSystem.IsLinux())
+        // A multicall coreutils sleep dispatches by argv[0]; preserve its basename.
+        var testDirectory = Path.Combine(binDir, $"test-sleep-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(testDirectory);
+        var testExe = Path.Combine(testDirectory, "sleep");
+        Process? child = null;
+        try
         {
+            File.Copy("/bin/sleep", testExe);
             File.SetUnixFileMode(testExe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            child = Process.Start(new ProcessStartInfo(testExe, "30")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }) ?? throw new InvalidOperationException("Could not start controlled sleep child.");
+            Assert.False(child.HasExited, "The controlled sleep child exited before identity checks.");
+            return (child, testExe);
         }
-
-        var child = Process.Start(new ProcessStartInfo(testExe, "30")
+        catch
         {
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
-        if (child == null)
-        {
-            try { File.Delete(testExe); } catch { }
-            throw new InvalidOperationException("Could not start controlled sleep child.");
+            StopControlledChild(child, testExe);
+            throw;
         }
-        return (child, testExe);
     }
 
-    private static void StopControlledChild(Process child, string? exePath = null)
+    private static void StopControlledChild(Process? child, string? exePath = null)
     {
         try
         {
-            if (!child.HasExited)
+            if (child is not null && !child.HasExited)
             {
                 child.Kill(entireProcessTree: true);
                 child.WaitForExit(5000);
@@ -188,9 +192,12 @@ public sealed class UnixOwnedProcessSignalTests
         }
         finally
         {
-            if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
+            child?.Dispose();
+            if (!string.IsNullOrEmpty(exePath))
             {
                 try { File.Delete(exePath); } catch { }
+                // Delete only the unique empty directory made by this fixture.
+                try { Directory.Delete(Path.GetDirectoryName(exePath)!); } catch { }
             }
         }
     }
