@@ -16,6 +16,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - N4-X-DNS-OWNERSHIP: competing Headless construction/disposal can restore an active service DNS sentinel before data-lock refusal; `Program.cs:122`, `VpnEngine.cs:160`, `UnixSocketServer.cs:27`; fix and regression planned in phase-n4-x-review-2026-10-26.md.
+- [ ] **P2** - N4-X-LEGACY-UPGRADE: package service masking does not quiesce the old shell-owned stdio helper; document disable/stop before replacing old assemblies and remove the concurrent stdio diagnostic example.
+
 ### Omarchy integration 2026-10-22 (PR #616)
 
 - [ ] **P2** - OMARCHY-N2-FREE-STALE-PING: free.test treats cached Verified as current reachability and reuses old latency after a failed TCP probe; return the actual repeat-probe result while retaining historical verification for apply, and suppress latency when basic probing fails - `VPNRouter.Headless/Features/FreeConfigFeature.cs:139`. Fix prepared; CI pending.
