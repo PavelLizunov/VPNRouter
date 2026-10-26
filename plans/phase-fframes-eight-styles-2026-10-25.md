@@ -1130,3 +1130,99 @@ system was found. Each style has a deliberate visual mechanism:
   at the failed parent until the successful child bundle is verified. Syntax/data
   checks pass; actual runner preflight, hooks/build/tests, bundle/upload/import and
   fresh exact-head ordinary CI remain PENDING. No native process has been submitted.
+- Recovery execution `40379845200` succeeded at bootstrap `0a67b2b19b46f7903d7c37f48b3ce754bb5a5823`:
+  unchanged pre-commit ran Release solution build (0 errors, 198 warnings), scoped
+  tests (217 passed, 1 skipped), then 22 focused tests and the original Linux filter
+  (3189 passed, 77 skipped). SDK observed 10.0.303 is permitted by unchanged
+  `global.json` 10.0.301/latestPatch. Archive `12676634429` (901595 bytes) verifies
+  SHA256 `f6fd3c14b7c49fd63a0a9b997b0bd53bb96b083b664205d3787e1b6cc03baf50`.
+  Parent bootstrap ordinary CI `40379852999` separately reproduced the same renamed
+  multicall-child failure; its source is the PR merge tree, not the recovery child.
+- Verified bundle `653940c12e5a7821ee0a7cf312f014270ded565200a1df83f2136d12628d0b5d`
+  contains sole child `3d23fffc58ba2bd551fa2005b526b543621f80e7`, exact parent bootstrap,
+  sole Tests-file patch and expected tree `498b41f20545b78235af5b78abd9c697de7b2763`.
+  Lead verified actual hook logs/TRX, all three pidfd regressions, reviewed fixture,
+  unchanged hook tree and independent parent-plus-blob expected tree. Reviewer
+  `332a63a5` tested nine isolated Git preservation/failure/race cases; under the
+  exclusive lead writer interval, one fixture cacheinfo update plus exact-parent
+  branch CAS imported that existing hook-validated commit. No new local commit or
+  build, bypass, reset, stash or checkout. All working bytes/modes and non-fixture
+  index entries/flags stayed equal; index empty. Push `bash-1ddbc1ed5d3f44bf` exit 0.
+- Repaired exact local/remote/PR head `3d23fffc58ba2bd551fa2005b526b543621f80e7`
+  passed ordinary PR CI `40382729790`; watcher `bash-7a1de9f52d884b3a` exit 0. All
+  seven expected checks succeeded; render-film skipped. Runtime fixture repair is
+  verified; fframes repeatability is not. Evidence under `out/native-importer-20261026/run-40379845200/`.
+  Full-history native submissions remain 0; baseline/best/confirmation absent.
+- Implementation split after green CI: source-bound encoder/ratecontrol hooks,
+  raw typed parser and mutation tests; independent all-segment/concat media binder
+  reusing bounded H.264 helpers; lead-owned public comparison, finite CI driver,
+  workflow and integration tests. Disjoint new files only in the already authorized
+  `.github/full-history-observation/` scope; old auto-trigger paths remain unchanged.
+  Reuse verdict: Extend existing `read_boundary(require_state=True)` and packet
+  bridge patterns, not a replacement renderer, parser stack or new dependency.
+
+### Full-history final integration and publication gate
+
+- Frozen source/data verification at repaired head `3d23fffc58ba2bd551fa2005b526b543621f80e7`
+  binds all 13 diagnostic/workflow files in
+  `out/native-importer-20261026/full-history-integration-20261027/verification.json`.
+  All 41 isolated source/saved-data contracts passed with no ignored `out/` access,
+  native compilation/render/decode or network. Python/YAML/extracted shell parsing
+  passed. Exact runner capacity, linking, loader behavior, transparency, runtime
+  budget and successful artifact retention remain unverified until the single job.
+- Final reviewer `3e5ec9f1` reported that the final verdict scans `pre_slice` before
+  `qpm`, contrary to emitted/internal consumed-call chronology. Lead reproduced the
+  actual consumer returning `pre_slice` for simultaneous qpm/pre-slice changes using
+  six inert mocked launches. Evidence: `full-history-verdict-order-red.json` under
+  the same ignored evidence root; no native call or scoped source edit occurred.
+  Record `FFRAMES-FULL-HISTORY-VERDICT-STAGE-ORDER` before implementation.
+- Final frozen report `full-history-final-integration-review.md` is collected:
+  `changes_required` for that single P2, no other source-confirmed launch blocker,
+  12/12 focused isolated data contracts and all 13 hashes unchanged. Review ended.
+  Lead's first isolated regression-copy attempt omitted the tracked transitive
+  `test_workflow.py` import; both variants failed before tests, not red/green
+  evidence. Logs and invocation-failure record are retained without overwriting.
+- Correction scope is only the verdict stage tuple in `ci.py` and an actual-driver
+  data-only regression in `test_driver.py`, now that the frozen review has ended.
+  Preserve hook/parser/media/workflow bytes and the finite manifest. Verify isolated
+  red/green, the full source/data contracts and a focused final delta review. This
+  is a reporting correction, not a native exception, source/capture expansion or
+  optimization attempt. Reconcile source-resolved ledger entries without claiming
+  a runtime pass. Publication itself triggers the sole authorized native series.
+- Pre-publication API checks confirm historical artifacts `12605741457` and
+  `12669620506` are unexpired and their advertised SHA256 digests match the retained
+  operands. The earlier reduced worker observed 91630104576 available disk bytes,
+  but this is historical capacity, not the next runner's readiness. The new job
+  gates on at least 37031571968 free bytes (34359738368 headroom plus 2671833600
+  packed-pixel bytes), records tools/load/RAM/swap/conflicts and stops without
+  cleanup if prerequisites fail. Native submissions remain 0 and attempts 0/10.
+- Corrected snapshot: actual-driver regression is red for the original consumer
+  and green after the one-line tuple fix. All 42 isolated source/saved-data tests
+  pass (18.365 seconds), using the actual 27-member preparation and no ignored
+  checkout out tree/network/native execution. Python AST, YAML and six extracted
+  bash syntax blocks pass. Receipt: `full-history-stage-order-check/verification.json`.
+  Only `ci.py` and `test_driver.py` differ from the previous 13-file freeze; the
+  remaining 11 hashes are unchanged. Focused delta reviewer `eb40191f` completed:
+  verified exact inverse delta and old-order in-memory regression sensitivity;
+  no gate/manifest/retention drift. Report SHA256
+  `71dd8d391f4f8aeb0b697c80afc23960fd79526fd15ab26ecece33cc379963cc`.
+  Eight ledger findings are source/data-resolved, explicitly not native-CI passes.
+- Publication scope is the 13 new diagnostic/workflow files and the attributable
+  task/ledger updates only. Preserve all unrelated music working bytes and the
+  separate music worktree; exclude its ledger section from this commit without
+  editing that working section. Old diagnostic hooks/triggers, exporter, both
+  evaluators, Cargo inputs, source/media/licenses and previews remain unchanged.
+  Only the new full-history path filter may launch native work. The prior reduced
+  CI completed in 16m03s; this is feasibility context, not proof the new 60-minute
+  job will finish. The single job must fail closed and retain partial evidence.
+- Gate status before publication: Build/native smoke PENDING on disposable CI;
+  Tests PASS for 42 source/data contracts, native/media/full PR gates PENDING;
+  Documentation PASS for attributable task/ledger reconciliation; Independent
+  source review PASS with corrected verdict delta independently verified;
+  installed-app/UI/release N/A (unchanged product and no release command);
+  Integration PASS for source/data mutation contracts, actual full-history
+  transparency/accounting/retention PENDING. This is not baseline acceptance.
+  Both immutable evaluator manifests verify all 13 protected files. All film
+  src/media/license files match frozen Git blobs. Prose check PASS: measured
+  counts are receipt-bound, source resolution is separated from runtime evidence,
+  and no causal, quality-acceptance or speedup claim is made.
