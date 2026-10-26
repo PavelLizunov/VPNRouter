@@ -77,6 +77,31 @@ public static partial class CustomConfigInjector
         EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
         EnsureUrltest(config);
         EnsureTunSelfRouteGuard(config);
+        // Add last so full-tunnel sanitization and process-rule replacement
+        // cannot remove the infrastructure bypass. It must precede DNS/QUIC.
+        if (ConfigGenerator.SystemBypassProcesses.Count > 0)
+        {
+            var route = (JsonObject)config["route"]!;
+            if (route["auto_detect_interface"] == null && string.IsNullOrEmpty(StjNodeHelpers.AsString(route["default_interface"])))
+                route["auto_detect_interface"] = true;
+            if (route["rules"] is not JsonArray bypassRules)
+            {
+                bypassRules = new JsonArray();
+                route["rules"] = bypassRules;
+            }
+            var outbounds = config["outbounds"] as JsonArray ?? new JsonArray();
+            if (config["outbounds"] == null) config["outbounds"] = outbounds;
+            var directTag = "vpnrouter-system-direct";
+            for (var suffix = 2; outbounds.Any(o => StjNodeHelpers.AsString(o?["tag"]) == directTag); suffix++)
+                directTag = $"vpnrouter-system-direct-{suffix}";
+            outbounds.Add(new JsonObject { ["type"] = "direct", ["tag"] = directTag });
+            bypassRules.Insert(0, new JsonObject
+            {
+                ["process_name"] = BuildProcessNameArray(ConfigGenerator.SystemBypassProcesses),
+                ["action"] = "route",
+                ["outbound"] = directTag
+            });
+        }
 
         return config.ToJsonString(InjectorOutputOptions);
     }

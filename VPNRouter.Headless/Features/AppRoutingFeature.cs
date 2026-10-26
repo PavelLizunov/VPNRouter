@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using Serilog;
+using VPNRouter.Core.Services;
 using VPNRouter.Headless.Storage;
 
 namespace VPNRouter.Headless.Features;
@@ -34,6 +35,19 @@ public sealed class AppRoutingFeature
         var include = settings.App?.RoutingAppsInclude ?? new List<string>();
         var exclude = settings.App?.RoutingAppsExclude ?? new List<string>();
 
+        // Match the legacy catalog baseline until the explicit Apps list is edited.
+        // Otherwise the first group toggle would silently drop earlier selections.
+        if (include.Count == 0 && settings.App?.RoutingAppsIncludeInitialized != true)
+        {
+            var active = (settings.ActiveProfile ?? string.Empty)
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var catalog = OfflineProfileHelper.GetOfflineProfileCollection(settings, _storage.DataDir, _logger);
+            include = catalog.Profiles.Where(p => active.Contains(p.Name, StringComparer.OrdinalIgnoreCase))
+                .SelectMany(ProfileFeature.ConcreteProcessNames).Concat(settings.CustomApps)
+                .Where(name => !settings.ExcludedApps.Contains(name, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
         var runningApps = _linuxApps?.Read() ?? new List<RunningApp>();
         var running = _linuxApps != null
             ? runningApps.Select(a => a.name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
@@ -44,7 +58,8 @@ public sealed class AppRoutingFeature
             include = include.ToList(),
             exclude = exclude.ToList(),
             running,
-            runningApps
+            runningApps,
+            systemBypass = ConfigGenerator.SystemBypassProcesses.ToList()
         };
     }
 

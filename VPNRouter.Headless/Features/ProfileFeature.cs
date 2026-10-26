@@ -44,12 +44,21 @@ public sealed class ProfileFeature
             {
                 id = p.Name,
                 name = p.Name,
+                description = p.Description,
+                processes = ConcreteProcessNames(p),
                 selected = activeSet.Contains(p.Name)
             })
             .ToList();
 
         return Task.FromResult<object>(new { items });
     }
+
+    internal static List<string> ConcreteProcessNames(Profile profile)
+        => profile.Processes.SelectMany(rule => new[] { rule.Name }.Concat(rule.ScanPatterns))
+            .Where(name => !string.IsNullOrWhiteSpace(name) && !name.Contains('*') && !name.Contains('?'))
+            .Select(name => !OperatingSystem.IsWindows() && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? name[..^4] : name)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
     public Task SelectAsync(JsonElement parameters, CancellationToken ct)
     {
