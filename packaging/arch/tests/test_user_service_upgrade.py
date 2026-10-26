@@ -9,7 +9,7 @@ INSTALL = Path(__file__).resolve().parents[1] / 'vpnrouter-headless.install'
 
 
 class UserServiceUpgradeTests(unittest.TestCase):
-    def exercise(self, remove=False, reenter=False, legacy_marker=False):
+    def exercise(self, remove=False, reenter=False, legacy_marker=False, owner_mask=False):
         with tempfile.TemporaryDirectory() as tmp:
             state = Path(tmp) / 'state'
             log = Path(tmp) / 'events'
@@ -20,6 +20,10 @@ _vpnrouter_upgrade_state={shlex.quote(str(state))}
 _vpnrouter_managers() {{ printf '%s\\n' 1000 1001; }}
 _vpnrouter_userctl() {{
     printf '%s\\n' "$*" >> {shlex.quote(str(log))}
+    if [[ "$2" == is-enabled && "$1" == 1001 && {"yes" if owner_mask else "no"} == yes ]]; then
+        printf '%s\\n' masked-runtime
+        return 1
+    fi
     [[ "$2" != is-active || "$1" == 1000 ]]
 }}
 setcap() {{ printf '%s\\n' capabilities >> {shlex.quote(str(log))}; }}
@@ -33,8 +37,8 @@ setcap() {{ printf '%s\\n' capabilities >> {shlex.quote(str(log))}; }}
 
     def test_upgrade_masks_before_stop_and_restores_after_capabilities(self):
         self.assertEqual(self.exercise(), [
-            '1000 is-active --quiet', '1000 mask --runtime --now',
-            '1001 is-active --quiet', '1001 mask --runtime --now', 'capabilities',
+            '1000 is-enabled', '1000 is-active --quiet', '1000 mask --runtime --now',
+            '1001 is-enabled', '1001 is-active --quiet', '1001 mask --runtime --now', 'capabilities',
             '1000 unmask --runtime', '1000 daemon-reload', '1000 start',
             '1001 unmask --runtime', '1001 daemon-reload'])
 
@@ -60,6 +64,14 @@ setcap() {{ printf '%s\\n' capabilities >> {shlex.quote(str(log))}; }}
         self.assertNotIn('1000 is-active --quiet', events)
         self.assertIn('1000 start', events)
         self.assertNotIn('1001 start', events)
+
+
+    def test_owner_runtime_mask_is_preserved(self):
+        events = self.exercise(owner_mask=True)
+        self.assertNotIn('1001 mask --runtime --now', events)
+        self.assertNotIn('1001 unmask --runtime', events)
+        self.assertNotIn('1001 start', events)
+        self.assertIn('1000 start', events)
 
 
 if __name__ == '__main__':

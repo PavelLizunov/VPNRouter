@@ -55,3 +55,10 @@ grant. Preserve native DNS for desktop/CLI and restrict the automatic managed
 resolver replacement to the existing Headless runtime-policy context. Explicit
 DnsLeakLockdown behavior remains available. Add a generated JSON regression for
 non-Headless context and scope the original Headless test explicitly.
+
+## Runtime mask ownership follow-up
+
+The inactive-service repair must preserve a caller's pre-existing runtime mask.
+Skip masked-runtime units only when no transaction marker already records our
+own interrupted upgrade. This retains recovery for old empty markers while
+avoiding unmasking caller intent. Add a transaction regression against b49ba27a.

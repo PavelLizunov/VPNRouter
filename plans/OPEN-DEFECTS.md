@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2 FIXED ON N4-X BRANCH** - N4-X-OWNER-MASK: masking all inactive units must not claim/remove a runtime mask set by the caller before the transaction; vpnrouter-headless.install now skips masked-runtime units without its own recovery marker. Interrupted transaction masks still resume. Regression RED against b49ba27a and GREEN after repair.
+
 - [x] **P2 FIXED ON N4-X BRANCH** - N4-X-DESKTOP-DNS-SCOPE: Linux-wide dns_mode=disabled removed native resolver integration from desktop/CLI packages that do not ship the Arch Headless polkit grant; ConfigGenerator.cs:176 and packaging/linux/postinst. Limit implicit DNS replacement to Headless runtime-policy context, preserving other frontends; generated-config regression added, exact-head CI pending.
 
 - [x] **P1 FIXED ON N4-X BRANCH** - N4-X-DNS-OWNERSHIP: competing Headless construction/disposal can restore an active service DNS sentinel before data-lock refusal; `Program.cs:122`, `VpnEngine.cs:160`, `UnixSocketServer.cs:27`; lock-before-factory and existing-lease stdio refusal implemented; regression CI/live evidence in phase-n4-x-review-2026-10-26.md and external X.md.

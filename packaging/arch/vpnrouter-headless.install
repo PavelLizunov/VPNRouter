@@ -27,6 +27,11 @@ _vpnrouter_quiesce() {
     install -d -m 700 "$_vpnrouter_upgrade_state"
     while read -r uid; do
         if [[ ! -f "$_vpnrouter_upgrade_state/$uid" ]]; then
+            # A pre-existing caller-owned runtime mask already prevents startup.
+            # Do not claim it and later remove it as our transaction's mask.
+            if [[ $(_vpnrouter_userctl "$uid" is-enabled 2>/dev/null) == masked-runtime ]]; then
+                continue
+            fi
             if _vpnrouter_userctl "$uid" is-active --quiet; then
                 printf '%s\n' yes > "$_vpnrouter_upgrade_state/$uid"
             else
