@@ -6,6 +6,52 @@ namespace VPNRouter.Tests;
 
 public class ConfigGeneratorTests
 {
+    [Theory]
+    [InlineData("172.19.0.1/30", "full", "custom_first")]
+    [InlineData("10.77.0.1/30", "split", "toggles_first")]
+    public void TunPeerIcmp_CannotReachPrivateDirectRoute(string address, string mode, string priority)
+    {
+        var settings = CreateSettings();
+        settings.Tun.Ipv4Address = address;
+        settings.App.RoutingMode = mode;
+        settings.App.CustomRulesPriority = priority;
+        settings.App.CustomRules = [new CustomRule { Type = "domain", Value = "example.org", Action = "direct" }];
+        var config = ConfigGenerator.Generate(CreateProfile(), ["browser"], settings);
+        var rules = config.Route.Rules;
+        var guard = Assert.Single(rules, r => r.Network == "icmp" && r.Action == "reject");
+        Assert.Equal(new[] { address }, guard.IpCidr);
+        Assert.True(guard.IsInfrastructure);
+        Assert.Null(guard.Outbound);
+        Assert.True(rules.IndexOf(guard) < rules.FindIndex(r => r.IpIsPrivate == true));
+        Assert.True(rules.IndexOf(guard) < rules.FindIndex(r => r.ProcessName?.Contains("browser") == true || r.Domain?.Contains("example.org") == true));
+        Assert.Contains(rules, r => r.Action == "hijack-dns" && r.Network == null);
+        var json = ConfigGenerator.Serialize(config);
+        Assert.Contains("\"network\": \"icmp\"", json);
+    }
+
+    [Fact]
+    public void LinuxTun_DnsIsOwnedByTheApplication_NotNativeInteractiveHelpers()
+    {
+        using var scope = SingBoxRuntimePolicy.EnterScope(SingBoxRuntimePolicy.DefaultProduction);
+        var config = ConfigGenerator.Generate(CreateProfile(), [], CreateSettings());
+        Assert.Equal(OperatingSystem.IsLinux() ? "disabled" : null, config.Inbounds.Single().DnsMode);
+        Assert.Contains(config.Route.Rules, rule => rule.Action == "hijack-dns");
+        var json = ConfigGenerator.Serialize(config);
+        if (OperatingSystem.IsLinux())
+            Assert.Contains("\"dns_mode\": \"disabled\"", json);
+        else
+            Assert.DoesNotContain("\"dns_mode\"", json);
+    }
+
+    [Fact]
+    public void Tun_NativeDnsIsPreservedOutsideHeadless()
+    {
+        Assert.Null(SingBoxRuntimePolicy.Current);
+        var config = ConfigGenerator.Generate(CreateProfile(), [], CreateSettings());
+        Assert.Null(config.Inbounds.Single().DnsMode);
+        Assert.DoesNotContain("\"dns_mode\"", ConfigGenerator.Serialize(config));
+    }
+
     private static AppSettings CreateSettings(int serverCount = 1)
     {
         var settings = new AppSettings
@@ -180,16 +226,18 @@ public class ConfigGeneratorTests
                 routeRule["rule_set"]!.AsArray().Select(tag => tag!.ToString()));
             Assert.Equal("direct", routeRule["outbound"]!.ToString());
             Assert.Equal("route", routeRule["action"]!.ToString());
-            Assert.Equal(3, routeRules.IndexOf(routeRule));
+            Assert.Equal(4, routeRules.IndexOf(routeRule));
             Assert.Equal("sniff", routeRules[0]!["action"]!.ToString());
             Assert.Equal("hijack-dns", routeRules[1]!["action"]!.ToString());
-            Assert.True(routeRules[2]!["ip_is_private"]!.GetValue<bool>());
+            Assert.Equal("icmp", routeRules[2]!["network"]!.ToString());
+            Assert.Equal("reject", routeRules[2]!["action"]!.ToString());
+            Assert.True(routeRules[3]!["ip_is_private"]!.GetValue<bool>());
             Assert.Contains(config.Route.RuleSet!, r => r.Tag == "vpnrouter-geoip-ru");
             if (routingMode == "split")
             {
                 var appRule = Assert.Single(config.Route.Rules.Where(r => r.ProcessName?.Contains("firefox.exe") == true
                     && r.Action == "route"));
-                Assert.True(config.Route.Rules.IndexOf(appRule) > 3);
+                Assert.True(config.Route.Rules.IndexOf(appRule) > 4);
                 Assert.Equal(appsMode == "exclude" ? "direct" : "proxy", appRule.Outbound);
             }
 

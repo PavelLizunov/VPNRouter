@@ -119,6 +119,31 @@ public sealed class CrashReporterScrubberTests
     }
 
     [Fact]
+    public void ScrubSecrets_KeepsPlainFilesystemPath()
+    {
+        const string path = "/usr/lib/vpnrouter-headless/runtime/sing-box";
+        Assert.Contains(path, CrashReporter.ScrubSecrets($"sing-box at {path} (44 MB)"));
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsBase64KeyWithSlashes()
+    {
+        const string key = "Kx7/pQ9vR2mT/8sWzL4nB6yH1cF3dJ5gA0eU+oIiYk=";
+        var s = CrashReporter.ScrubSecrets($"key {key}");
+        Assert.DoesNotContain(key, s);
+    }
+
+    [Fact]
+    public void ScrubSecrets_RedactsLowercaseBase64KeyWithShortPathSegments()
+    {
+        var key = new string('a', 20) + "/" + new string('a', 21) + "w=";
+        Assert.Equal(32, Convert.FromBase64String(key).Length);
+        var scrubbed = CrashReporter.ScrubSecrets($"key {key}");
+        Assert.DoesNotContain(key, scrubbed);
+        Assert.Contains("<key>", scrubbed);
+    }
+
+    [Fact]
     public void ScrubSecrets_RedactsRealityPublicKey()
     {
         const string pbk = "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU";

@@ -14,8 +14,13 @@ public static partial class ConfigGenerator
             ? TunSettings.DefaultMtu
             : mtu;
 
-    internal static string SelectTunStack(bool isMacOS)
-        => isMacOS ? "gvisor" : "system";
+    // The system stack delivers TUN traffic as inbound packets to a local
+    // listener, which host firewalls such as ufw on Linux drop; gvisor does not.
+    internal static string SelectTunStack(bool isMacOS, bool isLinux)
+        => isMacOS || isLinux ? "gvisor" : "system";
+
+    internal static string PlatformTunStack()
+        => SelectTunStack(OperatingSystem.IsMacOS(), OperatingSystem.IsLinux());
 
     internal const int AwgEndpointMtu = 1420;
 
@@ -93,7 +98,7 @@ public static partial class ConfigGenerator
             Inbounds = BuildInbounds(settings, proxyIsUdpNative),
             Outbounds = outbounds,
             Endpoints = endpoints,
-            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: proxyCarriesUdpNatively),
+            Route = BuildRoute(profile, appsProcessList, settings.Tun.Ipv4Address, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: proxyCarriesUdpNatively),
             Experimental = new SingBoxExperimental
             {
                 ClashApi = new ClashApi
@@ -145,6 +150,9 @@ public static partial class ConfigGenerator
         return JsonSerializer.Serialize(config, Json.AppJsonContext.Default.SingBoxConfig);
     }
 
+    private const int LinuxIproute2TableIndex = 2350;
+    private const int LinuxIproute2RuleIndex = 8900;
+
     private static List<SingBoxInbound> BuildInbounds(AppSettings settings, bool proxyIsUdpNative = false)
     {
         var routeExcludes = settings.Tun.GetEffectiveRouteExcludeAddress();
@@ -161,12 +169,24 @@ public static partial class ConfigGenerator
                                             ? Math.Min(mtu, AwgEndpointMtu)
                                             : mtu,
                 AutoRoute               = settings.Tun.AutoRoute,
+                // Since 1.14, sing-box also runs native resolvectl helpers by default.
+                // They can prompt and retain the TUN fd after exit, breaking immediate
+                // restarts. Headless owns noninteractive steering and ships its DNS
+                // grant. Other Linux frontends retain native DNS until they provide
+                // equivalent integration. Explicit hijack-dns routing stays enabled.
+                DnsMode                 = OperatingSystem.IsLinux() && SingBoxRuntimePolicy.Current != null
+                                            ? "disabled" : null,
                 StrictRoute             = false,
                 RouteExcludeAddress     = routeExcludes.Count > 0
                                             ? routeExcludes
                                             : null,
                 EndpointIndependentNat  = true,
-                Stack                   = SelectTunStack(OperatingSystem.IsMacOS())
+                Stack                   = PlatformTunStack(),
+                // sing-tun defaults (table 2022, rules from 9000) are shared with mihomo and
+                // other sing-box clients; a collision fails our start and our cleanup deletes
+                // the other client's routes.
+                Iproute2TableIndex      = OperatingSystem.IsLinux() ? LinuxIproute2TableIndex : null,
+                Iproute2RuleIndex       = OperatingSystem.IsLinux() ? LinuxIproute2RuleIndex : null
             }
         };
     }

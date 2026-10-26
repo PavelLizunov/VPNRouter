@@ -76,6 +76,7 @@ public static partial class CustomConfigInjector
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
         EnsureUrltest(config);
+        EnsureTunSelfRouteGuard(config);
 
         return config.ToJsonString(InjectorOutputOptions);
     }

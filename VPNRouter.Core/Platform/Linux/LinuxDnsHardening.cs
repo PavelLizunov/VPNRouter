@@ -2,6 +2,9 @@ using System.Text.Json;
 using Serilog;
 using VPNRouter.Core.Platform.Unix;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Models;
+using System.Net;
+using System.Net.Sockets;
 
 namespace VPNRouter.Core.Platform.Linux;
 
@@ -14,6 +17,35 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
     private const string Ip = "ip";
 
     private const string DefaultRoutingDomain = "~.";
+
+    // Resolver steering is needed even without firewall DNS lockdown: DHCP DNS on
+    // a private LAN bypasses the TUN's mandatory private-route exclusions.
+    internal static bool ShouldSteerResolver(AppSettings settings)
+        => settings.Tun.AutoRoute
+            && !string.Equals(settings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(settings.App.RoutingMode, "full", StringComparison.OrdinalIgnoreCase)
+                || settings.App.StrictDns
+                || string.Equals(settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase));
+
+    internal static string? DeriveDnsTarget(string? tunIpv4Cidr)
+    {
+        // sing-tun uses the next address as its virtual peer. The interface's own
+        // address is a local route (dev lo), so it cannot receive DNS via the TUN.
+        var parts = tunIpv4Cidr?.Split('/');
+        if (parts is not { Length: 2 }
+            || !IPAddress.TryParse(parts[0], out var address)
+            || address.AddressFamily != AddressFamily.InterNetwork
+            || !int.TryParse(parts[1], out var prefix) || prefix < 1 || prefix > 30)
+            return null;
+        var bytes = address.GetAddressBytes();
+        var value = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes);
+        var mask = uint.MaxValue << (32 - prefix);
+        var next = value + 1;
+        if ((next & mask) != (value & mask) || (next | mask) == uint.MaxValue)
+            return null;
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes, next);
+        return new IPAddress(bytes).ToString();
+    }
 
     public LinuxDnsHardening(IProcessRunner? runner = null, string? statePath = null)
     {
@@ -48,8 +80,13 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
                 return;
             }
 
-            if (!System.IO.File.Exists(_statePath))
-                SaveState(new LinuxDnsState { Interface = iface });
+            if (iface == "lo")
+            {
+                logger?.Warning("[LinuxDnsHardening] Refusing a local DNS target on loopback");
+                return;
+            }
+
+            SaveState(new LinuxDnsState { Interface = iface });
 
             // Claim success only when both the resolver pin and the routing domain took effect.
             var dnsOk = RunResolvectl(new[] { "dns", iface, dnsTarget }, logger);
@@ -63,7 +100,7 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
             }
             else
             {
-                logger?.Warning(
+                logger?.Error(
                     "[LinuxDnsHardening] FAILED to pin {Iface} DNS -> {Target} (resolvectl non-zero — " +
                     "polkit/CAP_NET_ADMIN missing? DNS is NOT hardened and may leak)", iface, dnsTarget);
             }
@@ -124,12 +161,35 @@ public sealed class LinuxDnsHardening : IUnixDnsHardening
 
     private string? GetTunInterface(string dnsTarget, ILogger? logger)
     {
-        var stdout = Run(Ip, new[] { "-o", "route", "get", dnsTarget }, logger);
-        return ParseRouteGetDevice(stdout);
+        // A restarted process can be alive before its TUN routes exist. During
+        // that window route-get returns the physical default interface instead.
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var iface = ParseRouteGetDevice(Run(Ip, new[] { "-o", "route", "get", dnsTarget }, logger));
+            if (iface == "lo") return null;
+            if (iface != null)
+            {
+                var link = Run(Ip, new[] { "-d", "-j", "link", "show", "dev", iface }, logger);
+                try
+                {
+                    using var json = JsonDocument.Parse(link);
+                    if (json.RootElement.GetArrayLength() == 1
+                        && json.RootElement[0].TryGetProperty("linkinfo", out var info)
+                        && info.TryGetProperty("info_kind", out var kind)
+                        && kind.GetString() == "tun")
+                        return iface;
+                }
+                catch (JsonException) { }
+            }
+            if (attempt < 19) System.Threading.Thread.Sleep(100);
+        }
+        return null;
     }
 
+    // Never open a polkit password dialog from a background helper; an unauthorized
+    // change fails instead and the callers already treat that as non-fatal.
     private bool RunResolvectl(string[] args, ILogger? logger)
-        => RunResult(Resolvectl, args, logger).ok;
+        => RunResult(Resolvectl, new[] { "--no-ask-password" }.Concat(args).ToArray(), logger).ok;
 
     private void FlushDnsCache(ILogger? logger)
         => RunResolvectl(new[] { "flush-caches" }, logger);

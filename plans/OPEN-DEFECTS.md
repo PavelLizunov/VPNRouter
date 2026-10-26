@@ -16,6 +16,45 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P1 FIXED ON N4-T BRANCH** - N4-T-TUN-SELF-ROUTE: private direct routing forwards ICMP to the virtual TUN peer back through the same TUN, recursively creating sing-box raw sockets and sustained TX/CPU growth after shell gateway probes. Generated/custom own-prefix ICMP guards implemented in ed82e139; r53 VM HY2/VLESS peer ping, rescan and cold restart leave zero sing-box raw sockets; corrected prefix assertions and green CI 40260604256 at cef9397e. See phase-omarchy-n4-traffic-2026-10-26.md. Not released or tested on the owner's laptop.
+
+- [x] **P2 FIXED ON N4-X BRANCH** - N4-X-OWNER-MASK: masking all inactive units must not claim/remove a runtime mask set by the caller before the transaction; vpnrouter-headless.install now skips masked-runtime units without its own recovery marker. Interrupted transaction masks still resume. Regression RED against b49ba27a and GREEN after repair.
+
+- [x] **P2 FIXED ON N4-X BRANCH** - N4-X-DESKTOP-DNS-SCOPE: Linux-wide dns_mode=disabled removed native resolver integration from desktop/CLI packages that do not ship the Arch Headless polkit grant; ConfigGenerator.cs:176 and packaging/linux/postinst. Limit implicit DNS replacement to Headless runtime-policy context, preserving other frontends; generated-config regression passed in Linux/Windows CI 40254756220; Headless behavior was exercised live on r50.
+
+- [x] **P1 FIXED ON N4-X BRANCH** - N4-X-DNS-OWNERSHIP: competing Headless construction/disposal can restore an active service DNS sentinel before data-lock refusal; `Program.cs:122`, `VpnEngine.cs:160`, `UnixSocketServer.cs:27`; lock-before-factory and existing-lease stdio refusal implemented; regression CI/live evidence in phase-n4-x-review-2026-10-26.md and external X.md.
+- [x] **P2 FIXED IN DOCUMENTATION** - N4-X-LEGACY-UPGRADE: package service masking does not quiesce the old shell-owned stdio helper; document disable/stop before replacing old assemblies and remove the concurrent stdio diagnostic example.
+
+### Omarchy integration 2026-10-22 (PR #616)
+
+- [ ] **P2** - OMARCHY-N2-FREE-STALE-PING: free.test treats cached Verified as current reachability and reuses old latency after a failed TCP probe; return the actual repeat-probe result while retaining historical verification for apply, and suppress latency when basic probing fails - `VPNRouter.Headless/Features/FreeConfigFeature.cs:139`. Fix prepared; CI pending.
+
+- [ ] **P1** - OMARCHY-N2-VERIFY-DETOUR: servers.verify drops DetourVia by passing a chained target to a single-outbound verifier; return UnsupportedByVerifier before core launch until verification can resolve the upstream chain - `VPNRouter.Headless/Features/ServerFeature.cs:305`, `plans/phase-omarchy-night2-backend-2026-10-24.md`. Fix prepared; CI pending.
+
+- [x] **P2 RESOLVED IN PR #616** - OMARCHY-R5-DESKTOP-PRECISION: owner observed Ghostty labelled DSH TUI/icon dsh; at 8194f44b LinuxRunningApps merges identity and Exec keys with first-entry wins. Implemented priority/ambiguity handling and wrapper fixtures in 469b69a1; headless-contract 39859423663 passes 39/0. See plans/phase-omarchy-r5-2026-10-23.md.
+- [x] **P2 RESOLVED IN PR #616** - OMARCHY-R5-PACKAGE-VERSION: every CI build produces 0.1.0-1, so pacman reinstalls instead of upgrading. Implemented explicit CI package/artifact versioning in 469b69a1; Arch 39859419326 passes 126 tests including pacman vercmp and installed offline smoke, artifact 12460354392 is 0.1.0.r12.g469b69a-1. See plans/phase-omarchy-r5-2026-10-23.md.
+
+Source-mapped MVP follow-ups below are deferred from Step 1; they are not live-host acceptance claims or new execution tasks.
+
+- [ ] **P3** - HEADLESS-SNAPSHOT-DISPATCH-DIVERGENCE: constants/backend classify snapshot read-only, but wire ProtocolDispatcher treats it as ordinary and returns busy during another command; progress request-ID stamping only handles dictionaries while production features emit anonymous objects - `VPNRouter.Headless/Protocol/ProtocolConstants.cs:62`, `VPNRouter.Headless/Protocol/ProtocolDispatcher.cs:69`, `:227`. Source-read compatibility/documentation gap; clients must not assume urgent snapshots or request-correlated progress. Deferred.
+
+- [x] **P2 RESOLVED IN PR #616** - OMARCHY-PRODUCTION-RUNTIME: normal Linux headless enters deny-all DefaultProduction, so connect stays unavailable; add the owner-approved package-rooted production path/ownership/capability checks - `VPNRouter.Core/Services/SingBoxRuntimePolicy.cs:157`, `VPNRouter.Headless/Program.cs:93`. Deferred to the next runtime/package slice. R2: implemented and verified in Arch CI run 39837132508 at 29dcca1a; see `plans/phase-omarchy-package-2026-10-22.md`. Native notice coverage remains partial.
+- [x] **P2 RESOLVED IN PR #616** - ARCH-INSTALL-CAPABILITIES: package has no libcap/install/upgrade capability path and inspection rejects all .INSTALL hooks; merely staging sing-box cannot satisfy normal-user launch prerequisites - `packaging/arch/PKGBUILD:9`, `packaging/arch/build_package.py:535`, `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs:588`. Deferred. R2: implemented and verified in Arch CI run 39837132508 at 29dcca1a; see `plans/phase-omarchy-package-2026-10-22.md`. Native notice coverage remains partial.
+- [x] **P2 RESOLVED IN PR #616** - ARCH-STALE-SOURCE-AND-RUNTIME: driver exports historical backend 05c0bcae instead of HEAD, pins fork 1.14.0-vpnctl.5/Cronet 1.13.14 while desktop uses 1.14.2-vpnctl.2/1.14.2, and CI only mocks package assembly; update exact-SHA source selection/pins and build a real Arch artifact - `packaging/arch/build_package.py:37`, `:644`, `.github/workflows/test.yml:82`. Deferred; native license/source evidence also needs alignment. R2: implemented and verified in Arch CI run 39837132508 at 29dcca1a; see `plans/phase-omarchy-package-2026-10-22.md`. Native notice coverage remains partial.
+- [ ] **P3** - CAP-CHILD-IDENTITY-RISK: file-capability exec may hide child exe identity from unprivileged .NET parent, affecting owner records/exact stop; source/manual-grounded risk, not reproduced - `VPNRouter.Core/Services/ProcessOwnership.cs:97`, `VPNRouter.Core/Services/TunOwnershipLock.cs:196`, `VPNRouter.Core/Services/SingBoxManager.LinuxStop.cs:15`. R2 verifies successful connect and exact spawned-child stop with real CAP_NET_ADMIN in Arch CI run 39837132508; held Process stop does not read /proc exe. Owner-record/orphan recovery across backend death remains unverified.
+- [x] **P2 RESOLVED IN PR #616** - PACKAGED-RUNTIME-LATENT-INTEGRATION: LaunchProcess still calls TryColocateCronet under policy and HealthCheck always warns policy-unavailable; reachable only after production enablement - `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs:660`, `VPNRouter.Core/Services/HealthCheck.cs:209`. Deferred with production policy. R2: implemented and verified in Arch CI run 39837132508 at 29dcca1a; see `plans/phase-omarchy-package-2026-10-22.md`. Native notice coverage remains partial.
+- [ ] **P3** - LINUX-APP-NAME-ATTRIBUTION: apps.list uses ProcessName but the selected native fork matches basename of /proc executable; Linux reuses Mac scanner/monitor. Long-name/wrapper/sandbox mismatch is a risk, not reproduced - `VPNRouter.Headless/Features/AppRoutingFeature.cs:136`, `VPNRouter.Core/Platform/PlatformServices.cs:15`. Test selected and control traffic before adding path-based API.
+- [ ] **P2** - LINUX-TUN-SETTINGS-AND-EGRESS-EVIDENCE: strictRoute/ipv6Enabled can be stored while generation fixes strict_route=false and emits only an IPv4 TUN address; warmup is an ordinary HTTP GET and does not prove selected-app proxy egress - `VPNRouter.Core/Services/ConfigGenerator.cs:148`, `VPNRouter.Core/Services/StartupPipeline.cs:780`. Deferred; test DNS/IPv6/traffic on the installed runtime.
+- [ ] **P3** - OMARCHY-PLUGIN-AND-LIVE-ACCEPTANCE: separate plugin draft PR 2 has the stdio service/launcher at e742c1d; no actual Quattro load, package install or connection was performed in Step 1. Backend entry `VPNRouter.Headless/Program.cs:109`; plugin `PavelLizunov/omarchy-vpnrouter` Service.qml:285 at that separate revision. Deferred integration/acceptance gap, not a missing-from-scratch plugin claim.
+- [ ] **P3** - LINUX-PROTECTION-PARITY: per-UID lock is not host-global across UIDs; Linux headless kill-switch and DNS lockdown remain unavailable - `VPNRouter.Core/Services/LinuxTunOwnership.cs:288`, `VPNRouter.Headless/Lifecycle/PlatformCapabilityVerifier.cs:20`, `:109`. Beyond the limited same-user MVP unless separately requested.
+
+- [x] **P2** - LIFECYCLE-TEST-CATALOG-COUPLING: Linux `test` at `97245a82` reports four failures after selecting the proper platform catalog: lifecycle/firewall fixtures expect Windows `Discord_Privacy.block_on_vpn_fail=true` but Linux correctly disables it. Supply explicit isolated local profiles so teardown/cancellation tests reach their intended firewall seam without platform catalog assumptions - `VPNRouter.Tests/VpnEngineStartAsyncSeamTests.cs:460`, `VPNRouter.Tests/StartupPipelineTests.cs:277`. RESOLVED in PR #616, 96b80782; Linux test job 120012694345 passes without changing teardown/cancellation assertions.
+
+- [x] **P2** - HEADLESS-TEST-API-DRIFT: real suite compilation at `ffbfcae2` fails on a missing two-argument `BuildProfileSources` seam and removed `AppConfig.DnsModeOverride`; stale assertions still expect writable DNS overrides despite the already-integrated rejection. Retarget tests to profile-owned DNS and add isolated data-directory source resolution - `VPNRouter.Headless.Tests/ProfileChecks.cs:370`, `VPNRouter.Headless.Tests/FeatureChecks.cs:1320`. RESOLVED in PR #616, 97245a82; real console suite passes at 96b80782.
+- [x] **P2** - LINUX-PROFILE-CATALOG-DIVERGENCE: Core assigns generic catalog priorities 78/83 before Linux 80/85, while the headless offline helper uses 82/87; `ProfileManager.LoadAsync` selects the first available source, so displayed Linux app names differ from the engine's Windows catalog. Keep non-Linux order unchanged and use platform-first Linux priorities - `VPNRouter.Core/Services/VpnEngine.ProfileSources.cs:166`, `VPNRouter.Headless/Features/ProfileFeature.cs:238`. RESOLVED in PR #616, 97245a82; platform/fallback precedence checks pass in the real headless suite at 96b80782.
+
+- [x] **P2** - HEADLESS-CI-NO-EXECUTION: `headless-contract` invokes `dotnet test` on a console executable without a test SDK; run 39830688652/job/120005702252 only restores and never executes `ProtocolTests.Main` - `.github/workflows/test.yml:73`, `VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj:4`, `VPNRouter.Headless.Tests/ProtocolTests.cs:18`. RESOLVED in PR #616: bounded console runner; run 39832686036 at 96b80782 executes 37 top-level checks successfully.
+
 ### Owner report 2026-10-19 (main `7af9aaeb`)
 
 - [x] **P2** - GENERATED-RU-IP-BYPASS-MISSING: the enabled bypass registers `vpnrouter-geoip-ru` but the generated direct route references only `vpnrouter-geosite-ru`; Russian IP destinations outside the TLD list still use proxy in full/exclude mode or for included apps, contrary to the UI hint. Custom injection already includes both tags. Source and WINBRAT current.json confirmed; owner's exact site/device not yet known - `VPNRouter.Core/Services/ConfigGenerator.Rules.cs:357`; task `plans/phase-ru-ip-bypass-2026-10-19.md`. FIXED in PR #604, implementation `c45beb19`: both tags in generated routing; 72 focused tests and full Windows suite (3457 passed, 19 skipped); negative control fails only enabled cases; real installed core selects direct for 77.88.55.88 only with bypass on. Not released or installed on the owner's device.
@@ -50,6 +89,8 @@ Found by the owner's questions about the Android installer and a tester's screen
 Found by the pre-tag checks of `plans/phase-r29-release-2.50.0-r29-2026-10-04.md`. Neither entry is a regression of r29 and neither blocks a candidate.
 
 - [ ] **P3** - LOG-REDACT-QUOTED-SPACE (found 2026-10-04 by an external read of #515 and confirmed by running r28 and r29 side by side): `DiagnosticsRedactor.RedactLogText` hides only the part of a quoted value before its first space, so `password="alpha beta"` becomes `password="*** beta"` and `token='x y'` becomes `token='*** y'` (the generic key-value pattern in `_logKeyValueSecret` stops at whitespace). r29 now treats `userpassword="alpha beta"` the same way (r28 left it whole). Fix: let a quoted value run to its closing quote, with a test for both quote styles; needs a separate change and a new candidate.
+
+  D1 triage 2026-10-25, main c3ebc46e: #617 is the minimal fix for quoted-space values; #620 covers the same tested cases but includes unrelated Sweeper changes. #618/#625 miss unterminated values, #619 misses opposite quotes inside a value, and #624 misses unterminated single quotes. None fully handles escaped delimiters. Exact regexes were checked on synthetic inputs with native .NET Regex; complete PR test suites were not rerun. All six PRs remain open and untouched; implementation remains outside this triage-only scope.
 - [ ] **P3** - PS51-NON-ASCII-SCRIPTS (found 2026-10-04 by parsing all 26 `.ps1`/`.psm1` files with Windows PowerShell 5.1 on `windows-worker`): `tools/android-bootstrap.ps1`, `tools/watch-after-push.ps1`, `build-linux.ps1` and `Setup-Hooks.ps1` contain non-ASCII characters and no byte-order mark, so 5.1 reads them as the ANSI code page and stops with "string is missing the terminator" or "Unexpected token". They parse on PowerShell 7. None is on the release or post-ship path (the scripts those use all parse). Fix: replace the characters with ASCII or add a UTF-8 byte-order mark; `Setup-Hooks.ps1` also has an open owner question about being named only in `.githooks/AGENTS.md`.
 
 ### Repository hygiene 2026-09-28 (H-0 audit, H-1 #327, H-2a #328)
@@ -438,3 +479,70 @@ Historical original #240 evidence only: the twelve repairs were recorded as reso
 - [x] **P2 RESOLVED after v2.48.0-r4 (2026-08-03)** — the CI pre-push verifier could terminate before its own exit-code handling on Windows PowerShell 5.1 because native `gh` stderr becomes a terminating `ErrorRecord` while `$ErrorActionPreference=Stop`. Removed the redundant `gh auth status` preflight and scoped `Continue` only around the real `gh api` authentication/availability check, then restored the caller preference and preserved fail-closed exit 3. Verified both authenticated success and a forced API-error path — `tools/verify-last-commit-ci.ps1`
 
 - [x] **P0** — Auto-failover false-positive teardown of a healthy connection (post-start delay-test 503 → tore down a working server) — RESOLVED v2.44.2 (warmup-confirmed gate, `VpnEngine.ShouldAutoFailoverAfterProbe`)
+
+- [x] **P2 RESOLVED IN PR #616** - OMARCHY-EXACT-HEAD-ARCH-PACKAGE: r2 implements the fixed package runtime, capability install/upgrade script, current desktop archive pins, exact-source manifest and real Arch CI installation/TUN checks. See `plans/phase-omarchy-package-2026-10-22.md`; Arch CI run 39837132508 passed build, inspection, install/upgrade, normal-user snapshot and real TUN connect/disconnect. The external r2 report records the final documentation head artifact.
+
+- [x] **P2 R4 RESOLVED IN PR #616** - OMARCHY-R4-CONTRACT: at 2628f77e apps.list exposes only process names; servers.list omits source/removability and subscription removal returns not_found; snapshot lacks typed unavailable reasons; HealthCheck warns on first-launch missing config/directories. Implemented the owner contract with offline fixture tests; all nine checks passed at 865e3eaa (headless 38/0), Arch 39852737249 passed without TUN. See plans/phase-omarchy-r4-2026-10-22.md.
+
+- [x] **P1 FIXED IN PR #622** - OMARCHY-D1-SHUTDOWN: at ddf97f80, `VPNRouter.Headless/Protocol/ProtocolConstants.cs:14` and `ProtocolServer.cs:277` abandon handler disposal after 3 s, before the session's 3 s gate wait plus 15 s stop can finish. Program's repeated disposal returns once the session is marked disposed. Commit 98532b24 allows 20 s and adds a delayed-handler EOF regression; README states the bounded behavior. CI 40171223816/40171225782 green; later source gate 1c2e8e57 also green. Live active-core shutdown and independent lead acceptance remain unverified.
+
+- [x] **P1 FIXED IN PR #622** - OMARCHY-D1-KEY-PATH: at ddf97f80, `VPNRouter.Core/Services/CrashReporter.cs:128,148` treats valid lowercase base64 secrets with short slash-separated runs as public paths. Commit 408a51b7 preserves only the fixed public package path; a canonical synthetic 32-byte-key regression and the existing package-path negative control pass in CI 40176568895/40176570811. Later source gate 1c2e8e57 is green; independent lead acceptance pending.
+- [x] **P1 FIXED IN PR #622** - OMARCHY-D1-PROBE-CONFIG-MODE: at ddf97f80, `VPNRouter.Core/Services/VlessDeepVerifier.cs:225` and `FreeConfigs/FreeConfigDeepVerifier.cs:111` write secret-bearing JSON in shared temp storage with umask-derived permissions. This predates the Linux delta but is reachable from Headless verify methods. Commit 74113e74 uses the existing private-file factory with CreateNew in both callers. Commit 1c2e8e57 adds `DeepVerifierConfigPermissionsTests.VerifyAsync_CreatesPrivateConfigBeforeSpawnAndDeletesItOnSpawnFailure`, observed passing in the Linux job of CI 40177760288 (Arch 40177761981 also green). The first test placement under HeadlessRuntimePolicyTests was excluded by the Linux filter and was restored. Free writer integration is source-reviewed; no real probe or live VPN run. Independent lead acceptance pending.
+
+## Linux backend lifecycle audit 2026-10-25
+
+- [ ] **P1** - OMARCHY-SHELL-SESSION-LIFETIME: owner/lead journal evidence at 09:59:58 MSK shows shell exit removing the active TUN and 56 routes. Plugin Service.qml starts a child with `--stdio`; launcher execs Headless. `Program.cs` owns RouterSession and `ProtocolServer.cs` treats stdin EOF as teardown. Linux kill-switch is unavailable; reconnect would leave a direct-traffic window. Deferred architecture change; compare service/socket, reconnect intent and warning in the D2 lifecycle note. Abrupt SIGKILL skips graceful cleanup and can leave auto_route ip rules; no live kernel-rule check in this round. Candidate implementation on `dsh/omarchy-session-lifetime-2026-10-25` and coordinated plugin lifetime branch: systemd user service owns the session, private same-UID Unix socket detaches client lifetime, stdio remains fallback. Candidate 2b1eb884: test CI 40181629309 and Arch 40181561680 green; VM service PID 143400, start timestamp and selected server survived shell restart, plugin reattached, second controller rejected. N4 L/M later exercised a real HY2 session across rescan and cold shell restart, preserving service/core PIDs and egress; N4 M installed r47/4ad09f87 with plugin b5eaee1. See phase-omarchy-n4-lifetime-2026-10-26.md. Keep open for independent lead/owner acceptance; another laptop and logout remain unverified.
+- [x] **P2 FIXED IN PR #622** - HEADLESS-SUBSCRIPTION-REFRESH-SILENT-FAILURE: at c1bafab1, `SubscriptionFetcher.RefreshEntryAsync` returns zero on HTTP/transport/empty-result failure while preserving cache; `SubscriptionFeature.RefreshAsync` ignores that result, saves and reports success. Plugin receives no structured failure. 04089901 adds safe `subscription_refresh_failed` code/message, cancellation precedence and atomic failure without saving candidates. Corrected fixture head 17752be7 passes eight offline wire/persistence scenarios in CI 40179759509 (41 Headless checks); Arch 40179761405 is green. Independent lead acceptance pending.
+- [x] **P3 FIXED IN PR #622** - HEADLESS-HISTORY-REFERENCES: at c1bafab1, Headless README links absent September evidence files; Headless AGENTS requires a dated resume plan and claims protocol text is still absent. Round4Checks/Round5Checks identify work rounds instead of protected behavior. 04089901 fixes the links/map, removes obsolete resume history and renames the checks to LinuxMetadataChecks/DesktopIdentityChecks. Explicit-substitution comparison preserves fixture bodies; both suites pass at 17752be7, fact_check reports zero broken links. Other distinct task receipts remain.
+- [x] **P3 FIXED IN PR #622** - HEADLESS-UNUSED-ADMISSION-HELPER: at c1bafab1, `ProtocolConstants.IsUrgentOrReadOnlyMethod` has no callers or registration, and lists snapshot as urgent even though ProtocolDispatcher treats it as ordinary. Confirmed with dead_names.py plus repository-wide name/registration search. 04089901 removes the obsolete helper; admission remains in ProtocolDispatcher. Headless dead_names reports zero remaining candidates; scoped builds/tests pass at 17752be7. This is not a whole-program reachability claim.
+
+## N4-X: inactive service upgrade race (2026-10-26, P2)
+
+Confirmed in the pre-upgrade hook: only active services were masked. A panel
+retry could start an inactive service while assemblies were being replaced.
+The hook now masks all existing user managers, persists prior restart intent
+across a retry, and restarts only previously active services after capabilities.
+Empty markers from an interrupted older hook remain restartable. Four new
+regression expectations fail against 4ad09f87; packaging checks pass after repair.
+
+## N4-L: shell-owned VPN lifetime (2026-10-26, P1, fixed on dsh/omarchy-n4-lifetime)
+
+Owner reported lost state after plugin reload on another Omarchy laptop. The
+stdio helper was a child of the shared shell; EOF disposed its owned VPN session.
+Headless now runs as a private user service; the plugin reattaches and gets a
+fresh snapshot. Live on omarchy-test (r45): rescanPlugins and a full shell restart
+kept the same service/core PIDs and exit IP. Logout is verified by unit reading
+only. See phase-omarchy-n4-lifetime-2026-10-26.md.
+
+## Omarchy N4 Linux DNS steering (2026-10-26, P1, fixed on dsh/omarchy-n4-net)
+
+Full-tunnel lookups used the DHCP resolver over the LAN (private route
+exclusions bypassed the generated DNS hijack). Headless now steers resolved to
+the TUN peer with routing domain `~.`; the Arch package ships a narrow polkit rule
+(VPNRouter-TUN, local active session only). Live r42: 3/3 lookups via the TUN,
+0 LAN port-53 packets.
+
+## Omarchy N4 native DNS helper retains TUN (2026-10-26, P1, fixed on dsh/omarchy-n4-net)
+
+sing-box 1.14 native DNS integration left a resolvectl child holding
+`/dev/net/tun` for up to 24.64 s after exit, so rapid restarts and connected MTU
+changes failed. Headless-generated Linux TUNs now set `dns_mode: disabled`; rapid restart 6/6, MTU
+1420 -> 1280 -> 1420 stays connected.
+
+## N4-U: repeated Linux authentication (2026-10-26)
+
+P2. Packaged Headless already refuses pkexec/sudo escalation via its runtime
+policy, but a stripped sing-box capability only said "reinstall". Headless now
+reports the exact one-time setcap repair command. The generic desktop Linux
+pkexec fallback (portable tarball/AppImage path) is unchanged on purpose.
+Evidence: phase-n4-auth-2026-10-26.md.
+
+## N4-M: DNS reapply races TUN restart (2026-10-26, P1, confirmed)
+
+Live r46/dce246bb: saving MTU 1280 from the plugin Settings keeps the
+tunnel connected but resolved loses its TUN DNS. LinuxDnsHardening queried
+the peer route before the replacement TUN routes appeared, selected ens18,
+and the narrow polkit rule correctly rejected that write. An uncached lookup
+then returned A+AAAA via ens18. Fix: wait briefly for a verified kernel TUN
+route, never mutate DNS on a physical link, and refresh the cleanup sentinel
+with that verified interface. Fixed in 4ad09f87: regression code is in LinuxDnsHardeningTests; exact-head test CI 40249714583 and Arch 40249712397 passed. N4 M records live r47 MTU 1420 -> 1280 -> 1420 and resolver recovery; this is scoped VM evidence.

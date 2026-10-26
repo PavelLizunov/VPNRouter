@@ -262,6 +262,9 @@ public class SingBoxInbound
     [JsonPropertyName("auto_route")]
     public bool AutoRoute { get; set; } = true;
 
+    [JsonPropertyName("dns_mode")]
+    public string? DnsMode { get; set; }
+
     [JsonPropertyName("strict_route")]
     public bool StrictRoute { get; set; } = false;
 
@@ -274,6 +277,14 @@ public class SingBoxInbound
 
     [JsonPropertyName("stack")]
     public string Stack { get; set; } = "system";
+
+    [JsonPropertyName("iproute2_table_index")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Iproute2TableIndex { get; set; }
+
+    [JsonPropertyName("iproute2_rule_index")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Iproute2RuleIndex { get; set; }
 }
 
 public class SingBoxOutbound

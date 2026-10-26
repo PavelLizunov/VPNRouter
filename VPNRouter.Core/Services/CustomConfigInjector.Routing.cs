@@ -4,6 +4,29 @@ namespace VPNRouter.Core.Services;
 
 public static partial class CustomConfigInjector
 {
+    private static void EnsureTunSelfRouteGuard(JsonObject config)
+    {
+        if (config["inbounds"] is not JsonArray inbounds || config["route"]?["rules"] is not JsonArray rules)
+            return;
+
+        var addresses = new JsonArray();
+        foreach (var inbound in inbounds.OfType<JsonObject>().Where(i => StjNodeHelpers.AsString(i["type"]) == "tun"))
+        {
+            if (inbound["address"] is JsonArray prefixes)
+                foreach (var prefix in prefixes) addresses.Add(prefix?.DeepClone());
+            else if (inbound["address"] is JsonValue prefix)
+                addresses.Add(prefix.DeepClone());
+        }
+        if (addresses.Count == 0) return;
+
+        // ICMP to a virtual peer must not be forwarded back through that TUN.
+        // This does not intercept DNS or ordinary private LAN destinations.
+        rules.Insert(0, new JsonObject
+        {
+            ["ip_cidr"] = addresses, ["network"] = "icmp", ["action"] = "reject"
+        });
+    }
+
     private static string FindProxyOutboundTag(JsonObject config)
     {
         if (config["outbounds"] is JsonArray outbounds)

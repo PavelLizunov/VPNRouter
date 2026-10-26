@@ -1,0 +1,11 @@
+// Allow the active local user to steer resolved on VPNRouter's own TUN only.
+// This does not authorize firewall changes or DNS changes on physical links.
+polkit.addRule(function(action, subject) {
+    if ((action.id == "org.freedesktop.resolve1.set-dns-servers" ||
+         action.id == "org.freedesktop.resolve1.set-domains" ||
+         action.id == "org.freedesktop.resolve1.revert") &&
+        action.lookup("interface") == "VPNRouter-TUN" &&
+        subject.local && subject.active) {
+        return polkit.Result.YES;
+    }
+});

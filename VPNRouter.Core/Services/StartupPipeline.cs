@@ -91,6 +91,9 @@ internal sealed class StartupPipeline
     private readonly IStartupHost _host;
     private readonly ISettingsStore _store;
     private readonly IWindowsDnsHardening _dnsHardening;
+    private SingBoxRuntimePolicy? _policy;
+
+    private SingBoxRuntimePolicy? EffectivePolicy => SingBoxRuntimePolicy.Capture(ref _policy);
 
     public static IHttpClient? WarmupHttp;
 
@@ -102,6 +105,7 @@ internal sealed class StartupPipeline
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _store = store ?? RealSettingsStore.Instance;
         _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
+        _policy = SingBoxRuntimePolicy.Current;
     }
 
     public async Task<StartupResult> ExecuteAsync(
@@ -109,6 +113,9 @@ internal sealed class StartupPipeline
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
+        var policy = EffectivePolicy;
+        using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
+        policy?.Authorize(SingBoxRuntimeOperation.Start);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var settings = context.Settings;
 
@@ -226,6 +233,15 @@ internal sealed class StartupPipeline
                     "excludes its subnet from TUN routing so they run side-by-side; proceeding. " +
                     "If routed apps lose internet, stop it and reconnect.",
                     c.ProcessName, c.Pid);
+            }
+
+            var foreignTun = ConflictingVpnDetector.DetectForeignFullTunnelTun(settings.Tun.InterfaceName, _host.Logger);
+            if (foreignTun.Count > 0)
+            {
+                throw new ConflictingVpnException(
+                    Array.Empty<ConflictingVpnDetector.ConflictingProcessInfo>(),
+                    $"Another VPN already routes all traffic through {foreignTun[0]}. " +
+                    "Turn it off before connecting VPNRouter.");
             }
         }
         else
@@ -393,7 +409,8 @@ internal sealed class StartupPipeline
             .Equals("full", StringComparison.OrdinalIgnoreCase);
         var profileName = settings.ActiveProfile;
 
-        if (string.IsNullOrEmpty(profileName) && !isFullTunnel && !isCustomConfig)
+        if (string.IsNullOrEmpty(profileName) && !isFullTunnel && !isCustomConfig
+            && !HasExplicitAppSelection(settings.App))
             throw new InvalidOperationException("No active profile specified in config.");
 
         if (SafeMode.Enabled)
@@ -438,6 +455,10 @@ internal sealed class StartupPipeline
         {
             activeProfile = new Profile { Name = "CustomConfig", DnsMode = "vpn_only" };
         }
+        else if (!isFullTunnel)
+        {
+            activeProfile = new Profile { Name = "SelectedApps", DnsMode = "vpn_only" };
+        }
         else
         {
             activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
@@ -445,6 +466,13 @@ internal sealed class StartupPipeline
 
         return activeProfile;
     }
+
+    // The Linux shell picks apps directly instead of a profile; the app list
+    // alone then defines split routing.
+    private static bool HasExplicitAppSelection(AppConfig app)
+        => string.Equals(app.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase)
+            || app.RoutingAppsIncludeInitialized
+            || app.RoutingAppsInclude?.Count > 0;
 
     private static void AddCustomAppsToProfile(Profile activeProfile, AppSettings settings)
     {
@@ -699,6 +727,9 @@ internal sealed class StartupPipeline
 
     private void DeploySingBoxBinary(AppSettings settings)
     {
+        if (EffectivePolicy != null)
+            return;
+
         var exePath = OperatingSystem.IsWindows()
             ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
             : AppPaths.SingBoxExePath;

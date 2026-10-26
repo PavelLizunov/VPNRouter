@@ -1,0 +1,75 @@
+# Keep managed assemblies and their running service from straddling package versions.
+_vpnrouter_upgrade_state=/run/vpnrouter-headless-upgrade
+
+_vpnrouter_managers() {
+    local directory uid
+    for directory in /run/user/[0-9]*; do
+        uid=${directory##*/}
+        [[ "$uid" =~ ^[0-9]+$ && -S "$directory/bus" ]] && printf '%s\n' "$uid"
+    done
+    return 0
+}
+
+_vpnrouter_userctl() {
+    local uid=$1 account
+    shift
+    account=$(getent passwd "$uid") || return 1
+    account=${account%%:*}
+    local -a unit=(vpnrouter-headless.service)
+    [[ "$1" == daemon-reload ]] && unit=()
+    timeout 50s runuser -u "$account" -- env \
+        XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+        systemctl --user "$@" "${unit[@]}"
+}
+
+_vpnrouter_quiesce() {
+    local uid
+    install -d -m 700 "$_vpnrouter_upgrade_state"
+    while read -r uid; do
+        if [[ ! -f "$_vpnrouter_upgrade_state/$uid" ]]; then
+            # A pre-existing caller-owned runtime mask already prevents startup.
+            # Do not claim it and later remove it as our transaction's mask.
+            if [[ $(_vpnrouter_userctl "$uid" is-enabled 2>/dev/null) == masked-runtime ]]; then
+                continue
+            fi
+            if _vpnrouter_userctl "$uid" is-active --quiet; then
+                printf '%s\n' yes > "$_vpnrouter_upgrade_state/$uid"
+            else
+                printf '%s\n' no > "$_vpnrouter_upgrade_state/$uid"
+            fi
+        fi
+        # Inactive services can race extraction too: the panel retries startup.
+        # Mask every manager, and remember which services need an explicit restart.
+        _vpnrouter_userctl "$uid" mask --runtime --now || return 1
+    done < <(_vpnrouter_managers)
+}
+
+_vpnrouter_resume() {
+    local restart=$1 marker uid
+    for marker in "$_vpnrouter_upgrade_state"/[0-9]*; do
+        [[ -f "$marker" ]] || continue
+        uid=${marker##*/}
+        _vpnrouter_userctl "$uid" unmask --runtime || continue
+        # daemon-reload takes no unit argument.
+        _vpnrouter_userctl "$uid" daemon-reload
+        if [[ "$restart" == yes && $(cat "$marker") != no ]]; then
+            _vpnrouter_userctl "$uid" start || continue
+        fi
+        rm -f "$marker"
+    done
+    rmdir "$_vpnrouter_upgrade_state" 2>/dev/null || true
+}
+
+pre_upgrade() { _vpnrouter_quiesce; }
+pre_remove() { _vpnrouter_quiesce; }
+
+post_install() {
+    setcap cap_net_admin,cap_net_raw+ep /usr/lib/vpnrouter-headless/runtime/sing-box
+}
+
+post_upgrade() {
+    post_install
+    _vpnrouter_resume yes
+}
+
+post_remove() { _vpnrouter_resume no; }

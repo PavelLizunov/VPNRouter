@@ -198,6 +198,25 @@ internal sealed class ProcessHandle : IProcessHandle
         catch { }
     }
 
+    public void Terminate()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Kill(entireProcessTree: false);
+            return;
+        }
+        try
+        {
+            if (!_process.HasExited) SendSignal(_process.Id, SigTerm);
+        }
+        catch { }
+    }
+
+    private const int SigTerm = 15;
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "kill", SetLastError = true)]
+    private static extern int SendSignal(int pid, int signal);
+
     public ProcessSnapshot? TryGetSnapshot()
     {
         try

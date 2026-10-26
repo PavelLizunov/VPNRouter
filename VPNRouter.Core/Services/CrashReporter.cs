@@ -133,7 +133,9 @@ public static class CrashReporter
                 ? $"{m.Groups[1].Value}{m.Groups[2].Value}/[redacted]"
                 : $"{m.Groups[1].Value}{m.Groups[2].Value}");
         s = _uuidPattern.Replace(s, "<uuid>");
-        s = _longBase64Pattern.Replace(s, "<key>");
+        // Only this public package path is exempt; lowercase slash-separated tokens can be keys.
+        s = _longBase64Pattern.Replace(s, m =>
+            "/" + m.Value == SingBoxRuntimePolicy.PackagedExecutablePath ? m.Value : "<key>");
         s = _tokenParamPattern.Replace(s, m => $"{m.Groups[1].Value}{m.Groups[2].Value}=[REDACTED]");
         return s;
     }

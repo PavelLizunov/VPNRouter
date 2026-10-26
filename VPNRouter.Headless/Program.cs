@@ -1,0 +1,163 @@
+using System.Runtime.InteropServices;
+using Serilog;
+using VPNRouter.Core;
+using VPNRouter.Core.Services;
+using VPNRouter.Headless.Protocol;
+
+namespace VPNRouter.Headless;
+
+public static class Program
+{
+    public static async Task<int> Main(string[] args)
+    {
+        bool stdioMode = false;
+        bool serviceMode = false;
+        bool attachMode = false;
+        string? dataDir = null;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            string arg = args[i];
+            if (arg == "--stdio")
+            {
+                stdioMode = true;
+            }
+            else if (arg == "--service") serviceMode = true;
+            else if (arg == "--attach") attachMode = true;
+            else if (arg == "--data-dir")
+            {
+                if (i + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine("Error: --data-dir requires an absolute path argument.");
+                    return 1;
+                }
+
+                dataDir = args[++i];
+                if (!Path.IsPathRooted(dataDir))
+                {
+                    Console.Error.WriteLine("Error: --data-dir must be an absolute path.");
+                    return 1;
+                }
+            }
+            else
+            {
+                // Must not echo secret or untrusted input from argv
+                Console.Error.WriteLine("Error: Unknown argument.");
+                PrintUsage();
+                return 1;
+            }
+        }
+
+        if ((stdioMode ? 1 : 0) + (serviceMode ? 1 : 0) + (attachMode ? 1 : 0) != 1 ||
+            (attachMode && dataDir != null) || ((serviceMode || attachMode) && !OperatingSystem.IsLinux()))
+        {
+            PrintUsage();
+            return 1;
+        }
+
+        using var cts = new CancellationTokenSource();
+
+        Console.CancelKeyPress += (sender, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            cts.Cancel();
+        };
+
+        PosixSignalRegistration? sigtermRegistration = null;
+        PosixSignalRegistration? sigintRegistration = null;
+        PosixSignalRegistration? sigquitRegistration = null;
+
+        if (!OperatingSystem.IsWindows())
+        {
+            try
+            {
+                sigtermRegistration = PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+                {
+                    context.Cancel = true;
+                    cts.Cancel();
+                });
+                sigintRegistration = PosixSignalRegistration.Create(PosixSignal.SIGINT, context =>
+                {
+                    context.Cancel = true;
+                    cts.Cancel();
+                });
+                sigquitRegistration = PosixSignalRegistration.Create(PosixSignal.SIGQUIT, context =>
+                {
+                    context.Cancel = true;
+                    cts.Cancel();
+                });
+            }
+            catch (PlatformNotSupportedException)
+            {
+                // PosixSignalRegistration not supported on this platform
+            }
+        }
+
+        using var sigtermScope = sigtermRegistration;
+        using var sigintScope = sigintRegistration;
+        using var sigquitScope = sigquitRegistration;
+        using var policyScope = OperatingSystem.IsLinux()
+            ? SingBoxRuntimePolicy.EnterScope(SingBoxRuntimePolicy.Current ?? SingBoxRuntimePolicy.DefaultProduction)
+            : null;
+
+        try
+        {
+            if (attachMode)
+                return await UnixSocketClient.RunAsync(UnixSocketSecurity.DefaultSocketPath(),
+                    Console.OpenStandardInput(), Console.OpenStandardOutput(), cts.Token).ConfigureAwait(false);
+
+            // Override AppPaths before creating session as required by lifecycle and storage contracts
+            if (!string.IsNullOrWhiteSpace(dataDir))
+            {
+                AppPaths.OverrideDataDir(Path.GetFullPath(dataDir));
+            }
+
+            using var stdioLease = stdioMode && OperatingSystem.IsLinux()
+                ? UnixSocketSecurity.AcquireExistingSessionLock(AppPaths.DataDir) : null;
+
+            // stdout carries the protocol, so diagnostics go to a private file.
+            // Errors only: snapshots log warnings, and read-only requests must not create data.
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Error()
+                .WriteTo.Sink(new Lifecycle.PrivateFileLogSink(Path.Combine(AppPaths.LogsDir, "headless.log")))
+                .CreateLogger();
+
+            if (serviceMode)
+            {
+                var service = new UnixSocketServer(() => CreateHandler(dataDir),
+                    UnixSocketSecurity.DefaultSocketPath(), AppPaths.DataDir);
+                return await service.RunAsync(cts.Token).ConfigureAwait(false);
+            }
+            await using var handler = CreateHandler(dataDir);
+            await using var server = new ProtocolServer(handler, Console.OpenStandardInput(), Console.OpenStandardOutput());
+
+            return await server.RunAsync(cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Fatal error in headless service: {ex.GetType().Name}");
+            return 1;
+        }
+    }
+
+    private static IProtocolHandler CreateHandler(string? dataDir)
+    {
+        var session = new RouterSession();
+        try { return new RouterBackendHandler(new RouterBackend(session, dataDir)); }
+        catch
+        {
+            session.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            throw;
+        }
+    }
+
+    private static void PrintUsage()
+    {
+        Console.Error.WriteLine("Usage: VPNRouter.Headless (--stdio | --service) [--data-dir ABSOLUTE_PATH] | --attach");
+        Console.Error.WriteLine("Runs NDJSON over standard I/O, a private Linux socket, or attaches to the user service.");
+    }
+}
