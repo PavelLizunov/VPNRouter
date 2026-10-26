@@ -673,8 +673,13 @@ internal sealed class SingBoxRuntimePolicy
         return size >= 0 && size <= data.Length && HasEffectiveNetAdmin(data.AsSpan(0, (int)size));
     }
 
+    internal static Func<string, bool>? HasNetAdminCapabilityOverrideForTests { get; set; }
+
     internal static bool HasNetAdminCapability(string path)
     {
+        if (HasNetAdminCapabilityOverrideForTests != null)
+            return HasNetAdminCapabilityOverrideForTests(path);
+
         try
         {
             int fd = Open(path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC, 0);
