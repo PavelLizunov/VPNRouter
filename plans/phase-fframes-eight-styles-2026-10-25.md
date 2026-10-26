@@ -948,3 +948,71 @@ system was found. Each style has a deliberate visual mechanism:
   both frozen manifests (13 assets). Native build/smoke/observation, actual exact-SHA
   CI and outcome remain PENDING; these checks alone do not establish transparency,
   reproduction, historical binary identity, a fix or measured acceleration.
+
+### Bounded importer CI outcome - 2026-10-26
+
+- Implementation `d3abd0b3573a18e9bc829bf6fe25f950315f4d7c` was committed with
+  ordinary hooks and pushed once. Exact local/remote/PR heads matched. Disposable
+  [run 40359957912](https://github.com/PavelLizunov/VPNRouter/actions/runs/40359957912)
+  succeeded in 16m03s; all seven ordinary PR checks at that head also passed and
+  render-film was intentionally skipped. No extra native submission or retry occurred.
+- Preflight before prerequisites/build: four logical CPUs, load1 0.383/0.922,
+  available RAM 14.269/14.397 GiB, used swap 0 GiB, free disk 85.337/84.537 GiB,
+  no conflicting jobs. Rust/Cargo 1.99.0, clang 18.1.3 and GCC 13.3.0 were recorded.
+  Both fresh x264 libraries, the public probe and locked Rust adapter compiled in
+  disposable CI; release Cargo build took 13m35s. No workstation native build,
+  render or decode was used. Fresh FFmpeg source HEAD `6882969c` was recorded,
+  not retroactively bound to the historical failing binary.
+- Native and decoded-byte transparency passed for the three synthetic controls
+  (plain/instrumented-off/on) and selected plain/instrumented film pair. Each target
+  retains exactly 24 original claims/PTS 768-791. Actual loader initialization selects
+  the isolated library. Public input/named-state/header/flush/call sequences match
+  both saved historical ID33 traces. Fresh libraries and cold allocator/cache history
+  are not the historical binary/state; complete semantic input equality is unproven.
+- Terminal result is `NO_REPRODUCTION`: the two prospective instrumented lifetimes
+  have equal visible I420 entry planes, coded NV12 Y864x480/UV864x240 rectangles,
+  returned native NALs and 24 decoded rows. All three fresh target MP4s are identical.
+  Fresh native output matches historical batch 1, not batch 0; this does not identify
+  the historical cause. The required stop is reached: no native retry, follow-up
+  search or repeated all-eight films. No fix or optimization follows from this result.
+- Artifact `12669620506` is 233474503 bytes / 113 entries with SHA256
+  `6e0cc25044f2ec79dbde871a626043ae9cf27048115a7334349cf1daf76df5ae`.
+  Original historical ZIP also matches its retained digest. Lead checks recompute
+  public/internal comparisons, retained identities, actual loader selection and saved
+  same-file redecode stability. All 72 actual MP4 packets bind to native slice tuples;
+  complete SPS/PPS/SEI header aggregates also bind after AVCC/Annex-B reconstruction.
+  Initial direct comparisons failed on framing and the SEI three-byte prefix; the
+  corrected bridge and failed hypotheses are retained without changing operands.
+- Independent saved-data reviewer `5982a9d8-9b3c-4d8f-b17a-53e0085baeee` completed
+  a read-only audit with no new result-invalidating gap. Separate raw TSV projection,
+  MP4 stsz/stsc/stco sample parsing, all 72 packet/native joins, full header binding,
+  archive CRC/extracted bytes, load identities and all 27 frozen inputs agree.
+  [Review report](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/independent-result-review.md>)
+  SHA256 is `131654eeb2d06d9ca78eea7f25f0e0f656234b956331d547b9a1406f14558dfe`.
+  Saved decode/redecode reports are equal; this review did not execute a new decode
+  or rehash raw pixels. The public probe also remains active in the plain control;
+  no completely unobserved full-film transparency pair is claimed.
+- Local evidence retains the original archive/logs in the
+  [run receipt](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/run-40359957912/actions-run.json>),
+  [lead comparison](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/result-verification.json>)
+  and [header/container binding](<../tools/help-videos/fframes-vpnrouter/out/native-importer-20261026/header-and-container-binding.json>).
+  Earlier source-only PENDING/native-untested notes above are historical snapshots,
+  superseded only for this bounded fixture. Capture still excludes row tails, outer
+  bands, optional pointees and unrecorded state. Historical input bytes are absent.
+- Gates: native build/smoke/acquisition PASS; 14 new contracts plus 11 boundary,
+  seven evaluator and three workflow tests PASS; documentation reconciled; independent
+  source/result review PASS within its limits; product/UI/installed-app/release N/A;
+  bounded transparency and implementation exact-head CI PASS. Defect reproduction is
+  NOT REPRODUCED, not a repaired baseline. Outcome-checkpoint CI is a separate gate.
+- Documentation-only checkpoint intent: publish only this outcome and its task-owned
+  defect-ledger continuation, preserve excluded music work and an empty prior index,
+  and reconcile the ignored running-state pointer to the completed receipts. Verify
+  scoped bytes/links/locks and ordinary new-head PR CI; do not touch native trigger
+  paths or dispatch jobs. New-head CI is pending at this precommit snapshot; retain
+  its final receipt and PR update without implying another native experiment.
+- Baseline, best candidate, confirmation and speedup remain absent; attempts 0/10.
+  Keep `FFRAMES-BASELINE-REPEATABILITY` open. Reopening native diagnosis requires a
+  separate owner scope because stop-on-no-reproduction ended this tranche. No
+  authority to relax equality, change encoder settings or rerun full films follows.
+  Rollback remains a scoped history-preserving revert of the isolated diagnostic
+  commit, preserving evidence, locks, deliveries and unrelated work.
