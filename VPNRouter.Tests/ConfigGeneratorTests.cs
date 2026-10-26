@@ -9,6 +9,7 @@ public class ConfigGeneratorTests
     [Fact]
     public void LinuxTun_DnsIsOwnedByTheApplication_NotNativeInteractiveHelpers()
     {
+        using var scope = SingBoxRuntimePolicy.EnterScope(SingBoxRuntimePolicy.DefaultProduction);
         var config = ConfigGenerator.Generate(CreateProfile(), [], CreateSettings());
         Assert.Equal(OperatingSystem.IsLinux() ? "disabled" : null, config.Inbounds.Single().DnsMode);
         Assert.Contains(config.Route.Rules, rule => rule.Action == "hijack-dns");
@@ -17,6 +18,15 @@ public class ConfigGeneratorTests
             Assert.Contains("\"dns_mode\": \"disabled\"", json);
         else
             Assert.DoesNotContain("\"dns_mode\"", json);
+    }
+
+    [Fact]
+    public void Tun_NativeDnsIsPreservedOutsideHeadless()
+    {
+        Assert.Null(SingBoxRuntimePolicy.Current);
+        var config = ConfigGenerator.Generate(CreateProfile(), [], CreateSettings());
+        Assert.Null(config.Inbounds.Single().DnsMode);
+        Assert.DoesNotContain("\"dns_mode\"", ConfigGenerator.Serialize(config));
     }
 
     private static AppSettings CreateSettings(int serverCount = 1)

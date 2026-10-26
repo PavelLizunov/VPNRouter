@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2 FIXED ON N4-X BRANCH** - N4-X-DESKTOP-DNS-SCOPE: Linux-wide dns_mode=disabled removed native resolver integration from desktop/CLI packages that do not ship the Arch Headless polkit grant; ConfigGenerator.cs:176 and packaging/linux/postinst. Limit implicit DNS replacement to Headless runtime-policy context, preserving other frontends; generated-config regression added, exact-head CI pending.
+
 - [x] **P1 FIXED ON N4-X BRANCH** - N4-X-DNS-OWNERSHIP: competing Headless construction/disposal can restore an active service DNS sentinel before data-lock refusal; `Program.cs:122`, `VpnEngine.cs:160`, `UnixSocketServer.cs:27`; lock-before-factory and existing-lease stdio refusal implemented; regression CI/live evidence in phase-n4-x-review-2026-10-26.md and external X.md.
 - [x] **P2 FIXED IN DOCUMENTATION** - N4-X-LEGACY-UPGRADE: package service masking does not quiesce the old shell-owned stdio helper; document disable/stop before replacing old assemblies and remove the concurrent stdio diagnostic example.
 

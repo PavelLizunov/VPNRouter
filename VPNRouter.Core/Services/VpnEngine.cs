@@ -253,8 +253,9 @@ public partial class VpnEngine : IDisposable
     private void ApplyUnixDnsSettings(AppSettings settings)
     {
         var isLinux = OperatingSystem.IsLinux();
+        var managesLinuxDns = isLinux && EffectivePolicy != null;
         if (settings.App.DnsLeakLockdown
-            || (isLinux && Platform.Linux.LinuxDnsHardening.ShouldSteerResolver(settings)))
+            || (managesLinuxDns && Platform.Linux.LinuxDnsHardening.ShouldSteerResolver(settings)))
         {
             try
             {
@@ -269,7 +270,7 @@ public partial class VpnEngine : IDisposable
                 _logger?.Warning(ex, "[VpnEngine] Unix DNS hardening Apply failed (non-fatal)");
             }
         }
-        else
+        else if (managesLinuxDns)
         {
             _unixDns.Restore(_logger);
         }

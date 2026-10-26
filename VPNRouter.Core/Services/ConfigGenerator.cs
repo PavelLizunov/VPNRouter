@@ -171,9 +171,11 @@ public static partial class ConfigGenerator
                 AutoRoute               = settings.Tun.AutoRoute,
                 // Since 1.14, sing-box also runs native resolvectl helpers by default.
                 // They can prompt and retain the TUN fd after exit, breaking immediate
-                // restarts. Our Unix DNS adapter owns noninteractive resolver steering;
-                // the explicit hijack-dns route below still handles captured DNS.
-                DnsMode                 = OperatingSystem.IsLinux() ? "disabled" : null,
+                // restarts. Headless owns noninteractive steering and ships its DNS
+                // grant. Other Linux frontends retain native DNS until they provide
+                // equivalent integration. Explicit hijack-dns routing stays enabled.
+                DnsMode                 = OperatingSystem.IsLinux() && SingBoxRuntimePolicy.Current != null
+                                            ? "disabled" : null,
                 StrictRoute             = false,
                 RouteExcludeAddress     = routeExcludes.Count > 0
                                             ? routeExcludes

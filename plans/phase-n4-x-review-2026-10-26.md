@@ -46,3 +46,12 @@ Backend .NET/Arch CI and final VM consumer gate: pending, recorded in external X
 The first plugin packaging run saw installed-host backend/processes; the isolated
 PID/network/filesystem run passed without touching that backend.
 Windows/macOS live and graphical logout: N/A to this bounded VM round.
+
+## Shared desktop Linux follow-up
+
+Source review confirmed that dns_mode=disabled was emitted for every Linux
+frontend, but packaging/linux/postinst does not ship the Arch Headless resolved
+grant. Preserve native DNS for desktop/CLI and restrict the automatic managed
+resolver replacement to the existing Headless runtime-policy context. Explicit
+DnsLeakLockdown behavior remains available. Add a generated JSON regression for
+non-Headless context and scope the original Headless test explicitly.

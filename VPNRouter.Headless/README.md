@@ -192,6 +192,6 @@ limit; VPN intent is never replayed. Package upgrades quiesce active services
 before file replacement and start a fresh disconnected session afterwards. See
 [Arch lifecycle handling](../packaging/arch/README.md#install-and-verify).
 
-Generated Linux TUNs disable sing-box's implicit native-DNS helper. VPNRouter owns
+Headless-generated Linux TUNs disable sing-box's implicit native-DNS helper. VPNRouter owns
 resolver changes with noninteractive commands; a helper waiting for polkit must
 not retain the TUN device across a settings restart.
