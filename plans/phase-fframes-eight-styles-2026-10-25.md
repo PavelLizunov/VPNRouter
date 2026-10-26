@@ -832,3 +832,34 @@ system was found. Each style has a deliberate visual mechanism:
   is a scoped history-preserving revert of this record update only, keeping evidence
   and unrelated work. Strict baseline remains unaccepted, best null, attempts 0/10;
   there is no measured acceleration, accepted candidate or confirmation.
+
+### Post-mod16 follow-up and missing-CI recovery
+
+- The source/data follow-up at `6b2e006020267f204f917f01b0c39903648cc1d3`
+  checked AQ and lowres, with two independent read-only reviews and ten passing
+  Python model checks. Conditional AVX512 AQ original-frame loads fit the coded
+  rectangle; extra scratch lanes are discarded. AVX2 lowres reads farther-right
+  slack, but only overwritten extra outputs depend on it. Actual native dispatch
+  and root cause remain unproven. Evidence: `out/repeatability-analysis/postmod16-6b2e/`.
+- Standard CI did not register at that head; manual source guard `40330938748`
+  passed. Exact remote main is `fbae13f558837e847c467904e5e1d9ebfb3cb55b`;
+  read-only merge simulation confirms one conflict in OPEN-DEFECTS.md because
+  both branches insert unrelated sections after Open. The PR reports dirty and
+  its saved merge ref still names previous head `a3690437`; REST base metadata is
+  stale relative to the actual remote main. This is not a failing test result.
+- Recovery intent: relocate only committed fframes ledger sections to the end of
+  Open, preserving their exact text and all statuses. Do not merge/rebase main,
+  alter product/workflow/evaluator/media bytes, include music work or rerender.
+  Verify byte-preserved sections, unrelated files, empty prior index, synthetic
+  conflict-free merge, scoped diff and actual new-head PR checks. No manual build
+  or native diagnostic dispatch. Missing CI recovery is not a performance attempt.
+- Risk: incorrect ledger placement or accidental inclusion of unrelated additions.
+  Independent source review checks scope/preservation before commit. Rollback is
+  a scoped history-preserving revert of this documentation-only recovery; keep
+  evidence and evaluator locks. Build/UI/media gates N/A for changed behavior;
+  ordinary exact-head PR CI remains required. Baseline/best null, attempts 0/10.
+- Recovery checks: synthetic merge against exact current main is conflict-free;
+  moved text/line multiset and the release gate's open P0/P1 set are unchanged.
+  Both evaluator manifests verify (13 files), unrelated file hashes match and
+  only the two task records are intended for commit. Independent review and new-
+  head CI are pending; no runtime or acceleration claim follows.
