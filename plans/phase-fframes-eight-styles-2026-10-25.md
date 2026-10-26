@@ -1016,3 +1016,68 @@ system was found. Each style has a deliberate visual mechanism:
   authority to relax equality, change encoder settings or rerun full films follows.
   Rollback remains a scoped history-preserving revert of the isolated diagnostic
   commit, preserving evidence, locks, deliveries and unrelated work.
+
+### Authorized full-history recovery diagnosis - 2026-10-26
+
+- A later direct owner instruction authorizes a new finite disposable-CI diagnosis
+  and strict-baseline recovery stage beyond the completed 24-frame tranche. It
+  supersedes that stop only for this new scope, not for unbounded retries or an
+  unchanged eight-style campaign. The performance objective remains incomplete.
+- Why: the cold reduced fixture omitted the original worker/converter/cache history.
+  Source review also finds two unobserved quantization boundaries: MB-tree rewrites
+  initial AQ offsets, and fractional float `rc->qpm` can differ while rounded slice
+  QP agrees. Neither mechanism is an observed explanation of the historical fault.
+- What: add only `.github/full-history-observation/`, its dedicated push-triggered
+  workflow, this task continuation and attributable ledger findings. Reuse the
+  unchanged public boundary observer and frozen source `ac5ac03c4475c32dea13738e5941db00115c8da6`.
+  Do not edit existing diagnostic triggers, either evaluator lock, exporter, film
+  source, media, licenses, Cargo.lock, padding or delivered previews/music work.
+- How: build matched fresh plain/instrumented r3108 libraries in one disposable
+  exact-SHA Ubuntu CI job after recorded capacity/SDK preflights. Use the ORIGINAL
+  film binary and full anime render command at scale 0.4444444444444444, frames
+  0-1079, one original worker and all 45 original 24-frame encoder lifetimes.
+  Keep final concat and persistent worker/converter/pool caches; do not use the
+  reduced adapter, skip preceding rasterization or restart the worker per claim.
+- Hard execution cap: three synthetic processes (plain, instrumented-off/on), each
+  with two consecutive 24-frame lifetimes, followed by full anime P/plain, A/on,
+  B/on. Total at most six processes, 3384 frames and 141 closed lifetimes, including
+  3240 film frames / 135 film lifetimes. No native retry, editorial/kinetic or
+  all-eight expansion. B runs only after synthetic gates, full P/A transparency
+  and historical observed-input/settings binding pass. P still has the public
+  probe; this is not completely unobserved transparency or historical binary replay.
+- Observations: visible I420 entry; actual post-mod16 NV12 Y864x480/UV864x240;
+  both initialized 1620-element float offset arrays after AQ and before slices,
+  after lookahead/MB-tree; source-visible raw float qpm plus type/reference/slice
+  identity at its source-defined observation point. Assert no-VBV stability or
+  stop rather than label one snapshot the consumed per-MB state. Hash raw typed
+  bytes, not decimals, cast values, pointers, struct padding or arbitrary borders.
+  Bind added allocation/type/stage/consumer source members and unique anchors.
+- Retention: exclusive run/operand namespaces; original historical ZIP and traces;
+  all 45 segment files and final concat per film; both decodes, native/header/
+  packet operands; exact executable/library/source/build/loader identity and logs;
+  partial/failing evidence before assertions, always uploaded. For A/B retain
+  packed entry/coded rectangles (1335916800 bytes per film, 2671833600 total before
+  compression), typed AQ/pre-slice array bytes and exact qpm bits. Preflight must
+  reserve that storage plus build/media/evidence headroom; do not clear caches.
+- Gates: disposable native build/smoke PENDING; source/parser/driver mutation
+  contracts PENDING; task/ledger/outcome PENDING; independent native bounds and
+  orchestration/retention review PENDING; installed-app/UI/release N/A; strict
+  source/input/output transparency, full 45-lifetime accounting, saved packet/header
+  bindings and exact-head ordinary PR CI PENDING. Full .NET tests are ordinary PR
+  checks, not evidence of native repeatability. No workstation build/render/decode.
+- Stop on missing evidence, unsupported source/settings/geometry, same-file decode
+  instability, historical observed-input mismatch or P/A transparency failure.
+  P/A mismatch is observer failure OR natural variation, not causal attribution.
+  After B, classify entry/coded/AQ/MB-tree/qpm/downstream boundaries only when the
+  comparison supports them; absent divergence is `NO_REPRODUCTION_FULL_HISTORY`
+  and ends this experiment. No extra run may be added to obtain a preferred result.
+- Strict recovery remains separate: anime equality alone cannot accept the
+  full-workload baseline. Any evaluator retention repair needs a reviewed linked
+  replacement lock, unchanged strict video/PCM equality and fresh full-workload
+  operands; preserve both old locks. This job emits no quality/measurement receipt,
+  baseline, best, confirmation or speedup. Candidates remain 0/10.
+- Risk/rollback: raw capture and hooks can perturb I/O/allocation; transparency
+  can fail even under natural variation, and fresh build/process history is not
+  the historical heap/library/cache state. Preserve all outcomes and limitations.
+  Revert only attributable diagnostic commits with history-preserving revert;
+  retain evidence, evaluator locks, original deliveries and unrelated work.
