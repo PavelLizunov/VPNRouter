@@ -878,3 +878,31 @@ system was found. Each style has a deliberate visual mechanism:
   are null, candidates 0/10; no acceleration is established. Further native
   importer-boundary capture needs a separately authorized exact-SHA disposable
   execution tranche with capacity/SDK preflight; no capture is implemented here.
+
+### Authorized bounded importer observation - 2026-10-26
+
+- Owner explicitly selected the limited native tranche after CI recovery: one
+  exact-SHA disposable GitHub CI experiment, resource/SDK preflight first, isolated
+  instrumented x264 with transparency checks, then importer-entry/post-mod16
+  coded-plane observation for one affected 24-frame lifetime. Stop on failed
+  transparency or absent reproduction; do not expand to repeated all-eight films.
+- Scope: new isolated importer diagnostic source/tests/workflow and this task
+  record/ledger only. Keep frozen source `ac5ac03c`, both evaluator locks, encoder
+  settings, delivered previews, media and unrelated music work unchanged. No
+  workstation native execution, upstream/product fix, padding normalization,
+  buffer replacement, arbitrary-stride/optional-pointee reads or 1080p final.
+- Plan: verify a source-faithful single-segment fixture, bind source/build/loaded
+  library identity, add bounded entry/coded-plane observations, verify transparent
+  plain/instrumented output, then retain every comparison operand even on failure.
+  A new diagnostic build is not the historical distro binary. If the existing
+  API cannot preserve segment timestamps/settings, report that concrete blocker
+  instead of silently changing the workload or rendering a whole film.
+- Gates: build/native smoke PENDING on disposable CI only; lightweight Python
+  contract/negative checks PENDING; documentation/outcome PENDING; independent
+  correctness/capture/release-boundary review PENDING; installed-app/UI N/A;
+  source/input/output transparency and exact-head ordinary PR CI PENDING. Baseline
+  acceptance, optimization candidates and confirmation remain separate and absent.
+- Risk/rollback: observation can perturb native allocation/state, and a reduced
+  fixture may not reproduce. Retain plain controls, identities, hashes and failure
+  evidence; do not infer a fix from equality. Revert only the isolated diagnostic
+  commit if rejected, preserving history/evidence and all unrelated work.
