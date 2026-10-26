@@ -862,4 +862,19 @@ system was found. Each style has a deliberate visual mechanism:
   moved text/line multiset and the release gate's open P0/P1 set are unchanged.
   Both evaluator manifests verify (13 files), unrelated file hashes match and
   only the two task records are intended for commit. Independent review and new-
-  head CI are pending; no runtime or acceleration claim follows.
+  head CI were pending when this recovery snapshot was prepared; see the outcome.
+- Recovery outcome (2026-10-26): both bounded read-only reviewers passed the final
+  two-document snapshot. Ordinary commit/push `e6c5905d39bef5ab55ce99da684d0f680f664a73`
+  matches that reviewed tree, with the existing repository hooks enabled and no
+  bypass. Local, remote and PR heads match; unrelated music bytes remain dirty
+  and uncommitted, with an empty index. GitHub reports MERGEABLE without merging
+  or rebasing main. Exact-head PR run `40342684204` passed: test 3m35s,
+  characterization-windows 7m27s, go-test-windows 44s, headless-contract 49s,
+  headless-publish 28s and packaging-arch 7s; source guard `40342684035` passed
+  in 5s. Render-film was intentionally skipped; no manual build/native diagnostic
+  was dispatched. Receipts: `out/repeatability-analysis/ci-recovery-6b2e/`, with
+  `simulation-v2.json` superseding earlier ledger-only snapshots. The eight open
+  fframes findings and sole open P0/P1 baseline remain unchanged. Baseline/best
+  are null, candidates 0/10; no acceleration is established. Further native
+  importer-boundary capture needs a separately authorized exact-SHA disposable
+  execution tranche with capacity/SDK preflight; no capture is implemented here.
