@@ -196,7 +196,12 @@ Headless and sing-box receive SIGTERM before final cgroup SIGKILL. It is part of
 `graphical-session.target`, independent of shell process lifetime, and stops on
 logout. Failed services restart with a two-second delay and a three-start/minute
 limit; VPN intent is never replayed. Package upgrades quiesce active services
-before file replacement and start a fresh disconnected session afterwards. See
+before file replacement and start a fresh disconnected session afterwards. At
+default-data Linux startup, Headless also gives superseded stdio helpers up to
+20 seconds to exit and reclaims packaged engines using the same default config
+when no live owner remains. Recovery runs after the available session leases;
+explicit data directories and attach clients do not run it. This is cleanup,
+not automatic reconnection. See
 [Arch lifecycle handling](../packaging/arch/README.md#install-and-verify).
 
 Headless-generated Linux TUNs disable sing-box's implicit native-DNS helper. VPNRouter owns

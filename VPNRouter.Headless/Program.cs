@@ -122,17 +122,13 @@ public static class Program
                 .WriteTo.Sink(new Lifecycle.PrivateFileLogSink(Path.Combine(AppPaths.LogsDir, "headless.log")))
                 .CreateLogger();
 
-            // A helper or sing-box left by an earlier instance would otherwise block every connect.
-            if (OperatingSystem.IsLinux() && string.IsNullOrWhiteSpace(dataDir))
-                await Lifecycle.LinuxStaleRuntimeReclaimer.ReclaimAsync(Log.Logger, cts.Token).ConfigureAwait(false);
-
             if (serviceMode)
             {
-                var service = new UnixSocketServer(() => CreateHandler(dataDir),
+                var service = new UnixSocketServer(() => CreateHandler(dataDir, cts.Token),
                     UnixSocketSecurity.DefaultSocketPath(), AppPaths.DataDir);
                 return await service.RunAsync(cts.Token).ConfigureAwait(false);
             }
-            await using var handler = CreateHandler(dataDir);
+            await using var handler = CreateHandler(dataDir, cts.Token);
             await using var server = new ProtocolServer(handler, Console.OpenStandardInput(), Console.OpenStandardOutput());
 
             return await server.RunAsync(cts.Token).ConfigureAwait(false);
@@ -148,8 +144,13 @@ public static class Program
         }
     }
 
-    private static IProtocolHandler CreateHandler(string? dataDir)
+    private static IProtocolHandler CreateHandler(string? dataDir, CancellationToken ct)
     {
+        // Service factories run only after both leases are held. A competing
+        // startup must not stop the current owner's runtime before lock refusal.
+        if (OperatingSystem.IsLinux() && string.IsNullOrWhiteSpace(dataDir))
+            Lifecycle.LinuxStaleRuntimeReclaimer.ReclaimAsync(Log.Logger, ct).GetAwaiter().GetResult();
+
         var session = new RouterSession();
         try { return new RouterBackendHandler(new RouterBackend(session, dataDir)); }
         catch
