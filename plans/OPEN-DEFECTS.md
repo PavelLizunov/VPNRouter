@@ -18,7 +18,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 - [x] **P2 FIXED ON N4-X BRANCH** - N4-X-OWNER-MASK: masking all inactive units must not claim/remove a runtime mask set by the caller before the transaction; vpnrouter-headless.install now skips masked-runtime units without its own recovery marker. Interrupted transaction masks still resume. Regression RED against b49ba27a and GREEN after repair.
 
-- [x] **P2 FIXED ON N4-X BRANCH** - N4-X-DESKTOP-DNS-SCOPE: Linux-wide dns_mode=disabled removed native resolver integration from desktop/CLI packages that do not ship the Arch Headless polkit grant; ConfigGenerator.cs:176 and packaging/linux/postinst. Limit implicit DNS replacement to Headless runtime-policy context, preserving other frontends; generated-config regression added, exact-head CI pending.
+- [x] **P2 FIXED ON N4-X BRANCH** - N4-X-DESKTOP-DNS-SCOPE: Linux-wide dns_mode=disabled removed native resolver integration from desktop/CLI packages that do not ship the Arch Headless polkit grant; ConfigGenerator.cs:176 and packaging/linux/postinst. Limit implicit DNS replacement to Headless runtime-policy context, preserving other frontends; generated-config regression passed in Linux/Windows CI 40254756220; Headless behavior was exercised live on r50.
 
 - [x] **P1 FIXED ON N4-X BRANCH** - N4-X-DNS-OWNERSHIP: competing Headless construction/disposal can restore an active service DNS sentinel before data-lock refusal; `Program.cs:122`, `VpnEngine.cs:160`, `UnixSocketServer.cs:27`; lock-before-factory and existing-lease stdio refusal implemented; regression CI/live evidence in phase-n4-x-review-2026-10-26.md and external X.md.
 - [x] **P2 FIXED IN DOCUMENTATION** - N4-X-LEGACY-UPGRADE: package service masking does not quiesce the old shell-owned stdio helper; document disable/stop before replacing old assemblies and remove the concurrent stdio diagnostic example.
@@ -524,7 +524,7 @@ the TUN peer with routing domain `~.`; the Arch package ships a narrow polkit ru
 
 sing-box 1.14 native DNS integration left a resolvectl child holding
 `/dev/net/tun` for up to 24.64 s after exit, so rapid restarts and connected MTU
-changes failed. Linux TUNs now set `dns_mode: disabled`; rapid restart 6/6, MTU
+changes failed. Headless-generated Linux TUNs now set `dns_mode: disabled`; rapid restart 6/6, MTU
 1420 -> 1280 -> 1420 stays connected.
 
 ## N4-U: repeated Linux authentication (2026-10-26)

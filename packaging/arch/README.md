@@ -87,8 +87,10 @@ on stop, allowing sing-box to remove its TUN and routes.
 During package upgrade, the service is runtime-masked for every existing user
 manager before files are replaced, including inactive services that the panel
 could otherwise start during extraction. Running services are stopped; after
-capabilities are restored all units are unmasked, and only previously active
-services are explicitly started, disconnected. The panel retries its attachment. Removal stops them without restarting.
+capabilities are restored the transaction's masks are removed, and only
+previously active services are explicitly started, disconnected. A runtime mask
+that the caller set before the transaction is preserved; masks recorded by an
+interrupted package transaction are recovered instead. The panel retries its attachment. Removal stops them without restarting.
 An interrupted transaction may leave a runtime mask; finish/reinstall the package
 or run `systemctl --user unmask --runtime vpnrouter-headless.service` before
 starting it again.

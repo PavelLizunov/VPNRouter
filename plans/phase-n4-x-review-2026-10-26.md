@@ -62,3 +62,23 @@ The inactive-service repair must preserve a caller's pre-existing runtime mask.
 Skip masked-runtime units only when no transaction marker already records our
 own interrupted upgrade. This retains recovery for old empty markers while
 avoiding unmasking caller intent. Add a transaction regression against b49ba27a.
+
+## Verification outcome
+
+Backend b295a001 has green Arch 40256016210 (r51) and all six jobs in
+40256018110. Packaging is 132/132; the caller-mask regression is RED against
+b49ba27a. Plugin 3bb9b30 has green 40253908948. Fresh Node (13 suites), isolated
+packaging (42), QML (6 EN/RU cases) and native plugin validation passed.
+The first qmllint invocation lacked the virtual qs import root; its exit 0 was
+not accepted as full import validation. A private qs import alias resolved that
+namespace: exit 0, zero failed imports, 535 remaining dynamic-type warnings.
+
+Live r49 covered legacy r33 migration, DNS-sentinel refusal, connected rescan/
+cold restart, active reinstall and active uninstall. Live r50 preserved service/
+core through rescan and restart; connected MTU 1280/1420 both retained DNS peer
+and routing domain, generated tun/dns_mode=disabled, and HTTP 200. Disconnect
+left no TUN or current/legacy rules. Exact final package, loaded-source proof,
+caller-mask installation and cleanup receipts are recorded in the owner-requested
+external X.md / X-evidence. Another laptop, desktop Linux GUI, macOS live, IPv6
+data plane, PMTU blackhole, logout/suspend and hung-stop remain unverified.
+Lead Claude owns independent acceptance of the new patches; no release or merge.
