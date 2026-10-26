@@ -761,3 +761,74 @@ system was found. Each style has a deliberate visual mechanism:
   collection. Next work is bounded source/binary/caller provenance only; no native
   execution or configuration variant was added. Fresh strict-repeatability baseline,
   performance candidates and confirmation remain pending, with 0/10 attempts.
+
+### Multi-angle source and saved-data investigation
+
+- Intent: answer the owner's request to inspect the failure from different angles
+  without repeating completed diagnostics. Scope is caller ownership, importer
+  footprint, observer coverage and evaluator/data integrity. Production, both
+  evaluator locks, codec/FP/thread/padding settings, media and deliveries are fixed.
+  Only source/data inspection and lightweight Python checks ran; no new native
+  execution, compile, render, pixel/audio decode, installation or external search.
+- Snapshot is `a369043715868b426a47429a2de8b641d96a60ee`. Three Sol fallbacks
+  completed their assigned reports; earlier failed Opus/Grok dispatches contribute
+  no findings. Reports and the lead's verification are retained under
+  [multi-angle evidence](<tools/help-videos/fframes-vpnrouter/out/repeatability-analysis/multiangle-20261025-a369/>).
+  Unrelated music documentation and its existing defect-ledger hunk are preserved
+  and excluded from this checkpoint's commit.
+- Caller review reverified crate/member identity and the real FramePool path:
+  fresh owned AVFrames, refcounted pooled pixels, pending-map ownership and the
+  per-segment mutex contradict simple in-flight reuse, stale AVFrame metadata,
+  unwritten visible YUV and missing drain. All 16 traces have 45x24 inputs; all
+  nonempty outputs occur on flush. Inspected x264 imports synchronously before
+  queue/early return, so delayed output does not require source pixels until flush.
+- Importer review and lead source-check: recorded CPU mask `1176575` conditionally
+  selects AVX512 Y copy and SSE2 U/V interleave in the 8-bit HAVE_MMX build. Y has
+  a masked visible-only tail; U/V rounded copies read five extra bytes on nonfinal
+  rows. Immediate mod16 expansion overwrites every copied source-padding byte
+  inside the coded 864-byte rectangle before AQ/lowres. Runtime dispatch and any
+  downstream dependency on farther-right internal slack remain unproven. No
+  padding normalization, full-stride capture or CPU/codec-setting fix is selected.
+- Evaluator review independently checked 34560 decoded rows and joined all 6480
+  native video tuples to 26736 actual packet-byte hashes in the six changed-style
+  films. Lead reproduced the complete packet bridge: native changed PTS are
+  anime/editorial/kinetic 48/83/73, decoded 48/216/96; affected lifetime sets agree.
+  Wrong row grouping, B-frame order, metadata-only differences and a simple
+  trace/output swap do not explain this retained witness.
+- Confirmed evidence gap: the original failed baseline `40192719205` did not retain
+  either comparison-signature operand or compared media before assertion/cleanup
+  (`benchmark.py:226-261`). Record FFRAMES-EVALUATOR-BASELINE-FAILURE-RETENTION as
+  deferred; do not mutate the frozen evaluator. Later native localization cannot
+  retroactively identify the exact differing style/kind in that original run.
+- Observer limits: effective parameters omit queued reconfiguration; the getter
+  forces returned opaque null. No differing reconfig trigger was found, and equal
+  later snapshots argue against a persistent update. Pre-open FP/derived state is
+  not captured; later equal controls do not prove equal initialization. Neither
+  gap establishes a cause. Recorded 1/1/0 threading also contradicts assuming an
+  active unobserved x264 lookahead worker from that setting alone.
+- Selected and completed one additional saved-data check: bounded SPS/PPS/IDR
+  header parsing plus a separately written prefix parser checked 270 headers
+  (135 pairs), with verified packet/native byte binding. All 15 affected lifetimes
+  already differ in their first IDR, while parsed headers and base slice QP agree
+  (QP 15 or 16). First unequal RBSP bytes are 11549-18374, after the CABAC body
+  starts at byte 5. Previous-segment references, a different initial slice type or
+  base QP are not sole explanations. Per-MB QP/AQ, prediction/residuals, imported
+  internal pixels and internal state remain unobserved; no CABAC/pixel decode ran.
+- IDR result SHA256 is
+  `6918518f315767d368d6ff29446e4ac85df5d09f5bc54061c978cb99d1d022fd`;
+  `idr-header-crosscheck.json` retains 18 exact input hashes. Bit/Exp-Golomb/escape
+  negatives, both header parsers and the lead's all-PTS packet bridge exited 0.
+- Next discriminating boundary, not a launched job: one affected 24-frame lifetime
+  with unchanged settings, prospectively bound native identity and source-bounded
+  visible importer-entry/post-mod16 coded-rectangle hashes. A difference on entry
+  places divergence before import; equal entry/unequal exit points to import or
+  omitted consumed input; equal coded exit/unequal IDR body points downstream or
+  to a demonstrated internal-slack dependency. Historical static FFmpeg/runtime
+  dispatch is still unresolved; no replay or native capture is implemented here.
+- Gates: source/data checks PASS; scoped documentation/link/diff checks and exact-
+  head PR CI are required for this evidence checkpoint. Runtime build/UI/new native
+  diagnostic gates N/A because no behavior changed. Risk is evidence overclaiming,
+  addressed by conditional source conclusions and retained counterevidence. Rollback
+  is a scoped history-preserving revert of this record update only, keeping evidence
+  and unrelated work. Strict baseline remains unaccepted, best null, attempts 0/10;
+  there is no measured acceleration, accepted candidate or confirmation.
