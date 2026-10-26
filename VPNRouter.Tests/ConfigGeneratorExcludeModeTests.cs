@@ -128,10 +128,13 @@ public class ConfigGeneratorExcludeModeTests
         var config = ConfigGenerator.Generate(EmptyProfile(),
             resolvedProcessNames: System.Array.Empty<string>(), settings);
 
-        Assert.True(config.Route.Rules.Count >= 4);
+        Assert.True(config.Route.Rules.Count >= 5);
         Assert.Equal("sniff", config.Route.Rules[0].Action);
         Assert.Equal("hijack-dns", config.Route.Rules[1].Action);
-        Assert.True(config.Route.Rules[2].IpIsPrivate);
+        Assert.Equal("icmp", config.Route.Rules[2].Network);
+        Assert.Equal("reject", config.Route.Rules[2].Action);
+        Assert.Equal(new[] { settings.Tun.Ipv4Address }, config.Route.Rules[2].IpCidr);
+        Assert.True(config.Route.Rules[3].IpIsPrivate);
     }
 
     [Fact]

@@ -25,7 +25,7 @@ public class CustomConfigInjectorTests
         input["inbounds"] = new JsonArray(inbound);
         var result = JsonNode.Parse(CustomConfigInjector.Inject(input.ToJsonString(), ["browser"], CreateSettings()))!;
         var rules = result["route"]!["rules"]!.AsArray().OfType<JsonObject>().ToList();
-        var guard = Assert.Single(rules.Where(r => (string?)r["network"] == "icmp"));
+        var guard = Assert.Single(rules, r => (string?)r["network"] == "icmp");
         Assert.Equal("reject", (string?)guard["action"]);
         Assert.Equal(new[] { "10.77.0.1/30", "fd00:77::1/126" }, guard["ip_cidr"]!.AsArray().Select(n => (string?)n));
         Assert.Equal(0, rules.IndexOf(guard));

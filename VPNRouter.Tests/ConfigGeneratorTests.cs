@@ -18,7 +18,7 @@ public class ConfigGeneratorTests
         settings.App.CustomRules = [new CustomRule { Type = "domain", Value = "example.org", Action = "direct" }];
         var config = ConfigGenerator.Generate(CreateProfile(), ["browser"], settings);
         var rules = config.Route.Rules;
-        var guard = Assert.Single(rules.Where(r => r.Network == "icmp" && r.Action == "reject"));
+        var guard = Assert.Single(rules, r => r.Network == "icmp" && r.Action == "reject");
         Assert.Equal(new[] { address }, guard.IpCidr);
         Assert.True(guard.IsInfrastructure);
         Assert.Null(guard.Outbound);
@@ -226,16 +226,18 @@ public class ConfigGeneratorTests
                 routeRule["rule_set"]!.AsArray().Select(tag => tag!.ToString()));
             Assert.Equal("direct", routeRule["outbound"]!.ToString());
             Assert.Equal("route", routeRule["action"]!.ToString());
-            Assert.Equal(3, routeRules.IndexOf(routeRule));
+            Assert.Equal(4, routeRules.IndexOf(routeRule));
             Assert.Equal("sniff", routeRules[0]!["action"]!.ToString());
             Assert.Equal("hijack-dns", routeRules[1]!["action"]!.ToString());
-            Assert.True(routeRules[2]!["ip_is_private"]!.GetValue<bool>());
+            Assert.Equal("icmp", routeRules[2]!["network"]!.ToString());
+            Assert.Equal("reject", routeRules[2]!["action"]!.ToString());
+            Assert.True(routeRules[3]!["ip_is_private"]!.GetValue<bool>());
             Assert.Contains(config.Route.RuleSet!, r => r.Tag == "vpnrouter-geoip-ru");
             if (routingMode == "split")
             {
                 var appRule = Assert.Single(config.Route.Rules.Where(r => r.ProcessName?.Contains("firefox.exe") == true
                     && r.Action == "route"));
-                Assert.True(config.Route.Rules.IndexOf(appRule) > 3);
+                Assert.True(config.Route.Rules.IndexOf(appRule) > 4);
                 Assert.Equal(appsMode == "exclude" ? "direct" : "proxy", appRule.Outbound);
             }
 
