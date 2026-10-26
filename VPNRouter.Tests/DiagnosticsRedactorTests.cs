@@ -337,6 +337,21 @@ app:
     }
 
     [Fact]
+    public void Logs_RedactQuotedValuesWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta\" ok\n" +
+            "[DBG] token='x y' ok\n" +
+            "[DBG] userpassword=\"alpha beta\"");
+
+        Assert.DoesNotContain("alpha beta", outp);
+        Assert.DoesNotContain("x y", outp);
+        Assert.Contains("password=\"***\"", outp);
+        Assert.Contains("token='***'", outp);
+        Assert.Contains("userpassword=\"***\"", outp);
+    }
+
+    [Fact]
     public void Yaml_MalformedYaml_RedactsSecretsAndPreservesStructure()
     {
         var malformedYaml =
