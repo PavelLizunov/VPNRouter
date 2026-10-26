@@ -1081,3 +1081,52 @@ system was found. Each style has a deliberate visual mechanism:
   the historical heap/library/cache state. Preserve all outcomes and limitations.
   Revert only attributable diagnostic commits with history-preserving revert;
   retain evidence, evaluator locks, original deliveries and unrelated work.
+
+### Ordinary CI repair - multicall sleep fixture
+
+- Exact brief head `0b54b7df56bf7a59ef08cc6e7be8b2210eb45f45` was published with
+  ordinary hooks and equal local/remote/PR identity. Ordinary CI `40373934361`
+  fails only `LinuxPidFdSignal_RejectsWrongIdentityAndPreservesChild`; six other
+  expected checks pass and render-film is skipped. No native diagnostic launched.
+- Owning failure evidence: test log reports `coreutils: unknown program` for the
+  randomized `test-sleep-...` copied executable, then expected IdentityMismatch /
+  actual TargetGone. The existing fixture assumes `/bin/sleep` is a standalone
+  binary; the observed runner's multicall executable requires basename `sleep`.
+- Scope: repair only the test fixture in `UnixOwnedProcessSignalTests.cs`, keeping
+  the executable under a uniquely created subdirectory of the trusted test BinDir,
+  basename `sleep`, explicit live-child precondition and exact cleanup after reaping.
+  Record the confirmed finding in the shared ledger with scoped staging. No Core
+  process/signal, product/runtime/VPN, evaluator or rendering change is allowed.
+- Verification: independent bounded test/lifetime review, source diff checks and
+  exact-SHA ordinary CI with the original full test suite. No test skip, weaker
+  identity assertion or blind rerun. Native implementation waits for green CI.
+  Build/tests PENDING on CI; documentation recorded; review PENDING; product UI N/A;
+  characterization is the existing mismatch/preservation/signal integration tests.
+- Rollback: scoped history-preserving revert of this test-only repair, retaining
+  failure/CI evidence and unrelated music bytes. This repairs the ordinary CI gate,
+  not fframes repeatability; baseline/best/confirmation remain absent, attempts 0/10.
+- Independent reviewer `53d08efa` verified the complete scoped source snapshot and
+  ownership/lifetime/error cleanup paths with no source-confirmed blocker. Original
+  identity/preservation/signal assertions and the CI test filter remain unchanged;
+  Core diff is empty. Source review is not a runtime pass. Fresh exact-head full
+  CI remains required; no native diagnostic or render trigger changed.
+- Commit attempt `bash-00f0537510104a43` was stopped by the existing pre-commit
+  build/test gates because `dotnet` is absent on this control plane. No commit,
+  SDK installation or hook bypass occurred. Necessary recovery: an isolated
+  `.github/ci-recovery/owned-sleep.json` exact-patch payload and dedicated disposable-CI
+  workflow create the test-only commit with the unchanged hooks enabled, then
+  run the original affected/full Linux test path and retain a Git bundle plus
+  exact-parent/tree/test receipts. This is ordinary CI recovery, not a native
+  render/process-budget retry. The lead verifies/imports only a successful bundle,
+  fast-forwards the task branch without replacing unrelated working/index bytes,
+  pushes normally and verifies exact-head PR checks. No hook/source/SDK policy
+  changes, product mutation or remote push credential is given to the worker.
+- Final frozen recovery review `054bc40f` found no new source-confirmed blocker
+  after failure-operand retention was added (earlier finding `a6f23f5b`). Workflow
+  SHA256 `aea3985161f986b723edac21d77d2898347b3ee521cba51c01f7a948e5a78b5a`,
+  payload `31f2bc1a2c820a28582527db1f1491d9ddfb73973d3144a6eb0cf2e013d2dd9d`,
+  decoded patch `661146079f21202f114c5f9504e31bda11060a1fbf3c612ea715ee89c8c79290`.
+  Complete patch equals the unstaged reviewed fixture repair; fixture index stays
+  at the failed parent until the successful child bundle is verified. Syntax/data
+  checks pass; actual runner preflight, hooks/build/tests, bundle/upload/import and
+  fresh exact-head ordinary CI remain PENDING. No native process has been submitted.
