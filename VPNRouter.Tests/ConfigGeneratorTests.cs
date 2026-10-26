@@ -8,7 +8,7 @@ public class ConfigGeneratorTests
 {
     [Theory]
     [InlineData("172.19.0.1/30", "full", "custom_first")]
-    [InlineData("10.77.0.1/30", "split", "builtin_first")]
+    [InlineData("10.77.0.1/30", "split", "toggles_first")]
     public void TunPeerIcmp_CannotReachPrivateDirectRoute(string address, string mode, string priority)
     {
         var settings = CreateSettings();
