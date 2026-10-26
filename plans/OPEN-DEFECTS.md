@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - N4-T-TUN-SELF-ROUTE: private direct routing forwards ICMP to the virtual TUN peer back through the same TUN, recursively creating sing-box raw sockets and sustained TX/CPU growth after shell gateway probes; generated/custom route guard and VM before/after evidence in phase-omarchy-n4-traffic-2026-10-26.md. Fix in progress.
+
 - [x] **P2 FIXED ON N4-X BRANCH** - N4-X-OWNER-MASK: masking all inactive units must not claim/remove a runtime mask set by the caller before the transaction; vpnrouter-headless.install now skips masked-runtime units without its own recovery marker. Interrupted transaction masks still resume. Regression RED against b49ba27a and GREEN after repair.
 
 - [x] **P2 FIXED ON N4-X BRANCH** - N4-X-DESKTOP-DNS-SCOPE: Linux-wide dns_mode=disabled removed native resolver integration from desktop/CLI packages that do not ship the Arch Headless polkit grant; ConfigGenerator.cs:176 and packaging/linux/postinst. Limit implicit DNS replacement to Headless runtime-policy context, preserving other frontends; generated-config regression passed in Linux/Windows CI 40254756220; Headless behavior was exercised live on r50.

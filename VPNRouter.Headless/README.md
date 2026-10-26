@@ -105,6 +105,13 @@ so UI detachment never resets it; explicit disconnect clears it. Counters are
 interface totals and restart when the TUN is recreated. No bandwidth, elapsed
 clock or connection state is inferred from a proxy listener.
 
+The counters use the kernel's TUN directions: RX is traffic delivered by sing-box
+to applications (download), TX is traffic sent by applications to sing-box
+(upload). They include all captured host traffic, not just this panel's requests.
+Generated and injected configs reject ICMP echo requests to their own virtual
+TUN address prefixes, preventing gateway probes from recursively routing through
+the direct outbound. DNS interception and physical LAN destinations are preserved.
+
 ## Subscription refresh failures
 
 `subscriptions.refresh` returns an error with code `subscription_refresh_failed`

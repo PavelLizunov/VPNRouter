@@ -7,7 +7,7 @@ public static partial class ConfigGenerator
 {
     private static string SlipstreamProcessName => Path.GetFileName(AppPaths.SlipstreamExePath);
 
-    private static SingBoxRoute BuildRoute(Profile profile, List<string> processes,
+    private static SingBoxRoute BuildRoute(Profile profile, List<string> processes, string tunAddress,
         string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
         bool blockQuicOnTcpProxy = true, bool isDnsTunnel = false,
         List<string>? dnsTunnelResolverIps = null, bool proxyIsUdpNative = false)
@@ -24,6 +24,11 @@ public static partial class ConfigGenerator
             AddDnsTunnelSelfExclusionRules(rules, dnsTunnelResolverIps);
 
         rules.Add(new RouteRule { Protocol = "dns", Action = "hijack-dns" });
+
+        // The virtual peer is not a LAN host. Direct ICMP forwarding to it
+        // re-enters this TUN and recursively allocates raw sockets in sing-box.
+        // DNS must still reach hijack-dns before this infrastructure guard.
+        rules.Add(new RouteRule { IpCidr = [tunAddress], Network = "icmp", Action = "reject", IsInfrastructure = true });
 
         rules.Add(new RouteRule
         {

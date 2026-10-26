@@ -6,6 +6,29 @@ namespace VPNRouter.Tests;
 
 public class ConfigGeneratorTests
 {
+    [Theory]
+    [InlineData("172.19.0.1/30", "full", "custom_first")]
+    [InlineData("10.77.0.1/30", "split", "builtin_first")]
+    public void TunPeerIcmp_CannotReachPrivateDirectRoute(string address, string mode, string priority)
+    {
+        var settings = CreateSettings();
+        settings.Tun.Ipv4Address = address;
+        settings.App.RoutingMode = mode;
+        settings.App.CustomRulesPriority = priority;
+        settings.App.CustomRules = [new CustomRule { Type = "domain", Value = "example.org", Action = "direct" }];
+        var config = ConfigGenerator.Generate(CreateProfile(), ["browser"], settings);
+        var rules = config.Route.Rules;
+        var guard = Assert.Single(rules.Where(r => r.Network == "icmp" && r.Action == "reject"));
+        Assert.Equal(new[] { address }, guard.IpCidr);
+        Assert.True(guard.IsInfrastructure);
+        Assert.Null(guard.Outbound);
+        Assert.True(rules.IndexOf(guard) < rules.FindIndex(r => r.IpIsPrivate == true));
+        Assert.True(rules.IndexOf(guard) < rules.FindIndex(r => r.ProcessName?.Contains("browser") == true || r.Domain?.Contains("example.org") == true));
+        Assert.Contains(rules, r => r.Action == "hijack-dns" && r.Network == null);
+        var json = ConfigGenerator.Serialize(config);
+        Assert.Contains("\"network\": \"icmp\"", json);
+    }
+
     [Fact]
     public void LinuxTun_DnsIsOwnedByTheApplication_NotNativeInteractiveHelpers()
     {

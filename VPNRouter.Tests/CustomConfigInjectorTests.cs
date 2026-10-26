@@ -8,6 +8,39 @@ namespace VPNRouter.Tests;
 
 public class CustomConfigInjectorTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TunPeerIcmpGuard_UsesNormalizedPrefixesBeforePrivateAndUserRules(bool legacy)
+    {
+        var input = JsonNode.Parse(legacy ? LegacyConfig : ActionConfig)!.AsObject();
+        var inbound = new JsonObject { ["type"] = "tun" };
+        if (legacy)
+        {
+            inbound["inet4_address"] = "10.77.0.1/30";
+            inbound["inet6_address"] = "fd00:77::1/126";
+        }
+        else
+            inbound["address"] = new JsonArray("10.77.0.1/30", "fd00:77::1/126");
+        input["inbounds"] = new JsonArray(inbound);
+        var result = JsonNode.Parse(CustomConfigInjector.Inject(input.ToJsonString(), ["browser"], CreateSettings()))!;
+        var rules = result["route"]!["rules"]!.AsArray().OfType<JsonObject>().ToList();
+        var guard = Assert.Single(rules.Where(r => (string?)r["network"] == "icmp"));
+        Assert.Equal("reject", (string?)guard["action"]);
+        Assert.Equal(new[] { "10.77.0.1/30", "fd00:77::1/126" }, guard["ip_cidr"]!.AsArray().Select(n => (string?)n));
+        Assert.Equal(0, rules.IndexOf(guard));
+        Assert.Null(guard["outbound"]);
+        Assert.Contains(rules, r => (string?)r["action"] == "hijack-dns");
+        Assert.Contains(rules, r => (bool?)r["ip_is_private"] == true && (string?)r["outbound"] == "direct");
+    }
+
+    [Fact]
+    public void NoTun_DoesNotAddIcmpGuard()
+    {
+        var result = JsonNode.Parse(CustomConfigInjector.Inject(ActionConfig, [], CreateSettings()))!;
+        Assert.DoesNotContain(result["route"]!["rules"]!.AsArray(), r => (string?)r?["network"] == "icmp");
+    }
+
     private static AppSettings CreateSettings() => new()
     {
         SingBox = new SingBoxSettings { ClashApi = "127.0.0.1:9090" }
