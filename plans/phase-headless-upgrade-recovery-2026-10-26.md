@@ -50,4 +50,14 @@ was added. Task-owned diff inspected; local tests and live behavior not checked.
 
 The coordinated plugin aborts package installation on a helper-stop timeout and
 extends initial snapshot/socket waits to cover the 26-second cleanup budget.
-A fresh Arch payload and main delivery are pending.
+Delivery completed: PR #630 merged as f6b39dbfc4d4de6e064b470037ea6b5a312c5a4c.
+Automatic PR CI passed at 56f87786d70d369ebb158b35bc9d98e664249e3a.
+Main Arch CI 40348520604 succeeded and produced 0.1.0.r59.gf6b39db-1.
+That exact package is bundled in omarchy-vpnrouter main
+4e66c9eb3558d552bed744f2b85e8818018118b9 and published in plugin release v0.1.2:
+https://github.com/PavelLizunov/omarchy-vpnrouter/releases/tag/v0.1.2
+
+Source delivery and publication are complete. No package was installed or live
+VPN session changed on this workstation or the reporting laptop during the
+continuation. The report's actual on-device cause and recovery remain unverified.
+The open ledger entry is retained for that material acceptance limitation.
