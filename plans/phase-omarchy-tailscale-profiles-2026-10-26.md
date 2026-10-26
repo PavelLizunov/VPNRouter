@@ -53,6 +53,17 @@ direct. Revert the scoped commits to roll back; no automatic reconnect.
 
 ## Outcome
 
+Automatic CI at a81dea3b built Headless/Android and passed Headless contracts and
+Windows characterization, but the general Linux suite failed 21 cases. Most
+asserted pre-existing generic route ordering/process membership, revealing that
+Headless system exclusions were applied to every Linux frontend. An actual
+custom-config reinjection issue also accumulated direct outbounds. Scope the
+process bypass to the active Headless runtime policy and reuse its plain direct
+outbound, retaining the TUN-self guard as the first custom infrastructure rule.
+The UnixOwnedProcessSignal wrong-identity failure is separately observed, not
+attributed to these route changes or declared pre-existing without evidence.
+No test files or local tests were added/changed/run.
+
 Implemented source changes: mandatory CGNAT exclusion; early Linux Tailscale
 process bypass in generated and custom routing; system bypass metadata; profile
 description/process metadata; legacy catalog baseline in apps.list before the

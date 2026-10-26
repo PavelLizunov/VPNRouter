@@ -7,8 +7,11 @@ public static partial class ConfigGenerator
 {
     private static string SlipstreamProcessName => Path.GetFileName(AppPaths.SlipstreamExePath);
 
-    internal static IReadOnlyList<string> SystemBypassProcesses { get; } =
-        OperatingSystem.IsLinux() ? new[] { "tailscaled", "tailscale" } : Array.Empty<string>();
+    // The Headless runtime owns these system exclusions. Other frontends retain
+    // their explicit application-routing policy.
+    internal static IReadOnlyList<string> SystemBypassProcesses =>
+        OperatingSystem.IsLinux() && SingBoxRuntimePolicy.Current != null
+            ? new[] { "tailscaled", "tailscale" } : Array.Empty<string>();
 
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes, string tunAddress,
         string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
