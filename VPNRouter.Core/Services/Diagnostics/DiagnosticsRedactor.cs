@@ -56,8 +56,10 @@ public static class DiagnosticsRedactor
     private static readonly Regex _urlKeepHost = new(
         @"^(\w+://)(?:[^@/?#\s]+@)?([^/?#\s]+).*$", RegexOptions.Compiled);
 
+    // Security: Redact sensitive key-value pairs from log lines including passwords, tokens, UUIDs,
+    // and transport keys (such as AmneziaWG header protection keys: header_protection_key, hpk).
     private static readonly Regex _logKeyValueSecret = new(
-        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)([""']?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
+        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|key|hpk|headerprotectionkey|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)([""']?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
         RegexOptions.Compiled);
 
     private static readonly Regex _yamlKeyValuePair = new(

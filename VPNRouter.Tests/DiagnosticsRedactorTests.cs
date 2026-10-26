@@ -337,6 +337,23 @@ app:
     }
 
     [Fact]
+    public void Logs_RedactAmneziaWgHeaderProtectionKeys()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] header_protection_key=MyHeaderProtectionSecret123\n" +
+            "[DBG] hpk: MyHpkSecret456\n" +
+            "[DBG] headerprotectionkey=MyHeaderProtectionNoSep789");
+
+        Assert.DoesNotContain("MyHeaderProtectionSecret123", outp);
+        Assert.DoesNotContain("MyHpkSecret456", outp);
+        Assert.DoesNotContain("MyHeaderProtectionNoSep789", outp);
+        Assert.Contains("header_protection_key=", outp);
+        Assert.Contains("hpk:", outp);
+        Assert.Contains("headerprotectionkey=", outp);
+        Assert.Contains(DiagnosticsRedactor.Redacted, outp);
+    }
+
+    [Fact]
     public void Yaml_MalformedYaml_RedactsSecretsAndPreservesStructure()
     {
         var malformedYaml =
