@@ -4,13 +4,13 @@ namespace VPNRouter.Headless.Protocol;
 
 public sealed class UnixSocketServer
 {
-    private readonly IProtocolHandler _handler;
+    private readonly Func<IProtocolHandler> _handlerFactory;
     private readonly string _socketPath;
     private readonly string _dataDirectory;
 
-    public UnixSocketServer(IProtocolHandler handler, string socketPath, string dataDirectory)
+    public UnixSocketServer(Func<IProtocolHandler> handlerFactory, string socketPath, string dataDirectory)
     {
-        _handler = handler;
+        _handlerFactory = handlerFactory ?? throw new ArgumentNullException(nameof(handlerFactory));
         _socketPath = socketPath;
         _dataDirectory = dataDirectory;
     }
@@ -25,8 +25,11 @@ public sealed class UnixSocketServer
         using var dataLock = UnixSocketSecurity.AcquireLock(Path.Combine(_dataDirectory, "headless-service.lock"));
         using var socketLock = UnixSocketSecurity.AcquireLock(Path.Combine(directory, "control.lock"));
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var dispatcher = new ProtocolDispatcher(_handler, concurrentSnapshots: true, quitRequested: () => stop.Cancel());
+        // Core construction can heal DNS state. It must happen only after both
+        // leases prove that this process owns the session and listener.
         using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        var handler = _handlerFactory();
+        var dispatcher = new ProtocolDispatcher(handler, concurrentSnapshots: true, quitRequested: () => stop.Cancel());
         Task? controller = null;
         bool bound = false;
         try
@@ -54,7 +57,7 @@ public sealed class UnixSocketServer
                     }
                     else
                     {
-                        controller = ServeClientAsync(peer, dispatcher, stop.Token);
+                        controller = ServeClientAsync(peer, handler, dispatcher, stop.Token);
                     }
                 }
                 catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException)
@@ -68,20 +71,26 @@ public sealed class UnixSocketServer
         {
             stop.Cancel();
             listener.Dispose();
-            if (controller != null) await controller.ConfigureAwait(false);
-            if (bound) File.Delete(_socketPath);
-            dispatcher.CancelActiveOperation();
-            var disposal = Task.Run(async () => await _handler.DisposeAsync().ConfigureAwait(false));
-            try { await disposal.WaitAsync(TimeSpan.FromSeconds(ProtocolConstants.HandlerDisposalTimeoutSeconds)).ConfigureAwait(false); }
-            catch { _ = disposal.ContinueWith(t => { _ = t.Exception; }, TaskScheduler.Default); }
+            try
+            {
+                if (controller != null) await controller.ConfigureAwait(false);
+            }
+            finally
+            {
+                dispatcher.CancelActiveOperation();
+                var disposal = Task.Run(async () => await handler.DisposeAsync().ConfigureAwait(false));
+                try { await disposal.WaitAsync(TimeSpan.FromSeconds(ProtocolConstants.HandlerDisposalTimeoutSeconds)).ConfigureAwait(false); }
+                catch { _ = disposal.ContinueWith(t => { _ = t.Exception; }, TaskScheduler.Default); }
+                if (bound) File.Delete(_socketPath);
+            }
         }
         return 0;
     }
 
-    private async Task ServeClientAsync(Socket peer, ProtocolDispatcher dispatcher, CancellationToken token)
+    private static async Task ServeClientAsync(Socket peer, IProtocolHandler handler, ProtocolDispatcher dispatcher, CancellationToken token)
     {
         using var stream = new NetworkStream(peer, ownsSocket: true);
-        await using var protocol = new ProtocolServer(_handler, stream, stream, sessionDispatcher: dispatcher);
+        await using var protocol = new ProtocolServer(handler, stream, stream, sessionDispatcher: dispatcher);
         try { await protocol.RunAsync(token).ConfigureAwait(false); }
         catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException) { }
     }

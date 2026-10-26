@@ -16,8 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P1** - N4-X-DNS-OWNERSHIP: competing Headless construction/disposal can restore an active service DNS sentinel before data-lock refusal; `Program.cs:122`, `VpnEngine.cs:160`, `UnixSocketServer.cs:27`; fix and regression planned in phase-n4-x-review-2026-10-26.md.
-- [ ] **P2** - N4-X-LEGACY-UPGRADE: package service masking does not quiesce the old shell-owned stdio helper; document disable/stop before replacing old assemblies and remove the concurrent stdio diagnostic example.
+- [x] **P1 FIXED ON N4-X BRANCH** - N4-X-DNS-OWNERSHIP: competing Headless construction/disposal can restore an active service DNS sentinel before data-lock refusal; `Program.cs:122`, `VpnEngine.cs:160`, `UnixSocketServer.cs:27`; lock-before-factory and existing-lease stdio refusal implemented; regression CI/live evidence in phase-n4-x-review-2026-10-26.md and external X.md.
+- [x] **P2 FIXED IN DOCUMENTATION** - N4-X-LEGACY-UPGRADE: package service masking does not quiesce the old shell-owned stdio helper; document disable/stop before replacing old assemblies and remove the concurrent stdio diagnostic example.
 
 ### Omarchy integration 2026-10-22 (PR #616)
 
@@ -485,10 +485,19 @@ Historical original #240 evidence only: the twelve repairs were recorded as reso
 
 ## Linux backend lifecycle audit 2026-10-25
 
-- [ ] **P1** - OMARCHY-SHELL-SESSION-LIFETIME: owner/lead journal evidence at 09:59:58 MSK shows shell exit removing the active TUN and 56 routes. Plugin Service.qml starts a child with `--stdio`; launcher execs Headless. `Program.cs` owns RouterSession and `ProtocolServer.cs` treats stdin EOF as teardown. Linux kill-switch is unavailable; reconnect would leave a direct-traffic window. Deferred architecture change; compare service/socket, reconnect intent and warning in the D2 lifecycle note. Abrupt SIGKILL skips graceful cleanup and can leave auto_route ip rules; no live kernel-rule check in this round. Candidate implementation on `dsh/omarchy-session-lifetime-2026-10-25` and coordinated plugin lifetime branch: systemd user service owns the session, private same-UID Unix socket detaches client lifetime, stdio remains fallback. Candidate 2b1eb884: test CI 40181629309 and Arch 40181561680 green; VM service PID 143400, start timestamp and selected server survived shell restart, plugin reattached, second controller rejected. A real connected session across shell restart remains unverified. Keep open until owner acceptance.
+- [ ] **P1** - OMARCHY-SHELL-SESSION-LIFETIME: owner/lead journal evidence at 09:59:58 MSK shows shell exit removing the active TUN and 56 routes. Plugin Service.qml starts a child with `--stdio`; launcher execs Headless. `Program.cs` owns RouterSession and `ProtocolServer.cs` treats stdin EOF as teardown. Linux kill-switch is unavailable; reconnect would leave a direct-traffic window. Deferred architecture change; compare service/socket, reconnect intent and warning in the D2 lifecycle note. Abrupt SIGKILL skips graceful cleanup and can leave auto_route ip rules; no live kernel-rule check in this round. Candidate implementation on `dsh/omarchy-session-lifetime-2026-10-25` and coordinated plugin lifetime branch: systemd user service owns the session, private same-UID Unix socket detaches client lifetime, stdio remains fallback. Candidate 2b1eb884: test CI 40181629309 and Arch 40181561680 green; VM service PID 143400, start timestamp and selected server survived shell restart, plugin reattached, second controller rejected. N4 L/M later exercised a real HY2 session across rescan and cold shell restart, preserving service/core PIDs and egress; N4 M installed r47/4ad09f87 with plugin b5eaee1. See phase-omarchy-n4-lifetime-2026-10-26.md. Keep open for independent lead/owner acceptance; another laptop and logout remain unverified.
 - [x] **P2 FIXED IN PR #622** - HEADLESS-SUBSCRIPTION-REFRESH-SILENT-FAILURE: at c1bafab1, `SubscriptionFetcher.RefreshEntryAsync` returns zero on HTTP/transport/empty-result failure while preserving cache; `SubscriptionFeature.RefreshAsync` ignores that result, saves and reports success. Plugin receives no structured failure. 04089901 adds safe `subscription_refresh_failed` code/message, cancellation precedence and atomic failure without saving candidates. Corrected fixture head 17752be7 passes eight offline wire/persistence scenarios in CI 40179759509 (41 Headless checks); Arch 40179761405 is green. Independent lead acceptance pending.
 - [x] **P3 FIXED IN PR #622** - HEADLESS-HISTORY-REFERENCES: at c1bafab1, Headless README links absent September evidence files; Headless AGENTS requires a dated resume plan and claims protocol text is still absent. Round4Checks/Round5Checks identify work rounds instead of protected behavior. 04089901 fixes the links/map, removes obsolete resume history and renames the checks to LinuxMetadataChecks/DesktopIdentityChecks. Explicit-substitution comparison preserves fixture bodies; both suites pass at 17752be7, fact_check reports zero broken links. Other distinct task receipts remain.
 - [x] **P3 FIXED IN PR #622** - HEADLESS-UNUSED-ADMISSION-HELPER: at c1bafab1, `ProtocolConstants.IsUrgentOrReadOnlyMethod` has no callers or registration, and lists snapshot as urgent even though ProtocolDispatcher treats it as ordinary. Confirmed with dead_names.py plus repository-wide name/registration search. 04089901 removes the obsolete helper; admission remains in ProtocolDispatcher. Headless dead_names reports zero remaining candidates; scoped builds/tests pass at 17752be7. This is not a whole-program reachability claim.
+
+## N4-X: inactive service upgrade race (2026-10-26, P2)
+
+Confirmed in the pre-upgrade hook: only active services were masked. A panel
+retry could start an inactive service while assemblies were being replaced.
+The hook now masks all existing user managers, persists prior restart intent
+across a retry, and restarts only previously active services after capabilities.
+Empty markers from an interrupted older hook remain restartable. Four new
+regression expectations fail against 4ad09f87; packaging checks pass after repair.
 
 ## N4-L: shell-owned VPN lifetime (2026-10-26, P1, fixed on dsh/omarchy-n4-lifetime)
 
@@ -530,4 +539,4 @@ the peer route before the replacement TUN routes appeared, selected ens18,
 and the narrow polkit rule correctly rejected that write. An uncached lookup
 then returned A+AAAA via ens18. Fix: wait briefly for a verified kernel TUN
 route, never mutate DNS on a physical link, and refresh the cleanup sentinel
-with that verified interface. Regression and exact-head CI pending.
+with that verified interface. Fixed in 4ad09f87: regression code is in LinuxDnsHardeningTests; exact-head test CI 40249714583 and Arch 40249712397 passed. N4 M records live r47 MTU 1420 -> 1280 -> 1420 and resolver recovery; this is scoped VM evidence.

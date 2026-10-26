@@ -112,6 +112,9 @@ public static class Program
                 AppPaths.OverrideDataDir(Path.GetFullPath(dataDir));
             }
 
+            using var stdioLease = stdioMode && OperatingSystem.IsLinux()
+                ? UnixSocketSecurity.AcquireExistingSessionLock(AppPaths.DataDir) : null;
+
             // stdout carries the protocol, so diagnostics go to a private file.
             // Errors only: snapshots log warnings, and read-only requests must not create data.
             Log.Logger = new LoggerConfiguration()
@@ -119,15 +122,13 @@ public static class Program
                 .WriteTo.Sink(new Lifecycle.PrivateFileLogSink(Path.Combine(AppPaths.LogsDir, "headless.log")))
                 .CreateLogger();
 
-            // Wire up lifecycle session and backend as defined in protocol v1 contract
-            await using var session = new RouterSession();
-            await using var backend = new RouterBackend(session, dataDir);
-            await using var handler = new RouterBackendHandler(backend);
             if (serviceMode)
             {
-                var service = new UnixSocketServer(handler, UnixSocketSecurity.DefaultSocketPath(), AppPaths.DataDir);
+                var service = new UnixSocketServer(() => CreateHandler(dataDir),
+                    UnixSocketSecurity.DefaultSocketPath(), AppPaths.DataDir);
                 return await service.RunAsync(cts.Token).ConfigureAwait(false);
             }
+            await using var handler = CreateHandler(dataDir);
             await using var server = new ProtocolServer(handler, Console.OpenStandardInput(), Console.OpenStandardOutput());
 
             return await server.RunAsync(cts.Token).ConfigureAwait(false);
@@ -140,6 +141,17 @@ public static class Program
         {
             Console.Error.WriteLine($"Fatal error in headless service: {ex.GetType().Name}");
             return 1;
+        }
+    }
+
+    private static IProtocolHandler CreateHandler(string? dataDir)
+    {
+        var session = new RouterSession();
+        try { return new RouterBackendHandler(new RouterBackend(session, dataDir)); }
+        catch
+        {
+            session.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            throw;
         }
     }
 

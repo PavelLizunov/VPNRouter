@@ -26,11 +26,16 @@ _vpnrouter_quiesce() {
     local uid
     install -d -m 700 "$_vpnrouter_upgrade_state"
     while read -r uid; do
-        if _vpnrouter_userctl "$uid" is-active --quiet; then
-            # Mask before stopping: a still-loaded panel must not restart the old binary.
-            touch "$_vpnrouter_upgrade_state/$uid"
-            _vpnrouter_userctl "$uid" mask --runtime --now || return 1
+        if [[ ! -f "$_vpnrouter_upgrade_state/$uid" ]]; then
+            if _vpnrouter_userctl "$uid" is-active --quiet; then
+                printf '%s\n' yes > "$_vpnrouter_upgrade_state/$uid"
+            else
+                printf '%s\n' no > "$_vpnrouter_upgrade_state/$uid"
+            fi
         fi
+        # Inactive services can race extraction too: the panel retries startup.
+        # Mask every manager, and remember which services need an explicit restart.
+        _vpnrouter_userctl "$uid" mask --runtime --now || return 1
     done < <(_vpnrouter_managers)
 }
 
@@ -42,7 +47,7 @@ _vpnrouter_resume() {
         _vpnrouter_userctl "$uid" unmask --runtime || continue
         # daemon-reload takes no unit argument.
         _vpnrouter_userctl "$uid" daemon-reload
-        if [[ "$restart" == yes ]]; then
+        if [[ "$restart" == yes && $(cat "$marker") != no ]]; then
             _vpnrouter_userctl "$uid" start || continue
         fi
         rm -f "$marker"

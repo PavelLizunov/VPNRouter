@@ -51,8 +51,8 @@ VPNRouter.Headless --stdio --data-dir /path/to/isolated/datadir
 ### CLI Arguments
 
 - Select exactly one mode: `--stdio`, `--service`, or `--attach`.
-- `--stdio`: Runs the protocol over `stdin` and `stdout`, with EOF teardown.
-- `--service` (Linux): Owns the session at `$XDG_RUNTIME_DIR/vpnrouter-headless/control.sock` (0600 in a 0700 directory). Same-UID peers only; socket and data-directory locks reject another daemon. A stale socket is replaced only while holding both locks.
+- `--stdio`: Runs the protocol over `stdin` and `stdout`, with EOF teardown. Do not share its data directory with a running service; use `--attach` instead. An existing service lease is checked before constructing Core, so a refused diagnostic cannot restore the active service's DNS state.
+- `--service` (Linux): Owns the session at `$XDG_RUNTIME_DIR/vpnrouter-headless/control.sock` (0600 in a 0700 directory). Same-UID peers only; socket and data-directory locks reject another daemon before constructing Core or touching its DNS sentinel. A stale socket is replaced only while holding both locks.
 - `--attach` (Linux): Relays standard I/O to that socket; EOF or SIGTERM detaches only this client. It cannot take `--data-dir`.
 - `--data-dir <ABSOLUTE_PATH>`: Optional directory path for isolated configurations and tests. Must be an absolute path. The CLI sets Core AppPaths before creating the backend. Offline profile reads use only this directory's cache, without falling back to the process-global data tree; bundled profiles remain available. Explicit local profile sources still refer to their configured paths. This option does not isolate TUN/network resources or grant permission to connect.
 

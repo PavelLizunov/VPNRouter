@@ -8,7 +8,7 @@ shutdown, disposes RouterBackendHandler -> RouterBackend -> RouterSession, and
 stops the owned engine. SIGTERM uses the same cancellation path; SIGKILL cannot.
 The owner/lead journal report at 09:59:58 MSK on 2026-10-25 records an active TUN
 and 56 routes disappearing after shell exit. This note does not reproduce it.
-Arch installs no service. Linux reports kill-switch/DNS lockdown unavailable.
+At that baseline Arch installed no service. Linux reports kill-switch/DNS lockdown unavailable.
 
 ## Options (implementation estimates, including tests)
 
@@ -24,7 +24,8 @@ one daemon per data directory in addition to the existing same-UID TUN lease.
 Configure service stop deadlines above backend stop budgets and test systemd
 cgroup termination. Shell independence does not imply survival of logout,
 service crash or explicit service stop; lingering is a separate policy choice.
-Do not bind service lifetime to the shell's graphical-session stop target.
+Bind the service to the graphical login session, not the shell process: logout
+should stop it, while a shell restart must leave that target active.
 
 Neither A nor B adds a kill-switch. B necessarily permits a direct-traffic window
 on this Linux implementation. A avoids the shell-induced window while alive.
@@ -52,7 +53,8 @@ optional TUN smoke has auto_route=false and does not test EOF while connected.
 
 Implemented on separate lifetime branches; not merged into the MVP/PR 622.
 `--service` owns backend and shared dispatcher; `--attach` relays the same NDJSON.
-The systemd user unit starts on demand, independent of graphical-session.target.
+The systemd user unit starts on demand. The current unit is PartOf
+`graphical-session.target`, so it survives shell restart but stops on logout.
 Socket mode is 0600 in a 0700 runtime directory, SO_PEERCRED requires same UID;
 nonblocking flock locks protect data-directory exclusivity and stale-socket
 cleanup. EOF/write failure detaches a controller, preserving operations and
@@ -64,7 +66,9 @@ a local payload is selected, never after a failure of an installed service.
 
 Automated and offline VM evidence is recorded in the
 [D3 task outcome](phase-omarchy-session-service-2026-10-25.md). This
-candidate cannot yet establish connected-session, TUN or egress survival across
-a shell restart: connecting is not authorized in D3. Linux kill-switch remains
-unavailable; service/core crash, forced cgroup kill, logout and hung-stop recovery
-remain separate acceptance risks.
+D3 outcome did not establish connected-session, TUN or egress survival because
+that round did not connect. N4 L/M later exercised HY2 across rescan and cold
+shell restart, retaining service/core PIDs and egress; see
+[the N4 integration journal](phase-omarchy-n4-lifetime-2026-10-26.md). N4 L also
+exercised Headless crash and active package reinstall. Logout is supported by
+unit reading only; Linux kill-switch and a hung-stop guarantee remain unavailable.

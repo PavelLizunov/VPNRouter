@@ -26,13 +26,28 @@ public static class SocketChecks
         Console.WriteLine("  LiveTunCounterBounds passed");
         var handler = new SessionHandler();
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        var service = new UnixSocketServer(handler, socketPath, data).RunAsync(stop.Token);
+        var service = new UnixSocketServer(() => handler, socketPath, data).RunAsync(stop.Token);
         try
         {
             Check(File.GetUnixFileMode(socketPath) == (UnixFileMode.UserRead | UnixFileMode.UserWrite), "Socket mode must be 0600");
             Check(File.GetUnixFileMode(Path.GetDirectoryName(socketPath)!) ==
                 (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute), "Runtime directory mode must be 0700");
             Console.WriteLine("  SocketPermissions passed");
+            var competingFactoryCalled = false;
+            IProtocolHandler CompetingHandler()
+            {
+                competingFactoryCalled = true;
+                throw new Exception("A competing daemon must not initialize Core");
+            }
+            await ExpectFailureAsync(new UnixSocketServer(CompetingHandler,
+                Path.Combine(directory, "competing", "control.sock"), data).RunAsync(stop.Token),
+                "Existing data lease must refuse before handler construction");
+            await ExpectFailureAsync(new UnixSocketServer(CompetingHandler, socketPath,
+                Path.Combine(directory, "competing-data")).RunAsync(stop.Token),
+                "Existing socket lease must refuse before handler construction");
+            Check(!competingFactoryCalled, "A refused daemon must not construct or dispose Core");
+            await CheckStdioRefusalBeforeDnsRestoreAsync(data);
+            Console.WriteLine("  SessionLeasePrecedesCoreConstruction passed");
             await using (var first = await Peer.OpenAsync(socketPath))
             {
                 Check((await first.ReadAsync()).GetProperty("data").GetProperty("selected").GetInt32() == 0, "Initial snapshot");
@@ -72,16 +87,16 @@ public static class SocketChecks
             using (var stale = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified))
                 stale.Bind(new UnixDomainSocketEndPoint(socketPath));
             using var restart = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            var restarted = new UnixSocketServer(handler, socketPath, data).RunAsync(restart.Token);
+            var restarted = new UnixSocketServer(() => handler, socketPath, data).RunAsync(restart.Token);
             await using (var peer = await Peer.OpenAsync(socketPath))
                 Check((await peer.ReadAsync()).GetProperty("event").GetString() == "state", "Stale socket recovery snapshot");
-            await ExpectFailureAsync(new UnixSocketServer(handler, Path.Combine(directory, "other", "control.sock"), data).RunAsync(stop.Token), "Data directory must have one daemon");
-            await ExpectFailureAsync(new UnixSocketServer(handler, socketPath, Path.Combine(directory, "other-data")).RunAsync(stop.Token), "Socket lock must protect existing listener");
+            await ExpectFailureAsync(new UnixSocketServer(() => handler, Path.Combine(directory, "other", "control.sock"), data).RunAsync(stop.Token), "Data directory must have one daemon");
+            await ExpectFailureAsync(new UnixSocketServer(() => handler, socketPath, Path.Combine(directory, "other-data")).RunAsync(stop.Token), "Socket lock must protect existing listener");
             restart.Cancel();
             await restarted;
             Console.WriteLine("  StaleSocketAndDaemonLocks passed");
             File.SetUnixFileMode(Path.GetDirectoryName(socketPath)!, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.OtherRead);
-            await ExpectFailureAsync(new UnixSocketServer(handler, socketPath, data).RunAsync(stop.Token), "Insecure runtime directory must be refused");
+            await ExpectFailureAsync(new UnixSocketServer(() => handler, socketPath, data).RunAsync(stop.Token), "Insecure runtime directory must be refused");
             Console.WriteLine("  InsecureDirectoryRefusal passed");
         }
         finally
@@ -90,6 +105,35 @@ public static class SocketChecks
             await service;
             await handler.DisposeAsync();
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task CheckStdioRefusalBeforeDnsRestoreAsync(string data)
+    {
+        // Empty sentinel causes production Core to delete it during construction
+        // without running a resolver command. A foreign process must never get that far.
+        var sentinel = Path.Combine(data, "linux-dns-hardening-state.json");
+        await File.WriteAllTextAsync(sentinel, "{}");
+        var start = new System.Diagnostics.ProcessStartInfo(ProtocolTests.FindHeadlessBinary())
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var arg in new[] { "--stdio", "--data-dir", data }) start.ArgumentList.Add(arg);
+        using var child = System.Diagnostics.Process.Start(start) ?? throw new Exception("Cannot start Headless");
+        child.StandardInput.Close();
+        try
+        {
+            await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            Check(child.ExitCode == 1, "Stdio must refuse a service-owned directory before creating Core");
+            Check(File.ReadAllText(sentinel) == "{}", "Refused stdio must leave the active DNS sentinel untouched");
+        }
+        finally
+        {
+            if (!child.HasExited) { child.Kill(); await child.WaitForExitAsync(); }
+            File.Delete(sentinel);
         }
     }
 

@@ -1098,7 +1098,7 @@ public static class ProtocolTests
     [DllImport("libc", SetLastError = true)]
     private static extern int kill(int pid, int sig);
 
-    private static string FindHeadlessBinary()
+    internal static string FindHeadlessBinary()
     {
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
         string binaryName = OperatingSystem.IsWindows() ? "VPNRouter.Headless.exe" : "VPNRouter.Headless";

@@ -33,6 +33,15 @@ internal static class UnixSocketSecurity
             throw new IOException("Socket peer has a different owner.");
     }
 
+    internal static FileStream? AcquireExistingSessionLock(string dataDirectory)
+    {
+        // Legacy stdio snapshots must not create persistent data. Once a service
+        // has used this directory, stdio must share its lease before creating Core:
+        // even constructing or disposing an idle engine can restore saved DNS.
+        var path = Path.Combine(dataDirectory, "headless-service.lock");
+        return File.Exists(path) ? AcquireLock(path) : null;
+    }
+
     internal static FileStream AcquireLock(string path)
     {
         // O_NOFOLLOW also rejects dangling symlinks, atomically at open.

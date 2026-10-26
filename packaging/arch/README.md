@@ -44,6 +44,16 @@ network acceptance. Its artifact is
 
 ## Install and verify
 
+When updating an existing plugin, disconnect in its panel, disable it with
+`omarchy plugin disable io.github.pavellizunov.vpnrouter`, and stop the unit if
+installed (`systemctl --user stop vpnrouter-headless.service`). An older package
+has no unit: use `pgrep -a -u "$(id -u)" -f '(^|[ /])VPNRouter[.]Headless([.]dll)? --stdio( |$)'`
+to find a remaining legacy helper, terminate only its listed PID with
+`kill -TERM PID`, and wait for exit. Service masking cannot stop a shell-owned
+stdio helper. Do this before replacing old assemblies, even if the VPN was
+already disconnected. If an old helper leaves a TUN briefly, wait for it to
+vanish before connecting the replacement.
+
 Download the package and sidecar from the same CI run into an empty directory, then:
 
 ```bash
@@ -53,8 +63,20 @@ getcap /usr/lib/vpnrouter-headless/runtime/sing-box
 systemctl --user daemon-reload
 systemctl --user start vpnrouter-headless.service
 { printf '%s\n' '{"v":1,"id":"check-1","method":"snapshot","params":{}}'; sleep 2; } | \
-  /usr/lib/vpnrouter-headless/VPNRouter.Headless --stdio
+  /usr/lib/vpnrouter-headless/VPNRouter.Headless --attach
 ```
+
+Run the attach diagnostic while the plugin is disabled: there is only one
+controller. With an enabled plugin, `controller_busy` is expected; use
+`systemctl --user is-active vpnrouter-headless.service` instead. Do not start a
+second stdio backend with the same data directory beside the service.
+Update the plugin from its coordinated branch, remove any plugin-local payload
+with `./setup --remove` from the installed plugin directory, rescan/enable it,
+and cold-restart the shell once to load the new transport. A local payload takes
+priority over this package and retains stdio lifetime. See the plugin's
+[EN](https://github.com/PavelLizunov/omarchy-vpnrouter/blob/dsh/omarchy-plugin-n4-lifetime/docs/guide.md#upgrading-an-existing-installation)
+and [RU](https://github.com/PavelLizunov/omarchy-vpnrouter/blob/dsh/omarchy-plugin-n4-lifetime/docs/guide.ru.md#обновление-существующей-установки)
+upgrade sequence.
 
 The unit is part of `graphical-session.target`: logout stops the VPN even with
 user lingering enabled. Shell/plugin reload only detaches the controller. A
@@ -62,9 +84,11 @@ service crash triggers up to three restarts per minute, with a two-second delay;
 the new session starts disconnected. The whole service cgroup receives SIGTERM
 on stop, allowing sing-box to remove its TUN and routes.
 
-During package upgrade, active user services are runtime-masked and stopped before
-files are replaced, then unmasked and started disconnected after capabilities are
-restored. The panel retries its attachment. Removal stops them without restarting.
+During package upgrade, the service is runtime-masked for every existing user
+manager before files are replaced, including inactive services that the panel
+could otherwise start during extraction. Running services are stopped; after
+capabilities are restored all units are unmasked, and only previously active
+services are explicitly started, disconnected. The panel retries its attachment. Removal stops them without restarting.
 An interrupted transaction may leave a runtime mask; finish/reinstall the package
 or run `systemctl --user unmask --runtime vpnrouter-headless.service` before
 starting it again.

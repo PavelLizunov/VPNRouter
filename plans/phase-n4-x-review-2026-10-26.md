@@ -13,6 +13,9 @@ tag, merge, owner workstation deployment or shared unrelated VM changes.
   or stdio diagnostic can revert a running service's DNS before refusal.
 - P2: migration instructions omit stopping the legacy shell-owned stdio helper
   before pacman replaces assemblies. Service masking cannot stop that helper.
+- P2: only active services are masked during upgrade; an inactive service can
+  start via panel retries while assemblies are replaced. Mask all user managers
+  and preserve whether each was active, including retry and old empty markers.
 - P3: the lifetime design note still describes the unit as independent of
   graphical-session.target; the shipped unit is PartOf that target.
 
@@ -36,5 +39,10 @@ and stopping its backend. Other-laptop and logout behavior remain unverified.
 
 ## Gates / outcome
 
-Build, regression, docs, source review and VM consumer gates: pending.
+Packaging: 131/131 passed; four upgrade expectations fail on the old hook.
+Plugin: 13 Node suites and 42 isolated packaging cases passed; docs-only plugin
+78ab311 has green CI 40252590875. Source/diff review performed directly.
+Backend .NET/Arch CI and final VM consumer gate: pending, recorded in external X.md.
+The first plugin packaging run saw installed-host backend/processes; the isolated
+PID/network/filesystem run passed without touching that backend.
 Windows/macOS live and graphical logout: N/A to this bounded VM round.
