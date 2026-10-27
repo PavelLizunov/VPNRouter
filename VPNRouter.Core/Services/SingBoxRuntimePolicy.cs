@@ -52,6 +52,11 @@ internal sealed class SingBoxRuntimePolicy
 
     public static SingBoxRuntimePolicy? Current => s_current.Value;
 
+    internal static void ResetForTests()
+    {
+        s_current.Value = null;
+    }
+
     /// <summary>
     /// Atomically captures the active policy into <paramref name="retained"/> with sticky retention semantics:
     /// - DefaultProduction dominates current/retained always.

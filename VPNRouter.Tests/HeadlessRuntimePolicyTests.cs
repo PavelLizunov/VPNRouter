@@ -28,6 +28,7 @@ public class HeadlessRuntimePolicyTests : IDisposable
     public HeadlessRuntimePolicyTests()
     {
         SingBoxFeatures.ResetForTests();
+        SingBoxRuntimePolicy.ResetForTests();
         SingBoxRuntimePolicy.GeteuidOverrideForTests = () => 1000;
 
         _savedDataDir = AppPaths.DataDir;
@@ -50,7 +51,9 @@ public class HeadlessRuntimePolicyTests : IDisposable
     public void Dispose()
     {
         SingBoxFeatures.ResetForTests();
+        SingBoxRuntimePolicy.ResetForTests();
         SingBoxRuntimePolicy.GeteuidOverrideForTests = null;
+        SingBoxManager.HasNetCapabilityOverrideForTests = null;
 
         ReleaseSingletonTunLockBestEffort();
 
@@ -729,6 +732,8 @@ public class HeadlessRuntimePolicyTests : IDisposable
         if (!OperatingSystem.IsLinux())
             return;
 
+        SingBoxManager.HasNetCapabilityOverrideForTests = _ => true;
+
         var tempFile = Path.Combine(_testDataDir, "manager-sb-" + Guid.NewGuid().ToString("N") + ".bin");
         var bytes = new byte[] { 0x01, 0x02, 0x03, 0x04 };
         File.WriteAllBytes(tempFile, bytes);
@@ -791,6 +796,8 @@ public class HeadlessRuntimePolicyTests : IDisposable
         // This test provides genuine Linux policy evidence and does not claim Windows evidence.
         if (!OperatingSystem.IsLinux())
             return;
+
+        SingBoxManager.HasNetCapabilityOverrideForTests = _ => true;
 
         var tempFile = Path.Combine(_testDataDir, "tamper-sb-" + Guid.NewGuid().ToString("N") + ".bin");
         var originalBytes = new byte[] { 0x11, 0x22, 0x33, 0x44 };

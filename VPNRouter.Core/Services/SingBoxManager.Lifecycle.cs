@@ -598,8 +598,13 @@ public partial class SingBoxManager
         }
     }
 
+    internal static Func<string, bool>? HasNetCapabilityOverrideForTests { get; set; }
+
     private bool HasNetCapability(string exePath)
     {
+        if (HasNetCapabilityOverrideForTests != null)
+            return HasNetCapabilityOverrideForTests(exePath);
+
         if (!OperatingSystem.IsLinux()) return false;
         if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath)) return false;
 
