@@ -151,9 +151,9 @@ public sealed class UnixOwnedProcessSignalTests
 
     private static (Process child, string exePath) StartControlledChild()
     {
-        var binDir = AppPaths.BinDir;
-        Directory.CreateDirectory(binDir);
-        var testExe = Path.Combine(binDir, $"test-sleep-{Guid.NewGuid():N}");
+        var childDir = Path.Combine(AppPaths.BinDir, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(childDir);
+        var testExe = Path.Combine(childDir, "sleep");
         File.Copy("/bin/sleep", testExe, overwrite: true);
         if (OperatingSystem.IsLinux())
         {
@@ -167,10 +167,10 @@ public sealed class UnixOwnedProcessSignalTests
         });
         if (child == null)
         {
-            try { File.Delete(testExe); } catch { }
+            try { Directory.Delete(childDir, recursive: true); } catch { }
             throw new InvalidOperationException("Could not start controlled sleep child.");
         }
-        return (child, testExe);
+        return (child, childDir);
     }
 
     private static void StopControlledChild(Process child, string? exePath = null)
@@ -188,9 +188,16 @@ public sealed class UnixOwnedProcessSignalTests
         }
         finally
         {
-            if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
+            if (!string.IsNullOrEmpty(exePath))
             {
-                try { File.Delete(exePath); } catch { }
+                try
+                {
+                    if (Directory.Exists(exePath))
+                        Directory.Delete(exePath, recursive: true);
+                    else if (File.Exists(exePath))
+                        File.Delete(exePath);
+                }
+                catch { }
             }
         }
     }
