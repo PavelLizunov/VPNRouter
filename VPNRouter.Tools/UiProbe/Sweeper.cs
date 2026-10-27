@@ -95,6 +95,8 @@ public static class Sweeper
 
         for (var step = 1; step <= o.MaxSteps; step++)
         {
+            if (!window.IsVisible) break;
+
             if (clock.Elapsed.TotalSeconds > o.MaxSeconds)
             {
                 result.Truncated = true;
@@ -161,8 +163,15 @@ public static class Sweeper
 
     private static void RenderFrame(ProbeSession session)
     {
-        session.Layout();
-        _ = session.Window.CaptureRenderedFrame();
+        try
+        {
+            session.Layout();
+            _ = session.Window.CaptureRenderedFrame();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Window closed/disposed by an action (e.g. Close button)
+        }
     }
 
     private static List<Candidate> Collect(Window window, SweepOptions o, List<string> skipped)
@@ -220,18 +229,26 @@ public static class Sweeper
     private static void Act(ProbeSession session, Candidate pick)
     {
         var window = session.Window;
+        if (!window.IsVisible) return;
         var point = pick.Center;
-        window.MouseMove(point, RawInputModifiers.None);
-        window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
-        window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
-
-        if (pick.Control is TextBox)
-            window.KeyTextInput("probe 123 <&> \"q\"");
-
-        if (pick.Control is ComboBox { IsDropDownOpen: true })
+        try
         {
-            window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
-            window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+            window.MouseMove(point, RawInputModifiers.None);
+            window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
+
+            if (pick.Control is TextBox && window.IsVisible)
+                window.KeyTextInput("probe 123 <&> \"q\"");
+
+            if (pick.Control is ComboBox { IsDropDownOpen: true } && window.IsVisible)
+            {
+                window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+                window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Window was closed/disposed by an action
         }
     }
 
