@@ -369,9 +369,10 @@ app:
                     "[DBG] userpassword=\"alpha beta gamma\"";
         var outp = DiagnosticsRedactor.RedactLogText(input);
 
-        var expected = "[DBG] password=\"***\"\n" +
-                       "[DBG] token='***'\n" +
-                       "[DBG] userpassword=\"***\"";
+        var expected = string.Join(Environment.NewLine,
+            "[DBG] password=\"***\"",
+            "[DBG] token='***'",
+            "[DBG] userpassword=\"***\"");
 
         Assert.Equal(expected, outp);
     }
