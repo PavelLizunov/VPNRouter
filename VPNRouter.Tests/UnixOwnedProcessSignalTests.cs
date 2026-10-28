@@ -160,7 +160,7 @@ public sealed class UnixOwnedProcessSignalTests
             File.SetUnixFileMode(testExe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        var child = Process.Start(new ProcessStartInfo(testExe, "3600")
+        var child = Process.Start(new ProcessStartInfo(testExe, "30")
         {
             UseShellExecute = false,
             CreateNoWindow = true
