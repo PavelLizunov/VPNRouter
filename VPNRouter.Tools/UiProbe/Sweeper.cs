@@ -136,6 +136,10 @@ public static class Sweeper
                 else Dispatcher.UIThread.RunJobs();
                 if (o.RenderEvery > 0 && step % o.RenderEvery == 0) RenderFrame(session);
             }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
             catch (Exception ex)
             {
                 error = ex.GetType().Name + ": " + ex.Message + FirstFrames(ex, 6);
@@ -161,8 +165,14 @@ public static class Sweeper
 
     private static void RenderFrame(ProbeSession session)
     {
-        session.Layout();
-        _ = session.Window.CaptureRenderedFrame();
+        try
+        {
+            session.Layout();
+            _ = session.Window.CaptureRenderedFrame();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private static List<Candidate> Collect(Window window, SweepOptions o, List<string> skipped)
