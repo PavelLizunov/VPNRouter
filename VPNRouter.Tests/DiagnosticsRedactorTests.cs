@@ -198,6 +198,19 @@ app:
     }
 
     [Fact]
+    public void Logs_RedactQuotedSecretsWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta gamma\" ok\n[DBG] token='x y z' set");
+
+        Assert.DoesNotContain("alpha beta gamma", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("x y z", outp);
+        Assert.Contains("password=\"***\"", outp);
+        Assert.Contains("token='***'", outp);
+    }
+
+    [Fact]
     public void Yaml_NumericObfsPassword_IsRedacted()
     {
         var outp = DiagnosticsRedactor.RedactConfigYaml(
