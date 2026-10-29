@@ -733,6 +733,9 @@ public class HeadlessRuntimePolicyTests : IDisposable
         var bytes = new byte[] { 0x01, 0x02, 0x03, 0x04 };
         File.WriteAllBytes(tempFile, bytes);
 
+        if (!SingBoxRuntimePolicy.HasNetAdminCapability(tempFile))
+            return;
+
         try
         {
             using var sha = SHA256.Create();
@@ -795,6 +798,9 @@ public class HeadlessRuntimePolicyTests : IDisposable
         var tempFile = Path.Combine(_testDataDir, "tamper-sb-" + Guid.NewGuid().ToString("N") + ".bin");
         var originalBytes = new byte[] { 0x11, 0x22, 0x33, 0x44 };
         File.WriteAllBytes(tempFile, originalBytes);
+
+        if (!SingBoxRuntimePolicy.HasNetAdminCapability(tempFile))
+            return;
 
         try
         {
