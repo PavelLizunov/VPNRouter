@@ -161,8 +161,14 @@ public static class Sweeper
 
     private static void RenderFrame(ProbeSession session)
     {
-        session.Layout();
-        _ = session.Window.CaptureRenderedFrame();
+        try
+        {
+            session.Layout();
+            _ = session.Window.CaptureRenderedFrame();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private static List<Candidate> Collect(Window window, SweepOptions o, List<string> skipped)
@@ -219,19 +225,25 @@ public static class Sweeper
 
     private static void Act(ProbeSession session, Candidate pick)
     {
-        var window = session.Window;
-        var point = pick.Center;
-        window.MouseMove(point, RawInputModifiers.None);
-        window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
-        window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
-
-        if (pick.Control is TextBox)
-            window.KeyTextInput("probe 123 <&> \"q\"");
-
-        if (pick.Control is ComboBox { IsDropDownOpen: true })
+        try
         {
-            window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
-            window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+            var window = session.Window;
+            var point = pick.Center;
+            window.MouseMove(point, RawInputModifiers.None);
+            window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
+
+            if (pick.Control is TextBox)
+                window.KeyTextInput("probe 123 <&> \"q\"");
+
+            if (pick.Control is ComboBox { IsDropDownOpen: true })
+            {
+                window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+                window.KeyReleaseQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+            }
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
