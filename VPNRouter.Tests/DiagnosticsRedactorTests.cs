@@ -360,4 +360,34 @@ app:
         Assert.Contains("bad_line: ***", outp);
         Assert.Contains("unknown_secret_key: ***", outp);
     }
+
+    [Fact]
+    public void Logs_RedactQuotedSecretsWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta gamma\"\n" +
+            "[DBG] token='x y z'\n" +
+            "[DBG] userpassword=\"foo 'bar' baz\"\n" +
+            "[DBG] secret_key='alpha \"beta\" gamma'\n" +
+            "[DBG] app_secret=\"hello \\\"world\\\" test\"\n" +
+            "[DBG] unclosed_token=\"unterminated secret value");
+
+        Assert.DoesNotContain("alpha", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("gamma", outp);
+        Assert.DoesNotContain("x y z", outp);
+        Assert.DoesNotContain("foo", outp);
+        Assert.DoesNotContain("bar", outp);
+        Assert.DoesNotContain("baz", outp);
+        Assert.DoesNotContain("hello", outp);
+        Assert.DoesNotContain("world", outp);
+        Assert.DoesNotContain("unterminated", outp);
+
+        Assert.Contains("password=\"***\"", outp);
+        Assert.Contains("token='***'", outp);
+        Assert.Contains("userpassword=\"***\"", outp);
+        Assert.Contains("secret_key='***'", outp);
+        Assert.Contains("app_secret=\"***\"", outp);
+        Assert.Contains("unclosed_token=\"***", outp);
+    }
 }
