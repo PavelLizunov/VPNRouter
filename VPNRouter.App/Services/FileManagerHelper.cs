@@ -7,6 +7,18 @@ namespace VPNRouter.App.Services;
 
 internal static class FileManagerHelper
 {
+    public static ProcessStartInfo BuildOpenDirectoryStartInfo(string directoryPath)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsWindows() ? "explorer.exe" :
+                OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add(directoryPath);
+        return psi;
+    }
+
     public static ProcessStartInfo BuildRevealStartInfo(string filePath)
     {
         var psi = new ProcessStartInfo();

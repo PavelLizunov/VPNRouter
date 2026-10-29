@@ -7,6 +7,19 @@ namespace VPNRouter.App.Services;
 
 public static class SelfRepair
 {
+    internal static ProcessStartInfo BuildStartInfo(string bootstrapPath)
+    {
+        var psi = new ProcessStartInfo("powershell.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        foreach (var argument in new[] { "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", bootstrapPath })
+            psi.ArgumentList.Add(argument);
+        return psi;
+    }
+
     private const string MarkerFileName = "self-repair-marker";
     private const int LoopWindowMinutes = 10;
 
@@ -81,14 +94,7 @@ public static class SelfRepair
             throw;
         }
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = "powershell.exe",
-            Arguments = $"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"{bootstrapPath}\"",
-            UseShellExecute = true,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
-        };
+        var psi = BuildStartInfo(bootstrapPath);
 
         try
         {
