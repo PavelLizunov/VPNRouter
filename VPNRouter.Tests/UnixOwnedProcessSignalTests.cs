@@ -154,7 +154,34 @@ public sealed class UnixOwnedProcessSignalTests
         var binDir = AppPaths.BinDir;
         Directory.CreateDirectory(binDir);
         var testExe = Path.Combine(binDir, $"test-sleep-{Guid.NewGuid():N}");
-        File.Copy("/bin/sleep", testExe, overwrite: true);
+
+        if (OperatingSystem.IsLinux() && File.Exists("/usr/bin/cc"))
+        {
+            var cFile = Path.Combine(binDir, $"test-sleep-{Guid.NewGuid():N}.c");
+            try
+            {
+                File.WriteAllText(cFile, "#include <unistd.h>\nint main(){ sleep(30); return 0; }\n");
+                var cc = Process.Start(new ProcessStartInfo("/usr/bin/cc", $"-O0 \"{cFile}\" -o \"{testExe}\"")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                cc?.WaitForExit(5000);
+            }
+            catch
+            {
+            }
+            finally
+            {
+                try { File.Delete(cFile); } catch { }
+            }
+        }
+
+        if (!File.Exists(testExe))
+        {
+            File.Copy("/bin/sleep", testExe, overwrite: true);
+        }
+
         if (OperatingSystem.IsLinux())
         {
             File.SetUnixFileMode(testExe, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
