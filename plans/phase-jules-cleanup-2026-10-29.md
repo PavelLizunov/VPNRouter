@@ -43,4 +43,5 @@ Repeated Jules/Sentinel runs created 51 open PRs, 41 about the same still-open L
 - Original dirty checkout preserved; separate worktree from current main.
 - Prior review confirmed the quoted-space defect; source blob unchanged since the 2026-10-25 native-regex triage. No full local .NET execution claimed.
 - Worker request vpnrouter-jules-cleanup-20261029 is queued for Linux101 behind the current owner's Windows lease. GitHub CI remains available independently.
-- No PR or Jules schedule has been changed yet.
+- PR #640 is open; brief commit 3b719476. Baseline CI 40967099986 fails Linux UnixOwnedProcessSignalTests on a multicall coreutils basename mismatch before product edits. Fix only that prerequisite first, retaining identity assertions, then resume product work after green CI.
+- Linux101 preflight had no .NET SDK in the inspected standard/build locations; released its lease without provisioning. Windows100 request vpnrouter-jules-cleanup-win-20261029 is active, identity WINBRAT confirmed, SDK 10.0.301 present, 12792 MiB available RAM and 118794 MiB free disk observed. No Jules schedule has been changed.
