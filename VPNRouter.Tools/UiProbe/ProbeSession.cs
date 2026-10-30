@@ -104,10 +104,11 @@ public sealed class ProbeSession : IDisposable
 
     public void Layout()
     {
+        if (!Window.IsVisible) return;
         Window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick(1);
-        Window.UpdateLayout();
+        if (Window.IsVisible) Window.UpdateLayout();
     }
 
     // A step is a label to click; "hover:Label" only moves the mouse onto the control and leaves it there (pointer-over styles), "press:Label"
@@ -192,9 +193,11 @@ public sealed class ProbeSession : IDisposable
         while (DateTime.UtcNow < end);
     }
 
-    public byte[] CapturePng()
+    public byte[]? CapturePng()
     {
+        if (!Window.IsVisible) return null;
         Layout();
+        if (!Window.IsVisible) return null;
         var bitmap = Window.CaptureRenderedFrame()
             ?? throw new InvalidOperationException("CaptureRenderedFrame returned null (headless Skia drawing is not enabled).");
         var path = Path.Combine(Path.GetTempPath(), "uiprobe-" + Guid.NewGuid().ToString("N") + ".png");
