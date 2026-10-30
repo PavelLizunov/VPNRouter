@@ -313,6 +313,28 @@ public sealed class ReleaseSafetyBehaviorTests
             Assert.True(process.ExitCode == 0, $"Scenario={scenario}; exit={process.ExitCode}; {output}");
             Assert.Contains("FIXTURE-PASS", output, StringComparison.Ordinal);
         }
-        finally { temp.Delete(recursive: true); }
+        finally
+        {
+            DeleteBestEffort(temp);
+        }
+    }
+
+    private static void DeleteBestEffort(DirectoryInfo? temp)
+    {
+        if (temp == null) return;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                if (temp.Exists)
+                    temp.Delete(recursive: true);
+                break;
+            }
+            catch
+            {
+                if (attempt < 4)
+                    Thread.Sleep(50);
+            }
+        }
     }
 }
