@@ -6,6 +6,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
+using VPNRouter.App.Services;
 using VPNRouter.Core.Services.Diagnostics;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
@@ -373,26 +374,7 @@ public partial class MainWindowViewModel
             var logsDir = AppPaths.LogsDir;
             Directory.CreateDirectory(logsDir);
 
-            ProcessStartInfo psi;
-            if (OperatingSystem.IsWindows())
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    UseShellExecute = false
-                };
-                psi.ArgumentList.Add(logsDir);
-            }
-            else
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/open",
-                    UseShellExecute = false
-                };
-                psi.ArgumentList.Add(logsDir);
-            }
-            System.Diagnostics.Process.Start(psi);
+            System.Diagnostics.Process.Start(FileManagerHelper.BuildOpenDirectoryStartInfo(logsDir));
         }
         catch { }
     }

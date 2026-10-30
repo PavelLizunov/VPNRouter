@@ -243,7 +243,8 @@ public static class ZapretActions
         catch { return (false, false); }
     }
 
-    internal static void OpenHostsEditHelpers(string tempPath, string hostsPath)
+    internal static (ProcessStartInfo Editor, ProcessStartInfo Reveal) BuildHostsEditStartInfos(
+        string tempPath, string hostsPath)
     {
         ArgumentNullException.ThrowIfNull(tempPath);
         ArgumentNullException.ThrowIfNull(hostsPath);
@@ -254,13 +255,23 @@ public static class ZapretActions
         if (hostsPath.Any(c => c is '\r' or '\n' or '"'))
             throw new ArgumentException("Hosts path contains disallowed characters", nameof(hostsPath));
 
+        var editor = new ProcessStartInfo("notepad.exe") { UseShellExecute = false };
+        editor.ArgumentList.Add(tempPath);
+        var reveal = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
+        reveal.ArgumentList.Add($"/select,{hostsPath}");
+        return (editor, reveal);
+    }
+
+    internal static void OpenHostsEditHelpers(string tempPath, string hostsPath)
+    {
+        var (editor, reveal) = BuildHostsEditStartInfos(tempPath, hostsPath);
         if (!OperatingSystem.IsWindows())
             return;
 
         try
         {
-            Process.Start(new ProcessStartInfo("notepad", tempPath) { UseShellExecute = true });
-            Process.Start(new ProcessStartInfo("explorer", $"/select,\"{hostsPath}\"") { UseShellExecute = true });
+            Process.Start(editor);
+            Process.Start(reveal);
         }
         catch { }
     }
