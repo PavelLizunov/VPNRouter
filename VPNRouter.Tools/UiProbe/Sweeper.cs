@@ -134,11 +134,6 @@ public static class Sweeper
                 Act(session, pick);
                 if (o.SpeedMs > 0) ProbeSession.Pump(o.SpeedMs);
                 else Dispatcher.UIThread.RunJobs();
-                if (!window.IsVisible)
-                {
-                    result.Notes.Add($"window closed at step {step}");
-                    break;
-                }
                 if (o.RenderEvery > 0 && step % o.RenderEvery == 0) RenderFrame(session);
             }
             catch (Exception ex)
@@ -166,9 +161,7 @@ public static class Sweeper
 
     private static void RenderFrame(ProbeSession session)
     {
-        if (!session.Window.IsVisible) return;
         session.Layout();
-        if (!session.Window.IsVisible) return;
         _ = session.Window.CaptureRenderedFrame();
     }
 
