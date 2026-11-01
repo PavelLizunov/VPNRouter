@@ -385,6 +385,22 @@ public sealed class ZapretActionsTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("service.bat")]
+    [InlineData("service with space.bat")]
+    public void BuildServiceMenuStartInfo_UsesArgumentListAndExpectedProperties(string fileName)
+    {
+        var fullPath = Path.Combine(Path.GetTempPath(), fileName);
+        var psi = ZapretActions.BuildServiceMenuStartInfo(fullPath);
+
+        Assert.Equal("cmd.exe", psi.FileName);
+        Assert.True(psi.UseShellExecute);
+        Assert.Equal("runas", psi.Verb);
+        Assert.Equal(Path.GetDirectoryName(fullPath), psi.WorkingDirectory);
+        Assert.Empty(psi.Arguments);
+        Assert.Equal(new[] { "/k", fullPath }, psi.ArgumentList);
+    }
+
     [Fact]
     public void ExtractWinwsArgsFromLines_LineContinuation_JoinsAndSubstitutesPlaceholders()
     {
