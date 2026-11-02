@@ -158,9 +158,12 @@ public sealed class BusinessSupportCollectorTests
         Directory.CreateDirectory(outside);
         File.WriteAllText(Path.Combine(outside, "vpnrouter20261102.log"), "linked-sensitive");
         var result = await RunPowerShell("-NoProfile", "-Command",
-            "New-Item -ItemType Junction -Path $env:SUPPORT_TEST_LINK -Target $env:SUPPORT_TEST_TARGET -ErrorAction Stop | Out-Null",
+            """
+            & (Join-Path ([Environment]::GetFolderPath('System')) 'cmd.exe') /d /c 'mklink /J "%SUPPORT_TEST_LINK%" "%SUPPORT_TEST_TARGET%"'
+            exit $LASTEXITCODE
+            """,
             environment: new() { ["SUPPORT_TEST_LINK"] = Path.Combine(fixture.Data, "logs"), ["SUPPORT_TEST_TARGET"] = outside });
-        Assert.Equal(0, result.Code);
+        Assert.True(result.Code == 0, result.Output);
         try
         {
             Assert.Equal(0, (await Collect(fixture)).Code);

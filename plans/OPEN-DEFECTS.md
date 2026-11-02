@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2 FIXED IN TEST SOURCE / CI PENDING** - BUSINESS-SUPPORT-JUNCTION-FIXTURE: Windows CI 41443085094 at 99f241cf fails at the New-Item Junction fixture setup (BusinessSupportCollectorTests:163), before collector invocation; 20 other Business checks pass. The fixture uses a literal path containing square brackets and an ampersand. Use mklink /J with explicitly quoted environment paths instead of PowerShell provider path resolution, and include subprocess output in the setup assertion. No collector or application behavior change.
+
 - [x] **P2 FIXED IN SOURCE / WINDOWS CI PENDING** - BUSINESS-SUPPORT-PROFILE-SPACES: fallback username masking stopped at whitespace and left part of a spaced Windows profile name. Source-confirmed by business_support_security and coordinator; mask the complete Users path segment and add backslash/forward-slash fixtures.
 - [x] **P2 FIXED IN SOURCE / WINDOWS CI PENDING** - BUSINESS-SUPPORT-CI-PATHS: existing artifact workflow paths did not include support-only source/test changes, so future helper-only fixes need not regenerate the artifact. Source-confirmed by business_support_test_review and coordinator; add support, installer and Business-test paths to both triggers.
 - [x] **P2 FIXED IN SOURCE / WINDOWS CI PENDING** - BUSINESS-SUPPORT-UPLOAD-BOUND: sender checked cached FileInfo length before opening, then used the stream's later length; replacement/growth between those operations could exceed the advertised bound. Source-confirmed by business_support_test_review and coordinator; check the opened stream too and bound token-file reads similarly.

@@ -58,6 +58,11 @@ ZIP POST, but do not deploy a receiver or claim production upload verification.
 ## Outcome
 
 - Status: PARTIAL; implementation and source review complete, Windows CI pending.
+- Initial Windows CI: 99f241cf, run 41443085094, shared Release solution build
+  passed; Business suite 20 passed, 1 failed, 1 intentionally skipped. The failed
+  test stops at fixture junction creation before calling the collector. Replace
+  provider-resolved New-Item with literal quoted mklink paths and repeat exact-SHA
+  CI; the actual collector/sender scripts are unchanged by this fixture correction.
 - Changed files: independent PowerShell 5.1 log collector/sender plus CMD launcher,
   Business-only Start-menu entry, standalone CI artifact, employee/admin instructions
   and Windows regression fixtures. No application engine or consumer UI changes.
