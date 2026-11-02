@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2 FIXED IN BUSINESS PILOT PR #646** - BUSINESS-FULL-MODE-TEST: new generator regression incorrectly required a per-process proxy rule in full mode, where the existing engine intentionally uses route.final=proxy. Linux CI 41429464669 at 19c10b32: 3247 passed, one assertion failed at BusinessDefaultsTests.cs:40. Check process-rule order only in split mode and assert final proxy plus Direct exceptions in full mode; no routing implementation change.
+
 - [x] **P2 FIXED IN BUSINESS PILOT PR #646** - BUSINESS-TRAY-LABEL: App property-change handler reset the Business open-window label to consumer Settings after connection changes; retain edition-specific label in both initialization and refresh. Confirmed by business_routing_review.
 - [x] **P2 FIXED IN BUSINESS PILOT PR #646** - BUSINESS-CONSUMER-TRAMPOLINE: shared build payload contained the ordinary Go GUI launcher with its own consumer web-repair; remove GUI/CLI/Service alternate entry points from Business payload. Business shortcuts launch App.exe directly. Confirmed by business_packaging_review.
 

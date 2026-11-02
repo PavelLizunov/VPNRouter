@@ -58,3 +58,7 @@ Owner requested the fastest pilot: compile the supplied private connection and r
 - Local lightweight checks: XML parses for props/csproj/XAML, workflow YAML parse, native rules count, scoped diff whitespace check. No local build, packaging, full tests or VPN launch.
 - WINBRAT currently BLOCKED: this session has no PowerShell controller, no trusted windows-worker SSH alias/DNS, no verifier credential file, no callable T3 linked-environment inventory, and no available homelab skill. Asked owner for the existing access route while continuing CI packaging. Customer UIS calls remain unverified.
 - Private CI inputs are outside Git; only encrypted installer delivery is authorized. Ephemeral repository secrets must be removed after retrieval.
+
+## CI correction at 19c10b32
+
+Linux CI compiled the application and ran 3326 tests: 3247 passed, 78 skipped and one new full-mode expectation failed. The fixture incorrectly required a process proxy rule even though full mode correctly uses final=proxy. Correct the expectation, retain Direct-exception checks and split-mode process/QUIC ordering checks. No runtime implementation change. GitHub rejected the workflow-file push because the current OAuth credential lacks workflow permission; a protected request for replacement authorization timed out. Product code was pushed separately so ordinary CI could proceed. The reviewed private workflow remains an unstaged task-owned change; no installer has been built or published.

@@ -24,7 +24,7 @@ public sealed class BusinessDefaultsTests
     [Theory]
     [InlineData("split", "direct")]
     [InlineData("full", "proxy")]
-    public void Preset_ReusesGeneratorAndRoutesDestinationsBeforeProcesses(string mode, string final)
+    public void Preset_ReusesGeneratorWithDirectExceptionsInBothModes(string mode, string final)
     {
         var settings = new AppSettings();
         BusinessDefaults.Apply(settings, SampleConnection, BusinessBootstrap.ReadRules());
@@ -37,11 +37,16 @@ public sealed class BusinessDefaultsTests
         Assert.Equal(6, settings.App.RoutingAppsInclude.Count);
         var direct = config.Route.Rules.FindIndex(r => r.DomainSuffix?.Contains("in-mag.ru") == true);
         var proxyProcess = config.Route.Rules.FindIndex(r => r.ProcessName?.Contains("Telegram.exe") == true && r.Outbound == "proxy");
-        Assert.True(direct >= 0 && proxyProcess > direct);
+        Assert.True(direct >= 0);
         if (mode == "split")
         {
+            Assert.True(proxyProcess > direct);
             var quic = config.Route.Rules.FindIndex(r => r.ProcessName?.Contains("Telegram.exe") == true && r.Action == "reject");
             Assert.True(quic >= 0 && quic < proxyProcess);
+        }
+        else
+        {
+            Assert.Equal(-1, proxyProcess);
         }
         Assert.Contains(config.Route.Rules, r => r.IpCidr?.Contains("195.211.120.35/32") == true && r.Outbound == "direct");
         Assert.Contains("195.211.120.35/32", config.Inbounds[0].RouteExcludeAddress!);
