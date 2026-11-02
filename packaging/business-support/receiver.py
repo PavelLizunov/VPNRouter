@@ -263,13 +263,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     store.active.discard(temporary)
                     temporary = None
                     sync_directory(store.root)
-            self.reply(200 if duplicate else 201, {"stored": True, "report_id": report_id})
+            response = (200 if duplicate else 201, {"stored": True, "report_id": report_id})
         except (ValueError, zipfile.BadZipFile, EOFError, UnicodeError):
-            self.reply(400, {"error": "invalid diagnostic archive"})
+            response = (400, {"error": "invalid diagnostic archive"})
         except (TimeoutError, socket.timeout):
-            self.reply(408, {"error": "upload timed out"})
+            response = (408, {"error": "upload timed out"})
         except OSError:
-            self.reply(503, {"error": "storage unavailable"})
+            response = (503, {"error": "storage unavailable"})
         finally:
             try:
                 if temporary is not None:
@@ -281,6 +281,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             pass  # Accounted for and recovered by the next sweep.
             finally:
                 store.release(size)
+        self.reply(*response)
 
 
 def sync_directory(path):

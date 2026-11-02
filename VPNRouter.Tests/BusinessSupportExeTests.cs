@@ -38,7 +38,7 @@ public sealed class BusinessSupportExeTests
                 }
                 $stage = [VPNRouter.Business.Support.SupportRunner]::CreatePrivateStage()
                 try {
-                    $acl = Get-Acl -LiteralPath $stage
+                    $acl = [IO.DirectoryInfo]::new($stage).GetAccessControl()
                     if (!$acl.AreAccessRulesProtected) { throw 'Staging inherits permissions.' }
                     $allowed = @([Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
                     foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {

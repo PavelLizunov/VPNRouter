@@ -89,3 +89,8 @@ publish credentials or real employee reports. No new VPN client or fleet agent.
 - Unknowns: compiler/runtime results, selected route's final DNS/TLS/live state,
   deployed service identity and complete real one-button delivery evidence.
 - Cleanup: no new production mutation or worker lease yet.
+- Initial CI at 5c7e2702 (run 41471898133): receiver 10/11 passed, with the
+  persistence fixture exposing response-before-cleanup ordering; native EXE
+  compilation succeeded, then the builder failed on unavailable Get-FileHash.
+  Correct both without changing the distributed VPN client. Existing script
+  and routing checks pass; repeat exact-SHA CI before deployment.

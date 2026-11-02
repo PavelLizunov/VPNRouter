@@ -16,6 +16,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 IN ONE-FILE SUPPORT CI FIX** - SUPPORT-HASH-CMDLET: 5c7e2702 Windows CI 41471898133 compiles the EXE, then build-support.ps1 fails because Get-FileHash is unavailable in the spawned Windows PowerShell environment. Use framework SHA256 streaming directly; no SDK or module installation. Use the framework ACL API in the same fixture to avoid module discovery dependence.
+- [ ] **P2 IN ONE-FILE SUPPORT CI FIX** - SUPPORT-ACK-CLEANUP: 5c7e2702 receiver CI passes 10/11 fixtures but immediate post-response accounting observes 4516 reserved bytes. HTTP responses are written before finally releases the reservation/temp file, so acknowledgement races completed cleanup. Compute the response, clean up/release first, then send it; cover the existing persistence/dedup fixture.
+
 - [x] **P2 FIXED IN ONE-FILE SUPPORT SOURCE / CI PENDING** - SUPPORT-TIMEOUT-CLEANUP: native wrapper timeout kills the child but does not wait for its exit before disposing/deleting private staging. Source-confirmed by support_exe_windows and coordinator; add a bounded exit wait after timeout termination to release script/token handles before cleanup.
 
 - [x] **P2 FIXED IN ONE-FILE SUPPORT SOURCE / CI PENDING** - SUPPORT-ORPHAN-UPLOADS: initial receiver leaves incoming temporary files after a process interruption but excludes them from subsequent quota/retention accounting. Source-confirmed by support_exe_security and coordinator; recover owned orphan uploads at startup and count owned temporary/metadata files in quota.

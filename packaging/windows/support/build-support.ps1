@@ -26,6 +26,9 @@ try {
         "/resource:$PSScriptRoot\Send-VPNRouterBusiness-Diagnostics.ps1,Send-VPNRouterBusiness-Diagnostics.ps1" `
         "/resource:$settings,support-settings.json" "/out:$exe" "$PSScriptRoot\SupportApp.cs"
     if ($LASTEXITCODE -ne 0) { throw 'Support executable build failed.' }
-    $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+    $stream = [IO.File]::OpenRead($exe)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose(); $stream.Dispose() }
     "$hash  VPNRouterBusiness-Diagnostics.exe" | Set-Content "$exe.sha256" -Encoding ascii
 } finally { Remove-Item -LiteralPath $settings -Force -ErrorAction SilentlyContinue }
