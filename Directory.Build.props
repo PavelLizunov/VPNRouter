@@ -1,4 +1,7 @@
 <Project>
+  <PropertyGroup Condition="'$(VPNRouterEdition)' == 'Business'">
+    <DefineConstants>$(DefineConstants);VPNROUTER_BUSINESS</DefineConstants>
+  </PropertyGroup>
   <!-- Methodology audit (plans/methodology-audit-2026-06-25.md, item 2).
 
        NuGet vulnerability auditing: the build now surfaces NU1901-1904 for

@@ -69,6 +69,8 @@ public static partial class ConfigGenerator
         bool? strictDnsOverride = null,
         Func<VlessServerEntry, bool>? isServerAlive = null)
     {
+        if (ProductEdition.IsBusiness && settings.App.BypassRussianTraffic && !GeoDataDownloader.AreGeoFilesAvailable())
+            throw new InvalidOperationException(Localization.Strings.BusinessGeoMissing);
         var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
             .ToLowerInvariant();
         var isExcludeMode = routingAppsMode == "exclude";
@@ -132,6 +134,9 @@ public static partial class ConfigGenerator
             if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
                 ApplyGeoBypass(config);
         }
+
+        if (ProductEdition.IsBusiness)
+            BusinessDefaults.ApplyDns(config, settings.App.CustomRules ?? []);
 
         return config;
     }

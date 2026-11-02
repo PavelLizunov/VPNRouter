@@ -8,6 +8,7 @@ namespace VPNRouter.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private bool _businessConfigurationFailed;
     private void OnAutoFailoverMessage(string message)
     {
         if (string.IsNullOrWhiteSpace(message)) return;
@@ -159,6 +160,11 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task ToggleConnectionAsync()
     {
+        if (ProductEdition.IsBusiness && _businessConfigurationFailed && !IsConnected)
+        {
+            StatusText = Core.Localization.Strings.BusinessConfigMissing;
+            return;
+        }
         var toggle = ConnectionSyncPolicy.DecideToggle(
             IsConnected,
             inTransition: IsConnecting || IsApplying || _isReconnecting,
@@ -381,6 +387,7 @@ public partial class MainWindowViewModel
 #if PLATFORM_WINDOWS
     private static bool TryStopVpnRouterService()
     {
+        if (ProductEdition.IsBusiness) return false;
         var psi = new System.Diagnostics.ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
         {
             UseShellExecute = false,

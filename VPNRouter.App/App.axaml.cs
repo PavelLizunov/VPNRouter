@@ -65,10 +65,12 @@ public partial class App : Application
             catch { }
 
             _viewModel = new MainWindowViewModel();
-            var mainWindow = new MainWindow { DataContext = _viewModel };
+            Window mainWindow = VPNRouter.Core.ProductEdition.IsBusiness
+                ? new BusinessWindow { DataContext = _viewModel }
+                : new MainWindow { DataContext = _viewModel };
 
 #if PLATFORM_WINDOWS
-            if (OperatingSystem.IsWindows())
+            if (OperatingSystem.IsWindows() && !VPNRouter.Core.ProductEdition.IsBusiness)
                 try
                 {
                     var cats = _viewModel.AppGroups
@@ -158,7 +160,8 @@ public partial class App : Application
     {
         var menu = new NativeMenu();
 
-        var showItem = new NativeMenuItem(Localization.Strings.TraySettings);
+        var showItem = new NativeMenuItem(VPNRouter.Core.ProductEdition.IsBusiness
+            ? VPNRouter.Core.Localization.Strings.BusinessOpen : Localization.Strings.TraySettings);
         // BringToFront also restores a window the tray guard minimized to the taskbar.
         showItem.Click += (_, _) => VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
 
@@ -171,13 +174,19 @@ public partial class App : Application
         menu.Items.Add(showItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(connectItem);
+        if (VPNRouter.Core.ProductEdition.IsBusiness)
+        {
+            var diagnostics = new NativeMenuItem(VPNRouter.Core.Localization.Strings.BusinessDiagnostics);
+            diagnostics.Click += (_, _) => _viewModel?.ExportDiagnosticsCommand.Execute(null);
+            menu.Items.Add(diagnostics);
+        }
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(quitItem);
 
         _trayIcon = new TrayIcon
         {
             Icon = new WindowIcon(AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant)))),
-            ToolTipText = "VPNRouter",
+            ToolTipText = VPNRouter.Core.ProductEdition.Name,
             Menu = menu,
             IsVisible = true
         };
@@ -204,11 +213,12 @@ public partial class App : Application
                 // The tray menu follows the connection state and the language (a language switch raises "" or IsRussian).
                 if (e.PropertyName is nameof(MainWindowViewModel.IsConnected) or nameof(MainWindowViewModel.IsRussian) or "" or null)
                 {
-                    showItem.Header = Localization.Strings.TraySettings;
+                    showItem.Header = VPNRouter.Core.ProductEdition.IsBusiness
+                        ? VPNRouter.Core.Localization.Strings.BusinessOpen : Localization.Strings.TraySettings;
                     quitItem.Header = Localization.Strings.TrayExit;
                     connectItem.Header = _viewModel.IsConnected ? Localization.Strings.TrayStop : Localization.Strings.TrayStart;
                     _trayIcon.ToolTipText = _viewModel.IsConnected
-                        ? "VPNRouter - Connected" : "VPNRouter";
+                        ? VPNRouter.Core.ProductEdition.Name + " - Connected" : VPNRouter.Core.ProductEdition.Name;
                 }
             };
         }

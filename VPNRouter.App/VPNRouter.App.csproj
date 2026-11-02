@@ -10,6 +10,16 @@
     <AssemblyName>VPNRouter.App</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\packaging\windows\business-rules.json" LogicalName="VPNRouter.Business.Rules" />
+    <EmbeddedResource Include="$(BusinessConnectionFile)" LogicalName="VPNRouter.Business.Connection"
+                      Condition="'$(VPNRouterEdition)' == 'Business' And '$(BusinessConnectionFile)' != ''" />
+  </ItemGroup>
+  <Target Name="ValidateBusinessConnection" BeforeTargets="PrepareForBuild" Condition="'$(VPNRouterEdition)' == 'Business'">
+    <Error Condition="'$(BusinessConnectionFile)' == '' Or !Exists('$(BusinessConnectionFile)')"
+           Text="Business builds require a private BusinessConnectionFile outside the repository." />
+  </Target>
+
   <!-- Windows-specific: define PLATFORM_WINDOWS, reference Service for ServiceInstaller.
        v2.20.4: ApplicationIcon points at the new penguin_mascot.ico
        (generated from Assets/penguin_mascot.png, 7 sizes 16–256). v2.20.3

@@ -83,7 +83,7 @@ sealed class Program
 #if PLATFORM_WINDOWS
         try
         {
-            if (VPNRouter.App.Services.ShortcutSelfHeal.EnsureTrampolineTarget())
+            if (!VPNRouter.Core.ProductEdition.IsBusiness && VPNRouter.App.Services.ShortcutSelfHeal.EnsureTrampolineTarget())
             {
                 try { Console.Error.WriteLine("[shortcut] Start Menu shortcut migrated to VPNRouter.GUI.exe (trampoline)"); }
                 catch { }

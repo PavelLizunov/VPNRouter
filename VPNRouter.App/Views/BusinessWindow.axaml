@@ -1,0 +1,46 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:VPNRouter.App.ViewModels"
+        xmlns:loc="using:VPNRouter.Core.Localization"
+        xmlns:icons="using:VPNRouter.App.Controls"
+        x:Class="VPNRouter.App.Views.BusinessWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="VPNRouter Business" Width="420" Height="560" MinWidth="340" MinHeight="480"
+        Background="{DynamicResource SurfaceAppBrush}"
+        Icon="avares://VPNRouter.App/Assets/penguin_mascot.ico">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="28" Spacing="20" MaxWidth="400" HorizontalAlignment="Stretch">
+            <Image Source="{Binding LogoSource}" Width="100" Height="100" Stretch="Uniform"
+                   HorizontalAlignment="Center" Margin="0,12,0,0"/>
+            <TextBlock Text="VPNRouter Business" FontSize="24" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}"/>
+            <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" TextAlignment="Center"
+                       MinHeight="44" Foreground="{DynamicResource TextSecondaryBrush}"/>
+            <Button Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding !IsConnecting}"
+                    Classes="solid" MinHeight="48" CornerRadius="{StaticResource RadiusPill}"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                    AutomationProperties.Name="{Binding ConnectButtonText}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <icons:Pictogram Id="power" Width="18" Height="18" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding ConnectButtonText}" FontSize="18" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Border Background="{DynamicResource SurfaceBaseBrush}" BorderBrush="{DynamicResource BorderDefaultBrush}"
+                    BorderThickness="1" CornerRadius="{StaticResource RadiusXl}" Padding="14">
+                <StackPanel Spacing="12" IsEnabled="{Binding !IsConnected}">
+                    <RadioButton GroupName="BusinessMode" IsChecked="{Binding IsSplitTunnel}"
+                                 IsEnabled="{Binding !IsConnecting}">
+                        <TextBlock Text="{x:Static loc:Strings.BusinessSplit}" TextWrapping="Wrap"/>
+                    </RadioButton>
+                    <RadioButton GroupName="BusinessMode" IsChecked="{Binding !IsSplitTunnel, Mode=OneWay}"
+                                 IsEnabled="{Binding !IsConnecting}">
+                        <TextBlock Text="{x:Static loc:Strings.BusinessFull}" TextWrapping="Wrap"/>
+                    </RadioButton>
+                </StackPanel>
+            </Border>
+            <TextBlock Text="{x:Static loc:Strings.BusinessHint}" TextWrapping="Wrap" TextAlignment="Center"
+                       FontSize="12" Foreground="{DynamicResource TextMutedBrush}"/>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

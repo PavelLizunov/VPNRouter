@@ -510,6 +510,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _engine.TrueSplitStateChanged += OnTrueSplitStateChanged;
 
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+        if (ProductEdition.IsBusiness)
+        {
+            try { Services.BusinessBootstrap.Apply(_settings, _settingsStore); }
+            catch
+            {
+                _businessConfigurationFailed = true;
+                StatusText = Core.Localization.Strings.BusinessConfigMissing;
+            }
+        }
 
         WireServersOrphanTracking();
         WireSimpleHomeNotifications();
@@ -543,6 +552,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         };
 
         LoadSettingsIntoUI();
+        if (_businessConfigurationFailed)
+            StatusText = Core.Localization.Strings.BusinessConfigMissing;
 
         WireOsThemeFollow();
 
@@ -556,7 +567,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             DetectServiceManagedVpn();
 
-            _ = UpdateVm.CheckOnStartupAsync();
+            if (!ProductEdition.IsBusiness) _ = UpdateVm.CheckOnStartupAsync();
 
             StartRuntimeStatusPolling();
 

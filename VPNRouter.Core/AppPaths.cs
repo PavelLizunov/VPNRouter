@@ -256,7 +256,8 @@ public static class AppPaths
     private static string ResolveDataDir()
     {
         if (OperatingSystem.IsWindows())
-            return Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                ProductEdition.DataDirectoryName);
 
         if (OperatingSystem.IsMacOS())
             return Path.Combine(

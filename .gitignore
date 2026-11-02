@@ -79,6 +79,11 @@ tools/*
 !tools/refactor-equivalence/**
 # Windows installer builder (Inno Setup script: packaging/windows/vpnrouter.iss).
 !tools/build-installer.ps1
+!tools/build-business.ps1
+
+# Individual Business build inputs are secret-bearing and stay outside Git.
+*.business-connection.txt
+*.business-private.*
 # v2.32.2: methodology self-checker — runs 10 meta-tests.
 !tools/check-methodology.sh
 # v2.37.0-r19: CI gate verifier (pre-push hook). Re-add per contract rule #11.

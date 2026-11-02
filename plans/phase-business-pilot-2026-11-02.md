@@ -48,3 +48,13 @@ No public release/tag or main merge is requested. Build/package/test work runs o
 ## Scope correction from owner
 
 Owner requested the fastest pilot: compile the supplied private connection and routing directly into a Business variant; expose only status and Start/Stop. Defer enrollment, fleet control and automated provisioning architecture. in-mag.ru is Direct by explicit owner decision. Connection wrapper fetched successfully and uses the existing supported subscription format (10 share links). Never publish its content. Baseline Linux CI exposed an existing coreutils test-fixture failure; repair it before product edits.
+
+## Implementation evidence before CI
+
+- Prior repaired baseline fc1f5774: all seven PR checks passed, including Linux/Windows test jobs. The coreutils test fixture failure is repaired.
+- Owner narrowed delivery to a private embedded-config pilot, then requested two modes and Russian bypass. Implemented as a build flag over common App/Core, not a permanent source fork. Consumer updater/web repair is not used for Business.
+- Original profile: 38 entries after explicitly resolving in-mag.ru to Direct, plus five UIS destination entries = 43 embedded native rules. Proxy process names live in the existing six-process include list so UDP sibling/QUIC logic stays reachable. Russian bypass has the existing toggles_first priority per the later owner request.
+- Three independent read-only reviews: business_memory_review (lifetime), business_routing_review (routing/tests), business_packaging_review (packaging/security). Confirmed Business process-rule ordering and tray-label defects fixed; consumer alternate entry points removed; private first-run storage paths made explicit. Pre-existing lifecycle findings recorded in OPEN-DEFECTS, without claiming measured memory leaks or expanding the pilot into lifecycle refactoring.
+- Local lightweight checks: XML parses for props/csproj/XAML, workflow YAML parse, native rules count, scoped diff whitespace check. No local build, packaging, full tests or VPN launch.
+- WINBRAT currently BLOCKED: this session has no PowerShell controller, no trusted windows-worker SSH alias/DNS, no verifier credential file, no callable T3 linked-environment inventory, and no available homelab skill. Asked owner for the existing access route while continuing CI packaging. Customer UIS calls remain unverified.
+- Private CI inputs are outside Git; only encrypted installer delivery is authorized. Ephemeral repository secrets must be removed after retrieval.

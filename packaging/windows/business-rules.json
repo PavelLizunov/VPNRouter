@@ -1,0 +1,303 @@
+[
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "uiscom.ru",
+    "comment": "UIS official service domains",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "uiscom.co",
+    "comment": "UIS official service domains",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "comagic.ru",
+    "comment": "UIS official service domains",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "callbackhunter.com",
+    "comment": "UIS official service domains",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "ip_cidr",
+    "value": "195.211.120.35/32",
+    "comment": "UIS published alternate SIP registration host; not all RTP hosts",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "dns-shop.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "yastatic.net",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "mc.yandex.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "top-fwz1.mail.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "mvideo.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "hausdorf.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "eduson.academy",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "academy-business-owner.eduson.tv",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "avito.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "www.mvideo.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "adm.vstroyka-solo.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
+    "value": "in-mag.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "youtube.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "youtu.be",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "googlevideo.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "ytimg.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "youtubei.googleapis.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "openai.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "chatgpt.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "claude.ai",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "claude.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "oaistatic.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "oaiusercontent.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "telegram.org",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "t.me",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "whatsapp.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "whatsapp.net",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "steamdb.info",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "itch.io",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "discord.com",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "pin.it",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "domain_suffix",
+    "value": "pinterest.ru",
+    "comment": "Proxy sites",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "process_name",
+    "value": "Telegram.exe",
+    "comment": "Proxy applications",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "process_name",
+    "value": "WhatsApp.exe",
+    "comment": "Proxy applications",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "process_name",
+    "value": "Discord.exe",
+    "comment": "Proxy applications",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "process_name",
+    "value": "AnyDesk.exe",
+    "comment": "Proxy applications",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "process_name",
+    "value": "Claude.exe",
+    "comment": "Proxy applications",
+    "enabled": true
+  },
+  {
+    "action": "proxy",
+    "type": "process_name",
+    "value": "iMe.exe",
+    "comment": "Proxy applications",
+    "enabled": true
+  }
+]

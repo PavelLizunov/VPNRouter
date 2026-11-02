@@ -11,8 +11,8 @@ namespace VPNRouter.App.Services;
 
 public static class SingleInstance
 {
-    private const string MutexName = "Global\\VPNRouter.App.SingleInstance.v2";
-    private const string PipeName = "VPNRouter.App.ShowWindow.v2";
+    private const string MutexName = "Global\\" + VPNRouter.Core.ProductEdition.DataDirectoryName + ".App.SingleInstance.v2";
+    private const string PipeName = VPNRouter.Core.ProductEdition.DataDirectoryName + ".App.ShowWindow.v2";
 
     private const byte SignalShowWindow = 0x01;
 

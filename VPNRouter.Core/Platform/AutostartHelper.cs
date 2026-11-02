@@ -7,7 +7,7 @@ namespace VPNRouter.Core.Platform;
 public static class AutostartHelper
 {
     private const string WinRunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-    private const string WinAppName = "VPNRouter";
+    private const string WinAppName = ProductEdition.DataDirectoryName;
 
     private const string MacPlistLabel = "com.ninitux.vpnrouter";
 

@@ -16,6 +16,8 @@ public static class SelfRepair
 
     public static Decision Plan(ILogger? logger = null)
     {
+        if (VPNRouter.Core.ProductEdition.IsBusiness)
+            return new Decision(false, "Business pilot updates are installed by the administrator.");
         try
         {
             var dir = VPNRouter.Core.AppPaths.DataDir;
@@ -42,6 +44,7 @@ public static class SelfRepair
 
     public static void Run(ILogger? logger = null)
     {
+        if (VPNRouter.Core.ProductEdition.IsBusiness) return;
         try
         {
             var dir = VPNRouter.Core.AppPaths.DataDir;

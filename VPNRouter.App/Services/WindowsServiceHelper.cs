@@ -8,7 +8,7 @@ namespace VPNRouter.App.Services;
 
 public static class WindowsServiceHelper
 {
-    public const string ServiceName = "VPNRouter";
+    public const string ServiceName = VPNRouter.Core.ProductEdition.DataDirectoryName;
     public const string DisplayName = "VPN Process Router";
     public const string Description = "Routes selected application traffic through VPN using sing-box TUN mode.";
 
