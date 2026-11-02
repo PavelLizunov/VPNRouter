@@ -21,12 +21,18 @@ on:
       - 'tools/ui-mcp/**'
       - '.github/workflows/build-ui-mcp.yml'
   workflow_dispatch:
+    inputs:
+      business_pilot:
+        description: 'Build the private Business pilot instead of the UI MCP server'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   build:
+    if: ${{ !inputs.business_pilot }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -84,3 +90,99 @@ jobs:
           name: ui-mcp-smoke
           path: smoke
           retention-days: 14
+
+  business-surface:
+    if: ${{ !inputs.business_pilot }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - name: Build shared Release solution
+        run: dotnet build VPNRouter.sln -c Release
+      - name: Business policy and isolated UI checks
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~Business" --logger "console;verbosity=normal"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: business-fixture-screenshots-${{ github.sha }}
+          path: VPNRouter.Tests/screenshots/business-*.png
+          if-no-files-found: error
+
+  business-pilot:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.business_pilot }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - name: Exact source and read-only capacity/tool preflight
+        shell: pwsh
+        run: |
+          git rev-parse HEAD
+          $cpu = Get-CimInstance Win32_Processor
+          $os = Get-CimInstance Win32_OperatingSystem
+          $disk = Get-PSDrive C
+          $jobs = @(Get-Process dotnet,msbuild,VBCSCompiler,java -ErrorAction SilentlyContinue)
+          Write-Host "CPU count=$([Environment]::ProcessorCount), load=$((($cpu | Measure-Object LoadPercentage -Average).Average)) percent"
+          Write-Host "Available RAM=$($os.FreePhysicalMemory) KiB, free disk=$([math]::Round($disk.Free/1GB,2)) GiB, competing jobs=$($jobs.Count)"
+          Get-CimInstance Win32_PageFileUsage | Select-Object AllocatedBaseSize,CurrentUsage
+          dotnet --list-sdks
+          go version
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          $gpg = 'C:\Program Files\Git\usr\bin\gpg.exe'
+          if (!(Test-Path $iscc) -or !(Test-Path $gpg)) { throw 'Required packaging/encryption tool missing.' }
+          if ($os.FreePhysicalMemory -lt 3MB -or $disk.Free -lt 8GB -or $jobs.Count -ne 0) { throw 'Insufficient build headroom.' }
+      - name: Compile, validate and encrypt individual installer
+        shell: pwsh
+        env:
+          BUSINESS_CONFIG: ${{ secrets.VPNROUTER_BUSINESS_PILOT_CONFIG }}
+          BUSINESS_DELIVERY_KEY: ${{ secrets.VPNROUTER_BUSINESS_PILOT_DELIVERY_KEY }}
+        run: |
+          $private = Join-Path $env:RUNNER_TEMP 'business-private'
+          $output = Join-Path $private 'out'
+          $delivery = Join-Path $env:RUNNER_TEMP 'business-delivery'
+          New-Item -ItemType Directory -Force -Path $private,$output,$delivery | Out-Null
+          try {
+            if (!$env:BUSINESS_CONFIG -or !$env:BUSINESS_DELIVERY_KEY) { throw 'Private pilot inputs missing.' }
+            $connection = Join-Path $private 'connection.txt'
+            $key = Join-Path $private 'key.txt'
+            [IO.File]::WriteAllText($connection, $env:BUSINESS_CONFIG)
+            [IO.File]::WriteAllText($key, $env:BUSINESS_DELIVERY_KEY)
+            Remove-Item Env:BUSINESS_CONFIG,Env:BUSINESS_DELIVERY_KEY
+            ./tools/build-business.ps1 -ConnectionFile $connection -OutputDir $output
+            $env:VPNRouterEdition = 'Business'
+            $env:BusinessConnectionFile = $connection
+            $env:VPNROUTER_BUSINESS_VALIDATE_DIR = Join-Path $private 'validation'
+            $env:VPNROUTER_BUSINESS_PAYLOAD_DIR = Join-Path $output 'payload\app'
+            New-Item -ItemType Directory -Force -Path $env:VPNROUTER_BUSINESS_VALIDATE_DIR | Out-Null
+            dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter 'FullyQualifiedName~BusinessPilotValidationTests' --logger 'console;verbosity=minimal'
+            if ($LASTEXITCODE -ne 0) { throw 'Embedded pilot first-run validation failed.' }
+            $core = Join-Path $env:VPNROUTER_BUSINESS_PAYLOAD_DIR 'sing-box.exe'
+            foreach ($mode in @('split','full')) {
+              $config = Join-Path $env:VPNROUTER_BUSINESS_VALIDATE_DIR "$mode.json"
+              & $core check -c $config *> (Join-Path $private "check-$mode.log")
+              if ($LASTEXITCODE -ne 0) { throw "Native core rejected Business $mode configuration." }
+              Write-Host "Business $mode configuration: native core check PASS (not a live VPN test)."
+            }
+            $installer = (Get-ChildItem $output -Filter 'VPNRouterBusiness-Setup-*.exe' | Select-Object -First 1).FullName
+            $gpg = 'C:\Program Files\Git\usr\bin\gpg.exe'
+            $gpgHome = Join-Path $private 'gpg'
+            New-Item -ItemType Directory -Force -Path $gpgHome | Out-Null
+            & $gpg --homedir $gpgHome --batch --yes --pinentry-mode loopback --passphrase-file $key --cipher-algo AES256 --symmetric --output (Join-Path $delivery 'VPNRouterBusiness-Pilot.exe.gpg') $installer
+            if ($LASTEXITCODE -ne 0) { throw 'Private installer encryption failed.' }
+            Copy-Item "$installer.sha256" (Join-Path $delivery 'installer.sha256')
+            git rev-parse HEAD | Set-Content (Join-Path $delivery 'source-sha.txt')
+          } finally {
+            Remove-Item -LiteralPath $private -Recurse -Force -ErrorAction SilentlyContinue
+          }
+      - name: Upload encrypted installer only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: business-pilot-encrypted-${{ github.sha }}
+          path: ${{ runner.temp }}/business-delivery/
+          if-no-files-found: error
+          retention-days: 3
