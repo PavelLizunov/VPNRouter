@@ -27,7 +27,7 @@ public sealed class BusinessSupportExeTests
                 if ($LASTEXITCODE -ne 0) { throw 'Compiler failed.' }
                 $exe = Join-Path $env:SUPPORT_OUTPUT 'VPNRouterBusiness-Diagnostics.exe'
                 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-                $assembly = [Reflection.Assembly]::LoadFile($exe)
+                $assembly = [Reflection.Assembly]::LoadFrom($exe)
                 $resources = @($assembly.GetManifestResourceNames())
                 if ($resources.Count -ne 3 -or $resources -notcontains 'support-settings.json' -or $resources -notcontains 'Collect-VPNRouterBusiness-Diagnostics.ps1' -or $resources -notcontains 'Send-VPNRouterBusiness-Diagnostics.ps1') { throw 'Missing embedded resources.' }
                 foreach ($name in @('Collect-VPNRouterBusiness-Diagnostics.ps1','Send-VPNRouterBusiness-Diagnostics.ps1')) {
@@ -45,7 +45,7 @@ public sealed class BusinessSupportExeTests
                         if ($rule.AccessControlType -eq 'Allow' -and $allowed -notcontains $rule.IdentityReference.Value) { throw 'Staging is accessible to another identity.' }
                     }
                 } finally { Remove-Item -LiteralPath $stage -Recurse -Force }
-                Add-Type -ReferencedAssemblies $exe,System.Windows.Forms,System.Drawing -TypeDefinition @'
+                $fixtureSource = @'
                 using System;
                 using System.Threading;
                 using VPNRouter.Business.Support;
@@ -66,6 +66,13 @@ public sealed class BusinessSupportExeTests
                     public void Cancel() { Cancelled = true; }
                 }
                 '@
+                $fixturePath = Join-Path $env:SUPPORT_OUTPUT 'FixtureWorkflow.cs'
+                $fixtureDll = Join-Path $env:SUPPORT_OUTPUT 'FixtureWorkflow.dll'
+                [IO.File]::WriteAllText($fixturePath, $fixtureSource, [Text.Encoding]::UTF8)
+                $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+                & $compiler /nologo /target:library /platform:x64 /langversion:5 /codepage:65001 "/reference:$exe" /reference:System.dll /reference:System.Core.dll "/out:$fixtureDll" $fixturePath
+                if ($LASTEXITCODE -ne 0) { throw 'Fake workflow compilation failed.' }
+                $null = [Reflection.Assembly]::LoadFrom($fixtureDll)
                 [Threading.SynchronizationContext]::SetSynchronizationContext([Windows.Forms.WindowsFormsSynchronizationContext]::new())
                 $click = [Windows.Forms.Button].GetMethod('OnClick', [Reflection.BindingFlags]'Instance,NonPublic')
                 foreach ($mode in @('success','failure','cancel')) {
@@ -82,7 +89,7 @@ public sealed class BusinessSupportExeTests
                         $button = $buttons[0]
                         if ($mode -eq 'success') {
                             $bitmap = [Drawing.Bitmap]::new($form.Width, $form.Height)
-                            try { $form.DrawToBitmap($bitmap, [Drawing.Rectangle]::new(0,0,$form.Width,$form.Height)); $bitmap.Save($env:SUPPORT_SCREENSHOT) } finally { $bitmap.Dispose() }
+                            try { $form.DrawToBitmap($bitmap, [Drawing.Rectangle]::new(0,0,$form.Width,$form.Height)); $bitmap.Save($env:SUPPORT_SCREENSHOT, [Drawing.Imaging.ImageFormat]::Png) } finally { $bitmap.Dispose() }
                         }
                         $click.Invoke($button, @([EventArgs]::Empty)) | Out-Null
                         if ($mode -eq 'cancel') { $form.Close() }

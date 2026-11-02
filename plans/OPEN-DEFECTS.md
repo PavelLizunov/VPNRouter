@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 IN ONE-FILE SUPPORT CI FIX** - SUPPORT-FIXTURE-ASSEMBLY-LOAD: Windows CI 41473348670 at 97f61e61 compiles the EXE and verifies resources/ACL, then PowerShell Add-Type fails to resolve the EXE reference with HRESULT 0x80131047. Compile the fake workflow with the already preflighted Framework csc, load assemblies through LoadFrom, and keep production behavior unchanged.
+
 - [ ] **P2 IN ONE-FILE SUPPORT CI FIX** - SUPPORT-HASH-CMDLET: 5c7e2702 Windows CI 41471898133 compiles the EXE, then build-support.ps1 fails because Get-FileHash is unavailable in the spawned Windows PowerShell environment. Use framework SHA256 streaming directly; no SDK or module installation. Use the framework ACL API in the same fixture to avoid module discovery dependence.
 - [ ] **P2 IN ONE-FILE SUPPORT CI FIX** - SUPPORT-ACK-CLEANUP: 5c7e2702 receiver CI passes 10/11 fixtures but immediate post-response accounting observes 4516 reserved bytes. HTTP responses are written before finally releases the reservation/temp file, so acknowledgement races completed cleanup. Compute the response, clean up/release first, then send it; cover the existing persistence/dedup fixture.
 

@@ -94,3 +94,8 @@ publish credentials or real employee reports. No new VPN client or fleet agent.
   compilation succeeded, then the builder failed on unavailable Get-FileHash.
   Correct both without changing the distributed VPN client. Existing script
   and routing checks pass; repeat exact-SHA CI before deployment.
+- CI at 97f61e61 (run 41473348670): receiver fixtures all pass; EXE compilation,
+  resource embedding and private Windows stage ACL pass. PowerShell Add-Type
+  then rejects the EXE reference used by the fake workflow fixture. Compile that
+  fake workflow with the same existing Framework compiler and use LoadFrom;
+  no production executable behavior change is involved.
