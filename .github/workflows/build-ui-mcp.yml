@@ -172,7 +172,12 @@ jobs:
             $gpg = 'C:\Program Files\Git\usr\bin\gpg.exe'
             $gpgHome = Join-Path $private 'gpg'
             New-Item -ItemType Directory -Force -Path $gpgHome | Out-Null
-            & $gpg --homedir $gpgHome --batch --yes --pinentry-mode loopback --passphrase-file $key --cipher-algo AES256 --symmetric --output (Join-Path $delivery 'VPNRouterBusiness-Pilot.exe.gpg') $installer
+            # Git's gpg is an MSYS program and expects POSIX drive paths.
+            function ConvertTo-GpgPath([string]$path) {
+              '/' + $path.Substring(0,1).ToLowerInvariant() + $path.Substring(2).Replace('\','/')
+            }
+            $encrypted = Join-Path $delivery 'VPNRouterBusiness-Pilot.exe.gpg'
+            & $gpg --homedir (ConvertTo-GpgPath $gpgHome) --batch --yes --pinentry-mode loopback --passphrase-file (ConvertTo-GpgPath $key) --cipher-algo AES256 --symmetric --output (ConvertTo-GpgPath $encrypted) (ConvertTo-GpgPath $installer)
             if ($LASTEXITCODE -ne 0) { throw 'Private installer encryption failed.' }
             Copy-Item "$installer.sha256" (Join-Path $delivery 'installer.sha256')
             git rev-parse HEAD | Set-Content (Join-Path $delivery 'source-sha.txt')
