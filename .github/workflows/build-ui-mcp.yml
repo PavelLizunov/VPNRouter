@@ -13,12 +13,18 @@ on:
       - 'VPNRouter.App/**'
       - 'VPNRouter.Core/**'
       - 'tools/ui-mcp/**'
+      - 'packaging/windows/support/**'
+      - 'packaging/windows/business.iss'
+      - 'VPNRouter.Tests/Business*.cs'
       - '.github/workflows/build-ui-mcp.yml'
   pull_request:
     paths:
       - 'VPNRouter.Tools/UiMcp/**'
       - 'VPNRouter.Tools/UiProbe/**'
       - 'tools/ui-mcp/**'
+      - 'packaging/windows/support/**'
+      - 'packaging/windows/business.iss'
+      - 'VPNRouter.Tests/Business*.cs'
       - '.github/workflows/build-ui-mcp.yml'
   workflow_dispatch:
     inputs:
@@ -104,6 +110,22 @@ jobs:
         run: dotnet build VPNRouter.sln -c Release
       - name: Business policy and isolated UI checks
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~Business" --logger "console;verbosity=normal"
+      - name: Package standalone Business support scripts
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'business-support-delivery'
+          New-Item -ItemType Directory -Path $out | Out-Null
+          $zip = Join-Path $out 'VPNRouterBusiness-Support.zip'
+          Compress-Archive -Path packaging/windows/support/*.ps1,packaging/windows/support/*.cmd,packaging/windows/support/README.ru.txt -DestinationPath $zip
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          "$hash  VPNRouterBusiness-Support.zip" | Set-Content "$zip.sha256" -Encoding ascii
+          git rev-parse HEAD | Set-Content (Join-Path $out 'source-sha.txt') -Encoding ascii
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: business-support-${{ github.sha }}
+          path: ${{ runner.temp }}/business-support-delivery/
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: business-fixture-screenshots-${{ github.sha }}

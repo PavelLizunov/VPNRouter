@@ -31,14 +31,21 @@ UsedUserAreasWarning=no
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+[CustomMessages]
+english.BusinessDiagnostics=VPNRouter Business - Collect diagnostics
+russian.BusinessDiagnostics=VPNRouter Business - Собрать диагностику
 [Files]
 Source: "business-README.ru.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "support\*.ps1"; DestDir: "{app}\support"; Flags: ignoreversion
+Source: "support\*.cmd"; DestDir: "{app}\support"; Flags: ignoreversion
+Source: "support\README.ru.txt"; DestDir: "{app}\support"; Flags: ignoreversion
 Source: "{#PayloadDir}\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "installer\stop-vpnrouter.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "installer\stop-vpnrouter.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 [Icons]
 Name: "{commonprograms}\VPNRouter Business"; Filename: "{app}\app\VPNRouter.App.exe"; WorkingDir: "{app}\app"
 Name: "{autodesktop}\VPNRouter Business"; Filename: "{app}\app\VPNRouter.App.exe"; WorkingDir: "{app}\app"
+Name: "{commonprograms}\{cm:BusinessDiagnostics}"; Filename: "{app}\support\Collect-VPNRouterBusiness-Diagnostics.cmd"; WorkingDir: "{app}\support"
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "VPNRouterBusiness"; ValueData: """{app}\app\VPNRouter.App.exe"" --minimized"; Flags: uninsdeletevalue
 [Run]

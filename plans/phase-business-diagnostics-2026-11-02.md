@@ -28,8 +28,9 @@ Include the helper in future Business installers and deliver the same scripts
 separately for the existing pilot. Keep the ordinary installer unchanged.
 User-initiated upload may target an owner-provided HTTPS endpoint, with verified
 TLS, bounded requests, no redirects and a retained ZIP on failure. A real URL,
-request format and server/deployment scope are pending the owner's answer;
-do not invent a receiver or claim production upload verification.
+request format and server/deployment scope were initially pending. The owner
+confirmed they will provide a ready HTTPS endpoint. Support a documented raw
+ZIP POST, but do not deploy a receiver or claim production upload verification.
 
 ## How
 
@@ -43,20 +44,34 @@ do not invent a receiver or claim production upload verification.
 
 ## Verification
 
-1. Build: BLOCKED pending implementation; existing shared Release CI applies.
-2. Tests: BLOCKED pending implementation; Windows PowerShell 5.1 execution on
+1. Build: BLOCKED pending exact implementation SHA in shared Release CI.
+2. Tests: BLOCKED pending exact implementation SHA; Windows PowerShell 5.1 execution on
    synthetic fixtures plus applicable full CI. No SDK installs or local builds.
-3. Docs: BLOCKED pending implementation and observed outcome.
-4. Review: BLOCKED pending a complete diff and independent bug-hunt reviewers.
+3. Docs: PASS for source scope; employee/admin instructions and Business guide
+   describe local collection, upload format, limitations and old-pilot compatibility.
+4. Review: PASS for source inspection with correctness, security and test-coverage
+   reviewers; all six confirmed findings recorded and fixed. Windows runtime pending.
 5. UI: N/A for application UI; this is a separate support launcher. Windows
    collector runtime must be exercised in CI without live VPN or employee logs.
 6. Characterization: N/A; no mechanical split or public ViewModel API change.
 
 ## Outcome
 
-- Status: PARTIAL; scope recorded before implementation.
+- Status: PARTIAL; implementation and source review complete, Windows CI pending.
+- Changed files: independent PowerShell 5.1 log collector/sender plus CMD launcher,
+  Business-only Start-menu entry, standalone CI artifact, employee/admin instructions
+  and Windows regression fixtures. No application engine or consumer UI changes.
+- Source checks: `git diff --check` and local PyYAML workflow parsing pass. No
+  SDK installed and no builds, packaging, full tests or app runs on this workstation.
+- Review: business_support_correctness, business_support_security and
+  business_support_test_review; findings in OPEN-DEFECTS prefixed BUSINESS-SUPPORT.
+  Fixed UTF-8 boundaries, legacy elevation logs, generic URI/SID masking, spaced
+  profile names, artifact workflow paths and opened-stream size limits.
+- Test limits: fake HTTP transport covers request bytes/headers and non-2xx
+  refusal, not real TLS, redirects, timeout or production receiver persistence.
 - Baseline: PR #646 head matches the accepted base; all applicable baseline
   checks passed, and the private build job is intentionally skipped on PR CI.
-- Endpoint: awaiting owner-provided receiver details or a receiver build request.
-- Git: brief-only commit pending; no product changes yet.
+- Endpoint: owner will provide a ready HTTPS endpoint; no server implementation
+  or deployment is requested. Actual production upload verification awaits its URL.
+- Git: brief committed as 69a87d30; all 11 baseline checks passed before edits.
 - Cleanup: no remote worker or live VPN scenario started.

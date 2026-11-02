@@ -12,6 +12,36 @@ Business has one Start/Stop action and two modes. Switch modes while disconnecte
 The standard tray and health recovery remain in use. Tray diagnostics exports
 the existing redacted diagnostic bundle locally; review it before sharing.
 
+If the application cannot start, the independent Windows PowerShell 5.1
+collector in `packaging/windows/support/` needs neither the app nor a .NET SDK.
+Extract the separate `VPNRouterBusiness-Support.zip` and double-click
+`Collect-VPNRouterBusiness-Diagnostics.cmd`. Future Business installers include
+the same helper in the Start menu. The previously delivered pilot needs only
+the separate support archive, not an application reinstall. Collection is local
+and does not start/stop VPN or change system network settings. Missing/unreadable
+inputs are recorded in `summary.json`; an empty report is not a successful health
+check. Run as the employee with elevation if their log ACL requires it.
+
+The fallback includes at most five app logs, two core logs, one launch log,
+five crash reports and the exact legacy launch-error file, reading at most
+1 MiB each. The legacy fallback covers the first pilot's failed elevation log
+under `%ProgramData%\VPNRouter\logs`; no other consumer logs are read.
+It does not copy configuration,
+subscriptions, binaries or arbitrary files. Linked inputs are refused. Automatic
+masking is best effort; review reports before private delivery because logs can
+still identify domains, IPs and applications. This smaller fallback does not
+replace the richer tray export when the app works.
+
+`Send-VPNRouterBusiness-Diagnostics.ps1` can explicitly upload a reviewed ZIP to
+the owner's HTTPS endpoint: a raw `application/zip` POST, optional individual
+Bearer token from a private file, and `X-VPNRouter-Report-Format:
+vpnrouter-business-support/1`. The receiver should return 2xx only after saving
+the report. The sender validates TLS normally, refuses redirects, limits the
+file to 24 MiB and the request to 30 seconds, does not retry, and retains the ZIP
+on every outcome. It does not print endpoint/token/response details. No endpoint
+or credential is embedded by default, and no receiver is deployed by these tools.
+See the [employee and administrator instructions](../packaging/windows/support/README.ru.txt).
+
 ## Routing policy
 
 `packaging/windows/business-rules.json` is the supplied Main profile converted to
