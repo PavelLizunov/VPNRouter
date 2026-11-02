@@ -44,3 +44,7 @@ No public release/tag or main merge is requested. Build/package/test work runs o
 - Semantic choice: in-mag.ru pending owner decision.
 - Private connection parameters: not supplied.
 - Delivery target: first employee Windows installer, then approximately 20 individually provisioned employees.
+
+## Scope correction from owner
+
+Owner requested the fastest pilot: compile the supplied private connection and routing directly into a Business variant; expose only status and Start/Stop. Defer enrollment, fleet control and automated provisioning architecture. in-mag.ru is Direct by explicit owner decision. Connection wrapper fetched successfully and uses the existing supported subscription format (10 share links). Never publish its content. Baseline Linux CI exposed an existing coreutils test-fixture failure; repair it before product edits.

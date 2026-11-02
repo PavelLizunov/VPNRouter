@@ -153,7 +153,9 @@ public sealed class UnixOwnedProcessSignalTests
     {
         var binDir = AppPaths.BinDir;
         Directory.CreateDirectory(binDir);
-        var testExe = Path.Combine(binDir, $"test-sleep-{Guid.NewGuid():N}");
+        var childDir = Path.Combine(binDir, $"test-sleep-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(childDir);
+        var testExe = Path.Combine(childDir, "sleep");
         File.Copy("/bin/sleep", testExe, overwrite: true);
         if (OperatingSystem.IsLinux())
         {
@@ -190,7 +192,7 @@ public sealed class UnixOwnedProcessSignalTests
         {
             if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
             {
-                try { File.Delete(exePath); } catch { }
+                try { File.Delete(exePath); Directory.Delete(Path.GetDirectoryName(exePath)!); } catch { }
             }
         }
     }

@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2 FIXED IN BUSINESS PILOT PR #646** - CI-COREUTILS-SLEEP: documentation-only baseline eb772389 failed UnixOwnedProcessSignalTests on Ubuntu: copied /bin/sleep under a random basename exits with "coreutils: unknown program" before the identity assertion. Preserve the sleep basename inside a unique test-owned directory; no runtime change. CI 41425696909, Linux test job 125211643725.
+
 - [ ] **P2 IN PROGRESS** - OMARCHY-UPGRADE-STALE-RUNTIME: owner reports a disconnected plugin with blocked Connect while background traffic remains tunneled after update; the reporting laptop is unavailable (prior SSH refused). Source confirms legacy helper/engine lifetime gaps; PR #630 adds bounded default-data recovery after leases and the coordinated plugin waits for helper exit. Target behavior remains unverified; see phase-headless-upgrade-recovery-2026-10-26.md.
 
 - [x] **P1 FIXED ON N4-T BRANCH** - N4-T-TUN-SELF-ROUTE: private direct routing forwards ICMP to the virtual TUN peer back through the same TUN, recursively creating sing-box raw sockets and sustained TX/CPU growth after shell gateway probes. Generated/custom own-prefix ICMP guards implemented in ed82e139; r53 VM HY2/VLESS peer ping, rescan and cold restart leave zero sing-box raw sockets; corrected prefix assertions and green CI 40260604256 at cef9397e. See phase-omarchy-n4-traffic-2026-10-26.md. Not released or tested on the owner's laptop.
