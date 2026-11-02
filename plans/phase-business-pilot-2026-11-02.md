@@ -39,7 +39,7 @@ No public release/tag or main merge is requested. Build/package/test work runs o
 
 ## Outcome
 
-- Status: IN PROGRESS.
+- Status: PARTIAL: personal pilot delivered and live-tested; customer UIS, long-term memory and fleet management remain unverified/deferred.
 - Initial source: clean main at f6b39dbf; recent exact-head checks successful; no suggested hash bump file.
 - Semantic choice: in-mag.ru pending owner decision.
 - Private connection parameters: not supplied.
@@ -76,3 +76,16 @@ Observed pool: Windows100 stopped, Linux101 stopped, Omarchy107 running under a 
 At 9f53bd00, business-surface passed the Release solution build and Business policy/UI checks. Private CI 41432331196 compiled the individual installer, persisted the embedded first-run configuration and passed native sing-box checks for split and full. Delivery failed only when MSYS gpg parsed Windows paths; translate the paths and rerun. No plaintext private artifact was uploaded.
 
 Owner explicitly authorized releasing the occupied Omarchy worker for this priority pilot. Released its exact reservation through the permanent-worker CLI, then acquired Windows100 under request vpnrouter-business-pilot-20261102. WINBRAT identity verified: 8 logical CPUs, CPU load 1 percent, available RAM 13356 MiB, swap used 0 MiB, free disk 115.7 GiB, competing build jobs 0, VPN app/core processes 0, one interactive desktop session. SDK inventories: private C:/android-build/dotnet has 10.0.301; C:/dotnet has 10.0.302 and 10.0.400. No build/SDK provisioning was performed there. Release this task lease and clean only task-owned test paths after verification.
+
+## Final pilot outcome
+
+- Installer: VPNRouterBusiness-Setup-v2.50.5.exe, 62,982,695 bytes, source f19df9ab34b5cf9e65e849a58bb193c62236ec59, SHA256 26b7d5752b7df6977eef317fc450a101f520e9a526d5d8e64adfa9e9da3273fd. Private delivery only; individual connection is embedded, no employee import/URL/server/app selection.
+- CI at that exact source: all ordinary checks passed, Release solution/Business surface job passed, private job 41433168793 passed first-run persistence and native sing-box split/full checks and produced an encrypted installer. Local retrieval decrypted and matched installer/source sidecars. No credentials entered Git; exact private input scan returned zero tracked matches.
+- Fixed WINBRAT live test: install PASS, first launch with embedded settings PASS, three split/full/split connect-stop cycles PASS, owned core/TUN up and absent states PASS, representative IPv4 HTTPS egress PASS (unselected process Direct in split, selected Telegram.exe process Proxy, full final Proxy), scenario cleanup PASS. See business-pilot-winbrat-2026-11-02.json. No live desktop captures or raw logs exported.
+- First orchestration attempt aborted before launch because dot-sourced verifier Action validation collided with a local launch-action variable. Corrected the wrapper variable, repeated from a clean install/data state; final report passed. No application change was needed.
+- Gates: build PASS for tested source; applicable tests PASS; documents/checklist/report PASS; independent review completed with Business findings fixed and pre-existing lifecycle findings tracked; isolated UI fixtures and exact Windows scenario PASS; characterization PASS in Windows CI. Production/customer acceptance is not claimed.
+- Memory: private bytes/working set/handles/threads sampled over three cycles. This is insufficient to establish absence of leaks. The three pre-existing disposal/lifetime findings remain in OPEN-DEFECTS and were not fixed in this preset pilot.
+- Limits: no customer UIS calls; no claim that every source domain, every real desktop app, IP/subnet, UDP/RTP or DNS path was exercised live. Network-break auto-recovery and extended soak remain owner checklist items.
+- Source and changes are in dsh/business-pilot / PR #646. No main merge, tag or public secret-bearing release was created. Consumer update/repair stays disabled for the private pilot; rebuilding from common code preserves shared fixes.
+- Owner handoff: personal installer, SHA256 sidecar, Russian 15-20 minute Windows checklist and sanitized test report in the private Downloads folder. Download before reboot and keep the individual installer private.
+- Cleanup: live script uninstalled the task installation, removed new Business data/probes/tasks and proved core/TUN absence. Task-only source/artifact directory removed from WINBRAT, task pool lease released through the permanent-worker CLI, ephemeral repository build secrets removed after retrieval. Private delivery files and build inputs intentionally retained outside Git for the owner.

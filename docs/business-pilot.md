@@ -88,3 +88,8 @@ to update the embedded connection or rules.
 Autostart launches the UI in the tray for the Windows account that ran Setup;
 it does not connect automatically. A different administrator account at the UAC
 prompt requires the administrator to set up the employee's autostart separately.
+
+The [Russian Windows acceptance checklist](business-pilot-test.ru.txt) accompanies
+the personal installer. The sanitized [WINBRAT result](../plans/business-pilot-winbrat-2026-11-02.json)
+and [executed orchestration script](../plans/business-pilot-live-verify-2026-11-02.ps1)
+record the pilot scope; they do not establish customer UIS or long-term memory safety.
