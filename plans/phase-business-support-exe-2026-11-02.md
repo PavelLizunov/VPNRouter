@@ -47,21 +47,45 @@ publish credentials or real employee reports. No new VPN client or fleet agent.
 
 ## Verification
 
-1. Build: BLOCKED pending implementation and Windows tool preflight.
-2. Tests: BLOCKED pending wrapper/receiver fixtures and exact-SHA CI.
-3. Docs: PARTIAL; scope and employee action recorded before code.
-4. Review: BLOCKED pending complete diff and independent source review.
+1. Build: BLOCKED pending exact implementation SHA and Windows compiler preflight.
+2. Tests: BLOCKED pending exact-SHA Windows EXE and Linux receiver CI fixtures.
+3. Docs: PASS for implementation scope; intake runbook, employee instruction and
+   Business guide explain private one-file delivery and the preserved admin fallback.
+4. Review: PASS for source inspection by separate security, Windows/lifetime and
+   tests/CI reviewers. Confirmed findings were recorded before fixes; runtime CI pending.
 5. UI: BLOCKED pending isolated synthetic UI evidence and applicable fixed
    WINBRAT verification; no live desktop or employee-data capture.
 6. Characterization: N/A; no application ViewModel/API refactor.
 
 ## Outcome
 
-- Status: PARTIAL; read-only discovery in progress; no new production mutation.
+- Status: PARTIAL; source implementation/review complete; CI and live delivery pending.
 - Baseline: all 11 checks green at 77fde270, worktree clean before this brief.
 - Homelab: connected through the existing Harness control plane; canonical
   homelab skill and DNS/publication runbook read. Current Caddy is active.
   The live apex route separates VPN config API from the existing landing backend.
   Landing VM identity and running-service inventory observed through its guest agent.
-- Unknowns: actual receiver/auth capability, landing source ownership, compiler
-  preflight, destination URL and complete real delivery evidence.
+- Discovery: landing is a running Next.js container with no existing intake in
+  the inspected routes. Its source remains unchanged. Read-only host baseline:
+  2 CPUs, load 0/0/0, available RAM 1229 MiB, swap used 103 MiB, free disk
+  215.68 GiB, Python 3.11.2, no competing build jobs. Repeat before deployment.
+- Implementation: classic Windows Framework EXE embeds the verified scripts;
+  UI sends with one action, shows progress and acknowledgement, keeps failed
+  reports, and cancels its owned child on close. No .NET 10 app startup required.
+  Build settings and EXE contain an individual upload identity and stay private.
+- Receiver: stdlib Python behind existing ingress, no public report download;
+  hashed/revocable identities, bounded ZIP parsing/body/deadline/concurrency and
+  private storage/retention. Issuance is locked/atomic; reports have private
+  employee metadata and content-based per-identity deduplication.
+- Review: support_exe_security, support_exe_windows and support_exe_test_review.
+  Registry atomicity, absolute deadline, idle retention, orphan accounting,
+  employee mapping, Windows staging ACL, failure text and timeout cleanup fixed
+  in source; see SUPPORT-* entries in OPEN-DEFECTS.
+- Source checks: Python AST, workflow YAML and `git diff --check` pass. No SDK
+  installed and no build/package/full tests run on workstation/control plane.
+- Verification limits: offscreen WinForms fixtures use a fake workflow and do
+  not establish the real PowerShell bridge or live HTTPS delivery. Fixed WINBRAT
+  and authenticated synthetic production delivery remain required.
+- Unknowns: compiler/runtime results, selected route's final DNS/TLS/live state,
+  deployed service identity and complete real one-button delivery evidence.
+- Cleanup: no new production mutation or worker lease yet.

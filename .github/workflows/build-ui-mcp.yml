@@ -14,6 +14,7 @@ on:
       - 'VPNRouter.Core/**'
       - 'tools/ui-mcp/**'
       - 'packaging/windows/support/**'
+      - 'packaging/business-support/**'
       - 'packaging/windows/business.iss'
       - 'VPNRouter.Tests/Business*.cs'
       - '.github/workflows/build-ui-mcp.yml'
@@ -23,6 +24,7 @@ on:
       - 'VPNRouter.Tools/UiProbe/**'
       - 'tools/ui-mcp/**'
       - 'packaging/windows/support/**'
+      - 'packaging/business-support/**'
       - 'packaging/windows/business.iss'
       - 'VPNRouter.Tests/Business*.cs'
       - '.github/workflows/build-ui-mcp.yml'
@@ -32,13 +34,17 @@ on:
         description: 'Build the private Business pilot instead of the UI MCP server'
         type: boolean
         default: false
+      business_support:
+        description: 'Build the privately configured single-file diagnostic tool'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   build:
-    if: ${{ !inputs.business_pilot }}
+    if: ${{ !inputs.business_pilot && !inputs.business_support }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -98,7 +104,7 @@ jobs:
           retention-days: 14
 
   business-surface:
-    if: ${{ !inputs.business_pilot }}
+    if: ${{ !inputs.business_pilot && !inputs.business_support }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -106,6 +112,19 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
           global-json-file: global.json
+      - name: Exact source and Windows tool preflight
+        shell: pwsh
+        run: |
+          git rev-parse HEAD
+          $os = Get-CimInstance Win32_OperatingSystem
+          $cpu = Get-CimInstance Win32_Processor
+          $disk = Get-PSDrive C
+          Write-Host "CPU=$([Environment]::ProcessorCount), load=$((($cpu | Measure-Object LoadPercentage -Average).Average)) percent, available RAM=$($os.FreePhysicalMemory) KiB, free disk=$([math]::Round($disk.Free/1GB,2)) GiB"
+          Get-CimInstance Win32_PageFileUsage | Select-Object AllocatedBaseSize,CurrentUsage
+          Get-Process dotnet,msbuild,VBCSCompiler,java -ErrorAction SilentlyContinue | Select-Object ProcessName,Id
+          dotnet --list-sdks
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (!(Test-Path $csc) -or $os.FreePhysicalMemory -lt 3MB -or $disk.Free -lt 8GB) { throw 'Windows support build preflight failed.' }
       - name: Build shared Release solution
         run: dotnet build VPNRouter.sln -c Release
       - name: Business policy and isolated UI checks
@@ -116,7 +135,7 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'business-support-delivery'
           New-Item -ItemType Directory -Path $out | Out-Null
           $zip = Join-Path $out 'VPNRouterBusiness-Support.zip'
-          Compress-Archive -Path packaging/windows/support/*.ps1,packaging/windows/support/*.cmd,packaging/windows/support/README.ru.txt -DestinationPath $zip
+          Compress-Archive -Path packaging/windows/support/Collect-VPNRouterBusiness-Diagnostics.ps1,packaging/windows/support/Send-VPNRouterBusiness-Diagnostics.ps1,packaging/windows/support/Collect-VPNRouterBusiness-Diagnostics.cmd,packaging/windows/support/README.ru.txt -DestinationPath $zip
           $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
           "$hash  VPNRouterBusiness-Support.zip" | Set-Content "$zip.sha256" -Encoding ascii
           git rev-parse HEAD | Set-Content (Join-Path $out 'source-sha.txt') -Encoding ascii
@@ -131,6 +150,75 @@ jobs:
           name: business-fixture-screenshots-${{ github.sha }}
           path: VPNRouter.Tests/screenshots/business-*.png
           if-no-files-found: error
+
+  business-receiver:
+    if: ${{ !inputs.business_pilot && !inputs.business_support }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Exact source and Python preflight
+        run: |
+          git rev-parse HEAD
+          python3 --version
+          nproc
+          uptime
+          free -m
+          df -h .
+      - name: Receiver HTTP and storage fixtures
+        run: python3 -m unittest discover -s packaging/business-support -p 'test_*.py' -v
+
+  business-support:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.business_support }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Exact source and compiler/encryption preflight
+        shell: pwsh
+        run: |
+          git rev-parse HEAD
+          $os = Get-CimInstance Win32_OperatingSystem
+          $disk = Get-PSDrive C
+          $cpu = Get-CimInstance Win32_Processor
+          Write-Host "CPU=$([Environment]::ProcessorCount), load=$((($cpu | Measure-Object LoadPercentage -Average).Average)), RAM available=$($os.FreePhysicalMemory) KiB, free disk=$([math]::Round($disk.Free/1GB,2)) GiB"
+          Get-CimInstance Win32_PageFileUsage | Select-Object AllocatedBaseSize,CurrentUsage
+          Get-Process csc,dotnet,msbuild -ErrorAction SilentlyContinue | Select-Object ProcessName,Id
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          $gpg = 'C:\Program Files\Git\usr\bin\gpg.exe'
+          if (!(Test-Path $csc) -or !(Test-Path $gpg) -or $os.FreePhysicalMemory -lt 1MB -or $disk.Free -lt 1GB) { throw 'Support compiler/encryption tool or capacity missing.' }
+      - name: Build and encrypt the personal support executable
+        shell: pwsh
+        env:
+          SUPPORT_SETTINGS: ${{ secrets.VPNROUTER_BUSINESS_SUPPORT_SETTINGS }}
+          DELIVERY_KEY: ${{ secrets.VPNROUTER_BUSINESS_SUPPORT_DELIVERY_KEY }}
+        run: |
+          $private = Join-Path $env:RUNNER_TEMP 'support-private'
+          $delivery = Join-Path $env:RUNNER_TEMP 'support-delivery'
+          New-Item -ItemType Directory -Path $private,$delivery | Out-Null
+          try {
+            if (!$env:SUPPORT_SETTINGS -or !$env:DELIVERY_KEY) { throw 'Private support inputs missing.' }
+            $settings = Join-Path $private 'settings.json'
+            $key = Join-Path $private 'delivery-key.txt'
+            [IO.File]::WriteAllText($settings, $env:SUPPORT_SETTINGS)
+            [IO.File]::WriteAllText($key, $env:DELIVERY_KEY)
+            Remove-Item Env:SUPPORT_SETTINGS,Env:DELIVERY_KEY
+            ./packaging/windows/support/build-support.ps1 -SettingsFile $settings -OutputDir $private
+            $exe = Join-Path $private 'VPNRouterBusiness-Diagnostics.exe'
+            $homeDir = Join-Path $private 'gpg'
+            New-Item -ItemType Directory -Path $homeDir | Out-Null
+            function ConvertTo-GpgPath([string]$path) { '/' + $path.Substring(0,1).ToLowerInvariant() + $path.Substring(2).Replace('\','/') }
+            & 'C:\Program Files\Git\usr\bin\gpg.exe' --homedir (ConvertTo-GpgPath $homeDir) --batch --yes --pinentry-mode loopback --passphrase-file (ConvertTo-GpgPath $key) --cipher-algo AES256 --symmetric --output (ConvertTo-GpgPath (Join-Path $delivery 'VPNRouterBusiness-Diagnostics.exe.gpg')) (ConvertTo-GpgPath $exe)
+            if ($LASTEXITCODE -ne 0) { throw 'Support encryption failed.' }
+            Copy-Item "$exe.sha256" $delivery
+            git rev-parse HEAD | Set-Content (Join-Path $delivery 'source-sha.txt') -Encoding ascii
+          } finally { Remove-Item -LiteralPath $private -Recurse -Force -ErrorAction SilentlyContinue }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: business-support-private-${{ github.sha }}
+          path: ${{ runner.temp }}/support-delivery/
+          if-no-files-found: error
+          retention-days: 3
 
   business-pilot:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.business_pilot }}

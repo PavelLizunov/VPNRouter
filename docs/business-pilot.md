@@ -12,6 +12,16 @@ Business has one Start/Stop action and two modes. Switch modes while disconnecte
 The standard tray and health recovery remain in use. Tray diagnostics exports
 the existing redacted diagnostic bundle locally; review it before sharing.
 
+The employee support path is a separate personal
+`VPNRouterBusiness-Diagnostics.exe`: open it and press Send diagnostics. It
+embeds the collector, sender and individually configured upload identity. The
+employee does not extract scripts, select ZIPs or enter server settings, and
+the already distributed Business app does not need replacement. The configured
+EXE is a private artifact; the upload-only identity is revocable at the receiver.
+The [support intake runbook](../packaging/business-support/README.md) owns the
+build, private delivery, receiver limits and verification contract. The script
+archive described below remains an administrator fallback.
+
 If the application cannot start, the independent Windows PowerShell 5.1
 collector in `packaging/windows/support/` needs neither the app nor a .NET SDK.
 Extract the separate `VPNRouterBusiness-Support.zip` and double-click

@@ -36,7 +36,8 @@ english.BusinessDiagnostics=VPNRouter Business - Collect diagnostics
 russian.BusinessDiagnostics=VPNRouter Business - Собрать диагностику
 [Files]
 Source: "business-README.ru.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "support\*.ps1"; DestDir: "{app}\support"; Flags: ignoreversion
+Source: "support\Collect-VPNRouterBusiness-Diagnostics.ps1"; DestDir: "{app}\support"; Flags: ignoreversion
+Source: "support\Send-VPNRouterBusiness-Diagnostics.ps1"; DestDir: "{app}\support"; Flags: ignoreversion
 Source: "support\*.cmd"; DestDir: "{app}\support"; Flags: ignoreversion
 Source: "support\README.ru.txt"; DestDir: "{app}\support"; Flags: ignoreversion
 Source: "{#PayloadDir}\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs createallsubdirs ignoreversion

@@ -1,0 +1,18 @@
+__SUPPORT_HOST__ {
+    request_body {
+        max_size 25165824
+    }
+    @reports {
+        method POST
+        path /api/reports
+    }
+    handle @reports {
+        reverse_proxy __SUPPORT_UPSTREAM__
+    }
+    handle /health {
+        reverse_proxy __SUPPORT_UPSTREAM__
+    }
+    handle {
+        respond 404
+    }
+}

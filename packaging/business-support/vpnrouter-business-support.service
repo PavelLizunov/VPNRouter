@@ -1,0 +1,24 @@
+[Unit]
+Description=VPNRouter Business diagnostic intake
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=vpnrouter-support
+Group=vpnrouter-support
+EnvironmentFile=/etc/vpnrouter-business-support/receiver.env
+ExecStart=/usr/bin/python3 /opt/vpnrouter-business-support/receiver.py serve --host ${SUPPORT_LISTEN_HOST} --port 18912 --reports /var/lib/vpnrouter-business-support/reports --keys /var/lib/vpnrouter-business-support/keys.json --trusted-proxy ${SUPPORT_TRUSTED_PROXY}
+Restart=on-failure
+RestartSec=3
+StateDirectory=vpnrouter-business-support
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+MemoryMax=192M
+TasksMax=16
+
+[Install]
+WantedBy=multi-user.target
