@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1 IN BUSINESS SERVER-SELECTION FIX** - BUSINESS-ACTIVE-SERVER-RESET: BusinessDefaults.Apply replaces VlessConfig and assigns the first VLESS name on every MainWindowViewModel construction, overwriting a saved fallback selection. Source-confirmed at 41b8d6f2 in BusinessDefaults.cs and BusinessBootstrap.Apply. Preserve a choice only within the refreshed embedded server list, cover missing-choice fallback and actual restart; task plans/phase-business-server-selection-2026-11-04.md.
+
 - [x] **P2 FIXED / CI cbdea026** - SUPPORT-FIXTURE-ASSEMBLY-LOAD: Windows CI 41473348670 at 97f61e61 compiles the EXE and verifies resources/ACL, then PowerShell Add-Type fails to resolve the EXE reference with HRESULT 0x80131047. Compile the fake workflow with the already preflighted Framework csc, load assemblies through LoadFrom, and keep production behavior unchanged.
 
 - [x] **P2 FIXED / CI cbdea026** - SUPPORT-HASH-CMDLET: 5c7e2702 Windows CI 41471898133 compiles the EXE, then build-support.ps1 fails because Get-FileHash is unavailable in the spawned Windows PowerShell environment. Use framework SHA256 streaming directly; no SDK or module installation. Use the framework ACL API in the same fixture to avoid module discovery dependence.
