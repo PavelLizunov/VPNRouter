@@ -125,6 +125,19 @@ to update the embedded connection or rules.
 4. To stop, press Disconnect. Closing the window leaves it in the tray.
 5. For a problem, use Save diagnostics in the tray and contact your administrator.
 
+The Business window also exposes one choice per bundled direct VLESS host. The
+complete endpoint pool is retained for the engine's TCP/UDP sibling handling. For
+an unavailable endpoint, disconnect, choose another VPN server and reconnect.
+The selector is disabled during connection and while connected. Selection is
+saved immediately and retained on restart when its name still resolves within
+the refreshed embedded preset; a removed choice falls back to its usable VLESS
+default. Saved variants on the same host resolve to its visible node choice.
+Bundled endpoint names must be nonempty and case-insensitively unique; an
+ambiguous preset is refused before changing settings. Embedded credentials and
+routing still come from the administrator's
+bundle. This adds a manual recovery action, not proof of automatic failover or
+of the cause of the November 3 office outage.
+
 Autostart launches the UI in the tray for the Windows account that ran Setup;
 it does not connect automatically. A different administrator account at the UAC
 prompt requires the administrator to set up the employee's autostart separately.

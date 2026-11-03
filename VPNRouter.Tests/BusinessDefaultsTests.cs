@@ -8,6 +8,76 @@ namespace VPNRouter.Tests;
 public sealed class BusinessDefaultsTests
 {
     internal const string SampleConnection = "vless://test-user@192.0.2.1:443?security=tls&type=tcp#Pilot";
+    internal const string MultiServerConnection = SampleConnection +
+        "\nvless://reserve-user@192.0.2.2:443?security=tls&type=tcp#Reserve%20server%20for%20the%20office";
+    internal const string ReserveName = "Reserve server for the office";
+    internal const string SiblingConnection =
+        "vless://test-user@192.0.2.1:443?security=tls&type=tcp&flow=xtls-rprx-vision#Primary" +
+        "\nvless://primary-udp@192.0.2.1:2443?security=tls&type=tcp#Primary-UDP" +
+        "\nvless://reserve-user@192.0.2.2:443?security=tls&type=tcp&flow=xtls-rprx-vision#Reserve" +
+        "\nvless://reserve-udp@192.0.2.2:2443?security=tls&type=tcp#Reserve-UDP";
+
+    [Theory]
+    [InlineData("Shared", "Shared")]
+    [InlineData("Shared", "shared")]
+    [InlineData("", "")]
+    public void Preset_RejectsAmbiguousLabelsBeforeChangingSettings(string firstName, string secondName)
+    {
+        var settings = new AppSettings();
+        settings.Vless.ActiveServer = "Existing choice";
+        var connection = $"vless://test-a@192.0.2.1:443?security=tls#{firstName}\n" +
+                         $"vless://test-b@192.0.2.2:443?security=tls#{secondName}";
+
+        Assert.Throws<InvalidDataException>(() => BusinessDefaults.Apply(settings, connection, BusinessBootstrap.ReadRules()));
+        Assert.Equal("Existing choice", settings.Vless.ActiveServer);
+    }
+
+    [Fact]
+    public void Preset_NodeChoiceKeepsTcpAndUdpSiblingsOnChosenHost()
+    {
+        var settings = new AppSettings();
+        settings.Vless.ActiveServer = "Reserve-UDP";
+        BusinessDefaults.Apply(settings, SiblingConnection, BusinessBootstrap.ReadRules());
+        settings.App.BypassRussianTraffic = false;
+
+        Assert.Equal(4, settings.Vless.Servers.Count);
+        Assert.Equal(new[] { "Primary", "Reserve" }, BusinessDefaults.GetServerChoices(settings.Vless.Servers).Select(s => s.Name));
+        Assert.Equal("Reserve", settings.Vless.ActiveServer);
+        var config = ConfigGenerator.Generate(new Profile(), [], settings);
+        Assert.Equal("192.0.2.2", Assert.Single(config.Outbounds, o => o.Tag == "proxy").Server);
+        Assert.Equal(443, Assert.Single(config.Outbounds, o => o.Tag == "proxy").ServerPort);
+        Assert.Equal("192.0.2.2", Assert.Single(config.Outbounds, o => o.Tag == "proxy-udp").Server);
+        Assert.Equal(2443, Assert.Single(config.Outbounds, o => o.Tag == "proxy-udp").ServerPort);
+    }
+
+    [Theory]
+    [InlineData("Reserve server for the office", "Reserve server for the office")]
+    [InlineData("reserve SERVER for the OFFICE", "Reserve server for the office")]
+    [InlineData("Removed server", "Pilot")]
+    [InlineData("", "Pilot")]
+    public void Preset_RetainsOnlyChoicesPresentInRefreshedBundle(string savedName, string expectedName)
+    {
+        var settings = new AppSettings();
+        settings.Vless.ActiveServer = savedName;
+        settings.Vless.Servers = [new VlessServerEntry
+        {
+            Name = savedName, Server = "192.0.2.99", Uuid = "stale-credential"
+        }];
+        settings.App.RoutingMode = "full";
+
+        BusinessDefaults.Apply(settings, MultiServerConnection, BusinessBootstrap.ReadRules());
+
+        Assert.Equal(expectedName, settings.Vless.ActiveServer);
+        Assert.Equal("full", settings.App.RoutingMode);
+        Assert.Equal(2, settings.Vless.Servers.Count);
+        Assert.DoesNotContain(settings.Vless.Servers, s => s.Uuid == "stale-credential");
+        settings.App.BypassRussianTraffic = false;
+        var config = ConfigGenerator.Generate(new Profile(), [], settings);
+        var proxy = Assert.Single(config.Outbounds, o => o.Tag == "proxy");
+        Assert.Equal(expectedName == "Pilot" ? "192.0.2.1" : "192.0.2.2", proxy.Server);
+        Assert.Equal("proxy", config.Route.Final);
+        Assert.Contains(config.Route.Rules, r => r.DomainSuffix?.Contains("in-mag.ru") == true && r.Outbound == "direct");
+    }
 
     [Fact]
     public void EmbeddedRules_ResolveOwnerConflictAndPreserveAllSourceProcesses()

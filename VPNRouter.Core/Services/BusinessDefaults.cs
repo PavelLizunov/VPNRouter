@@ -8,13 +8,24 @@ internal static class BusinessDefaults
     internal static void Apply(AppSettings settings, string connection, List<CustomRule> rules)
     {
         var servers = SubscriptionFetcher.ParseBody(connection);
-        var first = servers.FirstOrDefault(s => s.Protocol == "vless" && string.IsNullOrEmpty(s.DetourVia));
+        if (servers.Any(s => string.IsNullOrWhiteSpace(s.Name)) ||
+            servers.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != servers.Count)
+            throw new InvalidDataException("Business server names must be nonempty and unique.");
+        var choices = GetServerChoices(servers);
+        var first = choices.FirstOrDefault();
         if (first == null)
             throw new InvalidDataException("Business pilot requires a usable VLESS connection.");
         if (rules.Count == 0 || rules.Any(r => !r.Enabled || ConfigGenerator.BuildCustomRouteRule(r) == null))
             throw new InvalidDataException("Business routing preset is invalid.");
 
-        settings.Vless = new VlessConfig { Servers = servers, ActiveServer = first.Name };
+        var savedName = settings.Vless?.ActiveServer;
+        var saved = !string.IsNullOrWhiteSpace(savedName)
+            ? servers.FirstOrDefault(s => string.Equals(s.Name, savedName, StringComparison.OrdinalIgnoreCase))
+            : null;
+        var selected = saved == null ? null : choices.FirstOrDefault(s =>
+            string.Equals(s.Server, saved.Server, StringComparison.OrdinalIgnoreCase));
+        // Refresh credentials from the bundle while retaining a choice within it.
+        settings.Vless = new VlessConfig { Servers = servers, ActiveServer = (selected ?? first).Name };
         settings.ActiveProfile = string.Empty;
         settings.CustomApps.Clear();
         settings.ExcludedApps.Clear();
@@ -54,6 +65,12 @@ internal static class BusinessDefaults
         settings.Monitoring.RestartOnFailure = true;
         settings.Update.AutoCheck = false;
     }
+
+    // The shared engine groups TCP/UDP variants on one host. Offer node choices,
+    // while retaining every bundled variant for its existing sibling logic.
+    internal static List<VlessServerEntry> GetServerChoices(IEnumerable<VlessServerEntry> servers) =>
+        servers.Where(s => s.Protocol == "vless" && string.IsNullOrEmpty(s.DetourVia))
+            .DistinctBy(s => s.Server, StringComparer.OrdinalIgnoreCase).ToList();
 
     internal static void ApplyDns(SingBoxConfig config, IEnumerable<CustomRule> rules)
     {

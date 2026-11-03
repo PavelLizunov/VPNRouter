@@ -267,6 +267,27 @@ public partial class MainWindowViewModel
         }
     }
 
+    internal IReadOnlyList<ServerViewModel> GetBusinessServerChoices()
+    {
+        var names = BusinessDefaults.GetServerChoices(Servers.Select(s => s.ToEntry()))
+            .Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Servers.Where(s => names.Contains(s.Name)).ToArray();
+    }
+
+    internal void SelectBusinessServer(ServerViewModel? server)
+    {
+        if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting ||
+            server == null || !GetBusinessServerChoices().Contains(server)) return;
+
+        SelectedServer = server;
+        try { SaveSettings(); }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[Business] Failed to save server selection");
+            StatusText = VPNRouter.Core.Localization.Strings.BusinessServerSaveFailed;
+        }
+    }
+
     partial void OnSelectedCustomConfigChanged(CustomConfigViewModel? value)
     {
         if (_isLoadingUI || value == null) return;

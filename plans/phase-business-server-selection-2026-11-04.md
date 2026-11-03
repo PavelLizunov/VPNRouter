@@ -43,3 +43,28 @@ Status: ACTIVE. Baseline is clean and all eleven applicable PR checks passed;
 the two private artifact jobs were intentionally skipped in public CI.
 No workstation/control-plane SDK install, build or VPN execution is authorized.
 This private Business update does not request a public release, merge or tag.
+
+## Implementation and review before CI
+
+- Baseline brief 3c999b9c passed all eleven applicable checks; implementation
+  started only after its full gate completed.
+- Business window reuses the existing server rows and connection command. An
+  internal selection action validates membership/busy state, saves immediately
+  and surfaces a localized generic write error. No public ViewModel API changed.
+- Preset bootstrap preserves the saved physical node within refreshed embedded
+  credentials. Missing names fall back to its default; blank/duplicate labels
+  fail before settings are changed. The picker offers one direct VLESS node per
+  host while the complete protocol/UDP sibling pool remains in the engine.
+- Source-only independent reviews: business_server_correctness,
+  business_server_trust and business_server_coverage. Name ambiguity and sibling
+  semantics were confirmed, recorded, then fixed; same-host and label regressions
+  supplement the original different-host selection tests.
+- Existing private corporate API inspected without printing configuration:
+  10 entries, 3 physical VLESS hosts, zero blank or duplicate labels.
+- Tests also cover immediate save, restart provisioning, refreshed credentials,
+  removed choice, generated primary/UDP host, foreign rows, busy controls, save
+  failure, Russian labels and widths 340/420. Runtime and disk serialization
+  still require the private Windows build and WINBRAT scenario.
+- Lightweight XAML XML parse and diff whitespace check pass. No local compiler,
+  SDK install, package build or full test execution was used.
+- Worker pool is currently idle; no lease has been acquired for this update.

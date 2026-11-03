@@ -5,7 +5,7 @@
         xmlns:icons="using:VPNRouter.App.Controls"
         x:Class="VPNRouter.App.Views.BusinessWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="VPNRouter Business" Width="420" Height="560" MinWidth="340" MinHeight="480"
+        Title="VPNRouter Business" Width="420" Height="680" MinWidth="340" MinHeight="480"
         Background="{DynamicResource SurfaceAppBrush}"
         Icon="avares://VPNRouter.App/Assets/penguin_mascot.ico">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
@@ -26,6 +26,27 @@
                     <TextBlock Text="{Binding ConnectButtonText}" FontSize="18" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
+            <StackPanel Spacing="8" IsEnabled="{Binding !IsConnected}">
+                <TextBlock Text="{x:Static loc:Strings.BusinessServer}"
+                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                <ComboBox x:Name="BusinessServerSelector"
+                          SelectedItem="{Binding SelectedServer, Mode=OneWay}"
+                          SelectionChanged="OnBusinessServerSelectionChanged"
+                          IsEnabled="{Binding !IsConnecting}" MinHeight="36"
+                          HorizontalAlignment="Stretch"
+                          AutomationProperties.AutomationId="BusinessServerSelector"
+                          AutomationProperties.Name="{x:Static loc:Strings.BusinessServer}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ServerViewModel">
+                            <TextBlock Text="{Binding DisplayName}" MaxWidth="220"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding DisplayName}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="{x:Static loc:Strings.BusinessServerHint}" TextWrapping="Wrap"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"/>
+            </StackPanel>
             <Border Background="{DynamicResource SurfaceBaseBrush}" BorderBrush="{DynamicResource BorderDefaultBrush}"
                     BorderThickness="1" CornerRadius="{StaticResource RadiusXl}" Padding="14">
                 <StackPanel Spacing="12" IsEnabled="{Binding !IsConnected}">
