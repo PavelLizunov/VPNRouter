@@ -1,0 +1,210 @@
+{
+  "Source": "8f874598e719c40b533a3c6cf01b3c2f24d5c950",
+  "InstallerSha256": "e1d9b224bb10678ceb04622bc16a1e92ba62e7159ff3faf1fa96a446556e6bb8",
+  "PriorInstallerSha256": "26b7d5752b7df6977eef317fc450a101f520e9a526d5d8e64adfa9e9da3273fd",
+  "Stages": {
+    "Identity": "PASS",
+    "Install": "PASS",
+    "FirstLaunch": "PASS",
+    "SplitCycles": "PASS",
+    "FullCycle": "PASS",
+    "RepresentativeEgress": "PASS",
+    "MemorySampling": "PASS",
+    "MemoryLeak": "UNVERIFIED",
+    "UIS": "UNVERIFIED",
+    "Cleanup": "PASS",
+    "Upgrade": "PASS",
+    "SameAccount": "PASS",
+    "ServerChoices": "PASS",
+    "SelectionPersisted": "PASS",
+    "ActualNode": "PASS"
+  },
+  "Failure": null,
+  "Samples": [
+    {
+      "AtUtc": "2026-11-03T22:35:27.0125289+00:00",
+      "Mode": "split",
+      "Cycle": 1,
+      "Phase": "connected",
+      "Kind": "App",
+      "PrivateBytes": 79822848,
+      "WorkingSet": 172466176,
+      "Handles": 844,
+      "Threads": 46
+    },
+    {
+      "AtUtc": "2026-11-03T22:35:27.0385302+00:00",
+      "Mode": "split",
+      "Cycle": 1,
+      "Phase": "connected",
+      "Kind": "Core",
+      "PrivateBytes": 82984960,
+      "WorkingSet": 57942016,
+      "Handles": 456,
+      "Threads": 20
+    },
+    {
+      "AtUtc": "2026-11-03T22:35:32.0865294+00:00",
+      "Mode": "split",
+      "Cycle": 1,
+      "Phase": "connected-settled",
+      "Kind": "App",
+      "PrivateBytes": 80035840,
+      "WorkingSet": 173178880,
+      "Handles": 817,
+      "Threads": 46
+    },
+    {
+      "AtUtc": "2026-11-03T22:35:32.0885290+00:00",
+      "Mode": "split",
+      "Cycle": 1,
+      "Phase": "connected-settled",
+      "Kind": "Core",
+      "PrivateBytes": 83046400,
+      "WorkingSet": 58036224,
+      "Handles": 457,
+      "Threads": 20
+    },
+    {
+      "AtUtc": "2026-11-03T22:35:41.8890307+00:00",
+      "Mode": "split",
+      "Cycle": 1,
+      "Phase": "disconnected-settled",
+      "Kind": "App",
+      "PrivateBytes": 79921152,
+      "WorkingSet": 176758784,
+      "Handles": 864,
+      "Threads": 43
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:14.3370296+00:00",
+      "Mode": "full",
+      "Cycle": 2,
+      "Phase": "connected",
+      "Kind": "App",
+      "PrivateBytes": 77287424,
+      "WorkingSet": 167997440,
+      "Handles": 834,
+      "Threads": 46
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:14.3395295+00:00",
+      "Mode": "full",
+      "Cycle": 2,
+      "Phase": "connected",
+      "Kind": "Core",
+      "PrivateBytes": 83173376,
+      "WorkingSet": 60375040,
+      "Handles": 478,
+      "Threads": 23
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:19.3935340+00:00",
+      "Mode": "full",
+      "Cycle": 2,
+      "Phase": "connected-settled",
+      "Kind": "App",
+      "PrivateBytes": 77766656,
+      "WorkingSet": 168579072,
+      "Handles": 833,
+      "Threads": 46
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:19.3955290+00:00",
+      "Mode": "full",
+      "Cycle": 2,
+      "Phase": "connected-settled",
+      "Kind": "Core",
+      "PrivateBytes": 83173376,
+      "WorkingSet": 60403712,
+      "Handles": 478,
+      "Threads": 23
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:30.3040288+00:00",
+      "Mode": "full",
+      "Cycle": 2,
+      "Phase": "disconnected-settled",
+      "Kind": "App",
+      "PrivateBytes": 79380480,
+      "WorkingSet": 174166016,
+      "Handles": 855,
+      "Threads": 43
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:47.0885415+00:00",
+      "Mode": "split",
+      "Cycle": 3,
+      "Phase": "connected",
+      "Kind": "App",
+      "PrivateBytes": 81330176,
+      "WorkingSet": 178892800,
+      "Handles": 894,
+      "Threads": 47
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:47.0910357+00:00",
+      "Mode": "split",
+      "Cycle": 3,
+      "Phase": "connected",
+      "Kind": "Core",
+      "PrivateBytes": 83562496,
+      "WorkingSet": 60641280,
+      "Handles": 468,
+      "Threads": 22
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:52.1430291+00:00",
+      "Mode": "split",
+      "Cycle": 3,
+      "Phase": "connected-settled",
+      "Kind": "App",
+      "PrivateBytes": 84258816,
+      "WorkingSet": 181891072,
+      "Handles": 872,
+      "Threads": 47
+    },
+    {
+      "AtUtc": "2026-11-03T22:36:52.1455287+00:00",
+      "Mode": "split",
+      "Cycle": 3,
+      "Phase": "connected-settled",
+      "Kind": "Core",
+      "PrivateBytes": 83578880,
+      "WorkingSet": 60698624,
+      "Handles": 470,
+      "Threads": 22
+    },
+    {
+      "AtUtc": "2026-11-03T22:37:00.8400288+00:00",
+      "Mode": "split",
+      "Cycle": 3,
+      "Phase": "disconnected-settled",
+      "Kind": "App",
+      "PrivateBytes": 83296256,
+      "WorkingSet": 179716096,
+      "Handles": 882,
+      "Threads": 44
+    }
+  ],
+  "RepresentativeEgress": [
+    {
+      "Mode": "split",
+      "Status": "PASS",
+      "UnselectedExpected": true,
+      "SelectedProxyExpected": true
+    },
+    {
+      "Mode": "full",
+      "Status": "PASS",
+      "UnselectedExpected": true,
+      "SelectedProxyExpected": true
+    }
+  ],
+  "Limits": [
+    "Three cycles are not proof of absence of memory leaks.",
+    "Representative egress tests do not prove every routing rule or DNS path.",
+    "UIS requires real customer calls."
+  ],
+  "AtUtc": "2026-11-03T22:37:04.1915417+00:00"
+}

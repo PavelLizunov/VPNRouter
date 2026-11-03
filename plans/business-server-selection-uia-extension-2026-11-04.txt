@@ -1,0 +1,42 @@
+$pat.Expand()
+if ($req.Value) {
+    $selectionRequest = [string]$req.Value | ConvertFrom-Json
+    $preparedNames = $selectionRequest.Prepared
+    $selectionName = [string]$selectionRequest.Choice
+    $selectedTarget = $null
+    $selectionPattern = $null
+    $preparedVerified = 0
+    while (-not $selectedTarget -and (Get-Date) -lt $deadline) {
+        $elements = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $pidCond)
+        $preparedVerified = 0
+        foreach ($expectedName in $preparedNames) {
+            $seenName = $false
+            for ($n = 0; $n -lt $elements.Count; $n++) {
+                $element = $elements.Item($n)
+                if ($element.Current.Name -eq [string]$expectedName -and $element.Current.IsEnabled -and -not $element.Current.IsOffscreen) { $seenName = $true; break }
+            }
+            if ($seenName) { $preparedVerified++ }
+        }
+        $candidates = New-Object System.Collections.ArrayList
+        $labelCondition = New-Object System.Windows.Automation.PropertyCondition($ae::NameProperty, $selectionName)
+        for ($n = 0; $n -lt $elements.Count; $n++) {
+            $element = $elements.Item($n)
+            if (-not $element.Current.IsEnabled -or $element.Current.IsOffscreen) { continue }
+            $candidatePattern = $null
+            if (-not $element.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$candidatePattern)) { continue }
+            $childLabel = $element.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $labelCondition)
+            if ($element.Current.Name -eq $selectionName -or $childLabel) { [void]$candidates.Add([pscustomobject]@{ Element=$element; Pattern=$candidatePattern }) }
+        }
+        if ($candidates.Count -eq 1 -and $preparedVerified -eq $preparedNames.Count) {
+            $selectedTarget = $candidates[0].Element
+            $selectionPattern = $candidates[0].Pattern
+        } elseif ($candidates.Count -gt 1) { throw 'Selector adapter found ambiguous selectable rows.' }
+        if (-not $selectedTarget) { Start-Sleep -Milliseconds 200 }
+    }
+    if (-not $selectedTarget) { throw 'Selector adapter could not resolve a visible prepared row.' }
+    $selectionPattern.Select()
+    for ($n = 0; $n -lt 20 -and -not $selectionPattern.Current.IsSelected; $n++) { Start-Sleep -Milliseconds 100 }
+    if (-not $selectionPattern.Current.IsSelected) { throw 'Selector adapter selection was not acknowledged.' }
+    $pat.Collapse()
+    $result.Element = [ordered]@{ PreparedVerified=$preparedVerified; SelectionAcknowledged=$true }
+}
