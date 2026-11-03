@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2 FIXED IN SELECTOR CI SOURCE / CI PENDING** - BUSINESS-HIDDEN-TEMPLATE-TEXTBOX: public Windows CI 41726474747 at 6bc2f846 passes 31 Business tests but both width fixtures stop at the old assertion forbidding every TextBox descendant. The pinned Avalonia 12.1.3 ComboBox template always contains PART_EditableTextBox and hides it when IsEditable is false. Assert no effectively visible input plus an explicitly noneditable selector, then exercise the remaining fixture assertions; task plans/phase-business-server-selection-2026-11-04.md.
+
 - [x] **P1 FIXED IN SERVER-SELECTION SOURCE / CI PENDING** - BUSINESS-CHOICE-NAME-AMBIGUITY: review of the uncommitted selector found ParseBody permits duplicate/empty labels, while ViewModel load uses the last name match and GetActiveServers uses the first. A second visible node can therefore connect to the first. Confirmed by coordinator and business_server_trust/correctness; establish unambiguous bundled names before selection, with duplicate/case/blank regressions; task plans/phase-business-server-selection-2026-11-04.md.
 - [x] **P2 FIXED IN SERVER-SELECTION SOURCE / CI PENDING** - BUSINESS-CHOICE-SIBLING-SEMANTICS: review of the uncommitted selector found different ports/protocols on one host are grouped by GetActiveServers and may feed proxy/proxy-udp independently of the selected row. Confirmed by coordinator and all three reviewers. Expose one physical-node choice while retaining the existing backing pool; cover same-host variants; task plans/phase-business-server-selection-2026-11-04.md.
 

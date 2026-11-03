@@ -32,9 +32,10 @@ public sealed class BusinessWindowTests
         {
             var controls = window.GetVisualDescendants().ToList();
             Assert.Single(controls.OfType<Button>().Where(b => b.Command == vm.ToggleConnectionCommand));
-            Assert.Empty(controls.OfType<TextBox>());
+            Assert.Empty(controls.OfType<TextBox>().Where(t => t.IsEffectivelyVisible));
             Assert.Empty(controls.OfType<TabControl>());
             var selector = Assert.Single(controls.OfType<ComboBox>());
+            Assert.False(selector.IsEditable);
             Assert.Equal("BusinessServerSelector", AutomationProperties.GetAutomationId(selector));
             Assert.Equal("Сервер VPN", AutomationProperties.GetName(selector));
             Assert.Same(vm.SelectedServer, selector.SelectedItem);

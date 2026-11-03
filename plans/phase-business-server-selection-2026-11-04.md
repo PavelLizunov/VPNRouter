@@ -68,3 +68,18 @@ This private Business update does not request a public release, merge or tag.
 - Lightweight XAML XML parse and diff whitespace check pass. No local compiler,
   SDK install, package build or full test execution was used.
 - Worker pool is currently idle; no lease has been acquired for this update.
+
+## Initial CI correction
+
+At 6bc2f846 the shared build and private installer job 41726615434 succeed.
+Public Windows CI 41726474747 passes 31 Business fixtures and skips the private
+fixture, but both narrow/wide window cases stop at an obsolete all-descendants
+TextBox assertion. The pinned Avalonia 12.1.3 Fluent ComboBox contains a hidden
+PART_EditableTextBox even when its editable mode is false. Verify that the
+selector is noneditable and that no input is effectively visible, preserving
+the employee-facing invariant. Production App/Core source is unchanged by this
+test correction. Repeat the exact-SHA gate before delivery.
+
+The same two fixture failures are the only failures in the Linux full run
+41726474704: 3270 passed, 2 failed, 78 skipped. The pinned template source is
+[Avalonia 12.1.3 ComboBox](https://github.com/AvaloniaUI/Avalonia/blob/12.1.3/src/Avalonia.Themes.Fluent/Controls/ComboBox.xaml).
