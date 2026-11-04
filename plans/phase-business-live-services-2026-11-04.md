@@ -189,3 +189,12 @@ scoped diff, expected behavior and actual CI/live evidence. Reviewer is read-onl
 and does not recursively delegate or access private delivery inputs. Source-
 confirm findings, fix accepted blockers and rerun affected gates before handoff.
 Do not substitute another model if the requested route is unavailable.
+
+## First implementation CI correction
+
+At 495aa4d4, Linux/shared and Windows/shared builds stop before tests with CS0103
+for AppPaths in the new pool-save method (runs 41932551614 and 41932551579).
+The partial file lacked using VPNRouter.Core; add that namespace only. The
+failure was recorded before correction. Runtime/UI tests remain unexecuted for
+this snapshot; repeat all applicable checks at the correction head. No installer
+was rebuilt or deployed from the failing source.

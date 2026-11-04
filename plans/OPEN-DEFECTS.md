@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CONFIRMED CI BUILD FAILURE** - BUSINESS-REFRESH-APPPATHS-IMPORT: all shared builds at 495aa4d4 stop with CS0103 at MainWindowViewModel.ServerList.cs:305 because the new pool-save method references AppPaths without importing VPNRouter.Core. Add the owning namespace; no runtime tests ran past this compile error. Runs 41932551614/41932551579; task plans/phase-business-live-services-2026-11-04.md.
+
 - [ ] **P2 CONFIRMED IN FOLLOW-UP REVIEW** - BUSINESS-CONTROLLER-DETACH-REFERENCES: business_live_correctness and coordinator confirm action-panel DataContexts retain the disposed service controller when the window context becomes null. Clear both panel contexts and cover the null transition. Task plans/phase-business-live-services-2026-11-04.md. Source correction complete; runtime/CI pending.
 - [ ] **P2 CONFIRMED IN FOLLOW-UP REVIEW** - BUSINESS-REPORT-EXPLORER-HANDLE: business_live_correctness confirms the new OpenReport discards Process.Start's returned handle. Dispose it without waiting/killing the file manager. Task plans/phase-business-live-services-2026-11-04.md. Source correction complete; runtime/CI pending.
 - [ ] **P2 CONFIRMED COVERAGE GAP** - BUSINESS-REFRESH-CHUNKED-LIMIT-FIXTURE: business_live_coverage confirms the oversized-response test stops on known Content-Length and does not exercise the read-time cap. Add an unknown-length streamed body exceeding the bound. Task plans/phase-business-live-services-2026-11-04.md. Source correction complete; runtime/CI pending.
