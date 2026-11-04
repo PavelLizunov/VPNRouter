@@ -1,13 +1,28 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:VPNRouter.App.ViewModels"
+        xmlns:business="using:VPNRouter.App.ViewModels.Internals"
         xmlns:loc="using:VPNRouter.Core.Localization"
         xmlns:icons="using:VPNRouter.App.Controls"
         x:Class="VPNRouter.App.Views.BusinessWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="VPNRouter Business" Width="420" Height="680" MinWidth="340" MinHeight="480"
+        Title="VPNRouter Business" Width="420" Height="740" MinWidth="340" MinHeight="480"
         Background="{DynamicResource SurfaceAppBrush}"
         Icon="avares://VPNRouter.App/Assets/penguin_mascot.ico">
+    <Window.Styles>
+        <Style Selector="Ellipse.business-health-dot">
+            <Setter Property="Fill" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+        <Style Selector="Ellipse.business-health-dot.good">
+            <Setter Property="Fill" Value="{DynamicResource SuccessSolidBrush}"/>
+        </Style>
+        <Style Selector="Ellipse.business-health-dot.warning">
+            <Setter Property="Fill" Value="{DynamicResource WarningSolidBrush}"/>
+        </Style>
+        <Style Selector="Ellipse.business-health-dot.bad">
+            <Setter Property="Fill" Value="{DynamicResource DangerSolidBrush}"/>
+        </Style>
+    </Window.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="28" Spacing="20" MaxWidth="400" HorizontalAlignment="Stretch">
             <Image Source="{Binding LogoSource}" Width="100" Height="100" Stretch="Uniform"
@@ -27,23 +42,37 @@
                 </StackPanel>
             </Button>
             <StackPanel Spacing="8" IsEnabled="{Binding !IsConnected}">
-                <TextBlock Text="{x:Static loc:Strings.BusinessServer}"
-                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{x:Static loc:Strings.BusinessServer}" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <Button Grid.Column="1" x:Name="BusinessServerRefresh"
+                            Content="{x:Static loc:Strings.BusinessServerRefresh}"
+                            Click="OnBusinessServerRefresh" IsEnabled="{Binding !IsConnecting}"
+                            AutomationProperties.AutomationId="BusinessServerRefresh"/>
+                </Grid>
                 <ComboBox x:Name="BusinessServerSelector"
-                          SelectedItem="{Binding SelectedServer, Mode=OneWay}"
                           SelectionChanged="OnBusinessServerSelectionChanged"
                           IsEnabled="{Binding !IsConnecting}" MinHeight="36"
-                          HorizontalAlignment="Stretch"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                           AutomationProperties.AutomationId="BusinessServerSelector"
                           AutomationProperties.Name="{x:Static loc:Strings.BusinessServer}">
                     <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ServerViewModel">
-                            <TextBlock Text="{Binding DisplayName}" MaxWidth="220"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip.Tip="{Binding DisplayName}"/>
+                        <DataTemplate x:DataType="business:BusinessServerChoiceViewModel">
+                            <Grid ColumnDefinitions="12,*,Auto" ColumnSpacing="6" ToolTip.Tip="{Binding StatusText}">
+                                <Ellipse Classes="business-health-dot" Width="8" Height="8"
+                                         Classes.good="{Binding IsGood}" Classes.warning="{Binding IsWarning}"
+                                         Classes.bad="{Binding IsBad}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" ToolTip.Tip="{Binding DisplayName}"/>
+                                <TextBlock Grid.Column="2" Text="{Binding PingText}" FontSize="12"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </Grid>
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
+                <TextBlock Text="{x:Static loc:Strings.BusinessServerHealthHint}" TextWrapping="Wrap"
+                           ToolTip.Tip="{x:Static loc:Strings.BusinessServerHealthLegend}"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"/>
                 <TextBlock Text="{x:Static loc:Strings.BusinessServerHint}" TextWrapping="Wrap"
                            FontSize="12" Foreground="{DynamicResource TextMutedBrush}"/>
             </StackPanel>

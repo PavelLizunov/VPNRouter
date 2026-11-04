@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
+using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.App.Views;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
@@ -26,7 +27,7 @@ public sealed class BusinessWindowTests
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = new MainWindowViewModel(store);
         vm.StatusText = "VPNRouter Business";
-        var window = new BusinessWindow { DataContext = vm, Width = width };
+        var window = CreateWindow(vm, width);
         window.Show();
         try
         {
@@ -38,11 +39,11 @@ public sealed class BusinessWindowTests
             Assert.False(selector.IsEditable);
             Assert.Equal("BusinessServerSelector", AutomationProperties.GetAutomationId(selector));
             Assert.Equal("Сервер VPN", AutomationProperties.GetName(selector));
-            Assert.Same(vm.SelectedServer, selector.SelectedItem);
+            Assert.Same(vm.SelectedServer, Assert.IsType<BusinessServerChoiceViewModel>(selector.SelectedItem).Server);
             Assert.Equal(2, selector.Items.Count);
 
             var before = store.SaveCount;
-            selector.SelectedItem = vm.Servers[1];
+            selector.SelectedItem = selector.Items[1];
             Assert.Same(vm.Servers[1], vm.SelectedServer);
             Assert.True(store.SaveCount > before);
             Assert.Equal(BusinessDefaultsTests.ReserveName, store.Load(AppPaths.ConfigYamlPath).Vless.ActiveServer);
@@ -74,7 +75,7 @@ public sealed class BusinessWindowTests
         // All data is synthetic. No running desktop or live connection is captured.
         using var captureVm = new MainWindowViewModel(store);
         captureVm.StatusText = "VPNRouter Business";
-        ScreenshotHelper.Capture(new BusinessWindow { DataContext = captureVm, Width = width }, $"business-{width}");
+        ScreenshotHelper.Capture(CreateWindow(captureVm, width), $"business-{width}");
     }
 
     [AvaloniaFact]
@@ -109,13 +110,13 @@ public sealed class BusinessWindowTests
         BusinessDefaults.Apply(settings, BusinessDefaultsTests.SiblingConnection, App.Services.BusinessBootstrap.ReadRules());
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = new MainWindowViewModel(store);
-        var window = new BusinessWindow { DataContext = vm };
+        var window = CreateWindow(vm);
         window.Show();
         try
         {
             var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
             Assert.Equal(4, vm.Servers.Count);
-            Assert.Equal(new[] { "Primary", "Reserve" }, selector.Items.Cast<ServerViewModel>().Select(s => s.Name));
+            Assert.Equal(new[] { "Primary", "Reserve" }, selector.Items.Cast<BusinessServerChoiceViewModel>().Select(s => s.DisplayName));
             selector.SelectedIndex = 1;
             Assert.Equal("Reserve", vm.SelectedServer?.Name);
             Assert.Equal("Reserve", store.Load(AppPaths.ConfigYamlPath).Vless.ActiveServer);
@@ -124,6 +125,9 @@ public sealed class BusinessWindowTests
         }
         finally { window.Close(); }
     }
+
+    private static BusinessWindow CreateWindow(MainWindowViewModel vm, int width = 420) =>
+        new(static (_, _) => Task.FromResult(ServerProbeResult.Unknown)) { DataContext = vm, Width = width };
 
     [AvaloniaFact]
     public void ServerSelection_WriteFailureKeepsWindowUsableAndReportsGenericError()

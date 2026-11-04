@@ -16,6 +16,21 @@ public static partial class Strings
     public static string BusinessDiagnostics => Ru ? "Сохранить диагностику" : "Save diagnostics";
     public static string BusinessOpen => Ru ? "Открыть VPNRouter Business" : "Open VPNRouter Business";
     public static string BusinessServer => Ru ? "Сервер VPN" : "VPN server";
+    public static string BusinessServerRefresh => Ru ? "Проверить" : "Refresh";
+    public static string BusinessServerChecking => Ru ? "Проверка…" : "Checking…";
+    public static string BusinessServerNotChecked => Ru ? "Не проверен" : "Not checked";
+    public static string BusinessServerReachable => Ru ? "Порт доступен" : "Port reachable";
+    public static string BusinessServerSlow => Ru ? "Медленный ответ" : "Slow response";
+    public static string BusinessServerNoReply => Ru ? "Нет ответа" : "No response";
+    public static string BusinessServerInconclusive => Ru ? "Неясно" : "Inconclusive";
+    public static string BusinessServerLatency(int ms) => Ru ? $"{ms} мс" : $"{ms} ms";
+    public static string BusinessServerSubMillisecond => Ru ? "<1 мс" : "<1 ms";
+    public static string BusinessServerHealthHint => Ru
+        ? "Доступность порта и пинг: проверка каждые 30 с при отключённом VPN. Это не проверка работы VPN."
+        : "Port reachability and ping: checked every 30 s while VPN is off. This does not verify VPN traffic.";
+    public static string BusinessServerHealthLegend => Ru
+        ? "Зелёный: порт отвечает, до 800 мс. Жёлтый: медленнее 800 мс или результат неясен. Красный: нет ответа. Серый: не проверен. Проверка приостановлена, пока VPN подключается или подключён."
+        : "Green: port responds within 800 ms. Yellow: slower than 800 ms or inconclusive. Red: no response. Grey: not checked. Probes pause while VPN is connecting or connected.";
     public static string BusinessServerHint => Ru
         ? "Если VPN недоступен: отключитесь, выберите другой сервер и подключитесь снова. Выбор сохраняется."
         : "If VPN is unavailable, disconnect, choose another server and reconnect. Your choice is saved.";

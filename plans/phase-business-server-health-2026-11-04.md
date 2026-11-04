@@ -50,7 +50,7 @@ included in this block. The old installer does not contain the new indicators.
 
 1. Build: PENDING; exact-SHA GitHub CI only. No Harness build or SDK install.
 2. Tests: PENDING; focused Business tests and applicable full Linux/Windows gates.
-3. Docs: IN PROGRESS; this brief records scope; update the Business guide.
+3. Docs: updated Business guide, including on-demand diagnostics and probe limits.
 4. Review: independent review unavailable under the owner's explicit no-subagent
    instruction. Perform and record source checks with distinct correctness,
    lifetime, trust and coverage lenses; do not label them independent review.
@@ -61,7 +61,32 @@ included in this block. The old installer does not contain the new indicators.
 
 ## Outcome
 
-Status: BRIEF ONLY; implementation has not started. The private 8f874598 installer
-remains retained and unchanged. Only this isolated task checkout is used; the
-local dsh/business-pilot branch was created at the accepted base after confirming
-that no other worktree has that branch checked out. Continue the existing PR.
+Status: IMPLEMENTED, CI PENDING. Brief 1a5d6d2e passed all eleven applicable checks
+before implementation. The private 8f874598 installer remains retained and
+unchanged; this source change has not been packaged or live-verified on WINBRAT.
+
+- Business-only choice wrappers keep reachability transient, separate from shared
+  server health history and settings. Color, localized status and latency update
+  together. Unknown/checking never implies a measured ping; inconclusive results
+  stay yellow. No raw probe error is displayed.
+- The window owns a 30-second dispatcher timer, immediate/explicit refresh and
+  one cancellable round. Busy/hidden/context-change/close paths invalidate results
+  and cancel requests. Late callbacks check both cancellation and current VPN
+  state before updating. A new round waits for cancelled work to finish.
+- Deterministic fakes cover all statuses, submillisecond latency, coalescing,
+  cancellation and stale responses, failures isolated to one node, selection/save
+  invariants, refresh click, hidden/context-change/close cleanup and 340/420
+  layouts with all three colors. Actual execution awaits CI.
+- Source checks performed by the same agent: correctness (physical choices and
+  selection mapping), lifetime (one round, token ownership, timer/event cleanup),
+  trust (no settings/health writes or upload, generic errors), coverage (UI binding
+  colors, latency and busy controls). No independent review is claimed; the
+  owner's no-subagent instruction remains in force.
+- Local lightweight checks: Business XAML parses as XML; git diff --check passes.
+  No local SDK, compiler, app launch or test runner was used. Existing exact-SHA
+  CI owns build/full-test execution; the Business job records capacity/tool
+  preflight before compilation. Record new run numbers and inspected screenshots
+  after completion.
+- Only this isolated task checkout is used. The local dsh/business-pilot branch
+  was created at the accepted base after confirming it was not checked out
+  elsewhere. Continue PR #646 without force-push, merge, tag or public release.

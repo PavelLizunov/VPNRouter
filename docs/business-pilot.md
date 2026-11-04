@@ -138,6 +138,19 @@ routing still come from the administrator's
 bundle. This adds a manual recovery action, not proof of automatic failover or
 of the cause of the November 3 office outage.
 
+The server picker shows a traffic-light port-reachability indicator and TCP
+connection latency. Green means a response within 800 ms, yellow means a slow
+or inconclusive response, red means the endpoint could not be reached, and grey
+means not checked. These are port checks, not VPN authentication or proxied-traffic
+tests; a red result does not establish that the remote machine itself is down.
+Checks run on opening the visible window, every 30 seconds while disconnected,
+and on Refresh. Connecting, connected, hidden and closed states cancel checks
+and clear stale results. Measurements stay in memory and are not uploaded.
+
+The separate diagnostics EXE collects and uploads logs only after the employee
+presses Send diagnostics. There is no continuous background statistics upload
+and no diagnostics-upload button in the Business connection window.
+
 Autostart launches the UI in the tray for the Windows account that ran Setup;
 it does not connect automatically. A different administrator account at the UAC
 prompt requires the administrator to set up the employee's autostart separately.
