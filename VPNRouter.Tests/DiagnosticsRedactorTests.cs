@@ -360,4 +360,27 @@ app:
         Assert.Contains("bad_line: ***", outp);
         Assert.Contains("unknown_secret_key: ***", outp);
     }
+
+    [Fact]
+    public void Logs_RedactQuotedSecretsWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta\"\n" +
+            "[DBG] token='x y'\n" +
+            "[DBG] userpassword=\"alpha beta\"\n" +
+            "[DBG] userpassword='alpha beta'\n" +
+            "[DBG] password=\"with ' opposite\"\n" +
+            "[DBG] token='with \" opposite'\n" +
+            "[DBG] password=\"unterminated value\n" +
+            "[DBG] password=\"escaped \\\" quote\"");
+
+        Assert.DoesNotContain("alpha", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("x y", outp);
+        Assert.Contains("password=\"***\"", outp);
+        Assert.Contains("token='***'", outp);
+        Assert.Contains("userpassword=\"***\"", outp);
+        Assert.Contains("userpassword='***'", outp);
+        Assert.Contains("password=\"***", outp);
+    }
 }
