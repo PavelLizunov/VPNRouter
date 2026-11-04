@@ -19,8 +19,9 @@
   preserve other SSH access and services.
 - Place verified installer/receipts below ~/Windows in a task-owned folder;
   deploy through the guest share \\host.lan\Data after verifying guest identity.
-- Leave the application ready for the owner's manual test. Do not connect the
-  VPN automatically or claim new live dataplane/UIS/memory acceptance.
+- Leave the application ready for the owner's manual test. The later explicit
+  regression request authorizes bounded live VPN cycles on this guest. Record
+  actual results without claiming UIS or long-memory acceptance.
 - Verification: build/source/hash, guest install, Business UI and new controls.
   No live desktop screenshots or raw configuration/logs in reports or Git.
 - Rollback: retain the previous private installer; preserve existing user data.
@@ -88,3 +89,77 @@
 - Only this outcome record changes the repository. No merge, tag or public
   release was created. The outcome commit requires its own exact-head CI gate;
   the installed/tested source remains 0079ee82 regardless of that records head.
+
+## Unattended guest access follow-up
+
+The owner requests continued work and administrative access to the VM without
+repeated prompts. The guest already has an admin token. The owner then explicitly
+authorized root from the Omarchy user and device-to-device SSH setup; sudo -n
+succeeds, so no password window is needed. Prepare a key-authenticated guest
+command channel using inbox Windows OpenSSH and a fixed host-loopback proxy into
+the existing guest network namespace over the current host SSH connection.
+Preserve existing host authentication, VM resources and Windows UAC settings.
+No additional agent, SDK or product build is needed.
+Before changes, inventory the actual Windows guest and installed OpenSSH features.
+Verify noninteractive administrative commands and leave the application ready.
+Record service/task ownership and cleanup; keep private keys outside Git/chat.
+Status: COMPLETE; installed client/source remains unchanged.
+
+## Owner-requested live regression follow-up
+
+Verify the installed exact-source client on this guest through three bounded
+split/full/split connect/stop cycles across two physical choices, immediate save
+and full app restart, generated TCP host selection, representative HTTPS process
+routing, and core/TUN cleanup. Verify the new health refresh and connected-state
+control disabling. Preserve the original selection/mode, leave VPN disconnected
+when it started disconnected, keep the app ready, and remove task probes/tasks.
+No reinstall, SDK, build, WINBRAT use or desktop screenshot. Public results contain
+only counts/booleans; private labels, addresses and config stay in guest memory.
+
+## Unattended access and live regression outcome
+
+- The later owner grant enabled noninteractive sudo on Omarchy. Parent used only
+  sudo -n for the requested setup; no password/pkexec window or extra agent.
+- Inbox Windows OpenSSH Server is installed, automatic and running. Separate
+  Harness and Omarchy public keys are appended to the administrators key file,
+  whose protected ACL permits only SYSTEM and Builtin Administrators. Existing
+  Windows UAC settings and RDP credentials remain unchanged. Password SSH login
+  is disabled for this channel; private keys remain on their originating device.
+- A root-owned systemd socket/proxy exposes guest SSH only on the Omarchy
+  loopback interface, through its current Docker network namespace. The guest
+  firewall accepts that management path only. The proxy resolves the current
+  container PID per connection; no VM allocation/network/restart was needed.
+- Guest host key was obtained through the already trusted RDP bootstrap and
+  pinned independently on both clients. Strict key checking remains enabled.
+  Harness-to-guest and Omarchy-to-guest key login pass with full admin tokens.
+  A temporary HKLM write/delete and SCP upload/download round trip pass.
+- Initial server start failed because generated host private keys had the
+  ordinary-user owner; owner/ACL repair to Administrators/SYSTEM made sshd start.
+  This was setup, not a VPNRouter product defect; no product source changed.
+- Live verifier first passed UI-only inspection, then all three split/full/split
+  connect/stop cycles on the installed 0079ee82 binary across two physical nodes.
+  Exactly three selectable labels and the ten-entry backing pool were confirmed.
+  Selection saved before Connect and survived full process termination/relaunch.
+  Each generated TCP proxy host matched the choice. Connected selection/Refresh/
+  mode controls were disabled. Health refresh completed before and after cycles.
+- Representative IPv4 HTTPS passes in all three cycles: ordinary curl Direct
+  and the Telegram-named curl copy Proxy in split, both Proxy in full. Node two
+  has different observed VPN egress from node one. Actual addresses and labels
+  stayed in guest memory. This does not establish every rule, DNS or UDP path.
+- All three core/TUN lifecycles pass. Original choice/mode were restored; app
+  binary hash was unchanged; app remains running and VPN is off. The task's
+  interactive verifier and entire staging directory were removed, with no core
+  or TUN left. SSH remains automatic/running for requested future management.
+- Sanitized executed results are linked in
+  [business-server-health-owner-vm-2026-11-04.json](business-server-health-owner-vm-2026-11-04.json).
+  Executed scripts and bootstrap evidence remain only in the private delivery
+  admin folder; temporary host bootstrap copies were removed. A normal RDP
+  viewing helper is available to the owner without root or VM lifecycle calls.
+  Its normal desktop window was opened; a final same-session UIA check confirms
+  the app window and enabled visible selector. Readiness task/staging removed.
+- UIS calls, third-node dataplane, every rule/DNS path, office reachability and
+  sustained memory behavior remain unverified. Existing memory ledger findings
+  are unchanged. No absolute regression-free claim is made.
+- This follow-up changes records only. Previous exact head 4d5bbff2 passed all
+  eleven applicable checks (two expected private skips). Its successor record
+  commit requires its own CI gate; installer/product source stays 0079ee82.

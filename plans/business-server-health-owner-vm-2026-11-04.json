@@ -1,0 +1,63 @@
+{
+  "Source": "0079ee82cd266e43af895a7c5d3d92359bdf0a24",
+  "Action": "Run",
+  "Stages": {
+    "Identity": "PASS",
+    "UIChoices": "PASS",
+    "HealthRefresh": "PASS",
+    "Baseline": "PASS",
+    "HealthAfterStop1": "PASS",
+    "RestartPersistence": "PASS",
+    "HealthAfterStop2": "PASS",
+    "HealthAfterStop3": "PASS",
+    "ThreeCycles": "PASS"
+  },
+  "Cycles": [
+    {
+      "Mode": "split",
+      "RepresentativeHttps": "PASS",
+      "Controls": "PASS",
+      "SelectedExpected": true,
+      "NodeIndex": 1,
+      "UnselectedExpected": true,
+      "Cycle": 1,
+      "Lifecycle": "PASS",
+      "GeneratedTcpHost": "PASS"
+    },
+    {
+      "Mode": "full",
+      "RepresentativeHttps": "PASS",
+      "Controls": "PASS",
+      "SelectedExpected": true,
+      "NodeIndex": 2,
+      "UnselectedExpected": true,
+      "Cycle": 2,
+      "Lifecycle": "PASS",
+      "GeneratedTcpHost": "PASS"
+    },
+    {
+      "Mode": "split",
+      "RepresentativeHttps": "PASS",
+      "Controls": "PASS",
+      "SelectedExpected": true,
+      "NodeIndex": 2,
+      "UnselectedExpected": true,
+      "Cycle": 3,
+      "Lifecycle": "PASS",
+      "GeneratedTcpHost": "PASS"
+    }
+  ],
+  "Failure": null,
+  "Cleanup": "PASS",
+  "InitialDisconnected": true,
+  "EntryCount": 10,
+  "ChoiceCount": 3,
+  "BinaryUnchanged": true,
+  "AppReady": true,
+  "Limits": [
+    "Representative IPv4 HTTPS only; no every-rule, DNS, UDP, third-node or office acceptance.",
+    "UIS and sustained memory behavior remain unverified.",
+    "The owner-selected local guest is distinct from WINBRAT."
+  ],
+  "VerifierSha256": "4bedba6b25ef50cac515ca1368176670c90b573d2eeb042f6cfa3149d146f8ba"
+}
