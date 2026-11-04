@@ -23,6 +23,11 @@ public sealed class BusinessPilotValidationTests
             Assert.False(File.Exists(AppPaths.ConfigYamlPath));
             var settings = RealSettingsStore.Instance.Load(AppPaths.ConfigYamlPath);
             BusinessBootstrap.Apply(settings, RealSettingsStore.Instance, bundle);
+            var services = BusinessClientConfiguration.Parse(BusinessBootstrap.ReadConnection());
+            Assert.True(services.Subscription != null, "Private delivery must include the subscription reference.");
+            Assert.True(services.SupportEndpoint != null && !string.IsNullOrWhiteSpace(services.SupportToken),
+                "Private delivery must include the individual diagnostic upload identity.");
+            BusinessClientConfiguration.ValidateResponse(BusinessBootstrap.ReadConnection());
             settings = RealSettingsStore.Instance.Load(AppPaths.ConfigYamlPath);
             Assert.NotEmpty(settings.Vless.Servers);
             Assert.Equal(6, settings.App.RoutingAppsInclude.Count);

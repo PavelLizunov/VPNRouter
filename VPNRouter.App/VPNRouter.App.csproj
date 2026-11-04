@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\packaging\windows\support\Collect-VPNRouterBusiness-Diagnostics.ps1" LogicalName="VPNRouter.Business.Collector" />
     <EmbeddedResource Include="..\packaging\windows\business-rules.json" LogicalName="VPNRouter.Business.Rules" />
     <EmbeddedResource Include="$(BusinessConnectionFile)" LogicalName="VPNRouter.Business.Connection"
                       Condition="'$(VPNRouterEdition)' == 'Business' And '$(BusinessConnectionFile)' != ''" />

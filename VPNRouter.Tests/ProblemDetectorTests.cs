@@ -7,19 +7,19 @@ public sealed class ProblemDetectorTests
 {
     // Lines from the 2026-10-17 support case: full tunnel, the game server reached through the Swedish VLESS server.
     private const string FullTunnelGameSession = """
-+0300 2026-10-17 11:04:11 INFO [1456988962 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 202.49.176.110:8455
++0300 2026-10-17 11:04:11 INFO [1456988962 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 203.0.113.104:8455
 +0300 2026-10-17 11:28:37 INFO sing-box started (0.53s)
-+0300 2026-10-17 11:32:00 INFO [3479212803 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 202.49.176.110:8456
-+0300 2026-10-17 11:32:00 INFO [3479212803 412ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 202.49.176.110:8456
-+0300 2026-10-17 11:33:03 INFO [343192332 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 202.49.176.110:8455
-+0300 2026-10-17 11:35:34 INFO [2856132021 1ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound packet connection to 202.49.176.110:8455
-+0300 2026-10-17 11:35:53 INFO [911541764 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 202.49.176.110:8101
-+0300 2026-10-17 11:36:00 INFO [911541765 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 64.233.164.188:443
-+0300 2026-10-17 11:38:36 INFO [2060890596 0ms] outbound/direct[direct]: outbound connection to 31.31.198.99:443
++0300 2026-10-17 11:32:00 INFO [3479212803 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 203.0.113.104:8456
++0300 2026-10-17 11:32:00 INFO [3479212803 412ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 203.0.113.104:8456
++0300 2026-10-17 11:33:03 INFO [343192332 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 203.0.113.104:8455
++0300 2026-10-17 11:35:34 INFO [2856132021 1ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound packet connection to 203.0.113.104:8455
++0300 2026-10-17 11:35:53 INFO [911541764 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 203.0.113.104:8101
++0300 2026-10-17 11:36:00 INFO [911541765 0ms] outbound/vless[vless-Sweden VLESS ~zappodler]: outbound connection to 203.0.113.106:443
++0300 2026-10-17 11:38:36 INFO [2060890596 0ms] outbound/direct[direct]: outbound connection to 203.0.113.105:443
 """;
 
     private const string CurrentJson = """
-{ "outbounds": [ { "type": "vless", "tag": "vless-Sweden", "server": "155.4.244.204", "server_port": 443 },
+{ "outbounds": [ { "type": "vless", "tag": "vless-Sweden", "server": "192.0.2.101", "server_port": 443 },
                  { "type": "direct", "tag": "direct" } ] }
 """;
 
@@ -53,9 +53,9 @@ public sealed class ProblemDetectorTests
     {
         const string log = """
 +0300 2026-10-17 11:28:37 INFO sing-box started (0.53s)
-+0300 2026-10-17 11:30:00 INFO [1 0ms] outbound/vless[vless-Sweden]: outbound connection to 142.250.1.1:443
++0300 2026-10-17 11:30:00 INFO [1 0ms] outbound/vless[vless-Sweden]: outbound connection to 203.0.113.103:443
 +0300 2026-10-17 11:30:01 INFO [2 0ms] outbound/vless[vless-Sweden]: outbound connection to www.gstatic.com:80
-+0300 2026-10-17 11:30:02 INFO [3 0ms] outbound/vless[vless-Sweden]: outbound connection to 64.233.164.188:5228
++0300 2026-10-17 11:30:02 INFO [3 0ms] outbound/vless[vless-Sweden]: outbound connection to 203.0.113.106:5228
 """;
         Assert.Empty(ProblemDetector.Detect(true, 1420, null, CurrentJson, log));
     }
@@ -133,9 +133,9 @@ public sealed class ProblemDetectorTests
     {
         const string log = """
 +0300 2026-10-17 11:18:58 INFO sing-box started (0.46s)
-+0300 2026-10-17 11:19:38 ERROR [2571678741 5.6s] outbound/urltest[proxy]: dial tcp 155.4.244.204:443: i/o timeout
-+0300 2026-10-17 11:19:38 ERROR [2571678741 5.6s] connection: open connection to 140.248.139.82:443 using outbound/urltest[proxy]: dial tcp 155.4.244.204:443: i/o timeout
-+0300 2026-10-17 11:20:38 ERROR [2571678742 5.6s] outbound/urltest[proxy]: dial tcp 155.4.244.204:443: i/o timeout
++0300 2026-10-17 11:19:38 ERROR [2571678741 5.6s] outbound/urltest[proxy]: dial tcp 192.0.2.101:443: i/o timeout
++0300 2026-10-17 11:19:38 ERROR [2571678741 5.6s] connection: open connection to 203.0.113.102:443 using outbound/urltest[proxy]: dial tcp 192.0.2.101:443: i/o timeout
++0300 2026-10-17 11:20:38 ERROR [2571678742 5.6s] outbound/urltest[proxy]: dial tcp 192.0.2.101:443: i/o timeout
 """;
 
         var problem = Assert.Single(ProblemDetector.Detect(false, 1420, null, CurrentJson, log));
@@ -145,7 +145,7 @@ public sealed class ProblemDetectorTests
     [Fact]
     public void Detect_BrokenCurrentJson_DoesNotThrow()
     {
-        Assert.Empty(ProblemDetector.Detect(false, 1420, null, "{ not json", "dial tcp 1.2.3.4:443: i/o timeout"));
+        Assert.Empty(ProblemDetector.Detect(false, 1420, null, "{ not json", "dial tcp 203.0.113.101:443: i/o timeout"));
     }
 
     [Fact]

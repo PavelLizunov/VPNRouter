@@ -71,7 +71,8 @@ servers and ask whether vpnctl can supply server load.
   Never compile or install SDKs on Harness, Omarchy or the owner's guest.
 - Upgrade and test the owner's already selected Windows VM through its verified
   SSH channel; this explicit target continues the earlier owner exception to the
-  fixed WINBRAT default. Do not start WINBRAT or create additional agents.
+  fixed WINBRAT default. Do not start WINBRAT. The owner subsequently authorized multiple agents and
+  machines; three read-only independent source reviews now cover this draft.
 
 ## Six verification gates
 
@@ -81,9 +82,9 @@ servers and ask whether vpnctl can supply server load.
    and cache restart, busy-state races/cancellation, all variants, unknown geo,
    diagnostics success/refusal/retry/cancel and no automatic upload.
 3. Docs: PENDING; update Business guide/private-input contract and this Outcome.
-4. Review: PENDING; separate correctness/lifetime/security/coverage self-checks.
-   Independent review is unavailable under the owner's no-extra-agent constraint;
-   do not call self-checks independent review or a stable-release review pass.
+4. Review: IN PROGRESS; correctness/lifetime, security/trust, and tests/UI
+   independent reviewers are authorized by the later owner instruction. No
+   reviewer builds, mutates workers, changes files or recursively delegates.
 5. UI/live: PENDING; synthetic 340/420 renders and actual owner-guest subscription
    update to four choices, diagnostic send with independent receiver receipt,
    choice/restart, two-node split/full routing and TUN/core cleanup. No desktop
@@ -93,10 +94,98 @@ servers and ask whether vpnctl can supply server load.
 
 ## Outcome
 
-- Status: PLANNED; no product or installed-binary changes yet.
+- Status: IMPLEMENTED / CI PENDING; installed binary is still unchanged.
 - Private subscription probe is evidence of current server data, not proof that
   the existing application refreshed it. Existing installer remains 0079ee82.
 - UIS, every rule/DNS/UDP path, third/fourth-node dataplane, office calls and
   sustained memory behavior remain separate acceptance limits.
 - No merge, tag or public release is authorized. The prepared brief requires
   its exact-head CI gate before the implementation block.
+
+## Implementation block
+
+- Brief cedd1aaa84f5109b619b3c485ee63c6f44d25d66 passed all eleven applicable
+  exact-head checks, with two expected private skips, before implementation.
+- Added a Business-only controller, HTTP boundary, private collector bridge and
+  embedded immutable service metadata reader. In-app Collect/Send/Open folder/
+  Cancel actions preserve failed reports and show acknowledgement only on success.
+  The canonical allowlisted PowerShell collector is embedded unchanged.
+- Added a complete-response subscription refresh, source-bound raw-response
+  cache in the existing atomic settings transaction, and guarded pool replacement.
+  A save failure restores the old settings before changing visible rows. Both UI
+  connection flags and actual engine running state block replacement. Retained
+  nodes are matched by refreshed label or physical host; mode is not changed.
+- The window rebuilds transient health rows after a list change and owns service
+  cancellation/timers on hide, connect, context swap and close. Shared VM public
+  surface and connection implementation were not edited.
+- Added eight small locally drawn flag assets and localized country names for
+  recognized advertised labels; unknown/custom labels remain explicit unknown.
+  Source metadata is not a verified geographical/egress observation.
+- Added deterministic parser/cache/source-isolation, HTTP upload/refusal/bounds,
+  fourth-node/variant/selection/restart/rollback, busy/cancel/stale-completion,
+  no-auto-upload, retry/fresh-after-ack, country and 340/420 UI fixtures. A Windows
+  fixture executes the actual embedded collector against synthetic logs and checks
+  masking, absence of copied config, stage cleanup and private report ACL.
+- Correctness/lifetime/security/coverage self-checks are performed; three
+  independent reviews are running under the later owner authorization. A stale-archive-after-ack
+  issue in the draft was recorded before correction and given a regression.
+- Source checks only on Harness: scoped diff, XML parsing, asset dimensions and
+  private-value comparison. No local SDK/build/test execution. All runtime/build
+  gates remain pending exact-SHA CI and the later private install/live scenario.
+- Actual server metadata currently recognizes only some country labels. Unknown
+  labels are not guessed; a future vpnctl country-code field is documented along
+  with the client-safe load API needed for opaque nodes.
+
+## Refreshed input audit and owner review authorization
+
+- A read-only credential comparison with the installed owner guest confirms the
+  recovered subscription is the same account. No raw credential was printed.
+- Exact comparison of the refreshed private input against 1464 current paths
+  initially found two real endpoint addresses in three old test files and one
+  historical plan. No subscription identity or VLESS credential matched. The
+  finding was recorded before replacing those and nearby historical live-log
+  values with RFC documentation addresses. Historical Git commits are untouched.
+- Recheck: 21 private values, zero matching current-tree paths. This supersedes
+  the earlier old-snapshot-only zero-match statement for the refreshed source;
+  it does not claim that public history was erased or that endpoints are keys.
+- The owner now explicitly permits multiple subagents and machines. Three
+  independent read-only reviews inspect the complete current draft, with separate
+  correctness/lifetime, security/trust and tests/UI questions. Model/settings are
+  inherited unchanged. Build/SDK restrictions and one mutable scenario per worker
+  still apply; no additional VM, backend deployment or product build was started.
+
+## Independent review disposition before CI
+
+- Three independent reviewers completed source inspections: business_live_correctness,
+  business_live_security and business_live_coverage. Findings were reopened and
+  recorded before corrections; no reviewer ran builds, tests or VM operations.
+- Corrected the draft's elevated user-writable script execution: the immutable
+  embedded collector now goes to fixed system PowerShell over redirected stdin,
+  with system working/module paths and no executable disk staging. Security
+  reviewer rechecked the source boundary; actual WinPS bridge awaits CI.
+- Corrected malformed-YAML diagnostic fallback to omit unparseable content,
+  including unloadable backups, rather than reconstruct secret scalar boundaries.
+  Added short-wrapped base64 cache and unknown multiline regressions. Security
+  reviewer rechecked this causal path; parsed YAML still preserves safe fields.
+- Corrected physical-host priority when labels are reused, null-context panel
+  cleanup and Explorer process disposal. Correctness reviewer rechecked all three.
+- Added actual shared-bootstrap/file-backed restart fixtures, source mismatch/
+  corruption cases and unknown-length streaming limit tests. The prior manual
+  pool hydration fixture is now named as pool persistence, not bootstrap proof.
+- Reviewers contributed only four new regression files under explicit disjoint
+  ownership. Coordinator inspected each. Corrected the older contradictory guide
+  paragraphs. All build/runtime/layout claims remain pending exact-SHA CI.
+- Source audit also retrieved the existing personal standalone diagnostics EXE
+  privately and verified its known SHA256. No new upload identity was issued or
+  receiver registry changed, and no new client was installed in this block.
+
+## Requested final Astra review
+
+The owner explicitly requests an additional final review using GPT ASTRA with
+XHIGH reasoning after implementation/verification. Keep the primary model and
+existing reviewers unchanged. Route that review to the requested exact model
+through the available T3 delegation capability, with a clean final snapshot,
+scoped diff, expected behavior and actual CI/live evidence. Reviewer is read-only
+and does not recursively delegate or access private delivery inputs. Source-
+confirm findings, fix accepted blockers and rerun affected gates before handoff.
+Do not substitute another model if the requested route is unavailable.

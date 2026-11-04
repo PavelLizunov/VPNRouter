@@ -288,6 +288,39 @@ public partial class MainWindowViewModel
         }
     }
 
+    internal bool ReplaceBusinessServers(string connection, string sourceHash)
+    {
+        if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting || _engine.IsRunning) return false;
+        var entries = BusinessDefaults.ParseConnection(connection);
+        var next = BusinessDefaults.CreateServerPool(entries, _settings.Vless);
+        var rows = entries.Select(s => new ServerViewModel(s)).ToArray();
+        ServerViewModel.RefreshUdpSiblingFlags(rows);
+        ServerViewModel.RefreshProviderRiskFlags(rows);
+        var old = _settings.Vless;
+        var oldSource = _settings.App.BusinessSubscriptionSource;
+        var oldCache = _settings.App.BusinessSubscriptionCache;
+        _settings.Vless = next;
+        _settings.App.BusinessSubscriptionSource = sourceHash;
+        _settings.App.BusinessSubscriptionCache = connection;
+        try { _settingsStore.Save(_settings, AppPaths.ConfigYamlPath); }
+        catch
+        {
+            _settings.Vless = old;
+            _settings.App.BusinessSubscriptionSource = oldSource;
+            _settings.App.BusinessSubscriptionCache = oldCache;
+            throw;
+        }
+        _isLoadingUI = true;
+        try
+        {
+            Servers.Clear();
+            foreach (var row in rows) Servers.Add(row);
+            SelectedServer = rows.First(s => s.Name == next.ActiveServer);
+        }
+        finally { _isLoadingUI = false; }
+        return true;
+    }
+
     partial void OnSelectedCustomConfigChanged(CustomConfigViewModel? value)
     {
         if (_isLoadingUI || value == null) return;

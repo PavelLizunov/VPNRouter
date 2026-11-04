@@ -7,15 +7,15 @@ public sealed class ActiveServerMatcherTests
 {
     private static readonly (string Name, string Host)[] Servers =
     {
-        ("Sweden VLESS ~ninitux", "155.4.244.204"),
-        ("Iceland New HY2 ~ninitux", "89.126.249.149"),
+        ("Sweden VLESS ~fixture", "192.0.2.101"),
+        ("Iceland New HY2 ~fixture", "192.0.2.102"),
         ("edge.example.net", "Edge.Example.net"),
     };
 
     [Fact]
     public void ConnectedAddress_NamesTheSubscriptionServerThatOwnsIt()
     {
-        Assert.Equal("Sweden VLESS ~ninitux", ActiveServerMatcher.FindName("155.4.244.204", Servers));
+        Assert.Equal("Sweden VLESS ~fixture", ActiveServerMatcher.FindName("192.0.2.101", Servers));
     }
 
     [Fact]

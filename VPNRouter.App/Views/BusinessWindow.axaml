@@ -6,7 +6,7 @@
         xmlns:icons="using:VPNRouter.App.Controls"
         x:Class="VPNRouter.App.Views.BusinessWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="VPNRouter Business" Width="420" Height="740" MinWidth="340" MinHeight="480"
+        Title="VPNRouter Business" Width="420" Height="820" MinWidth="340" MinHeight="480"
         Background="{DynamicResource SurfaceAppBrush}"
         Icon="avares://VPNRouter.App/Assets/penguin_mascot.ico">
     <Window.Styles>
@@ -24,13 +24,13 @@
         </Style>
     </Window.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="28" Spacing="20" MaxWidth="400" HorizontalAlignment="Stretch">
-            <Image Source="{Binding LogoSource}" Width="100" Height="100" Stretch="Uniform"
-                   HorizontalAlignment="Center" Margin="0,12,0,0"/>
+        <StackPanel Margin="22" Spacing="14" MaxWidth="400" HorizontalAlignment="Stretch">
+            <Image Source="{Binding LogoSource}" Width="64" Height="64" Stretch="Uniform"
+                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
             <TextBlock Text="VPNRouter Business" FontSize="24" FontWeight="SemiBold"
                        HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}"/>
             <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" TextAlignment="Center"
-                       MinHeight="44" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                       MinHeight="28" Foreground="{DynamicResource TextSecondaryBrush}"/>
             <Button Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding !IsConnecting}"
                     Classes="solid" MinHeight="48" CornerRadius="{StaticResource RadiusPill}"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
@@ -41,6 +41,28 @@
                     <TextBlock Text="{Binding ConnectButtonText}" FontSize="18" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
+            <Border x:Name="BusinessActions" x:DataType="business:BusinessServicesViewModel"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusXl}" Padding="10">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                        <TextBlock Text="{x:Static loc:Strings.BusinessDiagnosticsHeader}" TextWrapping="Wrap"
+                                   FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="{x:Static loc:Strings.BusinessDiagnosticsCollect}"
+                                Command="{Binding CollectCommand}" AutomationProperties.AutomationId="BusinessDiagnosticsCollect"/>
+                        <Button Grid.Column="2" Content="{x:Static loc:Strings.BusinessDiagnosticsSend}"
+                                Command="{Binding SendCommand}" AutomationProperties.AutomationId="BusinessDiagnosticsSend"/>
+                    </Grid>
+                    <TextBlock Text="{Binding DiagnosticStatus}" TextWrapping="Wrap" FontSize="12"
+                               AutomationProperties.AutomationId="BusinessDiagnosticsStatus"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsDiagnosticBusy}"/>
+                    <Button Content="{x:Static loc:Strings.BusinessDiagnosticsCancel}" Command="{Binding CancelDiagnosticCommand}"
+                            IsVisible="{Binding IsDiagnosticBusy}" AutomationProperties.AutomationId="BusinessDiagnosticsCancel"/>
+                    <Button Content="{x:Static loc:Strings.BusinessDiagnosticsOpen}" Command="{Binding OpenReportCommand}"
+                            IsVisible="{Binding HasReport}" AutomationProperties.AutomationId="BusinessDiagnosticsOpen"/>
+                </StackPanel>
+            </Border>
             <StackPanel Spacing="8" IsEnabled="{Binding !IsConnected}">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Text="{x:Static loc:Strings.BusinessServer}" VerticalAlignment="Center"
@@ -52,24 +74,38 @@
                 </Grid>
                 <ComboBox x:Name="BusinessServerSelector"
                           SelectionChanged="OnBusinessServerSelectionChanged"
-                          IsEnabled="{Binding !IsConnecting}" MinHeight="36"
+                          IsEnabled="{Binding !IsConnecting}" MinHeight="46"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                           AutomationProperties.AutomationId="BusinessServerSelector"
                           AutomationProperties.Name="{x:Static loc:Strings.BusinessServer}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="business:BusinessServerChoiceViewModel">
-                            <Grid ColumnDefinitions="12,*,Auto" ColumnSpacing="6" ToolTip.Tip="{Binding StatusText}">
+                            <Grid ColumnDefinitions="12,24,*,Auto" ColumnSpacing="6" ToolTip.Tip="{Binding StatusText}">
                                 <Ellipse Classes="business-health-dot" Width="8" Height="8"
                                          Classes.good="{Binding IsGood}" Classes.warning="{Binding IsWarning}"
                                          Classes.bad="{Binding IsBad}" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
-                                           VerticalAlignment="Center" ToolTip.Tip="{Binding DisplayName}"/>
-                                <TextBlock Grid.Column="2" Text="{Binding PingText}" FontSize="12"
+                                <Image Grid.Column="1" Source="{Binding CountryFlag}" Width="24" Height="16"
+                                       IsVisible="{Binding HasCountry}" VerticalAlignment="Center"
+                                       ToolTip.Tip="{Binding CountryName}"/>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayName}"/>
+                                    <TextBlock Text="{Binding CountryName}" FontSize="11" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               ToolTip.Tip="{x:Static loc:Strings.BusinessCountryHint}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="3" Text="{Binding PingText}" FontSize="12"
                                            VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"/>
                             </Grid>
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
+                <StackPanel x:Name="BusinessSubscriptionActions" x:DataType="business:BusinessServicesViewModel" Spacing="4">
+                    <Button Content="{x:Static loc:Strings.BusinessUpdateServers}" Command="{Binding RefreshListCommand}"
+                            AutomationProperties.AutomationId="BusinessSubscriptionRefresh"/>
+                    <TextBlock Text="{Binding RefreshStatus}" TextWrapping="Wrap" FontSize="12"
+                               AutomationProperties.AutomationId="BusinessSubscriptionStatus"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </StackPanel>
                 <TextBlock Text="{x:Static loc:Strings.BusinessServerHealthHint}" TextWrapping="Wrap"
                            ToolTip.Tip="{x:Static loc:Strings.BusinessServerHealthLegend}"
                            FontSize="12" Foreground="{DynamicResource TextMutedBrush}"/>

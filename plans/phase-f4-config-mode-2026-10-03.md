@@ -2,8 +2,8 @@
 
 ## Why
 
-Tester screenshots: Advanced shows `Sweden VLESS` selected and connected, the home card says `130.94.0.171 - Server link` and the hero `via 130.94.0.171 . 155.4.244.204`. The log shows `config_mode` flipped from `subscribe` to `generated`
-in config.yaml between 01:01:44 and 01:03:31 (the routing change saved from the home screen), while sing-box never contacted 130.94.0.171 (a forgotten single link, `vless.servers=1`, deleted by hand at 01:09:57). The card names
+Tester screenshots: Advanced shows `Sweden VLESS` selected and connected, the home card says `203.0.113.101 - Server link` and the hero `via 203.0.113.101 . 192.0.2.101`. The log shows `config_mode` flipped from `subscribe` to `generated`
+in config.yaml between 01:01:44 and 01:03:31 (the routing change saved from the home screen), while sing-box never contacted 203.0.113.101 (a forgotten single link, `vless.servers=1`, deleted by hand at 01:09:57). The card names
 `Servers.First` in "generated" mode. `ApplyConfigModeToSettings` derives the mode from `IsVlessMode`/`IsSubscribeMode`, which are also the view state of the Servers/Subscribe tabs (selecting the Servers tab sets IsVlessMode).
 
 ## What

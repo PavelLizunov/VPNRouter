@@ -60,10 +60,6 @@ public static class DiagnosticsRedactor
         @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)([""']?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
         RegexOptions.Compiled);
 
-    private static readonly Regex _yamlKeyValuePair = new(
-        @"^(\s*(?:-\s*)?([a-zA-Z0-9_-]+)\s*:\s*)(.*)$",
-        RegexOptions.Compiled);
-
     public static string RedactConfigYaml(string yaml)
     {
         if (string.IsNullOrWhiteSpace(yaml)) return yaml ?? string.Empty;
@@ -83,35 +79,9 @@ public static class DiagnosticsRedactor
 
     internal static string RedactMalformedYaml(string yaml)
     {
-        if (string.IsNullOrWhiteSpace(yaml)) return yaml ?? string.Empty;
-        var lines = yaml.Replace("\r\n", "\n").Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var line = lines[i];
-            var m = _yamlKeyValuePair.Match(line);
-            if (m.Success)
-            {
-                var key = m.Groups[2].Value.Trim();
-                var val = m.Groups[3].Value;
-                if (SafeKeys.Contains(key))
-                {
-                    lines[i] = RedactLogText(line);
-                }
-                else if (UrlKeys.Contains(key))
-                {
-                    lines[i] = $"{m.Groups[1].Value}{RedactUrlKeepHost(val)}";
-                }
-                else
-                {
-                    lines[i] = $"{m.Groups[1].Value}{Redacted}";
-                }
-            }
-            else
-            {
-                lines[i] = RedactLogText(line);
-            }
-        }
-        return string.Join(Environment.NewLine, lines);
+        // A parse failure destroys scalar/block boundaries. In particular, short
+        // wrapped base64 may reconstruct credentials even after line scrubbing.
+        return string.IsNullOrWhiteSpace(yaml) ? yaml ?? string.Empty : OmittedOnParseFailure;
     }
 
     public static string RedactSingboxJson(string json)

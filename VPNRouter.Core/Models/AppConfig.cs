@@ -5,6 +5,12 @@ namespace VPNRouter.Core.Models;
 
 public class AppConfig
 {
+    [YamlMember(Alias = "business_subscription_source", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? BusinessSubscriptionSource { get; set; }
+
+    [YamlMember(Alias = "business_subscription_cache", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? BusinessSubscriptionCache { get; set; }
+
     [YamlMember(Alias = "log_level")]
     public string LogLevel { get; set; } = "info";
 

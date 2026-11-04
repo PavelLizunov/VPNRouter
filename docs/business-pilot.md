@@ -12,6 +12,17 @@ Business has one Start/Stop action and two modes. Switch modes while disconnecte
 The standard tray and health recovery remain in use. Tray diagnostics exports
 the existing redacted diagnostic bundle locally; review it before sharing.
 
+The running Business window now has a Diagnostics area above the server controls.
+Collect saves an allowlisted, masked log report locally. Send collects if needed
+and uploads only after that explicit action; success appears only after the
+receiver acknowledges delivery. A failed or cancelled upload keeps the archive,
+and retry reuses it for receiver deduplication. A new Send after acknowledged
+delivery collects fresh logs. Open report folder allows inspection/manual delivery.
+The same reviewed PowerShell collector is embedded in the app; collection does
+not change the tunnel. An individual upload identity is required in private build
+metadata. Older static bundles without it allow collection and explain that
+upload is not configured. The existing tray export remains available.
+
 The employee support path is a separate personal
 `VPNRouterBusiness-Diagnostics.exe`: open it and press Send diagnostics. It
 embeds the collector, sender and individually configured upload identity. The
@@ -48,8 +59,8 @@ Bearer token from a private file, and `X-VPNRouter-Report-Format:
 vpnrouter-business-support/1`. The receiver should return 2xx only after saving
 the report. The sender validates TLS normally, refuses redirects, limits the
 file to 24 MiB and the request to 30 seconds, does not retry, and retains the ZIP
-on every outcome. It does not print endpoint/token/response details. No endpoint
-or credential is embedded by default, and no receiver is deployed by these tools.
+on every outcome. It does not print endpoint/token/response details. The standalone scripts have no embedded endpoint or credential; the private app
+build metadata configures its upload identity. These scripts do not deploy a receiver.
 See the [employee and administrator instructions](../packaging/windows/support/README.ru.txt).
 
 ## Routing policy
@@ -114,8 +125,9 @@ employee's identity on the VPN server, including active sessions. Rebuilding the
 Business variant from updated common source applies shared fixes while retaining
 the presets. Consumer self-update/web repair is disabled in the pilot so it
 cannot replace Business with a consumer binary. Automatic fleet management and
-config rotation are deferred by owner direction; replace the individual installer
-to update the embedded connection or rules.
+rule rotation remain separate work. Subscription entries can now update from the
+immutable HTTPS reference described below; updating embedded rules still requires
+a new individual installer.
 
 ## Employee instruction
 
@@ -123,20 +135,22 @@ to update the embedded connection or rules.
 2. Open VPNRouter Business and press Connect. Nothing needs importing or configuring.
 3. If another resource needs VPN, disconnect, select the full mode and reconnect.
 4. To stop, press Disconnect. Closing the window leaves it in the tray.
-5. For a problem, use Save diagnostics in the tray and contact your administrator.
+5. For a problem, press Send in the window's Diagnostics area. Collect and Open
+   report folder allow inspection first. If the app cannot launch, use the
+   independent personal diagnostics EXE.
 
-The Business window also exposes one choice per bundled direct VLESS host. The
+The Business window exposes one choice per direct VLESS host in the current list. The
 complete endpoint pool is retained for the engine's TCP/UDP sibling handling. For
 an unavailable endpoint, disconnect, choose another VPN server and reconnect.
-The selector is disabled during connection and while connected. Selection is
-saved immediately and retained on restart when its name still resolves within
-the refreshed embedded preset; a removed choice falls back to its usable VLESS
-default. Saved variants on the same host resolve to its visible node choice.
-Bundled endpoint names must be nonempty and case-insensitively unique; an
-ambiguous preset is refused before changing settings. Embedded credentials and
-routing still come from the administrator's
-bundle. This adds a manual recovery action, not proof of automatic failover or
-of the cause of the November 3 office outage.
+The selector is disabled during connection and while connected. Selection saves
+immediately. A live refresh preserves the selected physical host even when its
+label changes; otherwise it resolves the refreshed name or falls back to the
+first usable VLESS host. Saved variants on that host resolve to its visible node
+choice. All endpoint names must be nonempty and case-insensitively unique before
+state changes. Future connected-service builds retain a source-bound cache from
+the embedded HTTPS reference; legacy static builds use the embedded preset.
+Routing rules continue to come from the administrator's bundle. This manual
+recovery action does not establish automatic failover or the office outage cause.
 
 The server picker shows a traffic-light port-reachability indicator and TCP
 connection latency. Green means a response within 800 ms, yellow means a slow
@@ -147,9 +161,9 @@ Checks run on opening the visible window, every 30 seconds while disconnected,
 and on Refresh. Connecting, connected, hidden and closed states cancel checks
 and clear stale results. Measurements stay in memory and are not uploaded.
 
-The separate diagnostics EXE collects and uploads logs only after the employee
-presses Send diagnostics. There is no continuous background statistics upload
-and no diagnostics-upload button in the Business connection window.
+Both the in-app Diagnostics area and separate diagnostics EXE collect/upload only
+on explicit employee action. There is no continuous background statistics upload.
+The separate EXE remains available when the Business application cannot launch.
 
 Autostart launches the UI in the tray for the Windows account that ran Setup;
 it does not connect automatically. A different administrator account at the UAC
@@ -159,3 +173,55 @@ The [Russian Windows acceptance checklist](business-pilot-test.ru.txt) accompani
 the personal installer. The sanitized [WINBRAT result](../plans/business-pilot-winbrat-2026-11-02.json)
 and [executed orchestration script](../plans/business-pilot-live-verify-2026-11-02.ps1)
 record the pilot scope; they do not establish customer UIS or long-term memory safety.
+
+## Live subscription and country display
+
+Future connected-service builds embed a fallback response and a private immutable
+HTTPS subscription reference. The visible disconnected app refreshes at startup,
+on Update list and hourly. Check remains the separate TCP port/latency action.
+A complete validated list replaces the pool only while idle; the selected host,
+split/full mode and all TCP/UDP variants are preserved. A missing choice falls
+back to the first available physical host. Failures, empty/invalid responses and
+cancellation retain the previous pool. Refresh never reconnects an active tunnel.
+
+The source fingerprint and last valid response share the existing atomic settings
+save, so restart can use a source-bound cache offline. Invalid or differently
+bound cache falls back to the embedded response. Cache data is secret-bearing,
+stays in the protected Business settings and is masked by structured diagnostics.
+If a YAML config/backup cannot be parsed, diagnostic export omits its content
+instead of guessing multiline credential boundaries.
+Upload/subscription service settings always come from the embedded bundle; a
+downloaded response cannot replace their target or upload identity. HTTPS uses
+normal certificate validation, no redirects, bounded size/time and no automatic
+upload or report retry.
+
+The existing private BusinessConnectionFile may be the API JSON wrapper with an
+additional `business` object: `subscription_url` is the individual HTTPS source,
+and `support` contains `endpoint` plus the individually issued upload-only
+`token`. The `config` field remains the base64 share-link fallback. Keep this
+whole input outside Git, and pass it through the existing ephemeral encrypted
+private CI path. The private delivery validation requires both services, while
+legacy offline bundles remain readable. Neither an admin password nor a vpnctl
+admin token belongs in this object.
+
+Country flags are local assets, with names translated into the selected language.
+They describe recognized country labels/ISO prefixes advertised in the
+subscription, not an independent IP geolocation or egress check. Opaque custom
+labels show Country unknown. No private endpoint is sent to an external geo API.
+
+## Server load from vpnctl
+
+The inspected vpnctl service already collects node memory and one-minute system
+load for its admin pages. Its current client config response does not expose
+those per-node measurements. The public subscription-access statistics count
+fetches and distinct source addresses; they cannot stand in for server load,
+VPN-online users or employee counts.
+
+A client-facing extension should authenticate using the existing individual
+subscription identity, return only granted physical nodes, and expose explicitly
+named metrics with sample time, age and unknown/stale states. System load must
+not be labelled CPU percent; normalizing it requires CPU count. It must not
+return SSH/admin credentials, subscriber source addresses or raw traffic records.
+An explicit country code in that same node metadata would also cover opaque
+labels. This client follow-up does not deploy that backend API or display fake
+load values.

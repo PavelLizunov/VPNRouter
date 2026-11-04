@@ -4,6 +4,8 @@ using System.ComponentModel;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.Core.Services;
+using VPNRouter.App.Services;
+using VPNRouter.Core;
 
 namespace VPNRouter.App.Views;
 
@@ -12,18 +14,30 @@ public partial class BusinessWindow : Window
     private readonly Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>> _probe;
     private BusinessServerHealthMonitor? _health;
     private MainWindowViewModel? _vm;
+    private readonly Func<MainWindowViewModel, Action, BusinessServicesViewModel> _serviceFactory;
+    private BusinessServicesViewModel? _services;
 
     public BusinessWindow() : this(static (server, ct) =>
-        TcpTlsProbe.ProbeTcpOnlyAsync(server.Server, server.Port, ct)) { }
+        TcpTlsProbe.ProbeTcpOnlyAsync(server.Server, server.Port, ct), static (vm, changed) =>
+        new(vm, ProductEdition.IsBusiness
+            ? BusinessBootstrap.ReadClientConfiguration()
+            : BusinessClientConfiguration.Empty, new BusinessClientHttp(), changed)) { }
 
-    internal BusinessWindow(Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>> probe)
+    internal BusinessWindow(Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>> probe,
+        Func<MainWindowViewModel, Action, BusinessServicesViewModel>? serviceFactory = null)
     {
         _probe = probe;
+        _serviceFactory = serviceFactory ?? (static (vm, changed) =>
+            new(vm, BusinessClientConfiguration.Empty, new BusinessClientHttp(), changed));
         InitializeComponent();
         DataContextChanged += (_, _) => AttachViewModel();
         PropertyChanged += (_, e) =>
         {
-            if (e.Property == IsVisibleProperty) _health?.SetVisible(IsVisible);
+            if (e.Property == IsVisibleProperty)
+            {
+                _health?.SetVisible(IsVisible);
+                _services?.SetVisible(IsVisible);
+            }
         };
         Opened += (_, _) => LaunchFailureCounter.MarkStable();
         Closed += (_, _) =>
@@ -37,6 +51,10 @@ public partial class BusinessWindow : Window
     {
         if (_vm != null) _vm.PropertyChanged -= OnVmPropertyChanged;
         _health?.Dispose();
+        _services?.Dispose();
+        BusinessActions.DataContext = null;
+        BusinessSubscriptionActions.DataContext = null;
+        _services = null;
         _health = null;
         _vm = null;
     }
@@ -45,10 +63,23 @@ public partial class BusinessWindow : Window
     {
         DetachViewModel();
         _vm = DataContext as MainWindowViewModel;
+        RebuildHealth();
+        if (_vm != null)
+        {
+            _services = _serviceFactory(_vm, RebuildHealth);
+            BusinessActions.DataContext = _services;
+            BusinessSubscriptionActions.DataContext = _services;
+            _vm.PropertyChanged += OnVmPropertyChanged;
+            _services.SetVisible(IsVisible);
+        }
+    }
+
+    private void RebuildHealth()
+    {
+        _health?.Dispose();
         _health = _vm == null ? null : new BusinessServerHealthMonitor(_vm, _probe);
         BusinessServerSelector.ItemsSource = _health?.Choices;
         SyncSelection();
-        if (_vm != null) _vm.PropertyChanged += OnVmPropertyChanged;
         _health?.SetVisible(IsVisible);
     }
 

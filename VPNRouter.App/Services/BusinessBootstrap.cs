@@ -13,16 +13,29 @@ internal static class BusinessBootstrap
             ProfileManager.SafeJsonOptions) ?? throw new InvalidDataException("Business rules missing.");
 
     internal static void Apply(AppSettings settings, ISettingsStore store, string? bundleDirectory = null)
+        => Apply(settings, store, ReadConnection(), bundleDirectory ?? AppContext.BaseDirectory,
+            AppPaths.GeoDir, AppPaths.ConfigYamlPath);
+
+    internal static void Apply(AppSettings settings, ISettingsStore store, string connection,
+        string bundleDirectory, string geoDirectory, string settingsPath)
     {
-        BusinessDefaults.Apply(settings, ReadResource("VPNRouter.Business.Connection"), ReadRules());
+        BusinessDefaults.Apply(settings, BusinessClientConfiguration.SelectStartupConnection(settings, connection), ReadRules());
         foreach (var name in new[] { "geoip-ru.srs", "geosite-ru.srs" })
         {
-            var source = Path.Combine(bundleDirectory ?? AppContext.BaseDirectory, "geo", name);
+            var source = Path.Combine(bundleDirectory, "geo", name);
             if (!File.Exists(source) || !RuleSetFile.IsValidBinary(source))
                 throw new InvalidDataException("Bundled Business bypass data missing.");
-            File.Copy(source, Path.Combine(AppPaths.GeoDir, name), overwrite: true);
+            File.Copy(source, Path.Combine(geoDirectory, name), overwrite: true);
         }
-        store.Save(settings, AppPaths.ConfigYamlPath);
+        store.Save(settings, settingsPath);
+    }
+
+    internal static string ReadConnection() => ReadResource("VPNRouter.Business.Connection");
+
+    internal static BusinessClientConfiguration ReadClientConfiguration()
+    {
+        try { return BusinessClientConfiguration.Parse(ReadConnection()); }
+        catch { return BusinessClientConfiguration.Empty; }
     }
 
     private static string ReadResource(string name)

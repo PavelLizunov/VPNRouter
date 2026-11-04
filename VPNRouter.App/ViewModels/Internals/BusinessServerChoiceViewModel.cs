@@ -8,6 +8,10 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
 {
     internal ServerViewModel Server { get; }
     public string DisplayName => Server.DisplayName;
+    public string CountryCode => BusinessServerCountry.Code(Server.Name);
+    public string CountryName => Strings.BusinessCountryName(CountryCode);
+    public bool HasCountry => CountryCode.Length != 0;
+    public Avalonia.Media.IImage? CountryFlag => BusinessServerCountry.Flag(CountryCode);
     private ServerProbeResult _result = ServerProbeResult.Unknown;
     private bool _checking;
 

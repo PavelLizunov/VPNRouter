@@ -337,7 +337,7 @@ app:
     }
 
     [Fact]
-    public void Yaml_MalformedYaml_RedactsSecretsAndPreservesStructure()
+    public void Yaml_MalformedYaml_OmitsContentRatherThanGuessingSecretBoundaries()
     {
         var malformedYaml =
             "app:\n" +
@@ -355,9 +355,6 @@ app:
         Assert.DoesNotContain(Password, outp);
         Assert.DoesNotContain(PrivKey, outp);
 
-        Assert.Contains("routing_mode: split", outp);
-        Assert.Contains("ninitux.com", outp);
-        Assert.Contains("bad_line: ***", outp);
-        Assert.Contains("unknown_secret_key: ***", outp);
+        Assert.Equal(DiagnosticsRedactor.OmittedOnParseFailure, outp);
     }
 }

@@ -7,25 +7,11 @@ internal static class BusinessDefaults
 {
     internal static void Apply(AppSettings settings, string connection, List<CustomRule> rules)
     {
-        var servers = SubscriptionFetcher.ParseBody(connection);
-        if (servers.Any(s => string.IsNullOrWhiteSpace(s.Name)) ||
-            servers.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != servers.Count)
-            throw new InvalidDataException("Business server names must be nonempty and unique.");
-        var choices = GetServerChoices(servers);
-        var first = choices.FirstOrDefault();
-        if (first == null)
-            throw new InvalidDataException("Business pilot requires a usable VLESS connection.");
+        var servers = ParseConnection(connection);
         if (rules.Count == 0 || rules.Any(r => !r.Enabled || ConfigGenerator.BuildCustomRouteRule(r) == null))
             throw new InvalidDataException("Business routing preset is invalid.");
 
-        var savedName = settings.Vless?.ActiveServer;
-        var saved = !string.IsNullOrWhiteSpace(savedName)
-            ? servers.FirstOrDefault(s => string.Equals(s.Name, savedName, StringComparison.OrdinalIgnoreCase))
-            : null;
-        var selected = saved == null ? null : choices.FirstOrDefault(s =>
-            string.Equals(s.Server, saved.Server, StringComparison.OrdinalIgnoreCase));
-        // Refresh credentials from the bundle while retaining a choice within it.
-        settings.Vless = new VlessConfig { Servers = servers, ActiveServer = (selected ?? first).Name };
+        settings.Vless = CreateServerPool(servers, settings.Vless);
         settings.ActiveProfile = string.Empty;
         settings.CustomApps.Clear();
         settings.ExcludedApps.Clear();
@@ -64,6 +50,36 @@ internal static class BusinessDefaults
             settings.Tun.RouteExcludeAddress.Add("195.211.120.35/32");
         settings.Monitoring.RestartOnFailure = true;
         settings.Update.AutoCheck = false;
+    }
+
+    internal static List<VlessServerEntry> ParseConnection(string connection)
+    {
+        if (connection.Length > 1024 * 1024) throw new InvalidDataException("Business response too large.");
+        var servers = SubscriptionFetcher.ParseBody(connection);
+        if (servers.Count > 500 || servers.Any(s => string.IsNullOrWhiteSpace(s.Name)) ||
+            servers.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != servers.Count)
+            throw new InvalidDataException("Business server names must be nonempty and unique.");
+        if (GetServerChoices(servers).Count == 0)
+            throw new InvalidDataException("Business pilot requires a usable VLESS connection.");
+        return servers;
+    }
+
+    internal static VlessConfig CreateServerPool(List<VlessServerEntry> servers, VlessConfig? previous)
+    {
+        var choices = GetServerChoices(servers);
+        var first = choices.First();
+        var savedName = previous?.ActiveServer;
+        var previousHost = previous?.Servers.FirstOrDefault(s =>
+            string.Equals(s.Name, savedName, StringComparison.OrdinalIgnoreCase))?.Server;
+        var selected = choices.FirstOrDefault(s =>
+            string.Equals(s.Server, previousHost, StringComparison.OrdinalIgnoreCase));
+        var saved = !string.IsNullOrWhiteSpace(savedName)
+            ? servers.FirstOrDefault(s => string.Equals(s.Name, savedName, StringComparison.OrdinalIgnoreCase))
+            : null;
+        selected ??= saved == null ? null : choices.FirstOrDefault(s =>
+            string.Equals(s.Server, saved.Server, StringComparison.OrdinalIgnoreCase));
+        // Prefer the retained physical host even if another node reuses its label.
+        return new VlessConfig { Servers = servers, ActiveServer = (selected ?? first).Name };
     }
 
     // The shared engine groups TCP/UDP variants on one host. Offer node choices,

@@ -2,6 +2,40 @@ namespace VPNRouter.Core.Localization;
 
 public static partial class Strings
 {
+    public static string BusinessUpdateServers => Ru ? "Обновить список" : "Update list";
+    public static string BusinessSubscriptionNotConfigured => Ru ? "Список встроен в эту сборку. Для обновления нужна новая версия." : "This build has an embedded list. Updating requires a newer build.";
+    public static string BusinessSubscriptionUpdating => Ru ? "Обновляем список серверов…" : "Updating server list…";
+    public static string BusinessSubscriptionUpdated(int count) => Ru ? $"Список обновлён. Серверов: {count}." : $"List updated. Servers: {count}.";
+    public static string BusinessSubscriptionFailed => Ru ? "Список не обновлён. Сохранены прежние серверы. Повторите позже." : "Update failed. Your previous servers are retained. Try again later.";
+    public static string BusinessSubscriptionCancelled => Ru ? "Обновление остановлено. Сохранены прежние серверы." : "Update stopped. Your previous servers are retained.";
+    public static string BusinessDiagnosticsHeader => Ru ? "Диагностика" : "Diagnostics";
+    public static string BusinessDiagnosticsLocalOnly => Ru ? "Можно собрать отчёт локально. Отправка в этой сборке не настроена." : "You can collect a local report. Upload is not configured in this build.";
+    public static string BusinessDiagnosticsHint => Ru ? "Сбор не меняет VPN. Отправка — только по кнопке. Пароли маскируются; в логах могут остаться адреса и названия приложений." : "Collection does not change VPN. Upload happens only on Send. Secrets are masked; logs may retain addresses and app names.";
+    public static string BusinessDiagnosticsCollect => Ru ? "Собрать" : "Collect";
+    public static string BusinessDiagnosticsSend => Ru ? "Отправить" : "Send";
+    public static string BusinessDiagnosticsCancel => Ru ? "Остановить" : "Cancel";
+    public static string BusinessDiagnosticsOpen => Ru ? "Открыть папку отчёта" : "Open report folder";
+    public static string BusinessDiagnosticsCollecting => Ru ? "Собираем диагностику…" : "Collecting diagnostics…";
+    public static string BusinessDiagnosticsSending => Ru ? "Отправляем диагностику…" : "Sending diagnostics…";
+    public static string BusinessDiagnosticsCollected => Ru ? "Отчёт сохранён. Можно открыть папку или отправить администратору." : "Report saved. Open its folder or send it to your administrator.";
+    public static string BusinessDiagnosticsDelivered => Ru ? "Администратор получил отчёт. Копия сохранена на компьютере." : "Your administrator received the report. A local copy is retained.";
+    public static string BusinessDiagnosticsCollectFailed => Ru ? "Не удалось собрать отчёт. Проверьте доступ к папке логов и повторите." : "Collection failed. Check access to the logs folder and try again.";
+    public static string BusinessDiagnosticsSendFailed => Ru ? "Получение не подтверждено. Отчёт сохранён. Повторите отправку." : "Delivery was not confirmed. The report is saved. Retry Send.";
+    public static string BusinessDiagnosticsCancelled => Ru ? "Операция остановлена. Сохранённые отчёты оставлены на компьютере." : "Operation stopped. Saved reports are retained locally.";
+    public static string BusinessDiagnosticsOpenFailed => Ru ? "Не удалось открыть папку отчёта." : "Could not open the report folder.";
+    public static string BusinessCountryHint => Ru ? "Страна, указанная в подписке" : "Country advertised by the subscription";
+    public static string BusinessCountryName(string code) => (code, Ru) switch
+    {
+        ("DE", true) => "Германия", ("DE", false) => "Germany",
+        ("IS", true) => "Исландия", ("IS", false) => "Iceland",
+        ("NL", true) => "Нидерланды", ("NL", false) => "Netherlands",
+        ("FI", true) => "Финляндия", ("FI", false) => "Finland",
+        ("SE", true) => "Швеция", ("SE", false) => "Sweden",
+        ("FR", true) => "Франция", ("FR", false) => "France",
+        ("GB", true) => "Великобритания", ("GB", false) => "United Kingdom",
+        ("US", true) => "США", ("US", false) => "United States",
+        _ => Ru ? "Страна неизвестна" : "Country unknown"
+    };
     public static string BusinessSplit => Ru ? "Выбранные приложения и сайты" : "Selected apps and sites";
     public static string BusinessFull => Ru ? "Всё, кроме российских ресурсов и UIS" : "Everything except Russian resources and UIS";
     public static string BusinessHint => Ru

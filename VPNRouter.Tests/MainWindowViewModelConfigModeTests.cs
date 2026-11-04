@@ -20,11 +20,11 @@ public sealed class MainWindowViewModelConfigModeTests
             new()
             {
                 Name = "simple", Url = "https://sub.example/c/1", Enabled = true,
-                Servers = new List<VlessServerEntry> { new() { Name = "Sweden VLESS ~ninitux", Server = "155.4.244.204", Port = 443 } },
+                Servers = new List<VlessServerEntry> { new() { Name = "Sweden VLESS ~fixture", Server = "192.0.2.101", Port = 443 } },
             },
         };
-        settings.App.ActiveSubscriptionServer = "Sweden VLESS ~ninitux";
-        settings.Vless.Servers = new List<VlessServerEntry> { new() { Name = "", Server = "130.94.0.171", Port = 443 } };
+        settings.App.ActiveSubscriptionServer = "Sweden VLESS ~fixture";
+        settings.Vless.Servers = new List<VlessServerEntry> { new() { Name = "", Server = "203.0.113.101", Port = 443 } };
         var store = new InMemorySettingsStore();
         store.Save(settings, AppPaths.ConfigYamlPath);
         return store;
@@ -51,6 +51,6 @@ public sealed class MainWindowViewModelConfigModeTests
         using var vm = new MainWindowViewModel(store);
 
         Assert.Contains(VPNRouter.App.Localization.Strings.SmpKindSubscription, vm.SmpConfigKind);
-        Assert.DoesNotContain("130.94.0.171", vm.SmpConfigName);
+        Assert.DoesNotContain("203.0.113.101", vm.SmpConfigName);
     }
 }
