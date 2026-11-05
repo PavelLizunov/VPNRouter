@@ -28,6 +28,31 @@ def report(extra=None, summary=None):
     return output.getvalue()
 
 
+class DeviceMetadataTests(unittest.TestCase):
+    def test_optional_or_malformed_device_objects_are_omitted(self):
+        self.assertEqual(receiver.client_reported_device({}), {})
+        for device in (None, "fixture-pc", [], 42, True, {}):
+            with self.subTest(device=device):
+                self.assertEqual(receiver.client_reported_device({"device": device}), {})
+
+    def test_names_are_allowlisted_bounded_and_reject_control_or_malformed_data(self):
+        invalid = (None, 42, True, [], {}, "", " \t ", "x" * 129,
+                   "line\nname", "nul\x00name", "bidi\u202ename", "tag\U000e0001name",
+                   "unpaired\ud800", "\U0001f600" * 65)
+        for value in invalid:
+            with self.subTest(value=value):
+                self.assertEqual(receiver.client_reported_device({"device": {
+                    "computer_name": value, "user_name": "valid-user", "identity": "ignored"
+                }}), {"user_name": "valid-user"})
+                self.assertEqual(receiver.client_reported_device({"device": {
+                    "computer_name": "valid-pc", "user_name": value
+                }}), {"computer_name": "valid-pc"})
+        self.assertEqual(receiver.client_reported_device({"device": {
+            "computer_name": "x" * 128, "user_name": "\U0001f600" * 64,
+            "employee": "ignored"
+        }}), {"computer_name": "x" * 128, "user_name": "\U0001f600" * 64})
+
+
 class ReceiverTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -72,6 +97,8 @@ class ReceiverTests(unittest.TestCase):
         metadata = json.loads((self.store.root / (report_id + ".json")).read_text())
         self.assertEqual(metadata["employee"], "fixture")
         self.assertEqual(metadata["identity"], identity)
+        self.assertNotIn("client_reported_device", metadata)
+        self.assertEqual(set(receipt), {"stored", "report_id"})
         self.assertNotIn(self.token, json.dumps(metadata))
         self.assertEqual(stored.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.post(payload)[0], 200)
@@ -79,6 +106,64 @@ class ReceiverTests(unittest.TestCase):
         self.assertEqual(self.store.reserved, 0)
         self.assertFalse(self.store.active)
         self.assertFalse(list(self.store.root.glob("incoming-*")))
+
+    def test_device_names_are_private_receipt_metadata_and_duplicate_keeps_receipt(self):
+        payload = report(summary={"format": "vpnrouter-business-support/1", "device": {
+            "computer_name": "  Fixture Workstation  ", "user_name": "fixture-\u0438\u043c\u044f"
+        }})
+        status, public_receipt = self.post(payload)
+        self.assertEqual(status, 201)
+        self.assertEqual(set(public_receipt), {"stored", "report_id"})
+        metadata_path = self.store.root / (public_receipt["report_id"] + ".json")
+        original_metadata = metadata_path.read_bytes()
+        metadata = json.loads(original_metadata)
+        self.assertEqual(metadata["client_reported_device"], {
+            "computer_name": "Fixture Workstation", "user_name": "fixture-\u0438\u043c\u044f"
+        })
+        self.assertEqual(metadata["employee"], "fixture")
+        self.assertEqual(metadata["identity"], hashlib.sha256(self.token.encode()).hexdigest())
+        self.assertEqual(self.post(payload), (200, public_receipt))
+        self.assertEqual(metadata_path.read_bytes(), original_metadata)
+        self.assertEqual(len(list(self.store.root.glob("*.zip"))), 1)
+        self.assertEqual(self.store.reserved, 0)
+
+    def test_invalid_optional_device_fields_do_not_reject_legacy_report_format(self):
+        status, receipt = self.post(report(summary={"format": "vpnrouter-business-support/1", "device": {
+            "computer_name": ["malformed"], "user_name": "line\nuser", "extra": "ignored"
+        }}))
+        self.assertEqual(status, 201)
+        metadata = json.loads((self.store.root / (receipt["report_id"] + ".json")).read_text())
+        self.assertNotIn("client_reported_device", metadata)
+        self.assertEqual(set(receipt), {"stored", "report_id"})
+
+    def test_client_device_cannot_override_authenticated_employee_identity_or_paths(self):
+        owner_file = self.root / "owner-file.txt"
+        owner_file.write_text("preserve owner file")
+        payload = report(summary={
+            "format": "vpnrouter-business-support/1", "employee": "spoofed-employee",
+            "identity": "0" * 64, "report_id": "../owner-file.txt", "path": "../owner-file.txt",
+            "device": {"computer_name": "../owner-file.txt", "user_name": "spoofed-client-user",
+                       "employee": "spoofed-employee", "identity": "0" * 64,
+                       "report_id": "../owner-file.txt", "path": "../owner-file.txt"}
+        })
+        status, receipt = self.post(payload)
+        self.assertEqual(status, 201)
+        identity = hashlib.sha256(self.token.encode()).hexdigest()
+        digest = hashlib.sha256(payload).hexdigest()
+        expected_id = hashlib.sha256((identity + digest).encode()).hexdigest()
+        self.assertEqual(receipt, {"stored": True, "report_id": expected_id})
+        metadata = json.loads((self.store.root / (expected_id + ".json")).read_text())
+        self.assertEqual(metadata["employee"], "fixture")
+        self.assertEqual(metadata["identity"], identity)
+        self.assertEqual(metadata["report_id"], expected_id)
+        self.assertEqual(metadata["sha256"], digest)
+        self.assertEqual(metadata["client_reported_device"], {
+            "computer_name": "../owner-file.txt", "user_name": "spoofed-client-user"
+        })
+        self.assertNotIn("spoofed-employee", json.dumps(metadata))
+        self.assertEqual(owner_file.read_text(), "preserve owner file")
+        self.assertEqual({p.name for p in self.store.root.iterdir()}, {expected_id + ".zip", expected_id + ".json"})
+        self.assertEqual((self.store.root / (expected_id + ".zip")).read_bytes(), payload)
 
     def test_credentials_are_hashed_revocable_and_never_in_receipt(self):
         self.assertNotIn(self.token, self.keys.read_text())

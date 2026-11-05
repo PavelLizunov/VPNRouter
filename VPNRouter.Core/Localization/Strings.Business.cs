@@ -2,6 +2,15 @@ namespace VPNRouter.Core.Localization;
 
 public static partial class Strings
 {
+    public static string BusinessRussian => "Русский";
+    public static string BusinessEnglish => "English";
+    public static string BusinessServiceConnected => Ru ? "Подключено через службу" : "Connected via service";
+    public static string BusinessConnected => Ru ? "Подключено" : "Connected";
+    public static string BusinessLanguage => Ru ? "Язык" : "Language";
+    public static string BusinessLanguageSaveFailed => Ru ? "Не удалось сохранить язык." : "Could not save language.";
+    public static string BusinessDetails => Ru ? "Подробнее" : "Details";
+    public static string BusinessFullCompact => Ru ? "Весь трафик с исключениями" : "All traffic with exceptions";
+    public static string BusinessModesHint => Ru ? "Россия и UIS — напрямую." : "Russia and UIS use Direct.";
     public static string BusinessUpdateServers => Ru ? "Обновить список" : "Update list";
     public static string BusinessSubscriptionNotConfigured => Ru ? "Список встроен в эту сборку. Для обновления нужна новая версия." : "This build has an embedded list. Updating requires a newer build.";
     public static string BusinessSubscriptionUpdating => Ru ? "Обновляем список серверов…" : "Updating server list…";
@@ -10,17 +19,17 @@ public static partial class Strings
     public static string BusinessSubscriptionCancelled => Ru ? "Обновление остановлено. Сохранены прежние серверы." : "Update stopped. Your previous servers are retained.";
     public static string BusinessDiagnosticsHeader => Ru ? "Диагностика" : "Diagnostics";
     public static string BusinessDiagnosticsLocalOnly => Ru ? "Можно собрать отчёт локально. Отправка в этой сборке не настроена." : "You can collect a local report. Upload is not configured in this build.";
-    public static string BusinessDiagnosticsHint => Ru ? "Сбор не меняет VPN. Отправка — только по кнопке. Пароли маскируются; в логах могут остаться адреса и названия приложений." : "Collection does not change VPN. Upload happens only on Send. Secrets are masked; logs may retain addresses and app names.";
+    public static string BusinessDiagnosticsHint => Ru ? "Отчёт содержит имя компьютера и Windows-пользователя со слов клиента. Отправка — только по кнопке. Пароли маскируются; в логах могут остаться адреса и названия приложений." : "The report includes client-reported computer and Windows user names. Upload happens only on Send. Secrets are masked; logs may retain addresses and app names.";
     public static string BusinessDiagnosticsCollect => Ru ? "Собрать" : "Collect";
     public static string BusinessDiagnosticsSend => Ru ? "Отправить" : "Send";
     public static string BusinessDiagnosticsCancel => Ru ? "Остановить" : "Cancel";
     public static string BusinessDiagnosticsOpen => Ru ? "Открыть папку отчёта" : "Open report folder";
     public static string BusinessDiagnosticsCollecting => Ru ? "Собираем диагностику…" : "Collecting diagnostics…";
     public static string BusinessDiagnosticsSending => Ru ? "Отправляем диагностику…" : "Sending diagnostics…";
-    public static string BusinessDiagnosticsCollected => Ru ? "Отчёт сохранён. Можно открыть папку или отправить администратору." : "Report saved. Open its folder or send it to your administrator.";
-    public static string BusinessDiagnosticsDelivered => Ru ? "Администратор получил отчёт. Копия сохранена на компьютере." : "Your administrator received the report. A local copy is retained.";
+    public static string BusinessDiagnosticsCollected => Ru ? "Отчёт сохранён." : "Report saved.";
+    public static string BusinessDiagnosticsDelivered => Ru ? "Отчёт доставлен." : "Report delivered.";
     public static string BusinessDiagnosticsCollectFailed => Ru ? "Не удалось собрать отчёт. Проверьте доступ к папке логов и повторите." : "Collection failed. Check access to the logs folder and try again.";
-    public static string BusinessDiagnosticsSendFailed => Ru ? "Получение не подтверждено. Отчёт сохранён. Повторите отправку." : "Delivery was not confirmed. The report is saved. Retry Send.";
+    public static string BusinessDiagnosticsSendFailed => Ru ? "Отправка не подтверждена. Повторите." : "Delivery not confirmed. Retry Send.";
     public static string BusinessDiagnosticsCancelled => Ru ? "Операция остановлена. Сохранённые отчёты оставлены на компьютере." : "Operation stopped. Saved reports are retained locally.";
     public static string BusinessDiagnosticsOpenFailed => Ru ? "Не удалось открыть папку отчёта." : "Could not open the report folder.";
     public static string BusinessCountryHint => Ru ? "Страна, указанная в подписке" : "Country advertised by the subscription";

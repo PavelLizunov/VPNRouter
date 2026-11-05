@@ -72,6 +72,84 @@ public sealed class BusinessSupportCollectorTests
     }
 
     [Fact]
+    public async Task Collector_DeviceNamesUseOsApisAndDoNotDisableLogPathMasking()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new Fixture();
+        Directory.CreateDirectory(Path.Combine(fixture.Data, "logs"));
+        File.WriteAllText(Path.Combine(fixture.Data, "logs", "vpnrouter20261102.log"),
+            "[2026-11-02 12:00:00 INF] C:\\Users\\Fixture Device User\\AppData\\Local\\fixture\n");
+        var result = await Collect(fixture, new()
+        {
+            ["COMPUTERNAME"] = "SPOOFED-COMPUTER", ["USERNAME"] = "spoofed-fixture-user"
+        });
+        Assert.Equal(0, result.Code);
+        var entries = ReadBundle(fixture);
+        using var summary = JsonDocument.Parse(entries["summary.json"]);
+        var device = summary.RootElement.GetProperty("device");
+        Assert.Equal(new[] { "computer_name", "user_name" }, device.EnumerateObject()
+            .Select(property => property.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+        Assert.True(device.GetProperty("computer_name").GetString() == Environment.MachineName,
+            "The report must identify the collecting OS computer, not a mutable process variable.");
+        Assert.True(device.GetProperty("user_name").GetString() == Environment.UserName,
+            "The report must identify the collecting OS user, not a mutable process variable.");
+        Assert.All(device.EnumerateObject(), property => Assert.InRange(property.Value.GetString()!.Length, 1, 128));
+        Assert.DoesNotContain("SPOOFED-COMPUTER", entries["summary.json"]);
+        Assert.DoesNotContain("spoofed-fixture-user", entries["summary.json"]);
+        Assert.DoesNotContain("Fixture Device User", entries["app-01.txt"]);
+        Assert.Contains("C:\\Users\\[user]\\AppData", entries["app-01.txt"]);
+        Assert.Contains("not the authenticated employee-key identity", entries["README.txt"]);
+    }
+
+    [Fact]
+    public async Task Collector_DeviceNamesAreBoundedOptionalAndRejectControlData()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new Fixture();
+        const string test = """
+            $ErrorActionPreference = 'Stop'
+            . $env:SUPPORT_COLLECT_SCRIPT
+            if ((ConvertTo-SupportDeviceName '  Office Laptop  ') -cne 'Office Laptop') { throw 'Valid name was changed.' }
+            $unicode = 'Офис Ноутбук'
+            if ((ConvertTo-SupportDeviceName $unicode) -cne $unicode) { throw 'Unicode name was changed.' }
+            $pair = 'Music ' + [char]0xD834 + [char]0xDD1E
+            if ((ConvertTo-SupportDeviceName $pair) -cne $pair) { throw 'Valid Unicode scalar was omitted.' }
+            if ((ConvertTo-SupportDeviceName ('x' * 128)).Length -ne 128) { throw 'Boundary name was omitted.' }
+            $invalid = @($null, '', '  ', ('x' * 129),
+                ('prefix' + [char]0 + 'suffix'), ('prefix' + [char]10 + 'suffix'),
+                ('prefix' + [char]0x202E + 'suffix'), ('prefix' + [char]0xDB40 + [char]0xDC01),
+                ('prefix' + [char]0xD834), ([string][char]0xDD1E))
+            foreach ($value in $invalid) {
+                if ($null -ne (ConvertTo-SupportDeviceName $value)) { throw 'Invalid device name was retained.' }
+            }
+            # If OS names cannot be obtained, retain the legacy report shape.
+            function Get-SupportDevice { return [ordered]@{} }
+            $zip = New-SupportBundle $env:SUPPORT_TEST_DATA $env:SUPPORT_TEST_OUTPUT $env:SUPPORT_TEST_LEGACY
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+            try {
+                $reader = [IO.StreamReader]::new($archive.GetEntry('summary.json').Open())
+                try { $summary = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+                if ($summary.PSObject.Properties['device']) { throw 'Unavailable device data must be optional.' }
+                if ($summary.format -ne 'vpnrouter-business-support/1') { throw 'Report format changed.' }
+                if ($archive.Entries.Count -ne 2) { throw 'Device metadata changed the archive allowlist.' }
+            } finally { $archive.Dispose() }
+            Write-Output 'device metadata checks passed'
+            """;
+        var testPath = Path.Combine(fixture.Root, "device-metadata-test.ps1");
+        File.WriteAllText(testPath, test, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        var result = await RunPowerShell("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", testPath,
+            environment: new()
+            {
+                ["SUPPORT_COLLECT_SCRIPT"] = Path.Combine(SupportDir, "Collect-VPNRouterBusiness-Diagnostics.ps1"),
+                ["SUPPORT_TEST_DATA"] = fixture.Data, ["SUPPORT_TEST_OUTPUT"] = fixture.Output,
+                ["SUPPORT_TEST_LEGACY"] = fixture.LegacyData
+            });
+        Assert.True(result.Code == 0, result.Output);
+        Assert.Contains("device metadata checks passed", result.Output);
+    }
+
+    [Fact]
     public async Task Collector_LegacyPilotElevationErrorIsCollectedWithoutOtherConsumerData()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -277,9 +355,9 @@ public sealed class BusinessSupportCollectorTests
         Assert.DoesNotContain("receiver-sensitive", result.Output);
     }
 
-    private static Task<(int Code, string Output)> Collect(Fixture fixture) => RunPowerShell(
-        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(SupportDir, "Collect-VPNRouterBusiness-Diagnostics.ps1"),
-        "-DataDir", fixture.Data, "-DestinationDir", fixture.Output, "-LegacyDataDir", fixture.LegacyData, "-NoOpen");
+    private static Task<(int Code, string Output)> Collect(Fixture fixture, Dictionary<string, string>? environment = null) =>
+        RunPowerShell(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(SupportDir, "Collect-VPNRouterBusiness-Diagnostics.ps1"),
+            "-DataDir", fixture.Data, "-DestinationDir", fixture.Output, "-LegacyDataDir", fixture.LegacyData, "-NoOpen"], environment);
 
     private static Dictionary<string, string> ReadBundle(Fixture fixture)
     {

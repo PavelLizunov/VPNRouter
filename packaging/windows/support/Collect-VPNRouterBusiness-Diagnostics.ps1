@@ -8,6 +8,39 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
+function ConvertTo-SupportDeviceName([string]$Value) {
+    if ([string]::IsNullOrWhiteSpace($Value) -or $Value.Length -gt 128) { return $null }
+    for ($index = 0; $index -lt $Value.Length; $index++) {
+        $character = $Value[$index]
+        $pair = $false
+        if ([char]::IsHighSurrogate($character)) {
+            if ($index + 1 -ge $Value.Length -or ![char]::IsLowSurrogate($Value[$index + 1])) { return $null }
+            $pair = $true
+        }
+        elseif ([char]::IsLowSurrogate($character)) { return $null }
+        $category = [Globalization.CharUnicodeInfo]::GetUnicodeCategory($Value, $index)
+        if ($category -eq [Globalization.UnicodeCategory]::Control -or
+            $category -eq [Globalization.UnicodeCategory]::Format) { return $null }
+        if ($pair) { $index++ }
+    }
+    return $Value.Trim()
+}
+
+function Get-SupportDevice {
+    $device = [ordered]@{}
+    # These OS APIs describe the collecting process, not an authenticated employee.
+    # Do not use mutable COMPUTERNAME/USERNAME variables or query hardware identity.
+    try {
+        $computer = ConvertTo-SupportDeviceName ([Environment]::MachineName)
+        if ($computer) { $device['computer_name'] = $computer }
+    } catch { }
+    try {
+        $user = ConvertTo-SupportDeviceName ([Environment]::UserName)
+        if ($user) { $device['user_name'] = $user }
+    } catch { }
+    return $device
+}
+
 # This fallback cannot load the application's .NET 10 redactor into Windows
 # PowerShell 5.1. Keep its input smaller: logs only, never configuration files.
 function Protect-SupportText([string]$Text) {
@@ -115,6 +148,8 @@ function New-SupportBundle([string]$Source, [string]$Destination, [string]$Legac
             entries = @($manifest.ToArray())
             warnings = @($warnings.ToArray())
         }
+        $device = Get-SupportDevice
+        if ($device.Count -gt 0) { $summary['device'] = $device }
         [IO.File]::WriteAllText((Join-Path $stage 'summary.json'), ($summary | ConvertTo-Json -Depth 5), [Text.Encoding]::UTF8)
         [IO.File]::WriteAllText((Join-Path $stage 'README.txt'), @'
 VPNRouter Business support report
@@ -123,6 +158,10 @@ Contains bounded app/core/launch log tails and crash reports, with automatic
 secret masking. No raw configuration, subscription files or binaries are copied.
 Masking is best effort: review the ZIP before sending it privately to your admin.
 Logs may contain visited domains, IP addresses and application names.
+The summary may include the computer name and current Windows user (device),
+reported by this client. They are not the authenticated employee-key identity.
+No hardware serial, machine SID or persistent tracking ID is collected.
+User names in log paths remain masked; the separate device fields are explicit.
 Missing/unreadable inputs are listed in summary.json. This is not a VPN health test.
 '@, [Text.Encoding]::UTF8)
         [void][IO.Directory]::CreateDirectory($Destination)

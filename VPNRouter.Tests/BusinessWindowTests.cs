@@ -35,7 +35,7 @@ public sealed class BusinessWindowTests
             Assert.Single(controls.OfType<Button>().Where(b => b.Command == vm.ToggleConnectionCommand));
             Assert.Empty(controls.OfType<TextBox>().Where(t => t.IsEffectivelyVisible));
             Assert.Empty(controls.OfType<TabControl>());
-            var selector = Assert.Single(controls.OfType<ComboBox>());
+            var selector = Assert.Single(controls.OfType<ComboBox>().Where(c => AutomationProperties.GetAutomationId(c) == "BusinessServerSelector"));
             Assert.False(selector.IsEditable);
             Assert.Equal("BusinessServerSelector", AutomationProperties.GetAutomationId(selector));
             Assert.Equal("Сервер VPN", AutomationProperties.GetName(selector));

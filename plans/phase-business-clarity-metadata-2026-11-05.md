@@ -75,4 +75,52 @@ specific device when the same personal build is used on multiple computers.
 
 ## Outcome
 
-Status: brief/research. No new product edit, installer build or backend mutation.
+Status: implementation in progress; no new installer or backend deployment yet.
+The brief cc819d83 passes eleven applicable checks/two expected skips. The existing
+owner-VM client was switched from stored English to Russian by a narrow language
+preference change/relaunch; the owner's received report was preserved.
+
+
+## First client block before CI
+
+- Added a visible persisted language selector, reactive window/service/row labels,
+  a compact680-pixel connection window, collapsed explanatory details, concise
+  diagnostic acknowledgements and hidden idle/success subscription chatter.
+  Existing public MainWindowViewModel API/commands and tunnel state are preserved.
+- Independent source reviews found shared busy/save-failure language problems,
+  row-tooltip/warning-masking regressions, stale preference errors and a stop-vs-
+  start presentation gap. Recorded before corrections; Business-owned labels
+  distinguish start/stop/service-managed healthy states and preserve warnings.
+- Independent test writer extended the window coverage to23 executions, including
+  hotRU/EN, busy/connected/stopping/service-managed, save failure/retry, warning
+  preservation, popup health labels, and compact340/420 geometry/details. Its
+  screenshot-close lifecycle issue was recorded and corrected before CI.
+- A separate agent adds bounded OS-reported computer/user names to optional
+  summary.device; another adds separately labeled client_reported_device receipt
+  metadata. Format/ZIP allowlist, authentication, quota, dedupe, response body and
+  storage paths stay compatible. Tests cover bounds/Unicode/omission, environment
+  spoofing, actual embedded collector and receipt identity/path isolation.
+- All device fields are disclosed in RU/EN details and bundled README. Employee
+  mapping remains authenticated by its individual upload key; names are supplied
+  by the client, not proof of hardware identity. The owner's existing report is
+  neither rewritten nor deleted.
+- Source XML/Python parsing and whitespace checks pass. No local build/test/SDK
+  was run. This UI/collector/receiver block now requires its exact-head CI.
+
+## Parallel trusted metadata work
+
+- Read-only investigation verified deployed vpnctld662b411, not historical local
+  HEAD or different main. All four nodes have memory/load samples. CPU percent
+  and CPU count are absent; present Unix1m load as load, never invented CPU%.
+- Existing local GeoIP data supports CH/IS/NL/SE. New DTO uses local AppState.geo,
+  explicit grants/protocol gates and cached DNS only, not brands/access logs or
+  third-party endpoint lookup. Existing app-config has no client metadata DTO.
+- Primary owns a secondary backend task worktree at deployed662b411. Agents share
+  its disjoint source/test scopes; canonical/other task roots are untouched.
+  Backend micro-spec, implementation,28 independent spec tests and diff-only
+  reviews proceed in parallel. Important anonymous-rate-capacity and invalid-
+  future-test-date findings were recorded before correction; recheck pending.
+- Separate client agent supplies a bounded typed HTTPS metadata service/parser,
+  monotonic aging and focused tests in new files. These are intentionally not
+  integrated/committed with this first client block. Window/cache integration,
+  actual sample/geo verification and final GPT ASTRA XHIGH remain pending.

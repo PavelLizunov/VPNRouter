@@ -16,6 +16,8 @@ public partial class BusinessWindow : Window
     private MainWindowViewModel? _vm;
     private readonly Func<MainWindowViewModel, Action, BusinessServicesViewModel> _serviceFactory;
     private BusinessServicesViewModel? _services;
+    private bool _syncingLanguage;
+    public BusinessWindowTextViewModel Texts { get; } = new();
 
     public BusinessWindow() : this(static (server, ct) =>
         TcpTlsProbe.ProbeTcpOnlyAsync(server.Server, server.Port, ct), static (vm, changed) =>
@@ -57,13 +59,16 @@ public partial class BusinessWindow : Window
         _services = null;
         _health = null;
         _vm = null;
+        Texts.SetClient(null);
     }
 
     private void AttachViewModel()
     {
         DetachViewModel();
         _vm = DataContext as MainWindowViewModel;
+        Texts.SetClient(_vm);
         RebuildHealth();
+        RefreshBusinessLocalization();
         if (_vm != null)
         {
             _services = _serviceFactory(_vm, RebuildHealth);
@@ -85,9 +90,42 @@ public partial class BusinessWindow : Window
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(MainWindowViewModel.StatusText) or nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected))
+        {
+            if (Dispatcher.UIThread.CheckAccess()) Texts.SetLanguageSaveFailed(false);
+            else Dispatcher.UIThread.Post(() => Texts.SetLanguageSaveFailed(false));
+        }
+        if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(MainWindowViewModel.IsRussian))
+        {
+            // IsRussian is raised before the shared language has been updated.
+            Dispatcher.UIThread.Post(RefreshBusinessLocalization);
+        }
         if (e.PropertyName != nameof(MainWindowViewModel.SelectedServer)) return;
         if (Dispatcher.UIThread.CheckAccess()) SyncSelection();
         else Dispatcher.UIThread.Post(SyncSelection);
+    }
+
+    private void RefreshBusinessLocalization()
+    {
+        Texts.Refresh();
+        _services?.RefreshLocalization();
+        if (_health != null) foreach (var choice in _health.Choices) choice.RefreshLocalization();
+        _syncingLanguage = true;
+        try { BusinessLanguageSelector.SetCurrentValue(ComboBox.SelectedIndexProperty, _vm?.IsRussian == true ? 0 : 1); }
+        finally { _syncingLanguage = false; }
+    }
+
+    private void OnBusinessLanguageChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingLanguage || _vm == null || BusinessLanguageSelector.SelectedItem is not ComboBoxItem item) return;
+        Texts.SetLanguageSaveFailed(false);
+        try
+        {
+            if (item.Tag as string == "ru") _vm.SetLanguageRussianCommand.Execute(null);
+            else if (item.Tag as string == "en") _vm.SetLanguageEnglishCommand.Execute(null);
+        }
+        catch { Texts.SetLanguageSaveFailed(true); }
+        RefreshBusinessLocalization();
     }
 
     private void SyncSelection()

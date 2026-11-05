@@ -16,6 +16,7 @@ import struct
 import tempfile
 import threading
 import time
+import unicodedata
 import zipfile
 
 MAX_BODY = 24 * 1024 * 1024
@@ -72,6 +73,28 @@ def validate_archive(path):
                 summary = json.loads(content.decode("utf-8-sig"))
         if not isinstance(summary, dict) or summary.get("format") != "vpnrouter-business-support/1":
             raise ValueError("wrong report format")
+        return summary
+
+
+def client_reported_device(summary):
+    """Optional untrusted display names, never employee identity or storage paths."""
+    device = summary.get("device")
+    if not isinstance(device, dict):
+        return {}
+    result = {}
+    for field in ("computer_name", "user_name"):
+        value = device.get(field)
+        if not isinstance(value, str) or len(value) > 128:
+            continue
+        if any(unicodedata.category(char) in ("Cc", "Cf", "Cs") for char in value):
+            continue
+        # Match the Windows collector's limit of 128 UTF-16 code units.
+        if len(value.encode("utf-16-le")) > 256:
+            continue
+        value = value.strip()
+        if value:
+            result[field] = value
+    return result
 
 
 class Store:
@@ -246,7 +269,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     remaining -= len(chunk)
                 stream.flush()
                 os.fsync(stream.fileno())
-            validate_archive(temporary)
+            summary = validate_archive(temporary)
             # Identical archives from different employees remain attributable.
             report_id = hashlib.sha256((identity[0] + digest.hexdigest()).encode()).hexdigest()
             destination = store.root / (report_id + ".zip")
@@ -254,10 +277,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 duplicate = destination.exists()
                 metadata = store.root / (report_id + ".json")
                 if not metadata.exists():
-                    atomic_json(metadata, {"identity": identity[0], "employee": identity[1],
-                                          "report_id": report_id, "sha256": digest.hexdigest(),
-                                          "received_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                                          "bytes": size})
+                    receipt = {"identity": identity[0], "employee": identity[1],
+                               "report_id": report_id, "sha256": digest.hexdigest(),
+                               "received_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                               "bytes": size}
+                    device = client_reported_device(summary)
+                    if device:
+                        receipt["client_reported_device"] = device
+                    atomic_json(metadata, receipt)
                 if not duplicate:
                     os.replace(temporary, destination)
                     store.active.discard(temporary)

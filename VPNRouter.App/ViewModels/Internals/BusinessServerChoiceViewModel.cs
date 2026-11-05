@@ -39,6 +39,13 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         _ => Strings.BusinessServerNotChecked
     };
 
+    internal void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(CountryName));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(PingText));
+    }
+
     internal void Update(ServerProbeResult result, bool checking = false)
     {
         _result = result;

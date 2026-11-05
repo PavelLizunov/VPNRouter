@@ -23,8 +23,54 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
 
     [ObservableProperty] private bool _isRefreshing;
     [ObservableProperty] private bool _isDiagnosticBusy;
-    [ObservableProperty] private string _refreshStatus = string.Empty;
-    [ObservableProperty] private string _diagnosticStatus = Strings.BusinessDiagnosticsHint;
+    private RefreshState _refreshState;
+    private DiagnosticState _diagnosticState;
+    private int _refreshedCount;
+    private enum RefreshState { None, NotConfigured, Updating, Updated, Failed, Cancelled }
+    private enum DiagnosticState { Ready, LocalOnly, Collecting, Sending, Collected, Delivered, CollectFailed, SendFailed, Cancelled, OpenFailed }
+
+    public string RefreshStatus => _refreshState switch
+    {
+        RefreshState.NotConfigured => Strings.BusinessSubscriptionNotConfigured,
+        RefreshState.Updating => Strings.BusinessSubscriptionUpdating,
+        RefreshState.Updated => Strings.BusinessSubscriptionUpdated(_refreshedCount),
+        RefreshState.Failed => Strings.BusinessSubscriptionFailed,
+        RefreshState.Cancelled => Strings.BusinessSubscriptionCancelled,
+        _ => string.Empty
+    };
+    public bool IsRefreshStatusVisible => _refreshState is RefreshState.Updating or RefreshState.Failed or RefreshState.Cancelled;
+    public string DiagnosticStatus => _diagnosticState switch
+    {
+        DiagnosticState.LocalOnly => Strings.BusinessDiagnosticsLocalOnly,
+        DiagnosticState.Collecting => Strings.BusinessDiagnosticsCollecting,
+        DiagnosticState.Sending => Strings.BusinessDiagnosticsSending,
+        DiagnosticState.Collected => Strings.BusinessDiagnosticsCollected,
+        DiagnosticState.Delivered => Strings.BusinessDiagnosticsDelivered,
+        DiagnosticState.CollectFailed => Strings.BusinessDiagnosticsCollectFailed,
+        DiagnosticState.SendFailed => Strings.BusinessDiagnosticsSendFailed,
+        DiagnosticState.Cancelled => Strings.BusinessDiagnosticsCancelled,
+        DiagnosticState.OpenFailed => Strings.BusinessDiagnosticsOpenFailed,
+        _ => Strings.BusinessDiagnosticsHint
+    };
+    public bool IsDiagnosticStatusVisible => _diagnosticState != DiagnosticState.Ready;
+
+    private void SetRefreshState(RefreshState state)
+    {
+        _refreshState = state;
+        RefreshLocalization();
+    }
+    private void SetDiagnosticState(DiagnosticState state)
+    {
+        _diagnosticState = state;
+        RefreshLocalization();
+    }
+    internal void RefreshLocalization()
+    {
+        OnPropertyChanged(nameof(RefreshStatus));
+        OnPropertyChanged(nameof(IsRefreshStatusVisible));
+        OnPropertyChanged(nameof(DiagnosticStatus));
+        OnPropertyChanged(nameof(IsDiagnosticStatusVisible));
+    }
 
     public AsyncRelayCommand RefreshListCommand { get; }
     public AsyncRelayCommand CollectCommand { get; }
@@ -44,8 +90,8 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         OpenReportCommand = new(OpenReport, () => !_disposed && !IsDiagnosticBusy && _report != null);
         _vm.PropertyChanged += OnVmChanged;
         _timer.Tick += OnTimer;
-        if (configuration.Subscription == null) RefreshStatus = Strings.BusinessSubscriptionNotConfigured;
-        if (configuration.SupportEndpoint == null) DiagnosticStatus = Strings.BusinessDiagnosticsLocalOnly;
+        if (configuration.Subscription == null) SetRefreshState(RefreshState.NotConfigured);
+        if (configuration.SupportEndpoint == null) SetDiagnosticState(DiagnosticState.LocalOnly);
     }
 
     private bool CanRefresh() => !_disposed && _visible && !IsRefreshing &&
@@ -81,7 +127,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         RefreshListCommand.NotifyCanExecuteChanged();
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _refresh = operation;
-        RefreshStatus = Strings.BusinessSubscriptionUpdating;
+        SetRefreshState(RefreshState.Updating);
         try
         {
             var body = await _http.FetchAsync(_configuration.Subscription!, operation.Token);
@@ -90,10 +136,11 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
             if (!_vm.ReplaceBusinessServers(body, _configuration.SourceHash!))
                 throw new InvalidOperationException("Server pool is busy.");
             _poolChanged();
-            RefreshStatus = Strings.BusinessSubscriptionUpdated(_vm.GetBusinessServerChoices().Count);
+            _refreshedCount = _vm.GetBusinessServerChoices().Count;
+            SetRefreshState(RefreshState.Updated);
         }
-        catch (OperationCanceledException) { if (!_disposed) RefreshStatus = Strings.BusinessSubscriptionCancelled; }
-        catch { if (!_disposed) RefreshStatus = Strings.BusinessSubscriptionFailed; }
+        catch (OperationCanceledException) { if (!_disposed) SetRefreshState(RefreshState.Cancelled); }
+        catch { if (!_disposed) SetRefreshState(RefreshState.Failed); }
         finally
         {
             _refresh = null;
@@ -113,7 +160,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
             // Retry sends the same saved archive, allowing receiver deduplication.
             if (!send || _report == null || _delivered)
             {
-                DiagnosticStatus = Strings.BusinessDiagnosticsCollecting;
+                SetDiagnosticState(DiagnosticState.Collecting);
                 var report = await _diagnostics.CollectAsync(operation.Token);
                 operation.Token.ThrowIfCancellationRequested();
                 _report = report;
@@ -123,15 +170,15 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
             if (send)
             {
                 uploading = true;
-                DiagnosticStatus = Strings.BusinessDiagnosticsSending;
+                SetDiagnosticState(DiagnosticState.Sending);
                 await _diagnostics.SendAsync(_report!, operation.Token);
                 operation.Token.ThrowIfCancellationRequested();
                 _delivered = true;
             }
-            if (!_disposed) DiagnosticStatus = send ? Strings.BusinessDiagnosticsDelivered : Strings.BusinessDiagnosticsCollected;
+            if (!_disposed) SetDiagnosticState(send ? DiagnosticState.Delivered : DiagnosticState.Collected);
         }
-        catch (OperationCanceledException) { if (!_disposed) DiagnosticStatus = Strings.BusinessDiagnosticsCancelled; }
-        catch { if (!_disposed) DiagnosticStatus = uploading ? Strings.BusinessDiagnosticsSendFailed : Strings.BusinessDiagnosticsCollectFailed; }
+        catch (OperationCanceledException) { if (!_disposed) SetDiagnosticState(DiagnosticState.Cancelled); }
+        catch { if (!_disposed) SetDiagnosticState(uploading ? DiagnosticState.SendFailed : DiagnosticState.CollectFailed); }
         finally
         {
             _diagnostic = null;
@@ -149,7 +196,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     {
         if (_report == null) return;
         try { using var process = System.Diagnostics.Process.Start(FileManagerHelper.BuildRevealStartInfo(_report)); }
-        catch { DiagnosticStatus = Strings.BusinessDiagnosticsOpenFailed; }
+        catch { SetDiagnosticState(DiagnosticState.OpenFailed); }
     }
 
     public void Dispose()
