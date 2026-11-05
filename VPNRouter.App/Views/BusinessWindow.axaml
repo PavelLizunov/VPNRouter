@@ -68,7 +68,8 @@
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="20" Spacing="12" MaxWidth="400" HorizontalAlignment="Stretch">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                <Image Source="{Binding LogoSource}" Width="36" Height="36" Stretch="Uniform"/>
+                <Image Source="{Binding LogoSource}" Width="36" Height="36" Stretch="Uniform"
+                       RenderOptions.BitmapInterpolationMode="HighQuality"/>
                 <TextBlock Grid.Column="1" Text="VPNRouter Business" FontSize="16" FontWeight="SemiBold"
                            TextWrapping="Wrap" VerticalAlignment="Center"/>
                 <Button Grid.Column="2" x:Name="BusinessMenuButton" Width="28" Height="28" Padding="0"

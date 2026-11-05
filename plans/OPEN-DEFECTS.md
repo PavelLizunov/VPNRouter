@@ -16,6 +16,12 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CONFIRMED LIVE TELEMETRY FAILURE** - BUSINESS-ACTIVITY-JUMP-SCAN: controller59477de stopped refreshing two nodes while their direct management SSH/key scan timed out; both VPN services remain active. Audited management jumps restore polling at19:19UTC; four fresh activity values confirmed at19:35. Underlying direct-route outage cause remains unknown; never treat stale activity as low. See plans/phase-business-activity-recovery-2026-11-05.md.
+
+- [ ] **P3 CONFIRMED PRESENTATION DEFECT** - BUSINESS-ACTIVITY-STALE-LABEL: a known stale snapshot displays the same no-data label as an absent sample; distinguish stale RU/EN text while retaining neutral bars and independent ping. See plans/phase-business-activity-recovery-2026-11-05.md.
+
+- [ ] **P3 CONFIRMED RENDERING DEFECT** - BUSINESS-HEADER-INTERPOLATION: BusinessWindow scales the640px mascot to36px without the HighQuality bitmap interpolation already used by Standard UI; the owner crop matches nearest-neighbor rendering. See plans/phase-business-activity-recovery-2026-11-05.md.
+
 - [x] **P2 CONFIRMED CI FIXTURE ERROR** - BUSINESS-ACTIVITY-TOOLTIP-FIXTURE: ae1276b0 adds an activity tooltip Grid, so the existing health test's generic tooltip-Grid Single assertion finds two owners. Select the Grid that directly owns the health dot; retain the expected per-row health and non-connection-status assertions. No product defect or private rebuild. Task plans/phase-business-clarity-metadata-2026-11-05.md. 691dc21c targets the direct health-dot owner and retains the original assertions; all eleven applicable checks pass. Product source is identical to the private ae1276b0 installer. RESOLVED v2.50.5.
 
 - [x] **P2 CONFIRMED CI GENERATED-DOC ERROR** - VPNCTL-ACTIVITY-INVENTORY-MAP: cargo check at624ed21 fails before Rust checking because docs/CODEBASE_INVENTORY.md is stale after two new Rust files. Regenerate with the existing project-map script; no backend product source change. Task plans/phase-business-clarity-metadata-2026-11-05.md. Regenerated only the existing map; exact59477de passes all eleven checks and is deployed. Backend product code is identical to reviewed624ed21. RESOLVED v2.50.5 delivery.

@@ -34,6 +34,7 @@ public static partial class Strings
     public static string BusinessDiagnosticsCancelled => Ru ? "Операция остановлена. Сохранённые отчёты оставлены на компьютере." : "Operation stopped. Saved reports are retained locally.";
     public static string BusinessDiagnosticsOpenFailed => Ru ? "Не удалось открыть папку отчёта." : "Could not open the report folder.";
     public static string BusinessNodeMetricsUnavailable => Ru ? "Активность: нет данных" : "Activity: no data";
+    public static string BusinessNodeMetricsStale => Ru ? "Активность: данные устарели" : "Activity: data is stale";
     public static string BusinessNodeActivityLow => Ru ? "Активность: низкая" : "Activity: low";
     public static string BusinessNodeActivityMedium => Ru ? "Активность: средняя" : "Activity: medium";
     public static string BusinessNodeActivityHigh => Ru ? "Активность: высокая" : "Activity: high";
