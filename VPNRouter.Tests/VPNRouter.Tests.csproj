@@ -55,6 +55,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <EmbeddedResource Include="Fixtures\BusinessNodeCanonicalEndpointSnapshot.json"
+                      LogicalName="VPNRouter.Tests.Fixtures.BusinessNodeCanonicalEndpointSnapshot.json" />
   </ItemGroup>
 
   <!-- Wave 12 Phase 3 (2026-05-18) — xUnit v3 needs xunit.runner.json copied

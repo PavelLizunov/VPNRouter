@@ -9,6 +9,29 @@ namespace VPNRouter.Tests;
 
 public sealed class BusinessNodeMetadataTests
 {
+    [Fact]
+    public async Task ProducerCanonicalEndpointFixture_IsAcceptedByTheActualHttpConsumer()
+    {
+        using var stream = typeof(BusinessNodeMetadataTests).Assembly.GetManifestResourceStream(
+            "VPNRouter.Tests.Fixtures.BusinessNodeCanonicalEndpointSnapshot.json");
+        Assert.NotNull(stream);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var json = await reader.ReadToEndAsync();
+        using var http = new HttpClient(new Handler((_, _) => Task.FromResult(Response(json))));
+        using var client = new BusinessNodeMetadataClient(http);
+        var snapshot = await client.FetchAsync(new("https://example.invalid/node-status/synthetic"), CancellationToken.None);
+
+        var row = Assert.Single(snapshot.Nodes).Value;
+        Assert.Equal("node.example.invalid", row.EndpointHost);
+        Assert.True(snapshot.TryGetNode("NODE.EXAMPLE.INVALID.", out var matched));
+        Assert.Same(row, matched);
+        Assert.Null(row.CountryIso);
+        Assert.Null(row.MemoryUsedPercent);
+        Assert.Null(row.Load1MinX100);
+        Assert.Null(snapshot.GetAgeSeconds(row));
+        Assert.Equal(BusinessNodeFreshness.Unknown, snapshot.GetFreshness(row));
+    }
+
     private static string Snapshot(string? rows = null, string generated = "2000", string ttl = "1320") =>
         $$"""{"schema":1,"generated_at":{{generated}},"max_age_seconds":{{ttl}},"nodes":[{{rows ?? Row()}}]}""";
 

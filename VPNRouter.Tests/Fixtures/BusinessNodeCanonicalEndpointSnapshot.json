@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "generated_at": 2000,
+  "max_age_seconds": 1320,
+  "nodes": [
+    {
+      "endpoint_host": "node.example.invalid",
+      "country_iso": null,
+      "memory_total_mib": null,
+      "memory_available_mib": null,
+      "load_1min_x100": null,
+      "observed_at": null,
+      "age_seconds": null,
+      "freshness": "unknown"
+    }
+  ]
+}

@@ -118,6 +118,7 @@ public sealed class BusinessNodeMetadataWindowTests
         Assert.Equal("CH", choice.CountryCode);
         Assert.Equal("Load 0.00 · RAM 0%", choice.MetricsText);
         Assert.False(choice.IsGood);
+        var menu = OpenMenu(fixture.Window);
         foreach (var index in new[] { 0, 1 })
         {
             fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!.SelectedIndex = index;
@@ -134,6 +135,7 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.True(services.IsDiagnosticBusy);
             Assert.False(fixture.Diagnostics.Token.IsCancellationRequested);
         }
+        menu.Hide();
 
         var afterLanguage = fixture.Store.SaveCount;
         var failed = fixture.Controller.RefreshAsync();
@@ -158,7 +160,8 @@ public sealed class BusinessNodeMetadataWindowTests
         var initial = fixture.Controller!.RefreshAsync();
         (await fixture.Fetch.NextAsync()).Result.SetResult(snapshot);
         await initial.WaitAsync(Budget);
-        var original = fixture.Choices;
+        var original = fixture.Vm.GetBusinessServerChoices().Select(server =>
+            Assert.Single(fixture.Choices.Where(choice => ReferenceEquals(choice.Server, server)))).ToArray();
         var received = snapshot.ReceivedTimestamp;
         var services = fixture.Services;
         var updated = Connection.Replace("NODE.EXAMPLE.INVALID.", "node.example.invalid")
@@ -170,7 +173,8 @@ public sealed class BusinessNodeMetadataWindowTests
         // Rebuilding legitimately synchronizes/persists the selected row. Only
         // the following metadata request and callback must be write-free.
         var beforeMetadataFailure = fixture.Store.SaveCount;
-        var rebuilt = fixture.Choices;
+        var rebuilt = fixture.Vm.GetBusinessServerChoices().Select(server =>
+            Assert.Single(fixture.Choices.Where(choice => ReferenceEquals(choice.Server, server)))).ToArray();
         Assert.NotSame(original[0], rebuilt[0]);
         Assert.Equal(new[] { "CH", "SE", "NL" }, rebuilt.Select(choice => choice.CountryCode));
         Assert.Contains("(stale)", rebuilt[0].MetricsText);
@@ -186,7 +190,7 @@ public sealed class BusinessNodeMetadataWindowTests
         await refresh.WaitAsync(Budget);
         Assert.Equal(beforeMetadataFailure, fixture.Store.SaveCount);
         Assert.Same(snapshot, fixture.Controller.LastSnapshot);
-        Assert.Contains("(stale)", fixture.Choices[0].MetricsText);
+        Assert.Contains("(stale)", rebuilt[0].MetricsText);
     }
 
     [AvaloniaFact]
@@ -279,13 +283,18 @@ public sealed class BusinessNodeMetadataWindowTests
             text => text.Text == selected.MetricsText && text.IsEffectivelyVisible);
         var scroll = Assert.IsType<ScrollViewer>(fixture.Window.Content);
         Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-        var send = Assert.Single(fixture.Window.GetVisualDescendants().OfType<Button>()
+        var menu = OpenMenu(fixture.Window);
+        var content = Assert.IsAssignableFrom<Control>(menu.Content);
+        var menuScroll = fixture.Window.FindControl<ScrollViewer>("BusinessMenuScroll")!;
+        var send = Assert.Single(content.GetVisualDescendants().OfType<Button>()
             .Where(button => AutomationProperties.GetAutomationId(button) == "BusinessDiagnosticsSend"));
-        var position = send.TranslatePoint(default, scroll);
+        var position = send.TranslatePoint(default, menuScroll);
         Assert.True(position.HasValue);
         Assert.True(send.Bounds.Width > 0 && send.Bounds.Height > 0);
-        Assert.True(position!.Value.X >= -1 && position.Value.X + send.Bounds.Width <= scroll.Viewport.Width + 1);
-        Assert.True(position.Value.Y >= -1 && position.Value.Y + send.Bounds.Height <= scroll.Viewport.Height + 1);
+        Assert.True(position!.Value.X >= -1 && position.Value.X + send.Bounds.Width <= menuScroll.Viewport.Width + 1);
+        Assert.True(position.Value.Y >= -1 && position.Value.Y + send.Bounds.Height <= menuScroll.Viewport.Height + 1);
+        menu.Hide();
+        Flush(fixture.Window);
         // Capture closes the window; all live-window assertions must precede it.
         ScreenshotHelper.Capture(fixture.Window, $"business-node-metadata-{language}-{width}");
     }
@@ -313,6 +322,15 @@ public sealed class BusinessNodeMetadataWindowTests
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
+    }
+
+    private static Flyout OpenMenu(BusinessWindow window)
+    {
+        var button = window.FindControl<Button>("BusinessMenuButton")!;
+        var flyout = Assert.IsType<Flyout>(button.Flyout);
+        if (!flyout.IsOpen) flyout.ShowAt(button);
+        Flush(window);
+        return flyout;
     }
 
     private sealed class Fixture : IDisposable

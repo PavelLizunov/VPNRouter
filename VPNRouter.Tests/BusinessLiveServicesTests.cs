@@ -185,7 +185,7 @@ public sealed class BusinessLiveServicesTests
     [AvaloniaTheory]
     [InlineData(340)]
     [InlineData(420)]
-    public async Task Window_ShowsCountryAndSendAboveFold_RefreshesAllChoices_AndKeepsBottomReachable(int width)
+    public async Task Window_ShowsCountryAndSendInMenu_RefreshesAllChoices_AndKeepsBottomReachable(int width)
     {
         using var vm = CreateVm(out _);
         using var client = Client((_, _) => Task.FromResult(Response(BusinessClientConfigurationTests.Four)));
@@ -201,10 +201,19 @@ public sealed class BusinessLiveServicesTests
             var choice = Assert.IsType<BusinessServerChoiceViewModel>(selector.SelectedItem);
             Assert.Equal("IS", choice.CountryCode); Assert.NotNull(choice.CountryFlag);
             Assert.Equal("Исландия", choice.CountryName);
-            var send = Assert.Single(window.GetVisualDescendants().OfType<Button>().Where(b => AutomationProperties.GetAutomationId(b) == "BusinessDiagnosticsSend"));
+            var menu = window.FindControl<Button>("BusinessMenuButton")!;
+            var flyout = Assert.IsType<Flyout>(menu.Flyout);
+            flyout.ShowAt(menu);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            var content = Assert.IsAssignableFrom<Control>(flyout.Content);
+            var menuScroll = window.FindControl<ScrollViewer>("BusinessMenuScroll")!;
+            var send = Assert.Single(content.GetVisualDescendants().OfType<Button>().Where(b => AutomationProperties.GetAutomationId(b) == "BusinessDiagnosticsSend"));
             Assert.True(send.IsEffectivelyEnabled);
-            var top = send.TranslatePoint(default, window);
-            Assert.True(top.HasValue && top.Value.Y >= 0 && top.Value.Y + send.Bounds.Height < window.Height);
+            Assert.True(send.IsEffectivelyVisible);
+            var top = send.TranslatePoint(default, menuScroll);
+            Assert.True(top.HasValue && top.Value.Y >= 0 && top.Value.Y + send.Bounds.Height <= menuScroll.Viewport.Height);
+            flyout.Hide();
             var scroll = Assert.IsType<ScrollViewer>(window.Content);
             Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
             scroll.Offset = new Vector(0, scroll.Extent.Height);

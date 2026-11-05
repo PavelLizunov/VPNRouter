@@ -12,6 +12,7 @@ import re
 import secrets
 import shutil
 import socket
+import stat
 import struct
 import tempfile
 import threading
@@ -24,6 +25,33 @@ MAX_EXPANDED = 20 * 1024 * 1024
 QUOTA = 512 * 1024 * 1024
 RETENTION = 7 * 86400
 ENTRY = re.compile(r"(?:README\.txt|summary\.json|(?:app|core|launch|legacy-launch|crash)-[0-9]{2}\.txt)")
+MAX_RECEIPT = 65536
+UNSAFE_ANALYSIS = re.compile(
+    r"[<>`|;&$\\]|[a-z][a-z0-9+.-]*://|\bwww\.|"
+    r"\b(?:[a-z0-9-]+\.)+[a-z]{2,63}\b|"
+    r"\b(?:powershell|pwsh|cmd|curl|wget|sudo|bash|sh|regedit|msiexec)\b", re.I)
+
+
+def public_analysis(value):
+    """Expose bounded plain prose only; never return arbitrary receipt fields."""
+    unavailable = {"version": 1, "state": "unavailable"}
+    if (not isinstance(value, dict) or type(value.get("version")) is not int or
+            value["version"] != 1 or value.get("state") not in ("unavailable", "pending", "ready")):
+        return unavailable
+    result = {"version": 1, "state": value["state"]}
+    for field in ("message_ru", "message_en"):
+        if field not in value:
+            continue
+        message = value[field]
+        if (not isinstance(message, str) or not 0 < len(message) <= 300 or
+                any(unicodedata.category(char) in ("Cc", "Cf", "Cs") for char in message) or
+                len(message.encode("utf-16-le")) > 600 or not message.strip() or
+                UNSAFE_ANALYSIS.search(message)):
+            return unavailable
+        result[field] = message.strip()
+    if result["state"] == "ready" and len(result) == 2:
+        return unavailable
+    return result
 
 
 def validate_archive(path):
@@ -146,6 +174,28 @@ class Store:
             pass
         return None
 
+    def receipt(self, report_id, identity):
+        """Read only the existing bounded receipt belonging to this upload key."""
+        try:
+            path = self.root / (report_id + ".json")
+            with open(path, "rb", opener=lambda p, f: os.open(
+                    p, f | os.O_NOFOLLOW | os.O_NONBLOCK)) as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    return None
+                raw = stream.read(MAX_RECEIPT + 1)
+            if len(raw) > MAX_RECEIPT:
+                return None
+            receipt = json.loads(raw)
+            archive = self.root / (report_id + ".zip")
+            if (isinstance(receipt, dict) and receipt.get("identity") == identity and
+                    receipt.get("report_id") == report_id and
+                    not archive.is_symlink() and archive.is_file()):
+                return {"stored": True, "report_id": report_id,
+                        "analysis": public_analysis(receipt.get("analysis"))}
+        except (OSError, ValueError, UnicodeError, RecursionError):
+            pass
+        return None
+
     def reserve(self, identity, size):
         self.prune()
         with self.lock:
@@ -217,21 +267,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
         self.close_connection = True
 
+    def authenticated_identity(self):
+        store = self.server.store
+        if self.client_address[0] != store.proxy:
+            self.reply(403, {"error": "ingress required"})
+            return None
+        identity = store.identity(self.headers.get("Authorization", ""))
+        if identity is None:
+            self.reply(401, {"error": "upload identity required"})
+        return identity
+
     def do_GET(self):
-        self.reply(200 if self.path == "/health" else 404,
-                   {"ok": True} if self.path == "/health" else {"error": "not found"})
+        if self.path == "/health":
+            self.reply(200, {"ok": True})
+            return
+        match = re.fullmatch(r"/api/reports/([0-9a-f]{64})/analysis", self.path)
+        if match:
+            identity = self.authenticated_identity()
+            if identity is None:
+                return
+            receipt = self.server.store.receipt(match[1], identity[0])
+            if receipt is not None:
+                self.reply(200, receipt)
+                return
+        self.reply(404, {"error": "not found"})
 
     def do_POST(self):
         store = self.server.store
         if self.path != "/api/reports":
             self.reply(404, {"error": "not found"})
             return
-        if self.client_address[0] != store.proxy:
-            self.reply(403, {"error": "ingress required"})
-            return
-        identity = store.identity(self.headers.get("Authorization", ""))
+        identity = self.authenticated_identity()
         if identity is None:
-            self.reply(401, {"error": "upload identity required"})
             return
         length = self.headers.get("Content-Length", "")
         if self.headers.get("Transfer-Encoding") or not length.isascii() or not length.isdigit():
@@ -290,7 +357,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     store.active.discard(temporary)
                     temporary = None
                     sync_directory(store.root)
-            response = (200 if duplicate else 201, {"stored": True, "report_id": report_id})
+            payload = {"stored": True, "report_id": report_id}
+            if "support-analysis-v1" in [part.strip() for part in self.headers.get(
+                    "X-VPNRouter-Capabilities", "").split(",")]:
+                payload = store.receipt(report_id, identity[0]) or dict(
+                    payload, analysis={"version": 1, "state": "unavailable"})
+            response = (200 if duplicate else 201, payload)
         except (ValueError, zipfile.BadZipFile, EOFError, UnicodeError):
             response = (400, {"error": "invalid diagnostic archive"})
         except (TimeoutError, socket.timeout):

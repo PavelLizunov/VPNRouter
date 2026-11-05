@@ -192,3 +192,92 @@ its no-write assertion for the actual failed metadata request/callback.
 The final Astra review started atfd5925da was cancelled before replacing its
 scope; a fresh review must use the corrected exact commit. No clean final review
 or new installer is claimed. Backend2ace802 CI remains pending full tests.
+
+## Final Astra finding and private-build handoff
+
+GPT ASTRA XHIGH reviewed all26 client follow-up files at25f3ca38 and all12 backend
+files at2ace802, excluding the earlier PR307 commits. One source-confirmedP2:
+raw producer endpoint deduplication conflicts with the consumer's canonical-host
+keys; the coordinator confirmed the admin-input, producer and consumer paths.
+Recorded before correction. No confirmedP0/P1; no runtime execution by reviewer.
+The backend subsequently changes only isolated test seeding at176e1ad; its exact
+CI still needs completion before the new alias-canonicalization product block.
+
+Client25f3ca38 now has eleven actual SUCCESS checks and two expected SKIPPED.
+Private inputs were recovered read-only from the exact installed2b DLL, with
+guest/controller hashes matching, no assembly execution/guest mutation and all
+13 entries/four choices/same account/services preserved. Private nodes reference
+is derived from the existing same-origin individual source. Values stay private.
+Encrypted-only installer dispatch at25f3ca38 was accepted; run ID was not visible
+in the single immediate run-list response. Resolve it on the next watch event;
+do not poll. Both task-owned ephemeral pilot secrets remain for that running job
+and must be removed and verified absent after retrieval/failure. No new install.
+
+## Owner fast UI correction (supersedes additional UI acceptance)
+
+Owner explicitly requests a quick redesign without additional tests: reuse the
+base window kebab menu for diagnostics/language, remove Details and all permanent
+explanations, keep only connection/server/modes, show real vpnctld country/load,
+and allow TCP ping while connected in split mode. Existing user choice/tunnel
+must not switch automatically; fresh load may order the displayed choices.
+No new UI test cases or further VM connection/Send cycles for this change. Adapt
+existing UI assertions only where controls intentionally move; automatic existing
+CI/build gates remain. Prior shared canonical consumer test was written before
+this steering and remains the backend finding's targeted contract regression.
+
+Exact25f3 client is now installed on owner VM (installer exit0), same account,
+choice/mode/language,13entries/fourchoices and originalreport preserved. Russian
+app left open, VPN/core/TUN off; task staging removed. No Send/connect performed
+by the task during upgrade. Owner's subsequent Send clicks are owner reports;
+preserve them and verify actual receipts before answering.
+
+The owner also requests a separate design agent for a concise Gemini diagnostic
+reply. Prepare the service/short-response/error fallback design; do not transfer
+real diagnostic archives to a new external service while only designing it.
+
+## Today-delivery modular service contract
+
+Owner gives60-90minutes from11:55UTC for a usable version and explicitly requires
+remote statuses/analysis to evolve independently of the installed client. Add a
+small stable support-analysis-v1 data contract to THIS base client, separate from
+Gemini implementation: existing POST durable2xx remains receipt truth, optional
+v1 analysis message and bounded same-origin authenticated result polling. Older
+receiver/EXE/fakes remain compatible; absent/invalid/timeout analysis never
+downgrades a received report. Plaintext bounded replies only, no downloaded code
+or automatic commands/config/network changes. Backend receiver can later supply
+new analysis rules/model/text without a client update. No real reports sent to
+Gemini and no provider key or model is configured in this phase. No additional
+UI test cases/VM acceptance cycles per owner; existing automatic CI remains.
+
+Verified owner's two manual Send receipts11:35:21Z/11:35:27Z,19210bytes each,
+valid ZIP/hash, enabled employee mapping, both with computer/user fields in
+summary; old20203byte08:43report preserved. No Telegram/email forwarding exists.
+Read-only service baseline confirms4 fresh country/load/RAM samples available.
+Concrete blocker to live data was old controller662b411 plus missing Caddy
+node-status matcher, not unavailable metrics. Candidate1fafc61 now passes all11
+CI jobs including exact-source four-binary/asset package. Stage/backup/scoped
+route validation in progress; no live controller activation claimed yet.
+
+## Current delivery block before push
+
+Minimal base-style kebab replaces main diagnostics/language/refresh controls and
+removes Details. Main keeps only connection/server/modes. Existing UI test methods
+and data rows were adapted, not expanded. Split-connected TCP probes remain
+active; transitions/full/hide retain cancellation. Fresh actual load/RAM orders
+only displayed choices under selection-sync guard, never selecting a new tunnel.
+Stable support-analysis-v1 channel confirms POST2xx before bounded optional body/
+poll handling; receipt remains delivered through analysis/cancel/failure. Receiver
+adds scoped reply-only GET and optional versioned POST payload, legacy POST exact.
+No Gemini/model calls, provider credentials, new UI test cases or VM connect/Send
+cycles. Python/XML/source whitespace checks pass; existing CI/build to run.
+
+Backend alias/candidate1fafc61 passes all11 CI jobs, but actualCPU preactivation
+finds AWS-LC C startup AVX incompatible with VM119. Old service remains healthy;
+all backups/stages/config-validation ready. Workflowed59850 corrects baseline and
+adds AVX-less emulator gate. New artifact must pass actual VM version before
+activation; do not use rejected1fafc61 binary. No live database restore occurred.
+
+A current exact-value check of task-owned recovered credential/reference/endpoint
+values finds zero matches in the current tracked tree and new source. Raw inputs,
+receipts and configured installers remain private. This is not an all-ref/history
+erasure claim.

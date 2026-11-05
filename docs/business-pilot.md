@@ -9,13 +9,13 @@ The standard build keeps its current UI and settings. Business uses
 `%ProgramData%\VPNRouterBusiness`, its own installer identity and autostart entry.
 Only one VPNRouter tunnel may run at a time; the existing global TUN lock is shared.
 Business has one Start/Stop action and two modes. Switch modes while disconnected.
-The header language selector switches Russian/English immediately and persists
-the preference. Explanatory text is collapsed under Details. Diagnostic progress,
-failure and confirmed receipt remain visible when relevant.
+The kebab menu contains the persisted Russian/English selector, diagnostics and
+refresh actions. The main window keeps connection, server and routing mode only;
+there is no Details panel. Diagnostic progress/failure/receipt stays in the menu.
 The standard tray and health recovery remain in use. Tray diagnostics exports
 the existing redacted diagnostic bundle locally; review it before sharing.
 
-The running Business window now has a Diagnostics area above the server controls.
+The Business kebab menu provides diagnostics actions.
 Collect saves an allowlisted, masked log report locally. Send collects if needed
 and uploads only after that explicit action; success appears only after the
 receiver acknowledges delivery. A failed or cancelled upload keeps the archive,
@@ -242,3 +242,17 @@ or closing cancels work. Metadata never mutates VPN selection/settings or tunnel
 state. Older bundles without nodes_url show no metrics. No admin credential or
 continuous client statistics upload is added. Subscription-fetch counters still
 cannot represent node resource load, VPN-online users or employee counts.
+
+## Server-driven support replies
+
+The app advertises support-analysis-v1 with the existing explicit report POST.
+Any durable2xx acknowledgement remains received even if optional analysis fails.
+A version1 reply may contain bounded plaintext message_ru/message_en; pending
+results are polled only under the original trusted HTTPS report endpoint and
+individual upload identity, for at most eight seconds. Missing/older404/invalid
+results use a receipt-confirmed fallback. No arbitrary URL, executable module,
+command or provider credential is accepted from a reply. The intake GET exposes
+only that identity's sanitized analysis, never archives or employee metadata.
+Server analysis/prompt/model/text can evolve behind this stable protocol without
+replacing the client. Gemini itself is not configured by this compatibility
+change; raw diagnostic archives are not sent to an external provider.

@@ -45,6 +45,7 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     }
     internal void SetLanguageSaveFailed(bool failed) { _languageSaveFailed = failed; Refresh(); }
 
+    public string Menu => Strings.BusinessMenu;
     public string Language => Strings.BusinessLanguage;
     public string CountryHint => Strings.BusinessCountryHint;
     public string Server => Strings.BusinessServer;

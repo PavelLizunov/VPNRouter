@@ -9,6 +9,12 @@ internal interface IBusinessDiagnostics
 {
     Task<string> CollectAsync(CancellationToken ct);
     Task SendAsync(string path, CancellationToken ct);
+    async Task<BusinessSupportReply> SendWithReplyAsync(string path, Action acknowledged, CancellationToken ct)
+    {
+        await SendAsync(path, ct);
+        acknowledged();
+        return BusinessSupportReply.Legacy;
+    }
 }
 
 internal sealed class BusinessDiagnostics(BusinessClientConfiguration configuration, BusinessClientHttp http,
@@ -78,7 +84,9 @@ internal sealed class BusinessDiagnostics(BusinessClientConfiguration configurat
         return reports[0];
     }
 
-    public Task SendAsync(string path, CancellationToken ct) => http.SendAsync(
+    public Task SendAsync(string path, CancellationToken ct) => SendWithReplyAsync(path, static () => { }, ct);
+
+    public Task<BusinessSupportReply> SendWithReplyAsync(string path, Action acknowledged, CancellationToken ct) => http.SendAsync(
         configuration.SupportEndpoint ?? throw new InvalidOperationException("Support is not configured."),
-        configuration.SupportToken ?? throw new InvalidOperationException("Support is not configured."), path, ct);
+        configuration.SupportToken ?? throw new InvalidOperationException("Support is not configured."), path, ct, acknowledged);
 }

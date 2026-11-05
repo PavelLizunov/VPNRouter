@@ -13,7 +13,8 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(30) };
     private Round? _round;
     private bool _visible, _enabled, _disposed;
-    private bool CanProbe => !_disposed && _visible && !_vm.IsConnecting && !_vm.IsConnected;
+    private bool CanProbe => !_disposed && _visible && !_vm.IsConnecting &&
+        (!_vm.IsConnected || _vm.IsSplitTunnel);
 
     internal IReadOnlyList<BusinessServerChoiceViewModel> Choices { get; }
 
@@ -36,7 +37,8 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected))
+        if (e.PropertyName is nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected)
+            or nameof(MainWindowViewModel.IsSplitTunnel))
         {
             if (Dispatcher.UIThread.CheckAccess()) UpdateAvailability();
             else Dispatcher.UIThread.Post(UpdateAvailability);

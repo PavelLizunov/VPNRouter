@@ -18,6 +18,7 @@ public partial class BusinessWindow : Window
     private readonly BusinessNodeMetadataController? _metadata;
     private BusinessServicesViewModel? _services;
     private bool _syncingLanguage;
+    private bool _syncingSelection;
     public BusinessWindowTextViewModel Texts { get; } = new();
 
     public BusinessWindow() : this(ProductEdition.IsBusiness
@@ -93,8 +94,6 @@ public partial class BusinessWindow : Window
         _health?.Dispose();
         _health = _vm == null ? null : new BusinessServerHealthMonitor(_vm, _probe);
         ApplyNodeMetadata();
-        BusinessServerSelector.ItemsSource = _health?.Choices;
-        SyncSelection();
         _health?.SetVisible(IsVisible);
         _ = _metadata?.RefreshAsync();
     }
@@ -106,14 +105,23 @@ public partial class BusinessWindow : Window
             Dispatcher.UIThread.Post(ApplyNodeMetadata);
             return;
         }
-        if (_metadata == null || _health == null) return;
-        var snapshot = _metadata.LastSnapshot;
-        foreach (var choice in _health.Choices)
+        if (_metadata != null && _health != null)
         {
-            BusinessNodeMetadata? row = null;
-            if (snapshot != null && snapshot.TryGetNode(choice.Server.Server, out var matched)) row = matched;
-            choice.UpdateMetadata(snapshot, row);
+            var snapshot = _metadata.LastSnapshot;
+            foreach (var choice in _health.Choices)
+            {
+                BusinessNodeMetadata? row = null;
+                if (snapshot != null && snapshot.TryGetNode(choice.Server.Server, out var matched)) row = matched;
+                choice.UpdateMetadata(snapshot, row);
+            }
         }
+        _syncingSelection = true;
+        try
+        {
+            BusinessServerSelector.ItemsSource = _health == null ? null : BusinessServerChoiceOrdering.Sort(_health.Choices);
+            SyncSelection();
+        }
+        finally { _syncingSelection = false; }
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -158,14 +166,21 @@ public partial class BusinessWindow : Window
 
     private void SyncSelection()
     {
-        BusinessServerSelector.SetCurrentValue(ComboBox.SelectedItemProperty,
-            _health?.Choices.FirstOrDefault(c => ReferenceEquals(c.Server, _vm?.SelectedServer)));
+        var wasSyncing = _syncingSelection;
+        _syncingSelection = true;
+        try
+        {
+            BusinessServerSelector.SetCurrentValue(ComboBox.SelectedItemProperty,
+                _health?.Choices.FirstOrDefault(c => ReferenceEquals(c.Server, _vm?.SelectedServer)));
+        }
+        finally { _syncingSelection = wasSyncing; }
     }
 
     private void OnBusinessServerSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel vm &&
-            e.AddedItems.Count == 1 && e.AddedItems[0] is BusinessServerChoiceViewModel choice)
+        if (!_syncingSelection && DataContext is MainWindowViewModel vm && !vm.IsConnecting && !vm.IsConnected &&
+            e.AddedItems.Count == 1 && e.AddedItems[0] is BusinessServerChoiceViewModel choice &&
+            !ReferenceEquals(choice.Server, vm.SelectedServer))
         {
             vm.SelectBusinessServer(choice.Server);
             SyncSelection();

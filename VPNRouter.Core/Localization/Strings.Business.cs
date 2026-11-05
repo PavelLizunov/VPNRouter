@@ -6,6 +6,7 @@ public static partial class Strings
     public static string BusinessEnglish => "English";
     public static string BusinessServiceConnected => Ru ? "Подключено через службу" : "Connected via service";
     public static string BusinessConnected => Ru ? "Подключено" : "Connected";
+    public static string BusinessMenu => Ru ? "Меню" : "Menu";
     public static string BusinessLanguage => Ru ? "Язык" : "Language";
     public static string BusinessLanguageSaveFailed => Ru ? "Не удалось сохранить язык." : "Could not save language.";
     public static string BusinessDetails => Ru ? "Подробнее" : "Details";
@@ -20,8 +21,8 @@ public static partial class Strings
     public static string BusinessDiagnosticsHeader => Ru ? "Диагностика" : "Diagnostics";
     public static string BusinessDiagnosticsLocalOnly => Ru ? "Можно собрать отчёт локально. Отправка в этой сборке не настроена." : "You can collect a local report. Upload is not configured in this build.";
     public static string BusinessDiagnosticsHint => Ru ? "Отчёт содержит имя компьютера и Windows-пользователя со слов клиента. Отправка — только по кнопке. Пароли маскируются; в логах могут остаться адреса и названия приложений." : "The report includes client-reported computer and Windows user names. Upload happens only on Send. Secrets are masked; logs may retain addresses and app names.";
-    public static string BusinessDiagnosticsCollect => Ru ? "Собрать" : "Collect";
-    public static string BusinessDiagnosticsSend => Ru ? "Отправить" : "Send";
+    public static string BusinessDiagnosticsCollect => Ru ? "Сохранить локально" : "Save locally";
+    public static string BusinessDiagnosticsSend => Ru ? "Отправить диагностику" : "Send diagnostics";
     public static string BusinessDiagnosticsCancel => Ru ? "Остановить" : "Cancel";
     public static string BusinessDiagnosticsOpen => Ru ? "Открыть папку отчёта" : "Open report folder";
     public static string BusinessDiagnosticsCollecting => Ru ? "Собираем диагностику…" : "Collecting diagnostics…";
@@ -78,7 +79,7 @@ public static partial class Strings
     public static string BusinessDiagnostics => Ru ? "Сохранить диагностику" : "Save diagnostics";
     public static string BusinessOpen => Ru ? "Открыть VPNRouter Business" : "Open VPNRouter Business";
     public static string BusinessServer => Ru ? "Сервер VPN" : "VPN server";
-    public static string BusinessServerRefresh => Ru ? "Проверить" : "Refresh";
+    public static string BusinessServerRefresh => Ru ? "Обновить пинг" : "Refresh ping";
     public static string BusinessServerChecking => Ru ? "Проверка…" : "Checking…";
     public static string BusinessServerNotChecked => Ru ? "Не проверен" : "Not checked";
     public static string BusinessServerReachable => Ru ? "Порт доступен" : "Port reachable";
@@ -99,4 +100,7 @@ public static partial class Strings
     public static string BusinessServerSaveFailed => Ru
         ? "Не удалось сохранить выбранный сервер. Проверьте права доступа к настройкам."
         : "The selected server could not be saved. Check access to the settings folder.";
+    public static string BusinessDiagnosticsReceived => Ru ? "Отчёт получен." : "Report received.";
+    public static string BusinessDiagnosticsReplyPending => Ru ? "Отчёт получен. Получаем короткий ответ…" : "Report received. Getting a short reply…";
+    public static string BusinessDiagnosticsReplyUnavailable => Ru ? "Отчёт получен. Краткий разбор сейчас недоступен." : "Report received. A short analysis is currently unavailable.";
 }

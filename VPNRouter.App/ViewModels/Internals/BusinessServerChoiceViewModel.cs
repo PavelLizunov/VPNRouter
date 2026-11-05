@@ -18,6 +18,10 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
     public string CountryName => Strings.BusinessCountryName(CountryCode);
     public bool HasCountry => CountryCode.Length != 0;
     public Avalonia.Media.IImage? CountryFlag => BusinessServerCountry.Flag(CountryCode);
+    internal uint? MetadataLoad => HasFreshMetadata ? _metadata!.Load1MinX100 : null;
+    internal double? MetadataMemoryUsedPercent => HasFreshMetadata ? _metadata!.MemoryUsedPercent : null;
+    private bool HasFreshMetadata => _metadataSnapshot != null && _metadata != null &&
+        _metadataSnapshot.GetFreshness(_metadata) == BusinessNodeFreshness.Fresh;
     private ServerProbeResult _result = ServerProbeResult.Unknown;
     private bool _checking;
 

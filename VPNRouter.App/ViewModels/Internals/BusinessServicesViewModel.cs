@@ -19,6 +19,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     private CancellationTokenSource? _refresh, _diagnostic;
     private bool _visible, _disposed, _started, _delivered;
     private string? _report;
+    private BusinessSupportReply? _supportReply;
     public bool HasReport => _report != null;
 
     [ObservableProperty] private bool _isRefreshing;
@@ -45,7 +46,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         DiagnosticState.Collecting => Strings.BusinessDiagnosticsCollecting,
         DiagnosticState.Sending => Strings.BusinessDiagnosticsSending,
         DiagnosticState.Collected => Strings.BusinessDiagnosticsCollected,
-        DiagnosticState.Delivered => Strings.BusinessDiagnosticsDelivered,
+        DiagnosticState.Delivered => _supportReply?.Message ?? Strings.BusinessDiagnosticsDelivered,
         DiagnosticState.CollectFailed => Strings.BusinessDiagnosticsCollectFailed,
         DiagnosticState.SendFailed => Strings.BusinessDiagnosticsSendFailed,
         DiagnosticState.Cancelled => Strings.BusinessDiagnosticsCancelled,
@@ -155,6 +156,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _diagnostic = operation;
         var uploading = false;
+        var acknowledged = false;
         try
         {
             // Retry sends the same saved archive, allowing receiver deduplication.
@@ -165,24 +167,41 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
                 operation.Token.ThrowIfCancellationRequested();
                 _report = report;
                 _delivered = false;
+                _supportReply = null;
                 OnPropertyChanged(nameof(HasReport));
             }
             if (send)
             {
                 uploading = true;
                 SetDiagnosticState(DiagnosticState.Sending);
-                await _diagnostics.SendAsync(_report!, operation.Token);
-                operation.Token.ThrowIfCancellationRequested();
+                _supportReply = await _diagnostics.SendWithReplyAsync(_report!, () =>
+                {
+                    acknowledged = true;
+                    void ShowReceipt()
+                    {
+                        if (_disposed || _diagnostic != operation || _supportReply != null) return;
+                        _delivered = true;
+                        _supportReply = BusinessSupportReply.Pending;
+                        SetDiagnosticState(DiagnosticState.Delivered);
+                    }
+                    if (Dispatcher.UIThread.CheckAccess()) ShowReceipt();
+                    else Dispatcher.UIThread.Post(ShowReceipt);
+                }, operation.Token);
                 _delivered = true;
             }
             if (!_disposed) SetDiagnosticState(send ? DiagnosticState.Delivered : DiagnosticState.Collected);
         }
-        catch (OperationCanceledException) { if (!_disposed) SetDiagnosticState(DiagnosticState.Cancelled); }
-        catch { if (!_disposed) SetDiagnosticState(uploading ? DiagnosticState.SendFailed : DiagnosticState.CollectFailed); }
+        catch (OperationCanceledException) { if (!_disposed) FinishFailure(DiagnosticState.Cancelled); }
+        catch { if (!_disposed) FinishFailure(uploading ? DiagnosticState.SendFailed : DiagnosticState.CollectFailed); }
         finally
         {
             _diagnostic = null;
             if (!_disposed) { IsDiagnosticBusy = false; NotifyDiagnosticCommands(); }
+        }
+        void FinishFailure(DiagnosticState state)
+        {
+            if (acknowledged) { _delivered = true; _supportReply = BusinessSupportReply.Unavailable; }
+            SetDiagnosticState(acknowledged ? DiagnosticState.Delivered : state);
         }
     }
 

@@ -31,7 +31,7 @@ public sealed class BusinessLanguageAndLayoutTests
         choice.Update(new(ServerProbeStatus.Ok, 12, null));
         var before = fixture.Vm.SelectedServer;
         var controller = fixture.Services;
-        var language = window.FindControl<ComboBox>("BusinessLanguageSelector")!;
+        var language = Language(window);
         Assert.Equal("Send", Send(window).Content);
         var saves = fixture.Store.SaveCount;
         language.SelectedIndex = 0;
@@ -61,7 +61,7 @@ public sealed class BusinessLanguageAndLayoutTests
         var operation = fixture.Services.RunDiagnosticsAsync(false);
         Assert.True(fixture.Services.IsDiagnosticBusy);
         Assert.Equal("Collecting diagnostics…", fixture.Services.DiagnosticStatus);
-        fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!.SelectedIndex = 0;
+        Language(fixture.Window).SelectedIndex = 0;
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("Собираем диагностику…", fixture.Services.DiagnosticStatus);
         Assert.False(fixture.Diagnostics.Token.IsCancellationRequested);
@@ -71,7 +71,7 @@ public sealed class BusinessLanguageAndLayoutTests
         Assert.Equal(1, fixture.Diagnostics.Collections);
         Assert.Equal(0, fixture.Diagnostics.Sends);
         Assert.True(fixture.Services.HasReport);
-        fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!.SelectedIndex = 1;
+        Language(fixture.Window).SelectedIndex = 1;
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("Report saved.", fixture.Services.DiagnosticStatus);
     }
@@ -89,7 +89,7 @@ public sealed class BusinessLanguageAndLayoutTests
         var selected = fixture.Vm.SelectedServer;
         var pool = fixture.Vm.Servers.ToArray();
         var operation = controller.RunDiagnosticsAsync(false);
-        var language = fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!;
+        var language = Language(fixture.Window);
 
         foreach (var targetLanguage in new[] { initialLanguage == "en" ? "ru" : "en", initialLanguage })
         {
@@ -127,7 +127,7 @@ public sealed class BusinessLanguageAndLayoutTests
         var operation = controller.RunDiagnosticsAsync(false);
         var before = fixture.Store.SaveCount;
         fixture.Store.RejectWrites = true;
-        var language = fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!;
+        var language = Language(fixture.Window);
 
         var error = Record.Exception(() => language.SelectedIndex = initialLanguage == "en" ? 0 : 1);
         FlushLayout(fixture.Window);
@@ -169,7 +169,7 @@ public sealed class BusinessLanguageAndLayoutTests
         SetBusyState(fixture, connecting: false);
         var controller = fixture.Services;
         var selected = fixture.Vm.SelectedServer;
-        var language = fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!;
+        var language = Language(fixture.Window);
         const string warning = "Connected [split] — connection needs attention: recovery is in progress.";
         fixture.Vm.StatusText = warning;
 
@@ -210,7 +210,7 @@ public sealed class BusinessLanguageAndLayoutTests
         var controller = fixture.Services;
         var selected = fixture.Vm.SelectedServer;
         fixture.Store.RejectWrites = true;
-        fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!.SelectedIndex = 0;
+        Language(fixture.Window).SelectedIndex = 0;
         FlushLayout(fixture.Window);
         Assert.Equal("Не удалось сохранить язык.", fixture.Window.Texts.ConnectionStatus);
 
@@ -234,6 +234,8 @@ public sealed class BusinessLanguageAndLayoutTests
     {
         using var fixture = new Fixture();
         await fixture.Window.RefreshBusinessServersAsync();
+        var language = Language(fixture.Window);
+        OpenMenu(fixture.Window).Hide();
         var selector = fixture.Window.FindControl<ComboBox>("BusinessServerSelector")!;
         var slow = Assert.IsType<BusinessServerChoiceViewModel>(selector.Items[1]);
         var unavailable = Assert.IsType<BusinessServerChoiceViewModel>(selector.Items[2]);
@@ -249,7 +251,7 @@ public sealed class BusinessLanguageAndLayoutTests
         {
             foreach (var index in new[] { 1, 0, 1 })
             {
-                fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!.SelectedIndex = index;
+                language.SelectedIndex = index;
                 FlushLayout(fixture.Window);
                 Assert.True(selector.IsDropDownOpen);
                 Assert.True(slowRow.IsEffectivelyVisible);
@@ -279,7 +281,7 @@ public sealed class BusinessLanguageAndLayoutTests
         fixture.Vm.StatusText = Strings.Stopping;
         var selected = fixture.Vm.SelectedServer;
         var controller = fixture.Services;
-        var language = fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!;
+        var language = Language(fixture.Window);
 
         foreach (var index in initialLanguage == "en" ? new[] { 0, 1 } : new[] { 1, 0 })
         {
@@ -306,7 +308,7 @@ public sealed class BusinessLanguageAndLayoutTests
         fixture.Vm.StatusText = source;
         var selected = fixture.Vm.SelectedServer;
         var controller = fixture.Services;
-        var language = fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!;
+        var language = Language(fixture.Window);
 
         foreach (var index in initialLanguage == "en" ? new[] { 0, 1 } : new[] { 1, 0 })
         {
@@ -331,55 +333,63 @@ public sealed class BusinessLanguageAndLayoutTests
     [InlineData(420, "ru")]
     [InlineData(340, "en")]
     [InlineData(420, "en")]
-    public void CompactWindow_DefaultsToCollapsedDetails_AndKeepsActionsAndBottomReachable(int width, string language)
+    public void CompactWindow_KeepsSecondaryActionsInMenu_AndMainControlsReachable(int width, string language)
     {
         using var fixture = new Fixture(width, language);
         var window = fixture.Window;
-        var details = Assert.Single(window.GetVisualDescendants().OfType<Expander>());
-        Assert.False(details.IsExpanded);
+        Assert.Empty(window.GetVisualDescendants().OfType<Expander>());
         Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(),
             text => text.Text == Strings.BusinessServerHint && text.IsEffectivelyVisible);
-        Assert.True(Send(window).IsEffectivelyEnabled);
         Assert.False(fixture.Services.IsDiagnosticStatusVisible);
         Assert.False(fixture.Services.IsRefreshStatusVisible);
         var scroll = Assert.IsType<ScrollViewer>(window.Content);
         FlushLayout(window);
-        AssertInsideViewport(Send(window), scroll);
         AssertInsideViewport(ConnectionButton(fixture), scroll);
-        AssertInsideViewport(window.FindControl<ComboBox>("BusinessLanguageSelector")!, scroll);
+        AssertInsideViewport(window.FindControl<ComboBox>("BusinessServerSelector")!, scroll);
+        var menu = window.FindControl<Button>("BusinessMenuButton")!;
+        AssertInsideViewport(menu, scroll);
         Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-        details.IsExpanded = true;
-        FlushLayout(window);
-        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(),
-            text => text.Text == Strings.BusinessServerHint && text.IsEffectivelyVisible);
-        var privacy = Assert.Single(details.GetVisualDescendants().OfType<TextBlock>()
-            .Where(text => text.Text == Strings.BusinessDiagnosticsHint));
-        Assert.True(privacy.IsEffectivelyVisible);
-        var privacyPosition = privacy.TranslatePoint(default, scroll);
-        Assert.True(privacyPosition.HasValue);
-        scroll.Offset = new(0, scroll.Offset.Y + privacyPosition!.Value.Y);
-        FlushLayout(window);
-        AssertInsideViewport(privacy, scroll);
         scroll.Offset = new(0, scroll.Extent.Height);
         FlushLayout(window);
         Assert.True(scroll.Offset.Y + scroll.Viewport.Height >= scroll.Extent.Height - 1);
-        var bottom = Assert.Single(details.GetVisualDescendants().OfType<TextBlock>()
-            .Where(text => text.Text == Strings.BusinessHint));
-        Assert.True(bottom.IsEffectivelyVisible);
-        AssertInsideViewport(bottom, scroll);
-        Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-        details.IsExpanded = false;
         scroll.Offset = default;
+        var flyout = OpenMenu(window);
+        var menuScroll = window.FindControl<ScrollViewer>("BusinessMenuScroll")!;
+        Assert.True(Send(window).IsEffectivelyEnabled);
+        AssertInsideViewport(Send(window), menuScroll);
+        AssertInsideViewport(Language(window), menuScroll);
+        Assert.Equal(Strings.BusinessDiagnosticsHint, ToolTip.GetTip(Send(window)));
+        menuScroll.Offset = new(0, menuScroll.Extent.Height);
         FlushLayout(window);
-        Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(),
-            text => text.Text == Strings.BusinessServerHint && text.IsEffectivelyVisible);
-        AssertInsideViewport(Send(window), scroll);
+        Assert.True(menuScroll.Offset.Y + menuScroll.Viewport.Height >= menuScroll.Extent.Height - 1);
+        AssertInsideViewport(window.FindControl<StackPanel>("BusinessSubscriptionActions")!, menuScroll);
+        Assert.True(menuScroll.Extent.Width <= menuScroll.Viewport.Width + 1);
+        flyout.Hide();
+        FlushLayout(window);
+        AssertInsideViewport(ConnectionButton(fixture), scroll);
+        AssertInsideViewport(menu, scroll);
         // Capture closes the window, so it must follow all live-window assertions.
         ScreenshotHelper.Capture(window, $"business-compact-{language}-{width}");
     }
 
-    private static Button Send(BusinessWindow window) => Assert.Single(window.GetVisualDescendants().OfType<Button>()
-        .Where(button => AutomationProperties.GetAutomationId(button) == "BusinessDiagnosticsSend"));
+    private static Button Send(BusinessWindow window) => Assert.Single(
+        Assert.IsAssignableFrom<Control>(OpenMenu(window).Content).GetVisualDescendants().OfType<Button>()
+            .Where(button => AutomationProperties.GetAutomationId(button) == "BusinessDiagnosticsSend"));
+
+    private static ComboBox Language(BusinessWindow window)
+    {
+        OpenMenu(window);
+        return window.FindControl<ComboBox>("BusinessLanguageSelector")!;
+    }
+
+    private static Flyout OpenMenu(BusinessWindow window)
+    {
+        var button = window.FindControl<Button>("BusinessMenuButton")!;
+        var flyout = Assert.IsType<Flyout>(button.Flyout);
+        if (!flyout.IsOpen) flyout.ShowAt(button);
+        FlushLayout(window);
+        return flyout;
+    }
 
     private static Button ConnectionButton(Fixture fixture) => Assert.Single(fixture.Window.GetVisualDescendants().OfType<Button>()
         .Where(button => ReferenceEquals(button.Command, fixture.Vm.ToggleConnectionCommand)));

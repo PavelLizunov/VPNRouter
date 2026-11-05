@@ -89,6 +89,7 @@ public sealed class BusinessServerHealthTests
     public async Task ConnectingThenDisconnecting_CancelsAndDiscardsLateResultsBeforeFreshRound()
     {
         using var vm = CreateVm(out _);
+        vm.IsSplitTunnel = false;
         var firstGate = NewResult();
         var nextGate = NewResult();
         var tokens = new List<CancellationToken>();
@@ -213,7 +214,7 @@ public sealed class BusinessServerHealthTests
             var saves = store.SaveCount;
             var selected = vm.SelectedServer;
             gate = NewResult();
-            var refresh = window.FindControl<Button>("BusinessServerRefresh")!;
+            var refresh = RefreshButton(window);
             refresh.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             Assert.Equal(6, calls);
             var refreshed = window.RefreshBusinessServersAsync();
@@ -262,17 +263,35 @@ public sealed class BusinessServerHealthTests
             Assert.Equal(Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color, Assert.IsAssignableFrom<ISolidColorBrush>(dot.Fill).Color);
             var scroll = Assert.IsType<ScrollViewer>(window.Content);
             Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-            var refresh = window.FindControl<Button>("BusinessServerRefresh")!;
+            var refresh = RefreshButton(window);
             vm.IsConnecting = true;
             Assert.False(refresh.IsEffectivelyEnabled);
             Assert.All(choices, c => Assert.False(c.IsGood || c.IsWarning || c.IsBad));
             vm.IsConnecting = false;
+            OpenMenu(window).Hide();
             ScreenshotHelper.Capture(window, $"business-health-{label}-{width}");
         }
         finally { window.Close(); }
     }
 
     private static TaskCompletionSource<ServerProbeResult> NewResult() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private static Button RefreshButton(BusinessWindow window)
+    {
+        OpenMenu(window);
+        return window.FindControl<Button>("BusinessServerRefresh")!;
+    }
+
+    private static Flyout OpenMenu(BusinessWindow window)
+    {
+        var button = window.FindControl<Button>("BusinessMenuButton")!;
+        var flyout = Assert.IsType<Flyout>(button.Flyout);
+        if (!flyout.IsOpen) flyout.ShowAt(button);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        return flyout;
+    }
 
     private static MainWindowViewModel CreateVm(out InMemorySettingsStore store)
     {
