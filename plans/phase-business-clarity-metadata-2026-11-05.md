@@ -62,33 +62,38 @@ specific device when the same personal build is used on multiple computers.
 
 ## Six verification gates
 
-1. Build: PASS. Private exact0fc49877 run42025808317 succeeds, embedded first-run
-   and native split/full checks pass. App/Core/packaging are identical at5d112dc1.
-2. Tests: PASS at5d112dc1, eleven SUCCESS/two expected SKIPPED. Linux3523/79,
-   Windows3693/21, Business285/1 (passed/skipped). Existing automatic gates only
-   for the final UI correction, as requested by the owner.
-3. Docs: PASS for the0fc delivery; outcome/ledger and private receipts reconciled.
-   The later simple-activity follow-up below awaits its own CI/build evidence.
-4. Review: PASS source-only final GPT ASTRA XHIGH over all23 client delta files
-   and9 backend delta files at5d112dc1/ed59850. No new confirmed P0/P1/P2; prior
-   alias P2 closed. Actual CPU gate subsequently passed before activation.
-5. UI/live: country/load API active with four fresh entries; receiver preserves
-   all three owner reports. Owner-VM0fc installer upgrade PASS, Russian app open. No new
-   connection/Send acceptance cycles for this quick redesign per owner instruction.
-6. Characterization: PASS exact5d112dc1 Windows and existing Standard/VM contracts;
-   MainWindowViewModel/routing unchanged in this final follow-up scope.
+1. Build: PASS. Private exact ae1276b0 run42033180942 succeeds, embedded first-run
+   and native split/full checks pass. App/Core/packaging are identical at691dc21c.
+2. Tests: PASS at691dc21c, eleven SUCCESS/two expected SKIPPED. Linux3523/79,
+   Windows3693/21, Business285/1 (passed/skipped). Backend59477de: eleven SUCCESS.
+   Existing UI scenarios were adapted; no extra VM connection/Send cycles.
+3. Docs: PASS. Final outcome, ledger, private receipts and user guide reconciled.
+4. Review: PASS. Requested final GPT ASTRA XHIGH covers complete activity deltas
+   atae1276b0/624ed21, with no confirmed new P0/P1/P2. Later691dc21c/59477de changes
+   only a fixture selector/records and generated docs; product source is identical.
+5. UI/live: PASS for scoped upgrade/readiness and authenticated APIs. Owner VM
+   runs exactae1276b0 with Russian window open; account/selection/mode/language,
+   13entries/fourchoices and all three reports preserved. Backend returns four
+   fresh activity levels, Sweden High. No separate activity-UI interaction or
+   fresh VPN/dataplane/Send acceptance was run, per the owner's quick-redesign scope.
+6. Characterization: PASS at691dc21c, including existing Standard/VM contracts.
+   MainWindowViewModel/routing are unchanged in this final follow-up scope.
 
 ## Outcome
 
-Current source is5d112dc1; private installer source is0fc49877 with identical
-App/Core/packaging. Client gates and requested final review pass. Controllered59850
-is deployed and healthy; scoped metadata HTTPS returns200/schema1/four fresh
-countries/load/RAM pairs. Receiver source is updated with all owner reports and
-registry/env preserved. Owner-VM upgrade and authenticated reply endpoint
-verification PASS. The owner subsequently requests the simple-activity follow-up
-below; its source is implemented but CI/private rebuild are pending. The dated blocks below describe implementation history;
-this outcome and the final handoff receipt supersede their pending statuses.
+DELIVERED privately on2026-11-05. Installer source isae1276b0, validated by exact
+691dc21c checks with identical App/Core/packaging. Controller59477de is deployed,
+healthy and passes all eleven checks; its product matches reviewed624ed21.
+The owner VM has the new Russian app open. The main window contains connection,
+server and modes; the standard kebab holds language/diagnostics/refresh. Server
+rows show backend-owned activity bars/text instead of raw Unix load/RAM. Countries
+come from trusted local GeoIP. Both APIs and all preserved reports are verified.
 
+The private configured EXE and protected receipts are in the Activity delivery
+folder; the prior Today installer remains rollback. Task input/key/GPG and guest/
+host staging are removed; no tags, merges, public releases or configured public
+EXE uploads. The dated blocks below describe implementation history; this outcome
+and the final handoff receipts supersede their earlier pending statuses.
 
 ## First client block before CI
 
@@ -407,3 +412,48 @@ fixture selecting both the health and new activity Grids. Target the direct heal
 dot owner, preserving the oracle. Backend cargo check finds only an outdated
 generated project map before compilation. These corrections change fixture/docs,
 not productApp/Core/packaging/backendRust; private installer source remainsae1276b0.
+
+## Final activity delivery receipt
+
+Private exact ae1276b0 build42033180942: SUCCESS, embedded first-run1passed,
+native split/fullPASS. Windows hosted preflight: four CPUs/7percent load,
+13,985,672KiB available RAM,30.58GiB free disk, zero competing jobs. Installer:
+63,031,370bytes, SHA256
+6658544a0cc69cc53719968ba3f81437f7c861260f6c5bfc1ea8ea8d3636992e.
+Both task-owned pilot secrets deleted and absence verified; delivery key/GPG and
+raw private-input stage removed after authenticated API acceptance. The new source
+scan checks33private values across1481tracked files with zero matches; this is not
+an all-ref/history erasure claim. Configured installers stay private.
+
+Exact691dc21c client checks:11SUCCESS/2expectedSKIPPED, Linux3523/79,
+Windows3693/21, Business285/1. Public merge7c41c6f1 and691dc21c have identical tree
+f4a31131c2e68a6c9f3529bea6b6e5a6d07768b1. New340/420RU/EN synthetic captures are
+retrieved, inspected and shown. Source recheck covers all11client and10backend
+activity files, with no confirmed new P0/P1/P2; remaining coverage limits stay open.
+
+Backend exact59477de: all11checksSUCCESS, same product as reviewed624ed21. Actual
+VM119 version gates pass before activation; deployed at13:26UTC in1.87seconds,
+health200/0.9.0+59477de, active, restarts0, running executable matches installed,
+all30binary/asset digests match. No migration, Caddy reload, node probe or liveDB
+restore. Protected rollback is previoused59850; existing legacy byte regressions
+pass and legacy config was not refetched. Real authenticated HTTPS:200/schema1,
+four nodes/four fresh, activityLow1/Medium2/High1/Unknown0, uniqueSEnodeHigh,
+strictnine-fieldDTO and no-store/nosniff/no-referrerPASS. Policy uses approximately
+one day of observed traffic with coverage/freshness checks, not saturation.
+
+Owner-VM upgrade/readiness/cleanup completes13:28:39UTC: exactae1276b0, setup0,
+graceful tray Exit through its verified native menu, no process kill. Installed
+DLL SHA25676563f18e86370fa1ce9ef22811b9a6858efaa632e1894667ad2ead6a75a875b.
+A fresh diagnostics-idle check and preservation snapshot precede shutdown.
+Account/selection/mode/Russian,13entries/fourchoices and all3owner reports remain
+byte/hash-preserved. Russian main/menu visible; core/TUN zero; no new VPN
+connections, Collect or Send calls. A task-only stale startup UIA handle was
+corrected by a fresh process lookup, without reinstall or extra acceptance cycle.
+Guest task/stage and host shared stage removed; VM/app/RDP intentionally left open.
+
+Gemini is not configured and received no real reports. The stable authenticated
+server reply channel is live; existing receipt GETs default to unavailable while
+upload acknowledgement remains valid. UIS, sustained memory, every rule/DNS/UDP,
+other-node/office acceptance and the separately observed added-node VLESS EOF are
+not claimed fixed or verified by this delivery. Previous two-node split/full,
+restart and cleanup evidence remains scoped to the earlier installed build.
