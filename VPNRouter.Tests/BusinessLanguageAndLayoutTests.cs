@@ -32,14 +32,14 @@ public sealed class BusinessLanguageAndLayoutTests
         var before = fixture.Vm.SelectedServer;
         var controller = fixture.Services;
         var language = Language(window);
-        Assert.Equal("Send", Send(window).Content);
+        Assert.Equal("Send diagnostics", Send(window).Content);
         var saves = fixture.Store.SaveCount;
         language.SelectedIndex = 0;
         Dispatcher.UIThread.RunJobs();
         Assert.True(fixture.Vm.IsRussian);
         Assert.True(fixture.Store.SaveCount > saves);
         Assert.Equal("ru", fixture.Store.Load(AppPaths.ConfigYamlPath).App.Language);
-        Assert.Equal("Отправить", Send(window).Content);
+        Assert.Equal("Отправить диагностику", Send(window).Content);
         Assert.Equal("Сервер VPN", AutomationProperties.GetName(selector));
         Assert.Equal("Исландия", choice.CountryName);
         Assert.Equal("12 мс", choice.PingText);
@@ -49,7 +49,7 @@ public sealed class BusinessLanguageAndLayoutTests
         Assert.False(fixture.Vm.IsSplitTunnel);
         language.SelectedIndex = 1;
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal("Send", Send(window).Content);
+        Assert.Equal("Send diagnostics", Send(window).Content);
         Assert.Equal("Iceland", choice.CountryName);
         Assert.Equal("en", fixture.Store.Load(AppPaths.ConfigYamlPath).App.Language);
     }
@@ -489,7 +489,12 @@ public sealed class BusinessLanguageAndLayoutTests
             FlushLayout(Window);
         }
 
-        public void Dispose() { Window.Close(); Vm.Dispose(); _client.Dispose(); Strings.Lang = _previousLanguage; }
+        public void Dispose()
+        {
+            Window.FindControl<Button>("BusinessMenuButton")?.Flyout?.Hide();
+            Dispatcher.UIThread.RunJobs();
+            Window.Close(); Vm.Dispose(); _client.Dispose(); Strings.Lang = _previousLanguage;
+        }
     }
 
     private sealed class RejectingSettingsStore : ISettingsStore

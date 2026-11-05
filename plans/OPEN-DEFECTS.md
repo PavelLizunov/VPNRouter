@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CONFIRMED CI LABEL FIXTURE ERROR** - BUSINESS-KEBAB-TEST-LABEL: current0fc49877 uses deliberate full Send diagnostics/Отправить диагностику menu labels, while one existing language fixture still expects old short labels. Update those three literals without adding scenarios. The same job also reports a headless cross-dispatcher cleanup failure during isolated application setup; explicitly close the fixture-owned flyout before its window, and do not claim a confirmed application-threading defect.
+
 - [ ] **P2 CONFIRMED PREACTIVATION ARTIFACT FAILURE** - VPNCTL-CANDIDATE-CPU-BASELINE: generic candidate1fafc61 Rust binaries SIGILL on actualVM119 (noAVX), resolved offline to aws_lc_0_45_0_OPENSSL_cpuid_setup AVX vmovd. Installed662b411 remains active; candidate not installed. Workflowed59850 forces Rust/C baseline and adds AVX-less QEMU version gate. Exact replacement CI/VM-version acceptance pending; no CPU/security config workaround.
 
 - [ ] **P2 OWNER-CONFIRMED FEATURE GAP** - BUSINESS-CONNECTED-SPLIT-PING: BusinessServerHealthMonitor disables and clears TCP reachability whenever IsConnected, including split mode. Owner explicitly requests visible periodic ping while connected in split mode. Permit stable connected split probing, keep transitions/full-mode cancellation and no selection/settings mutation; no additional UI test cases per owner steering.

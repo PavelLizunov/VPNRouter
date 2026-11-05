@@ -281,3 +281,10 @@ A current exact-value check of task-owned recovered credential/reference/endpoin
 values finds zero matches in the current tracked tree and new source. Raw inputs,
 receipts and configured installers remain private. This is not an all-ref/history
 erasure claim.
+
+CI0fc49877 product build and receiver checks pass. The Business fixture retains
+three old short Send labels after intentional kebab wording; correct only those
+literals. One separate headless cleanup exception occurs in isolated-app setup,
+not application code. Close the language fixture-owned flyout before its window
+and drain its dispatcher. No new test cases, product change or private rebuild
+is required for this fixture-only correction; installer source remains0fc49877.
