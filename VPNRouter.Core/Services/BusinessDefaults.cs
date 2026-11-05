@@ -61,8 +61,38 @@ internal static class BusinessDefaults
             throw new InvalidDataException("Business server names must be nonempty and unique.");
         if (GetServerChoices(servers).Count == 0)
             throw new InvalidDataException("Business pilot requires a usable VLESS connection.");
+        foreach (var server in servers) ValidateProtocolFields(server);
         return servers;
     }
+
+    private static void ValidateProtocolFields(VlessServerEntry server)
+    {
+        var valid = !string.IsNullOrWhiteSpace(server.Server) && server.Port is > 0 and <= 65535;
+        valid &= (server.Protocol ?? "vless").ToLowerInvariant() switch
+        {
+            "vless" => !string.IsNullOrWhiteSpace(server.Uuid) &&
+                (string.Equals(server.Security, "tls", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(server.Security, "none", StringComparison.OrdinalIgnoreCase) ||
+                 (string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase) &&
+                  VlessUriParser.IsValidRealityPublicKey(server.Reality?.PublicKey) &&
+                  VlessUriParser.IsValidRealityShortId(server.Reality?.ShortId))),
+            "hysteria2" => !string.IsNullOrWhiteSpace(server.Password),
+            "tuic" => !string.IsNullOrWhiteSpace(server.Uuid),
+            "shadowsocks" => !string.IsNullOrWhiteSpace(server.Method) && !string.IsNullOrWhiteSpace(server.Password) &&
+                (!server.Method.StartsWith("2022-blake3-", StringComparison.OrdinalIgnoreCase) ||
+                 LeakProtection.IsValidSs2022Key(server.Method, server.Password)),
+            "amneziawg" => server.Awg != null &&
+                IsValid32ByteKey(server.Awg.PrivateKey) &&
+                IsValid32ByteKey(server.Awg.PeerPublicKey) &&
+                server.Awg.Address.Count > 0 && server.Awg.Address.All(a => !string.IsNullOrWhiteSpace(a)) &&
+                (string.IsNullOrEmpty(server.Awg.PresharedKey) || IsValid32ByteKey(server.Awg.PresharedKey)),
+            _ => true
+        };
+        if (!valid) throw new InvalidDataException("Business endpoint lacks valid required protocol fields.");
+    }
+
+    private static bool IsValid32ByteKey(string value) =>
+        !string.IsNullOrEmpty(value) && VlessUriParser.TryDecodeBase64Url(value, out var bytes) && bytes.Length == 32;
 
     internal static VlessConfig CreateServerPool(List<VlessServerEntry> servers, VlessConfig? previous)
     {

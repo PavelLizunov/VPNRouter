@@ -76,25 +76,30 @@ servers and ask whether vpnctl can supply server load.
 
 ## Six verification gates
 
-1. Build: PENDING; exact-source Release solution and private Business packaging.
-2. Tests: PENDING; focused UI/service/parser/upload cases plus full Linux/Windows
+1. Build: public Release PASS at b851c667; private packaging validation FAIL in run
+   41934741893, correction pending. No new binary deployed.
+2. Tests: public PASS at b851c667 (Linux 3348/79 skipped, Windows 3518/21,
+   Business 110/1); new review regressions pending. Focused cases plus full suites
    suites. Cover fourth-node arrival, invalid/empty/failure retention, selection
    and cache restart, busy-state races/cancellation, all variants, unknown geo,
    diagnostics success/refusal/retry/cancel and no automatic upload.
-3. Docs: PENDING; update Business guide/private-input contract and this Outcome.
-4. Review: IN PROGRESS; correctness/lifetime, security/trust, and tests/UI
-   independent reviewers are authorized by the later owner instruction. No
-   reviewer builds, mutates workers, changes files or recursively delegates.
-5. UI/live: PENDING; synthetic 340/420 renders and actual owner-guest subscription
+3. Docs: source PASS; Business guide/private-input contract updated; final live
+   outcome remains pending.
+4. Review: three independent source reviews complete and corrected findings
+   rechecked. Requested GPT ASTRA XHIGH review at b851c667 finds one additional
+   confirmed P2, now under correction. No reviewer builds, mutates workers or
+   recursively delegates; four regression files were contributed under disjoint scope.
+5. UI/live: synthetic 340/420 renders PASS at b851c667; actual owner-guest subscription
    update to four choices, diagnostic send with independent receiver receipt,
    choice/restart, two-node split/full routing and TUN/core cleanup. No desktop
    screenshot; preserve the owner's data and leave the app usable.
-6. Characterization: PENDING; preserve shared ViewModel public-surface baseline
+6. Characterization: PASS at b851c667; shared ViewModel public-surface baseline
    and standard UI/engine behavior; no unrelated mechanical refactor.
 
 ## Outcome
 
-- Status: IMPLEMENTED / CI PENDING; installed binary is still unchanged.
+- Status: IMPLEMENTED / FINAL REVIEW CORRECTION; installed binary is still 0079ee82.
+  Public CI at b851c667 passes eleven applicable checks; private validation failed.
 - Private subscription probe is evidence of current server data, not proof that
   the existing application refreshed it. Existing installer remains 0079ee82.
 - UIS, every rule/DNS/UDP path, third/fourth-node dataplane, office calls and
@@ -198,3 +203,37 @@ The partial file lacked using VPNRouter.Core; add that namespace only. The
 failure was recorded before correction. Runtime/UI tests remain unexecuted for
 this snapshot; repeat all applicable checks at the correction head. No installer
 was rebuilt or deployed from the failing source.
+
+
+## Final review correction and private packaging diagnosis
+
+- The exact b851c667 public gate is confirmed: eleven SUCCESS and two expected
+  private SKIPPED. Linux 3348 passed/79 skipped; Windows full 3518/21; Business
+  110/1. Build, native collector bridge, synthetic widths and characterization
+  pass. UI workflow 41933092304 and full tests 41933092273 are snapshot evidence.
+- The requested GPT ASTRA XHIGH final review completed read-only across the full
+  41-file follow-up. It confirms one P2: Reality without a valid public key can
+  parse, replace/cache the working pool, then fail LeakProtection on connection
+  and bypass embedded fallback after restart. No new P0/P1 was reported. Record
+  BUSINESS-REFRESH-PROTOCOL-FIELDS before correction; validate required fields in
+  the shared Business pool parser before mutation or startup cache acceptance.
+- Added regressions for Reality key length/encoding, short IDs, unsupported
+  security and malformed backing credentials. The consumer test drives HTTP and
+  the real service/VM, asserts no row/selection/save/disk-cache mutation, rejects
+  direct bypass, then repeats actual file-backed bootstrap. A previously cached
+  malformed Reality response must use the embedded fallback. Tests await CI.
+- Private run 41934741893 at b851c667 compiled the installer but failed first-run
+  strict response validation. Source diagnosis: native capability discovery looks
+  in the test output/fresh data tree, while the verified fork core is in payload/app;
+  four AWG rows are filtered, causing the strict 13-row count mismatch. Probe the
+  actual payload core version/tags for scoped test capability settings, restoring
+  prior values. Do not enable features blindly or change product runtime policy.
+- The same private fixture reload can emit active labels through SettingsLoader
+  Console/Error and Serilog summaries on failure. Record before correction, quiet
+  only secret-bearing validation and restore both sinks exactly. No raw input or
+  raw build log is published; ephemeral private build secrets removed and absence
+  verified. No installer from the failed run was delivered or installed.
+- Review acceptance limits remain: exact-source live upload/fourth-node/dataplane
+  pending; recognized advertised countries only, unknown for opaque labels; load
+  requires the documented grant-scoped backend API. UIS and sustained memory
+  acceptance remain separate. Repeat final Astra review on corrected source.
