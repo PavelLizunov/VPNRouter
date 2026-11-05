@@ -396,3 +396,14 @@ assembly execution; SHA256 matches the earlier input receipt. Managed resources
 are length-prefixed without the initially assumed alignment; no input values or
 raw assembly were printed. The new private build must remove its task-owned
 secrets/key/staging after retrieval while retaining configured private delivery.
+
+## Activity recheck and fixture-only CI correction
+
+Final GPT ASTRA XHIGH atae1276b0/624ed21 reviews the complete11client/10backend
+file deltas and reports no confirmed new P0/P1/P2. Seven independent HTTP tests
+contain17datasets; malformed timestamp/noninteger/excess-bucket branches remain a
+recorded nonblocking coverage limit. Existing CI then finds an old health-tooltip
+fixture selecting both the health and new activity Grids. Target the direct health
+dot owner, preserving the oracle. Backend cargo check finds only an outdated
+generated project map before compilation. These corrections change fixture/docs,
+not productApp/Core/packaging/backendRust; private installer source remainsae1276b0.

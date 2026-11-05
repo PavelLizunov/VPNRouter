@@ -407,7 +407,9 @@ public sealed class BusinessLanguageAndLayoutTests
     private static void AssertHealthTooltip(ComboBoxItem row, string expected, string connectionStatus)
     {
         var tooltipOwner = Assert.Single(row.GetVisualDescendants().OfType<Grid>()
-            .Where(grid => ToolTip.GetTip(grid) is string));
+            .Where(grid => ToolTip.GetTip(grid) is string &&
+                grid.Children.OfType<Avalonia.Controls.Shapes.Ellipse>()
+                    .Any(dot => dot.Classes.Contains("business-health-dot"))));
         Assert.Equal(expected, ToolTip.GetTip(tooltipOwner));
         Assert.NotEqual(connectionStatus, ToolTip.GetTip(tooltipOwner));
     }

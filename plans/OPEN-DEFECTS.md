@@ -16,6 +16,12 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CONFIRMED CI FIXTURE ERROR** - BUSINESS-ACTIVITY-TOOLTIP-FIXTURE: ae1276b0 adds an activity tooltip Grid, so the existing health test's generic tooltip-Grid Single assertion finds two owners. Select the Grid that directly owns the health dot; retain the expected per-row health and non-connection-status assertions. No product defect or private rebuild. Task plans/phase-business-clarity-metadata-2026-11-05.md.
+
+- [ ] **P2 CONFIRMED CI GENERATED-DOC ERROR** - VPNCTL-ACTIVITY-INVENTORY-MAP: cargo check at624ed21 fails before Rust checking because docs/CODEBASE_INVENTORY.md is stale after two new Rust files. Regenerate with the existing project-map script; no backend product source change. Task plans/phase-business-clarity-metadata-2026-11-05.md.
+
+- [ ] **P3 NONBLOCKING ACTIVITY COVERAGE LIMIT** - BUSINESS-ACTIVITY-INVALID-BUCKET-BRANCHES: final GPT ASTRA XHIGH atae1276b0/624ed21 finds no confirmed new P0/P1/P2 but notes no dedicated malformed timestamp/noninteger/excess-bucket cases in the seven new backend HTTP tests. Source guards are reviewed; defer extra cases from the owner-timeboxed UI correction. Task plans/phase-business-clarity-metadata-2026-11-05.md.
+
 - [ ] **P2 OWNER-CONFIRMED USABILITY GAP** - BUSINESS-RAW-METRICS-UX: installed0fc49877 shows raw Unix load and RAM percentages to novice users. Owner requests one simple indicator and confirms high Swedish daily traffic. Replace numeric UI with backend-defined activity_level (low/medium/high/unknown) based on reset-safe rolling24h traffic, explicitly activity rather than network saturation; no client thresholds or fixed country override. Missing/stale/invalid data stays unknown. Task plans/phase-business-clarity-metadata-2026-11-05.md.
 
 - [x] **P2 RESOLVED DEPLOYMENT SCRIPT ERROR** - BUSINESS-CADDY-ACTIVATION-MODE: Private staging mode0600 propagated into live Caddy config, so root validation passed but the caddy-user reload failed. Restored the old config, preserved live owner/mode during replacement, then validated/reloaded successfully; real metadata HTTPS200. No route outage. RESOLVED v2.50.5 delivery. Task plans/phase-business-clarity-metadata-2026-11-05.md.
