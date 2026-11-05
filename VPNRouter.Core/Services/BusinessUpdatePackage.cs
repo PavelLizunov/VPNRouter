@@ -40,9 +40,10 @@ internal static class BusinessUpdatePackage
         foreach (var entry in archive.Entries)
         {
             var name = entry.FullName;
-            if (!IsPayloadPath(name) || !names.Add(name.TrimEnd('/')) ||
-                ((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000)
-                throw InvalidPackage();
+            if (!IsPayloadPath(name))
+                throw InvalidPackage(name.Contains('\\') ? "archive_separator" : "archive_path");
+            if (!names.Add(name.TrimEnd('/'))) throw InvalidPackage("archive_alias");
+            if (((entry.ExternalAttributes >> 16) & 0xF000) == 0xA000) throw InvalidPackage("archive_link");
             if (entry.Length < 0 || entry.Length > MaxExpandedBytes - expanded)
                 throw InvalidPackage();
             expanded += entry.Length;
@@ -247,6 +248,7 @@ internal static class BusinessUpdatePackage
         if (markers != 1) throw InvalidPackage();
     }
 
-    private static InvalidOperationException InvalidPackage() =>
-        new("The package is not a credential-free Windows Business update for the requested version.");
+    private static InvalidOperationException InvalidPackage(string? reason = null) =>
+        new("The package is not a credential-free Windows Business update for the requested version." +
+            (reason == null ? string.Empty : " Code=" + reason));
 }

@@ -44,7 +44,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $app 'vpnrouter-business-update.json'), ($receipt | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 
     $zip = Join-Path $output "VPNRouterBusiness-update-v$version-win-x64.zip"
-    Compress-Archive -LiteralPath $app -DestinationPath $zip -CompressionLevel Optimal
+    [IO.Compression.ZipFile]::CreateFromDirectory($app, $zip, [IO.Compression.CompressionLevel]::Optimal, $true)
     $env:VPNROUTER_BUSINESS_SHARED_UPDATE_ZIP = $zip
     & dotnet test (Join-Path $root 'VPNRouter.Tests\VPNRouter.Tests.csproj') -c Release --filter 'FullyQualifiedName~BusinessUpdatePackagingContractTests' --logger 'console;verbosity=minimal'
     if ($LASTEXITCODE -ne 0) { throw 'Shared Business package identity/resource validation failed; do not distribute outputs.' }
