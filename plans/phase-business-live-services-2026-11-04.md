@@ -76,36 +76,52 @@ servers and ask whether vpnctl can supply server load.
 
 ## Six verification gates
 
-1. Build: public Release PASS at b851c667; private packaging validation FAIL in run
-   41934741893, correction pending. No new binary deployed.
-2. Tests: public PASS at b851c667 (Linux 3348/79 skipped, Windows 3518/21,
-   Business 110/1); new review regressions pending. Focused cases plus full suites
-   suites. Cover fourth-node arrival, invalid/empty/failure retention, selection
-   and cache restart, busy-state races/cancellation, all variants, unknown geo,
-   diagnostics success/refusal/retry/cancel and no automatic upload.
-3. Docs: source PASS; Business guide/private-input contract updated; final live
-   outcome remains pending.
-4. Review: three independent source reviews complete and corrected findings
-   rechecked. Requested GPT ASTRA XHIGH review at b851c667 finds one additional
-   confirmed P2, now under correction. No reviewer builds, mutates workers or
-   recursively delegates; four regression files were contributed under disjoint scope.
-5. UI/live: synthetic 340/420 renders PASS at b851c667; actual owner-guest subscription
-   update to four choices, diagnostic send with independent receiver receipt,
-   choice/restart, two-node split/full routing and TUN/core cleanup. No desktop
-   screenshot; preserve the owner's data and leave the app usable.
-6. Characterization: PASS at b851c667; shared ViewModel public-surface baseline
-   and standard UI/engine behavior; no unrelated mechanical refactor.
+1. Build: PASS at exact 2b543cd8; public Release/API gates and private packaging
+   run 41939228794, including native split/full configuration checks.
+2. Tests: PASS; Linux 3364 passed/79 skipped, Windows full 3534/21, Business
+   126/1, including sixteen protocol/consumer/restart regressions. The private
+   first-run validation passes 1/0; all thirteen backing rows retained.
+3. Docs: PASS; Business guide/private-input contract and observed outcome updated.
+4. Review: PASS; three independent source lenses and requested final GPT ASTRA
+   XHIGH review/recheck. Its Reality P2 is corrected and source-confirmed closed;
+   recheck finds no new confirmed P0/P1/P2. AWG synthetic boundary cases remain
+   a recorded nonblocking coverage follow-up.
+5. UI/live: PASS for scoped client flows; synthetic 340/420 renders, four choices,
+   live/manual refresh, same-account upgrade, collection/explicit delivery with
+   independent receiver receipt, cancel/open folder, restart, two retained nodes
+   through split/full/split and TUN/core cleanup. The newly added host separately
+   FAILS its VLESS/HTTPS path with EOF; cause undetermined, ledger entry open.
+6. Characterization: PASS at exact 2b543cd8; shared ViewModel public surface and
+   Standard UI/engine gates remain intact.
 
 ## Outcome
 
-- Status: IMPLEMENTED / FINAL REVIEW CORRECTION; installed binary is still 0079ee82.
-  Public CI at b851c667 passes eleven applicable checks; private validation failed.
-- Private subscription probe is evidence of current server data, not proof that
-  the existing application refreshed it. Existing installer remains 0079ee82.
-- UIS, every rule/DNS/UDP path, third/fourth-node dataplane, office calls and
-  sustained memory behavior remain separate acceptance limits.
-- No merge, tag or public release is authorized. The prepared brief requires
-  its exact-head CI gate before the implementation block.
+- Status: IMPLEMENTED AND PRIVATELY INSTALLED on the owner's selected Windows VM.
+  Installed source is 2b543cd8d6314f87e22966235ab2eb9177cf1a81; the final records
+  commit requires its own public CI. No product rebuild is needed for records.
+- Four physical choices and thirteen backing entries are visible/persisted;
+  startup and manual source updates acknowledge four. Country names/flags use
+  recognized advertised labels; opaque labels visibly remain unknown. This is
+  partial advertised-country coverage, not independent geolocation. Server load
+  is not implemented; the documented grant-scoped vpnctl API is still required.
+- Diagnostics collect locally, and only explicit Send uploads. Independent
+  receiver observation sees zero reports through startup/manual refresh/local
+  collection, then one after Send. Archive hash/marker/employee mapping match.
+- Two retained hosts pass three split/full/split cycles, immediate save/full
+  restart, generated TCP host, representative IPv4 HTTPS routing, control guards
+  and complete TUN/core teardown. Original choice/mode restored; app left open,
+  VPN off, normal VM viewing window active, requested SSH access retained.
+- The new fourth host is first in the refreshed provider order. Two attempts on
+  it fail; the instrumented retry reports curl TLS exit 35, and native logs show
+  VLESS outbound EOF. Retained VLESS fields compare unchanged. This proves the
+  added host is listed, not that its VPN path works or that this is a client bug.
+- UIS, sustained memory, every routing/DNS rule, UDP dataplane, the other retained
+  host and real office reachability remain unverified. Existing memory findings
+  are unchanged. No merge, tag or public release is requested.
+- [Sanitized owner-VM result](business-live-services-owner-vm-2026-11-05.json)
+  records passing client flows and the new-host failure separately. Private
+  installer/checklist/receipts and task-only executed verifier sources remain in
+  protected delivery storage; no live desktop screenshots or raw logs are public.
 
 ## Implementation block
 
@@ -237,3 +253,84 @@ was rebuilt or deployed from the failing source.
   pending; recognized advertised countries only, unknown for opaque labels; load
   requires the documented grant-scoped backend API. UIS and sustained memory
   acceptance remain separate. Repeat final Astra review on corrected source.
+
+
+## Corrected-source gates and requested Astra recheck
+
+- Exact 2b543cd8d6314f87e22966235ab2eb9177cf1a81 passes eleven applicable
+  public checks and two expected private skips: Linux 3364 passed/79 skipped,
+  Windows full 3534/21, Business 126/1. All sixteen added protocol/consumer/
+  restart cases pass. Runs 41938144975 and 41938145033; shared API remains intact.
+- A new isolated GPT ASTRA XHIGH review of all five correction files plus their
+  current callers confirms the prior Reality P2 closed in source, meaningful
+  service/HTTP/VM/disk/restart coverage, no confirmed fixture defect and no new
+  confirmed P0/P1/P2. No builds, private input reads, remote mutations or tests
+  were performed by that reviewer. AWG guard boundary fixtures are recorded as
+  a nonblocking coverage follow-up, not an observed product failure.
+- Private exact-source run 41939228794 succeeds. Preflight: four logical CPUs,
+  7 percent CPU load, 14069756 KiB available RAM, 30.55 GiB free disk and zero
+  competing jobs. Actual native-core capability inspection permits all thirteen
+  rows; private first-run fixture passes 1/0 skipped. Native split/full config
+  checks both PASS. No controller/owner-machine build or SDK install occurred.
+- Encrypted-only artifact retrieved/decrypted privately, source and SHA checked.
+  Installer: 63013276 bytes; SHA256
+  59e95f97372a159b38d5c5c2dee957d4748cc4c28060d636c88da34ac4fb1cbd.
+  Both ephemeral GitHub build inputs were removed and absence verified; isolated
+  GPG agent/home and delivery key removed. Configured EXE remains private.
+- Owner guest preflight: eight logical CPUs, 1 percent load, 13954 MiB available
+  RAM, 101 MiB page-file use, 38.96 GiB free C:, zero competing build jobs,
+  no app/core/TUN. Upgrade exits 0 and installed product metadata matches exact
+  2b543cd8. Host shared-copy and guest-stage installer hashes match. No guest or
+  host resource/UAC/VM lifecycle change. Interactive live acceptance is completed below.
+
+
+## Exact installer live acceptance and cleanup
+
+- In-place upgrade exits 0, same corporate account and original choice/mode are
+  privately compared, and installed product metadata matches exact 2b543cd8.
+  The full source-bound cache contains thirteen rows/four physical VLESS choices.
+  Actual UIA checks all four selectable labels in one popup, acknowledges manual
+  live list refresh, sees advertised country/unknown labels and port status, and
+  confirms Collect/Send visible and enabled.
+- Actual in-app collection emits one 10368-byte allowlisted ZIP with the owned
+  synthetic marker and without the synthetic password. Receiver count is zero
+  before and after startup/manual refresh/local collection. Explicit Send shows
+  delivery acknowledgement; independent receiver validation matches archive
+  SHA256 27d3befc9a70fd31cbb7c13d57898b29a738437dfcc2acc6e2199bc5287af8db,
+  marker, absence of the synthetic secret and existing employee association.
+- A new collection after full restart, collection cancellation retaining the
+  previous ZIP, and opening its actual Explorer folder all pass. Only the newly
+  opened test folder window is closed. No automatic upload is introduced.
+- Initial first-row regression attempts exercise the newly added host, which is
+  first in provider order. Both stop at selected-process HTTPS/VLESS EOF; the
+  instrumented retry records curl TLS exit 35. Cleanup passes after each. The
+  task verifier now explicitly resolves two retained physical hosts from the
+  prior settings, while still validating all four UI choices. This separates
+  existing-client regression evidence from the new host's unresolved availability.
+- Three cycles on retained hosts pass: split on original host one, full and split
+  on original host two. Selection saves before connect and survives full process
+  termination/relaunch. Generated proxy host matches selection, controls disable
+  while connected, ordinary IPv4 HTTPS is Direct in split and the Telegram-named
+  probe is Proxy, both are Proxy in full, with distinct VPN egress between hosts.
+  All stops remove TUN/core; prior mode/choice restored.
+- A first final-readiness adapter stopped on early UIA FromHandle during app
+  startup. Bounded provider-readiness retry then passes on the same installed
+  binary. This changes only the private task helper. Final same-session UIA
+  confirms visible enabled selector/Send and live four-server acknowledgement.
+- Removed all five task UI jobs, guest installer/verifier/backup staging, private
+  support-identity recovery stage, owned synthetic log and three local report
+  directories. No recent collector temporary stage remains. Removed only the
+  independently verified test receipt/archive at the receiver. App/data/SSH and
+  private delivery remain deliberately; app runs with VPN off and no TUN/core.
+  Headless RDP service is stopped; the normal owner viewing window is active.
+- Confidential input audit: eighteen recovered credential/reference values and
+  four endpoint values match no current path across 1469 files. Fourteen PR/base
+  snapshots, 1511 unique blobs, contain no matching credential/reference values;
+  endpoint matches are confined to the four already documented historical
+  fixture/plan paths. Those current files are sanitized; public history is not
+  rewritten. Failed/successful private CI logs have no matched recovered values
+  or private labels. This does not scan every ref or external copy.
+- Both ephemeral GitHub build inputs remain absent. Isolated GPG agent/home and
+  key are gone. Task controller raw input/log/config staging is removed after
+  retaining only private configured delivery, sanitized receipts and verifier
+  sources. Harness/Omarchy/guest received no SDK or project build.

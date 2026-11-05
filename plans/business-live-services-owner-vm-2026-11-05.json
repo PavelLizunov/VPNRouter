@@ -1,0 +1,189 @@
+{
+  "Source": "2b543cd8d6314f87e22966235ab2eb9177cf1a81",
+  "InstallerSha256": "59e95f97372a159b38d5c5c2dee957d4748cc4c28060d636c88da34ac4fb1cbd",
+  "InstallerBytes": 63013276,
+  "PrivateBuildRun": 41939228794,
+  "Target": "owner-selected Windows VM",
+  "Prepare": {
+    "Source": "2b543cd8d6314f87e22966235ab2eb9177cf1a81",
+    "Action": "Prepare",
+    "Stages": {
+      "Window": "PASS",
+      "Pool": "PASS",
+      "Upgrade": "PASS",
+      "LiveSubscription": "PASS",
+      "CountryLabels": "PASS",
+      "Health": "PASS",
+      "DiagnosticsVisible": "PASS",
+      "DiagnosticCollect": "PASS"
+    },
+    "Cycles": [],
+    "Failure": null,
+    "Cleanup": "PASS",
+    "EntryCount": 13,
+    "ChoiceCount": 4,
+    "SameAccount": true,
+    "UpgradeChoiceModeRetained": true,
+    "CountryLabelsVisible": true,
+    "CountryUnknownVisible": true,
+    "ArchiveAllowlist": true,
+    "SyntheticMarkerFound": true,
+    "SyntheticSecretAbsent": true,
+    "ReportSha256": "27d3befc9a70fd31cbb7c13d57898b29a738437dfcc2acc6e2199bc5287af8db",
+    "ReportBytes": 10368,
+    "InstalledSourceVerified": true,
+    "AppReady": true
+  },
+  "ExplicitSend": {
+    "Source": "2b543cd8d6314f87e22966235ab2eb9177cf1a81",
+    "Action": "Send",
+    "Stages": {
+      "Window": "PASS",
+      "Pool": "PASS",
+      "DiagnosticSend": "PASS"
+    },
+    "Cycles": [],
+    "Failure": null,
+    "Cleanup": "PASS",
+    "EntryCount": 13,
+    "ChoiceCount": 4,
+    "ReportSha256": "27d3befc9a70fd31cbb7c13d57898b29a738437dfcc2acc6e2199bc5287af8db",
+    "ReportBytes": 10368,
+    "LocalCopyRetained": true,
+    "InstalledSourceVerified": true,
+    "AppReady": true
+  },
+  "Receiver": {
+    "ReceiverIdentityVerified": true,
+    "IdentityReportCount": 1,
+    "ArchiveHashMatches": true,
+    "SyntheticMarkerFound": true,
+    "SyntheticSecretAbsent": true,
+    "EmployeeMappingVerified": true,
+    "ReceivedUtc": "2026-11-05T00:21:42Z",
+    "Bytes": 10368
+  },
+  "NoAutoUploadObservation": {
+    "Before": 0,
+    "AfterStartupManualRefreshAndLocalCollection": 0
+  },
+  "Regression": {
+    "Source": "2b543cd8d6314f87e22966235ab2eb9177cf1a81",
+    "Action": "Run",
+    "Stages": {
+      "Window": "PASS",
+      "Pool": "PASS",
+      "Baseline": "PASS",
+      "HealthAfterStop1": "PASS",
+      "RestartPersistence": "PASS",
+      "HealthAfterStop2": "PASS",
+      "HealthAfterStop3": "PASS",
+      "ThreeCycles": "PASS"
+    },
+    "Cycles": [
+      {
+        "Mode": "split",
+        "RepresentativeHttps": "PASS",
+        "RetainedNodeIndex": 1,
+        "Controls": "PASS",
+        "SelectedExpected": true,
+        "UnselectedExpected": true,
+        "Cycle": 1,
+        "Lifecycle": "PASS",
+        "GeneratedTcpHost": "PASS",
+        "ChoiceIndex": 2
+      },
+      {
+        "Mode": "full",
+        "RepresentativeHttps": "PASS",
+        "RetainedNodeIndex": 2,
+        "Controls": "PASS",
+        "SelectedExpected": true,
+        "UnselectedExpected": true,
+        "Cycle": 2,
+        "Lifecycle": "PASS",
+        "GeneratedTcpHost": "PASS",
+        "ChoiceIndex": 3
+      },
+      {
+        "Mode": "split",
+        "RepresentativeHttps": "PASS",
+        "RetainedNodeIndex": 2,
+        "Controls": "PASS",
+        "SelectedExpected": true,
+        "UnselectedExpected": true,
+        "Cycle": 3,
+        "Lifecycle": "PASS",
+        "GeneratedTcpHost": "PASS",
+        "ChoiceIndex": 3
+      }
+    ],
+    "Failure": null,
+    "Cleanup": "PASS",
+    "EntryCount": 13,
+    "ChoiceCount": 4,
+    "ExercisedRetainedNodes": true,
+    "LastProbe": "SelectedProcess",
+    "LastCurlExitCode": 0,
+    "LastCurlErrorClass": "None",
+    "InstalledSourceVerified": true,
+    "AppReady": true
+  },
+  "RemainingActions": {
+    "Source": "2b543cd8d6314f87e22966235ab2eb9177cf1a81",
+    "Action": "Actions",
+    "Stages": {
+      "Window": "PASS",
+      "CollectAfterRestart": "PASS",
+      "CancelCollection": "PASS",
+      "OpenReportFolder": "PASS"
+    },
+    "Cycles": [],
+    "Failure": null,
+    "Cleanup": "PASS",
+    "OwnedReportDirectories": 2,
+    "AppReady": true
+  },
+  "FinalReadiness": {
+    "Source": "2b543cd8d6314f87e22966235ab2eb9177cf1a81",
+    "Ready": true,
+    "SameInteractiveSession": true,
+    "VpnOff": true,
+    "CoreAbsent": true,
+    "TunAbsent": true,
+    "SelectorVisibleEnabled": true,
+    "LiveListFourAcknowledged": true,
+    "WindowPresent": true,
+    "SendVisibleEnabled": true
+  },
+  "Cleanup": {
+    "AppLeftRunning": true,
+    "ConfiguredAppDataRetained": true,
+    "TaskGuestStageRemoved": true,
+    "PrivateSupportRecoveryStageRemoved": true,
+    "VpnOff": true,
+    "TaskUiJobsRemoved": 5,
+    "TunAbsent": true,
+    "CoreAbsent": true
+  },
+  "ReceiverTaskReportRemoved": true,
+  "ReceiverTaskMetadataRemoved": true,
+  "NewlyAddedNode": {
+    "Dataplane": "FAIL",
+    "Attempts": 2,
+    "InstrumentedRetryCurlExitCode": 35,
+    "NativeVlessError": "EOF",
+    "Cause": "UNDETERMINED",
+    "CurrentListPosition": 1,
+    "ExistingVlessFieldsChanged": 0,
+    "ClientDefectConfirmed": false
+  },
+  "CountryCoverage": "Recognized advertised labels; opaque labels visibly unknown. No independent geolocation.",
+  "ServerLoad": "NOT IMPLEMENTED; grant-scoped backend API required.",
+  "Limits": [
+    "Two retained physical hosts passed; the other retained host was not exercised.",
+    "The newly added host appears but its HTTPS/VLESS path failed.",
+    "UIS, sustained memory, every routing/DNS rule, UDP dataplane and office reachability remain unverified.",
+    "No live desktop screenshot; synthetic 340/420 renders are separate UI evidence."
+  ]
+}
