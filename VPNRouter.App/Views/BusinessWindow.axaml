@@ -48,6 +48,22 @@
         <Style Selector="Ellipse.business-health-dot.bad">
             <Setter Property="Fill" Value="{DynamicResource DangerSolidBrush}"/>
         </Style>
+        <Style Selector="Border.business-activity-bar">
+            <Setter Property="Background" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Opacity" Value="0.35"/>
+        </Style>
+        <Style Selector="Border.business-activity-bar.low">
+            <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Border.business-activity-bar.medium">
+            <Setter Property="Background" Value="{DynamicResource WarningSolidBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Border.business-activity-bar.high">
+            <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
     </Window.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="20" Spacing="12" MaxWidth="400" HorizontalAlignment="Stretch">
@@ -164,9 +180,20 @@
                                     <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayName}"/>
                                     <TextBlock Text="{Binding CountryName}" FontSize="11" TextTrimming="CharacterEllipsis"
                                                Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    <TextBlock Text="{Binding MetricsText}" IsVisible="{Binding HasMetadata}"
-                                               FontSize="10" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding MetricsHint}"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="5" IsVisible="{Binding HasMetadata}"
+                                          ToolTip.Tip="{Binding MetricsHint}">
+                                        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Height="10">
+                                            <Border Classes="business-activity-bar" Width="3" Height="4" VerticalAlignment="Bottom"
+                                                    Classes.low="{Binding IsActivityLow}" Classes.medium="{Binding IsActivityMedium}"
+                                                    Classes.high="{Binding IsActivityHigh}"/>
+                                            <Border Classes="business-activity-bar" Width="3" Height="7" VerticalAlignment="Bottom"
+                                                    Classes.medium="{Binding IsActivityMedium}" Classes.high="{Binding IsActivityHigh}"/>
+                                            <Border Classes="business-activity-bar" Width="3" Height="10" VerticalAlignment="Bottom"
+                                                    Classes.high="{Binding IsActivityHigh}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding MetricsText}" FontSize="10"
+                                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </Grid>
                                 </StackPanel>
                                 <TextBlock Grid.Column="3" Text="{Binding PingText}" FontSize="12"
                                            VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"/>

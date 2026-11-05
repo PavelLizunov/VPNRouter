@@ -28,6 +28,7 @@ public sealed class BusinessNodeMetadataTests
         Assert.Null(row.CountryIso);
         Assert.Null(row.MemoryUsedPercent);
         Assert.Null(row.Load1MinX100);
+        Assert.Equal(BusinessNodeActivityLevel.Unknown, row.ActivityLevel);
         Assert.Null(snapshot.GetAgeSeconds(row));
         Assert.Equal(BusinessNodeFreshness.Unknown, snapshot.GetFreshness(row));
     }
@@ -37,19 +38,21 @@ public sealed class BusinessNodeMetadataTests
 
     private static string Row(string host = "node.example.invalid", string country = "\"fi\"",
         string total = "1024", string available = "512", string load = "125", string observed = "1900",
-        string age = "100", string freshness = "fresh") =>
+        string age = "100", string freshness = "fresh", string activity = "\"unknown\"") =>
         string.Concat("{\"endpoint_host\":", JsonSerializer.Serialize(host), ",\"country_iso\":", country,
             ",\"memory_total_mib\":", total, ",\"memory_available_mib\":", available, ",\"load_1min_x100\":", load,
-            ",\"observed_at\":", observed, ",\"age_seconds\":", age, ",\"freshness\":", JsonSerializer.Serialize(freshness), "}");
+            ",\"observed_at\":", observed, ",\"age_seconds\":", age, ",\"freshness\":", JsonSerializer.Serialize(freshness), ",\"activity_level\":", activity, "}");
 
     [Fact]
     public void Parse_UsesExplicitCountry_AndPreservesUnknownCountryForOpaqueProviderLabels()
     {
-        var snapshot = BusinessNodeSnapshot.Parse(Snapshot(Row("known.example.invalid") + "," +
-            Row("opaque-provider.example.invalid", country: "null")));
+        var snapshot = BusinessNodeSnapshot.Parse(Snapshot(Row("known.example.invalid", activity: "\"low\"") + "," +
+            Row("opaque-provider.example.invalid", country: "null", activity: "\"high\"")));
 
         Assert.Equal("FI", snapshot.Nodes["KNOWN.EXAMPLE.INVALID"].CountryIso);
         Assert.Null(snapshot.Nodes["opaque-provider.example.invalid"].CountryIso);
+        Assert.Equal(BusinessNodeActivityLevel.Low, snapshot.Nodes["known.example.invalid"].ActivityLevel);
+        Assert.Equal(BusinessNodeActivityLevel.High, snapshot.Nodes["opaque-provider.example.invalid"].ActivityLevel);
         Assert.Equal(2, snapshot.Nodes.Count);
         Assert.IsAssignableFrom<IReadOnlyDictionary<string, BusinessNodeMetadata>>(snapshot.Nodes);
         Assert.Throws<NotSupportedException>(() => ((IDictionary<string, BusinessNodeMetadata>)snapshot.Nodes)
@@ -68,8 +71,10 @@ public sealed class BusinessNodeMetadataTests
     [InlineData("1024", "null", null)]
     public void Parse_RamPercentageRequiresAValidPair_AndZeroIsARealSample(string total, string available, double? used)
     {
-        var row = Assert.Single(BusinessNodeSnapshot.Parse(Snapshot(Row(total: total, available: available, load: "0"))).Nodes).Value;
+        var row = Assert.Single(BusinessNodeSnapshot.Parse(Snapshot(Row(total: total, available: available,
+            load: "0", activity: "\"medium\""))).Nodes).Value;
 
+        Assert.Equal(BusinessNodeActivityLevel.Medium, row.ActivityLevel);
         Assert.Equal(used, row.MemoryUsedPercent);
         Assert.Equal<uint?>(0, row.Load1MinX100);
         if (available == "0") Assert.Equal<long?>(0, row.MemoryAvailableMib);
@@ -101,6 +106,14 @@ public sealed class BusinessNodeMetadataTests
         Assert.Null(node.MemoryUsedPercent);
         Assert.Null(snapshot.GetAgeSeconds(node));
         Assert.Equal(BusinessNodeFreshness.Unknown, snapshot.GetFreshness(node));
+        foreach (var optional in new[] { "null", "false", "12", "[]", "{}", "\"future\"" })
+        {
+            var optionalNode = Assert.Single(BusinessNodeSnapshot.Parse(Snapshot(Row(activity: optional))).Nodes).Value;
+            Assert.Equal(BusinessNodeActivityLevel.Unknown, optionalNode.ActivityLevel);
+        }
+        var withoutActivity = Row().Replace(",\"activity_level\":\"unknown\"", "");
+        Assert.Equal(BusinessNodeActivityLevel.Unknown,
+            Assert.Single(BusinessNodeSnapshot.Parse(Snapshot(withoutActivity)).Nodes).Value.ActivityLevel);
     }
 
     [Theory]

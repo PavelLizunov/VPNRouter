@@ -33,16 +33,15 @@ public static partial class Strings
     public static string BusinessDiagnosticsSendFailed => Ru ? "Отправка не подтверждена. Повторите." : "Delivery not confirmed. Retry Send.";
     public static string BusinessDiagnosticsCancelled => Ru ? "Операция остановлена. Сохранённые отчёты оставлены на компьютере." : "Operation stopped. Saved reports are retained locally.";
     public static string BusinessDiagnosticsOpenFailed => Ru ? "Не удалось открыть папку отчёта." : "Could not open the report folder.";
-    public static string BusinessNodeMetricsUnavailable => Ru ? "Нагрузка: нет данных" : "Load: no data";
-    public static string BusinessNodeStale => Ru ? "старые" : "stale";
-    public static string BusinessNodeMetrics(string load, string memory, bool stale) =>
-        (Ru ? $"Нагрузка {load} · RAM {memory}" : $"Load {load} · RAM {memory}") +
-        (stale ? $" ({BusinessNodeStale})" : string.Empty);
+    public static string BusinessNodeMetricsUnavailable => Ru ? "Активность: нет данных" : "Activity: no data";
+    public static string BusinessNodeActivityLow => Ru ? "Активность: низкая" : "Activity: low";
+    public static string BusinessNodeActivityMedium => Ru ? "Активность: средняя" : "Activity: medium";
+    public static string BusinessNodeActivityHigh => Ru ? "Активность: высокая" : "Activity: high";
     public static string BusinessNodeMetricsHint(ulong? ageSeconds, bool stale)
     {
         var meaning = Ru
-            ? "Нагрузка Unix за 1 минуту, не процент CPU. RAM — занятая память."
-            : "Unix 1-minute load average, not CPU percent. RAM is used memory.";
+            ? "Активность по трафику за последние сутки; оценка от сервера."
+            : "Activity from traffic over the last day, assessed by the server.";
         if (ageSeconds is not { } age)
             return meaning + (Ru ? " Время пробы неизвестно." : " Sample age is unknown.");
         var amount = age < 60 ? age : age / 60;

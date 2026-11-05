@@ -43,7 +43,7 @@ public sealed class BusinessNodeMetadataWindowTests
     }
 
     [AvaloniaFact]
-    public void Choice_UsesAuthoritativeCountryAndRealZero_WhileHealthRemainsIndependent()
+    public void Choice_UsesAuthoritativeCountryAndActivity_WhileHealthRemainsIndependent()
     {
         var previousLanguage = Strings.Lang;
         Strings.Lang = "en";
@@ -59,8 +59,11 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Equal("CH", choice.CountryCode);
             Assert.Equal("Switzerland", choice.CountryName);
             Assert.NotNull(choice.CountryFlag);
-            Assert.Equal("Load 0.00 · RAM 0%", choice.MetricsText);
-            Assert.Contains("not CPU percent", choice.MetricsHint);
+            Assert.Equal("Activity: low", choice.MetricsText);
+            Assert.Contains("assessed by the server", choice.MetricsHint);
+            Assert.True(choice.IsActivityLow);
+            Assert.False(choice.IsActivityMedium);
+            Assert.False(choice.IsActivityHigh);
             Assert.True(choice.IsGood);
             Assert.Equal("12 ms", choice.PingText);
 
@@ -71,7 +74,7 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Equal("Country unknown", choice.CountryName);
             Assert.Null(choice.CountryFlag);
             Assert.False(choice.HasCountry);
-            Assert.Equal("Load 0.00 · RAM 100% (stale)", choice.MetricsText);
+            Assert.Equal("Activity: no data", choice.MetricsText);
             Assert.Contains("Data is stale", choice.MetricsHint);
             Assert.True(choice.IsGood);
 
@@ -84,13 +87,13 @@ public sealed class BusinessNodeMetadataWindowTests
 
             var future = Snapshot(Node("node.example.invalid", "CH", observed: 2001, age: 0));
             choice.UpdateMetadata(future, future.Nodes.Values.Single());
-            Assert.Equal("Load: no data", choice.MetricsText);
+            Assert.Equal("Activity: no data", choice.MetricsText);
             Assert.Contains("Sample age is unknown", choice.MetricsHint);
             Assert.Equal("CH", choice.CountryCode);
             Assert.True(choice.IsGood);
             choice.UpdateMetadata(null, null);
             Assert.True(choice.HasMetadata);
-            Assert.Equal("Load: no data", choice.MetricsText);
+            Assert.Equal("Activity: no data", choice.MetricsText);
         }
         finally { Strings.Lang = previousLanguage; }
     }
@@ -100,7 +103,7 @@ public sealed class BusinessNodeMetadataWindowTests
     {
         using var fixture = new Fixture();
         Assert.True(fixture.Choices[0].HasMetadata);
-        Assert.Equal("Load: no data", fixture.Choices[0].MetricsText);
+        Assert.Equal("Activity: no data", fixture.Choices[0].MetricsText);
         fixture.Vm.IsConnected = true;
         var selected = fixture.Vm.SelectedServer;
         var pool = fixture.Vm.Servers.ToArray();
@@ -116,14 +119,14 @@ public sealed class BusinessNodeMetadataWindowTests
         Assert.Equal(before, fixture.Store.SaveCount);
         var choice = Assert.IsType<BusinessServerChoiceViewModel>(fixture.Selector.SelectedItem);
         Assert.Equal("CH", choice.CountryCode);
-        Assert.Equal("Load 0.00 · RAM 0%", choice.MetricsText);
+        Assert.Equal("Activity: low", choice.MetricsText);
         Assert.False(choice.IsGood);
         var menu = OpenMenu(fixture.Window);
         foreach (var index in new[] { 0, 1 })
         {
             fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!.SelectedIndex = index;
             Flush(fixture.Window);
-            Assert.Equal(index == 0 ? "Нагрузка 0,00 · RAM 0%" : "Load 0.00 · RAM 0%", choice.MetricsText);
+            Assert.Equal(index == 0 ? "Активность: низкая" : "Activity: low", choice.MetricsText);
             Assert.Equal(index == 0 ? "Швейцария" : "Switzerland", choice.CountryName);
             Assert.Same(choice, fixture.Selector.SelectedItem);
             Assert.Same(selected, fixture.Vm.SelectedServer);
@@ -177,7 +180,7 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Single(fixture.Choices.Where(choice => ReferenceEquals(choice.Server, server)))).ToArray();
         Assert.NotSame(original[0], rebuilt[0]);
         Assert.Equal(new[] { "CH", "SE", "NL" }, rebuilt.Select(choice => choice.CountryCode));
-        Assert.Contains("(stale)", rebuilt[0].MetricsText);
+        Assert.Equal("Activity: no data", rebuilt[0].MetricsText);
         Assert.Contains("Data is stale", rebuilt[0].MetricsHint);
         Assert.Same(snapshot, fixture.Controller.LastSnapshot);
         Assert.Equal(received, fixture.Controller.LastSnapshot!.ReceivedTimestamp);
@@ -190,7 +193,7 @@ public sealed class BusinessNodeMetadataWindowTests
         await refresh.WaitAsync(Budget);
         Assert.Equal(beforeMetadataFailure, fixture.Store.SaveCount);
         Assert.Same(snapshot, fixture.Controller.LastSnapshot);
-        Assert.Contains("(stale)", rebuilt[0].MetricsText);
+        Assert.Equal("Activity: no data", rebuilt[0].MetricsText);
     }
 
     [AvaloniaFact]
@@ -300,9 +303,9 @@ public sealed class BusinessNodeMetadataWindowTests
     }
 
     private static object Node(string host, string? country, long? total = 1024, long? available = 512,
-        uint? load = 125, long? observed = 1900, ulong? age = 100, string freshness = "fresh") => new
+        uint? load = 125, long? observed = 1900, ulong? age = 100, string freshness = "fresh", string? activity = "low") => new
         { endpoint_host = host, country_iso = country, memory_total_mib = total, memory_available_mib = available,
-            load_1min_x100 = load, observed_at = observed, age_seconds = age, freshness };
+            load_1min_x100 = load, observed_at = observed, age_seconds = age, freshness, activity_level = activity };
 
     private static BusinessNodeSnapshot Snapshot(params object[] rows) => BusinessNodeSnapshot.Parse(JsonSerializer.Serialize(new
         { schema = 1, generated_at = 2000, max_age_seconds = 1320, nodes = rows }));

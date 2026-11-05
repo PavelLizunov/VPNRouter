@@ -11,7 +11,8 @@
       "load_1min_x100": null,
       "observed_at": null,
       "age_seconds": null,
-      "freshness": "unknown"
+      "freshness": "unknown",
+      "activity_level": "unknown"
     }
   ]
 }

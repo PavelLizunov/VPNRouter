@@ -1,7 +1,6 @@
 using VPNRouter.Core.Localization;
 using VPNRouter.Core.Services;
 using VPNRouter.App.Services;
-using System.Globalization;
 
 namespace VPNRouter.App.ViewModels.Internals;
 
@@ -18,27 +17,23 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
     public string CountryName => Strings.BusinessCountryName(CountryCode);
     public bool HasCountry => CountryCode.Length != 0;
     public Avalonia.Media.IImage? CountryFlag => BusinessServerCountry.Flag(CountryCode);
-    internal uint? MetadataLoad => HasFreshMetadata ? _metadata!.Load1MinX100 : null;
-    internal double? MetadataMemoryUsedPercent => HasFreshMetadata ? _metadata!.MemoryUsedPercent : null;
+    internal BusinessNodeActivityLevel ActivityLevel => HasFreshMetadata
+        ? _metadata!.ActivityLevel : BusinessNodeActivityLevel.Unknown;
     private bool HasFreshMetadata => _metadataSnapshot != null && _metadata != null &&
         _metadataSnapshot.GetFreshness(_metadata) == BusinessNodeFreshness.Fresh;
     private ServerProbeResult _result = ServerProbeResult.Unknown;
     private bool _checking;
 
-    public string MetricsText
+    public bool IsActivityLow => ActivityLevel == BusinessNodeActivityLevel.Low;
+    public bool IsActivityMedium => ActivityLevel == BusinessNodeActivityLevel.Medium;
+    public bool IsActivityHigh => ActivityLevel == BusinessNodeActivityLevel.High;
+    public string MetricsText => ActivityLevel switch
     {
-        get
-        {
-            if (_metadataSnapshot == null || _metadata == null ||
-                _metadataSnapshot.GetFreshness(_metadata) == BusinessNodeFreshness.Unknown)
-                return Strings.BusinessNodeMetricsUnavailable;
-            var culture = CultureInfo.GetCultureInfo(Strings.Lang == "ru" ? "ru-RU" : "en-US");
-            var load = _metadata.Load1MinX100 is { } measured ? (measured / 100.0).ToString("0.00", culture) : "—";
-            var memory = _metadata.MemoryUsedPercent is { } used ? used.ToString("0", culture) + "%" : "—";
-            return Strings.BusinessNodeMetrics(load, memory,
-                _metadataSnapshot.GetFreshness(_metadata) == BusinessNodeFreshness.Stale);
-        }
-    }
+        BusinessNodeActivityLevel.Low => Strings.BusinessNodeActivityLow,
+        BusinessNodeActivityLevel.Medium => Strings.BusinessNodeActivityMedium,
+        BusinessNodeActivityLevel.High => Strings.BusinessNodeActivityHigh,
+        _ => Strings.BusinessNodeMetricsUnavailable
+    };
 
     public string MetricsHint => Strings.BusinessNodeMetricsHint(
         _metadataSnapshot != null && _metadata != null ? _metadataSnapshot.GetAgeSeconds(_metadata) : null,
@@ -94,6 +89,9 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasCountry));
         OnPropertyChanged(nameof(MetricsText));
         OnPropertyChanged(nameof(MetricsHint));
+        OnPropertyChanged(nameof(IsActivityLow));
+        OnPropertyChanged(nameof(IsActivityMedium));
+        OnPropertyChanged(nameof(IsActivityHigh));
     }
 
     internal void Update(ServerProbeResult result, bool checking = false)

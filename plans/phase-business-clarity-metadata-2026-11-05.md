@@ -28,12 +28,12 @@ specific device when the same personal build is used on multiple computers.
    Business static/service/country/status labels react without resetting VPN,
    replacing the pool or abandoning diagnostics. Persist the choice; show Russian
    on the owner's VM after upgrade. Preserve an explicit language on restart.
-2. Keep connect, selector, modes and diagnostic Send obvious. Move explanatory
-   paragraphs and secondary diagnostic actions into compact optional details;
-   show brief actionable progress/failure/receipt states instead of permanent prose.
-   Preserve keyboard access, narrow layouts and cancellation.
+2. Keep only connection, selector and modes in the main window. Reuse the standard
+   kebab menu for language, diagnostics and refresh; remove Details and permanent
+   helper paragraphs. Keep concise progress/failure/receipt inside the menu and
+   preserve keyboard access, narrow layouts and cancellation.
 3. Add bounded computer-name/Windows-user fields to the diagnostic summary,
-   disclosed in the optional privacy details. No hardware serial, machine SID,
+   disclosed in the diagnostic action tooltip. No hardware serial, machine SID,
    new persistent tracking identity, token or raw config. Distinguish authenticated
    employee mapping from client-reported device names; preserve the owner's report.
 4. Inspect current vpnctld source/production revision and existing country/load
@@ -62,23 +62,32 @@ specific device when the same personal build is used on multiple computers.
 
 ## Six verification gates
 
-1. Build: PENDING; exact-source public Release and private packaging.
-2. Tests: PENDING; hot language/persistence, compact 340/420 layout, device summary,
-   metadata grant isolation/validation/staleness and unchanged connection behavior.
-3. Docs: PENDING; concise user guidance/privacy/actual outcomes and ledger.
-4. Review: PENDING; independent correctness/security/coverage and requested final
-   GPT ASTRA XHIGH recheck on the implemented snapshot.
-5. UI/live: PENDING; owner-VM upgrade, Russian/selectable language, compact controls,
-   real country/load samples if API is available, explicit report with device
-   fields and independent receipt. Do not erase the owner's current report.
-6. Characterization: PENDING; Standard/public VM API and existing regressions.
+1. Build: PASS. Private exact0fc49877 run42025808317 succeeds, embedded first-run
+   and native split/full checks pass. App/Core/packaging are identical at5d112dc1.
+2. Tests: PASS at5d112dc1, eleven SUCCESS/two expected SKIPPED. Linux3523/79,
+   Windows3693/21, Business285/1 (passed/skipped). Existing automatic gates only
+   for the final UI correction, as requested by the owner.
+3. Docs: PASS for the0fc delivery; outcome/ledger and private receipts reconciled.
+   The later simple-activity follow-up below awaits its own CI/build evidence.
+4. Review: PASS source-only final GPT ASTRA XHIGH over all23 client delta files
+   and9 backend delta files at5d112dc1/ed59850. No new confirmed P0/P1/P2; prior
+   alias P2 closed. Actual CPU gate subsequently passed before activation.
+5. UI/live: country/load API active with four fresh entries; receiver preserves
+   all three owner reports. Owner-VM0fc installer upgrade PASS, Russian app open. No new
+   connection/Send acceptance cycles for this quick redesign per owner instruction.
+6. Characterization: PASS exact5d112dc1 Windows and existing Standard/VM contracts;
+   MainWindowViewModel/routing unchanged in this final follow-up scope.
 
 ## Outcome
 
-Status: implementation in progress; no new installer or backend deployment yet.
-The brief cc819d83 passes eleven applicable checks/two expected skips. The existing
-owner-VM client was switched from stored English to Russian by a narrow language
-preference change/relaunch; the owner's received report was preserved.
+Current source is5d112dc1; private installer source is0fc49877 with identical
+App/Core/packaging. Client gates and requested final review pass. Controllered59850
+is deployed and healthy; scoped metadata HTTPS returns200/schema1/four fresh
+countries/load/RAM pairs. Receiver source is updated with all owner reports and
+registry/env preserved. Owner-VM upgrade and authenticated reply endpoint
+verification PASS. The owner subsequently requests the simple-activity follow-up
+below; its source is implemented but CI/private rebuild are pending. The dated blocks below describe implementation history;
+this outcome and the final handoff receipt supersede their pending statuses.
 
 
 ## First client block before CI
@@ -288,3 +297,102 @@ literals. One separate headless cleanup exception occurs in isolated-app setup,
 not application code. Close the language fixture-owned flyout before its window
 and drain its dispatcher. No new test cases, product change or private rebuild
 is required for this fixture-only correction; installer source remains0fc49877.
+
+## Final review and service activation receipts
+
+The requested GPT ASTRA XHIGH recheck covered all 23 client delta files from
+25f3ca38 to 5d112dc1 and nine backend delta files from 2ace802 to ed59850, plus
+relevant unchanged callers. No new confirmed P0/P1/P2; the prior endpoint-alias
+finding is closed in source. CPU-artifact acceptance was pending in that review
+and subsequently passed actual VM119 version probes and deployment. The reviewer
+did not execute tests or access private data.
+
+Exact 5d112dc1 public checks: 11 SUCCESS / 2 expected SKIPPED; Linux 3523 passed /
+79 skipped, Windows 3693/21, Business 285/1. Public PR merge f1149a03 and 5d112dc1
+have identical Git tree f4c41fe1b81cb6cb9ea2b1963dfebfeb1ba73e15. RU/EN 340/420
+synthetic captures were retrieved, inspected and shown; no desktop screenshots.
+Existing fixture assertions were adapted, with no extra UI scenarios or owner-VM
+connection/Send cycles for the final correction.
+
+Private installer exact 0fc49877, run 42025808317, succeeds: 63,031,393 bytes,
+SHA256 b5e554823d5c0b13aa56190beba115f2ad6c746aafcf19aa41d29405ee1962fb.
+App/Core/packaging are identical to 5d112dc1; the fixture-only correction did not
+trigger a private rebuild. Hosted Windows preflight: four CPUs / 1 percent load,
+13,948,032 KiB available RAM, zero pagefile usage, 27.69 GiB free disk, zero
+competing jobs; installed .NET 10.0.403 and Go 1.24.13. Embedded first-run: one
+passed; native split/full: PASS. Both ephemeral pilot secrets were deleted and
+absence verified; delivery key, isolated GPG and raw private-input staging were
+removed. Configured private delivery and receipts are retained.
+
+Controller ed59850: all 11 exact-head checks SUCCESS, baseline CPU / Nehalem QEMU
+gate PASS, both Rust version probes PASS on actual VM119 before install. Four
+binaries and 26 assets match all 30 installed digests; service active, health
+200 / 0.9.0+ed59850, restarts zero. Consistent DB backup and separate restored-copy
+selfcheck remain protected; no live DB restore or schema changes. The rejected
+1fafc61 artifact was never installed. Scoped Caddy metadata routes validate and
+reload with existing ownership/permissions preserved. A recorded staging-mode
+mistake was corrected after restoring old config, without route outage. Original
+legacy config text is unchanged; no live subscription refetch/counter increment
+was used for compatibility verification.
+
+Real private authenticated metadata HTTPS at 12:38 UTC: 200 / schema 1 / four
+nodes / four countries / four loads / four valid RAM pairs / all fresh, TTL 1320;
+strict DTO and privacy headers PASS. Receiver 5d source is active. Authenticated
+analysis GET returns 200 for all three existing receipts, exposing only stored,
+report_id and analysis, with default unavailable. Unknown 404, unauthenticated
+401, public archive 404, health 200; foreign receipt reader guard PASS, without a
+second existing token for a real foreign-identity HTTPS check. All three owner
+archives and receipts, registry/env and 14 other Caddy files are preserved. No
+new POST reports, provider/model calls or automatic client-statistics upload.
+Gemini remains unconfigured; this delivery supplies its stable reply channel.
+
+Known limits remain: added-node VLESS EOF, UIS, sustained memory, every rule /
+DNS / UDP, other-node / office acceptance and nonblocking timer / production
+constructor / popup / backend override / detour / real-IP test gaps. Do not infer
+VPN health from TCP ping or resource load, or employees online from subscription
+counters. Current exact-value source scan: 27 needles / 1481 paths / zero matches;
+this is not an all-history erasure claim.
+
+## Owner follow-up: simple server activity indicator
+
+At 12:50 UTC the owner confirms the installed UI works but rejects raw Unix load
+and RAM in server rows. Show one low/medium/high/unknown activity indicator. Keep
+capacity/saturation claims separate: the selected Swedish node has 130-266 GiB
+per complete UTC day and 160 GiB rolling24h, while physical link capacity and
+instantaneous peaks are unknown. Its country mapping is independently confirmed.
+
+Add optional schema1 activity_level from existing reset-safe rolling24h traffic.
+Backend policy: below25 GiB low,25 to below100 GiB medium,100 GiB and above high;
+only usable observed data qualifies, otherwise unknown. These are product activity
+bands, not CPU percent, link utilization, or a guarantee of VPN performance.
+The server owns this policy and can refine it without replacing the client. No
+hardcoded country/provider override, new node probes, migration, downloaded code,
+selection mutation or routing change. Preserve older numeric fields on the wire.
+The client maps only the optional enum to localized text/color and sorts stable
+activity bands; missing, null, invalid or stale values remain unknown. Remove raw
+RAM/load from visible text and hints. Existing UI assertions only, no new UI or
+connection/Send cycles. Independently written backend contract coverage and existing
+CI apply to the additive API. Private build/upgrade follow the same guarded path.
+
+## Delivered owner-VM baseline and follow-up verification
+
+At12:45UTC the exact0fc49877 installer exits0; graceful tray Exit used a verified
+native owned menu, without process kill. Installed DLL SHA256
+433516461c246e93a30555836715fd1bc162f5f76c0caba6bd54d129db8c6f43.
+Russian main/menu visible; account, selection, mode, language,13entries/fourchoices
+and all three owner reports retained. Core/TUN zero, no new connections or sends.
+Guest task/staging and host installer staging removed; owner VM/app/RDP intentionally
+remain running. Task-only WinPS5 array capture and YAML indentation comparisons
+were corrected to compare parsed scalar values, without reinstall/acceptance cycles.
+
+The next activity block keeps this working private installer as rollback. Client
+uses only an optional enum, backend owns25/100GiB activity bands and bounded fresh
+24-hour-bucket coverage. No link saturation claim, CPU-count migration or new probe.
+Independent backend spec writer saw no implementation; separate diff-only reviewer
+returned no confirmed findings. Root source review confirms enum fallback, fresh
+state, stable selection and legacy numeric wire compatibility. CI remains pending.
+Recovered the exact private input read-only from the installed0fc DLL, without
+assembly execution; SHA256 matches the earlier input receipt. Managed resources
+are length-prefixed without the initially assumed alignment; no input values or
+raw assembly were printed. The new private build must remove its task-owned
+secrets/key/staging after retrieval while retaining configured private delivery.

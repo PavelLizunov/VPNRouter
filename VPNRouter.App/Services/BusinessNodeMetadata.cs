@@ -8,6 +8,7 @@ using System.Text.Json;
 namespace VPNRouter.App.Services;
 
 internal enum BusinessNodeFreshness { Unknown, Fresh, Stale }
+internal enum BusinessNodeActivityLevel { Unknown, Low, Medium, High }
 
 internal sealed record BusinessNodeMetadata(
     string EndpointHost,
@@ -19,6 +20,8 @@ internal sealed record BusinessNodeMetadata(
     ulong? AgeSeconds,
     BusinessNodeFreshness Freshness)
 {
+    internal BusinessNodeActivityLevel ActivityLevel { get; init; }
+
     // Unix load average is deliberately separate from this RAM percentage.
     internal double? MemoryUsedPercent =>
         MemoryTotalMib is > 0 && MemoryAvailableMib is >= 0 && MemoryAvailableMib <= MemoryTotalMib
@@ -117,7 +120,8 @@ internal sealed class BusinessNodeSnapshot
                 else if (freshness == BusinessNodeFreshness.Fresh && age > maxAge)
                     freshness = BusinessNodeFreshness.Stale;
 
-                if (!nodes.TryAdd(host, new(host, country, total, available, load, observed, age, freshness)))
+                if (!nodes.TryAdd(host, new(host, country, total, available, load, observed, age, freshness)
+                    { ActivityLevel = Activity(row) }))
                     throw InvalidSnapshot();
             }
             return new(nodes, generatedAt, maxAge);
@@ -211,6 +215,19 @@ internal sealed class BusinessNodeSnapshot
         var code = value.GetString();
         if (code is not { Length: 2 } || !code.All(char.IsAsciiLetter)) throw InvalidSnapshot();
         return code.ToUpperInvariant();
+    }
+
+    private static BusinessNodeActivityLevel Activity(JsonElement row)
+    {
+        if (!row.TryGetProperty("activity_level", out var value) || value.ValueKind != JsonValueKind.String)
+            return BusinessNodeActivityLevel.Unknown;
+        return value.GetString() switch
+        {
+            "low" => BusinessNodeActivityLevel.Low,
+            "medium" => BusinessNodeActivityLevel.Medium,
+            "high" => BusinessNodeActivityLevel.High,
+            _ => BusinessNodeActivityLevel.Unknown
+        };
     }
 
     private static BusinessNodeFreshness Freshness(JsonElement row)

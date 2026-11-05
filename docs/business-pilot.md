@@ -221,19 +221,27 @@ opaque provider names are never guessed. Unsupported country codes keep their co
 and have no flag. Country is not proof of VPN egress location. No private endpoint
 is sent to an external geo API.
 
-## Server load from vpnctl
+## Server activity from vpnctl
 
 Configured builds read a grant-scoped node snapshot using the existing individual
 device/subscription identity. The separate backend change is tracked in vpnctl
 PR #311; source implementation does not prove production activation. Deployment
 and exact-source live acceptance are recorded in the task outcome.
 
-Each server row shows Unix one-minute load and occupied RAM. Unix load is not CPU
-percent; CPU count/percent are not supplied. The tooltip describes the metrics and
-sample age. Missing or inconsistent/future samples show no data; stale values are
-explicitly marked. Server-derived age advances with monotonic time, independent
-of the guest wall clock, and is not reset by hiding the window, failed requests,
-language changes or list reconstruction.
+Each row shows one simple activity indicator: low, medium, high or no data, with
+one, two or three colored bars. Optional schema-1 activity_level is assessed by
+the backend from traffic over the last day; the client contains no traffic
+thresholds or provider/country overrides. RAM percentages and raw system-load
+numbers are not shown. Activity describes observed use, not link saturation or
+a guarantee of VPN performance. Backend policy can evolve without a client update.
+
+Missing, null, unrecognized or malformed optional activity values show no data;
+stale or inconsistent/future samples also show no data. Older metadata responses
+remain accepted and show unknown activity. Existing numeric wire fields remain
+compatible. Server-derived age advances with monotonic time, independent of the
+guest wall clock, and is not reset by hiding the window, failed requests, language
+changes or list reconstruction. Display order uses fresh activity bands with
+stable ties; metadata never switches the selected server.
 
 Polling runs every five minutes while the Business window is visible, including
 while connected; age labels refresh every thirty seconds. Refresh requests a
