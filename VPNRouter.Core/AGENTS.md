@@ -32,7 +32,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
   - `ProcessScanner.cs`: Resolves running processes by profile rules and wildcard patterns.
   - `EtwProcessMonitor.cs`: Real-time process event monitor (Windows ETW).
   - `ProcessQuery.cs`: Safe `GetProcessesByName` wrappers (`AnyAlive`, `CountAlive`) ensuring `Process[]` handles are disposed.
-  - `RoutingAppListEditor.cs`: App routing list manager for split-tunnel configuration (`TryAddProcessName`, `TryRemoveProcessName`, `IsStillRoutedByAnother` survivor-guard).
+  - `RoutingAppListEditor.cs`: App routing list manager for split-tunnel configuration (`NormalizeManualProcessName`, `TryRemoveProcessName`).
   - `FirewallManager.cs`: Windows Firewall manager (`netsh.exe`).
   - `SplitTunnelDriverProtocol.cs`, `SplitTunnelDriverInterop.cs`, `SplitTunnelDriverManager.cs` (with `.Service.cs`, `.Wfp.cs`, `.Device.cs`, `.Pump.cs`, `.NetChange.cs`): True-split kernel driver protocol, P/Invoke interop, and lifecycle manager (`ISplitTunnelDriver`).
   - `ProfileManager.cs`: Merging and source priority resolution for profiles (GitHub > Local > Built-in).

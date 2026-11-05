@@ -56,21 +56,40 @@ repository; current Business delivery evidence and existing memory findings rema
    the existing unsigned Android Release APK compile/inventory job. No local SDK.
 2. Tests: PENDING Linux/Windows, Headless, packaging and affected Business gates.
    No tests are removed or rewritten for this cleanup.
-3. Docs: PENDING source-checked symbol/path/link corrections and final Outcome.
+3. Docs: PASS locally. Current symbols, linked release owner and paths verified;
+   Outcome records the implementation and outstanding exact-head checks.
 4. Review: source triage completed; independent cross-family review N/A by owner
    choice. This small deletion/correction batch introduces no feature or API.
 5. UI/live: N/A. No reachable UI flow changes and no new binary is shipped.
-6. Characterization: PENDING exact retained-line comparison after whole-member
-   deletions. No extraction or rewrite; compilation remains a separate gate.
+6. Characterization: PASS locally. An independent retained-text comparison with
+   e5ea6553 confirms exactly 29 member lines deleted and every retained byte
+   preserved in all three source files. No extraction or rewrite; compilation
+   remains a separate gate.
 
 GitHub-hosted runners are the build surface. Existing workflow preflight output
 is evidence only for the jobs that emit it; no control-plane build is permitted.
 
 ## Outcome
 
-- Status: IN PROGRESS; initial CI bootstrap prepared, source cleanup not applied.
-- Git: separate PR to business pending; PR #646 remains at e5ea6553.
-- Checks: base checks verified via GitHub API; no new-head success claimed.
+- Status: IMPLEMENTED; final exact-head CI pending.
+- Changed scope: ten approved files plus this brief and ledger; three whole
+  private members removed, four instruction maps corrected, three CI routes fixed.
+- Git: https://github.com/PavelLizunov/VPNRouter/pull/650 targets business;
+  PR #646 remains at e5ea6553. Bootstrap commit: 8249d9a49b34b8e2372d82e0f56ac66ccf21cb54.
+- Bootstrap checks: T3 wake reports all 12 passed on 8249d9a (10 applicable
+  successes / two expected private skips); no Android source changed in that block.
+  Direct/API and connector requests initially failed with TLS/transport errors.
+  A temporary SSH transport restored the GitHub API read; full PR head and all
+  10 successes/two expected skips were then independently confirmed by API.
+- Local checks: git diff --check, retained-text comparison, source/path/anchor and
+  YAML route assertions pass. C# dead-name rescan after documented callback/
+  entry-point exclusions returns zero candidates; the ledger also mentions removed
+  names, so this result is bounded and does not establish whole-program reachability.
+  A targeted source scan confirms the removed identifiers are absent from code.
+- Review: existing exclusions and callers rechecked by the lead. No external model
+  used, and no independent cross-family review is claimed.
+- Final regression/Android checks: PENDING after implementation push. No new-head
+  success, live behavior, installer or deployment acceptance is claimed.
 - Follow-ups: unknown history and foreign refs/worktrees retained. Existing memory,
   live dataplane and macOS runtime coverage limitations are not resolved here.
 - Cleanup: protected outside-repository audit artifacts intentionally retained.
