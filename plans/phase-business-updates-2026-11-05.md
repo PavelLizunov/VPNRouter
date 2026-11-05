@@ -19,8 +19,8 @@ Risk HIGH: authenticated executable replacement and provisioning survival. First
 
 ## Verification gates
 
-1. Build: PENDING exact-source solution/Business/generic publication CI.
-2. Tests: PENDING full Linux/Windows, focused Business source/provisioning/package/helper/UI tests. Synthetic tests never use private credentials or real endpoints.
+1. Build: PASS source5e6b4643 solution/compile checks; generic publication remains pending because its preceding Business test step failed.
+2. Tests: FAIL at5e6b4643 Business gate:377passed,2failed,6skipped of385; two failures are isolated Windows helper scenarios. Source compiles and Standard test-update succeeds. Correction pins WinPS module lookup, tightens copy-failure assertions and adds safe stage/type/HResult evidence plus an inherited-module regression. Full corrected-head CI pending.
 3. Docs: PASS design, manifest/package contract and pilot instructions updated; delivery outcome still pending.
 4. Review: PASS SOURCE-ONLY. Three native reviewers used distinct correctness/concurrency, security and producer/test lenses with own-file exclusions. Stop-isolation, offer-race, helper-shadow and mixed-App/Core findings are corrected and covered; coordinator also serialized two global-data-dir test classes. No external model or runtime acceptance is implied.
 5. UI/runtime: PENDING deterministic RU/EN340/420 captures and actual bridge-to-newer-package update on the owner-authorized VM, with preserved account/selection/mode and cleanup. No live desktop screenshots.
@@ -28,4 +28,8 @@ Risk HIGH: authenticated executable replacement and provisioning survival. First
 
 ## Outcome
 
-Implementation complete for initial CI; no updater-enabled installer or live feed claimed yet. Existing installer remains ae1276b0. Activity/icon fixes30176a85 have full green CI; live activity was confirmed fresh on four nodes across repeated collection cycles. Current direct-route outage cause remains unknown; audited management jumps restore telemetry.
+Initial implementation5e6b4643 compiles but fails two WinPS helper checks; correction awaiting CI. No updater-enabled installer or live feed claimed yet. Existing installer remains ae1276b0. Activity/icon fixes30176a85 have full green CI; live activity was confirmed fresh on four nodes across repeated collection cycles. Current direct-route outage cause remains unknown; audited management jumps restore telemetry.
+
+## WinPS correction evidence
+
+The CI parent is pwsh7, which launches dotnet and then Windows PowerShell5 through Process.Start. Microsoft documents incompatible PSModulePath inheritance for this intermediate-process chain: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_psmodulepath?view=powershell-7.3 . The helper now pins its own PSHOME/Modules before command discovery. This is a confirmed compatibility susceptibility, not yet proof of the truncated original failure stage. New sanitized stage/type/HResult output and full safe fixture-log assertions identify any remaining error. The copy-failure assertion now requires reaching COPY rather than accepting any earlier error. No SDK, local build or live app operation was performed for diagnosis. Owner VM SSH is currently closed; Omarchy sudo requires authentication despite the earlier authorization, so live update acceptance remains pending access.

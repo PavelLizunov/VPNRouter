@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CONFIRMED WINDOWS UPDATE SUSCEPTIBILITY / CI UNDER DIAGNOSIS** - BUSINESS-UPDATE-WINPS-MODULE-PATH: the helper inherits PSModulePath from a pwsh-launched intermediate dotnet/app process while using Windows PowerShell5 Utility commands. Microsoft documents incompatible module resolution for this exact launch chain; two5e6b4643 helper scenarios fail before the intended copy/source-changed branch, but their precise error is truncated. Pin child module lookup to its own PSHOME/Modules, add a poisoned-module scenario and safe phase/type/HResult diagnostics, and require exact-head CI to establish the failure cause. See plans/phase-business-updates-2026-11-05.md.
+
 - [ ] **P2 CONFIRMED UPDATE TEST ISOLATION FINDING** - BUSINESS-UPDATE-DATADIR-COLLECTION: two new package/apply suites override global AppPaths.DataDir without the existing serial collection and can race other tests. Both classes now use SafeModeStateCollection; exact-head CI pending. See plans/phase-business-updates-2026-11-05.md.
 
 - [ ] **P2 CONFIRMED UPDATE EDITION FINDING** - BUSINESS-UPDATE-MIXED-APP-CORE: validating Business edition only in Core admits a Standard App plus Business Core and forged receipt; App has inlined the Standard const branches. Require an App-owned compiled edition marker and reject mixed packages, retaining the real Core/resource checks. Independently source-confirmed; source correction present and independently rechecked; exact-head CI pending. See plans/phase-business-updates-2026-11-05.md.

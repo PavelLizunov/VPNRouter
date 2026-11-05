@@ -126,6 +126,7 @@ public partial class UpdateChecker
         var source = Literal(Path.GetFullPath(sourceDirectory).TrimEnd(Path.DirectorySeparatorChar));
         var destination = Literal(Path.GetFullPath(destinationDirectory).TrimEnd(Path.DirectorySeparatorChar));
         return $$"""
+            $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
             $ErrorActionPreference = 'Stop'
             $source = {{source}}
             $destination = {{destination}}
@@ -133,6 +134,7 @@ public partial class UpdateChecker
             $manifestHash = {{Literal(manifestSha256)}}
             $logPath = {{Literal(Path.GetFullPath(logPath))}}
             $temporary = $null
+            $phase = 'WAIT_PARENT'
             function Assert-OrdinaryPath([string]$path) {
                 $current = $path
                 while ($current) {
@@ -155,18 +157,23 @@ public partial class UpdateChecker
                     if ([DateTime]::UtcNow -ge $deadline) { throw 'APP_EXIT_TIMEOUT' }
                     Start-Sleep -Milliseconds 100
                 }
+                $phase = 'VALIDATE_PATHS'
                 Assert-OrdinaryPath $source
                 Assert-OrdinaryPath $destination
                 Assert-OrdinaryPath $manifestPath
+                $phase = 'READ_MANIFEST'
                 $manifestBytes = [IO.File]::ReadAllBytes($manifestPath)
+                $phase = 'VERIFY_MANIFEST'
                 $hasher = [Security.Cryptography.SHA256]::Create()
                 try { $actualManifestHash = [BitConverter]::ToString($hasher.ComputeHash($manifestBytes)).Replace('-', '') }
                 finally { $hasher.Dispose() }
                 if ($actualManifestHash -ne $manifestHash) {
                     throw 'MANIFEST_CHANGED'
                 }
+                $phase = 'PARSE_MANIFEST'
                 $files = ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString($manifestBytes))
                 if ($files.Count -eq 0) { throw 'EMPTY_MANIFEST' }
+                $phase = 'VERIFY_SOURCE'
                 foreach ($file in $files) {
                     $relative = [string]$file.Path
                     if ([IO.Path]::IsPathRooted($relative) -or $relative -match '(^|[\/])\.\.([\/]|$)' -or $relative.Contains(':')) {
@@ -182,6 +189,7 @@ public partial class UpdateChecker
                     Assert-OrdinaryPath $to
                     if ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -ne $file.Sha256) { throw 'SOURCE_CHANGED' }
                 }
+                $phase = 'COPY'
                 foreach ($file in $files) {
                     $from = Join-Path $source $file.Path
                     $to = Join-Path $destination $file.Path
@@ -196,15 +204,18 @@ public partial class UpdateChecker
                     else { [IO.File]::Move($temporary, $to) }
                     $temporary = $null
                 }
+                $phase = 'RELAUNCH'
                 {{(suppressRelaunch ? "# Relaunch suppressed for isolated verification." : "Start-Process -FilePath (Join-Path $destination 'VPNRouter.App.exe') -WorkingDirectory $destination | Out-Null")}}
                 exit 0
             } catch {
+                $exceptionType = $_.Exception.GetType().Name
+                $hresult = $_.Exception.HResult.ToString('X8')
                 $reason = if ($_.Exception.Message -in @('APP_EXIT_TIMEOUT','MANIFEST_CHANGED','SOURCE_CHANGED','COPY_CHANGED','REPARSE_POINT_REFUSED','INVALID_MANIFEST_PATH','EMPTY_MANIFEST')) {
                     $_.Exception.Message
                 } else { 'FILE_COPY_FAILED' }
                 try {
                     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($logPath)) | Out-Null
-                    [IO.File]::AppendAllText($logPath, [DateTime]::UtcNow.ToString('O') + ' BUSINESS_UPDATE_FAILED ' + $reason + [Environment]::NewLine)
+                    [IO.File]::AppendAllText($logPath, [DateTime]::UtcNow.ToString('O') + ' BUSINESS_UPDATE_FAILED ' + $reason + ' PHASE=' + $phase + ' TYPE=' + $exceptionType + ' HRESULT=' + $hresult + [Environment]::NewLine)
                 } catch {}
                 exit 1
             } finally {

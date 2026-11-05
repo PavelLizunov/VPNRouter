@@ -60,7 +60,8 @@ public sealed class BusinessUpdateApplyTests
         var provisioning = Path.Combine(fixture.Destination, "business-provisioning.json");
         File.WriteAllText(provisioning, "retained private fixture");
         var script = fixture.PrepareScript(int.MaxValue, 0, 100);
-        Assert.Equal(0, RunHelper(script));
+        var exit = RunHelper(script);
+        Assert.True(exit == 0, "Helper exit=" + exit + "; safe log=" + (File.Exists(fixture.Log) ? File.ReadAllText(fixture.Log) : "absent"));
         Assert.Equal("new bits", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
         Assert.Equal("second file", File.ReadAllText(Path.Combine(fixture.Destination, "nested", "other.dll")));
         Assert.Equal("retained private fixture", File.ReadAllText(provisioning));
@@ -95,7 +96,8 @@ public sealed class BusinessUpdateApplyTests
         Assert.Equal(1, RunHelper(script));
         Assert.Equal("old bits", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
         Assert.False(File.Exists(fixture.LaunchMarker));
-        Assert.Contains("SOURCE_CHANGED", File.ReadAllText(fixture.Log));
+        var log = File.ReadAllText(fixture.Log);
+        Assert.True(log.Contains("SOURCE_CHANGED", StringComparison.Ordinal), "Safe helper log=" + log);
     }
 
     [Fact]
@@ -109,6 +111,26 @@ public sealed class BusinessUpdateApplyTests
         Assert.Equal(1, RunHelper(fixture.PrepareScript(int.MaxValue, 0, 100)));
         Assert.Equal("blocking regular file", File.ReadAllText(Path.Combine(fixture.Destination, "nested")));
         Assert.False(File.Exists(fixture.LaunchMarker));
+        Assert.Contains("PHASE=COPY", File.ReadAllText(fixture.Log));
+    }
+
+    [Fact]
+    public void WindowsHelperIgnoresInheritedUtilityModules()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new HelperFixture();
+        File.WriteAllText(Path.Combine(fixture.Source, "payload.dll"), "new bits");
+        var modules = Path.Combine(fixture.Source, "inherited-modules");
+        var utility = Path.Combine(modules, "Microsoft.PowerShell.Utility");
+        Directory.CreateDirectory(utility);
+        File.WriteAllText(Path.Combine(utility, "Microsoft.PowerShell.Utility.psd1"),
+            "@{RootModule='utility.psm1';ModuleVersion='1.0.0';FunctionsToExport=@('Get-FileHash');CmdletsToExport=@();AliasesToExport=@()}");
+        File.WriteAllText(Path.Combine(utility, "utility.psm1"),
+            "function Get-FileHash { throw 'INHERITED_MODULE_USED' }; Export-ModuleMember -Function Get-FileHash");
+        var exit = RunHelper(fixture.PrepareScript(int.MaxValue, 0, 100), modules);
+        Assert.True(exit == 0, "Helper exit=" + exit + "; safe log=" + (File.Exists(fixture.Log) ? File.ReadAllText(fixture.Log) : "absent"));
+        Assert.Equal("new bits", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
+        Assert.Equal("VPNRouter.App.exe", File.ReadAllText(fixture.LaunchMarker));
     }
 
     [Fact]
@@ -122,13 +144,14 @@ public sealed class BusinessUpdateApplyTests
         Assert.DoesNotContain(script, info.Arguments);
     }
 
-    private static int RunHelper(string script)
+    private static int RunHelper(string script, string? inheritedModules = null)
     {
         var info = UpdateChecker.CreateBusinessHelperStartInfo(script, false);
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
         info.RedirectStandardOutput = true;
         info.RedirectStandardError = true;
+        if (inheritedModules != null) info.Environment["PSModulePath"] = inheritedModules;
         using var process = Process.Start(info)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
