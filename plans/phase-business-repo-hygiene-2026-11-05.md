@@ -52,12 +52,14 @@ repository; current Business delivery evidence and existing memory findings rema
 
 ## Verification gates
 
-1. Build: PENDING hosted Release regression builds and, after Android edits,
-   the existing unsigned Android Release APK compile/inventory job. No local SDK.
-2. Tests: PENDING Linux/Windows, Headless, packaging and affected Business gates.
-   No tests are removed or rewritten for this cleanup.
+1. Build: PASS on implementation 952102cb. Hosted Release builds and Android
+   Release APK compilation/inventory succeeded; both APKs contain arm64-v8a only.
+   No local SDK/build or private installer rebuild.
+2. Tests: PASS on implementation 952102cb. Linux 3523 passed / 79 skipped;
+   Windows 3693 / 21; Business 285 / 1. Headless publish/contracts, Arch packaging,
+   Go Windows, receiver and UI MCP checks also succeeded. No tests removed.
 3. Docs: PASS locally. Current symbols, linked release owner and paths verified;
-   Outcome records the implementation and outstanding exact-head checks.
+   Outcome records observed implementation checks and the evidence-only follow-up.
 4. Review: source triage completed; independent cross-family review N/A by owner
    choice. This small deletion/correction batch introduces no feature or API.
 5. UI/live: N/A. No reachable UI flow changes and no new binary is shipped.
@@ -71,7 +73,8 @@ is evidence only for the jobs that emit it; no control-plane build is permitted.
 
 ## Outcome
 
-- Status: IMPLEMENTED; final exact-head CI pending.
+- Status: PASS for implementation 952102cb; evidence-only follow-up, then observe
+  final PR-head CI before handoff. Product source is unchanged by this follow-up.
 - Changed scope: ten approved files plus this brief and ledger; three whole
   private members removed, four instruction maps corrected, three CI routes fixed.
 - Git: https://github.com/PavelLizunov/VPNRouter/pull/650 targets business;
@@ -88,8 +91,13 @@ is evidence only for the jobs that emit it; no control-plane build is permitted.
   A targeted source scan confirms the removed identifiers are absent from code.
 - Review: existing exclusions and callers rechecked by the lead. No external model
   used, and no independent cross-family review is claimed.
-- Final regression/Android checks: PENDING after implementation push. No new-head
-  success, live behavior, installer or deployment acceptance is claimed.
+- Implementation checks: GitHub API confirms full head
+  952102cb89c0ed40beaa2b79cefe054b8f3ef8e0 with exactly 11 SUCCESS and two expected
+  private-job SKIPPED. Recorded aggregate counts come from the actual job logs.
+  Runs: 42052486462, 42052486591, 42052486614, 42052486903.
+- RH-01 through RH-08 are resolved in source/CI in PR #650. The follow-up changes
+  only this record and the ledger; its exact-head checks must also pass. No live
+  behavior, installer, deployment or merge acceptance is claimed.
 - Follow-ups: unknown history and foreign refs/worktrees retained. Existing memory,
   live dataplane and macOS runtime coverage limitations are not resolved here.
 - Cleanup: protected outside-repository audit artifacts intentionally retained.
