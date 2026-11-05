@@ -67,6 +67,7 @@ public static partial class Strings
         ("GB", true) => "Великобритания", ("GB", false) => "United Kingdom",
         ("US", true) => "США", ("US", false) => "United States",
         ("CH", true) => "Швейцария", ("CH", false) => "Switzerland",
+        ("RO", true) => "Румыния", ("RO", false) => "Romania",
         _ when code.Length == 2 => code,
         _ => Ru ? "Страна неизвестна" : "Country unknown"
     };

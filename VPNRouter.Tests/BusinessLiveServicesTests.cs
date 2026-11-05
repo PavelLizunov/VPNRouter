@@ -229,6 +229,8 @@ public sealed class BusinessLiveServicesTests
     [Theory]
     [InlineData("Iceland VLESS", "IS")]
     [InlineData("Germany-Office", "DE")]
+    [InlineData("Romania node", "RO")]
+    [InlineData("Румыния", "RO")]
     [InlineData("NL node", "NL")]
     [InlineData("Исландия VPN", "IS")]
     [InlineData("ISLAND-unknown", "")]

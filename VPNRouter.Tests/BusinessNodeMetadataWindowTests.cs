@@ -67,6 +67,16 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.True(choice.IsGood);
             Assert.Equal("12 ms", choice.PingText);
 
+            var romania = Snapshot(Node("node.example.invalid", "RO"));
+            choice.UpdateMetadata(romania, romania.Nodes.Values.Single());
+            Assert.Equal("RO", choice.CountryCode);
+            Assert.Equal("Romania", choice.CountryName);
+            Assert.NotNull(choice.CountryFlag);
+            Strings.Lang = "ru";
+            choice.RefreshLocalization();
+            Assert.Equal("Румыния", choice.CountryName);
+            Strings.Lang = "en";
+
             var stale = Snapshot(Node("node.example.invalid", null, available: 0, load: 0,
                 observed: 600, age: 1400, freshness: "stale"));
             choice.UpdateMetadata(stale, stale.Nodes.Values.Single());
