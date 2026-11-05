@@ -200,8 +200,14 @@ public partial class UpdateChecker
                     $temporary = Join-Path $folder ('.business-copy-' + [Guid]::NewGuid().ToString('N'))
                     [IO.File]::Copy($from, $temporary, $false)
                     if ((Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash -ne $file.Sha256) { throw 'COPY_CHANGED' }
-                    if ([IO.File]::Exists($to)) { [IO.File]::Replace($temporary, $to, $null) }
-                    else { [IO.File]::Move($temporary, $to) }
+                    if ([IO.File]::Exists($to)) {
+                        $phase = 'REPLACE'
+                        # Preserve a true null string instead of PowerShell's empty-string conversion.
+                        [IO.File]::Replace($temporary, $to, [NullString]::Value)
+                    } else {
+                        $phase = 'MOVE'
+                        [IO.File]::Move($temporary, $to)
+                    }
                     $temporary = $null
                 }
                 $phase = 'RELAUNCH'
