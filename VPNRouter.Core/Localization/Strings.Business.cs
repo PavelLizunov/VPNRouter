@@ -35,6 +35,11 @@ public static partial class Strings
     public static string BusinessDiagnosticsOpenFailed => Ru ? "Не удалось открыть папку отчёта." : "Could not open the report folder.";
     public static string BusinessNodeMetricsUnavailable => Ru ? "Активность: нет данных" : "Activity: no data";
     public static string BusinessNodeMetricsStale => Ru ? "Активность: данные устарели" : "Activity: data is stale";
+    public static string BusinessUpdatesUnavailable => Ru ? "Обновления недоступны" : "Updates unavailable";
+    public static string BusinessUpdateWaitForConnection => Ru ? "Дождитесь завершения подключения и повторите обновление." : "Wait for the connection to finish and retry the update.";
+    public static string BusinessUpdateStopFailed => Ru ? "Не удалось остановить VPN. Отключите его и повторите обновление." : "Could not stop VPN. Disconnect and retry the update.";
+    public static string BusinessUpdateDownloadFailed => Ru ? "Не удалось загрузить проверенное обновление. Повторите позже." : "Could not download a verified update. Retry later.";
+    public static string BusinessUpdateInstallFailed => Ru ? "Не удалось запустить обновление. Повторите позже." : "Could not start the update. Retry later.";
     public static string BusinessNodeActivityLow => Ru ? "Активность: низкая" : "Activity: low";
     public static string BusinessNodeActivityMedium => Ru ? "Активность: средняя" : "Activity: medium";
     public static string BusinessNodeActivityHigh => Ru ? "Активность: высокая" : "Activity: high";

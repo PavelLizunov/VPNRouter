@@ -16,11 +16,21 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CONFIRMED UPDATE TEST ISOLATION FINDING** - BUSINESS-UPDATE-DATADIR-COLLECTION: two new package/apply suites override global AppPaths.DataDir without the existing serial collection and can race other tests. Both classes now use SafeModeStateCollection; exact-head CI pending. See plans/phase-business-updates-2026-11-05.md.
+
+- [ ] **P2 CONFIRMED UPDATE EDITION FINDING** - BUSINESS-UPDATE-MIXED-APP-CORE: validating Business edition only in Core admits a Standard App plus Business Core and forged receipt; App has inlined the Standard const branches. Require an App-owned compiled edition marker and reject mixed packages, retaining the real Core/resource checks. Independently source-confirmed; source correction present and independently rechecked; exact-head CI pending. See plans/phase-business-updates-2026-11-05.md.
+
+- [ ] **P2 CONFIRMED UPDATE INTEGRATION COMPILE FINDING** - BUSINESS-UPDATE-HELPER-SHADOW: staged-hash integration introduced a local helper-start variable named info inside ApplyBusinessUpdate(..., UpdateSourceInfo info), violating C# local-name rules. Local renamed startInfo and reviewed in source; exact-head CI pending. See plans/phase-business-updates-2026-11-05.md.
+
+- [ ] **P2 CONFIRMED UPDATE INTEGRATION FINDING** - BUSINESS-UPDATE-STOP-ISOLATION: the first update preparation reused ToggleConnectionAsync, whose Stop branch reaches global orphan cleanup. Use an owned-engine stop for Business update preparation and retain other applications/services. Independent source review; source correction present and independently rechecked; exact-head CI pending. See plans/phase-business-updates-2026-11-05.md.
+
+- [ ] **P2 CONFIRMED UPDATE RACE FINDING** - BUSINESS-UPDATE-OFFER-REPLACEMENT: a startup/manual check can replace the current offer reference after download starts, causing a verified staged update to be refused during Apply. Pin the successfully downloaded offer/path independently of later checks and cover the overlap. Independent source review; source correction present and independently rechecked; exact-head CI pending. See plans/phase-business-updates-2026-11-05.md.
+
 - [ ] **P2 CONFIRMED LIVE TELEMETRY FAILURE** - BUSINESS-ACTIVITY-JUMP-SCAN: controller59477de stopped refreshing two nodes while their direct management SSH/key scan timed out; both VPN services remain active. Audited management jumps restore polling at19:19UTC; four fresh activity values confirmed at19:35. Underlying direct-route outage cause remains unknown; never treat stale activity as low. See plans/phase-business-activity-recovery-2026-11-05.md.
 
-- [ ] **P3 CONFIRMED PRESENTATION DEFECT** - BUSINESS-ACTIVITY-STALE-LABEL: a known stale snapshot displays the same no-data label as an absent sample; distinguish stale RU/EN text while retaining neutral bars and independent ping. See plans/phase-business-activity-recovery-2026-11-05.md.
+- [x] **P3 FIXED IN30176a85 / GREEN CI** - BUSINESS-ACTIVITY-STALE-LABEL: a known stale snapshot displays the same no-data label as an absent sample; distinguish stale RU/EN text while retaining neutral bars and independent ping. See plans/phase-business-activity-recovery-2026-11-05.md.
 
-- [ ] **P3 CONFIRMED RENDERING DEFECT** - BUSINESS-HEADER-INTERPOLATION: BusinessWindow scales the640px mascot to36px without the HighQuality bitmap interpolation already used by Standard UI; the owner crop matches nearest-neighbor rendering. See plans/phase-business-activity-recovery-2026-11-05.md.
+- [x] **P3 FIXED IN30176a85 / GREEN CI** - BUSINESS-HEADER-INTERPOLATION: BusinessWindow scales the640px mascot to36px without the HighQuality bitmap interpolation already used by Standard UI; the owner crop matches nearest-neighbor rendering. See plans/phase-business-activity-recovery-2026-11-05.md.
 
 - [x] **P2 CONFIRMED CI FIXTURE ERROR** - BUSINESS-ACTIVITY-TOOLTIP-FIXTURE: ae1276b0 adds an activity tooltip Grid, so the existing health test's generic tooltip-Grid Single assertion finds two owners. Select the Grid that directly owns the health dot; retain the expected per-row health and non-connection-status assertions. No product defect or private rebuild. Task plans/phase-business-clarity-metadata-2026-11-05.md. 691dc21c targets the direct health-dot owner and retains the original assertions; all eleven applicable checks pass. Product source is identical to the private ae1276b0 installer. RESOLVED v2.50.5.
 

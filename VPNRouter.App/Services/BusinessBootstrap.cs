@@ -19,6 +19,7 @@ internal static class BusinessBootstrap
     internal static void Apply(AppSettings settings, ISettingsStore store, string connection,
         string bundleDirectory, string geoDirectory, string settingsPath)
     {
+        BusinessProvisioningStore.ValidateBundle(connection);
         BusinessDefaults.Apply(settings, BusinessClientConfiguration.SelectStartupConnection(settings, connection), ReadRules());
         foreach (var name in new[] { "geoip-ru.srs", "geosite-ru.srs" })
         {
@@ -30,7 +31,14 @@ internal static class BusinessBootstrap
         store.Save(settings, settingsPath);
     }
 
-    internal static string ReadConnection() => ReadResource("VPNRouter.Business.Connection");
+    internal static string ReadConnection()
+    {
+        using var embedded = typeof(BusinessBootstrap).Assembly.GetManifestResourceStream("VPNRouter.Business.Connection");
+        return ReadConnection(embedded == null ? null : BusinessProvisioningStore.ReadBounded(embedded), AppPaths.DataDir);
+    }
+
+    internal static string ReadConnection(string? embeddedBundle, string dataDirectory) =>
+        BusinessProvisioningStore.Resolve(embeddedBundle, dataDirectory);
 
     internal static BusinessClientConfiguration ReadClientConfiguration()
     {

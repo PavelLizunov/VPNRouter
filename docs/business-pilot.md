@@ -129,11 +129,18 @@ by that employee and are not a protection against extraction. Never give this
 same identity to all 20 employees or publish it as a public release. Revoke the
 employee's identity on the VPN server, including active sessions. Rebuilding the
 Business variant from updated common source applies shared fixes while retaining
-the presets. Consumer self-update/web repair is disabled in the pilot so it
-cannot replace Business with a consumer binary. Automatic fleet management and
-rule rotation remain separate work. Subscription entries can now update from the
-immutable HTTPS reference described below; updating embedded rules still requires
-a new individual installer.
+the presets. Business updates use a separate trusted HTTPS manifest and the existing
+update download/staging flow. The shared ZIP contains Business binaries and no
+employee provisioning; an ordinary consumer package is rejected using actual
+assembly metadata. The first update-enabled private installer saves its validated
+bundle outside the installed app directory, so later shared packages retain the
+employee identity, service addresses and saved settings. Older installed pilots
+need that one manual bridge upgrade. See the
+[Business package contract](../packaging/windows/business-update.md).
+Subscription entries can now update from the
+immutable HTTPS reference described below; bundled rules update with the Business
+application package. Fleet provisioning and server-side policy management remain
+separate work.
 
 ## Employee instruction
 

@@ -160,6 +160,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task ToggleConnectionAsync()
     {
+        if (ProductEdition.IsBusiness && UpdateVm.IsDownloading) return;
         if (ProductEdition.IsBusiness && _businessConfigurationFailed && !IsConnected)
         {
             StatusText = Core.Localization.Strings.BusinessConfigMissing;

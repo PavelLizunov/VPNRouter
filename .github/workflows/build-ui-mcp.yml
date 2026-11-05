@@ -16,6 +16,8 @@ on:
       - 'packaging/windows/support/**'
       - 'packaging/business-support/**'
       - 'packaging/windows/business.iss'
+      - 'packaging/windows/business-update.md'
+      - 'tools/build-business-update.ps1'
       - 'VPNRouter.Tests/Business*.cs'
       - '.github/workflows/build-ui-mcp.yml'
   pull_request:
@@ -26,6 +28,8 @@ on:
       - 'packaging/windows/support/**'
       - 'packaging/business-support/**'
       - 'packaging/windows/business.iss'
+      - 'packaging/windows/business-update.md'
+      - 'tools/build-business-update.ps1'
       - 'VPNRouter.Tests/Business*.cs'
       - '.github/workflows/build-ui-mcp.yml'
   workflow_dispatch:
@@ -38,13 +42,17 @@ on:
         description: 'Build the privately configured single-file diagnostic tool'
         type: boolean
         default: false
+      business_shared_update:
+        description: 'Build a credential-free Business update ZIP'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   build:
-    if: ${{ !inputs.business_pilot && !inputs.business_support }}
+    if: ${{ !inputs.business_pilot && !inputs.business_support && !inputs.business_shared_update }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -104,7 +112,7 @@ jobs:
           retention-days: 14
 
   business-surface:
-    if: ${{ !inputs.business_pilot && !inputs.business_support }}
+    if: ${{ !inputs.business_pilot && !inputs.business_support && !inputs.business_shared_update }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -129,6 +137,26 @@ jobs:
         run: dotnet build VPNRouter.sln -c Release
       - name: Business policy and isolated UI checks
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~Business" --logger "console;verbosity=normal"
+      - name: Verify credential-free Business publication
+        shell: pwsh
+        run: |
+          $priorEdition = $env:VPNRouterEdition
+          $priorShared = $env:BusinessSharedUpdate
+          $priorPayload = $env:VPNROUTER_BUSINESS_SHARED_PAYLOAD_DIR
+          try {
+            if ($env:BusinessConnectionFile) { throw 'Shared publication refuses a connection file.' }
+            $env:VPNRouterEdition = 'Business'
+            $env:BusinessSharedUpdate = 'true'
+            $env:VPNROUTER_BUSINESS_SHARED_PAYLOAD_DIR = Join-Path $env:RUNNER_TEMP 'business-shared-publication'
+            dotnet publish VPNRouter.App/VPNRouter.App.csproj -c Release -r win-x64 --self-contained true -o $env:VPNROUTER_BUSINESS_SHARED_PAYLOAD_DIR
+            if ($LASTEXITCODE -ne 0) { throw 'Shared Business publish failed.' }
+            dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~BusinessUpdatePackagingContractTests.SharedPublishedAssemblies' --logger 'console;verbosity=minimal'
+            if ($LASTEXITCODE -ne 0) { throw 'Shared Business binary identity validation failed.' }
+          } finally {
+            $env:VPNRouterEdition = $priorEdition
+            $env:BusinessSharedUpdate = $priorShared
+            $env:VPNROUTER_BUSINESS_SHARED_PAYLOAD_DIR = $priorPayload
+          }
       - name: Package standalone Business support scripts
         shell: pwsh
         run: |
@@ -152,7 +180,7 @@ jobs:
           if-no-files-found: error
 
   business-receiver:
-    if: ${{ !inputs.business_pilot && !inputs.business_support }}
+    if: ${{ !inputs.business_pilot && !inputs.business_support && !inputs.business_shared_update }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -301,3 +329,40 @@ jobs:
           path: ${{ runner.temp }}/business-delivery/
           if-no-files-found: error
           retention-days: 3
+
+  business-shared-update:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.business_shared_update && !inputs.business_pilot && !inputs.business_support }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - name: Exact source and Windows capacity/tool preflight
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -ne '${{ github.sha }}') { throw 'Source SHA mismatch.' }
+          $os = Get-CimInstance Win32_OperatingSystem
+          $cpu = Get-CimInstance Win32_Processor
+          $disk = Get-PSDrive C
+          $jobs = @(Get-Process dotnet,msbuild,VBCSCompiler,java -ErrorAction SilentlyContinue)
+          Write-Host "CPU=$([Environment]::ProcessorCount), load=$((($cpu | Measure-Object LoadPercentage -Average).Average)) percent, available RAM=$($os.FreePhysicalMemory) KiB, free disk=$([math]::Round($disk.Free/1GB,2)) GiB, competing jobs=$($jobs.Count)"
+          Get-CimInstance Win32_PageFileUsage | Select-Object AllocatedBaseSize,CurrentUsage
+          dotnet --list-sdks
+          go version
+          if ($os.FreePhysicalMemory -lt 3MB -or $disk.Free -lt 8GB -or $jobs.Count -ne 0) { throw 'Shared build preflight failed.' }
+      - name: Build and validate shared Business update
+        shell: pwsh
+        run: ./tools/build-business-update.ps1 -OutputDir (Join-Path $env:RUNNER_TEMP 'business-shared-update')
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: business-shared-update-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/business-shared-update/*.zip
+            ${{ runner.temp }}/business-shared-update/*.zip.sha256
+            ${{ runner.temp }}/business-shared-update/source-sha.txt
+          if-no-files-found: error
+          retention-days: 14

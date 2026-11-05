@@ -523,7 +523,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WireServersOrphanTracking();
         WireSimpleHomeNotifications();
 
-        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
+        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger,
+            updateSource: null, prepareBusinessUpdate: PrepareBusinessUpdateAsync);
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
@@ -567,7 +568,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             DetectServiceManagedVpn();
 
-            if (!ProductEdition.IsBusiness) _ = UpdateVm.CheckOnStartupAsync();
+            if (!ProductEdition.IsBusiness || UpdateVm.CanCheckUpdates) _ = UpdateVm.CheckOnStartupAsync();
 
             StartRuntimeStatusPolling();
 

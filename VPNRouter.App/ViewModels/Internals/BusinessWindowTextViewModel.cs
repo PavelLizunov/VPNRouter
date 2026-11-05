@@ -51,6 +51,8 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     public string Server => Strings.BusinessServer;
     public string ServerRefresh => Strings.BusinessServerRefresh;
     public string UpdateServers => Strings.BusinessUpdateServers;
+    public string InstallUpdate => Strings.UpdateButton;
+    public string LaterUpdate => Strings.UpdateButtonDismiss;
     public string DiagnosticsHeader => Strings.BusinessDiagnosticsHeader;
     public string DiagnosticsCollect => Strings.BusinessDiagnosticsCollect;
     public string DiagnosticsSend => Strings.BusinessDiagnosticsSend;

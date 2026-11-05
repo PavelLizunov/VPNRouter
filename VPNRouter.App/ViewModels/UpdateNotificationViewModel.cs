@@ -13,6 +13,7 @@ using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.UpdateSources;
 using VPNRouter.App.Localization;
+using VPNRouter.App.Services;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -31,7 +32,9 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     [ObservableProperty] private bool _isVisible;
     [ObservableProperty] private string _message = string.Empty;
-    [ObservableProperty] private bool _isDownloading;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCheckUpdates))]
+    private bool _isDownloading;
     [ObservableProperty] private int _downloadProgress;
 
     public enum UpdateCheckState { Default, Checking, UpToDate, Found, Failed }
@@ -40,7 +43,11 @@ public partial class UpdateNotificationViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CheckLinkText))]
     private UpdateCheckState _checkState = UpdateCheckState.Default;
 
-    public string CheckLinkText => CheckState switch
+    public bool CanCheckUpdates => !IsChecking && !IsDownloading &&
+        (_updateSource is not BusinessUpdateSource business || business.IsConfigured);
+
+    public string CheckLinkText => _updateSource is BusinessUpdateSource { IsConfigured: false }
+        ? VPNRouter.Core.Localization.Strings.BusinessUpdatesUnavailable : CheckState switch
     {
         UpdateCheckState.Checking => Strings.Checking,
         UpdateCheckState.UpToDate => Strings.UpToDate,
@@ -61,7 +68,9 @@ public partial class UpdateNotificationViewModel : ObservableObject
             item.NotifyLangChanged();
     }
 
-    [ObservableProperty] private bool _isChecking;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCheckUpdates))]
+    private bool _isChecking;
 
     public ObservableCollection<RollbackReleaseItemViewModel> StableVersions { get; } = new();
 
@@ -113,23 +122,36 @@ public partial class UpdateNotificationViewModel : ObservableObject
         UpdateSettings settings,
         ILogger logger,
         IUpdateSource? updateSource,
-        Action<int>? exitApplication = null)
+        Action<int>? exitApplication = null,
+        Func<Task>? prepareBusinessUpdate = null)
     {
         _settings = settings;
         _logger = logger;
         _updateChecker = new UpdateChecker(settings, AppVersion.Version);
-        _updateSource = updateSource ?? PlatformServices.CreateUpdateSource(
+        _updateSource = updateSource ?? (ProductEdition.IsBusiness
+            ? new BusinessUpdateSource(BusinessBootstrap.ReadClientConfiguration().UpdatesEndpoint,
+                AppVersion.Version, _updateChecker, prepareBusinessUpdate)
+            : PlatformServices.CreateUpdateSource(
             settings,
             AppVersion.Version,
             PolicyHttpClient.Shared,
-            desktopInstaller: _updateChecker);
+            desktopInstaller: _updateChecker));
         _exitApplication = exitApplication ?? Environment.Exit;
 
         _updateChecker.DownloadProgress += progress =>
-            Dispatcher.UIThread.Post(() => { if (!_errorLocked) DownloadProgress = progress; });
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_errorLocked) return;
+                DownloadProgress = progress;
+                if (_updateSource is BusinessUpdateSource)
+                    Message = string.Format(Strings.UpdateDownloading, progress);
+            });
 
         _updateChecker.StatusChanged += status =>
-            Dispatcher.UIThread.Post(() => { if (!_errorLocked) Message = status; });
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!_errorLocked && _updateSource is not BusinessUpdateSource) Message = status;
+            });
     }
 
     public async Task CheckOnStartupAsync()
@@ -153,7 +175,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
     [RelayCommand]
     private async Task CheckManually()
     {
-        if (IsDownloading || IsChecking)
+        if (!CanCheckUpdates)
             return;
 
         IsChecking = true;
@@ -303,21 +325,26 @@ public partial class UpdateNotificationViewModel : ObservableObject
         _errorLocked = false;
         IsDownloading = true;
         DownloadProgress = 0;
-        Message = Strings.UpdateDownloading;
+        Message = string.Format(Strings.UpdateDownloading, 0);
 
         try
         {
             var extractedDir = await _updateSource.DownloadAsync(target, progress: null).ConfigureAwait(false);
 
-            Message = Strings.UpdateApplying;
+            await Dispatcher.UIThread.InvokeAsync(() => Message = Strings.UpdateApplying);
 
-            try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
+            if (!ProductEdition.IsBusiness && _updateSource is not BusinessUpdateSource)
+            {
+                try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
+            }
 
             await _updateSource.ApplyAsync(target, extractedDir).ConfigureAwait(false);
 
-            Message = Strings.UpdateRestarting;
-
-            _exitApplication(0);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Message = Strings.UpdateRestarting;
+                _exitApplication(0);
+            });
         }
         catch (Exception ex)
         {

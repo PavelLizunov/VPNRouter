@@ -60,6 +60,12 @@ public partial class UpdateChecker
         ArgumentNullException.ThrowIfNull(info);
         if (string.IsNullOrWhiteSpace(stagedPath))
             throw new ArgumentException("Staged path must be non-empty.", nameof(stagedPath));
+        if (ProductEdition.IsBusiness)
+        {
+            ct.ThrowIfCancellationRequested();
+            ApplyBusinessUpdate(stagedPath, info);
+            return Task.FromResult(true);
+        }
         var isDowngrade = IsVersionDowngrade(_currentVersion, info.Version);
         if (isDowngrade)
         {
@@ -75,12 +81,21 @@ public partial class UpdateChecker
         return Task.FromResult(true);
     }
 
-    public async Task<string> DownloadAndStageAsync(UpdateInfo info, CancellationToken ct = default)
+    public Task<string> DownloadAndStageAsync(UpdateInfo info, CancellationToken ct = default) =>
+        DownloadAndStageAsync(info, ProductEdition.IsBusiness, ct);
+
+    internal async Task<string> DownloadAndStageAsync(UpdateInfo info, bool business, CancellationToken ct)
     {
         var useLite = info.HasLiteUpdate && !string.IsNullOrEmpty(info.LiteDownloadUrl);
         var downloadUrl = useLite ? info.LiteDownloadUrl! : info.DownloadUrl;
         var expectedSize = useLite ? info.LiteSizeBytes : info.SizeBytes;
         var checksumUrl = useLite ? info.LiteChecksumUrl : info.FullChecksumUrl;
+        if (business)
+        {
+            BusinessUpdatePackage.ValidateDownload(downloadUrl, expectedSize, info.FullChecksumSha256, useLite);
+            if (info.LatestVersion.Length > 64 || !TryParseSemVer(info.LatestVersion, out _))
+                throw new InvalidOperationException("Invalid Business update version.");
+        }
 
         if (string.IsNullOrWhiteSpace(downloadUrl) ||
             !Uri.TryCreate(downloadUrl, UriKind.Absolute, out var downloadUri) ||
@@ -109,6 +124,8 @@ public partial class UpdateChecker
             _stagingDir, Guid.NewGuid().ToString("N").Substring(0, 8));
         Directory.CreateDirectory(stagingDir);
 
+        try
+        {
         string downloadExt =
             downloadUrl.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? ".tar.gz"
             : downloadUrl.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)  ? ".tgz"
@@ -117,7 +134,7 @@ public partial class UpdateChecker
 
         long totalBytes;
         await using (var response = await _http.SendStreamingAsync(
-            new HttpRequest(HttpMethod.Get, downloadUri),
+            new HttpRequest(HttpMethod.Get, downloadUri) { MaxResponseBytes = business ? expectedSize : null },
             ct).ConfigureAwait(false))
         {
             if (!response.IsSuccess())
@@ -125,6 +142,8 @@ public partial class UpdateChecker
                     $"HTTP {response.StatusCode} downloading update from {downloadUrl}");
 
             totalBytes = response.ContentLength ?? expectedSize;
+            if (business && response.ContentLength is { } length && length != expectedSize)
+                throw new InvalidOperationException("Business update length does not match its manifest.");
 
             using var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920);
 
@@ -134,6 +153,8 @@ public partial class UpdateChecker
 
             while ((bytesRead = await response.Body.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
             {
+                if (business && bytesRead > expectedSize - totalRead)
+                    throw new InvalidOperationException("Business update exceeds its declared length.");
                 await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
                 totalRead += bytesRead;
 
@@ -145,11 +166,13 @@ public partial class UpdateChecker
         }
 
         var downloadedSize = new FileInfo(zipPath).Length;
+        if (business && downloadedSize != expectedSize)
+            throw new InvalidOperationException("Business update length does not match its manifest.");
         if (expectedSize > 0 && downloadedSize < expectedSize * 0.9)
             throw new InvalidOperationException(
                 $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {expectedSize / 1024 / 1024} MB). Download may be corrupted.");
 
-        string? expectedSha = info.FullChecksumSha256;
+        string? expectedSha = business ? info.FullChecksumSha256?.ToLowerInvariant() : info.FullChecksumSha256;
         if (string.IsNullOrEmpty(expectedSha) && checksumUri != null)
         {
             var shaResponse = await _http.SendAsync(
@@ -197,7 +220,14 @@ public partial class UpdateChecker
         StatusChanged?.Invoke("Extracting update...");
 
         var extractDir = Path.Combine(stagingDir, "extracted");
-        if (zipPath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+        if (business)
+        {
+            BusinessUpdatePackage.ValidateArchive(zipPath);
+            ZipFile.ExtractToDirectory(zipPath, extractDir);
+            BusinessUpdatePackage.ValidateStaged(extractDir, info.LatestVersion);
+            RememberBusinessStage(extractDir, info.LatestVersion, expectedSha, expectedSize, zipPath);
+        }
+        else if (zipPath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
             zipPath.EndsWith(".tgz",    StringComparison.OrdinalIgnoreCase))
         {
             Directory.CreateDirectory(extractDir);
@@ -218,10 +248,19 @@ public partial class UpdateChecker
             ZipFile.ExtractToDirectory(zipPath, extractDir);
         }
 
-        ValidateExtractedContent(extractDir);
+        if (!business) ValidateExtractedContent(extractDir);
 
         StatusChanged?.Invoke("Update ready to apply.");
         return extractDir;
+        }
+        catch
+        {
+            if (business)
+            {
+                try { Directory.Delete(stagingDir, recursive: true); } catch { }
+            }
+            throw;
+        }
     }
 
     public void CleanupStagingDir()

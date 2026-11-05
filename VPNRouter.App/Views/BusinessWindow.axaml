@@ -132,6 +132,12 @@
                                             </StackPanel>
                                         </Border>
                                         <Border Classes="menu-divider"/>
+                                        <Border>
+                                            <Button Classes="menu-item" Content="{Binding UpdateVm.CheckLinkText}"
+                                                    Command="{Binding UpdateVm.CheckManuallyCommand}" IsEnabled="{Binding UpdateVm.CanCheckUpdates}"
+                                                    AutomationProperties.AutomationId="BusinessUpdateCheck"/>
+                                        </Border>
+                                        <Border Classes="menu-divider"/>
                                         <Button x:Name="BusinessServerRefresh" Classes="menu-item"
                                                 Content="{Binding #BusinessWindowRoot.Texts.ServerRefresh}"
                                                 Click="OnBusinessServerRefresh"
@@ -152,8 +158,24 @@
                     </Button.Flyout>
                 </Button>
             </Grid>
+            <Border IsVisible="{Binding UpdateVm.IsVisible}" Padding="10"
+                    Background="{DynamicResource SurfaceBaseBrush}"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusMd}"
+                    AutomationProperties.AutomationId="BusinessUpdateNotice">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding UpdateVm.Message}" TextWrapping="Wrap" FontSize="12"/>
+                    <ProgressBar Height="3" Value="{Binding UpdateVm.DownloadProgress}" IsVisible="{Binding UpdateVm.IsDownloading}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !UpdateVm.IsDownloading}">
+                        <Button Content="{Binding #BusinessWindowRoot.Texts.InstallUpdate}" Command="{Binding UpdateVm.DownloadAndApplyCommand}"
+                                AutomationProperties.AutomationId="BusinessUpdateInstall"/>
+                        <Button Content="{Binding #BusinessWindowRoot.Texts.LaterUpdate}" Command="{Binding UpdateVm.DismissCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
             <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ConnectionStatus}" TextWrapping="Wrap" TextAlignment="Center"
                        MinHeight="24" Foreground="{DynamicResource TextSecondaryBrush}"/>
+            <Border IsEnabled="{Binding !UpdateVm.IsDownloading}">
             <Button Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding !IsConnecting}"
                     Classes="solid" MinHeight="48" CornerRadius="{StaticResource RadiusPill}"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
@@ -161,6 +183,7 @@
                     AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.ConnectButton}">
                 <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ConnectButton}" FontSize="18" VerticalAlignment="Center"/>
             </Button>
+            </Border>
             <StackPanel Spacing="8" IsEnabled="{Binding !IsConnected}">
                 <TextBlock Text="{Binding #BusinessWindowRoot.Texts.Server}"
                            Foreground="{DynamicResource TextSecondaryBrush}"/>

@@ -6,11 +6,12 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.Services;
 
-// Read only from the private embedded bundle, never from a downloaded response.
+// Read only from trusted provisioning, never from a downloaded subscription response.
 internal sealed class BusinessClientConfiguration
 {
     internal Uri? Subscription { get; private init; }
     internal Uri? NodesEndpoint { get; private init; }
+    internal Uri? UpdatesEndpoint { get; private init; }
     internal Uri? SupportEndpoint { get; private init; }
     internal string? SupportToken { get; private init; }
     internal string? SourceHash => Subscription == null ? null :
@@ -35,15 +36,16 @@ internal sealed class BusinessClientConfiguration
                 token.Any(c => !(char.IsAsciiLetterOrDigit(c) || "._~+/-=".Contains(c))))
                 throw new InvalidDataException("Invalid Business upload identity.");
         }
-        return new() { Subscription = subscription, NodesEndpoint = OptionalNodesEndpoint(data),
+        return new() { Subscription = subscription, NodesEndpoint = OptionalEndpoint(data, "nodes_url"),
+            UpdatesEndpoint = OptionalEndpoint(data, "updates_url"),
             SupportEndpoint = endpoint, SupportToken = token };
     }
 
-    // Optional telemetry must never prevent a valid embedded VPN bundle from starting.
-    // Duplicate or malformed targets disable only this feature; caches do not call this path.
-    private static Uri? OptionalNodesEndpoint(JsonElement data)
+    // Invalid optional service URLs disable only their feature, never VPN startup.
+    // Subscription caches do not supply these trusted targets.
+    private static Uri? OptionalEndpoint(JsonElement data, string name)
     {
-        var properties = data.EnumerateObject().Where(p => p.NameEquals("nodes_url")).ToArray();
+        var properties = data.EnumerateObject().Where(p => p.NameEquals(name)).ToArray();
         if (properties.Length != 1 || properties[0].Value.ValueKind != JsonValueKind.String)
             return null;
         var value = properties[0].Value.GetString();
