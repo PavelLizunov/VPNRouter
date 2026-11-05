@@ -101,6 +101,9 @@
                                     <TextBlock Text="{Binding CountryName}" FontSize="11" TextTrimming="CharacterEllipsis"
                                                Foreground="{DynamicResource TextSecondaryBrush}"
                                                ToolTip.Tip="{Binding $parent[views:BusinessWindow].Texts.CountryHint}"/>
+                                    <TextBlock Text="{Binding MetricsText}" IsVisible="{Binding HasMetadata}"
+                                               FontSize="10" TextWrapping="Wrap" ToolTip.Tip="{Binding MetricsHint}"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="3" Text="{Binding PingText}" FontSize="12"
                                            VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"/>

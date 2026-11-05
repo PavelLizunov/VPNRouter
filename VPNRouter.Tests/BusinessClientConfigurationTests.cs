@@ -38,6 +38,71 @@ public sealed class BusinessClientConfigurationTests
     public void PrivateMetadata_RejectsUnsafeServiceTargets(string source) =>
         Assert.Throws<InvalidDataException>(() => BusinessClientConfiguration.Parse(Bundle(source)));
 
+    private static string WithNodesField(string field) => Bundle().Replace("\"business\":{", "\"business\":{" + field + ",", StringComparison.Ordinal);
+
+    [Fact]
+    public void NodesEndpoint_IsOptionalAndDoesNotChangeSubscriptionCacheIdentity()
+    {
+        var original = BusinessClientConfiguration.Parse(Bundle());
+        Assert.Null(original.NodesEndpoint);
+        Assert.Null(BusinessClientConfiguration.Parse(Three).NodesEndpoint);
+        var updated = BusinessClientConfiguration.Parse(WithNodesField("\"nodes_url\":\"https://example.invalid/api/v1/app/node-status/device/synthetic\""));
+        Assert.Equal("/api/v1/app/node-status/device/synthetic", updated.NodesEndpoint!.AbsolutePath);
+        Assert.Equal(original.Subscription, updated.Subscription);
+        Assert.Equal(original.SourceHash, updated.SourceHash);
+        Assert.Equal(original.SupportEndpoint, updated.SupportEndpoint);
+        Assert.Equal(original.SupportToken, updated.SupportToken);
+    }
+
+    [Theory]
+    [InlineData("\"nodes_url\":null")]
+    [InlineData("\"nodes_url\":false")]
+    [InlineData("\"nodes_url\":123")]
+    [InlineData("\"nodes_url\":{}")]
+    [InlineData("\"nodes_url\":[]")]
+    [InlineData("\"nodes_url\":\"\"")]
+    [InlineData("\"nodes_url\":\"relative/nodes\"")]
+    [InlineData("\"nodes_url\":\"http://example.invalid/nodes\"")]
+    [InlineData("\"nodes_url\":\"https://user:password@example.invalid/nodes\"")]
+    [InlineData("\"nodes_url\":\"https://example.invalid/nodes#fragment\"")]
+    [InlineData("\"nodes_url\":\"https://bad_host.invalid/nodes\"")]
+    [InlineData("\"nodes_url\":\"https://example.invalid/a\",\"nodes_url\":\"https://other.invalid/b\"")]
+    public void InvalidOptionalNodesEndpoint_DisablesOnlyMetrics_AndVpnBootstrapStillWorks(string field)
+    {
+        var bundle = WithNodesField(field);
+        var cfg = BusinessClientConfiguration.Parse(bundle);
+        Assert.Null(cfg.NodesEndpoint);
+        Assert.NotNull(cfg.Subscription);
+        Assert.NotNull(cfg.SupportEndpoint);
+        var selected = BusinessClientConfiguration.SelectStartupConnection(new AppSettings(), bundle);
+        Assert.Equal(3, BusinessDefaults.ParseConnection(selected).Count);
+    }
+
+    [Fact]
+    public void OversizedOptionalNodesEndpoint_DoesNotDisableTheVpn()
+    {
+        var bundle = WithNodesField("\"nodes_url\":" + JsonSerializer.Serialize("https://example.invalid/" + new string('a', 4096)));
+        Assert.Null(BusinessClientConfiguration.Parse(bundle).NodesEndpoint);
+        Assert.Equal(bundle, BusinessClientConfiguration.SelectStartupConnection(new AppSettings(), bundle));
+    }
+
+    [Fact]
+    public void CachedDownloadedNodesUrl_CannotReplaceTrustedEmbeddedEndpoint()
+    {
+        var bundle = WithNodesField("\"nodes_url\":\"https://example.invalid/trusted-nodes\"");
+        var cfg = BusinessClientConfiguration.Parse(bundle);
+        var downloaded = JsonSerializer.Serialize(new { config = Convert.ToBase64String(Encoding.UTF8.GetBytes(Four)),
+            business = new { nodes_url = "https://other.invalid/not-trusted", support = new { endpoint = "https://other.invalid/not-trusted", token = "not-trusted" } } });
+        var settings = new AppSettings();
+        settings.App.BusinessSubscriptionSource = cfg.SourceHash;
+        settings.App.BusinessSubscriptionCache = downloaded;
+        Assert.Equal(downloaded, BusinessClientConfiguration.SelectStartupConnection(settings, bundle));
+        Assert.Equal("example.invalid", BusinessClientConfiguration.Parse(bundle).NodesEndpoint!.Host);
+        Assert.Equal("/trusted-nodes", cfg.NodesEndpoint!.AbsolutePath);
+        Assert.Equal(4, BusinessDefaults.GetServerChoices(BusinessDefaults.ParseConnection(downloaded)).Count);
+        Assert.DoesNotContain("other.invalid", DiagnosticsRedactor.RedactConfigYaml("app:\n  business_subscription_cache: |\n    " + downloaded + "\n"));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("<html>unavailable</html>")]

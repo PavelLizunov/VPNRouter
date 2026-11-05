@@ -131,3 +131,51 @@ preference change/relaunch; the owner's received report was preserved.
 three test-build jobs found the same missing Avalonia extension namespace in the
 new layout fixture. Recorded BUSINESS-LAYOUT-TEST-NAMESPACE before adding the
 import. No product behavior changed in this correction; exact-head CI is pending.
+
+## First block accepted at46dddb63
+
+Exact PR head matches local46dddb6324b4f9df07db0de5b9f706217fe16f1f. All eleven
+applicable checks passed; the two private dispatch-only jobs were skipped as
+expected. Business151 passed/1 skipped; receiver tests passed. All23 new UI
+executions passed, including RU/EN340/420 images, which were retrieved, visually
+inspected and shown with explicitly synthetic data. The owner's VM still runs
+the previous2b543cd8 binary. New private package/live acceptance remains pending.
+
+Before metadata integration, independently reviewed parser tests exposed a
+100ms deadline phase-order assertion; recorded before correcting the test. The
+previous CI finding was also placed inside the ledger introduction by an overly
+broad insertion anchor. Restore the introduction from71c7 and move the finding
+under Open; this correction does not affect source/CI evidence.
+
+Metadata implementation proceeds in three disjoint parallel scopes: controller/
+window lifecycle, independent controller/window tests, and trust review. Root
+owns optional embedded endpoint, row formatting/localization/country support and
+fixture timing. No MainWindowViewModel public API or routing changes are planned.
+
+## Metadata integration before CI
+
+- First-block full counts at46dddb63: Linux3389 passed/79 skipped; Windows3559/21;
+  Business151/1. These are executed CI evidence, not inferred from source review.
+- Optional embedded-only business.nodes_url configures a separate HTTPS client.
+  Malformed/duplicate/oversized optional values disable metrics while preserving
+  subscription/support/bootstrap. The source-bound cache identity is unchanged.
+- A window-owned controller fetches at most once at a time, every five minutes
+  while visible (including connected), with thirty-second age notifications and
+  explicit refresh. Hide/context swap cancels and discards late replies; close
+  disposes once. Failed requests/rebuild/language retain the same snapshot age.
+- Matched rows supply explicit countries; matched null stays unknown. Known
+  labels remain a fallback only without a matched row. Added a cached Swiss
+  vector flag and safe unsupported-code handling. No external endpoint GeoIP.
+- Compact row shows actual Unix1m load and occupied RAM, real zero, missing data
+  and stale values. Tooltip explains that load is not CPU percent and gives age
+  derived from server time plus monotonic elapsed time. No metrics persist.
+- Independent writer supplies15 controller/window executions including active
+  diagnostics/tunnel/selection retention and340/420 RU/EN synthetic captures.
+  Root adds15 optional-configuration executions, exact monotonic TTL boundary,
+  and corrects the scheduler-dependent deadline fixture recorded in the ledger.
+- Three independent read-only lenses (trust, concurrency/lifetime, coverage)
+  reviewed the final production draft and returned no new confirmedP0/P1/P2.
+  Known nonblocking constructor-request/timer/popup coverage limits are recorded.
+- Source XML parsing/whitespace checks pass. No local build/test/SDK ran. Exact
+  new-head CI, requested final GPT ASTRA XHIGH, private packaging, backend
+  controlled activation and owner-VM live acceptance are still pending.

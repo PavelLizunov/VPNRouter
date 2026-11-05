@@ -10,6 +10,7 @@ namespace VPNRouter.App.Services;
 internal sealed class BusinessClientConfiguration
 {
     internal Uri? Subscription { get; private init; }
+    internal Uri? NodesEndpoint { get; private init; }
     internal Uri? SupportEndpoint { get; private init; }
     internal string? SupportToken { get; private init; }
     internal string? SourceHash => Subscription == null ? null :
@@ -34,7 +35,24 @@ internal sealed class BusinessClientConfiguration
                 token.Any(c => !(char.IsAsciiLetterOrDigit(c) || "._~+/-=".Contains(c))))
                 throw new InvalidDataException("Invalid Business upload identity.");
         }
-        return new() { Subscription = subscription, SupportEndpoint = endpoint, SupportToken = token };
+        return new() { Subscription = subscription, NodesEndpoint = OptionalNodesEndpoint(data),
+            SupportEndpoint = endpoint, SupportToken = token };
+    }
+
+    // Optional telemetry must never prevent a valid embedded VPN bundle from starting.
+    // Duplicate or malformed targets disable only this feature; caches do not call this path.
+    private static Uri? OptionalNodesEndpoint(JsonElement data)
+    {
+        var properties = data.EnumerateObject().Where(p => p.NameEquals("nodes_url")).ToArray();
+        if (properties.Length != 1 || properties[0].Value.ValueKind != JsonValueKind.String)
+            return null;
+        var value = properties[0].Value.GetString();
+        if (value is not { Length: > 0 and <= 4096 } ||
+            !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0 ||
+            !BusinessNodeSnapshot.TryNormalizeHost(uri.IdnHost, out _))
+            return null;
+        return uri;
     }
 
     private static Uri Https(string? value)

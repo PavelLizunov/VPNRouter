@@ -1,5 +1,7 @@
 using VPNRouter.Core.Localization;
 using VPNRouter.Core.Services;
+using VPNRouter.App.Services;
+using System.Globalization;
 
 namespace VPNRouter.App.ViewModels.Internals;
 
@@ -8,12 +10,36 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
 {
     internal ServerViewModel Server { get; }
     public string DisplayName => Server.DisplayName;
-    public string CountryCode => BusinessServerCountry.Code(Server.Name);
+    private BusinessNodeSnapshot? _metadataSnapshot;
+    private BusinessNodeMetadata? _metadata;
+    public bool HasMetadata { get; private set; }
+    public string CountryCode => _metadata != null ? _metadata.CountryIso ?? string.Empty
+        : BusinessServerCountry.Code(Server.Name);
     public string CountryName => Strings.BusinessCountryName(CountryCode);
     public bool HasCountry => CountryCode.Length != 0;
     public Avalonia.Media.IImage? CountryFlag => BusinessServerCountry.Flag(CountryCode);
     private ServerProbeResult _result = ServerProbeResult.Unknown;
     private bool _checking;
+
+    public string MetricsText
+    {
+        get
+        {
+            if (_metadataSnapshot == null || _metadata == null ||
+                _metadataSnapshot.GetFreshness(_metadata) == BusinessNodeFreshness.Unknown)
+                return Strings.BusinessNodeMetricsUnavailable;
+            var culture = CultureInfo.GetCultureInfo(Strings.Lang == "ru" ? "ru-RU" : "en-US");
+            var load = _metadata.Load1MinX100 is { } measured ? (measured / 100.0).ToString("0.00", culture) : "—";
+            var memory = _metadata.MemoryUsedPercent is { } used ? used.ToString("0", culture) + "%" : "—";
+            return Strings.BusinessNodeMetrics(load, memory,
+                _metadataSnapshot.GetFreshness(_metadata) == BusinessNodeFreshness.Stale);
+        }
+    }
+
+    public string MetricsHint => Strings.BusinessNodeMetricsHint(
+        _metadataSnapshot != null && _metadata != null ? _metadataSnapshot.GetAgeSeconds(_metadata) : null,
+        _metadataSnapshot != null && _metadata != null &&
+            _metadataSnapshot.GetFreshness(_metadata) == BusinessNodeFreshness.Stale);
 
     internal BusinessServerChoiceViewModel(ServerViewModel server) => Server = server;
 
@@ -44,6 +70,26 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         OnPropertyChanged(nameof(CountryName));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(PingText));
+        RefreshMetadata();
+    }
+
+    internal void UpdateMetadata(BusinessNodeSnapshot? snapshot, BusinessNodeMetadata? row)
+    {
+        HasMetadata = true;
+        _metadataSnapshot = snapshot;
+        _metadata = snapshot == null ? null : row;
+        RefreshMetadata();
+    }
+
+    private void RefreshMetadata()
+    {
+        OnPropertyChanged(nameof(HasMetadata));
+        OnPropertyChanged(nameof(CountryCode));
+        OnPropertyChanged(nameof(CountryName));
+        OnPropertyChanged(nameof(CountryFlag));
+        OnPropertyChanged(nameof(HasCountry));
+        OnPropertyChanged(nameof(MetricsText));
+        OnPropertyChanged(nameof(MetricsHint));
     }
 
     internal void Update(ServerProbeResult result, bool checking = false)

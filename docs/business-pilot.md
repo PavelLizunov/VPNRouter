@@ -9,6 +9,9 @@ The standard build keeps its current UI and settings. Business uses
 `%ProgramData%\VPNRouterBusiness`, its own installer identity and autostart entry.
 Only one VPNRouter tunnel may run at a time; the existing global TUN lock is shared.
 Business has one Start/Stop action and two modes. Switch modes while disconnected.
+The header language selector switches Russian/English immediately and persists
+the preference. Explanatory text is collapsed under Details. Diagnostic progress,
+failure and confirmed receipt remain visible when relevant.
 The standard tray and health recovery remain in use. Tray diagnostics exports
 the existing redacted diagnostic bundle locally; review it before sharing.
 
@@ -22,6 +25,9 @@ The same reviewed PowerShell collector is embedded in the app; collection does
 not change the tunnel. An individual upload identity is required in private build
 metadata. Older static bundles without it allow collection and explain that
 upload is not configured. The existing tray export remains available.
+The optional report summary includes bounded client-reported computer and Windows
+user names. The receiver records them separately from the authenticated employee
+upload identity; these names are not proof of hardware identity.
 
 The employee support path is a separate personal
 `VPNRouterBusiness-Diagnostics.exe`: open it and press Send diagnostics. It
@@ -190,7 +196,7 @@ bound cache falls back to the embedded response. Cache data is secret-bearing,
 stays in the protected Business settings and is masked by structured diagnostics.
 If a YAML config/backup cannot be parsed, diagnostic export omits its content
 instead of guessing multiline credential boundaries.
-Upload/subscription service settings always come from the embedded bundle; a
+Upload/subscription/node metadata service settings always come from the embedded bundle; a
 downloaded response cannot replace their target or upload identity. HTTPS uses
 normal certificate validation, no redirects, bounded size/time and no automatic
 upload or report retry.
@@ -198,30 +204,41 @@ upload or report retry.
 The existing private BusinessConnectionFile may be the API JSON wrapper with an
 additional `business` object: `subscription_url` is the individual HTTPS source,
 and `support` contains `endpoint` plus the individually issued upload-only
-`token`. The `config` field remains the base64 share-link fallback. Keep this
+`token`. Optional `nodes_url` is a separate immutable HTTPS metadata reference
+using an existing device/subscription identity. Invalid optional metadata disables
+only metrics; it never prevents the VPN from starting. The `config` field remains
+the base64 share-link fallback. Keep this
 whole input outside Git, and pass it through the existing ephemeral encrypted
 private CI path. The private delivery validation requires both services, while
 legacy offline bundles remain readable. Neither an admin password nor a vpnctl
 admin token belongs in this object.
 
-Country flags are local assets, with names translated into the selected language.
-They describe recognized country labels/ISO prefixes advertised in the
-subscription, not an independent IP geolocation or egress check. Opaque custom
-labels show Country unknown. No private endpoint is sent to an external geo API.
+Country flags are local assets or vector drawings, with known names translated
+into the selected language. Configured node metadata supplies an explicit country
+from vpnctld's local GeoIP data. A matched null country remains unknown. Without
+a matched metadata row, recognized advertised country labels remain the fallback;
+opaque provider names are never guessed. Unsupported country codes keep their code
+and have no flag. Country is not proof of VPN egress location. No private endpoint
+is sent to an external geo API.
 
 ## Server load from vpnctl
 
-The inspected vpnctl service already collects node memory and one-minute system
-load for its admin pages. Its current client config response does not expose
-those per-node measurements. The public subscription-access statistics count
-fetches and distinct source addresses; they cannot stand in for server load,
-VPN-online users or employee counts.
+Configured builds read a grant-scoped node snapshot using the existing individual
+device/subscription identity. The separate backend change is tracked in vpnctl
+PR #311; source implementation does not prove production activation. Deployment
+and exact-source live acceptance are recorded in the task outcome.
 
-A client-facing extension should authenticate using the existing individual
-subscription identity, return only granted physical nodes, and expose explicitly
-named metrics with sample time, age and unknown/stale states. System load must
-not be labelled CPU percent; normalizing it requires CPU count. It must not
-return SSH/admin credentials, subscriber source addresses or raw traffic records.
-An explicit country code in that same node metadata would also cover opaque
-labels. This client follow-up does not deploy that backend API or display fake
-load values.
+Each server row shows Unix one-minute load and occupied RAM. Unix load is not CPU
+percent; CPU count/percent are not supplied. The tooltip describes the metrics and
+sample age. Missing or inconsistent/future samples show no data; stale values are
+explicitly marked. Server-derived age advances with monotonic time, independent
+of the guest wall clock, and is not reset by hiding the window, failed requests,
+language changes or list reconstruction.
+
+Polling runs every five minutes while the Business window is visible, including
+while connected; age labels refresh every thirty seconds. Refresh requests a
+snapshot immediately. Requests are single-flight, HTTPS-only and bounded; hiding
+or closing cancels work. Metadata never mutates VPN selection/settings or tunnel
+state. Older bundles without nodes_url show no metrics. No admin credential or
+continuous client statistics upload is added. Subscription-fetch counters still
+cannot represent node resource load, VPN-online users or employee counts.

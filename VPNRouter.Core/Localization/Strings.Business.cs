@@ -32,7 +32,24 @@ public static partial class Strings
     public static string BusinessDiagnosticsSendFailed => Ru ? "Отправка не подтверждена. Повторите." : "Delivery not confirmed. Retry Send.";
     public static string BusinessDiagnosticsCancelled => Ru ? "Операция остановлена. Сохранённые отчёты оставлены на компьютере." : "Operation stopped. Saved reports are retained locally.";
     public static string BusinessDiagnosticsOpenFailed => Ru ? "Не удалось открыть папку отчёта." : "Could not open the report folder.";
-    public static string BusinessCountryHint => Ru ? "Страна, указанная в подписке" : "Country advertised by the subscription";
+    public static string BusinessNodeMetricsUnavailable => Ru ? "Нагрузка: нет данных" : "Load: no data";
+    public static string BusinessNodeStale => Ru ? "старые" : "stale";
+    public static string BusinessNodeMetrics(string load, string memory, bool stale) =>
+        (Ru ? $"Нагрузка {load} · RAM {memory}" : $"Load {load} · RAM {memory}") +
+        (stale ? $" ({BusinessNodeStale})" : string.Empty);
+    public static string BusinessNodeMetricsHint(ulong? ageSeconds, bool stale)
+    {
+        var meaning = Ru
+            ? "Нагрузка Unix за 1 минуту, не процент CPU. RAM — занятая память."
+            : "Unix 1-minute load average, not CPU percent. RAM is used memory.";
+        if (ageSeconds is not { } age)
+            return meaning + (Ru ? " Время пробы неизвестно." : " Sample age is unknown.");
+        var amount = age < 60 ? age : age / 60;
+        var unit = Ru ? age < 60 ? "с" : "мин" : age < 60 ? "s" : "min";
+        return meaning + (Ru ? $" Проба {amount} {unit} назад." : $" Sample {amount} {unit} ago.") +
+            (stale ? (Ru ? " Данные устарели." : " Data is stale.") : string.Empty);
+    }
+    public static string BusinessCountryHint => Ru ? "Страна узла из vpnctld или явного названия подписки" : "Node country from vpnctld or an explicit subscription label";
     public static string BusinessCountryName(string code) => (code, Ru) switch
     {
         ("DE", true) => "Германия", ("DE", false) => "Germany",
@@ -43,6 +60,8 @@ public static partial class Strings
         ("FR", true) => "Франция", ("FR", false) => "France",
         ("GB", true) => "Великобритания", ("GB", false) => "United Kingdom",
         ("US", true) => "США", ("US", false) => "United States",
+        ("CH", true) => "Швейцария", ("CH", false) => "Switzerland",
+        _ when code.Length == 2 => code,
         _ => Ru ? "Страна неизвестна" : "Country unknown"
     };
     public static string BusinessSplit => Ru ? "Выбранные приложения и сайты" : "Selected apps and sites";

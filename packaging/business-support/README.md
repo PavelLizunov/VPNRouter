@@ -53,6 +53,10 @@ SHA without storing the token. Identical payloads from different identities have
 separate receipts. Network failure can occur after persistence but before the
 client receives acknowledgement; retries reuse the ZIP and are deduplicated.
 The client retains collected reports privately after failure.
+An optional bounded summary.device object supplies computer_name and user_name.
+The receiver allowlists these into separately labeled client_reported_device
+receipt metadata. They never replace authenticated employee identity, receipt
+paths or authorization; older reports without the fields remain valid.
 
 ## Deployment and operations
 

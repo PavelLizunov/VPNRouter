@@ -15,23 +15,28 @@ public partial class BusinessWindow : Window
     private BusinessServerHealthMonitor? _health;
     private MainWindowViewModel? _vm;
     private readonly Func<MainWindowViewModel, Action, BusinessServicesViewModel> _serviceFactory;
+    private readonly BusinessNodeMetadataController? _metadata;
     private BusinessServicesViewModel? _services;
     private bool _syncingLanguage;
     public BusinessWindowTextViewModel Texts { get; } = new();
 
-    public BusinessWindow() : this(static (server, ct) =>
-        TcpTlsProbe.ProbeTcpOnlyAsync(server.Server, server.Port, ct), static (vm, changed) =>
-        new(vm, ProductEdition.IsBusiness
-            ? BusinessBootstrap.ReadClientConfiguration()
-            : BusinessClientConfiguration.Empty, new BusinessClientHttp(), changed)) { }
+    public BusinessWindow() : this(ProductEdition.IsBusiness
+        ? BusinessBootstrap.ReadClientConfiguration() : BusinessClientConfiguration.Empty) { }
+
+    private BusinessWindow(BusinessClientConfiguration configuration) : this(
+        static (server, ct) => TcpTlsProbe.ProbeTcpOnlyAsync(server.Server, server.Port, ct),
+        (vm, changed) => new(vm, configuration, new BusinessClientHttp(), changed),
+        changed => configuration.NodesEndpoint is { } endpoint ? new(endpoint, changed) : null) { }
 
     internal BusinessWindow(Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>> probe,
-        Func<MainWindowViewModel, Action, BusinessServicesViewModel>? serviceFactory = null)
+        Func<MainWindowViewModel, Action, BusinessServicesViewModel>? serviceFactory = null,
+        Func<Action, BusinessNodeMetadataController?>? metadataFactory = null)
     {
         _probe = probe;
         _serviceFactory = serviceFactory ?? (static (vm, changed) =>
             new(vm, BusinessClientConfiguration.Empty, new BusinessClientHttp(), changed));
         InitializeComponent();
+        _metadata = metadataFactory?.Invoke(ApplyNodeMetadata);
         DataContextChanged += (_, _) => AttachViewModel();
         PropertyChanged += (_, e) =>
         {
@@ -39,12 +44,14 @@ public partial class BusinessWindow : Window
             {
                 _health?.SetVisible(IsVisible);
                 _services?.SetVisible(IsVisible);
+                _metadata?.SetVisible(IsVisible && _vm != null);
             }
         };
         Opened += (_, _) => LaunchFailureCounter.MarkStable();
         Closed += (_, _) =>
         {
             DetachViewModel();
+            _metadata?.Dispose();
             (DataContext as MainWindowViewModel)?.Dispose();
         };
     }
@@ -52,6 +59,7 @@ public partial class BusinessWindow : Window
     private void DetachViewModel()
     {
         if (_vm != null) _vm.PropertyChanged -= OnVmPropertyChanged;
+        _metadata?.SetVisible(false);
         _health?.Dispose();
         _services?.Dispose();
         BusinessActions.DataContext = null;
@@ -76,6 +84,7 @@ public partial class BusinessWindow : Window
             BusinessSubscriptionActions.DataContext = _services;
             _vm.PropertyChanged += OnVmPropertyChanged;
             _services.SetVisible(IsVisible);
+            _metadata?.SetVisible(IsVisible);
         }
     }
 
@@ -83,9 +92,28 @@ public partial class BusinessWindow : Window
     {
         _health?.Dispose();
         _health = _vm == null ? null : new BusinessServerHealthMonitor(_vm, _probe);
+        ApplyNodeMetadata();
         BusinessServerSelector.ItemsSource = _health?.Choices;
         SyncSelection();
         _health?.SetVisible(IsVisible);
+        _ = _metadata?.RefreshAsync();
+    }
+
+    private void ApplyNodeMetadata()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(ApplyNodeMetadata);
+            return;
+        }
+        if (_metadata == null || _health == null) return;
+        var snapshot = _metadata.LastSnapshot;
+        foreach (var choice in _health.Choices)
+        {
+            BusinessNodeMetadata? row = null;
+            if (snapshot != null && snapshot.TryGetNode(choice.Server.Server, out var matched)) row = matched;
+            choice.UpdateMetadata(snapshot, row);
+        }
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -147,5 +175,7 @@ public partial class BusinessWindow : Window
     private void OnBusinessServerRefresh(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => _ = RefreshBusinessServersAsync();
 
-    internal Task RefreshBusinessServersAsync() => _health?.RefreshAsync() ?? Task.CompletedTask;
+    internal Task RefreshBusinessServersAsync() => Task.WhenAll(
+        _health?.RefreshAsync() ?? Task.CompletedTask,
+        _metadata?.RefreshAsync() ?? Task.CompletedTask);
 }
