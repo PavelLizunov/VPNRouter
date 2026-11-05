@@ -150,6 +150,12 @@ public sealed class BusinessNodeMetadataTests
     [InlineData("node_.example.invalid")]
     [InlineData(" node.example.invalid")]
     [InlineData("[node.example.invalid]")]
+    [InlineData("[node.example.invalid")]
+    [InlineData("node.example.invalid]")]
+    [InlineData("[2001:db8::1")]
+    [InlineData("2001:db8::1]")]
+    [InlineData("[[2001:db8::1]]")]
+    [InlineData("[192.0.2.1]")]
     [InlineData("fe80::1%3")]
     [InlineData("999.1.1.1")]
     public void Parse_RejectsNonHostInputWithoutExposingPrivateValues(string host)

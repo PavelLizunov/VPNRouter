@@ -179,3 +179,16 @@ fixture timing. No MainWindowViewModel public API or routing changes are planned
 - Source XML parsing/whitespace checks pass. No local build/test/SDK ran. Exact
   new-head CI, requested final GPT ASTRA XHIGH, private packaging, backend
   controlled activation and owner-VM live acceptance are still pending.
+
+## Metadata-block CI corrections
+
+Atfd5925da the product builds; Business checks execute279 cases (276 pass, two
+fail, one skip). CI confirms strict metadata host validation incorrectly accepts
+a bracketed DNS label after the shared lenient VLESS stripper; record before
+adding metadata-only raw bracket validation and malformed-bracket cases.
+The pool-rebuild fixture also baselines settings writes before existing selected-
+row synchronization. Move the metadata-only baseline after rebuilding, retaining
+its no-write assertion for the actual failed metadata request/callback.
+The final Astra review started atfd5925da was cancelled before replacing its
+scope; a fresh review must use the corrected exact commit. No clean final review
+or new installer is claimed. Backend2ace802 CI remains pending full tests.

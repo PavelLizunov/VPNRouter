@@ -165,9 +165,11 @@ public sealed class BusinessNodeMetadataWindowTests
             .Replace("Iceland%20node", "Renamed%20node");
 
         Assert.True(fixture.Vm.ReplaceBusinessServers(updated, new string('a', 64)));
-        var afterPoolSave = fixture.Store.SaveCount;
         fixture.RebuildPool!();
         Flush(fixture.Window);
+        // Rebuilding legitimately synchronizes/persists the selected row. Only
+        // the following metadata request and callback must be write-free.
+        var beforeMetadataFailure = fixture.Store.SaveCount;
         var rebuilt = fixture.Choices;
         Assert.NotSame(original[0], rebuilt[0]);
         Assert.Equal(new[] { "CH", "SE", "NL" }, rebuilt.Select(choice => choice.CountryCode));
@@ -182,7 +184,7 @@ public sealed class BusinessNodeMetadataWindowTests
         var refresh = fixture.Controller.RefreshAsync();
         (await fixture.Fetch.NextAsync()).Result.SetException(new IOException("synthetic refresh failure"));
         await refresh.WaitAsync(Budget);
-        Assert.Equal(afterPoolSave, fixture.Store.SaveCount);
+        Assert.Equal(beforeMetadataFailure, fixture.Store.SaveCount);
         Assert.Same(snapshot, fixture.Controller.LastSnapshot);
         Assert.Contains("(stale)", fixture.Choices[0].MetricsText);
     }

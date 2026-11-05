@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.Services;
 
@@ -136,15 +135,23 @@ internal sealed class BusinessNodeSnapshot
         if (string.IsNullOrEmpty(value) || value.Length > 255 || value.Any(char.IsWhiteSpace) ||
             value.IndexOfAny(['/', '\\', '@', '?', '#', '%']) >= 0)
             return false;
-        var normalized = VlessUriParser.NormalizeHost(value);
-        if (IPAddress.TryParse(normalized, out var address))
+        if (value.IndexOfAny(['[', ']']) >= 0)
         {
-            // Brackets are only meaningful for IPv6, never a port or DNS wrapper.
-            if (value.Contains('[') && address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6)
+            if (!value.StartsWith('[') || !value.EndsWith(']') || value.Length < 3)
                 return false;
+            var literal = value[1..^1];
+            if (literal.IndexOfAny(['[', ']']) >= 0 || !IPAddress.TryParse(literal, out var ipv6) ||
+                ipv6.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6)
+                return false;
+            host = ipv6.ToString();
+            return true;
+        }
+        if (IPAddress.TryParse(value, out var address))
+        {
             host = address.ToString();
             return true;
         }
+        var normalized = value;
         if (normalized.IndexOfAny([':', '[', ']']) >= 0) return false;
         try
         {

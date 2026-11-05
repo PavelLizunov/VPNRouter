@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CONFIRMED IN CI fd5925da** - BUSINESS-METADATA-BRACKET-HOST: the metadata host normalizer calls the lenient VLESS bracket stripper before DNS validation, accepting [node.example.invalid] as a DNS host although brackets are allowed only for IPv6 literals. Keep a strict metadata-only raw bracket guard and cover malformed/unbalanced/double brackets; no Core URI behavior change.
+
+- [ ] **P2 CONFIRMED CI FIXTURE BASELINE ERROR** - BUSINESS-METADATA-POOL-SAVE-BASELINE: the new pool-rebuild test takes its write-count baseline before the existing window selection synchronization legitimately saves the selected row. Move the metadata-only no-write baseline after the list rebuild; keep the unchanged failed-refresh write-count, selection and original-snapshot assertions. Existing selection-save behavior is not changed.
+
 - [ ] **P3 NONBLOCKING METADATA COVERAGE LIMITS** - BUSINESS-METADATA-PROVENANCE-TIMER-POPUP: independent coverage review confirms current source provenance/lifetimes but notes tests reparse the trusted bundle rather than observing the production constructor request target, do not open the metrics dropdown for flag bounds, and do not directly advance the automatic timer. Existing real-controller/window, normalized-host, stale/zero, 340/420 tests cover the main consumer path. Retain these limits; final Astra and live owner acceptance remain pending. Task plans/phase-business-clarity-metadata-2026-11-05.md.
 
 - [x] **P2 FIXED / CI 46dddb63** - BUSINESS-LAYOUT-TEST-NAMESPACE: Linux, Windows and Business jobs at71c7b5cf failed compiling the new layout tests because TranslatePoint lacked using Avalonia. Added the namespace in46dddb63; all eleven applicable checks passed (two expected skips). RESOLVED v2.50.5 task source; no product behavior changed.
