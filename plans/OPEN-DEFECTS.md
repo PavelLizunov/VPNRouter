@@ -3,6 +3,9 @@
 Canonical open-defect ledger read by `tools/check-open-p0.ps1` (the cut-stable
 P0 gate, audit item 7, 2026-06-25). The `bug-hunt` skill appends survivors to
 the **## Open** section below; the cut-stable gate (`cut-stable` skill pre-flight
+
+- [x] **P3 TASK VERIFIER ORACLE CORRECTED** - BUSINESS-UPDATE-FIXED-POOL-ASSERTION: the live bridge verifier expected exactly13entries/fourhosts, but the current trusted subscription returns15/five and retains every prior entry. Update the task-only assertion to permit validated growth while preserving all prior rows/account/source/selection/mode/language/reports. Read-only provider and before/after comparisons confirm the mismatch; no product defect or repository verifier change. RESOLVED in task evidence; full live update still pending. See plans/phase-business-updates-2026-11-05.md.
+
 condition 6.5) **BLOCKS a stable cut** while any `- [ ]` P0/P1 remains open here,
 unless `tools/check-open-p0.ps1 -Waive '<reason>'` is run for that specific cut.
 
