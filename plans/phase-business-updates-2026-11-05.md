@@ -19,16 +19,16 @@ Risk HIGH: authenticated executable replacement and provisioning survival. First
 
 ## Verification gates
 
-1. Build: PASS source5e6b4643 solution/compile checks; generic publication remains pending because its preceding Business test step failed.
-2. Tests: FAIL at5e6b4643 Business gate:377passed,2failed,6skipped of385; two failures are isolated Windows helper scenarios. Source compiles and Standard test-update succeeds. At6a863499:379passed,1failed,6skipped; inherited-module and source-change checks now pass, copy failure reaches the intended COPY phase, and only successful replacement remains red. The helper now passes NullString.Value to File.Replace and distinguishes REPLACE/MOVE stages; full corrected-head CI pending.
+1. Build: PASS exactd2a5781f ordinary CI (12SUCCESS/3expectedSKIPPED) and explicit shared-package dispatch42112056656. The actual ZIP passes producer-to-consumer PE/resource/path validation before upload.
+2. Tests: PASS exactd2a5781f applicable Linux/Windows/Business, characterization and Standard auto-update gates. Earlier helper failures are corrected: own WinPS module lookup, true null for File.Replace, source/manifest tamper refusal and isolated data-directory tests pass. Earlier failure counts below remain historical evidence.
 3. Docs: PASS design, manifest/package contract and pilot instructions updated; delivery outcome still pending.
 4. Review: PASS SOURCE-ONLY. Three native reviewers used distinct correctness/concurrency, security and producer/test lenses with own-file exclusions. Stop-isolation, offer-race, helper-shadow and mixed-App/Core findings are corrected and covered; coordinator also serialized two global-data-dir test classes. No external model or runtime acceptance is implied.
 5. UI/runtime: PENDING deterministic RU/EN340/420 captures and actual bridge-to-newer-package update on the owner-authorized VM, with preserved account/selection/mode and cleanup. No live desktop screenshots.
-6. Characterization/integration: PENDING exact-head Standard public-surface checks, actual generic PE/resource assurance and archive receipt validation. Three expected skipped private/dispatch jobs on normal PR CI.
+6. Characterization/integration: PASS atd2a5781f, including actual generic publication and complete archive validation. Three expected skipped private/dispatch jobs on normal PR CI. The version-only successor requires its own exact-head gate.
 
 ## Outcome
 
-Initial implementation5e6b4643 compiles but fails two WinPS helper checks; correction awaiting CI. No updater-enabled installer or live feed claimed yet. Existing installer remains ae1276b0. Activity/icon fixes30176a85 have full green CI; live activity was confirmed fresh on four nodes across repeated collection cycles. Current direct-route outage cause remains unknown; audited management jumps restore telemetry.
+Corrected implementationd2a5781f passes all applicable CI and the actual shared ZIP gate. No updater-enabled installer or live feed is claimed yet. Existing installed source remains ae1276b0. Activity/icon fixes30176a85 have full green CI; live activity was confirmed fresh on four nodes across repeated collection cycles. Current direct-route outage cause remains unknown; audited management jumps restore telemetry.
 
 ## WinPS correction evidence
 
@@ -47,3 +47,11 @@ Hosting preflight is read-only: business-updates.ninitux.com resolves to the exi
 ## Confirmed package-path correction
 
 The independent producer review identified the exact forbidden entry app/appsettings.json in dispatch42109479221 inventory. A sidecar-verified publicv2.50.5 reference ZIP independently reproduces it after identical entry-point stripping; the137-byte file matches tracked Service Logging settings. build.ps1 removes appsettings.*.json but leaves the bare appsettings.json. The Business shared producer now deletes this exact unused Service file before archiving; consumer JSON policy remains unchanged. This supersedes the earlier unconfirmed archive-primitive explanation. The owner started the VM; SSH now verifies WIN-IH9VDMDHUHM / WindowsPowerShell5.1.26100.6584. No new installer has yet been applied.
+
+## Delivery preparation and newer-version proof
+
+Shared dispatch42112056656 succeeds at exactd2a5781f. Downloaded ZIP:73472471bytes, SHA256ed2f680ddd9248fa6c46ab3dd06c6c6ae7deb584585954834a5a8a1809c0d413,278entries, Business/win-x64/2.50.5/external-provisioning receipt. Source/sidecar checks match; bare appsettings.json is absent.
+
+The owner restarted the guest. Read-only preflight confirms its pinned identity, admin token, one app in interactive session1, no core process,25percent CPU,10681256KiB available RAM and41686781952bytes free disk. The installed App resource was read as bytes without executing the assembly. Its private bundle hash matches the prior delivery receipt; all13entries/fourphysicalhosts and existing service fields are unchanged. Only the trusted update-feed address is added to the protected bridge input. Exact-value/encoding comparison of19private values against1496tracked files finds no matching paths; this is a scoped current-tree check, not a complete Git-history secret audit.
+
+Private bridge dispatch42113768880 is pinned tod2a5781f/2.50.5. AppVersion advances to2.50.6 in the next isolated block so that a real strictly-newer generic update can be exercised. This is a task-branch package version, with no tag, GitHub release or merge. The bridge installer and subsequent generic ZIP must each pass their own packaging gate before use; final live update/provisioning acceptance remains pending.
