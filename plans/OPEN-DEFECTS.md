@@ -3,7 +3,9 @@
 Canonical open-defect ledger read by `tools/check-open-p0.ps1` (the cut-stable
 P0 gate, audit item 7, 2026-06-25). The `bug-hunt` skill appends survivors to
 the **## Open** section below; the cut-stable gate (`cut-stable` skill pre-flight
-condition 6.5) **BLOCKS a stable cut** while any `- [ ]` P0/P1 remains open here,
+condition 6.5) **BLOCKS a stable cut** while any `- [ ] **P2 CONFIRMED IN CI 71c7b5cf** - BUSINESS-LAYOUT-TEST-NAMESPACE: Linux, Windows and Business jobs fail compiling the new layout tests because TranslatePoint is an Avalonia extension and the test omits using Avalonia. Existing BusinessLiveServicesTests imports that namespace for the same call. Add the missing import; product/receiver builds otherwise succeeded. Exact-head CI rerun required.
+
+- [ ]` P0/P1 remains open here,
 unless `tools/check-open-p0.ps1 -Waive '<reason>'` is run for that specific cut.
 
 This file exists because a P0 found by the adversarial bug-hunt, written down and

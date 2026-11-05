@@ -124,3 +124,10 @@ preference change/relaunch; the owner's received report was preserved.
   monotonic aging and focused tests in new files. These are intentionally not
   integrated/committed with this first client block. Window/cache integration,
   actual sample/geo verification and final GPT ASTRA XHIGH remain pending.
+
+## First-block CI correction
+
+71c7b5cf product build, receiver tests and public contract jobs passed, but all
+three test-build jobs found the same missing Avalonia extension namespace in the
+new layout fixture. Recorded BUSINESS-LAYOUT-TEST-NAMESPACE before adding the
+import. No product behavior changed in this correction; exact-head CI is pending.

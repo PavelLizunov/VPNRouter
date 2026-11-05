@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
