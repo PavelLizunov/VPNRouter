@@ -36,6 +36,7 @@ try {
     $app = Join-Path $payload 'app'
     Get-ChildItem -LiteralPath $app -File |
         Where-Object Name -Match '^VPNRouter\.(GUI|CLI|Service)\.' | Remove-Item -Force
+    [IO.File]::Delete((Join-Path $app 'appsettings.json'))
     $geo = Join-Path $app 'geo'
     New-Item -ItemType Directory -Force -Path $geo | Out-Null
     Invoke-WebRequest 'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs' -OutFile (Join-Path $geo 'geoip-ru.srs')

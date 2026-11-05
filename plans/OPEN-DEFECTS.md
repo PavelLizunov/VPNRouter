@@ -16,7 +16,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P2 CONFIRMED SHARED-PACKAGE PRODUCER/CONSUMER FAILURE** - BUSINESS-UPDATE-ZIP-TOPOLOGY: dispatch42107305209 atc1962419 builds the binaries but its actual shared ZIP fails ValidateArchive path/alias/link policy atline45; no artifact is uploaded. Replace shell-module archive creation with the framework ZipFile directory writer, retain strict path checks and add fixed safe rejection categories. Exact rejected entry was not logged; full corrected ZIP gate must pass before delivery. See plans/phase-business-updates-2026-11-05.md.
+- [ ] **P2 CONFIRMED SHARED-PACKAGE PRODUCER/CONSUMER FAILURE** - BUSINESS-UPDATE-ZIP-TOPOLOGY: dispatch42107305209 atc1962419 and42109479221 atdd85f698 reject the actual ZIP before upload. Independent actual-inventory/public-reference analysis identifies sole forbidden app/appsettings.json, copied from Standard Service: build.ps1 removes appsettings.*.json but leaves this bare137-byte Logging-only file. Remove this exact unused file in the shared Business producer; retain strict consumer guards and canonical ZIP paths. Full corrected ZIP gate pending. See plans/phase-business-updates-2026-11-05.md.
 
 - [ ] **P1 CONFIRMED NEW UPDATER DEFECT** - BUSINESS-UPDATE-REPLACE-NULL: Windows helper passes $null to File.Replace third string argument; PowerShell coerces it into an empty backup path, which the API rejects. At6a863499 source-tamper/module-poison checks pass, but the existing-target copy fails with MethodInvocationException in COPY. Use NullString.Value for true null, retain old/new-file success coverage and add precise REPLACE/MOVE phases; exact-head CI pending. See plans/phase-business-updates-2026-11-05.md.
 
