@@ -19,12 +19,12 @@ Risk HIGH: authenticated executable replacement and provisioning survival. First
 
 ## Verification gates
 
-1. Build: PASS exactd2a5781f ordinary CI (12SUCCESS/3expectedSKIPPED) and explicit shared-package dispatch42112056656. The actual ZIP passes producer-to-consumer PE/resource/path validation before upload.
-2. Tests: PASS exactd2a5781f applicable Linux/Windows/Business, characterization and Standard auto-update gates. Earlier helper failures are corrected: own WinPS module lookup, true null for File.Replace, source/manifest tamper refusal and isolated data-directory tests pass. Earlier failure counts below remain historical evidence.
-3. Docs: PASS design, manifest/package contract and pilot instructions updated; delivery outcome still pending.
-4. Review: PASS SOURCE-ONLY. Three native reviewers used distinct correctness/concurrency, security and producer/test lenses with own-file exclusions. Stop-isolation, offer-race, helper-shadow and mixed-App/Core findings are corrected and covered; coordinator also serialized two global-data-dir test classes. No external model or runtime acceptance is implied.
+1. Build: PASS exactb247c037 product/package CI and records-only successor81a605ef ordinary CI (12SUCCESS/3expectedSKIPPED), plus explicit shared-package dispatch42114121659. The actual ZIP passes producer-to-consumer PE/resource/path validation before upload.
+2. Tests: PASS exactb247c037 and records-only81a605ef applicable Linux/Windows/Business, characterization and Standard auto-update gates. Earlier helper failures are corrected: own WinPS module lookup, true null for File.Replace, source/manifest tamper refusal and isolated data-directory tests pass. Earlier failure counts below remain historical evidence.
+3. Docs: PASS design, manifest/package contract, delivery evidence and partial live-acceptance limits recorded.
+4. Review: PASS SOURCE-ONLY. Three native reviewers used distinct correctness/concurrency, security and producer/test lenses with own-file exclusions. Reported source defects are corrected; coordinator also serialized two global-data-dir test classes. The requested GPT ASTRA XHIGH review of all37changed files through81a605ef confirms no new P0/P1/P2. Two nonblocking integration/concurrency coverage gaps are recorded below and in the ledger. No runtime acceptance is implied.
 5. UI/runtime: PASS inspected deterministic RU/EN340/420 captures atd2a5781f (same product implementation before the version-only successor). PARTIAL live bridge acceptance below; actual in-app2.50.5-to2.50.6 update, dataplane and task cleanup remain pending. No live desktop screenshots.
-6. Characterization/integration: PASS atd2a5781f, including actual generic publication and complete archive validation. Three expected skipped private/dispatch jobs on normal PR CI. The version-only successor requires its own exact-head gate.
+6. Characterization/integration: PASS atb247c037 and records-only81a605ef; actual generic publication and complete archive validation also pass atb247c037. Three expected skipped private/dispatch jobs on normal PR CI. This final record-only successor requires its own exact-head gate.
 
 ## Outcome
 
@@ -63,7 +63,7 @@ Exactb247c037 ordinary CI is green:12SUCCESS/3expectedSKIPPED. Linux3621passed/8
 - Generic ZIP:73472519bytes, SHA256457a8fd2a9b6523b654438094ef5ed886899a88f6cb415aa3c1e358b57a731f0;278files; App DLL SHA256a082a7f3cd6cfda7d0bd7128c0c491a87d20546fd5ad5cd3763abe46ac218930. CI validates actual PE edition/version/resource identity and full archive admission. Exact private-value/encoding scan of33values finds no credential/provisioning matches; a common public TLS SNI also occurs in existing App/Core defaults and is explicitly classified separately.
 - Private installer:VPNRouterBusiness-Setup-v2.50.6.exe,63045060bytes, SHA256aa179ea8101d3a88868dbf22feaa9cf433fcf4b7626dc43d29138e044f507ded. Copied with source/hash/guide to the owner's Omarchy Downloads/VPNRouterBusiness-Recovery-2026-11-05; remote hash rechecked, directory0700/files0600. Never publish this configured installer.
 - Trusted feed:https://business-updates.ninitux.com/windows-x64/latest.json. Versioned credential-free ZIPs are served by the existing ingress Caddy from /srv/vpnrouter-business-updates, with the dedicated conf.d/vpnrouter-business-updates.caddy site. No DNS records changed; unrelated Caddy configuration hashes remain unchanged. Whole configuration validation/reload succeeds; trusted HTTPS JSON and no-store manifest behavior are observed. The2.50.5 asset was independently downloaded over HTTPS and its full hash matched;2.50.6 manifest matches the validated archive. Actual client download remains pending.
-- Both ephemeral GitHub pilot secrets are removed and verified absent after artifact retrieval. Protected local build inputs and task staging remain only for the unfinished acceptance/recovery; their final cleanup is pending.
+- Both ephemeral GitHub pilot secrets are removed and verified absent after artifact retrieval. Recovered App DLL, original/bridge private input files, delivery key and isolated GPG home/agent are now removed. Private installers, sanitized receipts and executed scripts are retained intentionally. Guest staging cleanup remains pending access.
 
 ## Partial live bridge acceptance and current blocker
 
@@ -71,6 +71,19 @@ The owner-started guest was verified through pinned SSH and an isolated RDP sess
 
 The provider now returns15entries/fivephysical VLESS hosts; the previous13entries/fourhosts are all retained. A trusted subscription GET independently matches those counts. The task-only verifier's fixed13/4 assertion was therefore invalid; it now permits validated growth while requiring every prior entry, account, source, selection/mode/language and report bytes. Cache refresh is recorded, not treated as corruption.
 
-The initial task-only focus check trusted an immediate AppActivate return. It now verifies the actual foreground PID with a bounded activation helper. A later ready check remains incomplete. RDP then ended with RPC-initiated disconnect; guest SSH closed, host RDP listener disappeared and read-only process inspection confirms zero QEMU processes. The reason the VM stopped is not established. Host sudo -n still requires authentication despite the owner's existing authorization. A secure T3 sudo credential request is pending to restart the exact VM and enable its narrow unattended management path. No root popup, unrelated VM action or claim of successful self-update is made.
+The initial task-only focus check trusted an immediate AppActivate return. It now verifies the actual foreground PID with a bounded activation helper. A later ready check remains incomplete. RDP then ended with RPC-initiated disconnect; guest SSH closed, host RDP listener disappeared and read-only process inspection confirms zero QEMU processes. The reason the VM stopped is not established. Host sudo -n still requires authentication despite the owner's existing authorization. The secure T3 sudo credential request timed out without a value. Restart and narrow unattended management setup remain blocked by OS authentication; no sudoers/polkit configuration was changed. No root popup, unrelated VM action or claim of successful self-update is made.
 
 Prepared private scripts cover real menu check/download/apply/relaunch, all installed ZIP file hashes, provisioning retention, current rows and bounded two-node split/full/split acceptance. They must still execute successfully on the recovered guest. UIS, long-memory, every-rule/DNS/UDP and office acceptance remain outside this proof.
+
+## Final independent source review and disposition
+
+GPT ASTRA XHIGH reviewed the complete37-file ae1276b0-to81a605ef delta and relevant unchanged Standard callers. It confirmed the exact clean checkout and whitespace check, and found no new confirmed P0/P1/P2. This is source-only evidence: it did not run builds/tests, inspect private inputs or query live CI/VM/backend state. The coordinator independently verifies81a605ef exact-head CI:12SUCCESS/3expectedSKIPPED.
+
+Two nonblocking coverage gaps are deferred to follow-up updater hardening, with no product change or installer rebuild:
+
+- BusinessUpdatesWindowTests currently assigns downloading state directly. A future consumer test should drive the real update command through preparation, require owned-engine stop before apply, reject transitions/stop failures without applying or exiting, and observe unrelated process/service isolation.
+- The offer-replacement regression completes download before the next check. A future barrier-controlled test should keep download pending while another check completes, then release it and apply the original pinned offer/path. The reviewer finds current pinning correct by source inspection.
+
+Both limits are recorded as P3 in OPEN-DEFECTS. They do not establish a runtime defect or close pending live acceptance. The fixed-pool task-verifier entry was moved from the ledger introduction into its owning Open section.
+
+Local private build inputs and the task GPG agent/home are removed after both successful package runs. The completed isolated RDP process and its Omarchy task cache are removed; existing owner credentials are unchanged. The VM remains stopped. Guest-private staging/snapshots and the temporary verification task require cleanup after access returns. The actual2.50.5-to2.50.6 self-update and fresh dataplane cycles remain unfinished; no successful runtime result is invented.
