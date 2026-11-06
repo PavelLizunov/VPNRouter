@@ -32,7 +32,9 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         BusinessNodeActivityLevel.Low => Strings.BusinessNodeActivityLow,
         BusinessNodeActivityLevel.Medium => Strings.BusinessNodeActivityMedium,
         BusinessNodeActivityLevel.High => Strings.BusinessNodeActivityHigh,
-        _ => Strings.BusinessNodeMetricsUnavailable
+        _ => _metadataSnapshot != null && _metadata != null &&
+            _metadataSnapshot.GetFreshness(_metadata) == BusinessNodeFreshness.Stale
+                ? Strings.BusinessNodeMetricsStale : Strings.BusinessNodeMetricsUnavailable
     };
 
     public string MetricsHint => Strings.BusinessNodeMetricsHint(

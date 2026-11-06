@@ -9,6 +9,8 @@ public partial class UpdateChecker
 
     private void ApplyUpdate(string extractedDir, bool writeInstallReceipt)
     {
+        if (ProductEdition.IsBusiness)
+            throw new InvalidOperationException("Business updates require their verified manifest context.");
         if (OperatingSystem.IsMacOS())
             ApplyUpdateMac(extractedDir);
         else if (OperatingSystem.IsLinux())

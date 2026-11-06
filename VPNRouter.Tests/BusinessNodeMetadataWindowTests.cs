@@ -67,6 +67,16 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.True(choice.IsGood);
             Assert.Equal("12 ms", choice.PingText);
 
+            var romania = Snapshot(Node("node.example.invalid", "RO"));
+            choice.UpdateMetadata(romania, romania.Nodes.Values.Single());
+            Assert.Equal("RO", choice.CountryCode);
+            Assert.Equal("Romania", choice.CountryName);
+            Assert.NotNull(choice.CountryFlag);
+            Strings.Lang = "ru";
+            choice.RefreshLocalization();
+            Assert.Equal("Румыния", choice.CountryName);
+            Strings.Lang = "en";
+
             var stale = Snapshot(Node("node.example.invalid", null, available: 0, load: 0,
                 observed: 600, age: 1400, freshness: "stale"));
             choice.UpdateMetadata(stale, stale.Nodes.Values.Single());
@@ -74,7 +84,12 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Equal("Country unknown", choice.CountryName);
             Assert.Null(choice.CountryFlag);
             Assert.False(choice.HasCountry);
-            Assert.Equal("Activity: no data", choice.MetricsText);
+            Assert.Equal("Activity: data is stale", choice.MetricsText);
+            Assert.False(choice.IsActivityLow || choice.IsActivityMedium || choice.IsActivityHigh);
+            Strings.Lang = "ru";
+            choice.RefreshLocalization();
+            Assert.Equal("Активность: данные устарели", choice.MetricsText);
+            Strings.Lang = "en";
             Assert.Contains("Data is stale", choice.MetricsHint);
             Assert.True(choice.IsGood);
 
@@ -180,7 +195,7 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Single(fixture.Choices.Where(choice => ReferenceEquals(choice.Server, server)))).ToArray();
         Assert.NotSame(original[0], rebuilt[0]);
         Assert.Equal(new[] { "CH", "SE", "NL" }, rebuilt.Select(choice => choice.CountryCode));
-        Assert.Equal("Activity: no data", rebuilt[0].MetricsText);
+        Assert.Equal("Activity: data is stale", rebuilt[0].MetricsText);
         Assert.Contains("Data is stale", rebuilt[0].MetricsHint);
         Assert.Same(snapshot, fixture.Controller.LastSnapshot);
         Assert.Equal(received, fixture.Controller.LastSnapshot!.ReceivedTimestamp);
@@ -193,7 +208,7 @@ public sealed class BusinessNodeMetadataWindowTests
         await refresh.WaitAsync(Budget);
         Assert.Equal(beforeMetadataFailure, fixture.Store.SaveCount);
         Assert.Same(snapshot, fixture.Controller.LastSnapshot);
-        Assert.Equal("Activity: no data", rebuilt[0].MetricsText);
+        Assert.Equal("Activity: data is stale", rebuilt[0].MetricsText);
     }
 
     [AvaloniaFact]

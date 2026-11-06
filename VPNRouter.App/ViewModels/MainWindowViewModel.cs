@@ -19,6 +19,7 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
+using VPNRouter.Core.Services.UpdateSources;
 using VPNRouter.App.Localization;
 using VPNRouter.App.ViewModels.FreeConfigs;
 
@@ -29,6 +30,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private const int ServiceReleaseRetryDelayMs = 2000;
 
     private readonly VpnEngine _engine;
+    private readonly Action _stopOwnedEngineForUpdate;
     private bool _disposed;
 #if PLATFORM_WINDOWS
     private ZapretManager? _zapret;
@@ -480,6 +482,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public MainWindowViewModel() : this(null) { }
 
     public MainWindowViewModel(ISettingsStore? settingsStore)
+        : this(settingsStore, null, null, null) { }
+
+    internal MainWindowViewModel(ISettingsStore? settingsStore,
+        Func<Func<Task>, IUpdateSource>? businessUpdateSourceFactory,
+        Action<int>? exitApplication, Action? stopOwnedEngineForUpdate)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
 
@@ -503,6 +510,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         DeployBundledProfiles();
 
         _engine = PlatformServices.CreateVpnEngine(_logger);
+        _stopOwnedEngineForUpdate = stopOwnedEngineForUpdate ?? _engine.Stop;
         _engine.StatusChanged += OnEngineStatus;
         _engine.Connected += OnEngineConnected;
         _engine.AutoFailoverTriggered += OnAutoFailoverMessage;
@@ -523,7 +531,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WireServersOrphanTracking();
         WireSimpleHomeNotifications();
 
-        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
+        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger,
+            updateSource: businessUpdateSourceFactory?.Invoke(PrepareBusinessUpdateAsync),
+            exitApplication: exitApplication, prepareBusinessUpdate: PrepareBusinessUpdateAsync);
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
@@ -567,7 +577,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             DetectServiceManagedVpn();
 
-            if (!ProductEdition.IsBusiness) _ = UpdateVm.CheckOnStartupAsync();
+            if (!ProductEdition.IsBusiness || UpdateVm.CanCheckUpdates) _ = UpdateVm.CheckOnStartupAsync();
 
             StartRuntimeStatusPolling();
 

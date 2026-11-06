@@ -11,13 +11,19 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyMetadata Include="VPNRouterEdition" Value="Business" Condition="'$(VPNRouterEdition)' == 'Business'" />
     <EmbeddedResource Include="..\packaging\windows\support\Collect-VPNRouterBusiness-Diagnostics.ps1" LogicalName="VPNRouter.Business.Collector" />
     <EmbeddedResource Include="..\packaging\windows\business-rules.json" LogicalName="VPNRouter.Business.Rules" />
     <EmbeddedResource Include="$(BusinessConnectionFile)" LogicalName="VPNRouter.Business.Connection"
-                      Condition="'$(VPNRouterEdition)' == 'Business' And '$(BusinessConnectionFile)' != ''" />
+                      Condition="'$(VPNRouterEdition)' == 'Business' And '$(BusinessSharedUpdate)' != 'true' And '$(BusinessConnectionFile)' != ''" />
   </ItemGroup>
-  <Target Name="ValidateBusinessConnection" BeforeTargets="PrepareForBuild" Condition="'$(VPNRouterEdition)' == 'Business'">
-    <Error Condition="'$(BusinessConnectionFile)' == '' Or !Exists('$(BusinessConnectionFile)')"
+  <Target Name="ValidateBusinessConnection" BeforeTargets="PrepareForBuild"
+          Condition="'$(VPNRouterEdition)' == 'Business' Or '$(BusinessSharedUpdate)' == 'true'">
+    <Error Condition="'$(BusinessSharedUpdate)' == 'true' And '$(VPNRouterEdition)' != 'Business'"
+           Text="Shared Business updates require VPNRouterEdition=Business." />
+    <Error Condition="'$(BusinessSharedUpdate)' == 'true' And '$(BusinessConnectionFile)' != ''"
+           Text="Shared Business updates must not embed a BusinessConnectionFile." />
+    <Error Condition="'$(VPNRouterEdition)' == 'Business' And '$(BusinessSharedUpdate)' != 'true' And ('$(BusinessConnectionFile)' == '' Or !Exists('$(BusinessConnectionFile)'))"
            Text="Business builds require a private BusinessConnectionFile outside the repository." />
   </Target>
 

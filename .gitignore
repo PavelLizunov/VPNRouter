@@ -80,6 +80,7 @@ tools/*
 # Windows installer builder (Inno Setup script: packaging/windows/vpnrouter.iss).
 !tools/build-installer.ps1
 !tools/build-business.ps1
+!tools/build-business-update.ps1
 
 # Individual Business build inputs are secret-bearing and stay outside Git.
 *.business-connection.txt
