@@ -3,10 +3,10 @@ name: dotnet test
 
 on:
   push:
-    branches: [main, v3.0-prep]
+    branches: [main, business, v3.0-prep]
     tags: ['v*']
   pull_request:
-    branches: [main, v3.0-prep]
+    branches: [main, business, v3.0-prep]
   workflow_dispatch:
 
 jobs:

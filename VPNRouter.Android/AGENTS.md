@@ -59,7 +59,7 @@ Output artifact: `bin\Release\net10.0-android36.0\com.ninitux.vpnrouter-Signed.a
   - Implements `START_STICKY` for kernel service recreation under memory pressure.
   - Calls `startForeground` using `FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED` on API 34+.
   - Holds a fail-safe connect `WakeLock` for the active tunnel lifetime.
-  - Implements `onTaskRemoved` swipe-away recovery: schedules self-restart via `AlarmManager` when battery optimization exemption is granted and tunnel was running (no-ops if `boxService` is already live).
+  - Implements `onTaskRemoved` swipe-away recovery: schedules self-restart via `AlarmManager` when battery optimization exemption is granted and tunnel was running (no-ops if `commandServer` is already live).
   - Wraps `startForeground` in try/catch to broadcast `foreground-start-blocked` safely on background start restrictions.
 - `AndroidDeepVerifyBox.java`: Embedded Java helper spinning transient sing-box service instances for Free Configs deep verification.
 - `QrScanLauncher.java`: Java bridge to ZXing embedded scanner for live QR scan detection.

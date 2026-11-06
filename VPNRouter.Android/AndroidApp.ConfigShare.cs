@@ -360,15 +360,6 @@ public partial class AndroidApp
         if (_cfgImportOverlay is not null) _cfgImportOverlay.IsVisible = false;
     }
 
-    private void ResetExportOverlay()
-    {
-        if (_cfgExportStatus is not null)
-        {
-            _cfgExportStatus.Text = string.Empty;
-            _cfgExportStatus.IsVisible = false;
-        }
-        if (_cfgExportSaveBtn is not null) _cfgExportSaveBtn.IsEnabled = true;
-    }
 
     private void ResetImportOverlay()
     {
