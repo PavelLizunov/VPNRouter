@@ -14,7 +14,7 @@ internal static class BusinessServerCountry
         ("NL", ["Netherlands", "Нидерланды", "NL"]), ("FI", ["Finland", "Финляндия", "FI"]),
         ("SE", ["Sweden", "Швеция", "SE"]), ("FR", ["France", "Франция", "FR"]),
         ("GB", ["United Kingdom", "Великобритания", "GB"]), ("US", ["United States", "США", "US"]),
-        ("CH", ["Switzerland", "Швейцария", "CH"])
+        ("CH", ["Switzerland", "Швейцария", "CH"]), ("RO", ["Romania", "Румыния", "RO"])
     ];
     // Application-lifetime images; refreshing rows does not allocate bitmaps.
     private static readonly Dictionary<string, IImage> Flags = new();
@@ -35,11 +35,19 @@ internal static class BusinessServerCountry
         if (!Countries.Any(country => country.Code == code)) return null;
         if (!Flags.TryGetValue(code, out var image))
         {
-            if (code == "CH")
+            if (code is "CH" or "RO")
             {
                 image = new DrawingImage
                 {
-                    Drawing = new DrawingGroup
+                    Drawing = code == "RO" ? new DrawingGroup
+                    {
+                        Children =
+                        {
+                            new GeometryDrawing { Brush = Brushes.Blue, Geometry = Geometry.Parse("M0,0 L8,0 L8,16 L0,16 Z") },
+                            new GeometryDrawing { Brush = Brushes.Yellow, Geometry = Geometry.Parse("M8,0 L16,0 L16,16 L8,16 Z") },
+                            new GeometryDrawing { Brush = Brushes.Red, Geometry = Geometry.Parse("M16,0 L24,0 L24,16 L16,16 Z") }
+                        }
+                    } : new DrawingGroup
                     {
                         Children =
                         {

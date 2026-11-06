@@ -13,7 +13,7 @@ public partial class MainWindowViewModel
                 throw new InvalidOperationException(Strings.BusinessUpdateWaitForConnection);
             IsConnecting = true;
         });
-        try { await Task.Run(() => _engine.Stop()).ConfigureAwait(false); }
+        try { await Task.Run(_stopOwnedEngineForUpdate).ConfigureAwait(false); }
         catch
         {
             await Dispatcher.UIThread.InvokeAsync(() => IsConnecting = false);

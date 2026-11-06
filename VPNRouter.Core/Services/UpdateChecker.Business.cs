@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using VPNRouter.Core.Localization;
 using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.Core.Services;
@@ -42,11 +43,21 @@ public partial class UpdateChecker
         return identity.Manifest.ToArray();
     }
 
-    private void ApplyBusinessUpdate(string extractedDirectory, UpdateSourceInfo info)
+    // Tests replace only the process-launch boundary; production uses the Windows helper.
+    internal void ApplyBusinessUpdate(string extractedDirectory, UpdateSourceInfo info,
+        Action<ProcessStartInfo>? launchHelper = null)
     {
-        if (!OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows() && launchHelper == null)
             throw new PlatformNotSupportedException("Business desktop updates require Windows.");
         var manifest = ValidateBusinessStageForApply(extractedDirectory, info);
+        if (IsVersionDowngrade(_currentVersion, info.Version))
+        {
+            var backup = BackupConfigForDowngrade(info.Version);
+            DeleteInstallReceiptForDowngrade();
+            StatusChanged?.Invoke(backup == null
+                ? Strings.DowngradeNoConfigBackup
+                : string.Format(Strings.DowngradeConfigBackupCreated, backup));
+        }
         var source = Path.Combine(Path.GetFullPath(extractedDirectory), "app");
         var destination = Path.GetFullPath(AppContext.BaseDirectory);
         var manifestPath = Path.Combine(extractedDirectory, "business-update-files-" + Guid.NewGuid().ToString("N") + ".json");
@@ -60,6 +71,11 @@ public partial class UpdateChecker
                 current.StartTime.ToUniversalTime().Ticks, 45_000,
                 string.Equals(Environment.GetEnvironmentVariable("VPNROUTER_CI"), "1", StringComparison.Ordinal));
             var startInfo = CreateBusinessHelperStartInfo(script, NeedsBusinessUpdateElevation(destination));
+            if (launchHelper != null)
+            {
+                launchHelper(startInfo);
+                return;
+            }
             using var helper = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("The Business update helper could not start.");
             if (helper.WaitForExit(300) && helper.ExitCode != 0)

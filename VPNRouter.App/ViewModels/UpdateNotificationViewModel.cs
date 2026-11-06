@@ -83,10 +83,12 @@ public partial class UpdateNotificationViewModel : ObservableObject
     private enum VersionHistoryState { None, Loading, Ready, Empty, Failed }
     private VersionHistoryState _versionHistoryState;
 
+    private bool IncludeVersionHistoryCandidates => _updateSource is not BusinessUpdateSource && _settings.IsExperimental;
+
     public string VersionHistoryMessage => _versionHistoryState switch
     {
         VersionHistoryState.Loading => Strings.LoadingVersions,
-        VersionHistoryState.Ready => _settings.IsExperimental ? Strings.RollbackSafetyHintCandidates : Strings.RollbackSafetyHint,
+        VersionHistoryState.Ready => IncludeVersionHistoryCandidates ? Strings.RollbackSafetyHintCandidates : Strings.RollbackSafetyHint,
         VersionHistoryState.Empty => Strings.NoOlderVersions,
         VersionHistoryState.Failed => Strings.VersionHistoryFailed,
         _ => string.Empty,
@@ -254,7 +256,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
         try
         {
-            var includeCandidates = _settings.IsExperimental;
+            var includeCandidates = IncludeVersionHistoryCandidates;
             var releases = await _updateSource.ListOlderAsync(
                 includeCandidates ? CandidateHistoryLimit : StableHistoryLimit, includeCandidates);
             foreach (var release in releases)
