@@ -526,21 +526,12 @@ public static class ZapretActions
         if (fullServicePath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"'))
             throw new ArgumentException("Service path contains disallowed shell metacharacters", nameof(customServicePath));
 
-        var psi = BuildServiceMenuStartInfo(fullServicePath);
-        Process.Start(psi);
-    }
-
-    internal static ProcessStartInfo BuildServiceMenuStartInfo(string fullServicePath)
-    {
-        var psi = new ProcessStartInfo("cmd.exe")
+        Process.Start(new ProcessStartInfo("cmd.exe", $"/k \"\"{fullServicePath}\"\"")
         {
             UseShellExecute = true,
             Verb = "runas",
             WorkingDirectory = Path.GetDirectoryName(fullServicePath) ?? ZapretUpdater.ZapretDir
-        };
-        psi.ArgumentList.Add("/k");
-        psi.ArgumentList.Add(fullServicePath);
-        return psi;
+        });
     }
 
     internal static bool IsServiceRunning(string serviceName)

@@ -360,4 +360,48 @@ app:
         Assert.Contains("bad_line: ***", outp);
         Assert.Contains("unknown_secret_key: ***", outp);
     }
+
+    [Fact]
+    public void Logs_RedactQuotedSecretsWithSpaces()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] password=\"alpha beta\"\n" +
+            "[DBG] token='x y'\n" +
+            "[DBG] userpassword=\"alpha beta\"\n" +
+            "[DBG] userpassword='alpha beta'\n" +
+            "[DBG] password=\"with ' opposite\"\n" +
+            "[DBG] token='with \" opposite'\n" +
+            "[DBG] password=\"unterminated value\n" +
+            "[DBG] password=\"escaped \\\" quote\"");
+
+        Assert.DoesNotContain("alpha", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("x y", outp);
+        Assert.Contains("password=\"***\"", outp);
+        Assert.Contains("token='***'", outp);
+        Assert.Contains("userpassword=\"***\"", outp);
+        Assert.Contains("userpassword='***'", outp);
+        Assert.Contains("password=\"***", outp);
+    }
+
+    [Fact]
+    public void Logs_RedactAdjacentQuotedUriAndTokens()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "password=\"https://example.test/private\" token=\"alpha beta\"\n" +
+            "password='https://example.test/private' token='alpha beta'\n" +
+            "password=\"vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@1.2.3.4:443?flow=xtls\" token=\"alpha beta\"\n" +
+            "password='vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@1.2.3.4:443?flow=xtls' token='alpha beta'\n" +
+            "password=\"unterminated https://example.test/private\ntoken=\"alpha beta\"\n" +
+            "password='unterminated https://example.test/private\ntoken='alpha beta'\n" +
+            "password=\"escaped \\\" https://example.test/private\" token=\"alpha beta\"\n" +
+            "password='escaped \\' https://example.test/private' token='alpha beta'");
+
+        Assert.DoesNotContain("private", outp);
+        Assert.DoesNotContain("alpha", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("2d54442d-158f-49e2-b225-67ba1a5b77f4", outp);
+        Assert.Contains("password=\"***\" token=\"***\"", outp);
+        Assert.Contains("password='***' token='***'", outp);
+    }
 }
