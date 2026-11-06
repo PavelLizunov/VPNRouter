@@ -1,0 +1,78 @@
+{
+  "Source": "cf919e89258fda6e74320a5d68840d4eebc2a240",
+  "Implementation": "7417f808d53a8439228c56818e8d43fcefa22038",
+  "ExactSourceChecks": "7 SUCCESS",
+  "MigrationRun": 42215497802,
+  "SnapshotAndDeploy": "SUCCESS",
+  "PublicComparison": {
+    "source_sha": "93abe24c28bef534d6bfe0f0f211c2fb9600f48f",
+    "origin": "https://vpn.ninitux.com/",
+    "files_checked": 36,
+    "bytes_checked": 56800902,
+    "omitted_empty_marker": ".nojekyll",
+    "status": "PASS",
+    "paths": [
+      "CNAME",
+      "android/index.html",
+      "apt/conf/distributions",
+      "apt/db/checksums.db",
+      "apt/db/contents.cache.db",
+      "apt/db/packages.db",
+      "apt/db/references.db",
+      "apt/db/release.caches.db",
+      "apt/db/version",
+      "apt/dists/stable/InRelease",
+      "apt/dists/stable/Release",
+      "apt/dists/stable/Release.gpg",
+      "apt/dists/stable/main/binary-amd64/Packages",
+      "apt/dists/stable/main/binary-amd64/Packages.gz",
+      "apt/dists/stable/main/binary-amd64/Release",
+      "apt/index.html",
+      "apt/install.sh",
+      "apt/key.gpg",
+      "apt/pool/main/v/vpnrouter/vpnrouter_2.50.5_amd64.deb",
+      "apt/vpnrouter.asc",
+      "diagnose.ps1",
+      "help/diagnostics-en.mp4",
+      "help/diagnostics-ru.mp4",
+      "help/fix-en.mp4",
+      "help/fix-ru.mp4",
+      "help/games-en.mp4",
+      "help/games-ru.mp4",
+      "help/index.html",
+      "help/rollback-en.mp4",
+      "help/rollback-ru.mp4",
+      "index.html",
+      "index.md",
+      "install.ps1",
+      "install.sh",
+      "repair.cmd",
+      "uninstall.ps1"
+    ]
+  },
+  "Pages": {
+    "build_type": "workflow",
+    "cname": "vpn.ninitux.com",
+    "https_enforced": true
+  },
+  "MigrationWorkflow": "disabled_manually",
+  "FinalDeploymentPolicy": [
+    {
+      "name": "v*",
+      "type": "tag"
+    }
+  ],
+  "RetiredPublisher": "deleted; disable rejected HTTP403 inactive",
+  "RecreationGuard": {
+    "ruleset_id": 26691875,
+    "include": [
+      "refs/heads/gh-pages"
+    ],
+    "rules": [
+      "creation"
+    ],
+    "bypass_actors": [],
+    "effective_verified": true
+  },
+  "TagsAndReleasesChanged": false
+}

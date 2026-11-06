@@ -88,11 +88,15 @@ Actions publication does not run Jekyll.
 Before running the migration, enable the workflow Pages source and allow `main`
 in the `github-pages` environment, preserving the custom domain and HTTPS. Keep
 `gh-pages` until deployment and public installer/help/Android/APT checks pass.
-Disable the retired `publish-apt.yml` workflow (historical ID `263772941`) so old
-immutable-tag workflows cannot recreate the branch; verify the replacement has
-a different workflow ID. After successful migration, disable `migrate-pages.yml`
-and remove the environment's obsolete `gh-pages` deployment policy. Do not move
-old tags or store a generated site/package snapshot in the source branches.
+Verify that the replacement has a different workflow ID from the retired
+`publish-apt.yml` (historical ID `263772941`) and that no legacy run is active.
+GitHub marks the removed workflow as `deleted` and refuses disabling it; this
+state alone is not a documented rerun guard. Before deleting `gh-pages`, require
+an active creation-only ruleset matching exactly `refs/heads/gh-pages`, with no
+bypass actors, and verify its effective rules. Other branch names remain allowed.
+After successful migration, disable `migrate-pages.yml` and remove the obsolete
+`gh-pages` environment policy. Do not move old tags or store a generated
+site/package snapshot in the source branches.
 
 ### Key rotation
 
