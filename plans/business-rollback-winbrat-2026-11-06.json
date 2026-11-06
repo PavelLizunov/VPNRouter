@@ -1,0 +1,277 @@
+{
+  "schema": 1,
+  "product_source": "ed2c570cdd6f95e74ce2a081526f4c770314a441",
+  "version": "2.50.8",
+  "pull_request": "https://github.com/PavelLizunov/VPNRouter/pull/646",
+  "source_ci": {
+    "applicable_success": 12,
+    "expected_skipped": 3,
+    "linux": {
+      "passed": 3682,
+      "skipped": 81
+    },
+    "windows": {
+      "passed": 3849,
+      "skipped": 26
+    },
+    "business": {
+      "passed": 441,
+      "skipped": 6
+    },
+    "new_rollback_cases_passed_linux": 59,
+    "shared_package_run": 42194693930,
+    "private_installer_run": 42195330728,
+    "shared_package_gate": {
+      "passed": 7,
+      "skipped": 1
+    },
+    "private_bootstrap_gate_passed": 1,
+    "native_split_full_config": "PASS"
+  },
+  "reviews": {
+    "native_distinct_source_lenses": 3,
+    "own_implementation_excluded": true,
+    "final_model": "GPT ASTRA XHIGH",
+    "confirmed_new_p0_p1_p2": 0,
+    "source_only": true,
+    "composed_failure_coverage_limit_retained": true
+  },
+  "delivery": {
+    "installer": "VPNRouterBusiness-Setup-v2.50.8.exe",
+    "private_configured": true,
+    "bytes": 63048329,
+    "sha256": "583c5d7d832ef16cde923477fa09a0070712774e720dde8c64f3bdfe90a59b5b",
+    "public_installer_published": false,
+    "omarchy_copy_hash_matches": true,
+    "directory_mode": "0700",
+    "file_mode": "0600",
+    "generic_zip_bytes": 73474489,
+    "generic_zip_sha256": "68f8c7de9cb837f7858dc0458c5363295e25696f813091a1b547eabc6c6d52b6",
+    "public_feed": "https://business-updates.ninitux.com/windows-x64/latest.json",
+    "history_versions": [
+      "2.50.7",
+      "2.50.6",
+      "2.50.5"
+    ],
+    "full_trusted_https_zip_hash": "PASS"
+  },
+  "windows": {
+    "identity": "WINBRAT",
+    "bootstrap_bridge5": "PASS",
+    "update5_to7": {
+      "check_download_apply_relaunch": "PASS",
+      "installed_files_hash_match": 278,
+      "later_readiness_inspect": "PASS",
+      "initial_verifier_postcondition_timing_failure_retained": true
+    },
+    "update7_to8": "PASS",
+    "rollback8_to7": {
+      "explicit_cancel": "PASS",
+      "explicit_confirm": "PASS",
+      "installed_files_hash_match": 278,
+      "private_backup_acl": "PASS",
+      "backup_bytes_match_before_apply": true
+    },
+    "reupdate7_to8": "PASS",
+    "fresh_private8_installer_bootstrap": "PASS",
+    "preservation": {
+      "corporate_account": true,
+      "provisioning": true,
+      "prior_pool_rows": true,
+      "selected_server_mode_language": true,
+      "subscription_source_cache": true,
+      "cache_bytes_may_refresh": true,
+      "backing_entries": 16,
+      "physical_choices": 6,
+      "original_reports_present": 0,
+      "unrelated_running_instances_present": 0,
+      "standard_configuration_service_state_retained": true
+    },
+    "accepted_dataplane": {
+      "source": "ed2c570cdd6f95e74ce2a081526f4c770314a441",
+      "version": "2.50.8",
+      "success": true,
+      "failure": null,
+      "subscription_choice_indices_1based": [
+        1,
+        4
+      ],
+      "cycles": [
+        {
+          "SelectedExpected": true,
+          "OrdinaryExpected": true,
+          "GeneratedTcpHostMatchesChoice": true,
+          "Cycle": 1,
+          "NodeIndex": 1,
+          "SubscriptionRefreshDisabled": true,
+          "ConnectedSelectorAndModeDisabled": true,
+          "DifferentNodeEgress": null,
+          "DifferentNodeEgressCompared": false,
+          "Mode": "split",
+          "Lifecycle": "PASS",
+          "SubscriptionChoiceIndex": 1,
+          "ConnectedSplitHealthCompleted": true,
+          "RepresentativeHttps": "PASS"
+        },
+        {
+          "SelectedExpected": true,
+          "OrdinaryExpected": true,
+          "GeneratedTcpHostMatchesChoice": true,
+          "Cycle": 2,
+          "NodeIndex": 2,
+          "SubscriptionRefreshDisabled": true,
+          "ConnectedSelectorAndModeDisabled": true,
+          "DifferentNodeEgress": true,
+          "DifferentNodeEgressCompared": true,
+          "Mode": "full",
+          "Lifecycle": "PASS",
+          "SubscriptionChoiceIndex": 4,
+          "ConnectedSplitHealthCompleted": false,
+          "RepresentativeHttps": "PASS"
+        },
+        {
+          "SelectedExpected": true,
+          "OrdinaryExpected": true,
+          "GeneratedTcpHostMatchesChoice": true,
+          "Cycle": 3,
+          "NodeIndex": 2,
+          "SubscriptionRefreshDisabled": true,
+          "ConnectedSelectorAndModeDisabled": true,
+          "DifferentNodeEgress": true,
+          "DifferentNodeEgressCompared": true,
+          "Mode": "split",
+          "Lifecycle": "PASS",
+          "SubscriptionChoiceIndex": 4,
+          "ConnectedSplitHealthCompleted": true,
+          "RepresentativeHttps": "PASS"
+        }
+      ],
+      "elapsed_seconds": 31.7,
+      "cleanup": "PASS"
+    },
+    "cleanup": {
+      "main": {
+        "Success": true,
+        "Error": null,
+        "Action": "Cleanup",
+        "Stages": {
+          "Identity": "PASS",
+          "OwnedInstallDataTunRemoved": "PASS"
+        },
+        "Failure": null,
+        "NoDesktopScreenshot": true,
+        "ReportSent": false,
+        "AppExitPath": "ExactOwnedIdleProcessHandle",
+        "TrayAutomationUnavailable": true,
+        "Standard": {
+          "ConfigurationRetained": true,
+          "OriginalProcessesRetained": 0,
+          "ServiceRetained": true
+        }
+      },
+      "fresh": {
+        "Success": true,
+        "Error": null,
+        "Action": "Cleanup",
+        "Stages": {
+          "Identity": "PASS",
+          "OwnedInstallDataTunRemoved": "PASS"
+        },
+        "Failure": null,
+        "NoDesktopScreenshot": true,
+        "ReportSent": false,
+        "AppExitPath": "ExactOwnedIdleProcessHandle",
+        "TrayAutomationUnavailable": true,
+        "Standard": {
+          "ConfigurationRetained": true,
+          "OriginalProcessesRetained": 0,
+          "ServiceRetained": true
+        }
+      },
+      "final": {
+        "BusinessDataAbsent": true,
+        "BusinessRegistryAbsent": true,
+        "NoGlobalProcessKill": true,
+        "Identity": "WINBRAT",
+        "TaskRootsRemoved": 2,
+        "Success": true,
+        "OwnedProcessCount": 0,
+        "TunCount": 0
+      },
+      "lease": {
+        "request_id": "vpnrouter-business-rollback-win-20261106",
+        "vmid": 100,
+        "status": "released",
+        "sequence": 32,
+        "finished": 1793960480.5332704
+      },
+      "tray_exit_automation": "UNVERIFIED; exact idle task process handle fallback recorded",
+      "global_process_kills": false
+    }
+  },
+  "network_observation": {
+    "node2_same_proxy_failure_on7_and8": true,
+    "node1_full_and_split_pass_on7_and8": true,
+    "direct_harness_node2_tcp": "TIMEOUT",
+    "simultaneous_external_egress_node2_connect_validated_tls": "PASS",
+    "direct_tcp_choice_results_1based": {
+      "1": "PASS",
+      "2": "TIMEOUT",
+      "3": "TIMEOUT",
+      "4": "PASS",
+      "5": "PASS",
+      "6": "PASS"
+    },
+    "remote_authenticated_vless_via_external_egress": "UNVERIFIED",
+    "global_node_down_claimed": false,
+    "precise_routing_filter_acl_cause": "UNKNOWN",
+    "bundled_core7_and8_byte_identical": true,
+    "routing_lifecycle_source7_and8_unchanged": true
+  },
+  "verifier": {
+    "canonical_original": {
+      "brat-verify.ps1": "be4f2463363f2ece92a7cc11b1d10b0f7c3c2b660fcd782436717ac1b0112100",
+      "brat-local-shim.ps1": "95f177702d3a890733f3f02d77d24f3e93d3d2a22672c37101484d2f7c07f965"
+    },
+    "tracked_tools_unchanged": true,
+    "main": {
+      "task_verifier_sha256": "14e5262655c492dcae6a69d44636ab9f2800154224c7a12b0465b18a3cba1aed",
+      "local_shim_sha256": "95f177702d3a890733f3f02d77d24f3e93d3d2a22672c37101484d2f7c07f965",
+      "scripts": {
+        "Acceptance-Interactive.ps1": "16a670c505e2c57a9e49e415a5c33ade0323df1bc29b58c21eb01f8336189a12",
+        "Acceptance-Common.ps1": "d8e73894c11622ee0067c716716305f2de537b4357d63e6b9330a05852e2626c",
+        "Acceptance-Dataplane.ps1": "e42715d88865b46c62062c961edaff194d46f7be1ea0a8c0ed4342ab7ad12f1d",
+        "Invoke-BusinessAcceptance.ps1": "e3ca7fa3073ae8bd6f985b3891b05e737785c2f4cde8206507d10aaac88d15be"
+      }
+    },
+    "fresh": {
+      "task_verifier_sha256": "e247c8e865f58537d52be062a8fdc4c0a8849e0240bed9255f18b24f4c380b3f",
+      "local_shim_sha256": "95f177702d3a890733f3f02d77d24f3e93d3d2a22672c37101484d2f7c07f965",
+      "scripts": {
+        "Acceptance-Interactive.ps1": "16a670c505e2c57a9e49e415a5c33ade0323df1bc29b58c21eb01f8336189a12",
+        "Acceptance-Common.ps1": "d8e73894c11622ee0067c716716305f2de537b4357d63e6b9330a05852e2626c",
+        "Acceptance-Dataplane.ps1": "e42715d88865b46c62062c961edaff194d46f7be1ea0a8c0ed4342ab7ad12f1d",
+        "Invoke-BusinessAcceptance.ps1": "e3ca7fa3073ae8bd6f985b3891b05e737785c2f4cde8206507d10aaac88d15be"
+      }
+    },
+    "task_scripts_retained_privately": true,
+    "desktop_screenshots": false,
+    "diagnostic_upload_performed": false
+  },
+  "privacy": {
+    "ephemeral_github_secrets_removed_and_absence_verified": true,
+    "current_tracked_repository_exact_private_value_matches": 0,
+    "actual_values_checked": 11,
+    "complete_history_audit_claimed": false,
+    "task_plain_inputs_removed": true,
+    "isolated_gpg_home_removed": true
+  },
+  "limits": [
+    "UIS, sustained memory, every routing rule, DNS/UDP and office reachability remain unverified.",
+    "Remaining nodes do not have authenticated dataplane acceptance; direct TCP alone is not VPN availability.",
+    "Runtime update/rollback tested7 only;5/6 retained in the validated catalog but not individually rolled back live.",
+    "No running unrelated Standard instance was present; configuration/service baseline retention is verified, concurrent-instance isolation is not live-proven.",
+    "Update replacement remains per-file, not whole-package transactional.",
+    "Tray visual behavior and graceful tray exit were not accepted by the task UIAutomation transport."
+  ]
+}
