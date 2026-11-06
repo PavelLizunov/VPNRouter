@@ -21,7 +21,7 @@ if ($Strict) {
         $RequiredSuccess = 'publish=1,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1'
     }
     if (-not $RequiredWorkflows) {
-        $RequiredWorkflows = 'Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Publish APT Repository,Verify Release Integrity,Auto-Update Integration Test (Windows)'
+        $RequiredWorkflows = 'Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Publish APT and Pages,Verify Release Integrity,Auto-Update Integration Test (Windows)'
     }
     $TolerateFailure = $null
 }
@@ -165,14 +165,14 @@ if ($Strict) {
         'Build macOS DMG' = 'build-mac.yml'
         'Build Android APK' = 'build-android.yml'
         'Build Linux AppImage + .deb' = 'build-linux.yml'
-        'Publish APT Repository' = 'publish-apt.yml'
+        'Publish APT and Pages' = 'publish-pages.yml'
         'Verify Release Integrity' = 'verify-release-integrity.yml'
         'Auto-Update Integration Test (Windows)' = 'test-windows-update.yml'
         'dotnet test' = 'test.yml'
     }
     $jobOwners = @{
         'build' = @('build-mac.yml', 'build-android.yml', 'build-linux.yml')
-        'publish' = @('publish-apt.yml')
+        'publish' = @('publish-pages.yml')
         'verify' = @('verify-release-integrity.yml')
         'test-update' = @('test-windows-update.yml')
         'test' = @('test.yml')
@@ -200,7 +200,7 @@ if ($Strict) {
     $selectedJobs = New-Object System.Collections.ArrayList
     foreach ($file in $wanted.Keys) {
         $requiredWorkflow = $wanted[$file]
-        $events = if ($file -in @('publish-apt.yml', 'verify-release-integrity.yml')) {
+        $events = if ($file -in @('publish-pages.yml', 'verify-release-integrity.yml')) {
             @('release', 'workflow_dispatch')
         } elseif ($file -eq 'test-windows-update.yml') {
             @('push', 'workflow_dispatch', 'release')

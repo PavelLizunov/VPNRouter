@@ -82,7 +82,7 @@ AppVersion must match the complete tag version, including `-rN`.
 
    ```sh
    gh workflow run verify-release-integrity.yml --ref TAG -f tag=TAG -f auto_draft_on_failure=false
-   gh workflow run publish-apt.yml --ref TAG -f tag=TAG
+   gh workflow run publish-pages.yml --ref TAG -f tag=TAG
    ```
 
    APT retains/reindexes the latest published canonical stable only, selected

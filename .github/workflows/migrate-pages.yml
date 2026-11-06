@@ -1,0 +1,117 @@
+name: Migrate Existing Pages Snapshot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vpnrouter-pages
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Require manual migration from main
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'PavelLizunov/VPNRouter'
+          test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
+          test "$GITHUB_REF_TYPE" = 'branch'
+          test "$GITHUB_REF" = 'refs/heads/main'
+
+      - name: Checkout exact run SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Export and verify fixed existing Pages snapshot
+        env:
+          SNAPSHOT_SHA: 93abe24c28bef534d6bfe0f0f211c2fb9600f48f
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --no-tags --depth=1 origin "$SNAPSHOT_SHA"
+          test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$SNAPSHOT_SHA"
+          git archive --format=tar "$SNAPSHOT_SHA" > "$RUNNER_TEMP/pages-snapshot.tar"
+          python3 - <<'PY_SNAPSHOT'
+          import os
+          import pathlib
+          import stat
+          import tarfile
+
+          root = pathlib.Path('gh-pages-dir')
+          with tarfile.open(pathlib.Path(os.environ['RUNNER_TEMP']) / 'pages-snapshot.tar') as archive:
+              members = archive.getmembers()
+              for member in members:
+                  path = pathlib.PurePosixPath(member.name)
+                  if (path.is_absolute() or '..' in path.parts or
+                          any(part in ('.git', '.github') for part in path.parts) or
+                          not (member.isfile() or member.isdir())):
+                      raise SystemExit('Unsafe Pages snapshot entry')
+              files = [member for member in members if member.isfile()]
+              if len(files) != 37 or sum(member.size for member in files) != 56800902:
+                  raise SystemExit('Pages snapshot inventory mismatch')
+              root.mkdir()
+              archive.extractall(root)
+          files = []
+          for directory, directories, names in os.walk(root, followlinks=False):
+              for name in directories + names:
+                  path = pathlib.Path(directory) / name
+                  mode = path.lstat().st_mode
+                  if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                      raise SystemExit('Pages snapshot contains a link or special file')
+                  if stat.S_ISREG(mode):
+                      if path.stat().st_nlink != 1:
+                          raise SystemExit('Pages snapshot contains a hard link')
+                      files.append(path)
+          if len(files) != 37 or sum(path.stat().st_size for path in files) != 56800902:
+              raise SystemExit('Exported Pages snapshot inventory mismatch')
+          if (root / 'CNAME').read_text(encoding='ascii') != 'vpn.ninitux.com':
+              raise SystemExit('Pages custom domain mismatch')
+          print('Verified fixed Pages snapshot: 37 files, 56800902 bytes')
+          PY_SNAPSHOT
+
+      - name: Verify existing signed APT snapshot
+        run: |
+          set -euo pipefail
+          test -s gh-pages-dir/apt/dists/stable/main/binary-amd64/Packages
+          gpgv --keyring "$PWD/gh-pages-dir/apt/key.gpg" \
+              gh-pages-dir/apt/dists/stable/Release.gpg gh-pages-dir/apt/dists/stable/Release
+          gpgv --keyring "$PWD/gh-pages-dir/apt/key.gpg" \
+              --output .apt-signed-release gh-pages-dir/apt/dists/stable/InRelease
+          cmp .apt-signed-release gh-pages-dir/apt/dists/stable/Release
+          (cd gh-pages-dir/apt/dists/stable &&
+              awk '/^SHA256:/ {on=1; next} /^[^ ]/ {on=0} on {print $1 "  " $3}' Release |
+              sha256sum --check --strict -)
+          (cd gh-pages-dir/apt &&
+              awk '/^SHA256:/ {hash=$2} /^Filename:/ {file=$2} END {print hash "  " file}' \
+                  dists/stable/main/binary-amd64/Packages | sha256sum --check --strict -)
+
+      - name: Upload verified existing Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4
+        with:
+          name: github-pages
+          path: gh-pages-dir
+          retention-days: 1
+
+  deploy:
+    needs: snapshot
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy verified existing Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e  # v4

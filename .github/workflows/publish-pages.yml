@@ -1,4 +1,4 @@
-name: Publish APT Repository
+name: Publish APT and Pages
 
 on:
   release:
@@ -11,10 +11,10 @@ on:
         default: ""
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: publish-apt-gh-pages
+  group: vpnrouter-pages
   cancel-in-progress: false
 
 jobs:
@@ -128,25 +128,10 @@ jobs:
           echo "Trust fingerprint: $FPR"
           echo "${FPR}:6:" | gpg --import-ownertrust
 
-      - name: Checkout or create gh-pages worktree
+      - name: Create empty Pages staging directory
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if git ls-remote --exit-code origin gh-pages > /dev/null 2>&1; then
-              echo "gh-pages branch exists — fetching"
-              git fetch origin gh-pages
-              git worktree add gh-pages-dir gh-pages
-          else
-              echo "gh-pages branch missing — creating orphan"
-              git worktree add --detach gh-pages-dir
-              cd gh-pages-dir
-              git checkout --orphan gh-pages
-              git rm -rf . || true
-              touch .nojekyll   # disable Jekyll so files starting with _ are served
-              echo "# VPNRouter APT Repository" > index.md
-              cd ..
-          fi
+          set -euo pipefail
+          mkdir gh-pages-dir
 
       - name: Lay out apt repo skeleton
         run: |
@@ -297,19 +282,12 @@ jobs:
               awk '/^SHA256:/ {on=1; next} /^[^ ]/ {on=0} on {print $1 "  " $3}' Release |
               sha256sum --check --strict -)
 
-      - name: Publish gh-pages (single orphan commit, force-push)
-        run: |
-          cd gh-pages-dir
-          git checkout --orphan _publish
-          git add -A
-          if git diff --cached --quiet; then
-              echo "::error::gh-pages working tree is empty — refusing to publish an empty site"
-              exit 1
-          fi
-          MSG="Publish stable APT reindex (run $GITHUB_REF_NAME at $GITHUB_SHA)"
-          git commit -q -m "$MSG"
-          git push --force origin HEAD:gh-pages
-          echo "Published gh-pages as a single orphan commit: $MSG"
+      - name: Upload validated Pages artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v4
+        with:
+          name: github-pages
+          path: gh-pages-dir
+          retention-days: 1
 
       - name: Print installation snippet
         run: |
@@ -330,3 +308,18 @@ jobs:
 
           ====================================================================
           EOF
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy validated Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e  # v4
