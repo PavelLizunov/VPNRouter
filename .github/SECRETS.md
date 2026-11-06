@@ -16,7 +16,7 @@ Add / rotate via: **Repo Settings → Secrets and variables → Actions
 | `HOMEBREW_TAP_DISPATCH_TOKEN` | `build-mac.yml` | cross-repo dispatch to `PavelLizunov/homebrew-vpnrouter` on stable cuts | PAT, classic, `repo` scope |
 | `ANDROID_KEYSTORE_BASE64` | `build-android.yml` | signing the release APK so existing installs accept updates | base64-encoded JKS keystore |
 | `ANDROID_KEYSTORE_PASSWORD` | `build-android.yml` | unlocks the keystore + key during signing | plain string |
-| `APT_SIGNING_KEY`, `APT_SIGNING_KEY_ID` | `publish-apt.yml` | signing the APT repository metadata | ASCII-armored PGP private key; key ID |
+| `APT_SIGNING_KEY`, `APT_SIGNING_KEY_ID` | `publish-pages.yml` | signing the APT repository metadata | ASCII-armored PGP private key; key ID |
 | `SIGNPATH_API_TOKEN`, `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_SIGNING_POLICY_SLUG`, `SIGNPATH_ARTIFACT_CONFIG_SLUG` | `sign-windows.yml` | SignPath signing of Windows artifacts; any configured value blocks the unsigned path | SignPath credentials and slugs |
 | `SIGNPATH_EXPECTED_SUBJECT` (repository variable) | `sign-windows.yml` | expected Authenticode signer subject | Actions variable, not a secret |
 | ~~`LIBBOX_AAR_BASE64`~~ | retired Wave 32 | replaced by tooling-release pattern below (48 KB secret cap × 15.6 MB aar = impossible) | — |
