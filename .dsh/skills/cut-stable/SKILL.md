@@ -180,7 +180,7 @@ not trigger downstream workflows, so explicitly dispatch missing runs:
 
 ```powershell
 gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draft_on_failure=false
-gh workflow run publish-apt.yml --ref $tag -f tag=$tag
+gh workflow run publish-pages.yml --ref $tag -f tag=$tag
 ```
 
 Homebrew notification in `build-mac.yml` is suppressed during draft staging.

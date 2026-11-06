@@ -227,7 +227,7 @@ try {
             '-Repo', $Repo,
             '-IgnoreSkipped', 'characterization-windows',
             '-RequiredSuccess', 'publish=1,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1',
-            '-RequiredWorkflows', 'Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Publish APT Repository,Verify Release Integrity,Auto-Update Integration Test (Windows)',
+            '-RequiredWorkflows', 'Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Publish APT and Pages,Verify Release Integrity,Auto-Update Integration Test (Windows)',
             '-Strict'
         ) -Step 'Commit CI gate'
     }

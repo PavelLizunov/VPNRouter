@@ -130,7 +130,7 @@ them absent, explicitly dispatch at the published tag:
 
 ```powershell
 gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draft_on_failure=false
-gh workflow run publish-apt.yml --ref $tag -f tag=$tag
+gh workflow run publish-pages.yml --ref $tag -f tag=$tag
 ```
 
 Candidate APT runs verify provenance and reindex the latest published stable;

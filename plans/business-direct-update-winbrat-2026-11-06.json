@@ -1,0 +1,167 @@
+{
+  "Task": "vpnrouter-business-direct-update-20261106",
+  "Vm": "WINBRAT",
+  "Lease": {
+    "Status": "released",
+    "Sequence": 34,
+    "Finished": 1793966047.7351148
+  },
+  "NoDesktopScreenshot": true,
+  "ReportSent": false,
+  "Bootstrap": {
+    "Success": true,
+    "Error": null,
+    "Action": "Bootstrap",
+    "Stages": {
+      "Identity": "PASS",
+      "InitialIsolation": "PASS",
+      "PrivateBridgeInstall": "PASS",
+      "BridgeAutomaticBootstrap": "PASS"
+    },
+    "Failure": null,
+    "NoDesktopScreenshot": true,
+    "ReportSent": false,
+    "Preflight": {
+      "AvailableRamKiB": 13714072,
+      "LoadPercent": 50,
+      "CompetingBuilds": 0,
+      "LogicalCpu": 8,
+      "FreeDiskBytes": 124611059712,
+      "SdkUsed": false
+    },
+    "Preservation": {
+      "SubscriptionCacheByteIdentical": true,
+      "ChoiceCount": 6,
+      "UnrelatedProcessesRetained": 0,
+      "CacheSnapshotFilesStillPresent": 0,
+      "CacheSnapshotFileCount": 0,
+      "PreservedReportCount": 0,
+      "ProvisioningRetained": true,
+      "EntryCount": 16,
+      "SelectionModeLanguageRetained": true,
+      "AccountRetained": true,
+      "PriorEntriesRetained": true,
+      "CacheSnapshotFilesUnchanged": 0,
+      "SubscriptionCacheRetained": true,
+      "OwnerReportsPreserved": true
+    },
+    "Readiness": {
+      "NoDesktopScreenshot": true,
+      "ReportSent": false,
+      "OldDetailsPanelAbsent": true,
+      "MenuVisible": true,
+      "TunCount": 0,
+      "SelectorEnabled": true,
+      "RussianMainVisible": true,
+      "NewVpnConnections": 0,
+      "CoreCount": 0
+    },
+    "Standard": {
+      "ConfigurationRetained": true,
+      "OriginalProcessesRetained": 0,
+      "ServiceRetained": true
+    },
+    "EntryCount": 16,
+    "ChoiceCount": 6,
+    "ProvisioningPersisted": true
+  },
+  "DirectUpdate": {
+    "Success": true,
+    "Error": null,
+    "Action": "Update",
+    "Stages": {
+      "Identity": "PASS",
+      "UpdatePreflight": "PASS",
+      "RealUpdateCheck": "PASS",
+      "RealDownloadApplyRelaunch": "PASS",
+      "InstalledPayload": "PASS",
+      "ProfileAndStandardRetained": "PASS"
+    },
+    "Failure": null,
+    "NoDesktopScreenshot": true,
+    "ReportSent": false,
+    "Payload": {
+      "Source": "ed2c570cdd6f95e74ce2a081526f4c770314a441",
+      "Version": "2.50.8",
+      "InstalledFilesMatched": 278,
+      "AppDllSha256": "47f56632260d6637344852b10b90c643299b51fbd0619e0daa29c27cfd81428d"
+    },
+    "Preservation": {
+      "SubscriptionCacheByteIdentical": false,
+      "ChoiceCount": 6,
+      "UnrelatedProcessesRetained": 0,
+      "CacheSnapshotFilesStillPresent": 0,
+      "CacheSnapshotFileCount": 0,
+      "PreservedReportCount": 0,
+      "ProvisioningRetained": true,
+      "EntryCount": 16,
+      "SelectionModeLanguageRetained": true,
+      "AccountRetained": true,
+      "PriorEntriesRetained": true,
+      "CacheSnapshotFilesUnchanged": 0,
+      "SubscriptionCacheRetained": true,
+      "OwnerReportsPreserved": true
+    },
+    "Readiness": {
+      "NoDesktopScreenshot": true,
+      "ReportSent": false,
+      "OldDetailsPanelAbsent": true,
+      "MenuVisible": true,
+      "TunCount": 0,
+      "SelectorEnabled": true,
+      "RussianMainVisible": true,
+      "NewVpnConnections": 0,
+      "CoreCount": 0
+    },
+    "Standard": {
+      "ConfigurationRetained": true,
+      "OriginalProcessesRetained": 0,
+      "ServiceRetained": true
+    }
+  },
+  "Cleanup": {
+    "Success": true,
+    "Error": null,
+    "Action": "Cleanup",
+    "Stages": {
+      "Identity": "PASS",
+      "OwnedInstallDataTunRemoved": "PASS"
+    },
+    "Failure": null,
+    "NoDesktopScreenshot": true,
+    "ReportSent": false,
+    "AppExitPath": "ExactOwnedIdleProcessHandle",
+    "TrayAutomationUnavailable": true,
+    "Standard": {
+      "ConfigurationRetained": true,
+      "OriginalProcessesRetained": 0,
+      "ServiceRetained": true
+    }
+  },
+  "Verifier": {
+    "LocalShimSha256": "95f177702d3a890733f3f02d77d24f3e93d3d2a22672c37101484d2f7c07f965",
+    "CanonicalTrackedFilesUnchanged": true,
+    "Scripts": {
+      "Acceptance-Interactive.ps1": "747060a451837ed2a3d8bf33a3ed60c9f09861899184d0a4f14b466e2d7b128a",
+      "Acceptance-Common.ps1": "d605f026b4b7af5fc7947f1042960643055e4a79a4dd107dccc83abf9e0a979f",
+      "Acceptance-Dataplane.ps1": "e42715d88865b46c62062c961edaff194d46f7be1ea0a8c0ed4342ab7ad12f1d",
+      "Invoke-BusinessAcceptance.ps1": "551090f10c340d8cce4e2734fbc98b5fbdfad106146efa5d0e5688b5b329eba6"
+    },
+    "Extension": "Task-only fixed Business in-session scenario before default process lookup",
+    "CanonicalOriginal": {
+      "brat-verify.ps1": "be4f2463363f2ece92a7cc11b1d10b0f7c3c2b660fcd782436717ac1b0112100",
+      "brat-local-shim.ps1": "95f177702d3a890733f3f02d77d24f3e93d3d2a22672c37101484d2f7c07f965"
+    },
+    "TaskVerifierSha256": "4e69fb5ffad6e6da6270fc138ce555e08c2b10721fe384a3427d0f8e3f1d213d"
+  },
+  "FinalCleanup": {
+    "TaskCount": 0,
+    "TaskRootRemoved": true,
+    "BusinessDataPresent": false,
+    "BusinessRegistryCount": 0,
+    "OwnedAppCoreCount": 0,
+    "Success": true,
+    "NoDesktopScreenshot": true,
+    "TunCount": 0
+  }
+}

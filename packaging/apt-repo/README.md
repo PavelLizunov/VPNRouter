@@ -6,7 +6,7 @@ Public apt repository for VPNRouter, hosted on GitHub Pages at:
 
 Packages are `.deb` artifacts from GitHub Releases, re-indexed and
 GPG-signed on every new release by the
-[`.github/workflows/publish-apt.yml`](../../.github/workflows/publish-apt.yml)
+[`.github/workflows/publish-pages.yml`](../../.github/workflows/publish-pages.yml)
 workflow.
 
 ## Usage
@@ -57,28 +57,46 @@ sudo apt update
   key above. Used by the publish workflow to sign `Release` files.
 - `APT_SIGNING_KEY_ID` — `6ED816C8E249EE03` (fingerprint of the key).
 
-### Enabling GitHub Pages
+### GitHub Pages publication
 
-Once the publish workflow has created the `gh-pages` branch, go to:
+Use GitHub Actions as the Pages publishing source. Keep the configured custom
+domain `vpn.ninitux.com` and HTTPS enforcement. The `github-pages` environment
+must admit canonical release tags; its deploy job requires `pages: write` and
+`id-token: write`. The publisher uploads a verified site artifact and deploys it
+without creating or updating a branch.
 
-    Settings → Pages → Source: `Deploy from a branch` → Branch: `gh-pages` / `/ (root)`
-
-After the first workflow run the files will be served at
-`https://pavellizunov.github.io/VPNRouter/apt/`.
-
-### Re-syncing the whole repo
-
-If anything goes wrong and you need to rebuild the apt repo from
-scratch:
+Manual reindexing must run at an immutable canonical release tag whose source
+contains `publish-pages.yml`:
 
 ```bash
-gh workflow run publish-apt --ref main
-# (or with a specific tag to publish just one release)
-gh workflow run publish-apt --ref main -f tag=v2.22.2
+gh workflow run publish-pages.yml --ref TAG -f tag=TAG
 ```
 
-This re-downloads every `.deb` artifact from the last 30 releases
-(when no tag given) and re-indexes the apt repo.
+The run verifies the tag/SHA and reindexes only the latest published canonical
+stable release. It validates the DEB/sidecar, package metadata and signed indexes;
+it never adds a candidate DEB or falls back from a malformed latest stable.
+
+### One-time migration from the retired branch publisher
+
+`migrate-pages.yml` is a manual, main-only bridge for the exact existing Pages
+snapshot `93abe24c28bef534d6bfe0f0f211c2fb9600f48f`. It verifies 37 files and
+56800902 bytes plus existing APT signatures and hashes, then deploys the existing
+site without signing, building a product or changing release assets. Its only
+hidden file is the empty `.nojekyll` marker, which the Pages artifact action omits;
+Actions publication does not run Jekyll.
+
+Before running the migration, enable the workflow Pages source and allow `main`
+in the `github-pages` environment, preserving the custom domain and HTTPS. Keep
+`gh-pages` until deployment and public installer/help/Android/APT checks pass.
+Verify that the replacement has a different workflow ID from the retired
+`publish-apt.yml` (historical ID `263772941`) and that no legacy run is active.
+GitHub marks the removed workflow as `deleted` and refuses disabling it; this
+state alone is not a documented rerun guard. Before deleting `gh-pages`, require
+an active creation-only ruleset matching exactly `refs/heads/gh-pages`, with no
+bypass actors, and verify its effective rules. Other branch names remain allowed.
+After successful migration, disable `migrate-pages.yml` and remove the obsolete
+`gh-pages` environment policy. Do not move old tags or store a generated
+site/package snapshot in the source branches.
 
 ### Key rotation
 
