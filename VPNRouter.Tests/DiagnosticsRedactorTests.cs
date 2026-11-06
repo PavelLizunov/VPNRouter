@@ -383,4 +383,25 @@ app:
         Assert.Contains("userpassword='***'", outp);
         Assert.Contains("password=\"***", outp);
     }
+
+    [Fact]
+    public void Logs_RedactAdjacentQuotedUriAndTokens()
+    {
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "password=\"https://example.test/private\" token=\"alpha beta\"\n" +
+            "password='https://example.test/private' token='alpha beta'\n" +
+            "password=\"vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@1.2.3.4:443?flow=xtls\" token=\"alpha beta\"\n" +
+            "password='vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@1.2.3.4:443?flow=xtls' token='alpha beta'\n" +
+            "password=\"unterminated https://example.test/private\ntoken=\"alpha beta\"\n" +
+            "password='unterminated https://example.test/private\ntoken='alpha beta'\n" +
+            "password=\"escaped \\\" https://example.test/private\" token=\"alpha beta\"\n" +
+            "password='escaped \\' https://example.test/private' token='alpha beta'");
+
+        Assert.DoesNotContain("private", outp);
+        Assert.DoesNotContain("alpha", outp);
+        Assert.DoesNotContain("beta", outp);
+        Assert.DoesNotContain("2d54442d-158f-49e2-b225-67ba1a5b77f4", outp);
+        Assert.Contains("password=\"***\" token=\"***\"", outp);
+        Assert.Contains("password='***' token='***'", outp);
+    }
 }
