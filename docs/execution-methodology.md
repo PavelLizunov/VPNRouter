@@ -157,7 +157,7 @@ v3.0 development readiness is not release authority.
 - Use `ship-rolling-candidate` only after an explicit candidate command.
 - Use `post-ship-mcp-verify` after every candidate or stable ship.
 - Use `cut-stable` only after explicit stable authorization and all hard gates.
-- Require the exact 16-asset release contract, exact-SHA CI, sidecar verification, fixed-WINBRAT verification, two connection cycles, cleanup, and the open-defect gate where applicable.
+- Require the exact [release asset contract](agent-contract.md#release-and-winbrat-contract), exact-SHA CI, sidecar verification, fixed-WINBRAT verification, two connection cycles, cleanup, and the open-defect gate where applicable.
 
 ## 10. Stop-the-line conditions
 

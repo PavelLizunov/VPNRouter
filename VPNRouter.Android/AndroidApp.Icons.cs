@@ -60,24 +60,6 @@ public partial class AndroidApp
         return row;
     }
 
-    /// <summary>A chevron-right icon that points down when its section is open.</summary>
-    private static void SetChevronOpen(IconView? chevron, bool open)
-    {
-        if (chevron is null) return;
-        if (chevron.Transitions is null && UiMotion.Enabled)
-        {
-            chevron.Transitions = new Transitions
-            {
-                new TransformOperationsTransition
-                {
-                    Property = Visual.RenderTransformProperty,
-                    Duration = TimeSpan.FromMilliseconds(180),
-                    Easing = new CubicEaseOut(),
-                },
-            };
-        }
-        chevron.RenderTransform = TransformOperations.Parse(open ? "rotate(90deg)" : "rotate(0deg)");
-    }
 
     /// <summary>Colour changes of a status chip fade instead of jumping (not when Android animations are off).</summary>
     private static void AddChipTransitions(TextBlock chip)

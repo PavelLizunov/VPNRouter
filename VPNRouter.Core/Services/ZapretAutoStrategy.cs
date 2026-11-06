@@ -292,8 +292,6 @@ public static class ZapretAutoStrategy
 
     internal const string SilentWrapperStrategyName = "_vpnrouter_silent";
 
-    private static bool IsSilentWrapper(string? name) =>
-        string.Equals(name?.Trim(), SilentWrapperStrategyName, StringComparison.OrdinalIgnoreCase);
 
 internal static string? BestStrategyByScore(
         IReadOnlyDictionary<string, ZapretStrategyTestResult> perStrategy)
