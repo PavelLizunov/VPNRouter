@@ -407,4 +407,21 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("/RESOLVED/lists/tls_clienthello_www_google_com.bin", args);
         Assert.DoesNotContain("%LISTS%", args);
     }
+
+    [Theory]
+    [InlineData(@"C:\ProgramData\VPNRouter\zapret\service.bat")]
+    [InlineData(@"C:\Custom Path With Spaces\zapret\service.bat")]
+    public void BuildServiceMenuStartInfo_ConfiguresSafeProcessStartInfo(string servicePath)
+    {
+        var psi = ZapretActions.BuildServiceMenuStartInfo(servicePath);
+
+        Assert.Equal("cmd.exe", psi.FileName);
+        Assert.True(psi.UseShellExecute);
+        Assert.Equal("runas", psi.Verb);
+        Assert.Equal(Path.GetDirectoryName(servicePath), psi.WorkingDirectory);
+        Assert.Equal(2, psi.ArgumentList.Count);
+        Assert.Equal("/k", psi.ArgumentList[0]);
+        Assert.Equal(servicePath, psi.ArgumentList[1]);
+        Assert.Empty(psi.Arguments);
+    }
 }
