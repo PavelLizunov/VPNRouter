@@ -78,7 +78,8 @@ public sealed class SelfRepairTests
             var outputPath = Path.Combine(tempRoot, "test_output.txt");
             var expectedToken = Guid.NewGuid().ToString("N");
 
-            File.WriteAllText(scriptPath, $"Set-Content -Path '{outputPath}' -Value '{expectedToken}'");
+            // Avoid interpolating outputPath directly into the script literal to prevent syntax errors with apostrophes
+            File.WriteAllText(scriptPath, $"Set-Content -LiteralPath (Join-Path $PSScriptRoot 'test_output.txt') -Value '{expectedToken}'");
 
             var psi = SelfRepair.BuildProcessStartInfo(scriptPath);
 
@@ -86,6 +87,19 @@ public sealed class SelfRepairTests
             Assert.NotNull(process);
 
             var exited = process!.WaitForExit(10000);
+            if (!exited)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(2000);
+                }
+                catch
+                {
+                    // Ignore kill errors during test cleanup
+                }
+            }
+
             Assert.True(exited, "PowerShell execution should complete within bounded timeout");
             Assert.Equal(0, process.ExitCode);
 
