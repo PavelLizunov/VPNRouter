@@ -100,9 +100,9 @@ public static class SelfRepair
         if (string.IsNullOrWhiteSpace(bootstrapPath))
             throw new ArgumentException("Bootstrap path cannot be null or empty", nameof(bootstrapPath));
 
-        // Reject dangerous characters that could lead to command or argument injection
-        if (bootstrapPath.IndexOfAny(new[] { '\r', '\n', '&', '|', '^', '<', '>', '%', '"', '\'' }) >= 0)
-            throw new ArgumentException("Bootstrap path contains disallowed shell metacharacters", nameof(bootstrapPath));
+        // Reject genuinely invalid path characters and delimiters like newlines and quotes
+        if (bootstrapPath.IndexOfAny(new[] { '\0', '\r', '\n', '"' }) >= 0)
+            throw new ArgumentException("Bootstrap path contains disallowed characters", nameof(bootstrapPath));
 
         var psi = new ProcessStartInfo
         {
