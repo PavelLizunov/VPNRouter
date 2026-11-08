@@ -295,6 +295,21 @@ public sealed class ZapretActionsTests : IDisposable
     }
 
     [Fact]
+    public void BuildServiceMenuStartInfo_ConfiguresSafeProcessStartInfo()
+    {
+        var batPath = Path.Combine(ZapretUpdater.ZapretDir, "service.bat");
+        var psi = ZapretActions.BuildServiceMenuStartInfo(batPath);
+
+        Assert.NotNull(psi);
+        Assert.Equal("cmd.exe", psi.FileName);
+        Assert.True(psi.UseShellExecute);
+        Assert.Equal("runas", psi.Verb);
+        Assert.Equal(ZapretUpdater.ZapretDir, psi.WorkingDirectory);
+        Assert.Equal(string.Empty, psi.Arguments);
+        Assert.Equal(new[] { "/k", batPath }, psi.ArgumentList.ToArray());
+    }
+
+    [Fact]
     public void OpenServiceMenu_PathWithMetacharacters_ThrowsArgumentException()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_dir_&_calc_{Guid.NewGuid():N}");
