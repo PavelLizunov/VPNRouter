@@ -411,17 +411,70 @@ public sealed class ZapretActionsTests : IDisposable
     [Theory]
     [InlineData(@"C:\ProgramData\VPNRouter\zapret\service.bat")]
     [InlineData(@"C:\Custom Path With Spaces\zapret\service.bat")]
+    [InlineData(@"C:\ProgramData\VPNRouter\zapret\custom (x86)\service.bat")]
     public void BuildServiceMenuStartInfo_ConfiguresSafeProcessStartInfo(string servicePath)
     {
-        var psi = ZapretActions.BuildServiceMenuStartInfo(servicePath);
+        var psi = ZapretActions.BuildServiceMenuStartInfo(servicePath, requireElevation: true);
 
         Assert.Equal("cmd.exe", psi.FileName);
         Assert.True(psi.UseShellExecute);
         Assert.Equal("runas", psi.Verb);
         Assert.Equal(Path.GetDirectoryName(servicePath), psi.WorkingDirectory);
-        Assert.Equal(2, psi.ArgumentList.Count);
-        Assert.Equal("/k", psi.ArgumentList[0]);
-        Assert.Equal(servicePath, psi.ArgumentList[1]);
-        Assert.Empty(psi.Arguments);
+        Assert.Equal($"/k \"\"{servicePath}\"\"", psi.Arguments);
+        Assert.Empty(psi.ArgumentList);
+
+        var unelevatedPsi = ZapretActions.BuildServiceMenuStartInfo(servicePath, requireElevation: false);
+        Assert.Empty(unelevatedPsi.Verb);
+        Assert.Equal($"/k \"\"{servicePath}\"\"", unelevatedPsi.Arguments);
+    }
+
+    [Theory]
+    [InlineData("ordinary_path")]
+    [InlineData("nested path (x86)")]
+    public void BuildServiceMenuStartInfo_WindowsChildProcess_ExecutesPathsWithSpacesAndParentheses(string folderName)
+    {
+        Assert.SkipWhen(!OperatingSystem.IsWindows(), "Windows-only cmd execution test");
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"vpnrouter_cmd_test ({Guid.NewGuid():N})");
+        var subDir = Path.Combine(tempRoot, folderName);
+        Directory.CreateDirectory(subDir);
+
+        var batPath = Path.Combine(subDir, "service.bat");
+        var tokenFile = Path.Combine(subDir, "token.txt");
+        const string expectedToken = "token_ok";
+
+        File.WriteAllText(batPath, $"@echo off\r\necho {expectedToken} > \"{tokenFile}\"\r\nexit\r\n");
+
+        Process? proc = null;
+        try
+        {
+            var psi = ZapretActions.BuildServiceMenuStartInfo(batPath, requireElevation: false);
+            psi.CreateNoWindow = true;
+            psi.WindowStyle = ProcessWindowStyle.Hidden;
+
+            proc = Process.Start(psi);
+            Assert.NotNull(proc);
+
+            var exited = proc!.WaitForExit(10000);
+            if (!exited)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                Assert.Fail("cmd.exe child process timed out after 10 seconds");
+            }
+
+            Assert.True(File.Exists(tokenFile), "Token file was not created by the batch file");
+            var tokenContent = File.ReadAllText(tokenFile).Trim();
+            Assert.Equal(expectedToken, tokenContent);
+        }
+        finally
+        {
+            if (proc != null)
+            {
+                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+                proc.Dispose();
+            }
+
+            try { Directory.Delete(tempRoot, recursive: true); } catch { }
+        }
     }
 }
