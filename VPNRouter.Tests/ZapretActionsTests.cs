@@ -322,9 +322,23 @@ public sealed class ZapretActionsTests : IDisposable
     [InlineData("temp\rpath", "valid_hosts")]
     [InlineData("temp\npath", "valid_hosts")]
     [InlineData("temp\"path", "valid_hosts")]
+    [InlineData("temp&path", "valid_hosts")]
+    [InlineData("temp|path", "valid_hosts")]
+    [InlineData("temp^path", "valid_hosts")]
+    [InlineData("temp<path", "valid_hosts")]
+    [InlineData("temp>path", "valid_hosts")]
+    [InlineData("temp%path", "valid_hosts")]
+    [InlineData("temp'path", "valid_hosts")]
     [InlineData("valid_temp", "hosts\rpath")]
     [InlineData("valid_temp", "hosts\npath")]
     [InlineData("valid_temp", "hosts\"path")]
+    [InlineData("valid_temp", "hosts&path")]
+    [InlineData("valid_temp", "hosts|path")]
+    [InlineData("valid_temp", "hosts^path")]
+    [InlineData("valid_temp", "hosts<path")]
+    [InlineData("valid_temp", "hosts>path")]
+    [InlineData("valid_temp", "hosts%path")]
+    [InlineData("valid_temp", "hosts'path")]
     public void OpenHostsEditHelpers_PathWithDisallowedCharacters_ThrowsArgumentException(string tempPath, string hostsPath)
     {
         var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath));
@@ -336,6 +350,30 @@ public sealed class ZapretActionsTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers(null!, "valid_hosts"));
         Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers("valid_temp", null!));
+    }
+
+    [Fact]
+    public void BuildNotepadStartInfo_ConfiguresSafeProcessStartInfo()
+    {
+        const string tempPath = @"C:\Temp\hosts_temp.txt";
+        var psi = ZapretActions.BuildNotepadStartInfo(tempPath);
+
+        Assert.Equal("notepad.exe", psi.FileName);
+        Assert.False(psi.UseShellExecute);
+        var arg = Assert.Single(psi.ArgumentList);
+        Assert.Equal(tempPath, arg);
+    }
+
+    [Fact]
+    public void BuildExplorerStartInfo_ConfiguresSafeProcessStartInfo()
+    {
+        const string hostsPath = @"C:\Windows\System32\drivers\etc\hosts";
+        var psi = ZapretActions.BuildExplorerStartInfo(hostsPath);
+
+        Assert.Equal("explorer.exe", psi.FileName);
+        Assert.False(psi.UseShellExecute);
+        var arg = Assert.Single(psi.ArgumentList);
+        Assert.Equal($"/select,{hostsPath}", arg);
     }
 
     [Fact]

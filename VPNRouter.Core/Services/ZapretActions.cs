@@ -248,10 +248,11 @@ public static class ZapretActions
         ArgumentNullException.ThrowIfNull(tempPath);
         ArgumentNullException.ThrowIfNull(hostsPath);
 
-        if (tempPath.Any(c => c is '\r' or '\n' or '"'))
+        // Security: Disallow shell metacharacters that could enable command or argument injection.
+        if (tempPath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"' or '\''))
             throw new ArgumentException("Temp path contains disallowed characters", nameof(tempPath));
 
-        if (hostsPath.Any(c => c is '\r' or '\n' or '"'))
+        if (hostsPath.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%' or '"' or '\''))
             throw new ArgumentException("Hosts path contains disallowed characters", nameof(hostsPath));
 
         if (!OperatingSystem.IsWindows())
@@ -259,10 +260,30 @@ public static class ZapretActions
 
         try
         {
-            Process.Start(new ProcessStartInfo("notepad", tempPath) { UseShellExecute = true });
-            Process.Start(new ProcessStartInfo("explorer", $"/select,\"{hostsPath}\"") { UseShellExecute = true });
+            Process.Start(BuildNotepadStartInfo(tempPath));
+            Process.Start(BuildExplorerStartInfo(hostsPath));
         }
         catch { }
+    }
+
+    internal static ProcessStartInfo BuildNotepadStartInfo(string tempPath)
+    {
+        var psi = new ProcessStartInfo("notepad.exe")
+        {
+            UseShellExecute = false
+        };
+        psi.ArgumentList.Add(tempPath);
+        return psi;
+    }
+
+    internal static ProcessStartInfo BuildExplorerStartInfo(string hostsPath)
+    {
+        var psi = new ProcessStartInfo("explorer.exe")
+        {
+            UseShellExecute = false
+        };
+        psi.ArgumentList.Add($"/select,{hostsPath}");
+        return psi;
     }
 
     public enum GameFilterMode { Off = 0, All = 1, TcpOnly = 2, UdpOnly = 3 }
