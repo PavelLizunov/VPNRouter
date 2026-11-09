@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Diagnostics;
 using VPNRouter.Core;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
