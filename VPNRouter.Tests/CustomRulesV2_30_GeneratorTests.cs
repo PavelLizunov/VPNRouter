@@ -137,7 +137,7 @@ public class CustomRulesV2_30_GeneratorTests
             VPNRouter.Core.Services.RuleSetCacheManager.CacheSubdir);
         System.IO.Directory.CreateDirectory(cacheDir);
         var stubPath = System.IO.Path.Combine(cacheDir, "user-geosite-ads.srs");
-        System.IO.File.WriteAllBytes(stubPath, new byte[] { 0x53, 0x52, 0x53, 0x00 });
+        System.IO.File.WriteAllBytes(stubPath, RuleSetSamples.UpstreamGeositeTldRu());
         try
         {
             var config = NewConfigWithEmptyRoutes();

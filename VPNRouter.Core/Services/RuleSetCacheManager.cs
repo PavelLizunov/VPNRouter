@@ -28,6 +28,9 @@ public static class RuleSetCacheManager
     {
         if (string.IsNullOrWhiteSpace(url))
             throw new ArgumentException("URL must be non-empty", nameof(url));
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsedUri) ||
+            (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps))
+            throw new ArgumentException("URL must be an absolute http or https URI", nameof(url));
         if (string.IsNullOrWhiteSpace(filename) || filename.Contains(Path.DirectorySeparatorChar) || filename.Contains(Path.AltDirectorySeparatorChar))
             throw new ArgumentException("Filename must be a leaf, no path separators", nameof(filename));
 
@@ -47,7 +50,7 @@ public static class RuleSetCacheManager
         try
         {
             var fi = new FileInfo(localPath);
-            var existsLocally = fi.Exists && fi.Length > 0;
+            var existsLocally = fi.Exists && fi.Length > 0 && RuleSetFile.IsValidBinary(localPath);
             var ageOk = existsLocally && (DateTime.UtcNow - fi.LastWriteTimeUtc) < MaxAgeForUseAsIs;
 
             if (ageOk)
@@ -55,6 +58,11 @@ public static class RuleSetCacheManager
                 logger.Debug("[RuleSetCache] using cached {Path} (age {Age})",
                     localPath, DateTime.UtcNow - fi.LastWriteTimeUtc);
                 return localPath;
+            }
+
+            if (fi.Exists && !existsLocally)
+            {
+                logger.Warning("[RuleSetCache] cached {Path} is corrupt or not a valid binary rule-set", localPath);
             }
 
             var ownsClient = false;
@@ -78,7 +86,7 @@ public static class RuleSetCacheManager
                     throw new InvalidDataException($"Invalid Content-Type: {mediaType}");
 
                 var bytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
-                if (bytes.Length == 0 || bytes[0] == (byte)'<')
+                if (bytes.Length == 0 || bytes[0] == (byte)'<' || !RuleSetFile.IsValidBinary(bytes))
                     throw new InvalidDataException("Downloaded rule-set is corrupt, truncated, or HTML");
 
                 var tmp = localPath + ".tmp";
@@ -131,6 +139,9 @@ public static class RuleSetCacheManager
     {
         if (string.IsNullOrWhiteSpace(url))
             throw new ArgumentException("URL must be non-empty", nameof(url));
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsedUri) ||
+            (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps))
+            throw new ArgumentException("URL must be an absolute http or https URI", nameof(url));
         if (string.IsNullOrWhiteSpace(filename) || filename.Contains(Path.DirectorySeparatorChar) || filename.Contains(Path.AltDirectorySeparatorChar))
             throw new ArgumentException("Filename must be a leaf, no path separators", nameof(filename));
 
