@@ -243,15 +243,21 @@ public static class ZapretActions
         catch { return (false, false); }
     }
 
+    internal static Action<ProcessStartInfo> ProcessLauncher { get; set; } = psi => Process.Start(psi);
+
     internal static void OpenHostsEditHelpers(string tempPath, string hostsPath)
     {
-        ArgumentNullException.ThrowIfNull(tempPath);
-        ArgumentNullException.ThrowIfNull(hostsPath);
+        if (string.IsNullOrWhiteSpace(tempPath))
+            throw new ArgumentException("Temp path cannot be null or empty", nameof(tempPath));
+        if (string.IsNullOrWhiteSpace(hostsPath))
+            throw new ArgumentException("Hosts path cannot be null or empty", nameof(hostsPath));
 
-        if (tempPath.Any(c => c is '\r' or '\n' or '"'))
+        // Reject genuinely invalid path characters and delimiters like null, newlines and quotes.
+        // Legal Windows path characters like ', &, ^, % and spaces are permitted.
+        if (tempPath.IndexOfAny(new[] { '\0', '\r', '\n', '"' }) >= 0)
             throw new ArgumentException("Temp path contains disallowed characters", nameof(tempPath));
 
-        if (hostsPath.Any(c => c is '\r' or '\n' or '"'))
+        if (hostsPath.IndexOfAny(new[] { '\0', '\r', '\n', '"' }) >= 0)
             throw new ArgumentException("Hosts path contains disallowed characters", nameof(hostsPath));
 
         if (!OperatingSystem.IsWindows())
@@ -259,10 +265,28 @@ public static class ZapretActions
 
         try
         {
-            Process.Start(new ProcessStartInfo("notepad", tempPath) { UseShellExecute = true });
-            Process.Start(new ProcessStartInfo("explorer", $"/select,\"{hostsPath}\"") { UseShellExecute = true });
+            ProcessLauncher(BuildNotepadStartInfo(tempPath));
+            ProcessLauncher(BuildExplorerStartInfo(hostsPath));
         }
         catch { }
+    }
+
+    internal static ProcessStartInfo BuildNotepadStartInfo(string tempPath)
+    {
+        var psi = new ProcessStartInfo("notepad.exe")
+        {
+            UseShellExecute = false
+        };
+        psi.ArgumentList.Add(tempPath);
+        return psi;
+    }
+
+    internal static ProcessStartInfo BuildExplorerStartInfo(string hostsPath)
+    {
+        return new ProcessStartInfo("explorer.exe", $"/select,\"{hostsPath}\"")
+        {
+            UseShellExecute = true
+        };
     }
 
     public enum GameFilterMode { Off = 0, All = 1, TcpOnly = 2, UdpOnly = 3 }
