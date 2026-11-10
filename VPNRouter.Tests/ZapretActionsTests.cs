@@ -319,43 +319,73 @@ public sealed class ZapretActionsTests : IDisposable
     }
 
     [Theory]
+    [InlineData("temp\0path", "valid_hosts")]
     [InlineData("temp\rpath", "valid_hosts")]
     [InlineData("temp\npath", "valid_hosts")]
     [InlineData("temp\"path", "valid_hosts")]
-    [InlineData("temp&path", "valid_hosts")]
-    [InlineData("temp|path", "valid_hosts")]
-    [InlineData("temp^path", "valid_hosts")]
-    [InlineData("temp<path", "valid_hosts")]
-    [InlineData("temp>path", "valid_hosts")]
-    [InlineData("temp%path", "valid_hosts")]
-    [InlineData("temp'path", "valid_hosts")]
+    [InlineData("valid_temp", "hosts\0path")]
     [InlineData("valid_temp", "hosts\rpath")]
     [InlineData("valid_temp", "hosts\npath")]
     [InlineData("valid_temp", "hosts\"path")]
-    [InlineData("valid_temp", "hosts&path")]
-    [InlineData("valid_temp", "hosts|path")]
-    [InlineData("valid_temp", "hosts^path")]
-    [InlineData("valid_temp", "hosts<path")]
-    [InlineData("valid_temp", "hosts>path")]
-    [InlineData("valid_temp", "hosts%path")]
-    [InlineData("valid_temp", "hosts'path")]
     public void OpenHostsEditHelpers_PathWithDisallowedCharacters_ThrowsArgumentException(string tempPath, string hostsPath)
     {
         var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath));
         Assert.Contains("contains disallowed characters", ex.Message);
     }
 
-    [Fact]
-    public void OpenHostsEditHelpers_NullPaths_ThrowsArgumentNullException()
+    [Theory]
+    [InlineData(null, "valid_hosts")]
+    [InlineData("", "valid_hosts")]
+    [InlineData("   ", "valid_hosts")]
+    [InlineData("valid_temp", null)]
+    [InlineData("valid_temp", "")]
+    [InlineData("valid_temp", "   ")]
+    public void OpenHostsEditHelpers_NullOrWhitespace_ThrowsArgumentException(string? tempPath, string? hostsPath)
     {
-        Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers(null!, "valid_hosts"));
-        Assert.Throws<ArgumentNullException>(() => ZapretActions.OpenHostsEditHelpers("valid_temp", null!));
+        Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(tempPath!, hostsPath!));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\O'Brien\AppData\Local\Temp\hosts.txt", @"C:\Windows\System32\drivers\etc\hosts")]
+    [InlineData(@"C:\Work\R&D\Temp\hosts.txt", @"C:\Windows\System32\drivers\etc\hosts")]
+    [InlineData(@"C:\Path With Spaces\^caret\hosts.txt", @"C:\Windows\System32\drivers\etc\hosts")]
+    [InlineData(@"C:\Temp%20Folder\hosts.txt", @"C:\Windows\System32\drivers\etc\hosts")]
+    public void OpenHostsEditHelpers_LegalWindowsPaths_PassValidationAndTriggerLaunchers(string tempPath, string hostsPath)
+    {
+        var originalLauncher = ZapretActions.ProcessLauncher;
+        var launched = new List<ProcessStartInfo>();
+        ZapretActions.ProcessLauncher = psi => launched.Add(psi);
+
+        try
+        {
+            ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath);
+
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Equal(2, launched.Count);
+                Assert.Equal("notepad.exe", launched[0].FileName);
+                Assert.Equal(tempPath, Assert.Single(launched[0].ArgumentList));
+                Assert.False(launched[0].UseShellExecute);
+
+                Assert.Equal("explorer.exe", launched[1].FileName);
+                Assert.Equal($"/select,\"{hostsPath}\"", launched[1].Arguments);
+                Assert.True(launched[1].UseShellExecute);
+            }
+            else
+            {
+                Assert.Empty(launched);
+            }
+        }
+        finally
+        {
+            ZapretActions.ProcessLauncher = originalLauncher;
+        }
     }
 
     [Fact]
     public void BuildNotepadStartInfo_ConfiguresSafeProcessStartInfo()
     {
-        const string tempPath = @"C:\Temp\hosts_temp.txt";
+        const string tempPath = @"C:\Users\O'Brien\AppData\Local\Temp\hosts_temp.txt";
         var psi = ZapretActions.BuildNotepadStartInfo(tempPath);
 
         Assert.Equal("notepad.exe", psi.FileName);
@@ -371,9 +401,9 @@ public sealed class ZapretActionsTests : IDisposable
         var psi = ZapretActions.BuildExplorerStartInfo(hostsPath);
 
         Assert.Equal("explorer.exe", psi.FileName);
-        Assert.False(psi.UseShellExecute);
-        var arg = Assert.Single(psi.ArgumentList);
-        Assert.Equal($"/select,{hostsPath}", arg);
+        Assert.True(psi.UseShellExecute);
+        Assert.Equal($"/select,\"{hostsPath}\"", psi.Arguments);
+        Assert.Empty(psi.ArgumentList);
     }
 
     [Fact]
