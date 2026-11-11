@@ -626,24 +626,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             if (Directory.Exists(path))
             {
-                ProcessStartInfo psi;
-                if (OperatingSystem.IsWindows())
-                {
-                    psi = new ProcessStartInfo
-                    {
-                        FileName = "explorer.exe",
-                        UseShellExecute = false
-                    };
-                }
-                else
-                {
-                    psi = new ProcessStartInfo
-                    {
-                        FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
-                        UseShellExecute = false
-                    };
-                }
-                psi.ArgumentList.Add(path);
+                var psi = VPNRouter.App.Services.FileManagerHelper.BuildOpenDirectoryStartInfo(path);
                 Process.Start(psi);
             }
         }
