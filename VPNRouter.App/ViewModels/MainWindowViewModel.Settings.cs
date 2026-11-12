@@ -373,25 +373,7 @@ public partial class MainWindowViewModel
             var logsDir = AppPaths.LogsDir;
             Directory.CreateDirectory(logsDir);
 
-            ProcessStartInfo psi;
-            if (OperatingSystem.IsWindows())
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    UseShellExecute = false
-                };
-                psi.ArgumentList.Add(logsDir);
-            }
-            else
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/open",
-                    UseShellExecute = false
-                };
-                psi.ArgumentList.Add(logsDir);
-            }
+            var psi = VPNRouter.App.Services.FileManagerHelper.BuildOpenDirectoryStartInfo(logsDir);
             System.Diagnostics.Process.Start(psi);
         }
         catch { }

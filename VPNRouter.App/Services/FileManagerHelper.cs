@@ -28,4 +28,19 @@ internal static class FileManagerHelper
         }
         return psi;
     }
+
+    public static ProcessStartInfo BuildOpenDirectoryStartInfo(string dirPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dirPath);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsWindows()
+                ? "explorer.exe"
+                : (OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open"),
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add(dirPath);
+        return psi;
+    }
 }

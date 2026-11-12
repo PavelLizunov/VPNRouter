@@ -37,6 +37,30 @@ public class RevealInFileManagerTests
             Assert.Equal(Path.GetDirectoryName(malPath), psi.ArgumentList[0]);
         }
     }
+
+    [Fact]
+    public void BuildOpenDirectoryStartInfo_RejectsNullOrWhiteSpace()
+    {
+        Assert.Throws<ArgumentNullException>(() => FileManagerHelper.BuildOpenDirectoryStartInfo(null!));
+        Assert.Throws<ArgumentException>(() => FileManagerHelper.BuildOpenDirectoryStartInfo(""));
+        Assert.Throws<ArgumentException>(() => FileManagerHelper.BuildOpenDirectoryStartInfo("   "));
+    }
+
+    [Fact]
+    public void BuildOpenDirectoryStartInfo_SafeArgumentList_PopulatesDirectoryArgument()
+    {
+        var testDir = Path.Combine(Path.GetTempPath(), "test_dir_with spaces_\" & calc.exe & \"folder");
+        var psi = FileManagerHelper.BuildOpenDirectoryStartInfo(testDir);
+
+        Assert.Empty(psi.Arguments);
+        Assert.False(psi.UseShellExecute);
+        var expectedExe = OperatingSystem.IsWindows()
+            ? "explorer.exe"
+            : (OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open");
+        Assert.Equal(expectedExe, psi.FileName);
+        Assert.Single(psi.ArgumentList);
+        Assert.Equal(testDir, psi.ArgumentList[0]);
+    }
 }
 
 #if PLATFORM_WINDOWS
