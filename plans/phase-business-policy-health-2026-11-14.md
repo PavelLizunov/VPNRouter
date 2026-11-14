@@ -1,13 +1,14 @@
-# Business: centralized direct exceptions and verified VPN availability
+# Business: corporate routing policies and verified VPN availability
 
 ## Task brief
 
 - Original owner request, 2026-11-14: prepare a plan for later Claude Code review. That planning task did not include implementation or deployment.
 - Takeover, 2026-11-14: the owner explicitly selected review and refinement of the plan. Continue the existing planning PR, verify the design against current source, record findings and refine delivery/acceptance steps. Preserve product behavior, installed clients and the separate PR #674.
 - Review assignment update: after the Claude provider failed, the owner explicitly asked the lead agent to perform that review. The lead completed the planning review below; Claude availability is no longer an entry gate for this document. This does not change independent review requirements for future product code.
+- Implementation authorization, 2026-11-14: after discussing and approving the interactive diagram, the owner requested implementation of the Corp portal at `admin.corp.ninitux.com`, for the existing corporate subscription embedded in the EXE. Both site directions and both application timings are in scope. The active implementation brief is [phase-corp-policy-implementation-2026-11-14.md](phase-corp-policy-implementation-2026-11-14.md); it supersedes the earlier direct-only and next-connection-only proposal. VPN node-health and regional verification remain a separate follow-up. The original planning-only requests above remain historical facts.
 - Review baseline: VPNRouter `4f5cc892c1cce0c5d7fd1f17291a1b13302dcbd6`; vpnctl contract/tree inspected read-only at `cc071d3143886ccf1cd0869011a694ab67882181`. Verification for these edits is source references, scoped documentation diff and exact-head PR CI; runtime gates remain future implementation work.
 - Accepted base: `business`, `8fe6c19d9114d1fc7527054c4fe43e4940565c8e`; planning branch: `dsh/business-policy-health-plan-20261114`; PR target: `business`.
-- Scope: a protected administration page for shared direct-domain exceptions, trusted client policy synchronization, and an honest per-node VPN availability indicator. Standard behavior must remain unchanged.
+- Current scope: the Corp administration page and trusted client policy synchronization. Node-health work is retained below as a separate planned follow-up. Standard behavior must remain unchanged.
 - Risk: planning LOW; later policy/probe implementation HIGH because it changes routing, DNS, private provisioning and process lifetimes.
 - Rollback: revert the planning commit. Later delivery requires independent policy-content, client-binary and server rollback procedures.
 
@@ -17,7 +18,7 @@
 
 Зелёная точка должна означать свежую успешную передачу тестового трафика через конкретный VPN-узел из текущей сети сотрудника. Открытый TCP-порт и серверная активность не являются доказательством такой доступности. Из сообщения владельца известно, что Sweden недоступен в некоторых регионах, но остаётся зелёным; точная причина блокировки не установлена.
 
-Этот документ предназначен для проверки плана, а не для начала реализации или выпуска. Первоначальная передача на проверку продолжена в этой задаче; фактический статус независимого review указан в разделе 9.
+Первоначальная проверка плана завершена (раздел 9). Владелец затем утвердил реализацию схемы Corp; её текущий объём и приёмка записаны в отдельном implementation brief. Выпуск и активация сервиса не считаются выполненными по результатам проверки плана.
 
 ## 2. Подтверждённая текущая архитектура
 
@@ -35,24 +36,24 @@
 
 1. Проверка плана выполнена ведущим агентом по поручению владельца; исправления и выводы находятся в разделе 9. До реализации прочитать актуальные контракты обеих затронутых кодовых баз, обновить исходные SHA и закрыть решения для соответствующего этапа.
 2. Отдельная небольшая правка `mkvt24.ru` уже имеет зелёный exact-head CI в PR #674. Слияние и доставка требуют отдельной команды владельца.
-3. Исправить смысл индикации: отделить ответ порта от подтверждения VPN; затем добавить настоящую проверку узлов и её тесты.
-4. Зафиксировать формат, доверие и приоритет центральной политики; реализовать сервер/API и клиентский механизм по этому контракту.
-5. Добавить админку, подключить её к проверенному API, выполнить сценарий на двух клиентах и проверить откат.
-6. После отдельного разрешения собрать/доставить новую Business-версию и активировать сервис. Сначала пилотная группа, затем все сотрудники.
+3. Первая поставка: портал Corp на `admin.corp.ninitux.com`. IP выхода должен принадлежать VPN-серверу из существующей корпоративной подписки, затем нужен пароль Corp. Админка управляет обоими направлениями сайтов: «Без VPN» и «Через VPN».
+4. В составе той же поставки подключить загрузку правил Business-клиентом: единый формат, доверенный источник, маршруты/DNS, кэш и однократное обновление существующих установок. Проверить публикацию и получение одной ревизии на двух изолированных клиентах.
+5. Реализовать и проверить приложение и сервер; подготовить процедуру доверенной миграции уже выданных клиентов. Слияние, выпуск и активация выполняются по отдельной явной команде владельца.
+6. Отдельная задача: исправить смысл TCP-индикатора и добавить настоящую проверку VPN-узлов. Региональная проверка нужна для воспроизведения жалобы на Sweden; приёмку портала и общих правил она не блокирует.
 
-Каждый этап реализации получает отдельный task brief, небольшой PR в свою принятую ветку и зелёные проверки до следующего блока. Планирование не меняет `AppVersion`, релизный канал, DNS, серверы или приватные установщики.
+Связанные изменения используют общий implementation brief и один PR в каждом затронутом репозитории; PR VPNRouter остаётся направленным в `business`. Перед следующим блоком нужны зелёные проверки текущего commit. Разделы про node-health не входят в утверждённую реализацию портала.
 
 ## 4. Централизованная политика: минимальная версия
 
 ### Пользовательский сценарий
 
-Администратор входит в отдельную защищённую страницу, добавляет домен и комментарий, видит предварительный результат и публикует новую ревизию. В первой версии действие только «напрямую»: произвольный sing-box JSON, скрипты, IP-сети, настройки серверов и управление VPN-аккаунтами не предоставляются. Направление «через VPN» можно спроектировать отдельным расширением после проверки приоритетов.
+Администратор входит в отдельную защищённую страницу, добавляет домен и комментарий, видит предварительный результат и публикует новую ревизию. В утверждённой версии доступны «Без VPN» и «Через VPN». Произвольный sing-box JSON, скрипты, IP-сети, настройки серверов и управление VPN-аккаунтами не предоставляются. Список первоначально заполнен правилами из EXE; служебные правила защищены.
 
 Правило `mkvt24.ru` охватывает сам домен и поддомены. Если администратор вставляет URL, интерфейс явно показывает выделенный домен перед сохранением; сервер принимает только нормализованный домен. Путь, схема, порт и параметры не становятся частью маршрутизации. Не добавлять без подтверждения посторонние домены CDN или фиксированные IP сайта.
 
 ### Доверие и формат
 
-- Предлагаемый снимок: `schema`, `policy_id`, монотонная `revision`, время публикации, полный список разрешённых direct-доменов и подпись. Точный wire-формат и алгоритм подписи утвердить при review; не придумывать собственную криптографию.
+- Предлагаемый снимок: `schema`, `policy_id`, монотонная `revision`, время публикации, полный список управляемых доменов с направлением direct/proxy, момент применения и подпись. Точный wire-формат и алгоритм подписи утвердить при review; не придумывать собственную криптографию.
 - Адрес политики, идентификатор организации и публичный ключ проверки приходят только из доверенного provisioning. Адрес нельзя подменить ответом подписки, метаданными, локальным YAML или самой политикой.
 - Доставка по HTTPS с обычной проверкой сертификата; ограниченные таймаут, размер, глубина JSON и число правил; запрет неконтролируемых перенаправлений. Стартовые лимиты для review: 64 KiB, 512 доменов, глубина 8, дедлайн 10 секунд.
 - Проверять схему, организацию, подпись, уникальность и нормализацию доменов, все границы размеров. Неизвестная схема или одно неверное правило отклоняют весь снимок без частичного применения.
@@ -62,25 +63,25 @@
 
 ### Слияние и применение на клиенте
 
-- Встроенный пресет остаётся базой и первым резервом; центральная политика добавляет direct-исключения. Удаление домена из удалённого списка убирает только удалённое исключение, а не встроенное правило с тем же доменом.
-- Утвердить единый эффективный набор до генерации конфига: direct-политика имеет приоритет над совпадающими встроенными proxy-доменами и proxy-приложениями. Пересечения суффиксов видны в предпросмотре и покрыты тестами. Существующие UIS/российские правила и процессные имена не теряются.
+- Встроенный пресет служит начальным списком и резервом до первой принятой политики. Подписанная политика целиком заменяет редактируемый список сайтов; удалённые администратором записи не восстанавливаются из EXE при перезапуске. Защищённые правила телефонии, админки и приложений сохраняются отдельно.
+- Сформировать единый эффективный набор до генерации конфига: явное направление сайта в обоих режимах имеет приоритет над географическим bypass и правилами приложений. Защищённая телефония и доступ к админке сохраняются. Конфликтующие пересечения суффиксов отклоняются до публикации; регистр имён процессов не меняется.
 - Один и тот же снимок применяется к routing и DNS. Direct-домен использует прямой DNS; недопустимы состояния «маршрут новый, DNS старый» и обратное.
 - Первая версия загружает политику при запуске и периодически независимо от открытого окна: предлагается каждые 5 минут с небольшим случайным сдвигом, а также вручную. Долгий запрос не блокирует Connect/Disconnect или интерфейс.
-- Отделить принятую ревизию от применённой. При подключённом VPN новый снимок ожидает следующего подключения; показать это явно. В первой версии не перезапускать активные соединения автоматически и не обещать мгновенное изменение существующих сессий.
+- Отделить принятую ревизию от применённой. По умолчанию новый снимок ждёт следующего подключения. При выбранном «Применить сейчас» после получения снимка переподключается только работающий VPN; перед публикацией админка предупреждает о возможном обрыве звонков и загрузок. Остановленный пользователем VPN сам не запускается.
 - Ошибка сети/сервера/подписи сохраняет последний корректный снимок и его возраст. При первом запуске без корректного кэша действует встроенный пресет. Обновление неудачного запроса не делает устаревший снимок свежим.
 - Пустой список является только явным подписанным опубликованным состоянием. Пустой HTTP-ответ, 401, 404 или ошибка разбора не очищают исключения.
 - Обновление не меняет выбор узла, подписку, employee identity, язык, режим, настройки Standard или локальные отчёты. Временный сбой сервиса политик не мешает обычному запуску VPN с последней корректной конфигурацией.
 
 ### Админка и сервер
 
-- Сначала проверить существующий Business backend и репозиторий `vpnctl`: возможность расширить текущую админку/API предпочтительнее второго независимого хранилища. Точная кодовая база, адрес размещения и инфраструктурный доступ пока не выбраны.
+- Сервер реализуется в `vpnctl` на базе `cc071d3143886ccf1cd0869011a694ab67882181`, с отдельными Corp router/auth и таблицами в текущей SQLite. Портал: `admin.corp.ninitux.com`. Данные доступных узлов берутся из существующего отбора корпоративной подписки; адрес входа узла не считается автоматически доказанным IP выхода.
 - Для пилота достаточно одного выделенного администратора. Пароль хранится как стойкий хеш; браузерная сессия защищена, есть выход, ограничение попыток входа и защита CSRF/XSS. Административный пароль и ключ подписи не попадают в EXE.
 - Читающие клиенты не имеют прав публикации. Доступ к корпоративному списку задаётся отдельной read-only идентичностью организации; секреты не передаются в URL и не логируются. Provisioning должен поддержать её безопасную доставку/ротацию.
 - Редактирование создаёт черновик; отдельное действие публикует валидированную ревизию целиком. Контроль конкурентного редактирования не даёт второму администратору незаметно затереть изменения.
 - Список: домен, комментарий, источник/состояние. История: кто, когда, что изменил, номер ревизии; восстановление предыдущего содержимого создаёт новую ревизию. Предусмотреть резервную копию и восстановление.
 - В первой версии не собирать списки посещённых сайтов или историю трафика. Версию политики можно показать локально в клиенте; серверная отметка «применено у всех» потребует отдельного согласованного протокола подтверждений. Без него такого обещания в админке нет.
 
-«Для всех» означает клиентов одной организации с поддержкой политики: онлайн-клиент получает снимок в пределах интервала обновления, офлайн-клиент — после возвращения в сеть. В первой версии применение маршрутов происходит при следующем подключении.
+«Для всех» означает клиентов одной организации с поддержкой политики: онлайн-клиент получает снимок в пределах интервала обновления, офлайн-клиент — после возвращения в сеть. Момент применения выбирается при публикации: следующее подключение или переподключение работающего VPN после получения правил.
 
 ## 5. Проверка реальной работы VPN
 
@@ -117,7 +118,7 @@
 
 - Два изолированных клиента одной организации получают одну ревизию. Клиент другой организации не принимает этот снимок. Изменения не затрагивают Standard.
 - Добавление `mkvt24.ru` даёт direct для корня и поддоменов в split/full даже при proxy-приложении и без географического bypass; похожий `notmkvt24.ru` не совпадает. Маршрут и DNS соответствуют одной ревизии.
-- Удаление удалённого исключения, пересечения доменов, пустой опубликованный список и возврат встроенного поведения проверены отдельно. Встроенные UIS/российские исключения и остальные приложения сохранены.
+- Удаление записи (в том числе исходно встроенной), пересечения доменов и пустой опубликованный список проверены отдельно; EXE не восстанавливает удалённые записи. Встроенные UIS/российские исключения и остальные приложения сохранены.
 - После рестарта подтверждённый кэш сохраняется и не затирается bootstrap. Повреждённый кэш, неверная подпись/ключ/организация, replay, подмена ревизии, неизвестная схема, слишком большой/медленный/частично неверный ответ и redirect не меняют рабочую политику.
 - История/откат, конкурентная публикация, неавторизованное чтение/изменение, rate limit, CSRF/XSS и отсутствие секретов в выводе покрыты тестами и отдельным review.
 - Показаны принятая и применённая ревизии; клиент офлайн и клиент с активной сессией не обозначаются как уже обновлённые без доказательства.
@@ -144,11 +145,11 @@
 
 Проверить соответствие описанной архитектуры актуальным исходникам `business`; определить серверную кодовую базу/хостинг и способ безопасной миграции уже выданного provisioning; согласовать схему/подпись/ключи и точный приоритет доменов. Отдельно проверить безопасное переиспользование существующего verifier, прямой сетевой путь, TTL/таймауты, все отмены и доверие к результату HTTPS.
 
-Результат проверки ведущим агентом, замечания с severity и исходниками, а также их исправления записаны в разделе 9 и ledger. Оставшиеся технические решения привязаны к этапам реализации. Проверка плана не запускает реализацию или выпуск.
+Результат проверки ведущим агентом, замечания с severity и исходниками, а также их исправления записаны в разделе 9 и ledger. Оставшиеся технические решения привязаны к этапам реализации. Проверка плана сама по себе не разрешала реализацию; последующее явное согласие владельца разрешило объём Corp из implementation brief. Выпуск остаётся отдельным действием.
 
 ## Outcome
 
-The owner-directed lead review is complete. The takeover documents four implementation design gates and corrects three additional planning/reuse findings, with evidence and dispositions in the ledger. The seven CI checks at 7dd1445b completed successfully; the final documentation revision receives its own exact-head checks in PR #675 to business. Scoped verification covers documentation-only changes, whitespace, source references and finding consistency. No product implementation, runtime acceptance or regional reproduction is claimed. Claude did not return a review; the owner assigned its planning review to the lead. Local builds/tests were not run for this documentation change; PowerShell is unavailable on this host.
+Historical planning outcome: the owner-directed lead review is complete. The takeover documents four implementation design gates and corrects three additional planning/reuse findings, with evidence and dispositions in the ledger. The seven CI checks at 7dd1445b completed successfully; the final documentation revision receives its own exact-head checks in PR #675 to business. Scoped verification covers documentation-only changes, whitespace, source references and finding consistency. No product implementation, runtime acceptance or regional reproduction is claimed. Claude did not return a review; the owner assigned its planning review to the lead. Local builds/tests were not run for this documentation change; PowerShell is unavailable on this host.
 
 ## 9. Takeover review and implementation boundaries
 
@@ -179,7 +180,7 @@ The historical Business backend is identifiable: `59477de6a199c8916a048b25832ac7
 `BusinessDefaults.Apply` replaces `CustomRules` at startup, while `ConfigGenerator.Generate` reads those settings to build routing and DNS. Downloading into YAML or modifying live settings from the refresh callback is not an adequate integration boundary.
 
 - Introduce one application-owned policy coordinator, independent of window visibility. Maintain distinct immutable embedded, accepted and last successfully applied snapshots. At connection start, capture the effective rules and revision once; use that capture for both routing and DNS through the full start attempt. A concurrent refresh belongs to the next attempt.
-- Build the effective rule set from embedded rules plus the accepted remote direct list, preserving infrastructure protections and process-name casing. Put explicit remote direct suffixes ahead of embedded proxy domains and proxy applications in both route and resolver precedence. Deleting a remote entry restores the embedded behavior. Test overlapping parent/child suffixes in both directions and a domain already embedded as direct.
+- Build the effective rule set from protected embedded infrastructure/application rules plus the accepted full managed-site list. Preserve process-name casing. Explicit site direction precedes geographic bypass and application routing in both route and resolver precedence. Deleting a managed entry must not restore it from the embedded seed. Reject conflicting parent/child directions; test both directions, both modes and edits to initially embedded sites.
 - A valid signature means accepted content, not successful application. Record the active applied revision only when the owned core acknowledges loading the effective configuration, identified by policy revision, config digest and engine-run identity. This proves configuration application, not internet availability. Keep last-applied history separate; when no core is active there is no active applied revision. Generation/load failure leaves the accepted revision pending and cannot label an old historical revision as currently active. The generic Connected status is insufficient: `StartupPipeline.ScheduleWarmupProbe` can emit it after warmup failure.
 - Do not retry an older policy automatically because a connection, DNS or control request failed. That could restore an exception the administrator removed, and a network failure does not establish a bad policy. The already-running connection retains its original snapshot until stopped; a new attempt uses the accepted snapshot. An intentional content rollback requires a newly published signed revision. Keep the last applied snapshot for recovery evidence, without lowering the acceptance floor or treating it as authority to revert routing.
 - Persist a protected acceptance journal containing source/organization identity, key identity, maximum accepted revision, payload digest and the snapshots needed for recovery. Commit acceptance atomically before advertising it. An older server response cannot reduce the floor; an equal revision is idempotent only for identical signed content. Unavailable updates retain the latest valid accepted policy; rejected responses do not replace it.
@@ -211,9 +212,10 @@ The existing deep verifier is a source of components, not a drop-in Business pro
 | C: policy contract | Resolve 9.1-9.3 in both repositories before client/server work | Shared positive/negative signature and domain fixtures, concrete trust migration and authority boundaries |
 | D: policy API and admin | C; draft/publish/history/restore with policy-only authentication | Independent API spec tests, authorization/CSRF/concurrency/restore checks and backend CI at a pinned SHA |
 | E: client policy | C and a test API; app-owned synchronization and immutable connect snapshot | Restart/replay/migration tests, route/DNS precedence in split/full, real bootstrap-to-connect coverage and Business-edition CI |
-| F: integration and delivery | B, D and E | Two clients, wrong-organization rejection, pending/applied status, private migration and shared-update compatibility, WINBRAT lifecycle and regional evidence |
+| F: Corp portal and policy delivery | D and E; no dependency on A/B | IP/password login, two clients, wrong-organization rejection, pending/applied status, private migration and shared-update compatibility; applicable WINBRAT policy lifecycle |
+| G: node-health follow-up | A and B | Actual owned-process/egress tests, WINBRAT node selection/lifecycle and affected-region evidence for the Sweden symptom |
 
-Each implementation slice needs its own brief and task PR with green checks, as required by the owning repository. VPNRouter PRs target `business`; the selected backend uses its accepted base. The generic Standard test job is not a substitute for compiling/testing the Business edition. Candidate packaging, distribution and activation are separate delivery work; documentation completion does not establish them.
+The current delivery order is C/D/E/F for the Corp portal, with A/B/G tracked independently. These are validation boundaries rather than a required PR count: tightly related work can share a brief and implementation PR in its owning repository. VPNRouter PRs target `business`; vpnctl changes use its accepted base. If both repositories change, they need linked PRs because one Git PR cannot span repositories. The generic Standard test job is not a substitute for compiling/testing the Business edition. Documentation completion does not establish packaging or deployment.
 
 ### 9.6 Completed review and implementation decisions
 
