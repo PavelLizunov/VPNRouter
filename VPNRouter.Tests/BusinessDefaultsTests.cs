@@ -83,7 +83,7 @@ public sealed class BusinessDefaultsTests
     public void EmbeddedRules_ResolveOwnerConflictAndPreserveAllSourceProcesses()
     {
         var rules = BusinessBootstrap.ReadRules();
-        Assert.Equal(43, rules.Count);
+        Assert.Equal(44, rules.Count);
         Assert.All(rules, r => Assert.True(r.Enabled));
         Assert.Equal("direct", Assert.Single(rules, r => r.Value == "in-mag.ru").Action);
         Assert.Empty(CustomRulesParser.DetectConflicts(rules));
@@ -121,6 +121,8 @@ public sealed class BusinessDefaultsTests
         Assert.Contains(config.Route.Rules, r => r.IpCidr?.Contains("195.211.120.35/32") == true && r.Outbound == "direct");
         Assert.Contains("195.211.120.35/32", config.Inbounds[0].RouteExcludeAddress!);
         Assert.Contains(config.Dns.Rules, r => r.DomainSuffix?.Contains("uiscom.ru") == true && r.Server == "local-dns");
+        Assert.Contains(config.Dns.Rules, r => r.DomainSuffix?.Contains("mkvt24.ru") == true && r.Server == "local-dns");
+        Assert.Contains(config.Route.Rules, r => r.DomainSuffix?.Contains("mkvt24.ru") == true && r.Outbound == "direct");
         Assert.Contains(config.Dns.Rules, r => r.DomainSuffix?.Contains("youtube.com") == true && r.Server == "vpn-dns");
         Assert.Contains(config.Route.Rules, r => r.DomainSuffix?.Contains("youtube.com") == true && r.Outbound == "proxy");
     }
