@@ -2,7 +2,9 @@
 
 ## Task brief
 
-- Owner request, 2026-11-14: prepare a plan for later Claude Code review. Implementation, infrastructure changes and deployment are not authorized by this planning task.
+- Original owner request, 2026-11-14: prepare a plan for later Claude Code review. That planning task did not include implementation or deployment.
+- Takeover, 2026-11-14: the owner explicitly selected review and refinement of the plan. Continue the existing planning PR, verify the design against current source, record findings and refine delivery/acceptance steps. Preserve product behavior, installed clients and the separate PR #674.
+- Review baseline: VPNRouter `4f5cc892c1cce0c5d7fd1f17291a1b13302dcbd6`; vpnctl contract/tree inspected read-only at `cc071d3143886ccf1cd0869011a694ab67882181`. Verification for these edits is source references, scoped documentation diff and exact-head PR CI; runtime gates remain future implementation work.
 - Accepted base: `business`, `8fe6c19d9114d1fc7527054c4fe43e4940565c8e`; planning branch: `dsh/business-policy-health-plan-20261114`; PR target: `business`.
 - Scope: a protected administration page for shared direct-domain exceptions, trusted client policy synchronization, and an honest per-node VPN availability indicator. Standard behavior must remain unchanged.
 - Risk: planning LOW; later policy/probe implementation HIGH because it changes routing, DNS, private provisioning and process lifetimes.
@@ -14,7 +16,7 @@
 
 Зелёная точка должна означать свежую успешную передачу тестового трафика через конкретный VPN-узел из текущей сети сотрудника. Открытый TCP-порт и серверная активность не являются доказательством такой доступности. Из сообщения владельца известно, что Sweden недоступен в некоторых регионах, но остаётся зелёным; точная причина блокировки не установлена.
 
-Этот документ предназначен для проверки плана, а не для начала реализации или выпуска. Не создавать агентов для проверки: владелец передаст документ Claude Code позже.
+Этот документ предназначен для проверки плана, а не для начала реализации или выпуска. Первоначальная передача на проверку продолжена в этой задаче; фактический статус независимого review указан в разделе 9.
 
 ## 2. Подтверждённая текущая архитектура
 
@@ -133,7 +135,7 @@
 1. Build — N/A для этого документа; будущая реализация: Release build точного SHA только в GitHub CI или на разрешённом worker после записанного preflight. На workstation/Harness сборок нет.
 2. Tests — N/A для prose-only плана; будущая реализация: focused Business/policy/probe tests и полный применимый набор, затем отдельные native-core и live-сценарии. Отдельный PR #674 имеет собственные CI-результаты.
 3. Docs — PASS: подготовлен snapshot-based план с текущими source entry points, неизвестными, приёмкой и откатом; пути/внутренние ссылки проверены, исходная проблема записана как BUSINESS-PORT-ONLY-GREEN в ledger. Exact-head CI документационного PR отражается в GitHub, не выдаётся за runtime-проверку новой функциональности.
-4. Independent review — PENDING OWNER'S CLAUDE CODE REVIEW. Самопроверка не является независимой приёмкой; агенты не запускались. Для реализации нужны correctness, security/trust и test/lifecycle review по контракту проекта.
+4. Independent review — BLOCKED: the requested Claude review was attempted during takeover but the provider rejected it before returning findings; see section 9. Coordinator source review is recorded separately and is not independent acceptance. Implementation still requires correctness, security/trust and test/lifecycle review.
 5. UI/live — N/A для плана; headless и полный WINBRAT-сценарий обязательны для будущего изменения UI и разрешённой доставки. Реальных региональных проверок эта сессия не выполняла.
 6. Integration/characterization — N/A для prose-only плана; реализация должна сохранить Standard/API/подписки/selection/lifecycle и проверить реальную загрузку политики на двух клиентах, а не только парсер.
 
@@ -145,4 +147,72 @@
 
 ## Outcome
 
-Prepared for owner and later Claude Code review on dsh/business-policy-health-plan-20261114. This change contains the plan and one open verification-gap ledger entry only. Cited source paths, internal anchors, scoped diff and absence of product-source changes are checked before commit; exact-head CI status belongs to the planning PR. No administration service, policy synchronizer or authenticated Business node probe has been implemented; no independent review or live acceptance is claimed. Merge, package, release and deployment remain separate owner decisions.
+The initial plan was published at 4f5cc892 in PR #675 to business. The takeover adds four source-confirmed design findings and the implementation boundaries below in the same planning PR. Whitespace, documentation-only scope, seven referenced paths, seven exact source citations and unique ledger dispositions pass the scoped checks. Product source and the separate mkvt24.ru change remain outside this diff. No administration service, policy synchronizer or authenticated Business probe is implemented by this task. Independent Claude review did not run successfully; runtime and regional acceptance are not claimed. Fresh exact-head CI is tracked in PR #675 and reported at handoff; local builds/tests were not run for this documentation change, and PowerShell is unavailable on this host.
+
+## 9. Takeover review and implementation boundaries
+
+This section refines sections 3-8 following the coordinator's source review. It is a proposed implementation contract awaiting independent review, not a completed feature or a claim that all design decisions have been approved. Findings were recorded in `plans/OPEN-DEFECTS.md` before refining this plan.
+
+### 9.1 Initial policy trust and migration
+
+`BusinessProvisioningStore.Resolve` selects the embedded bundle when present and otherwise retains the private saved bundle. The shared updater requires `provisioning: external` and rejects `VPNRouter.Business.Connection` resources. Adding a new parser to a shared EXE will therefore leave previously issued clients without a policy endpoint, organization identity or verification key.
+
+- Use an explicit policy capability in trusted provisioning: organization/policy identity, HTTPS endpoint, read-only credential and allowed verification keys. Missing or invalid optional policy fields disable policy synchronization only; the current VPN configuration must still start. Duplicate policy fields must not silently select a different trust root.
+- The first rollout needs a one-time privately configured migration through the existing trusted delivery channel. Preserve the employee's subscription, identity, settings and reports; extend the provisioning contract and packaging tests before issuing that artifact. Subsequent shared updates remain credential-free and retain that provisioning. Never bootstrap keys or credentials from subscription responses, node metadata or the policy response itself.
+- Delivery cannot be marked ready until the operator has a concrete migration artifact/procedure for an already-issued client. Record which installation channels it supports and how a failed migration leaves the old provisioning usable. This task does not create or distribute that artifact.
+- Test old client/old provisioning, new client/old provisioning, new client/new provisioning, malformed optional fields, interrupted migration and upgrade/rollback/upgrade. Confirm that the shared package contains neither organization credentials nor an embedded connection bundle.
+
+### 9.2 Company administrator versus infrastructure operator
+
+The inspected vpnctl contract at `cc071d3` explicitly describes a single operator with no multi-tenancy/RBAC. Reusing its global operator session for a company administrator would exceed the intended domain-exception capability. The actual deployed Business backend revision and its relation to vpnctl main remain unverified.
+
+- Prefer shared backend infrastructure only if it can expose a separately authenticated policy-only surface. Otherwise use an isolated service boundary; do not add a partially enforced general RBAC system as an incidental part of this feature. Record the repository/revision and hosting decision before backend implementation.
+- A company administrator may edit, publish and restore only its assigned policy. The server derives that identity from authentication, never from a client-supplied organization selector alone. A client read credential may only fetch its assigned published policy. Neither identity grants node deployment, inventory, subscription-account, support-upload or infrastructure administration rights.
+- Isolate the policy session, cookie name/signing context and CSRF checks from the operator surface. Existing operator authentication is not automatically valid for the company surface or vice versa. Define logout, credential rotation and session revocation semantics; do not promise immediate revocation if the chosen session mechanism cannot provide it.
+- Publication commits the immutable signed bytes, revision and redacted audit event atomically. Failed signing, failed audit, concurrency conflicts and backup restore must not expose partial state or reuse a previously issued revision. Restore content by publishing a newer revision. Verify authorization by direct HTTP requests to both surfaces, including cross-policy identifiers; hiding navigation is insufficient.
+
+### 9.3 Immutable policy and durable recovery
+
+`BusinessDefaults.Apply` replaces `CustomRules` at startup, while `ConfigGenerator.Generate` reads those settings to build routing and DNS. Downloading into YAML or modifying live settings from the refresh callback is not an adequate integration boundary.
+
+- Introduce one application-owned policy coordinator, independent of window visibility. Maintain distinct immutable embedded, accepted and last successfully applied snapshots. At connection start, capture the effective rules and revision once; use that capture for both routing and DNS through the full start attempt. A concurrent refresh belongs to the next attempt.
+- Build the effective rule set from embedded rules plus the accepted remote direct list, preserving infrastructure protections and process-name casing. Put explicit remote direct suffixes ahead of embedded proxy domains and proxy applications in both route and resolver precedence. Deleting a remote entry restores the embedded behavior. Test overlapping parent/child suffixes in both directions and a domain already embedded as direct.
+- A valid signature means accepted content, not successful application. Advance the applied revision only after the generated configuration and connection readiness are confirmed by the owning lifecycle. A generation/start failure retains the previous applied revision and reports a pending/failed revision. If retrying the known last working snapshot, show that fallback explicitly and keep the newer accepted revision pending; never silently discard it.
+- Persist a protected acceptance journal containing source/organization identity, key identity, maximum accepted revision, payload digest and the snapshots needed for recovery. Commit acceptance atomically before advertising it. An older server response cannot reduce the floor; an equal revision is idempotent only for identical signed content. Reconnecting with a previously accepted fallback does not reduce that floor.
+- Cover restart, concurrent refreshes, disk-full/ACL failures and crash recovery between acceptance steps. Binary rollback must not silently roll back policy trust or the acceptance floor. An administrator restoring an entire older machine backup is outside protection by a local journal alone; recovery must reconcile with the current trusted service before claiming replay protection.
+- Before cross-repository implementation, commit one wire specification and shared signed fixtures: exact signed bytes/envelope, fixed supported signature algorithm, key identifier/rotation overlap, strict duplicate-field behavior, integer bounds, time semantics, domain IDNA normalization and a pinned public-suffix source. Do not independently sign reserialized JSON in Rust and verify a different representation in C#.
+- Apply the proposed 64 KiB response bound to decoded HTTP content as well as transport handling; cap list size/depth and reject redirects. An HTTP cache hit may update last-contact time, not the signed publication time or the age of a policy. Keep accepted/applied revision and last successful contact distinct in RU/EN diagnostics.
+
+### 9.4 Business probe contract and reuse limits
+
+The existing deep verifier is a source of components, not a drop-in Business probe. `DeepVerifyProbe` uses a single control URL, default redirect handling and a fully buffered body. Its port-ready check proves that something listens, while verifier cleanup does not await child exit. The current window-owned health monitor requests cancellation without exposing an awaited shutdown barrier.
+
+- Prototype a Business-specific probe boundary with a typed result, a monotonic clock, a bounded scheduler and an asynchronous stop/drain operation. Preserve other callers of `VlessDeepVerifier` and their behavior unless a separately tested shared extraction is necessary. Do not surface raw exception strings, credentials or trace bodies in status text.
+- Authenticate the loopback SOCKS listener with a per-run random credential, retain the owned process handle and verify it remains alive through readiness and the request. A foreign listener winning the port race must fail authentication and must never produce green. Keep configuration and credentials in a private per-run directory; do not expose a Clash API or use a speed-test download.
+- Use normal TLS validation, no redirects, bounded streaming response reads and explicit expected status/body checks for two independently operated control endpoints. Try the fallback through the same checked node only. A valid response through either control may establish HTTPS success; failure of the controls, local runtime startup or DNS setup must remain distinguishable from a demonstrated remote handshake/authentication failure.
+- Default classification: successful authenticated HTTPS is green; confirmed node connection/protocol failure is red; ambiguous timeout or control-service failure is inconclusive; cancellation, unsupported transport, missing runtime or unverifiable direct egress is unknown. A TCP response alone remains yellow. Do not infer an ISP block, UDP health or overall site availability from these results.
+- Prove the direct physical route for the helper's node connection and its bootstrap DNS path. A `direct` outbound name is not evidence of physical egress. Until route/interface binding is implemented and verified for the shipped core, suspend probes during any active tunnel or uncertain route and clear green. This deliberately does not inherit the existing connected-split permission. Separately verify hostname resolution for control requests; the current helper's direct DoH behavior must not be mistaken for tunnel DNS validation.
+- Cancel before a connection transition, then await owned-helper exit and private-file cleanup. Do not hold the dispatcher while draining. Subscription replacement, window recreation, hide, shutdown, suspend/resume and network-generation changes must invalidate late results and drain the old round before starting a new one. Repeated hide/show or monitor reconstruction must not reset the application-level probe budget.
+- Suggested budgets for independent review: 15 seconds per node including control fallback, 60 seconds per cycle, at most two helpers, 5 minutes of monotonic freshness and at most one automatic cycle per 5 minutes. Queue entries left untested by the cycle budget stay unknown. Bound manual refreshes too; they cannot bypass concurrency or create overlapping rounds.
+- Reserve a bounded cleanup phase and require actual process exit before another helper or Connect starts. If cleanup fails, expose a local error and stop probe scheduling; Disconnect must still tear down the main tunnel. A crash may bypass `finally`, so any next-start recovery must identify only the recorded owned helper using process identity/start time and the private run path, never a broad sing-box kill.
+- Acceptance must include a competing SOCKS listener, a helper that ignores cancellation, partial/oversized/redirecting controls, two unavailable controls, hostname DNS failure, stale callbacks, clock changes, repeated window recreation and another active VPN. Run actual helper/process/network cases on a preflighted Windows worker or Windows CI; injected unit tests alone cannot establish ownership, routing or cleanup.
+
+### 9.5 Delivery slices and evidence
+
+| Slice | Dependency and reviewable result | Required evidence before the next slice |
+|---|---|---|
+| A: indicator semantics | Change only Business TCP-only wording/colors; preserve node selection and metadata | Regression that TCP success never means verified VPN, RU/EN narrow headless render, exact-head CI |
+| B: isolated probe | Reviewed physical-egress, control-response and lifecycle contract from 9.4 | Fake-boundary tests plus real owned-process/control tests, lifecycle race tests and Windows core compatibility |
+| C: policy contract | Resolve 9.1-9.3 in both repositories before client/server work | Shared positive/negative signature and domain fixtures, concrete trust migration and authority boundaries |
+| D: policy API and admin | C; draft/publish/history/restore with policy-only authentication | Independent API spec tests, authorization/CSRF/concurrency/restore checks and backend CI at a pinned SHA |
+| E: client policy | C and a test API; app-owned synchronization and immutable connect snapshot | Restart/replay/migration tests, route/DNS precedence in split/full, real bootstrap-to-connect coverage and Business-edition CI |
+| F: integration and delivery | B, D and E | Two clients, wrong-organization rejection, pending/applied status, private migration and shared-update compatibility, WINBRAT lifecycle and regional evidence |
+
+Each implementation slice needs its own brief and task PR with green checks, as required by the owning repository. VPNRouter PRs target `business`; the selected backend uses its accepted base. The generic Standard test job is not a substitute for compiling/testing the Business edition. Candidate packaging, distribution and activation are separate delivery work; documentation completion does not establish them.
+
+### 9.6 Review status and outstanding decisions
+
+- Coordinator source review: the four planning gaps above are recorded with source evidence in the ledger and addressed in this proposed plan. The deployed TCP-only indicator remains an open runtime gap. No product changes, worker jobs or regional probes were performed.
+- Independent Claude review: attempted once; the provider failed before returning findings with `Your account can't receive replies from Claude right now`, directing the owner to `https://portal.anthropic.com/verify`. No alternative provider was substituted and no independent acceptance is claimed.
+- Still required before implementation: independent review; the deployed backend/repository and policy-only authentication choice; the exact signature/normalization/key-rotation specification and migration artifact; verified physical-egress support, control endpoints and final budgets. These are explicit entry gates for the relevant slices, not hidden assumptions to resolve while shipping.
+- Initial PR CI evidence: six checks completed successfully at `4f5cc892`; `packaging-arch` reported `in_progress` with a `success` conclusion while its parent run was completed. This inconsistent record is not claimed as an all-green gate. The documentation update must receive fresh exact-head checks.
