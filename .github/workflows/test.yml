@@ -10,6 +10,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  business-policy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      VPNROUTER_EXPECT_BUSINESS_POLICY_TESTS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - name: Exact source
+        run: git rev-parse HEAD
+      - name: Business compiled policy contracts
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true --filter "FullyQualifiedName~BusinessPolicy|FullyQualifiedName~BusinessDefaults" --logger "console;verbosity=normal"
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15

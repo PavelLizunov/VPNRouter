@@ -12,6 +12,7 @@ internal sealed class BusinessClientConfiguration
     internal Uri? Subscription { get; private init; }
     internal Uri? NodesEndpoint { get; private init; }
     internal Uri? UpdatesEndpoint { get; private init; }
+    internal BusinessPolicyConfiguration? Policy { get; private init; }
     internal Uri? SupportEndpoint { get; private init; }
     internal string? SupportToken { get; private init; }
     internal string? SourceHash => Subscription == null ? null :
@@ -38,6 +39,8 @@ internal sealed class BusinessClientConfiguration
         }
         return new() { Subscription = subscription, NodesEndpoint = OptionalEndpoint(data, "nodes_url"),
             UpdatesEndpoint = OptionalEndpoint(data, "updates_url"),
+            Policy = doc.RootElement.EnumerateObject().Count(p => p.NameEquals("business")) == 1
+                ? BusinessPolicyConfiguration.ParseOptional(data) : null,
             SupportEndpoint = endpoint, SupportToken = token };
     }
 

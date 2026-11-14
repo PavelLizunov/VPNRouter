@@ -1,0 +1,5 @@
+Mozilla Public Suffix List (ICANN and PRIVATE)
+https://github.com/publicsuffix/list/blob/dfe55f3548d0fe51c04b8d2903507a01fdec57ad/public_suffix_list.dat
+SHA-256: c61dec506c4a1045355280a560bf66c9ee893fb1510db98510ef7fb277fb2df8
+License: Mozilla Public License 2.0 (notice retained in data file).
+Update both client and server datasets and shared fixtures together.

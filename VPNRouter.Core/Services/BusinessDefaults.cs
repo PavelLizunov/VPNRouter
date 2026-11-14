@@ -5,11 +5,14 @@ namespace VPNRouter.Core.Services;
 // The pilot is a preset of the existing generated-config engine, not another client.
 internal static class BusinessDefaults
 {
-    internal static void Apply(AppSettings settings, string connection, List<CustomRule> rules)
+    internal static void Apply(AppSettings settings, string connection, List<CustomRule> rules,
+        BusinessPolicySnapshot? policy = null)
     {
         var servers = ParseConnection(connection);
         if (rules.Count == 0 || rules.Any(r => !r.Enabled || ConfigGenerator.BuildCustomRouteRule(r) == null))
             throw new InvalidDataException("Business routing preset is invalid.");
+
+        rules = BusinessPolicyRouting.Compose(rules, policy);
 
         settings.Vless = CreateServerPool(servers, settings.Vless);
         settings.ActiveProfile = string.Empty;
@@ -33,7 +36,7 @@ internal static class BusinessDefaults
         // proxy-udp sibling selection and the TCP-only QUIC fallback guards.
         settings.App.CustomRules = rules.Where(r => r.Type != "process_name" || r.Action != "proxy").ToList();
         settings.App.BypassRussianTraffic = true;
-        settings.App.CustomRulesPriority = "toggles_first";
+        settings.App.CustomRulesPriority = "custom_first";
         settings.App.StrictDns = false;
         settings.App.DnsLeakLockdown = false;
         settings.App.BlockAds = false;
@@ -122,14 +125,14 @@ internal static class BusinessDefaults
     {
         // Explicit DNS destinations take precedence over app matching (Windows DNS may
         // belong to svchost). Direct sites must never inherit a proxy app's resolver.
-        var direct = new List<DnsRule>();
-        var proxy = new List<DnsRule>();
+        var domains = new List<DnsRule>();
+        var processes = new List<DnsRule>();
         foreach (var rule in rules.Where(r => r.Enabled && r.Action is "direct" or "proxy"))
         {
             var route = ConfigGenerator.BuildCustomRouteRule(rule);
             if (route == null || (route.Domain == null && route.DomainSuffix == null && route.ProcessName == null))
                 continue;
-            (rule.Action == "direct" ? direct : proxy).Add(new DnsRule
+            (route.ProcessName == null ? domains : processes).Add(new DnsRule
             {
                 Domain = route.Domain, DomainSuffix = route.DomainSuffix, ProcessName = route.ProcessName,
                 Server = rule.Action == "direct" ? "local-dns" : "vpn-dns"
@@ -141,6 +144,47 @@ internal static class BusinessDefaults
             rule.Server = "local-dns";
         var infrastructure = config.Dns.Rules.Where(r => r.QueryType != null).ToList();
         var rest = config.Dns.Rules.Except(geo).Except(infrastructure).ToList();
-        config.Dns.Rules = infrastructure.Concat(direct).Concat(geo).Concat(proxy).Concat(rest).ToList();
+        // Both explicit directions must win over geographic defaults. Keep the
+        // same domain order as routing; process-owned DNS remains lower priority.
+        config.Dns.Rules = infrastructure.Concat(domains).Concat(geo).Concat(processes).Concat(rest).ToList();
+    }
+
+    internal static void ApplyDomainTransports(SingBoxConfig config, bool hasUdpProxy,
+        bool proxyCarriesUdpNatively, bool blockQuicOnTcpProxy)
+    {
+        // Explicit site rules precede per-app/global transport guards. Carry the
+        // same transport decision into those site rules instead of bypassing it.
+        for (var i = config.Route.Rules.Count - 1; i >= 0; i--)
+        {
+            var rule = config.Route.Rules[i];
+            if (rule.Outbound != "proxy" || rule.Network != null ||
+                (rule.Domain == null && rule.DomainSuffix == null)) continue;
+
+            RouteRule ForDomain() => new()
+            {
+                Domain = rule.Domain?.ToList(), DomainSuffix = rule.DomainSuffix?.ToList()
+            };
+
+            if (hasUdpProxy)
+            {
+                var udp = ForDomain();
+                udp.Network = "udp";
+                udp.Action = "route";
+                udp.Outbound = "proxy-udp";
+                config.Route.Rules.Insert(i, udp);
+            }
+            else if (!proxyCarriesUdpNatively && blockQuicOnTcpProxy)
+            {
+                var quic = ForDomain();
+                quic.Protocol = "quic";
+                quic.Action = "reject";
+                var udp443 = ForDomain();
+                udp443.Network = "udp";
+                udp443.Port = [443];
+                udp443.Action = "reject";
+                config.Route.Rules.Insert(i, quic);
+                config.Route.Rules.Insert(i, udp443);
+            }
+        }
     }
 }

@@ -136,7 +136,11 @@ public static partial class ConfigGenerator
         }
 
         if (ProductEdition.IsBusiness)
+        {
             BusinessDefaults.ApplyDns(config, settings.App.CustomRules ?? []);
+            BusinessDefaults.ApplyDomainTransports(config, hasUdpProxy, proxyCarriesUdpNatively,
+                settings.App.BlockQuicOnTcpProxy);
+        }
 
         return config;
     }

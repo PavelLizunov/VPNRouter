@@ -103,9 +103,13 @@ an incompatible backend rollback and retain the last accepted client policy.
 
 ## Outcome
 
-- Status: PARTIAL; scope approved, implementation not yet present.
+- Status: PARTIAL; the first client policy block is implemented locally, awaiting exact-head CI. Portal, polling/bootstrap/connection integration and delivery are not yet implemented.
 - Starting evidence: all seven PR #675 checks completed successfully at `d429a1c2f241062a4923ec6d01d2567d974d711b`; current `business` and vpnctl `main` match the pinned bases above.
 - Source reconnaissance: startup overwrites rules; ordinary saves reparse stale text; current Business geo precedence can override explicit proxy; engine ApplyAsync is guarded and currently restarts sing-box; existing visible-window subscription refresh cannot serve policy polling. Findings and dispositions are tracked in OPEN-DEFECTS before fixes.
 - Backend source supports an isolated router and current SQLite; no separate service is required. Private Corp-to-subscription binding, verified egress addresses and activation configuration remain delivery prerequisites.
 - No local build, remote host mutation, deployment or release has been performed.
-- Next: exact-head brief CI, shared contract/fixtures, then server/client implementation in coordinated repository PRs.
+- Foundation block: [wire v1](../docs/business-policy-wire-v1.md), P-256 parser, full PSL/domain validation, immutable snapshots, optional provisioning, bounded HTTP, protected atomic journal, explicit route/DNS priorities and UDP-preserving site rules. The embedded preset now pins the portal through VPN; the accepted-policy overload is not yet connected to runtime synchronization.
+- Added tests cover strict signatures/schema/limits, shared public vectors, domain normalization/PSL, optional malformed provisioning, durable replay/rotation/writer races, streamed response/deadline cancellation, full replacement and both-mode transport behavior. Dedicated Windows/Linux CI compiles the Business branches. Test execution is pending; no counts are claimed yet.
+- Independent foundation review: separate Core security, routing correctness and storage/lifetime reviewers. Core has no remaining confirmed findings. Routing found proxy-domain UDP bypass; storage found missing directory durability. Both are source-corrected with regressions; the lead checked these bounded corrections. There is no claim of a final full-feature review.
+- Source checks: whitespace, project XML, shared fixture JSON/base64/payload digests and pinned PSL SHA pass. No local compilation or test run.
+- Next: obtain green foundation CI, integrate application-owned policy polling and immutable connection capture with an actual owned-core acceptance receipt, implement the isolated vpnctl portal against the shared wire contract, and run final cross-component reviews/tests.

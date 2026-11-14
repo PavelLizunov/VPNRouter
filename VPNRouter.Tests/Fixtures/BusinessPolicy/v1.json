@@ -1,0 +1,38 @@
+{
+  "description": "Synthetic P-256 public test vector; ephemeral private key was discarded. Signed payload bytes are authoritative.",
+  "policy_id": "corp-fixture",
+  "key_id": "fixture-key",
+  "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAExlY0zSy1znR8jE3F1TX90/fRfO9RlkZX73OMP3YevsBhI/EEqZRg++OPual/5qGAWsjYKCexoXOVFbl2J8Evdg==",
+  "cases": [
+    {
+      "name": "sites",
+      "valid": true,
+      "payload_utf8": "{\"schema\":1,\"policy_id\":\"corp-fixture\",\"key_id\":\"fixture-key\",\"revision\":7,\"published_at\":1794657600,\"apply\":\"next_connection\",\"rules\":[{\"domain\":\"example.com\",\"action\":\"direct\",\"comment\":\"Company site\"},{\"domain\":\"example.org\",\"action\":\"proxy\",\"comment\":\"VPN site\"}]}",
+      "payload_sha256": "F87772F1978355E5DB895216442AA8001AA7BF1D1FA39973D1FCC8B06B4236AD",
+      "envelope": {
+        "payload": "eyJzY2hlbWEiOjEsInBvbGljeV9pZCI6ImNvcnAtZml4dHVyZSIsImtleV9pZCI6ImZpeHR1cmUta2V5IiwicmV2aXNpb24iOjcsInB1Ymxpc2hlZF9hdCI6MTc5NDY1NzYwMCwiYXBwbHkiOiJuZXh0X2Nvbm5lY3Rpb24iLCJydWxlcyI6W3siZG9tYWluIjoiZXhhbXBsZS5jb20iLCJhY3Rpb24iOiJkaXJlY3QiLCJjb21tZW50IjoiQ29tcGFueSBzaXRlIn0seyJkb21haW4iOiJleGFtcGxlLm9yZyIsImFjdGlvbiI6InByb3h5IiwiY29tbWVudCI6IlZQTiBzaXRlIn1dfQ==",
+        "signature": "oa/sf9mkEF/H9aj5J2+aFc/d9blSgVY07EWwMAQJiMm2yRFA9NDza/EYVtS+PonDbA6J97OnLAoUdZ3jYzjlqg=="
+      }
+    },
+    {
+      "name": "empty",
+      "valid": true,
+      "payload_utf8": "{\"schema\":1,\"policy_id\":\"corp-fixture\",\"key_id\":\"fixture-key\",\"revision\":8,\"published_at\":1794657600,\"apply\":\"now\",\"rules\":[]}",
+      "payload_sha256": "06EEC833EAA7F3FCCDB48EDCB8327AC5C1AFC5C83F5C3CC99AA43D6D2CE84E90",
+      "envelope": {
+        "payload": "eyJzY2hlbWEiOjEsInBvbGljeV9pZCI6ImNvcnAtZml4dHVyZSIsImtleV9pZCI6ImZpeHR1cmUta2V5IiwicmV2aXNpb24iOjgsInB1Ymxpc2hlZF9hdCI6MTc5NDY1NzYwMCwiYXBwbHkiOiJub3ciLCJydWxlcyI6W119",
+        "signature": "DtK6L/VYPKDTHgk4qAt9J1y7K+P/1NNA/B0X8ATbdEL2MpdyFHXwYsAAMK8fR5lo0rumVoi9wvv8a6a5vCLmEQ=="
+      }
+    },
+    {
+      "name": "altered-signature",
+      "valid": false,
+      "payload_utf8": "{\"schema\":1,\"policy_id\":\"corp-fixture\",\"key_id\":\"fixture-key\",\"revision\":7,\"published_at\":1794657600,\"apply\":\"next_connection\",\"rules\":[{\"domain\":\"example.com\",\"action\":\"direct\",\"comment\":\"Company site\"},{\"domain\":\"example.org\",\"action\":\"proxy\",\"comment\":\"VPN site\"}]}",
+      "payload_sha256": "F87772F1978355E5DB895216442AA8001AA7BF1D1FA39973D1FCC8B06B4236AD",
+      "envelope": {
+        "payload": "eyJzY2hlbWEiOjEsInBvbGljeV9pZCI6ImNvcnAtZml4dHVyZSIsImtleV9pZCI6ImZpeHR1cmUta2V5IiwicmV2aXNpb24iOjcsInB1Ymxpc2hlZF9hdCI6MTc5NDY1NzYwMCwiYXBwbHkiOiJuZXh0X2Nvbm5lY3Rpb24iLCJydWxlcyI6W3siZG9tYWluIjoiZXhhbXBsZS5jb20iLCJhY3Rpb24iOiJkaXJlY3QiLCJjb21tZW50IjoiQ29tcGFueSBzaXRlIn0seyJkb21haW4iOiJleGFtcGxlLm9yZyIsImFjdGlvbiI6InByb3h5IiwiY29tbWVudCI6IlZQTiBzaXRlIn1dfQ==",
+        "signature": "oK/sf9mkEF/H9aj5J2+aFc/d9blSgVY07EWwMAQJiMm2yRFA9NDza/EYVtS+PonDbA6J97OnLAoUdZ3jYzjlqg=="
+      }
+    }
+  ]
+}

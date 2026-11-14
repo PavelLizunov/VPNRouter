@@ -91,7 +91,7 @@ internal static class BusinessProvisioningStore
         if (value.ValueKind != JsonValueKind.Object) throw InvalidProvisioning();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in value.EnumerateObject())
-            if (!seen.Add(property.Name) && !(optionalEndpoints && property.Name is "nodes_url" or "updates_url"))
+            if (!seen.Add(property.Name) && !(optionalEndpoints && property.Name is "nodes_url" or "updates_url" or "policy"))
                 throw InvalidProvisioning();
     }
 
