@@ -26,6 +26,10 @@ Headless Avalonia harness in `VPNRouter.Tests` runs offscreen rendering, page sc
 - `VPNRouter.App/Views/`: Windows (`MainWindow`, `AboutWindow`, `SetupWizardWindow`) and `Views/Pages/` tab views (`SimplePage`, `ServersPage`, `SubscribePage`, `NetworkPage`, `ApplicationsPage`, `ToolsPage`, `DpiBypassPage`, `TelegramPage`, `FreeConfigsPage`).
 - `VPNRouter.App/Services/`: Desktop application services (e.g., `SelfRepair`, `FileManagerHelper`, `ShellMenuRegistrar`, `ShortcutSelfHeal`, `InstallHealthCheck`, `ShortcutResolver`, `SingleInstance`, `WindowsServiceHelper`, `SteamLibraryScanner`, `WindowForegroundHelper`).
 - `VPNRouter.App/Assets/`: App icons, mascot assets, embedded fonts, and install guide resources.
+- `Services/BusinessPolicyCoordinator.cs` owns app-lifetime policy polling;
+  `BusinessPolicySettings.cs` captures independent connection settings.
+  `ViewModels/MainWindowViewModel.BusinessPolicy.cs` owns accepted/applied UI
+  state and session-bound application. See `docs/business-policy-wire-v1.md`.
 
 ## Design System Rules
 

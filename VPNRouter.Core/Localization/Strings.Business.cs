@@ -6,6 +6,13 @@ public static partial class Strings
     public static string BusinessEnglish => "English";
     public static string BusinessServiceConnected => Ru ? "Подключено через службу" : "Connected via service";
     public static string BusinessConnected => Ru ? "Подключено" : "Connected";
+    public static string BusinessPolicyEmbedded => Ru ? "Правила компании: встроенный список." : "Company rules: embedded list.";
+    public static string BusinessPolicyPending => Ru ? "Новые правила сохранены. Применятся при подключении." : "New rules saved. They will apply when you connect.";
+    public static string BusinessPolicyApplying => Ru ? "Применяем правила компании. VPN переподключается…" : "Applying company rules. VPN is reconnecting…";
+    public static string BusinessPolicyApplyFailed => Ru ? "Правила сохранены, но применить их не удалось. Переподключитесь к VPN." : "Rules were saved but could not be applied. Reconnect to the VPN.";
+    public static string BusinessPolicyApplied => Ru ? "Правила компании применены." : "Company rules applied.";
+    public static string BusinessPolicyRefreshUnavailable => Ru ? "Не удалось обновить правила компании. Сохранены последние проверенные правила." : "Could not refresh company rules. The last verified rules are retained.";
+    public static string BusinessPolicyRecoveryRequired => Ru ? "Не удалось восстановить правила компании. Обратитесь к администратору для восстановления настроек." : "Could not recover company rules. Contact your administrator to restore settings.";
     public static string BusinessMenu => Ru ? "Меню" : "Menu";
     public static string BusinessLanguage => Ru ? "Язык" : "Language";
     public static string BusinessLanguageSaveFailed => Ru ? "Не удалось сохранить язык." : "Could not save language.";

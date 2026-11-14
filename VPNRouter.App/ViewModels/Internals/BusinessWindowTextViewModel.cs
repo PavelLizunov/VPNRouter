@@ -39,13 +39,17 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
 
     internal void SetClient(MainWindowViewModel? client)
     {
+        if (_client != null) _client.BusinessPolicyStatusChanged -= Refresh;
         _client = client;
+        if (_client != null) _client.BusinessPolicyStatusChanged += Refresh;
         _languageSaveFailed = false;
         Refresh();
     }
     internal void SetLanguageSaveFailed(bool failed) { _languageSaveFailed = failed; Refresh(); }
 
     public string Menu => Strings.BusinessMenu;
+    public string PolicyStatus => _client?.BusinessPolicyStatusText ?? string.Empty;
+    public bool HasPolicyStatus => !string.IsNullOrEmpty(PolicyStatus);
     public string Language => Strings.BusinessLanguage;
     public string CountryHint => Strings.BusinessCountryHint;
     public string Server => Strings.BusinessServer;

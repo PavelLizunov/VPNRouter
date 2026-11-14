@@ -103,8 +103,11 @@ do not erase the journal automatically when its signer is no longer trusted.
 Unverifiable cache disables acceptance until trust is repaired, rather than
 silently falling back to an empty revision floor. A missing first-use journal
 starts with the embedded seed. A corrupted existing journal is a visible local
-policy error, never an invitation to accept an older revision. Existing embedded
-VPN configuration remains available while synchronization is blocked.
+policy error, never an invitation to accept an older revision. Keep a running
+session on its captured verified rules. If startup cannot recover a verified
+policy, block new policy-managed connections with a recovery message instead of
+reinstating deleted seed exceptions. This does not change the missing/invalid
+optional-provisioning fallback or the valid first-use missing-journal behavior.
 
 Accept a higher revision only after the atomic journal write succeeds. An equal
 revision is a no-op only for identical payload SHA-256. Reject older revisions.
@@ -128,6 +131,16 @@ Only actual core acceptance of the generated configuration marks a revision
 applied, paired with configuration digest and engine-run identity. Disconnection
 clears active application state, retaining history. Generation/load failures leave
 the accepted revision pending. The portal says published, never applied to all.
+
+The desktop receipt uses a fresh private configuration/log pair for each owned
+launch. With file logging and timestamps disabled, the bundled sing-box
+`v1.14.2-vpnctl.2` emits `INFO sing-box started (...s)` after successful startup
+(`log/log.go`, `log/format.go`, `box.go` at `f62085aa7cc0f3ee665ac3043d35698760a386e9`).
+Pair that acknowledgement with the exact live handle, session and effective JSON
+digest. Shared diagnostic logs are never acknowledgement evidence. Policy-owned
+health recovery reuses the current typed configuration; unversioned health or
+process-monitor writes cannot replace it. An older queued apply cannot lower the
+highest acknowledged policy revision within the same session.
 
 ## Browser surface
 

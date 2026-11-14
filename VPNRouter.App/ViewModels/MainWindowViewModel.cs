@@ -486,7 +486,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     internal MainWindowViewModel(ISettingsStore? settingsStore,
         Func<Func<Task>, IUpdateSource>? businessUpdateSourceFactory,
-        Action<int>? exitApplication, Action? stopOwnedEngineForUpdate)
+        Action<int>? exitApplication, Action? stopOwnedEngineForUpdate,
+        Func<AppSettings, ISettingsStore, Services.BusinessPolicyCoordinator?>? businessBootstrap = null)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
 
@@ -518,9 +519,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _engine.TrueSplitStateChanged += OnTrueSplitStateChanged;
 
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-        if (ProductEdition.IsBusiness)
+        if (ProductEdition.IsBusiness || businessBootstrap != null)
         {
-            try { Services.BusinessBootstrap.Apply(_settings, _settingsStore); }
+            try
+            {
+                var policy = businessBootstrap != null
+                    ? businessBootstrap(_settings, _settingsStore)
+                    : Services.BusinessBootstrap.Apply(_settings, _settingsStore);
+                InitializeBusinessPolicy(policy);
+            }
+            catch (Services.BusinessPolicyStartupException)
+            {
+                _businessPolicyStartupBlocked = true;
+                StatusText = Core.Localization.Strings.BusinessPolicyRecoveryRequired;
+            }
             catch
             {
                 _businessConfigurationFailed = true;
@@ -534,6 +546,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger,
             updateSource: businessUpdateSourceFactory?.Invoke(PrepareBusinessUpdateAsync),
             exitApplication: exitApplication, prepareBusinessUpdate: PrepareBusinessUpdateAsync);
+        UpdateVm.PropertyChanged += OnBusinessPolicyUpdateStateChanged;
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
@@ -564,6 +577,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         LoadSettingsIntoUI();
         if (_businessConfigurationFailed)
             StatusText = Core.Localization.Strings.BusinessConfigMissing;
+        if (_businessPolicyStartupBlocked)
+            StatusText = Core.Localization.Strings.BusinessPolicyRecoveryRequired;
 
         WireOsThemeFollow();
 
@@ -575,6 +590,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         if (startBackgroundServices)
         {
+            _businessPolicy?.Start();
             DetectServiceManagedVpn();
 
             if (!ProductEdition.IsBusiness || UpdateVm.CanCheckUpdates) _ = UpdateVm.CheckOnStartupAsync();
@@ -758,6 +774,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        DisposeBusinessPolicy();
 
 #if PLATFORM_WINDOWS
         try { _tgProxyLifetimeCts.Cancel(); }

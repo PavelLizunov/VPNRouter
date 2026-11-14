@@ -10,8 +10,13 @@ public partial class SingBoxManager
 {
     public string WriteConfigToDisk(string configJson)
     {
-        _currentConfigPath = WriteJsonToDisk(configJson);
-        return _currentConfigPath;
+        lock (_lifecycleGate)
+        {
+            if (_businessPolicy != null)
+                throw new InvalidOperationException("Business configuration requires its captured policy.");
+            _currentConfigPath = WriteJsonToDisk(configJson);
+            return _currentConfigPath;
+        }
     }
 
     private bool TryHotReload()

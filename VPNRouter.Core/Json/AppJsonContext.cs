@@ -15,6 +15,7 @@ namespace VPNRouter.Core.Json;
     WriteIndented = true,
     MaxDepth = 32,
     NumberHandling = JsonNumberHandling.AllowReadingFromString)]
+[JsonSerializable(typeof(AppSettings))]
 [JsonSerializable(typeof(CacheRecovery.SchemaProbe))]
 [JsonSerializable(typeof(ClashSelectProxyDto))]
 [JsonSerializable(typeof(ClashSetConfigDto))]

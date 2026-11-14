@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using VPNRouter.Core.Services;
 using YamlDotNet.Serialization;
 
 namespace VPNRouter.Core.Models;
@@ -48,5 +49,10 @@ public class AppSettings
 
     [YamlMember(Alias = "update")]
     public UpdateSettings Update { get; set; } = new();
+
+    // Assigned only from verified provisioning/policy state at capture time.
+    [JsonIgnore]
+    [YamlIgnore]
+    internal BusinessPolicySnapshot? BusinessPolicy { get; set; }
 
 }

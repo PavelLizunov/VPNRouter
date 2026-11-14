@@ -867,7 +867,8 @@ public partial class MainWindowViewModel
                 return false;
             }
 
-            var ok = await Task.Run(() => _engine.ApplyAsync(_settings, CancellationToken.None, forceRestart));
+            var capturedSettings = CaptureBusinessConnectionSettings();
+            var ok = await Task.Run(() => _engine.ApplyAsync(capturedSettings, CancellationToken.None, forceRestart));
             if (ok)
             {
                 ClearPendingIfRevisionUnchanged(appliedRevision);
@@ -900,6 +901,7 @@ public partial class MainWindowViewModel
         ApplyServersToSettings();
         ApplyCustomConfigsToSettings();
         ApplyAppSelectionToSettings();
+        EnforceBusinessPolicySettings();
 
         _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }

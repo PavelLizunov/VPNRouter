@@ -21,6 +21,8 @@ public partial class SingBoxManager
 
         lock (_lifecycleGate)
         {
+            if (_businessPolicy != null)
+                throw new InvalidOperationException("Business configuration requires its captured policy.");
             if (Volatile.Read(ref _disposed) != 0)
             {
                 _logger.Debug("[SingBoxManager] Start ignored — manager already disposed");
@@ -67,14 +69,13 @@ public partial class SingBoxManager
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
         }
 
-        RotateSingBoxLog();
-        _currentConfigPath = WriteJsonToDisk(configJson);
-
-        _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
-
         State = SingBoxState.Starting;
+        _policySpawnAttempted = false;
         try
         {
+            RotateSingBoxLog();
+            _currentConfigPath = WriteJsonToDisk(configJson);
+            _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
             LaunchProcess(exePath);
             if (_handle is null)
             {
@@ -84,6 +85,11 @@ public partial class SingBoxManager
         }
         catch
         {
+            if (_businessPolicy != null)
+            {
+                HandleFailedPolicyLaunch();
+                throw;
+            }
             KillLaunchedProcessBestEffort();
             State = SingBoxState.Failed;
             ReleaseTunOwnership();
@@ -173,6 +179,7 @@ public partial class SingBoxManager
         }
         finally
         {
+            CleanStoppedPolicyLaunch();
             _stopInProgress = false;
             Volatile.Write(ref _stopState, 0);
         }
@@ -534,6 +541,7 @@ public partial class SingBoxManager
                 return false;
             }
             State = SingBoxState.Restarting;
+            _policySpawnAttempted = false;
 
             if (OperatingSystem.IsWindows())
             {
@@ -560,6 +568,11 @@ public partial class SingBoxManager
         }
         catch
         {
+            if (_businessPolicy != null)
+            {
+                HandleFailedPolicyLaunch();
+                throw;
+            }
             KillLaunchedProcessBestEffort();
             State = SingBoxState.Failed;
             ReleaseTunOwnership();
@@ -655,6 +668,8 @@ public partial class SingBoxManager
                 .GetAwaiter().GetResult();
         }
 
+        PreparePolicyLaunch();
+
         string spawnExe;
         IReadOnlyList<string> spawnArgs;
 
@@ -717,6 +732,9 @@ public partial class SingBoxManager
             return;
         }
 
+        ThrowIfPolicyCanceled();
+
+        _policySpawnAttempted = true;
         _handle = _runner.Start(request);
 
         var startedHandle = _handle;
@@ -739,13 +757,16 @@ public partial class SingBoxManager
         };
         startedHandle.Exited += (_, code) => OnProcessExited(code);
 
+        AcknowledgePolicyLaunch(startedHandle);
         State = SingBoxState.Running;
         _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", startedHandle.Pid);
+        NotifyPolicyAcceptance();
         Started?.Invoke(startedHandle.Pid);
     }
 
-    private static string WriteJsonToDisk(string json)
+    private string WriteJsonToDisk(string json)
     {
+        _sourceConfigJson = json;
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
             AppPaths.EnsurePrivateUnixDirectory(AppPaths.DataDir);

@@ -19,6 +19,10 @@ that every failure path has the same behavior.
   no blanket lock-order rule in this map.
 - `ResilientStarter.cs`, `AutoFailoverEngine.cs` and `SafeMode.cs`: startup
   recovery and failover decisions.
+- `VpnEngine.BusinessPolicy.cs`, `SingBoxManager.BusinessPolicy.cs` and
+  `BusinessPolicyLaunch.cs`: guarded same-session policy apply, private launch
+  acknowledgement and current receipt validation. Policy-owned managers reject
+  unversioned config writes; health recovery restarts their captured source.
 
 ## Health and power events
 
