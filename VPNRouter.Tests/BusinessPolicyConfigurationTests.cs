@@ -46,7 +46,7 @@ public sealed class BusinessPolicyConfigurationTests
         yield return [valid.Replace(ReadToken, "synthetic-policy-reader-token with-space")];
         yield return [valid.Replace("\"keys\":[", "\"keys\":[],\"keys\":[")];
         yield return [valid.Replace("\"id\":\"fixture-key\"", "\"id\":\"fixture-key\",\"id\":\"other\"")];
-        yield return [valid.Replace(Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()), "invalid-key")];
+        yield return [PolicyJson(key, spki: "invalid-key")];
     }
 
     [Theory]
@@ -105,13 +105,14 @@ public sealed class BusinessPolicyConfigurationTests
         BusinessClientConfiguration.Parse(Bundle(PolicyJson(key, policyId, token))).Policy
         ?? throw new InvalidOperationException("Synthetic policy configuration was rejected.");
 
-    internal static string PolicyJson(ECDsa key, string policyId = "fixture-policy", string token = ReadToken) =>
+    internal static string PolicyJson(ECDsa key, string policyId = "fixture-policy", string token = ReadToken,
+        string? spki = null) =>
         JsonSerializer.Serialize(new
         {
             policy_id = policyId,
             endpoint = "https://example.invalid/api/v1/corp/policy",
             read_token = token,
-            keys = new[] { new { id = "fixture-key", spki = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()) } }
+            keys = new[] { new { id = "fixture-key", spki = spki ?? Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()) } }
         });
 
     private static string Bundle(string policy) =>
