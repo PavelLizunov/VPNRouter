@@ -99,3 +99,56 @@ instruction commit receives fresh CI. No receiver service, website routes,
 production model worker, credential, upload identity or public analysis receipt
 was changed. Immediate automatic integration versus preparation-only scope is
 being clarified with the owner; this document cannot establish activation.
+
+## Owner-confirmed runtime continuation
+
+The owner explicitly selected immediate automatic analysis and the Diagnostics
+section, then requested a new version number and mkvt24.ru direct routing.
+Implement the companion runtime contract, preserve legacy intake/replies, and
+complete real model-to-inbox verification before claiming activation. Prepare
+private Corp2.50.9 and its same-source shared artifact; preserve2.50.8 and all
+credentials/history. The older mkvt24 PR#674 conflicts with current business;
+port its narrow preset/regression changes without importing historical ledger
+content. Also update the authoritative signed company policy, because accepted
+remote rules replace embedded sites. CI-only builds/tests and trusted WINBRAT
+preflight/lease still apply. Backend target remains vpnctl main; client/support
+packaging target remains business. Runtime code/spec review and deployment gates
+are pending; the preparation-only gate results above are historical evidence.
+
+## Runtime implementation checkpoint
+
+The receiver now implements the private identity-scoped inbox/retry interface.
+The independent stdlib worker builds scrubbed, bounded evidence packets and
+publishes only validated model results, preserving original ZIPs, receipt fields,
+retention timestamps and prior results. The vpnctl task branch implements the
+existing Corp-gated Russian inbox and typed private service bridge without a
+schema migration. Sixteen independent spec-only HTTP/configuration tests cover
+the bridge; separate CI-only browser fixtures cover narrow320/420 layouts,
+navigation, evidence, retries, hostile text and unavailable states.
+
+Three independent review passes covered backend correctness, cross-component
+security and support concurrency/lifetime. Confirmed findings were ledgered
+before correction: ZIP symlinks, synthetic session/CSRF shape, packet citations,
+Responses reasoning output, lock acquisition failures, stable masking aliases,
+provider total deadline, additional private paths, generated commands, stale
+receipt scope and upload quota headroom. Small final corrections received lead
+source review; runtime tests are not yet claimed green.
+
+Local static checks pass: Python AST, Rust formatting, JavaScript syntax,
+whitespace and redacted gitleaks over both complete task diffs. Compilation,
+packaging, full tests and browser execution are not run on the control-plane
+workstation; exact-head GitHub CI is the publication gate for both repositories.
+The prior instruction-only head a4a6a442 passed all9 checks.
+
+The persistent gateway advertised gpt-6.1-terra and completed a minimal Responses
+request using that exact model with store=false. Its full current configuration,
+model key and new separate bridge bearer were permanently retained through
+owner-access before use. No production worker, inbox deployment, report result,
+Windows build or feed activation is claimed by this implementation checkpoint.
+New source says2.50.9 and the embedded preset includes mkvt24.ru; signed company
+policy publication and actual Windows direct route/DNS verification remain open.
+
+Rollback: deploy the prior exact receiver/backend binaries, stop the optional
+worker and remove only its private integration configuration if required;
+preserve every credential version and report. The new Windows build must retain
+complete provisioning, subscription/support fields and signed policy floors.

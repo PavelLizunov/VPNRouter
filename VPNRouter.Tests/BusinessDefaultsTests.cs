@@ -83,9 +83,10 @@ public sealed class BusinessDefaultsTests
     public void EmbeddedRules_ResolveOwnerConflictAndPreserveAllSourceProcesses()
     {
         var rules = BusinessBootstrap.ReadRules();
-        Assert.Equal(43, rules.Count);
+        Assert.Equal(44, rules.Count);
         Assert.All(rules, r => Assert.True(r.Enabled));
         Assert.Equal("direct", Assert.Single(rules, r => r.Value == "in-mag.ru").Action);
+        Assert.Equal("direct", Assert.Single(rules, r => r.Value == "mkvt24.ru").Action);
         Assert.Empty(CustomRulesParser.DetectConflicts(rules));
         Assert.Equal(new[] { "Telegram.exe", "WhatsApp.exe", "Discord.exe", "AnyDesk.exe", "Claude.exe", "iMe.exe" },
             rules.Where(r => r.Type == "process_name").Select(r => r.Value));
@@ -105,6 +106,8 @@ public sealed class BusinessDefaultsTests
         Assert.Equal(final, config.Route.Final);
         Assert.Equal(mode == "split" ? "local-dns" : "vpn-dns", config.Dns.Final);
         Assert.Equal(6, settings.App.RoutingAppsInclude.Count);
+        Assert.Contains(config.Route.Rules, r => r.DomainSuffix?.Contains("mkvt24.ru") == true && r.Outbound == "direct");
+        Assert.Contains(config.Dns.Rules, r => r.DomainSuffix?.Contains("mkvt24.ru") == true && r.Server == "local-dns");
         var direct = config.Route.Rules.FindIndex(r => r.DomainSuffix?.Contains("in-mag.ru") == true);
         var proxyProcess = config.Route.Rules.FindIndex(r => r.ProcessName?.Contains("Telegram.exe") == true && r.Outbound == "proxy");
         Assert.True(direct >= 0);

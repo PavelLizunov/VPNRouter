@@ -2,8 +2,9 @@
 
 ## Status and owning contracts
 
-This document defines the analyzer instructions and the proposed Corp inbox
-integration. It does not activate an analyzer or add website routes.
+This document defines analyzer instructions and the Corp inbox result contract.
+The [runtime contract](business-diagnostics-runtime-contract.md) owns the
+implemented worker and bridge interfaces. Deployment status remains separate.
 [Support intake](../packaging/business-support/README.md) owns archive validation,
 upload identity, legacy responses and the public analysis receipt.
 [The task record](../plans/phase-corp-diagnostics-analysis-2026-11-16.md) owns

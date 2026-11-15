@@ -44,6 +44,13 @@
   {
     "action": "direct",
     "type": "domain_suffix",
+    "value": "mkvt24.ru",
+    "comment": "Direct sites",
+    "enabled": true
+  },
+  {
+    "action": "direct",
+    "type": "domain_suffix",
     "value": "yastatic.net",
     "comment": "Direct sites",
     "enabled": true

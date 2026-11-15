@@ -294,5 +294,89 @@ class ReceiverTests(unittest.TestCase):
         self.assertFalse(list(self.store.root.glob("incoming-*")))
 
 
+class InboxTests(unittest.TestCase):
+    setUp = ReceiverTests.setUp
+    tearDown = ReceiverTests.tearDown
+    post = ReceiverTests.post
+
+    def internal(self, path='', method='GET', token=None, body=None):
+        connection = http.client.HTTPConnection(*self.server.server_address, timeout=5)
+        try:
+            connection.request(method, '/internal/corp-diagnostics/reports' + path, body=body,
+                               headers={'Authorization': 'Bearer ' + (token or 's' * 32),
+                                        'Content-Type': 'application/json'})
+            response = connection.getresponse()
+            return response.status, json.loads(response.read())
+        finally:
+            connection.close()
+
+    def enable(self):
+        self.store.inbox = (hashlib.sha256(self.token.encode()).hexdigest(), 's' * 32)
+
+    def test_capability_is_distinct_from_upload_and_revocation_is_live(self):
+        self.assertEqual(self.internal()[0], 404)
+        self.enable()
+        self.assertEqual(self.internal(token=self.token)[0], 401)
+        self.assertEqual(self.internal()[0], 200)
+        self.keys.write_text('{}')
+        self.assertEqual(self.internal()[0], 401)
+
+    def test_list_detail_retry_are_scoped_bounded_and_preserve_mtime(self):
+        self.enable()
+        _, public = self.post(report())
+        report_id = public['report_id']
+        metadata_path = self.store.root / (report_id + '.json')
+        original = json.loads(metadata_path.read_text())
+        before = metadata_path.stat().st_mtime_ns
+        code, listing = self.internal('?limit=1')
+        self.assertEqual(code, 200)
+        self.assertEqual(len(listing['reports']), 1)
+        self.assertEqual(set(listing['reports'][0]), {'report_id', 'received_utc', 'bytes', 'device_label',
+                         'analysis_state', 'verdict', 'summary_ru', 'model', 'updated_utc'})
+        self.assertNotIn('identity', json.dumps(listing))
+        self.assertEqual(self.internal('/' + report_id)[0], 200)
+        self.assertEqual(self.internal('/' + 'f' * 64), (404, {'error': 'not found'}))
+        self.assertEqual(self.internal('?cursor=' + 'f' * 64)[0], 400)
+        self.assertEqual(self.internal('?limit=101')[0], 400)
+        self.assertEqual(self.internal('/' + report_id + '/retry', 'POST', body=b'{}')[0], 202)
+        self.assertEqual(metadata_path.stat().st_mtime_ns, before)
+        changed = json.loads(metadata_path.read_text())
+        for key, value in original.items():
+            self.assertEqual(changed[key], value)
+        changed['diagnosis'].update(state='running', lease_until=time.time() + 300)
+        receiver.update_receipt(self.store.root, report_id, changed)
+        self.assertEqual(self.internal('/' + report_id + '/retry', 'POST', body=b'{}')[0], 409)
+        # Existing upload responses retain their byte-level JSON field contract.
+        self.assertEqual(self.post(report())[1], public)
+
+    def test_foreign_reports_and_missing_archive_indistinguishable(self):
+        self.enable()
+        foreign = self.root / 'foreign-client.json'
+        receiver.issue_identity(self.keys, 'https://example.invalid/api/reports', foreign, 'foreign')
+        foreign_token = json.loads(foreign.read_text())['token']
+        _, foreign_public = self.post(report(), token=foreign_token)
+        self.assertEqual(self.internal('/' + foreign_public['report_id'])[0], 404)
+        self.assertEqual(self.internal('?cursor=' + foreign_public['report_id'])[0], 400)
+        _, own = self.post(report())
+        (self.store.root / (own['report_id'] + '.zip')).unlink()
+        self.assertEqual(self.internal('/' + own['report_id'])[0], 404)
+        self.assertEqual(self.internal()[1]['reports'], [])
+
+
+class ArchiveTypeTests(unittest.TestCase):
+    def test_symlink_entries_are_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'fixture.zip'
+            with zipfile.ZipFile(path, 'w') as archive:
+                archive.writestr('README.txt', 'synthetic')
+                archive.writestr('summary.json', '{"format":"vpnrouter-business-support/1"}')
+                entry = zipfile.ZipInfo('app-01.txt')
+                entry.create_system = 3
+                entry.external_attr = 0o120777 << 16
+                archive.writestr(entry, '/private/file')
+            with self.assertRaises(ValueError):
+                receiver.validate_archive(path)
+
+
 if __name__ == "__main__":
     unittest.main()
