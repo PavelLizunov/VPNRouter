@@ -29,6 +29,8 @@ public static partial class ConfigGenerator
         dns.Tag = BusinessPortalDns;
         dns.Detour = BusinessPortalOutbound;
         config.Dns.Servers.Add(dns);
+        // Associate DNS replies with IP-addressed traffic for the portal UDP guard.
+        config.Dns.ReverseMapping = true;
 
         static bool IsPortalOnly(List<string>? domains) =>
             domains is [BusinessPolicyDomains.PortalDomain];
