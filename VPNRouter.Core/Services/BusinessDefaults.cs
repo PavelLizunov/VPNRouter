@@ -68,7 +68,7 @@ internal static class BusinessDefaults
         return servers;
     }
 
-    private static void ValidateProtocolFields(VlessServerEntry server)
+    internal static void ValidateProtocolFields(VlessServerEntry server)
     {
         var valid = !string.IsNullOrWhiteSpace(server.Server) && server.Port is > 0 and <= 65535;
         valid &= (server.Protocol ?? "vless").ToLowerInvariant() switch

@@ -29,7 +29,11 @@ public sealed class BusinessPolicyRoutingTests
         settings.App.RoutingMode = mode;
 
         var config = ConfigGenerator.Generate(new Profile(), [], settings);
-        if (!ProductEdition.IsBusiness) BusinessDefaults.ApplyDns(config, settings.App.CustomRules);
+        if (!ProductEdition.IsBusiness)
+        {
+            BusinessDefaults.ApplyDns(config, settings.App.CustomRules);
+            ConfigGenerator.ApplyBusinessPortal(config, settings);
+        }
 
         var siteRoute = config.Route.Rules.FindIndex(r => r.DomainSuffix?.Contains("avito.ru") == true && r.Action == "route");
         var geoRoute = config.Route.Rules.FindIndex(r => r.RuleSet?.Contains("vpnrouter-geosite-ru") == true);
@@ -49,8 +53,8 @@ public sealed class BusinessPolicyRoutingTests
             Assert.True(appDns > siteDns);
         }
 
-        Assert.Contains(config.Route.Rules, r => r.DomainSuffix?.Contains(BusinessPolicyDomains.PortalDomain) == true && r.Outbound == "proxy");
-        Assert.Contains(config.Dns.Rules, r => r.DomainSuffix?.Contains(BusinessPolicyDomains.PortalDomain) == true && r.Server == "vpn-dns");
+        Assert.Contains(config.Route.Rules, r => r.DomainSuffix?.Contains(BusinessPolicyDomains.PortalDomain) == true && r.Outbound == ConfigGenerator.BusinessPortalOutbound);
+        Assert.Contains(config.Dns.Rules, r => r.DomainSuffix?.Contains(BusinessPolicyDomains.PortalDomain) == true && r.Server == ConfigGenerator.BusinessPortalDns);
         Assert.Contains(config.Route.Rules, r => r.IpCidr?.Contains("195.211.120.35/32") == true && r.Outbound == "direct");
         Assert.Contains("195.211.120.35/32", config.Inbounds[0].RouteExcludeAddress!);
     }
@@ -68,14 +72,17 @@ public sealed class BusinessPolicyRoutingTests
         var config = ConfigGenerator.Generate(new Profile(), [], settings);
         Assert.Contains(config.Outbounds, o => o.Tag == "proxy-udp");
         if (!ProductEdition.IsBusiness)
+        {
             BusinessDefaults.ApplyDomainTransports(config, true, false, settings.App.BlockQuicOnTcpProxy);
+            ConfigGenerator.ApplyBusinessPortal(config, settings);
+        }
         var rules = config.Route.Rules.Where(r => r.DomainSuffix?.Contains("example.com") == true).ToArray();
         Assert.Equal(2, rules.Length);
         Assert.Equal("udp", rules[0].Network);
         Assert.Equal("proxy-udp", rules[0].Outbound);
         Assert.Equal("proxy", rules[1].Outbound);
         Assert.DoesNotContain(rules, r => r.Action == "reject");
-        Assert.Contains(config.Route.Rules, r => r.DomainSuffix?.Contains(BusinessPolicyDomains.PortalDomain) == true && r.Outbound == "proxy-udp");
+        Assert.Contains(config.Route.Rules, r => r.DomainSuffix?.Contains(BusinessPolicyDomains.PortalDomain) == true && r.Network == "udp" && r.Action == "reject");
     }
 
     [Theory]

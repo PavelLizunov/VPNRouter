@@ -226,6 +226,16 @@ public sealed class AutoFailoverEngine
     {
         var oldActive = _settings.Vless.ActiveServer ?? "";
 
+        if (ProductEdition.IsBusiness)
+        {
+            poolSource = "vless.servers";
+            return BusinessDefaults.GetServerChoices(_settings.Vless.GetEffectiveServers())
+                .Where(ConfigGenerator.IsBusinessPortalTransportAvailable)
+                .Where(IsCandidateUsable)
+                .Where(s => !IsAlreadyTried(s, oldActive))
+                .ToList();
+        }
+
         var subs = _settings.App.Subscriptions ?? new List<SubscriptionEntry>();
         var subscriptionPool = subs
             .Where(s => s != null && s.Enabled && s.Servers != null)

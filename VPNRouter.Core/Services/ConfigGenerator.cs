@@ -140,6 +140,7 @@ public static partial class ConfigGenerator
             BusinessDefaults.ApplyDns(config, settings.App.CustomRules ?? []);
             BusinessDefaults.ApplyDomainTransports(config, hasUdpProxy, proxyCarriesUdpNatively,
                 settings.App.BlockQuicOnTcpProxy);
+            ApplyBusinessPortal(config, settings);
         }
 
         return config;
