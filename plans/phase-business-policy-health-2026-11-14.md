@@ -224,3 +224,11 @@ The current delivery order is C/D/E/F for the Corp portal, with A/B/G tracked in
 - Claude returned no findings because of account verification failure. The owner then explicitly assigned the remaining review to the lead, who completed it against 7dd1445b and the corrected document. This is a lead-agent review, with no independent-model result. The failed provider is not a remaining planning blocker and no replacement agent was launched.
 - Before the relevant implementation slice: reconcile the deployed backend and select the policy-only auth boundary; freeze the shared signature/normalization/key-rotation specification and migration procedure; demonstrate loopback ownership and physical-egress support, select independent controls and validate budgets. Each slice still receives the normal product-code reviews and tests. No live host access, worker job, helper execution or regional probe was performed for this plan review.
 - CI evidence: all seven checks completed successfully on 7dd1445b1054721cd8e9df75fc1a7e416ab43df2, including packaging-arch. The earlier inconsistent initial-head check record is superseded by this verified run. The final documentation correction receives fresh checks at its own SHA.
+
+### 9.7 Later private Corp delivery
+
+The owner later authorized implementation and private Corp rollout (slices C/D/E/F).
+Accepted source, installer and actual delivery evidence are tracked in
+[the Corp acceptance brief](phase-corp-portal-udp-association-2026-11-15.md).
+The planning-only review above remains a historical receipt; node-health slices
+A/B/G remain separate work.
