@@ -176,6 +176,10 @@ public class SingBoxDns
     [JsonPropertyName("strategy")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Strategy { get; set; } = "ipv4_only";
+
+    [JsonPropertyName("reverse_mapping")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ReverseMapping { get; set; }
 }
 
 public class DnsServer
