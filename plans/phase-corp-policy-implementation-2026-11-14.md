@@ -103,6 +103,15 @@ an incompatible backend rollback and retain the last accepted client policy.
 
 ## Outcome
 
+- Launch authorized by the owner on2026-11-15 after the green PR handback.
+  PR675 merged into business at47f8f2be; backend PR323 merged into main at7aad3a93.
+  WINBRAT preflight confirms .NET10.0.301, portable Inno and ample resources.
+  The private build helper now needs its existing portable compiler fallback;
+  this scoped fix changes no product behavior and retains the missing-SDK gate.
+  Verification is source/whitespace/secret checks, exact-head CI and the actual
+  private build on the leased WINBRAT. Preserve the full recovered private bundle;
+  rollout and data-plane proof are still in progress.
+
 - Source/CI readiness (2026-11-15): client `098b7d3496e1b3b7397b3903503c0a90ea376b04`
   passed all 13 applicable checks (three manual delivery jobs skipped). Backend
   `3116a257bb09678c634a58dbdbd9727ef2ed6509`, run `43714819498`, passed
