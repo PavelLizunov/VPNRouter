@@ -55,7 +55,7 @@ public static class DiagnosticsExporter
             AddCrashReports(staging, entries, warnings);
             AddOptionalLogTail(staging, Path.Combine(Path.GetTempPath(), "vpnrouter-trampoline.log"), "trampoline.log", entries);
 
-            AddLogTail(staging, AppPaths.SingBoxLogPath, "singbox-tail.log", entries, warnings);
+            AddLogTail(staging, SingBoxManager.DiagnosticLogPath, "singbox-tail.log", entries, warnings);
             var singBoxOld = Path.Combine(AppPaths.LogsDir, "singbox.old.log");
             if (File.Exists(singBoxOld))
                 AddLogTail(staging, singBoxOld, "singbox-old-tail.log", entries, warnings);

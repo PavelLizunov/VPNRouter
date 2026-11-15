@@ -201,8 +201,9 @@ public partial class MainWindowViewModel
         {
             if (File.Exists(AppPaths.CurrentConfigPath))
                 json = File.ReadAllText(AppPaths.CurrentConfigPath);
-            if (File.Exists(AppPaths.SingBoxLogPath))
-                log = DiagnosticsExporter.TailLines(AppPaths.SingBoxLogPath, 4_000);
+            var logPath = SingBoxManager.DiagnosticLogPath;
+            if (File.Exists(logPath))
+                log = DiagnosticsExporter.TailLines(logPath, 4_000);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

@@ -10,6 +10,37 @@ on:
   workflow_dispatch:
 
 jobs:
+  business-policy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      VPNROUTER_EXPECT_BUSINESS_POLICY_TESTS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - name: Exact source
+        run: git rev-parse HEAD
+      - name: Business compiled policy contracts
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true --filter "FullyQualifiedName~BusinessPolicy|FullyQualifiedName~BusinessDefaults" --logger "console;verbosity=normal"
+      - name: Upload synthetic policy screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: business-policy-screenshots-${{ matrix.os }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            VPNRouter.Tests/screenshots/business-policy-pending-340.png
+            VPNRouter.Tests/screenshots/business-policy-pending-420.png
+          if-no-files-found: error
+          retention-days: 14
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -154,7 +154,7 @@ public sealed class BusinessDefaultsTests
     }
 
     [Fact]
-    public void Dns_RussianBypassPrecedesProxyAndDirectExceptionsPrecedeApps()
+    public void Dns_ExplicitSiteDirectionsPrecedeRussianBypassAndApps()
     {
         var config = new SingBoxConfig();
         config.Dns.Rules = [new DnsRule { RuleSet = ["vpnrouter-geosite-ru"], Server = "vpn-dns" }];
@@ -162,7 +162,8 @@ public sealed class BusinessDefaultsTests
         var ru = config.Dns.Rules.FindIndex(r => r.RuleSet != null);
         Assert.Equal("local-dns", config.Dns.Rules[ru].Server);
         Assert.True(config.Dns.Rules.FindIndex(r => r.DomainSuffix?.Contains("uiscom.ru") == true) < ru);
-        Assert.True(config.Dns.Rules.FindIndex(r => r.DomainSuffix?.Contains("youtube.com") == true) > ru);
+        Assert.True(config.Dns.Rules.FindIndex(r => r.DomainSuffix?.Contains("youtube.com") == true) < ru);
+        Assert.True(config.Dns.Rules.FindIndex(r => r.ProcessName?.Contains("Telegram.exe") == true) > ru);
     }
 
     [Fact]

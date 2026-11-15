@@ -204,7 +204,9 @@ internal sealed class StartupPipeline
             Success: true,
             EarlyReturn: false,
             ProcessId: pid,
-            Duration: sw.Elapsed);
+            Duration: sw.Elapsed,
+            ConfigJson: configJson,
+            Profile: profile);
     }
 
     private void PreflightConflictAndDns(AppSettings settings, bool skipVpnConflictCheck)
@@ -770,7 +772,10 @@ internal sealed class StartupPipeline
         var singBox = new SingBoxManager(settings.SingBox, _host.Logger);
         singBox.Started += pid => _host.OnSingBoxStarted(pid);
         _host.SetSingBoxManager(singBox);
-        singBox.StartWithJson(configJson);
+        if (settings.BusinessPolicy is { } businessPolicy)
+            singBox.StartWithPolicyJson(configJson, businessPolicy, ct);
+        else
+            singBox.StartWithJson(configJson);
 
         for (int i = 0; i < 10; i++)
         {

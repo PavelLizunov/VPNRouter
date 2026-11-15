@@ -36,6 +36,8 @@ public partial class VpnEngine
         public void OnSingBoxStarted(int pid)
         {
             _startedHandle = _singBoxManager?.OwnedProcessHandle;
+            if (_engine._policySession is { } session && ReferenceEquals(session.Cancellation, _sessionCts))
+                session.HasRun = true;
             _engine.EnterPostStartPhase();
             _engine.SingBoxStarted?.Invoke(pid);
         }
@@ -120,6 +122,8 @@ public partial class VpnEngine
         {
             _singBoxManager = manager;
             _engine._singBox = manager;
+            manager.PolicyConfigurationAccepted += launch =>
+                _engine.ObservePolicyAcceptance(manager, launch, _sessionCts);
             manager.Crashed += (_, _) =>
             {
                 if (ReferenceEquals(_engine._singBox, manager))

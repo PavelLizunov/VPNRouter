@@ -488,6 +488,16 @@ public class HealthMonitor : IDisposable
 
             try
             {
+                if (_singBox.HasBusinessPolicy)
+                {
+                    if (!RunTunOrphanRecoveryCleanup(ct) || ct.IsCancellationRequested || _isStopping) return;
+                    // Policy-owned recovery reuses the last typed source. This
+                    // monitor's startup settings may predate a published policy.
+                    _singBox.Restart();
+                    _lastFullRestart = DateTime.UtcNow;
+                    Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+                    return;
+                }
                 var scan = _scanner.ScanForProfile(_activeProfile);
                 var configJson = GenerateConfigJson(scan.ProcessNames);
 
@@ -598,12 +608,13 @@ public class HealthMonitor : IDisposable
 
     private bool TryHotReloadViaApi(string configJson)
     {
+        if (ProductEdition.IsBusiness || _singBox.HasBusinessPolicy) return false;
         if (HotReloadHookForTests is { } hook)
             return hook(configJson);
 
-        var path = _singBox.WriteConfigToDisk(configJson);
         try
         {
+            var path = _singBox.WriteConfigToDisk(configJson);
             return _api.ReloadConfigAsync(path).GetAwaiter().GetResult();
         }
         catch (Exception ex)
@@ -615,7 +626,7 @@ public class HealthMonitor : IDisposable
 
     private void OnDebounceElapsed(object? state)
     {
-        if (_isStopping) return;
+        if (_isStopping || ProductEdition.IsBusiness || _singBox.HasBusinessPolicy) return;
 
         try
         {

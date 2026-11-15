@@ -12,23 +12,42 @@ internal static class BusinessBootstrap
         JsonSerializer.Deserialize<List<CustomRule>>(ReadResource("VPNRouter.Business.Rules"),
             ProfileManager.SafeJsonOptions) ?? throw new InvalidDataException("Business rules missing.");
 
-    internal static void Apply(AppSettings settings, ISettingsStore store, string? bundleDirectory = null)
+    internal static BusinessPolicyCoordinator? Apply(AppSettings settings, ISettingsStore store, string? bundleDirectory = null)
         => Apply(settings, store, ReadConnection(), bundleDirectory ?? AppContext.BaseDirectory,
             AppPaths.GeoDir, AppPaths.ConfigYamlPath);
 
-    internal static void Apply(AppSettings settings, ISettingsStore store, string connection,
+    internal static BusinessPolicyCoordinator? Apply(AppSettings settings, ISettingsStore store, string connection,
         string bundleDirectory, string geoDirectory, string settingsPath)
     {
         BusinessProvisioningStore.ValidateBundle(connection);
-        BusinessDefaults.Apply(settings, BusinessClientConfiguration.SelectStartupConnection(settings, connection), ReadRules());
-        foreach (var name in new[] { "geoip-ru.srs", "geosite-ru.srs" })
+        BusinessPolicyCoordinator? policy = null;
+        try
         {
-            var source = Path.Combine(bundleDirectory, "geo", name);
-            if (!File.Exists(source) || !RuleSetFile.IsValidBinary(source))
-                throw new InvalidDataException("Bundled Business bypass data missing.");
-            File.Copy(source, Path.Combine(geoDirectory, name), overwrite: true);
+            if (BusinessClientConfiguration.Parse(connection).Policy is { } configuration)
+            {
+                var dataDirectory = Path.GetDirectoryName(Path.GetFullPath(settingsPath))!;
+                policy = new(configuration, new BusinessPolicyStore(configuration, dataDirectory));
+                policy.Load();
+                if (policy.IsUnavailable) throw new BusinessPolicyStartupException();
+            }
+            BusinessDefaults.Apply(settings, BusinessClientConfiguration.SelectStartupConnection(settings, connection),
+                ReadRules(), policy?.Current);
+            settings.BusinessPolicy = policy?.Current;
+            foreach (var name in new[] { "geoip-ru.srs", "geosite-ru.srs" })
+            {
+                var source = Path.Combine(bundleDirectory, "geo", name);
+                if (!File.Exists(source) || !RuleSetFile.IsValidBinary(source))
+                    throw new InvalidDataException("Bundled Business bypass data missing.");
+                File.Copy(source, Path.Combine(geoDirectory, name), overwrite: true);
+            }
+            store.Save(settings, settingsPath);
+            return policy;
         }
-        store.Save(settings, settingsPath);
+        catch
+        {
+            policy?.Dispose();
+            throw;
+        }
     }
 
     internal static string ReadConnection()
@@ -53,4 +72,9 @@ internal static class BusinessBootstrap
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }
+}
+
+internal sealed class BusinessPolicyStartupException : Exception
+{
+    internal BusinessPolicyStartupException() : base("Business policy recovery is required.") { }
 }

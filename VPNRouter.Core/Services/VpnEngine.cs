@@ -178,8 +178,12 @@ public partial class VpnEngine : IDisposable
                 return;
             }
 
+            _sessionCts?.Cancel();
+            if (_singBox != null || _healthMonitor != null) TeardownInternal();
             _sessionCts?.Dispose();
             _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _policySession = new BusinessPolicySession(_sessionCts);
+            _policyReceipt = null;
             ResetFailoverContext(settings);
             try
             {
@@ -222,6 +226,8 @@ public partial class VpnEngine : IDisposable
 
     internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck)
     {
+        if (_policySession?.CanApply(settings.BusinessPolicy) == false)
+            throw new InvalidOperationException("A newer Business policy was already applied in this session.");
         _skipVpnConflictCheck = skipVpnConflictCheck;
         _warmupConfirmed = false;
         _postStartPhase = false;
@@ -281,7 +287,9 @@ public partial class VpnEngine : IDisposable
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            return await ApplyGatedAsync(settings, ct, forceRestart).ConfigureAwait(false);
+            using var linked = settings.BusinessPolicy == null ? null :
+                CancellationTokenSource.CreateLinkedTokenSource(ct, _sessionCts?.Token ?? CancellationToken.None);
+            return await ApplyGatedAsync(settings, linked?.Token ?? ct, forceRestart).ConfigureAwait(false);
         }
         finally
         {
@@ -291,13 +299,19 @@ public partial class VpnEngine : IDisposable
 
     private async Task<bool> ApplyGatedAsync(AppSettings settings, CancellationToken ct, bool forceRestart)
     {
+        if (_policySession?.CanApply(settings.BusinessPolicy) == false) return false;
         if (_sessionCts is null || _sessionCts.IsCancellationRequested)
         {
             _logger?.Warning("[VpnEngine] Apply skipped — no active session (stopped or never started)");
             return false;
         }
 
-        if (_singBox == null || !_singBox.IsRunning())
+        // Policy admission is finalized by ReloadPolicyJsonWithResult under the
+        // manager gate. A health restart can stop the handle after the readiness
+        // wait; the same uncancelled, previously running session still owns intent.
+        var continuingPolicySession = settings.BusinessPolicy != null &&
+            _policySession is { HasRun: true } policySession && IsCurrentPolicySession(policySession);
+        if (_singBox == null || (!continuingPolicySession && !_singBox.IsRunning()))
         {
             _logger?.Warning("[VpnEngine] Apply called but sing-box not running");
             return false;
@@ -311,6 +325,7 @@ public partial class VpnEngine : IDisposable
         var oldProfile = _activeProfile;
         var oldScanResult = _scanResult;
         var configCommitted = false;
+        var policyRestartAttempted = false;
 
         void RestoreActiveBaseline()
         {
@@ -399,13 +414,20 @@ public partial class VpnEngine : IDisposable
                 ? "[VpnEngine] Forced full restart (structural change)"
                 : "[VpnEngine] Applying config via full restart");
 
-            if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart: true))
+            if (settings.BusinessPolicy != null) ct.ThrowIfCancellationRequested();
+            policyRestartAttempted = settings.BusinessPolicy != null;
+            var restarted = settings.BusinessPolicy is { } businessPolicy
+                ? _singBox.ReloadPolicyJsonWithResult(configJson, businessPolicy, _sessionCts!.Token, ct)
+                : _singBox.ReloadConfigJsonWithResult(configJson, forceRestart: true);
+            if (!restarted)
             {
                 RestoreActiveBaseline();
+                if (policyRestartAttempted) AbortFailedPolicyRestart();
                 _logger?.Error("[VpnEngine] Apply failed: sing-box reload or restart was not confirmed");
                 OnStatus("Apply failed: sing-box reload or restart was not confirmed");
                 return false;
             }
+            if (settings.BusinessPolicy != null) ct.ThrowIfCancellationRequested();
 
             ActiveConfigMode = newConfigMode;
             ActiveRoutingMode = newRoutingMode;
@@ -425,6 +447,7 @@ public partial class VpnEngine : IDisposable
         {
             if (!configCommitted)
                 RestoreActiveBaseline();
+            if (policyRestartAttempted && !configCommitted) AbortFailedPolicyRestart();
             _logger?.Error(ex, "[VpnEngine] Apply failed");
             OnStatus($"Apply failed: {ex.Message}");
             return false;
@@ -460,6 +483,7 @@ public partial class VpnEngine : IDisposable
 
     private void TeardownInternal()
     {
+        Volatile.Write(ref _policyReceipt, null);
         OnStatus("Stopping...");
 
         try { _probeCts?.Cancel(); } catch { }

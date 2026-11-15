@@ -13,6 +13,7 @@ public partial class MainWindowViewModel
 {
     private async Task<bool> ApplyFreeConfigAsync(FreeConfigEntry entry)
     {
+        if (ProductEdition.IsBusiness || _businessRules != null) return false;
         try
         {
             if (entry.Status != FreeConfigStatus.Verified)

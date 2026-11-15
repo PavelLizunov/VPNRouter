@@ -79,7 +79,7 @@ public partial class SingBoxManager
     {
         try
         {
-            var path = AppPaths.SingBoxLogPath;
+            var path = _policyLaunch?.LogPath ?? AppPaths.SingBoxLogPath;
             if (!File.Exists(path)) return;
 
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read,
@@ -108,7 +108,7 @@ public partial class SingBoxManager
             for (var i = 0; i < keep; i++)
             {
                 var idx = (start + i) % TailLines;
-                _logger.Warning("[singbox] {Line}", buffer[idx]);
+                _logger.Warning("[singbox] {Line}", Diagnostics.DiagnosticsRedactor.RedactLogText(buffer[idx]));
             }
             _logger.Warning("[SingBoxManager] === end sing-box crash tail ===");
         }

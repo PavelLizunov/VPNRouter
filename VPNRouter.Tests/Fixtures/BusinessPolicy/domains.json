@@ -1,0 +1,112 @@
+{
+  "normalization": [
+    {
+      "input": "https://EXAMPLE.com/catalog/?q=one#part",
+      "expected": "example.com"
+    },
+    {
+      "input": "Example.COM.",
+      "expected": "example.com"
+    },
+    {
+      "input": "bücher.example",
+      "expected": "xn--bcher-kva.example"
+    },
+    {
+      "input": "https://bücher.example/path",
+      "expected": "xn--bcher-kva.example"
+    },
+    {
+      "input": "www.ck",
+      "expected": "www.ck"
+    },
+    {
+      "input": "city.kawasaki.jp",
+      "expected": "city.kawasaki.jp"
+    },
+    {
+      "input": "tenant.github.io",
+      "expected": "tenant.github.io"
+    },
+    {
+      "input": "co.uk",
+      "expected": null
+    },
+    {
+      "input": "github.io",
+      "expected": null
+    },
+    {
+      "input": "a.ck",
+      "expected": null
+    },
+    {
+      "input": "x.kawasaki.jp",
+      "expected": null
+    },
+    {
+      "input": "*",
+      "expected": null
+    },
+    {
+      "input": "*.example.com",
+      "expected": null
+    },
+    {
+      "input": "https://user@example.com/path",
+      "expected": null
+    },
+    {
+      "input": "127.0.0.1",
+      "expected": null
+    },
+    {
+      "input": "127.1",
+      "expected": null
+    },
+    {
+      "input": "0x7f000001",
+      "expected": null
+    },
+    {
+      "input": "999.1.1.1",
+      "expected": null
+    },
+    {
+      "input": "example..com",
+      "expected": null
+    },
+    {
+      "input": "example.com..",
+      "expected": null
+    },
+    {
+      "input": "-site.example",
+      "expected": null
+    },
+    {
+      "input": "site_.example",
+      "expected": null
+    },
+    {
+      "input": "xn--.example",
+      "expected": null
+    },
+    {
+      "input": "example.com:443",
+      "expected": null
+    },
+    {
+      "input": "ftp://example.com",
+      "expected": null
+    },
+    {
+      "input": "[2001:db8::1]",
+      "expected": null
+    },
+    {
+      "input": "https://example.com\\@other.example",
+      "expected": null
+    }
+  ]
+}

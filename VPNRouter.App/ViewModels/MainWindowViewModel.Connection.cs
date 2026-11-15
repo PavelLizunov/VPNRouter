@@ -66,6 +66,11 @@ public partial class MainWindowViewModel
     {
         Dispatcher.UIThread.Post(() =>
         {
+            if (_businessPolicyApplyActive && status != "Stopped")
+            {
+                if (!_businessPolicyStopRequested) StatusText = Core.Localization.Strings.BusinessPolicyApplying;
+                return;
+            }
             if (status.StartsWith("Connected") || status.StartsWith("VPN Router is running"))
             {
                 if (!IsConnected) return;
@@ -161,6 +166,16 @@ public partial class MainWindowViewModel
     private async Task ToggleConnectionAsync()
     {
         if (ProductEdition.IsBusiness && UpdateVm.IsDownloading) return;
+        if (_businessPolicyApplyActive)
+        {
+            await StopBusinessPolicyApplicationAsync();
+            return;
+        }
+        if (_businessPolicyStartupBlocked && !_engine.IsRunning)
+        {
+            StatusText = Core.Localization.Strings.BusinessPolicyRecoveryRequired;
+            return;
+        }
         if (ProductEdition.IsBusiness && _businessConfigurationFailed && !IsConnected)
         {
             StatusText = Core.Localization.Strings.BusinessConfigMissing;
@@ -407,8 +422,10 @@ public partial class MainWindowViewModel
     private async Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)> RunTwoPhaseStartAsync(
         CancellationToken ct, Func<bool> skipConflictCheck)
     {
+        var capturedSettings = CaptureBusinessConnectionSettings();
+        var skipConflict = skipConflictCheck();
         var startTask = Task.Run(
-            () => _engine.StartAsync(_settings, ct, skipConflictCheck()),
+            () => _engine.StartAsync(capturedSettings, ct, skipConflict),
             ct);
 
         var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
@@ -722,8 +739,9 @@ public partial class MainWindowViewModel
             if (applyInPlace)
             {
                 _logger.Information("[VM] ReconnectAsync applying new config via ApplyAsync(forceRestart=true)");
+                var capturedSettings = CaptureBusinessConnectionSettings();
                 var applied = await Task.Run(() => _engine.ApplyAsync(
-                    _settings,
+                    capturedSettings,
                     CancellationToken.None,
                     forceRestart: true));
                 if (applied)
@@ -810,6 +828,7 @@ public partial class MainWindowViewModel
         {
             IsConnecting = false;
             _isReconnecting = false;
+            TryApplyPendingBusinessPolicy();
         }
     }
 }

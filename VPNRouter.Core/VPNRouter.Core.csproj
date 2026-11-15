@@ -77,4 +77,8 @@
     <InternalsVisibleTo Include="VPNRouter.App" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\public_suffix_list.dat" LogicalName="VPNRouter.Business.PublicSuffixList" />
+  </ItemGroup>
+
 </Project>

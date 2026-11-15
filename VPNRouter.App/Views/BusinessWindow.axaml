@@ -218,6 +218,9 @@
             </Border>
             <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ConnectionStatus}" TextWrapping="Wrap" TextAlignment="Center"
                        MinHeight="24" Foreground="{DynamicResource TextSecondaryBrush}"/>
+            <TextBlock Text="{Binding #BusinessWindowRoot.Texts.PolicyStatus}" IsVisible="{Binding #BusinessWindowRoot.Texts.HasPolicyStatus}"
+                       AutomationProperties.AutomationId="BusinessPolicyStatus" TextWrapping="Wrap" TextAlignment="Center"
+                       FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
             <Border IsEnabled="{Binding !UpdateVm.IsDownloading}">
             <Button Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding !IsConnecting}"
                     Classes="solid" MinHeight="48" CornerRadius="{StaticResource RadiusPill}"

@@ -94,44 +94,53 @@ public partial class SingBoxManager : IDisposable
     {
         lock (_lifecycleGate)
         {
-            if (Volatile.Read(ref _disposed) != 0)
-            {
-                _logger.Debug("[SingBoxManager] ReloadConfigJson ignored — manager already disposed");
-                return false;
-            }
-            if (!_ownsTunLock)
-            {
-                _logger.Warning("[SingBoxManager] ReloadConfigJson ignored — manager does not own valid TUN lease");
-                return false;
-            }
-
-            if (_exactStopUnconfirmed)
-            {
-                StopInternal(releaseLock: false);
-                if (State != SingBoxState.Stopped)
-                    return false;
-
-                forceRestart = true;
-            }
-
-            _logger.Information("[SingBoxManager] Reloading config{Mode}",
-                forceRestart ? " (force restart, no hot-reload attempt)" : "");
-            _currentConfigPath = WriteJsonToDisk(configJson);
-
-            if (!forceRestart && TryHotReload())
-                return true;
-
-            if (!forceRestart)
-                _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
-
-            return RestartCore();
+            if (_businessPolicy != null) return false;
+            return ReloadConfigJsonCore(configJson, forceRestart);
         }
+    }
+
+    private bool ReloadConfigJsonCore(string configJson, bool forceRestart)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            _logger.Debug("[SingBoxManager] ReloadConfigJson ignored — manager already disposed");
+            return false;
+        }
+        if (!_ownsTunLock)
+        {
+            _logger.Warning("[SingBoxManager] ReloadConfigJson ignored — manager does not own valid TUN lease");
+            return false;
+        }
+
+        if (_exactStopUnconfirmed)
+        {
+            StopInternal(releaseLock: false);
+            if (State != SingBoxState.Stopped)
+                return false;
+
+            forceRestart = true;
+        }
+
+        _logger.Information("[SingBoxManager] Reloading config{Mode}",
+            forceRestart ? " (force restart, no hot-reload attempt)" : "");
+        _currentConfigPath = WriteJsonToDisk(configJson);
+
+        if (_businessPolicy != null) forceRestart = true;
+        if (!forceRestart && TryHotReload())
+            return true;
+
+        if (!forceRestart)
+            _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
+
+        return RestartCore();
     }
 
     public bool TryReloadConfigJson(string configJson)
     {
         lock (_lifecycleGate)
         {
+            // The Clash endpoint does not acknowledge a loaded policy configuration.
+            if (_businessPolicy != null) return false;
             if (Volatile.Read(ref _disposed) != 0)
             {
                 _logger.Debug("[SingBoxManager] TryReloadConfigJson ignored — manager already disposed");

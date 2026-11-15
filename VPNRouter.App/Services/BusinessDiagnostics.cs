@@ -32,6 +32,9 @@ internal sealed class BusinessDiagnostics(BusinessClientConfiguration configurat
     public async Task<string> CollectAsync(CancellationToken ct)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+        ct.ThrowIfCancellationRequested();
+        if (dataDirectory == null || Path.GetFullPath(dataDirectory) == Path.GetFullPath(AppPaths.DataDir))
+            Core.Services.SingBoxManager.PreservePolicyDiagnosticLog();
         var root = reportRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "VPNRouterBusinessSupport", "Client");
         BusinessPrivateFiles.CreateDirectory(root);
