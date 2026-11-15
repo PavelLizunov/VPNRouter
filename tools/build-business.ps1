@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path -LiteralPath $ConnectionFile -PathType Leaf)) { throw 'Private connection file missing.' }
 $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+if (-not (Test-Path $iscc)) { $iscc = 'C:\android-build\tools\innosetup\ISCC.exe' }
 if (-not (Test-Path $iscc)) { throw 'Required Inno Setup SDK missing; do not install it automatically.' }
 $version = [regex]::Match((Get-Content (Join-Path $root 'VPNRouter.Core\AppVersion.cs') -Raw), 'Version = "([^"]+)"').Groups[1].Value
 if (-not $version) { throw 'Source version missing.' }
