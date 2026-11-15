@@ -59,14 +59,43 @@ outside this source tree. Verify these rather than infer them from templates.
 
 ## Six gates
 
-- Build: N/A for instructions; runtime code/builds require separate exact-SHA CI.
-- Tests: pending schema/examples and actual-report prompt dry run.
-- Documentation: in progress, reusable prompt and concrete integration contract.
-- Review: pending bounded Terra validation; do not claim Claude reviewed it.
-- Runtime: pending actual report retrieval; no new intake/model deployment claimed.
-- Integration: pending ownership and compatibility checks against current source.
+- Build: N/A, instruction-only change; no runtime code or local build.
+- Tests: PASS, actual reviewed case schema/bounds, every evidence reference and
+  receiver.public_analysis executed successfully. No full local test run.
+- Documentation: PASS, reusable system instruction, result contract, website/job
+  boundaries and acceptance examples in docs/business-diagnostics-analyzer.md.
+- Review: PASS for this preparation, two requested Terra dry runs plus lead
+  source review. Lead corrected excerpt-context and historical-verdict gaps.
+  No independent runtime-code review or deployed worker is claimed.
+- Runtime: PASS for intake evidence, real owner Windows upload found and full
+  ZIP/receipt preserved in verified permanent private archives.
+- Integration: PASS for existing public-reply compatibility and packet evidence;
+  website inbox/continuous analyzer integration remains design, not deployment.
 
 ## Outcome
 
-In progress. This initial record states source-confirmed behavior and bounded
-work before changes. Secrets, upload URLs/tokens and raw reports stay outside Git.
+The actual Corp report was received on 15 November at22:19:45UTC,25,315bytes,
+from a Windows device distinct from WINBRAT. Its full source archive is retained
+before parsing; no raw report, credentials, device names or receipt IDs enter Git.
+Both historical fatal reports are dated6November (versions2.50.6 and2.50.8);
+source log data does not establish a current tunnel/policy failure. Client report
+formation time is approximately11hours ahead of receiver time, with unknown cause.
+
+Source and live trusted manifest confirm both the corrected private installer
+and update channel use2.50.8. CheckAsync offers only a strictly greater version.
+This establishes the private delivery gap, not the exact installed source on the
+owner's Windows machine. The already verified private installer can be installed
+directly; no new shared update/version was published by this task.
+
+The first keyword-only packet omitted short crash headers. The corrected packet
+preserves full bounded app/crash context; a repeated Terra run correctly dates
+historical crashes. Lead tightened current-scope semantics after its broad
+runtime verdict still relied on historical events. Original model outputs remain
+private alongside the reviewed result; corrected instructions and the existing
+receiver validator enforce the final contract.
+
+Initial brief/ledger commit83a7a93d passed all9 exact-head checks. The final
+instruction commit receives fresh CI. No receiver service, website routes,
+production model worker, credential, upload identity or public analysis receipt
+was changed. Immediate automatic integration versus preparation-only scope is
+being clarified with the owner; this document cannot establish activation.
