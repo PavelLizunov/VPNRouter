@@ -1,16 +1,17 @@
 # Corp policy delivery runbook
 
-Status: preparation only. No merge, release, deployment or activation is authorized
-by this document. Backend operator setup and private capability export are under implementation;
-actual egress probing remains pending. These are not yet verified live operations.
-Do not run a live procedure from this draft.
+Status: source preparation for later authorized delivery. Backend operator setup,
+reader overlap, protected export and the owned sing-box runner are implemented
+and CI-verified at vpnctl `3116a25`. Managed-artifact integration and later live
+acceptance remain separate gates. No merge, release, deployment or activation is
+authorized by this document; no live operation is claimed.
 
 ## Intent, baseline and invariants
 
 Enable signed site policies for existing Corp employees at
 `https://admin.corp.ninitux.com`, preserving their VPN subscription and support
 identity. Source baseline: VPNRouter
-`b4703c1228ae8f4b2ca12bccf084db4a25f55360`, inspected 2026-11-15. The existing
+`098b7d3496e1b3b7397b3903503c0a90ea376b04`, inspected 2026-11-15. The existing
 [implementation brief](../plans/phase-corp-policy-implementation-2026-11-14.md)
 owns task intent, gates and outcomes; the
 [defect ledger](../plans/OPEN-DEFECTS.md) owns unresolved findings. Backend
@@ -54,12 +55,17 @@ recovery artifact, not as a routine rollback launcher.
 
 ## Backend and ingress prerequisites
 
-These are acceptance requirements for the pending backend delivery block. Obtain
-reviewed operator commands and an exact-SHA backend runbook before execution;
-this client document supplies no substitute SQL, CLI or live probe commands.
+These are acceptance requirements for later backend delivery. Operator setup,
+rotation, overlap and protected export are implemented in vpnctl PR #323; the
+ingress and actual-client delivery gates remain pending. Use its reviewed
+[backend runbook](https://github.com/PavelLizunov/vpnctl/blob/dsh/corp-policy-portal-20261115/docs/specs/corp-policy-delivery.md)
+at the accepted backend SHA before execution. This client document supplies no
+substitute SQL, CLI or live probe commands.
 
-1. Provision DNS A/AAAA records for the canonical host and a valid TLS chain.
-   Check every published address and IPv4/IPv6 path. Bind the isolated Corp
+1. Provision public IPv4 DNS A records for the canonical host and a valid TLS
+   chain. The current observer admits only canonical IPv4 exits; do not publish
+   an IPv6 delivery claim or AAAA path until that path has a separately reviewed
+   proof/denial contract. Check every published address. Bind the isolated Corp
    surface to that host and prevent alternate-host/operator-surface access.
 2. Restrict backend ingress to the intended trusted proxy path. The proxy must
    strip client-supplied forwarding/IP headers and set the single trusted client
@@ -74,26 +80,33 @@ this client document supplies no substitute SQL, CLI or live probe commands.
    reader credential. Do not reuse operator authentication. Export only the
    read capability and verification public keys into private client provisioning;
    a reader cannot log into the portal, publish or select another organization.
-5. Establish verified actual IPv4/IPv6 exits for every eligible effective route,
-   including NAT. Detoured entries are excluded from the Business choices. Bind mappings to subscription eligibility and route
+5. Establish verified actual IPv4 exits for every eligible effective route,
+   including NAT. IPv4-mapped IPv6 peers normalize to IPv4; true IPv6 observations
+   are rejected by the current backend. Detoured entries are excluded from the
+   Business choices. Bind mappings to subscription eligibility and route
    fingerprints, with stale/missing mappings denied. Inventory/DNS/ingress IPs,
    employee source IPs and a successful TCP handshake are not egress evidence.
-   Probe tooling and the private mapping lifecycle are pending prerequisites.
+   The owned-helper runtime and controller lifecycle are CI-covered; deployed
+   mapping verification remains a prerequisite.
 6. Verify browser IP gating before login and on protected requests, separate
    host-scoped sessions, CSRF/Origin checks, logout/revocation, rate limits and
    bounded publication. Disable a subscription and prove access disappears.
-   Reader fetches remain separately authenticated even with the client stopped.
+   Reader GET `/api/v1/corp/policy` requires an enabled binding/user and its
+   separate reader bearer, including while the client is stopped. Observer POST
+   `/api/v1/corp/egress-observation` instead requires a single-use probe challenge
+   and resolved peer, and must work during disabled setup. Do not place the
+   browser IP/password gate in front of these two machine-authenticated paths.
 7. Back up the backend database consistently with revisions, signed bytes, audit,
    binding and credential state. Back up signing keys separately with restricted
    access. Rehearse restore with publication disabled; preserve the highest
    published revision across database rollback before enabling writes again.
 
-Portal transport correction under review: the current task adds a dedicated
+Portal transport is implemented and CI-verified at the client baseline: a dedicated
 outbound for the exact selected direct VLESS Business choice, matching HTTPS DNS
 and portal UDP rejection before ordinary routing. Business failover must choose
 from that same available host-choice set. This preserves ordinary-site sibling
-behavior without using it for the portal. Exact-head CI and later actual egress
-verification remain required; source JSON alone does not prove the path.
+behavior without using it for the portal. Fresh exact-head CI after any change
+and later actual egress verification remain required; source JSON alone does not prove the path.
 
 TUN capture is also required. Existing user, mandatory LAN and auto-detected
 route exclusions precede sing-box domain rules. At activation, verify that every
@@ -116,11 +129,13 @@ Add exactly these fields under `business.policy`:
 | Field | Required value |
 |---|---|
 | `policy_id` | Stable backend identity, 1-64 ASCII letters/digits or `-_.` |
-| `endpoint` | Fixed HTTPS policy URL, normally `https://admin.corp.ninitux.com/api/v1/corp/policy`; no userinfo, query or fragment |
+| `endpoint` | Exactly `https://admin.corp.ninitux.com/api/v1/corp/policy` for this deployment; no userinfo, query or fragment |
 | `read_token` | Separate reader credential, 32-512 ASCII bearer-token characters |
 | `keys` | 1-4 objects containing exactly `id` and `spki`; unique identifier IDs and canonical base64 DER P-256 SubjectPublicKeyInfo public keys |
 
 The policy object accepts exactly `policy_id`, `endpoint`, `read_token`, `keys`.
+The parser allows other trusted HTTPS endpoints in general, but the portal
+routing protection and backend export here are verified for this fixed host/URL.
 See [wire v1](business-policy-wire-v1.md) and
 [BusinessPolicyConfiguration](../VPNRouter.App/Services/BusinessPolicyConfiguration.cs)
 for exact validation. A malformed optional capability disables sync while VPN
@@ -218,10 +233,12 @@ accounted for; removing their journal's signer too early blocks recovery.
 Shared binaries and signed policies cannot add verification keys.
 
 Rotate the reader through a private provisioning bridge preserving all other
-fields and the same namespace. Backend overlapping-reader support is pending
-operator work; do not assume it exists. If unavailable, schedule a coordinated
-cutover and document the bounded fetch outage, retain the accepted policy and
-verify all targets before revoking the old reader. Reader/key changes never reset
+fields and the same namespace. Backend operator controls support two overlapping
+readers: add the new reader,
+export its exact capability, migrate and verify the intended clients, then remove
+the old reader. Never remove the last reader. Retain the accepted policy during
+any fetch outage; an export alone does not prove client migration. Reader/key
+changes never reset
 the revision floor. An endpoint/identity change requires a separate explicitly
 reviewed trusted migration; it creates a different journal namespace.
 
@@ -236,8 +253,10 @@ for two isolated clients before any later owner activation decision:
 - Allowed verified Corp exits reach login in both Business modes; outside,
   spoofed, stale and disabled-subscription exits fail. Operator cookies and reader
   credentials cannot authenticate/publish; wrong password and logout work.
-- Portal TCP/UDP uses only the verified path described above, including IPv6,
-  same-host siblings and detours. Check actual external egress, not only JSON.
+- Portal TCP and its HTTPS DNS use only the selected verified VLESS path; portal
+  UDP is rejected. Exercise same-host siblings, failover and detours, plus IPv6
+  denial under the current IPv4-only observation contract. Check actual external
+  egress and TUN capture, not only JSON.
 - Search/add/edit/delete and both `direct` / `proxy` actions work; normalized URLs,
   protected conflicts, invalid domains, signed empty list and concurrent saves
   behave correctly. Deletions stay deleted after restart/save/shared update.

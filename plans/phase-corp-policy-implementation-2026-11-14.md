@@ -103,6 +103,30 @@ an incompatible backend rollback and retain the last accepted client policy.
 
 ## Outcome
 
+- Source/CI readiness (2026-11-15): client `098b7d3496e1b3b7397b3903503c0a90ea376b04`
+  passed all 13 applicable checks (three manual delivery jobs skipped). Backend
+  `3116a257bb09678c634a58dbdbd9727ef2ed6509`, run `43714819498`, passed
+  all 12 jobs, including canonical Cargo/just-ci, 14 real process/socket/TLS
+  tests, browser verification and static musl. A final cross-component diff
+  review of wire/export/eligibility/client validation and routing returned no
+  findings. A separate delivery-document review also returned no findings.
+  This final client block changes only delivery documentation and ledger/brief
+  receipts; local links, whitespace and secret scanning are checked, and its
+  exact-head CI remains required. Backend managed-artifact compatibility is a
+  separately pending CI gate. No deployment, private installer migration,
+  actual-client capture/egress or production activation is claimed or authorized.
+
+- Delivery-document reconciliation (2026-11-15): align this branch's runbook with
+  green client `098b7d3496e1b3b7397b3903503c0a90ea376b04` and backend
+  `3116a257bb09678c634a58dbdbd9727ef2ed6509`: exact portal reader URL,
+  implemented operator/overlap controls, IPv4-only observed exits, TCP/DNS pin,
+  UDP rejection and distinct browser/reader/observer ingress gates. Preserve
+  private installer migration, TUN capture and later authorized live acceptance.
+  The backend owned sing-box runner is green in PR #323 at that baseline;
+  managed-artifact integration and later live deployment remain separate gates.
+  Verification: independent source audit, path/contract/whitespace review and
+  exact-head client CI; no local build/runtime. Rollback is a task-branch revert.
+
 - Portal transport source block: dedicated exact-choice VLESS/HTTPS DNS, UDP rejection and a bounded Business failover candidate filter. Independent correctness, security and test-consumer reviewers ran on the complete working-tree diff. One confirmed failover integration defect was recorded before correction and covered by a restart callback that actually generates the new configuration. No remaining confirmed blocker from those reviews; full lifecycle/dataplane execution remains outside this source gate. Static whitespace checks pass; runtime checks are not run locally and fresh client CI is required.
 
 - Next verified block (2026-11-15): after backend 5758b2010ee24306cf19eb4576db83d7a534f1a6 passed all 12 CI checks, add operator preparation controls and constrain the client portal transport. The client must build a dedicated outbound from the exact selected direct VLESS Business choice, reject portal UDP before ordinary routing, and use a dedicated matching DNS path. Same-host siblings, health narrowing and automatic pool selection must not redirect this protected traffic. Invalid, chained or unavailable selections fail closed. Preserve ordinary-site transports and both modes; regression coverage includes Reality/WS/XHTTP siblings, selection changes, domain/subdomain precedence and unavailable selection. Rollback is a task-branch revert; runtime validation is exact-SHA CI only. Backend operator setup/rotation/export remains separate from later egress verification and activation.
