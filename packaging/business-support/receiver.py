@@ -399,7 +399,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply(401, {"error": "upload identity required"})
         return identity
 
-    def internal(self, retry=False):
+    def internal(self, retry=False, delete=False):
         store = self.server.store
         if not self.path.startswith("/internal/"):
             return False
@@ -416,7 +416,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         base = "/internal/corp-diagnostics/reports"
         match = re.fullmatch(base + r"/([0-9a-f]{64})(/retry)?", parsed.path)
         with store.lock:
-            if parsed.path == base and not retry:
+            if parsed.path == base and not retry and not delete:
                 query = parse_qs(parsed.query, keep_blank_values=True)
                 try:
                     if set(query) - {"limit", "cursor"} or any(len(v) != 1 for v in query.values()):
@@ -441,6 +441,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             receipt = load_receipt(store.root, match[1], identity) if match and not parsed.query else None
             if receipt is None or bool(match[2]) != retry:
                 self.reply(404, {"error": "not found"})
+                return True
+            if delete:
+                if (self.headers.get_content_type() != "application/json" or
+                        self.headers.get("Transfer-Encoding") or
+                        self.headers.get("Content-Length") != "2" or self.rfile.read(2) != b"{}"):
+                    self.reply(400, {"error": "empty JSON required"})
+                    return True
+                archive = store.root / (match[1] + ".zip")
+                metadata = store.root / (match[1] + ".json")
+                try:
+                    freed = archive.stat().st_size + metadata.stat().st_size
+                    # Remove the archive first: even a partial failure invalidates
+                    # the pair, so a late worker cannot recreate its receipt.
+                    archive.unlink()
+                    metadata.unlink()
+                except OSError:
+                    self.reply(503, {"error": "storage unavailable"})
+                else:
+                    self.reply(200, {"schema": 1, "state": "deleted", "freed_bytes": freed})
                 return True
             job = receipt.get("diagnosis") or {}
             if retry:
@@ -478,6 +497,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if receipt is not None:
                 self.reply(200, receipt)
                 return
+        self.reply(404, {"error": "not found"})
+
+    def do_DELETE(self):
+        if self.internal(delete=True):
+            return
         self.reply(404, {"error": "not found"})
 
     def do_POST(self):

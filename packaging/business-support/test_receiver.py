@@ -349,6 +349,125 @@ class InboxTests(unittest.TestCase):
         # Existing upload responses retain their byte-level JSON field contract.
         self.assertEqual(self.post(report())[1], public)
 
+    def test_delete_removes_live_pair_and_returns_actual_freed_bytes(self):
+        self.enable()
+        _, public = self.post(report())
+        report_id = public['report_id']
+        untouched = self.store.root / 'keep.txt'
+        untouched.write_bytes(b'foreign fixture')
+        before = sum(p.stat().st_size for p in self.store.root.iterdir())
+        expected = sum((self.store.root / (report_id + extension)).stat().st_size
+                       for extension in ('.zip', '.json'))
+        self.assertEqual(self.internal('/' + report_id, 'DELETE', body=b'{}'),
+                         (200, {'schema': 1, 'state': 'deleted', 'freed_bytes': expected}))
+        after = sum(p.stat().st_size for p in self.store.root.iterdir())
+        self.assertEqual(before - after, expected)
+        self.assertGreater(expected, 0)
+        self.assertEqual(list(self.store.root.iterdir()), [untouched])
+        self.assertEqual(untouched.read_bytes(), b'foreign fixture')
+        self.assertEqual(self.internal('/' + report_id), (404, {'error': 'not found'}))
+        self.assertEqual(self.internal('/' + report_id, 'DELETE', body=b'{}'),
+                         (404, {'error': 'not found'}))
+        self.assertEqual(self.internal()[1]['reports'], [])
+
+    def test_delete_requires_enabled_service_capability_and_is_not_public(self):
+        _, public = self.post(report())
+        path = '/' + public['report_id']
+        self.assertEqual(self.internal(path, 'DELETE', body=b'{}')[0], 404)
+        self.enable()
+        self.assertEqual(self.internal(path, 'DELETE', token=self.token, body=b'{}')[0], 401)
+        connection = http.client.HTTPConnection(*self.server.server_address, timeout=5)
+        try:
+            connection.request('DELETE', '/api/reports' + path, body=b'{}',
+                               headers={'Authorization': 'Bearer ' + self.token})
+            response = connection.getresponse()
+            self.assertEqual(response.status, 404)
+            response.read()
+        finally:
+            connection.close()
+        self.keys.write_text('{}')
+        self.assertEqual(self.internal(path, 'DELETE', body=b'{}')[0], 401)
+        self.assertTrue((self.store.root / (public['report_id'] + '.zip')).exists())
+
+    def test_delete_foreign_missing_and_expired_are_same_not_found(self):
+        self.enable()
+        foreign = self.root / 'foreign-client.json'
+        receiver.issue_identity(self.keys, 'https://example.invalid/api/reports', foreign, 'foreign')
+        token = json.loads(foreign.read_text())['token']
+        _, public = self.post(report(), token=token)
+        archive = self.store.root / (public['report_id'] + '.zip')
+        original = archive.read_bytes()
+        expected = (404, {'error': 'not found'})
+        self.assertEqual(self.internal('/' + public['report_id'], 'DELETE', body=b'{}'), expected)
+        self.assertEqual(self.internal('/' + 'f' * 64, 'DELETE', body=b'{}'), expected)
+        _, own = self.post(report())
+        load_receipt = receiver.load_receipt
+        expired_now = time.time() + receiver.RETENTION + 10
+        def expired(root, report_id, identity):
+            return load_receipt(root, report_id, identity, now=expired_now)
+        with mock.patch.object(receiver, 'load_receipt', side_effect=expired):
+            self.assertEqual(self.internal('/' + own['report_id'], 'DELETE', body=b'{}'), expected)
+        self.assertEqual(archive.read_bytes(), original)
+        self.assertTrue((self.store.root / (own['report_id'] + '.json')).exists())
+
+    def test_delete_rejects_bad_paths_and_bodies_without_changing_pair(self):
+        self.enable()
+        _, public = self.post(report())
+        path = '/' + public['report_id']
+        before = {p.name: p.read_bytes() for p in self.store.root.iterdir()}
+        for bad in ('/../keys.json', '/%2e%2e/keys.json', path + '/retry',
+                    path + '?extra=1', '', '/' + 'A' * 64):
+            with self.subTest(path=bad):
+                self.assertEqual(self.internal(bad, 'DELETE', body=b'{}')[0], 404)
+        for body in (b'', b'[]', b'null', b'{"all":true}', b'{ }'):
+            with self.subTest(body=body):
+                self.assertEqual(self.internal(path, 'DELETE', body=body)[0], 400)
+        self.assertEqual({p.name: p.read_bytes() for p in self.store.root.iterdir()}, before)
+
+    def test_delete_refuses_symlinked_archive_without_touching_target(self):
+        self.enable()
+        _, public = self.post(report())
+        report_id = public['report_id']
+        archive = self.store.root / (report_id + '.zip')
+        foreign = self.root / 'foreign.zip'
+        foreign.write_bytes(archive.read_bytes())
+        original = foreign.read_bytes()
+        archive.unlink()
+        archive.symlink_to(foreign)
+        self.assertEqual(self.internal('/' + report_id, 'DELETE', body=b'{}'),
+                         (404, {'error': 'not found'}))
+        self.assertTrue(archive.is_symlink())
+        self.assertEqual(foreign.read_bytes(), original)
+        self.assertTrue((self.store.root / (report_id + '.json')).exists())
+
+    def test_delete_partial_io_failure_is_explicit_and_cannot_publish_analysis(self):
+        self.enable()
+        _, public = self.post(report())
+        report_id = public['report_id']
+        metadata = self.store.root / (report_id + '.json')
+        archive = self.store.root / (report_id + '.zip')
+        with mock.patch.object(Path, 'unlink', side_effect=OSError('synthetic unlink failure')):
+            self.assertEqual(self.internal('/' + report_id, 'DELETE', body=b'{}'),
+                             (503, {'error': 'storage unavailable'}))
+        self.assertTrue(archive.exists())
+        self.assertTrue(metadata.exists())
+        unlink = Path.unlink
+        def fail_metadata(path, *args, **kwargs):
+            if path == metadata:
+                raise OSError('synthetic unlink failure')
+            return unlink(path, *args, **kwargs)
+        with mock.patch.object(Path, 'unlink', fail_metadata):
+            self.assertEqual(self.internal('/' + report_id, 'DELETE', body=b'{}'),
+                             (503, {'error': 'storage unavailable'}))
+        self.assertFalse(archive.exists())
+        self.assertTrue(metadata.exists())
+        self.assertIsNone(receiver.load_receipt(self.store.root, report_id, self.store.inbox[0]))
+        # A failed second unlink leaves no tombstone or renamed copy; the
+        # ordinary retention sweep also clears the remaining bounded receipt.
+        self.store.clock = lambda: time.time() + receiver.RETENTION + 10
+        self.store.prune()
+        self.assertFalse(list(self.store.root.iterdir()))
+
     def test_foreign_reports_and_missing_archive_indistinguishable(self):
         self.enable()
         foreign = self.root / 'foreign-client.json'
