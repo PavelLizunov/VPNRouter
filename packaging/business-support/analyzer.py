@@ -424,7 +424,7 @@ def validate_result(value, packet, refs, names=()):
                     raise Invalid('operator reference')
                 scopes.append('current')
             elif item.get('kind') == 'packet' and set(item) == {'kind', 'field'}:
-                fields = {'received_utc', 'report_id', 'input_sha256', 'prompt_version'}
+                fields = {'received_utc', 'report_id', 'input_sha256', 'prompt_version', 'files'}
                 fields.update('collector.' + key for key, scalar in packet.get('collector', {}).items()
                               if type(scalar) in (str, bool, int))
                 if not isinstance(item['field'], str) or item['field'] not in fields:

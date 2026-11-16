@@ -164,3 +164,15 @@ packet and no result was published. A narrow follow-up preserves source line
 boundaries with synthetic empty/trailing-line coverage and fresh CI. Windows
 private/shared2.50.9 builds remain pinned to accepted38ae56d8; this support-only
 repair changes no client binary, provisioning, version or embedded rules.
+
+The corrected real packet prepares8files/220cited lines, including40historical
+and zero current lines. A retained unaltered Terra response exposed a second
+strict-publication gap: the model correctly cites the existing file inventory
+for missing-current-data evidence, while validation initially admits only
+scalar metadata. A narrow follow-up admits files as unknown-scope evidence only;
+the runtime-failure proof guard remains unchanged. No failed result was published.
+The exact UTF-8 original was recovered through an ASCII-safe management transfer;
+the earlier decoded transport capture is retained separately. It also demonstrates
+prompt ambiguity around current clock observations versus unknown packet scope.
+The executable scope rule is now explicit in the instruction; fresh automatic
+analysis must validate before any ready/publication claim.

@@ -120,6 +120,18 @@ class WorkerTests(unittest.TestCase):
             with self.assertRaises(analyzer.Invalid):
                 analyzer.validate_result(candidate, packet, refs, names)
 
+    def test_existing_file_inventory_is_unknown_scope_evidence_only(self):
+        packet, refs, names = analyzer.prepare(self.root, self.receipt, self.config)
+        candidate = result([{'kind': 'packet', 'field': 'files'}])
+        analyzer.validate_result(candidate, packet, refs, names)
+        candidate['assessments'][0].update(verdict='problem_found', time_scope='current')
+        with self.assertRaises(analyzer.Invalid):
+            analyzer.validate_result(candidate, packet, refs, names)
+        candidate['assessments'][0].update(verdict='insufficient_data', time_scope='unknown')
+        candidate['assessments'][0]['evidence'][0]['field'] = 'missing_files'
+        with self.assertRaises(analyzer.Invalid):
+            analyzer.validate_result(candidate, packet, refs, names)
+
     def test_timeout_is_bounded_and_retries_keep_previous_public_result(self):
         old = result()['public_analysis']
         path = self.root / (self.receipt['report_id'] + '.json')
