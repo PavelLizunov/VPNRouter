@@ -376,3 +376,16 @@ A separate exact-profile probe confirms ambiguous final public state and packet
 collector citation instructions. Clarify only that instruction, validate its
 example against the unchanged publisher; the refined real probe passes in 11
 seconds. Exact-head CI and automatic reprocessing remain pending. Keep originals.
+
+## Owner-requested report deletion
+
+The owner requests deleting diagnostics so they disappear and free storage.
+Implement DELETE on the existing private scoped inbox, removing the JSON receipt
+and ZIP under the shared mutation lock. The companion Corp route must retain
+egress/session/same-origin/CSRF gates and explicit browser confirmation. Preserve
+foreign reports, existing upload compatibility and all credentials. Verify actual
+space reclamation, invalid/foreign requests and late-result discard with targeted
+tests. The owner explicitly forbids every rebuild. The Corp Caddy edge delegates
+authorization to the existing side-effect-free normalization endpoint, then calls
+the private Python receiver; exact static JS/CSS paths update the existing HTML
+shell through normal DOM rendering. No binary replacement or compilation.

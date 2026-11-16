@@ -17,6 +17,11 @@ Private endpoints, never forwarded by the public support ingress:
 - GET `/internal/corp-diagnostics/reports?limit=50&cursor=ID`.
 - GET `/internal/corp-diagnostics/reports/ID`.
 - POST `/internal/corp-diagnostics/reports/ID/retry`, empty JSON body.
+- DELETE `/internal/corp-diagnostics/reports/ID`, empty JSON body. Success200
+  `{"schema":1,"state":"deleted","freed_bytes":N}` removes the live JSON/ZIP pair
+  under the shared lock. A late analyzer completion is discarded. An I/O failure
+  returns503; archive-first removal can leave only a bounded receipt until existing
+  retention cleanup. Foreign/expired/missing reports are the same404.
 
 All require `Authorization: Bearer SERVICE_TOKEN`. No upload identity or browser
 cookie grants this access. Force configured Corp identity on every lookup; an
@@ -101,6 +106,10 @@ Browser pages/assets:
 - GET `/assets/corp-diagnostics.js`: static secret-free asset.
 - GET `/api/corp/reports` and `/api/corp/reports/ID`: authenticated scoped data.
 - POST `/api/corp/reports/ID/retry`: existing same-origin and session CSRF checks.
+- DELETE `/api/corp/reports/ID`: the same egress/session/origin/CSRF gates;
+  explicit browser confirmation before deleting both report and archive. The
+  no-build deployment delegates those gates through the existing side-effect-free
+  normalization endpoint at the Caddy edge; only200 permits the private DELETE.
 
 Reuse host isolation, trusted real-IP resolution, enabled binding, current exit
 fingerprints, session generations and security headers. Reject a missing/stale

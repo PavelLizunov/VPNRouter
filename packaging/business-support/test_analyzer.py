@@ -1,5 +1,6 @@
 """Synthetic worker/receiver contracts; no external service or private fixture."""
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -194,6 +195,34 @@ class WorkerTests(unittest.TestCase):
             return result(), None
         self.assertEqual(analyzer.run_once(self.root, self.config, delete)['state'], 'discarded')
         self.assertFalse((self.root / (self.receipt['report_id'] + '.json')).exists())
+
+    def test_http_delete_while_provider_runs_discards_result_and_removes_pair(self):
+        store = receiver.Store(self.root, self.keys, '127.0.0.1')
+        store.inbox = (self.identity, 's' * 32)
+        server = receiver.Receiver(('127.0.0.1', 0), store)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        def delete(config, packet):
+            connection = http.client.HTTPConnection(*server.server_address, timeout=5)
+            try:
+                connection.request('DELETE', '/internal/corp-diagnostics/reports/' + self.receipt['report_id'],
+                                   body=b'{}', headers={'Authorization': 'Bearer ' + 's' * 32,
+                                                       'Content-Type': 'application/json'})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertEqual(json.loads(response.read())['state'], 'deleted')
+            finally:
+                connection.close()
+            return result(), 'synthetic-model'
+        try:
+            self.assertEqual(analyzer.run_once(self.root, self.config, delete)['state'], 'discarded')
+            self.assertFalse(list(self.root.glob('*.json')))
+            self.assertFalse(list(self.root.glob('*.zip')))
+            self.assertEqual(analyzer.run_once(self.root, self.config, delete)['state'], 'idle')
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
 
     def test_archive_hash_and_identity_are_checked_before_provider(self):
         called = []
