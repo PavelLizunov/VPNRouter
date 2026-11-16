@@ -239,6 +239,39 @@ class WorkerTests(unittest.TestCase):
         available = analyzer.load_config(self.config_path, self.root)
         self.assertEqual(analyzer.run_once(self.root, available, lambda *args: (result(), None))['state'], 'ready')
 
+    def test_thinking_profile_is_explicit_bounded_and_requeues_terminal_result(self):
+        raw = json.loads(self.config_path.read_text())
+        for mode in ('enabled', 'disabled'):
+            self.config_path.write_text(json.dumps(dict(raw, wire_api='chat_completions', thinking_mode=mode)))
+            self.assertEqual(analyzer.load_config(self.config_path, self.root)['thinking_mode'], mode)
+        for wire, mode in (('responses', 'disabled'), ('chat_completions', 'unbounded'),
+                           ('chat_completions', None), ('chat_completions', {})):
+            self.config_path.write_text(json.dumps(dict(raw, wire_api=wire, thinking_mode=mode)))
+            with self.assertRaises(analyzer.Invalid):
+                analyzer.load_config(self.config_path, self.root)
+        baseline = dict(self.config, wire_api='chat_completions')
+        # Persisted pre-option job encoding: an unchanged request must not be billed again.
+        legacy = {'input': self.receipt['sha256'], 'prompt': baseline['_prompt_sha'],
+                  'model': baseline['model_name'], 'url': baseline['model_api_url'],
+                  'wire': baseline['wire_api'], 'facts': baseline['_facts'], 'provider_available': True}
+        receipt = self.metadata()
+        receipt['diagnosis'] = {'state': 'unavailable', 'revision': analyzer.digest(analyzer.encode(legacy))}
+        receiver.atomic_json(self.root / (receipt['report_id'] + '.json'), receipt)
+        self.assertEqual(analyzer.run_once(self.root, baseline, lambda *args: self.fail('legacy report requeued'))['state'], 'idle')
+        enabled = dict(baseline, thinking_mode='enabled')
+        calls = []
+        def provider(config, packet):
+            calls.append(config['thinking_mode'])
+            if config['thinking_mode'] == 'enabled':
+                raise analyzer.Invalid('synthetic exhausted output')
+            return result(), 'synthetic-model'
+        self.assertEqual(analyzer.run_once(self.root, enabled, provider)['state'], 'unavailable')
+        self.assertEqual(analyzer.run_once(self.root, enabled, provider)['state'], 'idle')
+        self.assertEqual(analyzer.run_once(self.root, dict(enabled, thinking_mode='disabled'), provider)['state'], 'ready')
+        self.assertEqual(calls, ['enabled', 'disabled'])
+        for key, value in self.receipt.items():
+            self.assertEqual(self.metadata()[key], value)
+
     def test_process_lock_prevents_parallel_provider_requests(self):
         descriptor = os.open(self.root / '.analyzer.lock', os.O_RDWR | os.O_CREAT, 0o600)
         try:
@@ -323,6 +356,7 @@ class WorkerTests(unittest.TestCase):
             headers = connection.request_fields['headers']
             self.assertEqual(headers['User-Agent'], 'VPNRouter-Corp-Diagnostics/1.0')
             self.assertEqual(headers['Authorization'], 'Bearer synthetic-provider-key')
+            self.assertNotIn('thinking', json.loads(connection.request_fields['body']))
             session = headers['X-Opencode-Session']
             self.assertRegex(session, '^[0-9a-f]{64}$')
             self.assertNotEqual(session, report_id)
@@ -334,6 +368,14 @@ class WorkerTests(unittest.TestCase):
         with mock.patch.object(analyzer.http.client, 'HTTPSConnection', return_value=connection):
             analyzer.request_model(config, packet)
         self.assertNotIn('X-Opencode-Session', connection.request_fields['headers'])
+        for mode in ('enabled', 'disabled'):
+            config['thinking_mode'] = mode
+            connection = Connection(Response(chat))
+            with mock.patch.object(analyzer.http.client, 'HTTPSConnection', return_value=connection):
+                analyzer.request_model(config, packet)
+            payload = json.loads(connection.request_fields['body'])
+            self.assertEqual(payload['thinking'], {'type': mode})
+            self.assertEqual(payload['max_tokens'], 6000)
 
     def test_aliases_preserve_relationships_and_scrub_is_idempotent(self):
         aliases = {}
