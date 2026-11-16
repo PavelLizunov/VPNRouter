@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Private diagnostic storage behind the existing HTTPS ingress; stdlib only."""
 import argparse
+import contextlib
+import fcntl
 import hashlib
 import hmac
 import http.server
@@ -19,10 +21,13 @@ import threading
 import time
 import unicodedata
 import zipfile
+from urllib.parse import urlsplit, parse_qs
 
 MAX_BODY = 24 * 1024 * 1024
 MAX_EXPANDED = 20 * 1024 * 1024
 QUOTA = 512 * 1024 * 1024
+MAX_CONCURRENT_REQUESTS = 4
+UPLOAD_HEADROOM = MAX_CONCURRENT_REQUESTS * (MAX_BODY + 4096)
 RETENTION = 7 * 86400
 ENTRY = re.compile(r"(?:README\.txt|summary\.json|(?:app|core|launch|legacy-launch|crash)-[0-9]{2}\.txt)")
 MAX_RECEIPT = 65536
@@ -58,9 +63,9 @@ def validate_archive(path):
     """Never extract caller paths; validate bounded contents before private storage."""
     # The official collector emits ordinary ZIPs without archive comments/ZIP64.
     # Bound the central directory before ZipFile allocates its entry objects.
-    if Path(path).stat().st_size < 22:
+    if (os.fstat(path.fileno()).st_size if hasattr(path, "fileno") else Path(path).stat().st_size) < 22:
         raise ValueError("invalid ZIP footer")
-    with open(path, "rb") as source:
+    with (contextlib.nullcontext(path) if hasattr(path, "fileno") else open(path, "rb")) as source:
         source.seek(-22, os.SEEK_END)
         signature, disk, directory_disk, disk_count, count, directory_size, offset, comment = struct.unpack("<4s4H2LH", source.read(22))
     if (signature != b"PK\x05\x06" or disk or directory_disk or comment or
@@ -78,7 +83,8 @@ def validate_archive(path):
         summary = None
         for entry in entries:
             if (not ENTRY.fullmatch(entry.filename) or entry.flag_bits & 1 or
-                    entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)):
+                    entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED) or
+                    stat.S_ISLNK(entry.external_attr >> 16)):
                 raise ValueError("unsupported entry")
             if entry.file_size > 2 * 1024 * 1024:
                 raise ValueError("entry too large")
@@ -125,8 +131,115 @@ def client_reported_device(summary):
     return result
 
 
+class MutationLock:
+    """Threads and cooperating processes serialize mutations on the directory inode."""
+    def __init__(self, root):
+        self.root = root
+        self.local = threading.RLock()
+        self.state = threading.local()
+
+    def __enter__(self):
+        self.local.acquire()
+        depth = getattr(self.state, "depth", 0)
+        descriptor = None
+        try:
+            if depth == 0:
+                descriptor = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+                self.state.fd = descriptor
+            self.state.depth = depth + 1
+            return self
+        except BaseException:
+            if descriptor is not None:
+                os.close(descriptor)
+            self.local.release()
+            raise
+
+    def __exit__(self, *_):
+        self.state.depth -= 1
+        if self.state.depth == 0:
+            os.close(self.state.fd)
+        self.local.release()
+
+
+def enabled_identity(key_file, identity):
+    try:
+        records = json.loads(Path(key_file).read_text())
+        return records.get(identity, {}).get("enabled") is True
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+
+
+def private_file(path, root, limit=65536):
+    path = Path(path).resolve()
+    if path == Path(root).resolve() or Path(root).resolve() in path.parents:
+        raise ValueError("private configuration overlaps reports")
+    with open(path, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW | os.O_NONBLOCK)) as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("regular private file required")
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("private file too large")
+    return data
+
+
+def load_receipt(root, report_id, identity, now=None):
+    if not re.fullmatch(r"[0-9a-f]{64}", report_id):
+        return None
+    try:
+        path = Path(root) / (report_id + ".json")
+        with open(path, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW | os.O_NONBLOCK)) as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or (now or time.time()) - info.st_mtime > RETENTION:
+                return None
+            raw = stream.read(MAX_RECEIPT + 1)
+        if len(raw) > MAX_RECEIPT:
+            return None
+        value = json.loads(raw)
+        archive = Path(root) / (report_id + ".zip")
+        if (not isinstance(value, dict) or value.get("identity") != identity or
+                value.get("report_id") != report_id or archive.is_symlink() or not archive.is_file() or
+                (now or time.time()) - archive.stat().st_mtime > RETENTION):
+            return None
+        return value
+    except (OSError, ValueError, UnicodeError, RecursionError):
+        return None
+
+
+def update_receipt(root, report_id, value, quota=QUOTA):
+    path = Path(root) / (report_id + ".json")
+    info = path.stat()
+    raw = json.dumps(value, ensure_ascii=True).encode()
+    if len(raw) > MAX_RECEIPT:
+        raise ValueError("receipt too large")
+    used = sum(p.stat().st_size for p in Path(root).iterdir()
+               if not p.is_symlink() and p.is_file())
+    # A separate analyzer cannot see the receiver's in-memory reservations.
+    # Keep capacity for every bounded streaming request, including its metadata.
+    if used + len(raw) + UPLOAD_HEADROOM > quota:
+        raise OSError("storage quota")
+    atomic_json(path, value, preserved_ns=(info.st_atime_ns, info.st_mtime_ns))
+
+
+def report_summary(receipt):
+    job = receipt.get("diagnosis")
+    job = job if isinstance(job, dict) else {}
+    result = job.get("result") or {}
+    assessments = result.get("assessments", [])
+    verdicts = [a.get("verdict") for a in assessments if isinstance(a, dict)]
+    verdict = ("problem_found" if "problem_found" in verdicts else
+               "insufficient_data" if "insufficient_data" in verdicts else
+               "no_problem_evidenced" if verdicts else None)
+    device = client_reported_device({"device": receipt.get("client_reported_device")})
+    return {"report_id": receipt["report_id"], "received_utc": receipt.get("received_utc"),
+            "bytes": receipt.get("bytes"), "device_label": device.get("computer_name"),
+            "analysis_state": job.get("state", "received"), "verdict": verdict,
+            "summary_ru": result.get("owner_explanation"), "model": job.get("requested_model"),
+            "updated_utc": job.get("updated_utc")}
+
+
 class Store:
-    def __init__(self, root, key_file, trusted_proxy, quota=QUOTA):
+    def __init__(self, root, key_file, trusted_proxy, quota=QUOTA, inbox_config=None):
         self.root = Path(root)
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         if self.root.is_symlink():
@@ -135,7 +248,16 @@ class Store:
         self.key_file = Path(key_file)
         self.proxy = str(ipaddress.ip_address(trusted_proxy))
         self.quota = quota
-        self.lock = threading.Lock()
+        self.lock = MutationLock(self.root)
+        self.inbox = None
+        if inbox_config:
+            config = json.loads(private_file(inbox_config, self.root))
+            identity = config.get("corp_identity_sha256", "")
+            token = private_file(config["service_token_file"], self.root, 512).decode("ascii").strip()
+            if (config.get("schema") != 1 or not re.fullmatch(r"[0-9a-f]{64}", identity) or
+                    not re.fullmatch(r"[A-Za-z0-9._~+/=-]{32,512}", token)):
+                raise ValueError("invalid inbox configuration")
+            self.inbox = (identity, token)
         self.reserved = 0
         self.attempts = {}
         self.active = set()
@@ -223,7 +345,7 @@ class Receiver(http.server.ThreadingHTTPServer):
     def __init__(self, address, store, upload_timeout=30):
         self.store = store
         self.upload_timeout = upload_timeout
-        self.slots = threading.BoundedSemaphore(4)
+        self.slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
         super().__init__(address, Handler)
 
     def service_actions(self):
@@ -277,7 +399,73 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply(401, {"error": "upload identity required"})
         return identity
 
+    def internal(self, retry=False):
+        store = self.server.store
+        if not self.path.startswith("/internal/"):
+            return False
+        capability = store.inbox
+        supplied = self.headers.get("Authorization", "")
+        if capability is None:
+            self.reply(404, {"error": "not found"})
+            return True
+        identity, token = capability
+        if not hmac.compare_digest(supplied.encode(), ("Bearer " + token).encode()) or not enabled_identity(store.key_file, identity):
+            self.reply(401, {"error": "service identity required"})
+            return True
+        parsed = urlsplit(self.path)
+        base = "/internal/corp-diagnostics/reports"
+        match = re.fullmatch(base + r"/([0-9a-f]{64})(/retry)?", parsed.path)
+        with store.lock:
+            if parsed.path == base and not retry:
+                query = parse_qs(parsed.query, keep_blank_values=True)
+                try:
+                    if set(query) - {"limit", "cursor"} or any(len(v) != 1 for v in query.values()):
+                        raise ValueError()
+                    limit = int(query.get("limit", ["50"])[0])
+                    if not 1 <= limit <= 100:
+                        raise ValueError()
+                    reports = [load_receipt(store.root, p.stem, identity) for p in store.root.glob("*.json")]
+                    reports = sorted((r for r in reports if r), key=lambda r: (str(r.get("received_utc", "")), r["report_id"]), reverse=True)
+                    cursor = query.get("cursor", [None])[0]
+                    if cursor is not None:
+                        indices = [i for i, r in enumerate(reports) if r["report_id"] == cursor]
+                        if not indices:
+                            raise ValueError()
+                        reports = reports[indices[0] + 1:]
+                    selected = reports[:limit]
+                    self.reply(200, {"schema": 1, "reports": [report_summary(r) for r in selected],
+                                     "next_cursor": selected[-1]["report_id"] if len(reports) > limit else None})
+                except (ValueError, TypeError):
+                    self.reply(400, {"error": "invalid pagination"})
+                return True
+            receipt = load_receipt(store.root, match[1], identity) if match and not parsed.query else None
+            if receipt is None or bool(match[2]) != retry:
+                self.reply(404, {"error": "not found"})
+                return True
+            job = receipt.get("diagnosis") or {}
+            if retry:
+                if (self.headers.get("Transfer-Encoding") or self.headers.get("Content-Length") != "2" or self.rfile.read(2) != b"{}"):
+                    self.reply(400, {"error": "empty JSON required"})
+                    return True
+                if job.get("state") == "running" and job.get("lease_until", 0) > time.time():
+                    self.reply(409, {"error": "analysis active"})
+                    return True
+                job.update(state="pending", generation=job.get("generation", 0) + 1, attempts=0,
+                           lease_until=0, next_attempt=0, updated_utc=utc_now())
+                receipt["diagnosis"] = job
+                try:
+                    update_receipt(store.root, match[1], receipt, store.quota)
+                    self.reply(202, {"schema": 1, "state": "pending"})
+                except (OSError, ValueError):
+                    self.reply(503, {"error": "storage unavailable"})
+            else:
+                self.reply(200, {"schema": 1, "report": report_summary(receipt),
+                                 "analysis": job.get("result"), "provenance": job.get("provenance")})
+        return True
+
     def do_GET(self):
+        if self.internal():
+            return
         if self.path == "/health":
             self.reply(200, {"ok": True})
             return
@@ -293,6 +481,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.reply(404, {"error": "not found"})
 
     def do_POST(self):
+        if self.internal(retry=True):
+            return
         store = self.server.store
         if self.path != "/api/reports":
             self.reply(404, {"error": "not found"})
@@ -351,6 +541,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     device = client_reported_device(summary)
                     if device:
                         receipt["client_reported_device"] = device
+                    used = sum(p.stat().st_size for p in store.owned_files())
+                    if used + len(json.dumps(receipt).encode()) > store.quota:
+                        raise OSError("storage quota")
                     atomic_json(metadata, receipt)
                 if not duplicate:
                     os.replace(temporary, destination)
@@ -383,6 +576,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.reply(*response)
 
 
+def utc_now():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
 def sync_directory(path):
     directory = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
     try:
@@ -391,7 +588,7 @@ def sync_directory(path):
         os.close(directory)
 
 
-def atomic_json(path, value):
+def atomic_json(path, value, preserved_ns=None):
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
@@ -400,6 +597,8 @@ def atomic_json(path, value):
             json.dump(value, stream)
             stream.flush()
             os.fsync(stream.fileno())
+        if preserved_ns is not None:
+            os.utime(temporary, ns=preserved_ns)
         os.replace(temporary, path)
         temporary = None
         sync_directory(path.parent)
@@ -452,6 +651,7 @@ def main():
     serve.add_argument("--port", type=int, default=18912)
     serve.add_argument("--reports", required=True)
     serve.add_argument("--keys", required=True)
+    serve.add_argument("--inbox-config")
     serve.add_argument("--trusted-proxy", required=True)
     issue = actions.add_parser("issue")
     issue.add_argument("--keys", required=True)
@@ -462,7 +662,7 @@ def main():
     if args.action == "issue":
         issue_identity(args.keys, args.endpoint, args.output, args.label)
     else:
-        store = Store(args.reports, args.keys, args.trusted_proxy)
+        store = Store(args.reports, args.keys, args.trusted_proxy, inbox_config=args.inbox_config)
         with Receiver((args.host, args.port), store) as server:
             server.serve_forever()
 
