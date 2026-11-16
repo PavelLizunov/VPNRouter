@@ -314,3 +314,18 @@ Stop the optional analyzer if needed without deleting reports or credentials.
 Do not roll back signed policy floors or rewrite an immutable Windows asset;
 any later client correction requires a newly numbered delivery. No further
 runtime operation is required for this task.
+
+## Owner-requested answer hierarchy follow-up
+
+On 16 November the owner requests clearer bot instructions, plain user answers,
+report levels and an immediate solution where one is established. Refine only
+the system instruction: keep corp-diagnosis/1 and all existing evidence/freshness
+and advisory-only guards. The companion vpnctl change presents short answer,
+action and disclosed technical detail. A supported remedy comes first; unknown
+cases receive one diagnostic action without a speculative reinstall/reset.
+
+Verify prompt diff/bounds/compatibility and exact-head documentation CI; repeat
+automatic analysis of both retained real reports after activating the accepted
+prompt. No Windows build, version bump, provisioning or policy change is needed.
+Rollback restores the retained exact prompt and preserves all report results and
+credential versions. Outcome and real semantic review remain pending.
