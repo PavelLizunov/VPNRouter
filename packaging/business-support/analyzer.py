@@ -217,7 +217,7 @@ def prepare(root, receipt, config):
                     continue
                 content = archive.read(entry).decode('utf-8-sig', errors='strict')
                 raw_lines = content.splitlines()
-                clean_lines = scrub(content, names, aliases).splitlines()
+                clean_lines = scrub(content, names, aliases).split('\n') if raw_lines else []
                 if len(raw_lines) != len(clean_lines):
                     raise Invalid('line mapping')
                 selected = set(range(len(clean_lines))) if len(content.encode()) <= 16000 else set(range(min(40, len(clean_lines))))
