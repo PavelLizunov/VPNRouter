@@ -149,6 +149,37 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(outcome['state'], 'failed')
         self.assertEqual(analyzer.run_once(self.root, self.config, timeout)['state'], 'idle')
 
+    def test_failed_retry_retains_result_and_its_original_provenance(self):
+        self.assertEqual(analyzer.run_once(self.root, self.config, lambda *args: (result(), 'original-model'))['state'], 'ready')
+        before = self.metadata()
+        config = dict(self.config, model_name='new-model')
+        self.assertEqual(analyzer.run_once(self.root, config, lambda *args: ({'schema': 'invalid'}, 'new-model'))['state'], 'unavailable')
+        after = self.metadata()
+        self.assertEqual(after['analysis'], before['analysis'])
+        self.assertEqual(after['diagnosis']['result'], before['diagnosis']['result'])
+        self.assertEqual(after['diagnosis']['provenance'], before['diagnosis']['provenance'])
+        self.assertEqual(after['diagnosis']['last_attempt_provenance']['status'], 'unavailable')
+        self.assertEqual(after['diagnosis']['last_attempt_provenance']['returned_model'], 'new-model')
+
+    def test_receipt_budget_rollback_keeps_prior_result_provenance(self):
+        self.assertEqual(analyzer.run_once(self.root, self.config, lambda *args: (result(), 'original-model'))['state'], 'ready')
+        before = self.metadata()
+        config = dict(self.config, model_name='new-model')
+        original = receiver.update_receipt
+        rejected = []
+        def bounded_publication(root, report_id, metadata, *args, **kwargs):
+            if metadata['diagnosis']['state'] == 'ready' and not rejected:
+                rejected.append(True)
+                raise ValueError('synthetic receipt budget')
+            return original(root, report_id, metadata, *args, **kwargs)
+        with mock.patch.object(receiver, 'update_receipt', side_effect=bounded_publication):
+            self.assertEqual(analyzer.run_once(self.root, config, lambda *args: (result(), 'new-model'))['state'], 'unavailable')
+        after = self.metadata()
+        self.assertEqual(after['analysis'], before['analysis'])
+        self.assertEqual(after['diagnosis']['result'], before['diagnosis']['result'])
+        self.assertEqual(after['diagnosis']['provenance'], before['diagnosis']['provenance'])
+        self.assertEqual(after['diagnosis']['last_attempt_provenance']['status'], 'unavailable')
+
     def test_deleted_and_superseded_jobs_are_not_recreated_or_overwritten(self):
         def supersede(config, packet):
             metadata = self.metadata()
