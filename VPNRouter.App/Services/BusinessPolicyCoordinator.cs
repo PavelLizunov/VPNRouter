@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.Services;
@@ -7,8 +10,10 @@ internal sealed class BusinessPolicyCoordinator : IDisposable, IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly BusinessPolicyStore _store;
+    private readonly BusinessPolicyStore? _phoneStore;
     private readonly BusinessPolicyHttp? _http;
     private readonly Func<CancellationToken, Task<byte[]>> _fetch;
+    private readonly Func<CancellationToken, Task<byte[]?>>? _fetchPhone;
     private readonly TimeProvider _timeProvider;
     private readonly Func<TimeSpan> _nextInterval;
     private readonly CancellationTokenSource _lifetime = new();
@@ -19,8 +24,12 @@ internal sealed class BusinessPolicyCoordinator : IDisposable, IAsyncDisposable
     private volatile bool _disposed;
     private bool _unavailable;
     private DateTimeOffset? _lastContactUtc;
+    private BusinessPolicySnapshot? _current;
+    private readonly BusinessPolicySnapshot? _embeddedMain;
+    private string? _pendingMainApply;
+    private string? _pendingPhoneApply;
 
-    internal BusinessPolicySnapshot? Current => _store.Current;
+    internal BusinessPolicySnapshot? Current => Volatile.Read(ref _current);
     internal bool IsUnavailable { get { lock (_gate) return _unavailable; } }
     internal DateTimeOffset? LastContactUtc { get { lock (_gate) return _lastContactUtc; } }
     internal Task Completion => _completion.Task;
@@ -31,17 +40,32 @@ internal sealed class BusinessPolicyCoordinator : IDisposable, IAsyncDisposable
 
     internal BusinessPolicyCoordinator(BusinessPolicyConfiguration configuration, BusinessPolicyStore store,
         Func<CancellationToken, Task<byte[]>>? fetch = null, TimeProvider? timeProvider = null,
-        Func<TimeSpan>? nextInterval = null)
+        Func<TimeSpan>? nextInterval = null, BusinessPolicyStore? phoneStore = null,
+        Func<CancellationToken, Task<byte[]?>>? fetchPhone = null,
+        IReadOnlyList<CustomRule>? embeddedRules = null)
     {
         _store = store;
+        _phoneStore = phoneStore;
+        if (phoneStore != null)
+        {
+            ArgumentNullException.ThrowIfNull(embeddedRules);
+            var sites = embeddedRules.Where(rule => rule.Enabled &&
+                    (rule.Type is "domain" or "domain_suffix") && !BusinessPolicyDomains.IsProtected(rule.Value))
+                .Select(rule => new BusinessPolicyRule(rule.Value, rule.Action, rule.Comment)).ToArray();
+            BusinessPolicyDomains.ValidateRules(sites);
+            var identity = string.Join('\n', sites.Select(rule => rule.Domain + "\0" + rule.Action + "\0" + rule.Comment));
+            _embeddedMain = new(configuration.PolicyId, "embedded", 0, 0, false, sites,
+                Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))));
+        }
         _timeProvider = timeProvider ?? TimeProvider.System;
         _nextInterval = nextInterval ?? (() => TimeSpan.FromSeconds(Random.Shared.Next(55, 66)));
-        if (fetch == null)
+        if (fetch == null || (phoneStore != null && fetchPhone == null))
         {
             _http = new BusinessPolicyHttp(timeProvider: _timeProvider);
-            _fetch = ct => _http.FetchAsync(configuration, ct);
         }
-        else _fetch = fetch;
+        _fetch = fetch ?? (ct => _http!.FetchAsync(configuration, ct));
+        if (phoneStore != null)
+            _fetchPhone = fetchPhone ?? (ct => _http!.FetchPhoneAsync(configuration, ct));
     }
 
     // Bootstrap reads the journal before composing effective rules. Loading an old
@@ -83,7 +107,9 @@ internal sealed class BusinessPolicyCoordinator : IDisposable, IAsyncDisposable
     {
         try
         {
-            _store.Load();
+            var main = _store.Load();
+            var phone = _phoneStore?.Load()?.Phone;
+            Volatile.Write(ref _current, Compose(main, phone, main?.ApplyNow == true));
             _loaded = true;
             SetUnavailable(false);
             return true;
@@ -107,19 +133,56 @@ internal sealed class BusinessPolicyCoordinator : IDisposable, IAsyncDisposable
                 if (_disposed) return;
             }
 
-            var envelope = await _fetch(_lifetime.Token).ConfigureAwait(false);
+            byte[]? envelope = null;
+            byte[]? phoneEnvelope = null;
+            var unavailable = false;
+            try { envelope = await _fetch(_lifetime.Token).ConfigureAwait(false); }
+            catch (Exception e) when (IsExpectedFailure(e)) { unavailable = true; }
+            if (_fetchPhone != null && !_lifetime.IsCancellationRequested)
+            {
+                try { phoneEnvelope = await _fetchPhone(_lifetime.Token).ConfigureAwait(false); }
+                catch (Exception e) when (IsExpectedFailure(e)) { unavailable = true; }
+            }
             lock (_gate)
             {
                 // A transport that finishes after cancellation cannot publish into
                 // the disposed application, even if it ignored its cancellation token.
                 if (_disposed || _lifetime.IsCancellationRequested) return;
                 var previous = Current;
-                var accepted = _store.Accept(envelope);
-                _lastContactUtc = _timeProvider.GetUtcNow();
-                SetUnavailable(false);
-                if (previous == null || previous.Revision != accepted.Revision ||
-                    previous.PayloadDigest != accepted.PayloadDigest)
+                if (envelope != null)
+                {
+                    try
+                    {
+                        _store.Accept(envelope);
+                        _lastContactUtc = _timeProvider.GetUtcNow();
+                    }
+                    catch (Exception e) when (IsExpectedFailure(e)) { unavailable = true; }
+                }
+                if (_phoneStore != null)
+                {
+                    if (phoneEnvelope == null)
+                    {
+                        if (_phoneStore.Current != null) unavailable = true;
+                    }
+                    else
+                    {
+                        try { _phoneStore.Accept(phoneEnvelope); }
+                        catch (Exception e) when (IsExpectedFailure(e)) { unavailable = true; }
+                    }
+                }
+                var main = _store.Current;
+                var phone = _phoneStore?.Current?.Phone;
+                var mainChanged = main != null && main.PayloadDigest != previous?.PayloadDigest;
+                var phoneChanged = phone?.PayloadDigest != previous?.Phone?.PayloadDigest;
+                if (mainChanged) _pendingMainApply = main!.ApplyNow ? main.PayloadDigest : null;
+                if (phoneChanged) _pendingPhoneApply = phone?.ApplyNow == true ? phone.PayloadDigest : null;
+                var accepted = Compose(main, phone, _pendingMainApply != null || _pendingPhoneApply != null);
+                SetUnavailable(unavailable);
+                if (accepted != null && (previous == null || previous.EffectiveDigest != accepted.EffectiveDigest))
+                {
+                    Volatile.Write(ref _current, accepted);
                     Notify(Accepted, accepted);
+                }
             }
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
@@ -127,6 +190,22 @@ internal sealed class BusinessPolicyCoordinator : IDisposable, IAsyncDisposable
         {
             lock (_gate)
                 if (!_disposed) SetUnavailable(true);
+        }
+    }
+
+    private BusinessPolicySnapshot? Compose(BusinessPolicySnapshot? main, BusinessPhonePolicySnapshot? phone,
+        bool applyNow) => (main ?? (phone == null ? null : _embeddedMain))?.WithPhone(phone, applyNow);
+
+    internal void AcknowledgeApplied(BusinessPolicySnapshot applied)
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            if (_pendingMainApply == applied.PayloadDigest) _pendingMainApply = null;
+            if (_pendingPhoneApply == applied.Phone?.PayloadDigest) _pendingPhoneApply = null;
+            if (Current is { } current)
+                Volatile.Write(ref _current, current.WithPhone(current.Phone,
+                    _pendingMainApply != null || _pendingPhoneApply != null));
         }
     }
 

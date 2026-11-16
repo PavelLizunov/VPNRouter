@@ -9,19 +9,35 @@ internal static class BusinessPolicyRouting
         var seed = embedded.ToArray();
         if (policy != null) BusinessPolicyDomains.ValidateRules(policy.Rules);
 
-        var result = BusinessPolicyDomains.ProtectedDirectDomains
-            .Select(domain => Site(domain, "direct", "Protected telephony service"))
-            .ToList();
-        result.Add(Site(BusinessPolicyDomains.PortalDomain, "proxy", "Corporate administration"));
-        result.AddRange(seed.Where(r => !IsSite(r) && r.Type != "process_name").Select(Copy));
+        if (policy?.Phone != null) BusinessPhonePolicy.ValidateRules(policy.Phone.Rules);
+
+        var result = new List<CustomRule>
+        {
+            Site(BusinessPolicyDomains.PortalDomain, "proxy", "Corporate administration")
+        };
+        if (policy?.Phone == null)
+        {
+            result.AddRange(BusinessPolicyDomains.ProtectedDirectDomains
+                .Select(domain => Site(domain, "direct", "Protected telephony service")));
+            result.AddRange(seed.Where(r => !IsSite(r) && r.Type != "process_name").Select(Copy));
+        }
+        else
+        {
+            result.AddRange(policy.Phone.Rules.Select(r => new CustomRule
+            {
+                Type = r.Type, Value = r.Value, Action = r.Action, Comment = r.Comment, Enabled = true
+            }));
+        }
+
+        if (policy?.Phone != null)
+            result.AddRange(seed.Where(r => !IsSite(r) && r.Type != "process_name" &&
+                !(r.Type == "ip_cidr" && r.Value == BusinessPhonePolicy.LegacySipCidr)).Select(Copy));
 
         if (policy == null)
             result.AddRange(seed.Where(r => IsSite(r) && !BusinessPolicyDomains.IsProtected(r.Value)).Select(Copy));
         else
             result.AddRange(policy.Rules.Select(r => Site(r.Domain, r.Action, r.Comment)));
 
-        // IP exceptions and application rules are owned by the embedded preset.
-        // Remote policy may replace only the managed site list.
         result.AddRange(seed.Where(r => r.Type == "process_name").Select(Copy));
         return result;
     }

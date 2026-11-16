@@ -44,6 +44,19 @@ internal static class BusinessPolicySettings
             throw new InvalidDataException("Business routing preset is invalid.");
 
         var rules = BusinessPolicyRouting.Compose(embeddedRules, policy);
+        if (policy?.Phone is { } phone)
+        {
+            if (phone.Rules.Any(rule => rule.Type == "ip_cidr" && rule.Value.Contains(':')))
+                throw new InvalidDataException("Corp telephony currently supports IPv4 addresses only.");
+            var excludes = target.Tun.RouteExcludeAddress.Where(value => value != BusinessPhonePolicy.LegacySipCidr)
+                .Concat(TunSettings.MandatoryLocalRouteExcludeAddress)
+                .Concat(target.Tun.AutoDetectedExcludeAddress).ToArray();
+            if (phone.Rules.Where(rule => rule.Type == "ip_cidr" && rule.Action == "proxy")
+                .Any(rule => excludes.Any(exclude => BusinessPhonePolicy.IntersectsIp(rule.Value, exclude))))
+                throw new InvalidDataException("Telephony proxy routes intersect a physical network exclusion.");
+            // BusinessDefaults historically inserted this exact address without an ownership marker.
+            target.Tun.RouteExcludeAddress.RemoveAll(value => value == BusinessPhonePolicy.LegacySipCidr);
+        }
         var processes = rules.Where(r => r.Type == "process_name" && r.Action == "proxy")
             .SelectMany(r => r.Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();

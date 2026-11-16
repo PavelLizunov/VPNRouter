@@ -15,9 +15,12 @@ internal sealed class BusinessPolicySnapshot
     internal bool ApplyNow { get; }
     internal IReadOnlyList<BusinessPolicyRule> Rules { get; }
     internal string PayloadDigest { get; }
+    internal BusinessPhonePolicySnapshot? Phone { get; }
+    internal string EffectiveDigest { get; }
 
     internal BusinessPolicySnapshot(string policyId, string keyId, long revision, long publishedAt,
-        bool applyNow, IEnumerable<BusinessPolicyRule> rules, string payloadDigest)
+        bool applyNow, IEnumerable<BusinessPolicyRule> rules, string payloadDigest,
+        BusinessPhonePolicySnapshot? phone = null)
     {
         PolicyId = policyId;
         KeyId = keyId;
@@ -26,7 +29,15 @@ internal sealed class BusinessPolicySnapshot
         ApplyNow = applyNow;
         Rules = Array.AsReadOnly(rules.ToArray());
         PayloadDigest = payloadDigest;
+        if (phone != null && phone.PolicyId != policyId)
+            throw new InvalidDataException("Invalid Business policy.");
+        Phone = phone;
+        EffectiveDigest = phone == null ? payloadDigest : Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes($"telephony-v1:{payloadDigest}:{phone.PayloadDigest}")));
     }
+
+    internal BusinessPolicySnapshot WithPhone(BusinessPhonePolicySnapshot? phone, bool? applyNowOverride = null) =>
+        new(PolicyId, KeyId, Revision, PublishedAt, applyNowOverride ?? ApplyNow, Rules, PayloadDigest, phone);
 }
 
 internal static class BusinessPolicy
@@ -39,6 +50,29 @@ internal static class BusinessPolicy
 
     internal static BusinessPolicySnapshot Parse(ReadOnlyMemory<byte> envelope,
         string expectedPolicyId, IReadOnlyDictionary<string, string> keys)
+        => ParseSigned(envelope, expectedPolicyId, keys,
+            ["schema", "policy_id", "key_id", "revision", "published_at", "apply", "rules"],
+            (data, metadata) =>
+            {
+                var list = data["rules"];
+                if (list.ValueKind != JsonValueKind.Array || list.GetArrayLength() > 512) throw Invalid();
+                var rules = new List<BusinessPolicyRule>(list.GetArrayLength());
+                foreach (var item in list.EnumerateArray())
+                {
+                    var rule = Object(item, "domain", "action", "comment");
+                    rules.Add(new(String(rule["domain"]), String(rule["action"]), String(rule["comment"])));
+                }
+                BusinessPolicyDomains.ValidateRules(rules);
+                return new BusinessPolicySnapshot(metadata.PolicyId, metadata.KeyId, metadata.Revision,
+                    metadata.PublishedAt, metadata.ApplyNow, rules, metadata.PayloadDigest);
+            });
+
+    internal sealed record Metadata(string PolicyId, string KeyId, long Revision, long PublishedAt,
+        bool ApplyNow, string PayloadDigest);
+
+    internal static T ParseSigned<T>(ReadOnlyMemory<byte> envelope, string expectedPolicyId,
+        IReadOnlyDictionary<string, string> keys, string[] fields,
+        Func<Dictionary<string, JsonElement>, Metadata, T> parse)
     {
         try
         {
@@ -46,14 +80,13 @@ internal static class BusinessPolicy
                 throw Invalid();
             _ = StrictUtf8.GetCharCount(envelope.Span);
             using var outer = JsonDocument.Parse(envelope, new JsonDocumentOptions { MaxDepth = 8 });
-            var fields = Object(outer.RootElement, "payload", "signature");
-            var payload = Base64(String(fields["payload"]), MaximumPayloadBytes);
-            var signature = Base64(String(fields["signature"]), 64);
+            var outerFields = Object(outer.RootElement, "payload", "signature");
+            var payload = Base64(String(outerFields["payload"]), MaximumPayloadBytes);
+            var signature = Base64(String(outerFields["signature"]), 64);
             if (signature.Length != 64 || payload.Length == 0) throw Invalid();
             _ = StrictUtf8.GetCharCount(payload);
             using var inner = JsonDocument.Parse(payload, new JsonDocumentOptions { MaxDepth = 8 });
-            var data = Object(inner.RootElement, "schema", "policy_id", "key_id", "revision",
-                "published_at", "apply", "rules");
+            var data = Object(inner.RootElement, fields);
             if (Integer(data["schema"], 1) != 1) throw Invalid();
             var policyId = String(data["policy_id"]);
             var keyId = String(data["key_id"]);
@@ -63,22 +96,12 @@ internal static class BusinessPolicy
             using var verifier = ImportKey(encodedKey);
             if (!verifier.VerifyData(payload, signature, HashAlgorithmName.SHA256,
                     DSASignatureFormat.IeeeP1363FixedFieldConcatenation)) throw Invalid();
-
             var revision = Integer(data["revision"], MaximumRevision);
             var publishedAt = Integer(data["published_at"], 253402300799);
             var apply = String(data["apply"]);
             if (apply is not ("next_connection" or "now")) throw Invalid();
-            var list = data["rules"];
-            if (list.ValueKind != JsonValueKind.Array || list.GetArrayLength() > 512) throw Invalid();
-            var rules = new List<BusinessPolicyRule>(list.GetArrayLength());
-            foreach (var item in list.EnumerateArray())
-            {
-                var rule = Object(item, "domain", "action", "comment");
-                rules.Add(new(String(rule["domain"]), String(rule["action"]), String(rule["comment"])));
-            }
-            BusinessPolicyDomains.ValidateRules(rules);
-            return new(policyId, keyId, revision, publishedAt, apply == "now", rules,
-                Convert.ToHexString(SHA256.HashData(payload)));
+            return parse(data, new(policyId, keyId, revision, publishedAt, apply == "now",
+                Convert.ToHexString(SHA256.HashData(payload))));
         }
         catch (Exception e) when (e is JsonException or InvalidDataException or ArgumentException or
             InvalidOperationException or FormatException or CryptographicException or KeyNotFoundException)
@@ -121,7 +144,7 @@ internal static class BusinessPolicy
         return decoded;
     }
 
-    private static Dictionary<string, JsonElement> Object(JsonElement value, params string[] names)
+    internal static Dictionary<string, JsonElement> Object(JsonElement value, params string[] names)
     {
         if (value.ValueKind != JsonValueKind.Object) throw Invalid();
         var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
@@ -132,7 +155,7 @@ internal static class BusinessPolicy
         return result;
     }
 
-    private static string String(JsonElement value) => value.ValueKind == JsonValueKind.String
+    internal static string String(JsonElement value) => value.ValueKind == JsonValueKind.String
         ? value.GetString() ?? throw Invalid() : throw Invalid();
 
     private static long Integer(JsonElement value, long maximum)

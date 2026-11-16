@@ -166,6 +166,12 @@ public static partial class ConfigGenerator
     private static List<SingBoxInbound> BuildInbounds(AppSettings settings, bool proxyIsUdpNative = false)
     {
         var routeExcludes = settings.Tun.GetEffectiveRouteExcludeAddress();
+        if (settings.BusinessPolicy?.Phone?.Rules.Any(rule => rule.Type == "ip_cidr" && rule.Value.Contains(':')) == true)
+            throw new InvalidDataException("Business telephony IPv6 routes require IPv6 tunnel support.");
+        if (settings.BusinessPolicy?.Phone is { } phone && phone.Rules.Any(rule =>
+            rule.Type == "ip_cidr" && rule.Action == "proxy" &&
+            routeExcludes.Any(excluded => BusinessPhonePolicy.IntersectsIp(rule.Value, excluded))))
+            throw new InvalidDataException("Business telephony proxy conflicts with a required physical route.");
         var mtu = NormalizeTunMtu(settings.Tun.Mtu);
         return new List<SingBoxInbound>
         {

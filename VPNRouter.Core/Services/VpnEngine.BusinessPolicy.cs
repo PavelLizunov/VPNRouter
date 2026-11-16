@@ -35,7 +35,11 @@ internal sealed class BusinessPolicySession
     internal static bool CanFollow(BusinessPolicySnapshot? candidate, BusinessPolicySnapshot? floor) =>
         floor == null || (candidate != null && candidate.PolicyId == floor.PolicyId &&
             (candidate.Revision > floor.Revision ||
-             (candidate.Revision == floor.Revision && candidate.PayloadDigest == floor.PayloadDigest)));
+             (candidate.Revision == floor.Revision && candidate.PayloadDigest == floor.PayloadDigest)) &&
+            (floor.Phone == null || (candidate.Phone != null && candidate.Phone.PolicyId == floor.Phone.PolicyId &&
+                (candidate.Phone.Revision > floor.Phone.Revision ||
+                 (candidate.Phone.Revision == floor.Phone.Revision &&
+                  candidate.Phone.PayloadDigest == floor.Phone.PayloadDigest)))));
 }
 
 internal sealed class BusinessPolicyAppliedReceipt
@@ -43,6 +47,7 @@ internal sealed class BusinessPolicyAppliedReceipt
     internal string PolicyId => Launch.Policy.PolicyId;
     internal long Revision => Launch.Policy.Revision;
     internal string PayloadDigest => Launch.Policy.PayloadDigest;
+    internal string EffectiveDigest => Launch.Policy.EffectiveDigest;
     internal string ConfigurationDigest => Launch.ConfigurationDigest;
     internal Guid SessionId => Session.SessionId;
     internal Guid LaunchId => Launch.LaunchId;
@@ -117,7 +122,7 @@ public partial class VpnEngine
             var receipt = Volatile.Read(ref _policyReceipt);
             return receipt != null && ReferenceEquals(receipt.Session, expectedSession) &&
                 receipt.PolicyId == settings.BusinessPolicy.PolicyId && receipt.Revision == settings.BusinessPolicy.Revision &&
-                receipt.PayloadDigest == settings.BusinessPolicy.PayloadDigest && IsPolicyReceiptCurrent(receipt)
+                receipt.EffectiveDigest == settings.BusinessPolicy.EffectiveDigest && IsPolicyReceiptCurrent(receipt)
                 ? receipt : null;
         }
         catch (OperationCanceledException) { return null; }

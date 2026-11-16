@@ -26,7 +26,9 @@ internal static class BusinessBootstrap
             if (BusinessClientConfiguration.Parse(connection).Policy is { } configuration)
             {
                 var dataDirectory = Path.GetDirectoryName(Path.GetFullPath(settingsPath))!;
-                policy = new(configuration, new BusinessPolicyStore(configuration, dataDirectory));
+                policy = new(configuration, new BusinessPolicyStore(configuration, dataDirectory),
+                    phoneStore: new BusinessPolicyStore(configuration, dataDirectory, telephony: true),
+                    embeddedRules: ReadRules());
                 policy.Load();
                 if (policy.IsUnavailable) throw new BusinessPolicyStartupException();
             }

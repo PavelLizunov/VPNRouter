@@ -12,6 +12,7 @@ public partial class MainWindowViewModel
     private BusinessPolicyCoordinator? _businessPolicy;
     private IReadOnlyList<CustomRule>? _businessRules;
     private bool _businessPolicyStartupBlocked;
+    private bool _businessPolicyRuntimeBlocked;
     private bool _businessPolicyApplyActive;
     private bool _businessPolicyStopRequested;
     private CancellationTokenSource? _businessPolicyApplyCancellation;
@@ -31,12 +32,14 @@ public partial class MainWindowViewModel
         get
         {
             if (_businessPolicyStartupBlocked) return PolicyStrings.BusinessPolicyRecoveryRequired;
+            if (_businessPolicyRuntimeBlocked) return PolicyStrings.BusinessPolicyApplyFailed;
             if (_businessPolicy == null) return string.Empty;
             if (_businessPolicyApplyActive) return PolicyStrings.BusinessPolicyApplying;
+            if (_businessPolicyRuntimeBlocked) return PolicyStrings.BusinessPolicyApplyFailed;
             if (_businessPolicy.IsUnavailable) return PolicyStrings.BusinessPolicyRefreshUnavailable;
             if (_businessPolicy.Current is not { } accepted) return PolicyStrings.BusinessPolicyEmbedded;
             return AppliedBusinessPolicy is { } applied && applied.Revision == accepted.Revision &&
-                applied.PayloadDigest == accepted.PayloadDigest
+                applied.EffectiveDigest == accepted.EffectiveDigest
                 ? PolicyStrings.BusinessPolicyApplied : PolicyStrings.BusinessPolicyPending;
         }
     }
@@ -60,14 +63,25 @@ public partial class MainWindowViewModel
     internal AppSettings CaptureBusinessConnectionSettings(BusinessPolicySnapshot? policy)
     {
         if (_businessPolicyStartupBlocked) throw new BusinessPolicyStartupException();
-        return _businessRules == null ? _settings :
+        var captured = _businessRules == null ? _settings :
             BusinessPolicySettings.Capture(_settings, _businessRules, policy);
+        _businessPolicyRuntimeBlocked = false;
+        return captured;
     }
 
     private void EnforceBusinessPolicySettings()
     {
-        if (_businessRules != null)
-            BusinessPolicySettings.EnforceRules(_settings, _businessRules, _businessPolicy?.Current);
+        try
+        {
+            if (_businessRules != null)
+                BusinessPolicySettings.EnforceRules(_settings, _businessRules, _businessPolicy?.Current);
+            _businessPolicyRuntimeBlocked = false;
+        }
+        catch (InvalidDataException)
+        {
+            _businessPolicyRuntimeBlocked = true;
+            _logger.Warning("[Business] Accepted routes conflict with the current network capabilities");
+        }
     }
 
     private void OnBusinessPolicyAccepted(BusinessPolicySnapshot policy)
@@ -78,9 +92,15 @@ public partial class MainWindowViewModel
         Dispatcher.UIThread.Post(() =>
         {
             if (_disposed || _businessPolicy?.Current is not { } latest ||
-                latest.Revision != policy.Revision || latest.PayloadDigest != policy.PayloadDigest) return;
+                latest.Revision != policy.Revision || latest.EffectiveDigest != policy.EffectiveDigest) return;
             _businessPolicyPendingApply = session == null ? null : (policy, session);
             EnforceBusinessPolicySettings();
+            if (_businessPolicyRuntimeBlocked)
+            {
+                _businessPolicyPendingApply = null;
+                NotifyBusinessPolicyStatus();
+                return;
+            }
             NotifyBusinessPolicyStatus();
             TryApplyPendingBusinessPolicy();
         });
@@ -93,6 +113,8 @@ public partial class MainWindowViewModel
         Dispatcher.UIThread.Post(() =>
         {
             if (_disposed || !_engine.IsPolicyReceiptCurrent(receipt)) return;
+            _businessPolicy?.AcknowledgeApplied(receipt.Launch.Policy);
+            _businessPolicyRuntimeBlocked = false;
             _businessPolicyApplied = _businessPolicyAppliedHistory = receipt;
             NotifyBusinessPolicyStatus();
         });
@@ -122,13 +144,13 @@ public partial class MainWindowViewModel
             _businessPolicyApplyActive || _businessPolicyStopRequested ||
             IsConnecting || IsApplying || _isReconnecting || UpdateVm?.IsDownloading == true) return;
         if (_businessPolicy?.Current is not { } latest || latest.Revision != pending.Policy.Revision ||
-            latest.PayloadDigest != pending.Policy.PayloadDigest)
+            latest.EffectiveDigest != pending.Policy.EffectiveDigest)
         {
             _businessPolicyPendingApply = null;
             return;
         }
         if (AppliedBusinessPolicy is { } applied && applied.Revision == latest.Revision &&
-            applied.PayloadDigest == latest.PayloadDigest)
+            applied.EffectiveDigest == latest.EffectiveDigest)
         {
             _businessPolicyPendingApply = null;
             return;
@@ -167,6 +189,8 @@ public partial class MainWindowViewModel
             _businessPolicyApplyActive = false;
             if (receipt != null && !_businessPolicyStopRequested && _engine.IsPolicyReceiptCurrent(receipt))
             {
+                _businessPolicy?.AcknowledgeApplied(receipt.Launch.Policy);
+                _businessPolicyRuntimeBlocked = false;
                 _businessPolicyApplied = _businessPolicyAppliedHistory = receipt;
                 RestoreConnectedStatus();
                 RefreshActiveIndicator();

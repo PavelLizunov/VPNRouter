@@ -12,6 +12,8 @@ internal sealed class BusinessPolicyStore
     private const int HeaderBytes = 84;
     private static readonly byte[] Magic = "VRPOL001"u8.ToArray();
     private readonly BusinessPolicyConfiguration _configuration;
+    private readonly bool _telephony;
+    private readonly string _trustId;
     private readonly object _gate = new();
     private readonly string _directory;
     private readonly string _lockPath;
@@ -23,12 +25,16 @@ internal sealed class BusinessPolicyStore
     internal BusinessPolicySnapshot? Current => Volatile.Read(ref _current);
 
     internal BusinessPolicyStore(BusinessPolicyConfiguration configuration, string dataDirectory,
-        Action<string, string>? replaceFile = null, Action<string>? flushDirectory = null)
+        Action<string, string>? replaceFile = null, Action<string>? flushDirectory = null,
+        bool telephony = false)
     {
         _configuration = configuration;
+        _telephony = telephony;
+        _trustId = telephony ? Convert.ToHexString(SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(configuration.TrustId + ":telephony:v1"))) : configuration.TrustId;
         _directory = Path.GetFullPath(Path.Combine(dataDirectory, "policy"));
-        JournalPath = Path.Combine(_directory, configuration.TrustId + ".bin");
-        _lockPath = Path.Combine(_directory, configuration.TrustId + ".lock");
+        JournalPath = Path.Combine(_directory, _trustId + ".bin");
+        _lockPath = Path.Combine(_directory, _trustId + ".lock");
         _replaceFile = replaceFile ?? BusinessPolicyDurability.Replace;
         _flushDirectory = flushDirectory ?? BusinessPolicyDurability.FlushDirectory;
     }
@@ -55,7 +61,7 @@ internal sealed class BusinessPolicyStore
         // The caller retains its array; it must not be able to change bytes after verification.
         if (envelope.Length is 0 or > BusinessPolicy.MaximumResponseBytes) throw Failure();
         var captured = envelope.ToArray();
-        var candidate = BusinessPolicy.Parse(captured, _configuration.PolicyId, _configuration.Keys);
+        var candidate = Parse(captured);
         lock (_gate)
         {
             try
@@ -113,11 +119,11 @@ internal sealed class BusinessPolicyStore
             var bytes = new byte[checked((int)input.Length)];
             input.ReadExactly(bytes);
             if (input.ReadByte() != -1 || !bytes.AsSpan(0, 8).SequenceEqual(Magic) ||
-                !CryptographicOperations.FixedTimeEquals(bytes.AsSpan(8, 32), Convert.FromHexString(_configuration.TrustId)))
+                !CryptographicOperations.FixedTimeEquals(bytes.AsSpan(8, 32), Convert.FromHexString(_trustId)))
                 throw Failure();
             var length = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(80, 4));
             if (length != bytes.Length - HeaderBytes) throw Failure();
-            var snapshot = BusinessPolicy.Parse(bytes.AsMemory(HeaderBytes), _configuration.PolicyId, _configuration.Keys);
+            var snapshot = Parse(bytes.AsMemory(HeaderBytes));
             if (snapshot.Revision != BinaryPrimitives.ReadInt64BigEndian(bytes.AsSpan(40, 8)) ||
                 !CryptographicOperations.FixedTimeEquals(bytes.AsSpan(48, 32), Convert.FromHexString(snapshot.PayloadDigest)))
                 throw Failure();
@@ -129,7 +135,7 @@ internal sealed class BusinessPolicyStore
     {
         var header = new byte[HeaderBytes];
         Magic.CopyTo(header, 0);
-        Convert.FromHexString(_configuration.TrustId).CopyTo(header, 8);
+        Convert.FromHexString(_trustId).CopyTo(header, 8);
         BinaryPrimitives.WriteInt64BigEndian(header.AsSpan(40, 8), candidate.Revision);
         Convert.FromHexString(candidate.PayloadDigest).CopyTo(header, 48);
         BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(80, 4), envelope.Length);
@@ -158,6 +164,17 @@ internal sealed class BusinessPolicyStore
         if (floor != null && (candidate == null || candidate.Revision < floor.Revision ||
             (candidate.Revision == floor.Revision && candidate.PayloadDigest != floor.PayloadDigest)))
             throw Failure();
+    }
+
+    private BusinessPolicySnapshot Parse(ReadOnlyMemory<byte> envelope)
+    {
+        if (!_telephony) return BusinessPolicy.Parse(envelope, _configuration.PolicyId, _configuration.Keys);
+        var phone = BusinessPhonePolicy.Parse(envelope, _configuration.PolicyId, _configuration.Keys);
+        if (phone.Rules.Any(rule => rule.Type == "ip_cidr" && rule.Value.Contains(':')))
+            throw Failure();
+        // Reuse the durable journal machinery; this container never becomes a site policy.
+        return new(phone.PolicyId, phone.KeyId, phone.Revision, phone.PublishedAt,
+            phone.ApplyNow, [], phone.PayloadDigest, phone);
     }
 
     private static void RefuseLinks(string path)

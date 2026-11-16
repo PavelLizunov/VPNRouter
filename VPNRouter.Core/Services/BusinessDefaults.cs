@@ -49,8 +49,8 @@ internal static class BusinessDefaults
         settings.SingBox.ExecutablePath = AppPaths.SingBoxExePath;
         settings.App.LogFile = Path.Combine(AppPaths.LogsDir, "vpnrouter.log");
         // Confirmed alternate UIS SIP host; the customer must supply its RTP ranges.
-        if (!settings.Tun.RouteExcludeAddress.Contains("195.211.120.35/32"))
-            settings.Tun.RouteExcludeAddress.Add("195.211.120.35/32");
+        if (policy?.Phone == null && !settings.Tun.RouteExcludeAddress.Contains(BusinessPhonePolicy.LegacySipCidr))
+            settings.Tun.RouteExcludeAddress.Add(BusinessPhonePolicy.LegacySipCidr);
         settings.Monitoring.RestartOnFailure = true;
         settings.Update.AutoCheck = false;
     }
@@ -152,22 +152,23 @@ internal static class BusinessDefaults
     internal static void ApplyDomainTransports(SingBoxConfig config, bool hasUdpProxy,
         bool proxyCarriesUdpNatively, bool blockQuicOnTcpProxy)
     {
-        // Explicit site rules precede per-app/global transport guards. Carry the
-        // same transport decision into those site rules instead of bypassing it.
+        // Explicit domain and IP rules precede per-app/global transport guards.
+        // Preserve the same transport decision for every explicit destination.
         for (var i = config.Route.Rules.Count - 1; i >= 0; i--)
         {
             var rule = config.Route.Rules[i];
             if (rule.Outbound != "proxy" || rule.Network != null ||
-                (rule.Domain == null && rule.DomainSuffix == null)) continue;
+                (rule.Domain == null && rule.DomainSuffix == null && rule.IpCidr == null)) continue;
 
-            RouteRule ForDomain() => new()
+            RouteRule ForDestination() => new()
             {
-                Domain = rule.Domain?.ToList(), DomainSuffix = rule.DomainSuffix?.ToList()
+                Domain = rule.Domain?.ToList(), DomainSuffix = rule.DomainSuffix?.ToList(),
+                IpCidr = rule.IpCidr?.ToList()
             };
 
             if (hasUdpProxy)
             {
-                var udp = ForDomain();
+                var udp = ForDestination();
                 udp.Network = "udp";
                 udp.Action = "route";
                 udp.Outbound = "proxy-udp";
@@ -175,10 +176,10 @@ internal static class BusinessDefaults
             }
             else if (!proxyCarriesUdpNatively && blockQuicOnTcpProxy)
             {
-                var quic = ForDomain();
+                var quic = ForDestination();
                 quic.Protocol = "quic";
                 quic.Action = "reject";
-                var udp443 = ForDomain();
+                var udp443 = ForDestination();
                 udp443.Network = "udp";
                 udp443.Port = [443];
                 udp443.Action = "reject";
