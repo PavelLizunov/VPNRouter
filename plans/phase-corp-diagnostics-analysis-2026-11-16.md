@@ -176,3 +176,11 @@ the earlier decoded transport capture is retained separately. It also demonstrat
 prompt ambiguity around current clock observations versus unknown packet scope.
 The executable scope rule is now explicit in the instruction; fresh automatic
 analysis must validate before any ready/publication claim.
+
+Automatic Terra analysis and authenticated HTTPS list/detail are now verified
+ready for the original owner report, with unknown current runtime/tunnel health
+and a separately identified evidence-quality problem. Final retry source review
+found that a failed later attempt can misattribute a retained result's provenance.
+The narrow repair preserves the result/provenance pair and stores last-attempt
+metadata separately; synthetic tests cover invalid output and receipt rollback.
+Windows private upgrade and physical mkvt acceptance continue independently.

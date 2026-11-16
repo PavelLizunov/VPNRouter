@@ -556,10 +556,12 @@ def run_once(root, config, model_request=bounded_request_model):
             completed = receiver.utc_now()
             job.update(state=state, lease_until=0, next_attempt=time.time()+config['retry_seconds'] if state == 'pending' else 0,
                        updated_utc=completed)
-            job['provenance'] = {'requested_model': config['model_name'], 'returned_model': returned,
+            job['last_attempt_provenance'] = {'requested_model': config['model_name'], 'returned_model': returned,
                                  'prompt_sha256': config['_prompt_sha'], 'input_sha256': receipt['sha256'],
                                  'run_id': claim['run_id'], 'started_utc': claim['updated_utc'],
                                  'completed_utc': completed, 'prompt_version': 'corp-diagnosis/1', 'status': state}
+            if result is not None or job.get('result') is None:
+                job['provenance'] = dict(job['last_attempt_provenance'])
             if result is not None:
                 job['result'] = result
                 latest['analysis'] = result['public_analysis']
@@ -577,7 +579,10 @@ def run_once(root, config, model_request=bounded_request_model):
                     latest.pop('analysis', None)
                 state = 'unavailable'
                 job['state'] = state
-                job['provenance']['status'] = state
+                job['last_attempt_provenance']['status'] = state
+                previous_provenance = (receipt.get('diagnosis') or {}).get('provenance')
+                job['provenance'] = (previous_provenance if previous is not None and previous_provenance
+                                     else dict(job['last_attempt_provenance']))
                 receiver.update_receipt(root, receipt['report_id'], latest)
         return {'state': state, 'processed': 1}
     finally:
