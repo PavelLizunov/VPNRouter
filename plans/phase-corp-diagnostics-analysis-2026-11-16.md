@@ -152,3 +152,15 @@ Rollback: deploy the prior exact receiver/backend binaries, stop the optional
 worker and remove only its private integration configuration if required;
 preserve every credential version and report. The new Windows build must retain
 complete provisioning, subscription/support fields and signed policy floors.
+
+## Real deployment acceptance follow-up
+
+PR679 was accepted into business as4f5ed340 after all14 applicable checks passed
+at38ae56d8 (three manual private delivery jobs skipped). The receiver was staged
+at that exact source, remains healthy, and uses a separately retained service
+bearer. No worker was enabled before a real packet dry run. That run discovered
+a source-line mapping failure on trailing blank lines; the model received no
+packet and no result was published. A narrow follow-up preserves source line
+boundaries with synthetic empty/trailing-line coverage and fresh CI. Windows
+private/shared2.50.9 builds remain pinned to accepted38ae56d8; this support-only
+repair changes no client binary, provisioning, version or embedded rules.

@@ -101,6 +101,17 @@ class WorkerTests(unittest.TestCase):
         candidate['assessments'][0].update(verdict='insufficient_data', time_scope='unknown')
         analyzer.validate_result(candidate, packet, refs, names)
 
+    def test_packet_preserves_empty_and_trailing_blank_source_lines(self):
+        for content in ('', '\n', 'first\n\n', 'first\n\n\n'):
+            with self.subTest(content=repr(content)):
+                receipt = self.write_report(content=content)
+                packet, refs, _ = analyzer.prepare(self.root, receipt, self.config)
+                entry = next(f for f in packet['files'] if f['file'] == 'crash-01.txt')
+                expected = content.splitlines()
+                self.assertEqual([line['text'] for line in entry['lines']], expected)
+                self.assertEqual([line['line'] for line in entry['lines']], list(range(1, len(expected) + 1)))
+                self.assertEqual(len(refs), len(expected))
+
     def test_invalid_evidence_and_short_output_never_publish(self):
         for candidate in (result([{'kind': 'log', 'file': '../secret', 'line': 1}]), result()):
             if candidate['assessments'][0]['evidence'][0]['kind'] == 'packet':

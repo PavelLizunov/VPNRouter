@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2 CONFIRMED LIVE PACKET PREPARATION GAP** - BUSINESS-DIAGNOSTICS-TRAILING-BLANK-LINES: dry preparation of the preserved real report fails closed with line mapping before any provider call. scrub joins source lines, then splitlines drops a final empty line and changes evidence numbering. Preserve the already-established source line boundaries, including trailing empty lines and empty files; add synthetic regression. Recorded before correction during real deployment acceptance, 2026-11-16.
+
+- [ ] **P2 CONFIRMED CI PUBLICATION GAPS** - BUSINESS-DIAGNOSTICS-BACKEND-CI-METADATA: backend57910ce fails the generated CODEBASE_INVENTORY check after adding Rust files, and Clippy rejects requests.clone() on Arc in the independent test fixture. Hosted job logs133006237382/133006237045 confirm both. Regenerate the inventory and use explicit Arc::clone without changing assertions or weakening gates; fix-only follow-up on PR333.
+
 - [ ] **P2 CONFIRMED DRAFT QUOTA RACE** - BUSINESS-DIAGNOSTICS-UPLOAD-HEADROOM: independent lifetime review confirms receipt growth ignores another process's in-flight upload reservation and can consume capacity before streaming finishes. Preserve maximum bounded concurrent upload headroom for receipt growth and recheck complete upload/metadata capacity under the shared mutation lock before finalization. Add a regression at the headroom boundary; diagnostics runtime phase 2026-11-16.
 
 - [ ] **P2 CONFIRMED DRAFT CURRENT-SCOPE FRESHNESS GAP** - BUSINESS-DIAGNOSTICS-RECEIPT-FRESHNESS: current log scope initially compares events and the operator attempt window only with receipt time. Independent security review confirms that a retained old report can still label runtime evidence current. Require bounded nonfuture receiver time relative to analysis time and retain stale evidence as historical. Diagnostics runtime phase 2026-11-16.
