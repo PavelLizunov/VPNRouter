@@ -54,3 +54,7 @@ contract; normalization ambiguity was clarified before their correction.
 Local diff checks pass. Build/full tests remain not-run locally under the
 control-plane prohibition; exact-SHA CI and live acceptance are pending.
 Version2.50.10 is reserved for this new private Corp build.
+
+First CI on f72ce95 compiled product code but all six affected test jobs hit
+the same CS8752 params-array fixture ambiguity. Corrected constructor typing
+without changing runtime behavior or weakening assertions; new CI pending.

@@ -47,24 +47,24 @@ public sealed class BusinessPolicyPhoneTests
         yield return [Payload().Replace("\"revision\":7", "\"revision\":7.0")];
         yield return [Payload().Replace("\"rules\":[]", "\"rules\":null")];
         yield return [Payload("[{\"type\":\"ip_cidr\",\"value\":\"195.211.120.35/32\",\"action\":\"direct\"}]")];
-        yield return [Payload(Rules(new("domain_suffix", "example.com", "direct", "\n")))];
-        yield return [Payload(Rules(new("domain_suffix", "example.com", "direct", new string('я', 129))))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "example.com", "direct", "\n")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "example.com", "direct", new string('я', 129))))];
         yield return [Payload(Rules(new("domain", "example.com", "direct", "")))];
-        yield return [Payload(Rules(new("domain_suffix", "EXAMPLE.COM", "direct", "")))];
-        yield return [Payload(Rules(new("domain_suffix", "co.uk", "direct", "")))];
-        yield return [Payload(Rules(new("domain_suffix", "corp.ninitux.com", "direct", "")))];
-        yield return [Payload(Rules(new("domain_suffix", "admin.corp.ninitux.com", "proxy", "")))];
-        yield return [Payload(Rules(new("domain_suffix", "x.admin.corp.ninitux.com", "proxy", "")))];
-        yield return [Payload(Rules(new("ip_cidr", "195.211.120.35", "direct", "")))];
-        yield return [Payload(Rules(new("ip_cidr", "195.211.120.35/24", "direct", "")))];
-        yield return [Payload(Rules(new("ip_cidr", "::ffff:195.211.120.35/128", "direct", "")))];
-        yield return [Payload(Rules(new("ip_cidr", "2001:0db8::/32", "direct", "")))];
-        yield return [Payload(Rules(new("ip_cidr", "2001:db8::/129", "direct", "")))];
-        yield return [Payload(Rules(new("domain_suffix", "example.com", "block", "")))];
-        yield return [Payload(Rules(new("ip_cidr", "192.0.2.0/24", "direct", ""), new("ip_cidr", "192.0.2.0/24", "direct", "")))];
-        yield return [Payload(Rules(new("ip_cidr", "192.0.2.0/24", "direct", ""), new("ip_cidr", "192.0.2.1/32", "proxy", "")))];
-        yield return [Payload(Rules(new("ip_cidr", "2001:db8::/32", "direct", ""), new("ip_cidr", "2001:db8:1::/48", "proxy", "")))];
-        yield return [Payload(Rules(new("domain_suffix", "example.com", "direct", ""), new("domain_suffix", "sub.example.com", "proxy", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "EXAMPLE.COM", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "co.uk", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "corp.ninitux.com", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "admin.corp.ninitux.com", "proxy", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "x.admin.corp.ninitux.com", "proxy", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("ip_cidr", "195.211.120.35", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("ip_cidr", "195.211.120.35/24", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("ip_cidr", "::ffff:195.211.120.35/128", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("ip_cidr", "2001:0db8::/32", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("ip_cidr", "2001:db8::/129", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "example.com", "block", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("ip_cidr", "192.0.2.0/24", "direct", ""), new BusinessPhonePolicyRule("ip_cidr", "192.0.2.0/24", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("ip_cidr", "192.0.2.0/24", "direct", ""), new BusinessPhonePolicyRule("ip_cidr", "192.0.2.1/32", "proxy", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("ip_cidr", "2001:db8::/32", "direct", ""), new BusinessPhonePolicyRule("ip_cidr", "2001:db8:1::/48", "proxy", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "example.com", "direct", ""), new BusinessPhonePolicyRule("domain_suffix", "sub.example.com", "proxy", "")))];
     }
 
     [Theory]
@@ -122,11 +122,11 @@ public sealed class BusinessPolicyPhoneTests
     public void SameDirectionOverlapAndDifferentAddressFamilies_AreValid()
     {
         BusinessPhonePolicy.ValidateRules([
-            new("domain_suffix", "example.com", "direct", ""),
-            new("domain_suffix", "sub.example.com", "direct", ""),
-            new("ip_cidr", "192.0.2.0/24", "direct", ""),
-            new("ip_cidr", "192.0.2.1/32", "direct", ""),
-            new("ip_cidr", "2001:db8::/32", "proxy", "")]);
+            new BusinessPhonePolicyRule("domain_suffix", "example.com", "direct", ""),
+            new BusinessPhonePolicyRule("domain_suffix", "sub.example.com", "direct", ""),
+            new BusinessPhonePolicyRule("ip_cidr", "192.0.2.0/24", "direct", ""),
+            new BusinessPhonePolicyRule("ip_cidr", "192.0.2.1/32", "direct", ""),
+            new BusinessPhonePolicyRule("ip_cidr", "2001:db8::/32", "proxy", "")]);
         Assert.False(BusinessPhonePolicy.IntersectsIp("0.0.0.0/0", "::/0"));
         Assert.True(BusinessPhonePolicy.IntersectsIp("2001:db8::/32", "2001:db8:ffff::/48"));
         Assert.False(BusinessPhonePolicy.IntersectsIp("192.0.2.0/25", "192.0.2.128/25"));

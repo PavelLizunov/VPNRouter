@@ -889,3 +889,12 @@ ViewModel and routing composition before correction. Add embedded-main
 composition, retain pending immediate category revisions until acknowledged,
 and preserve old unrelated IP ordering. Unsupported IPv6 must be rejected
 before durable phone acceptance to avoid poisoning offline configuration.
+
+## Corp phone CI fixture compilation (2026-11-16, P1, confirmed)
+
+All six failed jobs on PR690/f72ce95 have the same CS8752 compiler diagnostic:
+new phone test helpers use target-typed new() as the sole argument to a params
+BusinessPhonePolicyRule[] parameter, so C# selects the array target rather than
+the element. The source product projects compile, but the test assembly cannot
+compile and no runtime test result is available. Use explicit rule constructor
+types in these fixtures. Recorded before the test-only correction.

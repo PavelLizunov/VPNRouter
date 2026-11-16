@@ -10,8 +10,8 @@ public sealed class BusinessPolicyPhoneRoutingTests
     [Fact]
     public void AcceptedPhone_PrecedesManagedSitesAndEmbeddedIpRules()
     {
-        var phone = Phone(new("domain_suffix", "calls.example.com", "proxy", "phone"),
-            new("ip_cidr", BusinessPhonePolicy.LegacySipCidr, "proxy", "phone IP"));
+        var phone = Phone(new BusinessPhonePolicyRule("domain_suffix", "calls.example.com", "proxy", "phone"),
+            new BusinessPhonePolicyRule("ip_cidr", BusinessPhonePolicy.LegacySipCidr, "proxy", "phone IP"));
         var composed = BusinessPolicyRouting.Compose(Seed(), Main().WithPhone(phone));
         Assert.Equal(BusinessPolicyDomains.PortalDomain, composed[0].Value);
         Assert.Equal(new[] { "calls.example.com", BusinessPhonePolicy.LegacySipCidr }, composed.Skip(1).Take(2).Select(r => r.Value));
@@ -84,7 +84,7 @@ public sealed class BusinessPolicyPhoneRoutingTests
     [InlineData("full")]
     public void AcceptedPhoneIp_GeneratesProxyRoutesWithoutAddingLegacyPhysicalExclusion(string mode)
     {
-        var settings = Settings(Phone(new("ip_cidr", BusinessPhonePolicy.LegacySipCidr, "proxy", "")));
+        var settings = Settings(Phone(new BusinessPhonePolicyRule("ip_cidr", BusinessPhonePolicy.LegacySipCidr, "proxy", "")));
         settings.App.RoutingMode = mode;
         settings.Tun.RouteExcludeAddress.Add("198.51.100.10/32");
         var config = ConfigGenerator.Generate(new Profile(), [], settings);
@@ -103,7 +103,7 @@ public sealed class BusinessPolicyPhoneRoutingTests
     [InlineData("192.0.2.0/24", true)]
     public void ProxyPhone_IntersectingMandatoryOrNewlyDetectedPhysicalExclusionFailsBeforeLaunch(string value, bool detected)
     {
-        var settings = Settings(Phone(new("ip_cidr", value, "proxy", "")));
+        var settings = Settings(Phone(new BusinessPhonePolicyRule("ip_cidr", value, "proxy", "")));
         if (detected) settings.Tun.AutoDetectedExcludeAddress.Add("192.0.2.23");
         var error = Assert.Throws<InvalidDataException>(() => ConfigGenerator.Generate(new Profile(), [], settings));
         Assert.Equal("Business telephony proxy conflicts with a required physical route.", error.Message);
@@ -114,7 +114,7 @@ public sealed class BusinessPolicyPhoneRoutingTests
     [InlineData("proxy")]
     public void Ipv6Phone_FailsExplicitlyUntilTunnelCanCaptureIpv6(string action)
     {
-        var settings = Settings(Phone(new("ip_cidr", "2001:db8::/32", action, "")));
+        var settings = Settings(Phone(new BusinessPhonePolicyRule("ip_cidr", "2001:db8::/32", action, "")));
         settings.Tun.Ipv6Enabled = true;
         var error = Assert.Throws<InvalidDataException>(() => ConfigGenerator.Generate(new Profile(), [], settings));
         Assert.Equal("Business telephony IPv6 routes require IPv6 tunnel support.", error.Message);
