@@ -140,6 +140,9 @@ def load_config(path, root):
     value['_prompt_sha'] = digest(prompt.encode())
     if value.get('wire_api') not in ('responses', 'chat_completions'):
         raise Invalid('configuration')
+    if 'thinking_mode' in value and (value['wire_api'] != 'chat_completions' or
+                                     value['thinking_mode'] not in ('enabled', 'disabled')):
+        raise Invalid('thinking mode')
     if not isinstance(value.get('model_name'), str) or not 1 <= len(value['model_name']) <= 128 or scrub(value['model_name']) != value['model_name']:
         raise Invalid('configuration')
     parsed = urlsplit(value.get('model_api_url', ''))
@@ -277,6 +280,8 @@ def request_model(config, packet):
         request.update(input=messages, store=False, max_output_tokens=6000)
     else:
         request.update(messages=messages, max_tokens=6000, response_format={'type': 'json_object'})
+        if 'thinking_mode' in config:
+            request['thinking'] = {'type': config['thinking_mode']}
     url = config['_url']
     connection_cls = http.client.HTTPSConnection if url.scheme == 'https' else http.client.HTTPConnection
     connection = connection_cls(url.hostname, url.port, timeout=config['timeout_seconds'])
@@ -508,10 +513,13 @@ def run_once(root, config, model_request=bounded_request_model):
                 if not receipt:
                     continue
                 job = receipt.get('diagnosis') or {}
-                revision = digest(encode({'input': receipt.get('sha256'), 'prompt': config['_prompt_sha'],
-                                          'model': config['model_name'], 'url': config['model_api_url'],
-                                          'wire': config['wire_api'], 'facts': config['_facts'],
-                                          'provider_available': config['_key'] is not None}))
+                revision_fields = {'input': receipt.get('sha256'), 'prompt': config['_prompt_sha'],
+                                   'model': config['model_name'], 'url': config['model_api_url'],
+                                   'wire': config['wire_api'], 'facts': config['_facts'],
+                                   'provider_available': config['_key'] is not None}
+                if 'thinking_mode' in config:
+                    revision_fields['thinking_mode'] = config['thinking_mode']
+                revision = digest(encode(revision_fields))
                 state = job.get('state', 'received')
                 if state == 'running' and job.get('lease_until', 0) > now:
                     continue

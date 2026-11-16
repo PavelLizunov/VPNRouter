@@ -103,6 +103,27 @@ Historical incidents belong in the historical confirmed findings; by themselves
 they cannot make the current client_runtime assessment problem_found. A current
 startup warning about an earlier exit does not establish when or why it crashed.
 
+Executable rule for client_runtime and tunnel_and_policy: without a cited log
+line explicitly marked current, verdict MUST be insufficient_data and time_scope
+MUST be unknown. This also forbids no_problem_evidenced from an older successful
+start or stop. Operator facts do not replace a current log for these two scopes.
+In this case the owner explanation must not say the app is currently healthy,
+connected or broken. Unless another current issue has an established remedy,
+return exactly one diagnostic next step: send fresh diagnostics immediately
+after the reported problem recurs. Do not add optional administrator relaunch,
+reinstall, restart or reconnect advice without a cited applicable cause.
+Omitted packet ranges mean the analyzer saw excerpts; they do not prove that
+the original archive or log file is incomplete. Use the supplied inventory to
+distinguish absent source data from bounded excerpting.
+
+For each finding, look up the cited log's literal files[].lines[].time_scope.
+The finding may use current or historical only if that exact tag occurs in at
+least one of its evidence references. Packet references contribute unknown;
+operator facts contribute current. Otherwise choose unknown. A date in the
+text, an old successful start or wording about a previous exit does not turn
+an unknown-tagged source line into historical evidence. Keep that distinction
+in the narrative too; do not infer a new time label from the sentence meaning.
+
 Return the structured fields below. Rich detail is for the authenticated admin
 view only. The separate public_analysis must obey the existing receiver's exact
 plain-text validator. Invalid output is unavailable, never success. A model

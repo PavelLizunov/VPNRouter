@@ -48,6 +48,10 @@ summary with state and counts, no model text/secrets/paths. Config fields:
   `chat_completions`), prompt_file, optional operator_context_file.
 - timeout_seconds (default90, max120), lease_seconds (default300),
   max_attempts (default3), poll_seconds (default15), retry_seconds (default30).
+- thinking_mode (optional, chat_completions only): enabled or disabled. Omission
+  preserves provider defaults. It is part of job identity. For the owner-selected
+  deepseek-v4.1-flash diagnostic profile use disabled to reserve bounded output
+  for the structured result; evidence/result guards remain unchanged.
 - allow_private_http (defaultfalse): only literal private/loopback addresses may
   use HTTP; otherwise HTTPS. No userinfo, query, fragment or redirects.
 

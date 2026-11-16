@@ -339,3 +339,33 @@ header and our own User-Agent it returned HTTP 200 and valid JSON from the exact
 requested model. Add only the missing worker transport metadata, then repeat
 synthetic tests, independent review, exact-source CI and real-report acceptance.
 No fallback provider or new Windows version is authorized by this selection.
+
+The owner clarified that only deepseek-v4.1-flash is wanted inside the site.
+OpenCode Go authentication and session routing work, but its default high
+thinking mode consumed all 6,000 output tokens on the real report and returned
+no final content. Retain the unaltered response; add a bounded explicit chat
+thinking option and include it in job identity so this profile change requeues
+terminal attempts. Select disabled for this diagnostic profile, without raising
+token/deadline bounds or relaxing output validation. Test default/valid/invalid
+profiles and requeue, review independently, then verify automatic real outputs.
+
+The disabled-thinking probe returned complete JSON in 12 seconds, but its
+unknown-time healthy-runtime conclusion was correctly rejected. Tighten the
+instruction to match that executable guard exactly, prevent unsupported admin
+relaunch advice and distinguish omitted packet excerpts from missing archives.
+Original rejected output remains private evidence, never an automatic success.
+
+The next probe obeyed the runtime verdict guard but assigned historical to a
+past-exit warning whose packet line is unknown. Record this additional prompt
+ambiguity before correction: finding tags must use the literal cited line tags,
+not dates or past-tense wording inferred from the log text.
+
+Server-only follow-up verification: focused transport/configuration/legacy-job
+tests pass, independent diff review completed, and the lead corrected its one
+confirmed default-revision compatibility finding. The two unmodified real Flash
+probes validate in 9 and 20 seconds with the refined prompt and disabled thinking.
+These probes never publish a receipt and are not automatic worker acceptance.
+The site at accepted a9c6e6f5 is live; its real authenticated 320/420/1280 layout,
+summary/action ordering and keyboard disclosures pass. Full exact-source CI and
+automatic reprocessing/provenance for this final profile are recorded in the
+associated PR deployment receipt. No client build/version or policy changed.
