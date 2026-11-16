@@ -308,6 +308,33 @@ class WorkerTests(unittest.TestCase):
             with self.assertRaises(analyzer.Unavailable):
                 analyzer.request_model(self.config, {})
 
+        chat = {'model': 'deepseek-v4-pro', 'choices': [{'finish_reason': 'stop', 'message': {
+            'content': json.dumps(result()), 'reasoning_content': 'Synthetic advisory reasoning.'}}]}
+        config = dict(self.config, wire_api='chat_completions', model_name='deepseek-v4-pro')
+        config['_url'] = analyzer.urlsplit('https://opencode.ai/inference/go/openai/v1/chat/completions')
+        sessions = []
+        for report_id in (self.receipt['report_id'], self.receipt['report_id'], 'b' * 64):
+            connection = Connection(Response(chat))
+            packet = {'report_id': report_id, 'input_sha256': self.receipt['sha256']}
+            with mock.patch.object(analyzer.http.client, 'HTTPSConnection', return_value=connection):
+                candidate, model = analyzer.request_model(config, packet)
+            self.assertEqual(candidate, result())
+            self.assertEqual(model, 'deepseek-v4-pro')
+            headers = connection.request_fields['headers']
+            self.assertEqual(headers['User-Agent'], 'VPNRouter-Corp-Diagnostics/1.0')
+            self.assertEqual(headers['Authorization'], 'Bearer synthetic-provider-key')
+            session = headers['X-Opencode-Session']
+            self.assertRegex(session, '^[0-9a-f]{64}$')
+            self.assertNotEqual(session, report_id)
+            sessions.append(session)
+        self.assertEqual(sessions[0], sessions[1])
+        self.assertNotEqual(sessions[0], sessions[2])
+        config['_url'] = analyzer.urlsplit('https://opencode.ai.example.invalid/v1/chat/completions')
+        connection = Connection(Response(chat))
+        with mock.patch.object(analyzer.http.client, 'HTTPSConnection', return_value=connection):
+            analyzer.request_model(config, packet)
+        self.assertNotIn('X-Opencode-Session', connection.request_fields['headers'])
+
     def test_aliases_preserve_relationships_and_scrub_is_idempotent(self):
         aliases = {}
         first = analyzer.scrub('peer 192.0.2.7 then 192.0.2.8', aliases=aliases)
