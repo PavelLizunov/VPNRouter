@@ -49,7 +49,7 @@ public sealed class BusinessPolicyPhoneTests
         yield return [Payload("[{\"type\":\"ip_cidr\",\"value\":\"195.211.120.35/32\",\"action\":\"direct\"}]")];
         yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "example.com", "direct", "\n")))];
         yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "example.com", "direct", new string('я', 129))))];
-        yield return [Payload(Rules(new("domain", "example.com", "direct", "")))];
+        yield return [Payload(Rules(new BusinessPhonePolicyRule("domain", "example.com", "direct", "")))];
         yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "EXAMPLE.COM", "direct", "")))];
         yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "co.uk", "direct", "")))];
         yield return [Payload(Rules(new BusinessPhonePolicyRule("domain_suffix", "corp.ninitux.com", "direct", "")))];

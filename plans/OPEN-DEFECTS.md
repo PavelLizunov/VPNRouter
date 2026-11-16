@@ -898,3 +898,9 @@ BusinessPhonePolicyRule[] parameter, so C# selects the array target rather than
 the element. The source product projects compile, but the test assembly cannot
 compile and no runtime test result is available. Use explicit rule constructor
 types in these fixtures. Recorded before the test-only correction.
+
+The first CS8752 correction missed the negative fixture whose rule type is the
+intentionally invalid `domain` rather than `domain_suffix`/`ip_cidr`. CI on
+dfd8993 still reports exactly that one compilation error in all five jobs.
+Record before correcting the remaining constructor; inspect all params helper
+calls rather than matching only supported rule types. No runtime tests ran.
