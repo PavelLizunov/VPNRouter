@@ -369,3 +369,10 @@ The site at accepted a9c6e6f5 is live; its real authenticated 320/420/1280 layou
 summary/action ordering and keyboard disclosures pass. Full exact-source CI and
 automatic reprocessing/provenance for this final profile are recorded in the
 associated PR deployment receipt. No client build/version or policy changed.
+
+The accepted d117b48d worker automatically published the original owner's Flash
+answer; the second report retained its prior result after two rejected replies.
+A separate exact-profile probe confirms ambiguous final public state and packet
+collector citation instructions. Clarify only that instruction, validate its
+example against the unchanged publisher; the refined real probe passes in 11
+seconds. Exact-head CI and automatic reprocessing remain pending. Keep originals.

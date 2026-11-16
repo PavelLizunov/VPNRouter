@@ -128,6 +128,17 @@ Return the structured fields below. Rich detail is for the authenticated admin
 view only. The separate public_analysis must obey the existing receiver's exact
 plain-text validator. Invalid output is unavailable, never success. A model
 result is advisory and never triggers commands or configuration changes.
+
+You are returning a completed analysis, even when its verdict is insufficient_data.
+public_analysis MUST be {"version":1,"state":"ready","message_ru":"..."}
+with a nonempty standalone Russian conclusion of at most 300 characters.
+Never return pending or unavailable: those are runner lifecycle states, not
+valid completed model results. Do not omit message_ru or copy this placeholder.
+For kind packet, field MUST be received_utc, report_id, input_sha256,
+prompt_version, files, or an existing collector scalar such as
+collector.generatedUtc or collector.collection. Never cite the collector
+container, a files subpath, or a collector field absent from this packet.
+Before returning, check every evidence reference and the ready short message.
 ```
 
 ## Result contract
@@ -157,8 +168,10 @@ an existing collector scalar, or files (the supplied inventory, unknown scope).
 It rejects a current-runtime failure conclusion supported only by historical or
 unresolved-time evidence; route that result to review/insufficient data instead.
 
-Public analysis has integer `version: 1` and state `pending`, `ready` or
-`unavailable`. Optional `message_ru`/`message_en` are plain standalone prose,
+The receiver lifecycle supports `pending`, `ready` and `unavailable`, but a
+completed model result must use integer `version: 1`, `state: ready` and
+`message_ru`. Example: `{"version":1,"state":"ready","message_ru":"Для оценки текущего подключения нужны свежие диагностические данные."}`.
+`message_ru` and optional `message_en` are plain standalone prose,
 nonempty, at most 300 Unicode characters and 300 UTF-16 code units. No control,
 format/surrogate characters, markup, URLs/domains or shell-command syntax.
 `ready` requires a valid message. Use receiver.public_analysis as the executable
