@@ -329,3 +329,13 @@ automatic analysis of both retained real reports after activating the accepted
 prompt. No Windows build, version bump, provisioning or policy change is needed.
 Rollback restores the retained exact prompt and preserves all report results and
 credential versions. Outcome and real semantic review remain pending.
+
+The owner then explicitly selected DeepSeek from OpenCode Go and supplied its
+token through the secret card. The full token was permanently retained and
+verified before use. Official Go documentation and the live model catalog expose
+deepseek-v4-pro through the OpenAI-compatible chat endpoint. A minimal request
+confirmed the service requires a stable conversation session header; with that
+header and our own User-Agent it returned HTTP 200 and valid JSON from the exact
+requested model. Add only the missing worker transport metadata, then repeat
+synthetic tests, independent review, exact-source CI and real-report acceptance.
+No fallback provider or new Windows version is authorized by this selection.

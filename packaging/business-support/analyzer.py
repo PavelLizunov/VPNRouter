@@ -282,8 +282,12 @@ def request_model(config, packet):
     connection = connection_cls(url.hostname, url.port, timeout=config['timeout_seconds'])
     deadline = time.monotonic() + config['timeout_seconds']
     try:
-        connection.request('POST', url.path or '/', body=encode(request), headers={
-            'Authorization': 'Bearer ' + config['_key'], 'Content-Type': 'application/json'})
+        headers = {'Authorization': 'Bearer ' + config['_key'], 'Content-Type': 'application/json',
+                   'User-Agent': 'VPNRouter-Corp-Diagnostics/1.0'}
+        if url.hostname == 'opencode.ai':
+            headers['X-Opencode-Session'] = digest(encode({'report': packet.get('report_id'),
+                                                         'input': packet.get('input_sha256')}))
+        connection.request('POST', url.path or '/', body=encode(request), headers=headers)
         connection.sock.settimeout(max(.01, deadline - time.monotonic()))
         response = connection.getresponse()
         if response.status in (408, 429) or response.status >= 500:
