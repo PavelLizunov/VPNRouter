@@ -57,10 +57,10 @@ internal static class BusinessPolicyDomains
     internal static bool IsProtected(string domain) =>
         Intersects(domain, PortalDomain) || ProtectedDirectDomains.Any(value => Intersects(domain, value));
 
-    private static bool Intersects(string left, string right) => left == right ||
+    internal static bool Intersects(string left, string right) => left == right ||
         left.EndsWith("." + right, StringComparison.Ordinal) || right.EndsWith("." + left, StringComparison.Ordinal);
 
-    private static string NormalizeDns(string input)
+    internal static string NormalizeDns(string input)
     {
         if (input is not { Length: > 0 and <= 253 } || input.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)) ||
             input.IndexOfAny(['/', '\\', ':', '?', '#', '@', '[', ']', '%', '*']) >= 0) throw Invalid();

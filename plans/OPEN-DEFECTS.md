@@ -857,3 +857,35 @@ and the narrow polkit rule correctly rejected that write. An uncached lookup
 then returned A+AAAA via ens18. Fix: wait briefly for a verified kernel TUN
 route, never mutate DNS on a physical link, and refresh the cleanup sentinel
 with that verified interface. Fixed in 4ad09f87: regression code is in LinuxDnsHardeningTests; exact-head test CI 40249714583 and Arch 40249712397 passed. N4 M records live r47 MTU 1420 -> 1280 -> 1420 and resolver recovery; this is scoped VM evidence.
+
+## Corp telephony editing (2026-11-16, P2, confirmed)
+
+The portal phone view is read-only. The signed schema1 managed-site policy
+explicitly excludes four phone suffixes; BusinessPolicyRouting reinserts them,
+and BusinessDefaults adds195.211.120.35/32 as a physical TUN exclusion.
+Unlocking the form alone cannot change routing; proxy IP rules also need the
+same UDP transport handling as domains. Existing revision/digest receipts
+cover only the site feed. Add an independent signed phone feed and composite
+application floors without changing existing site authority or journals.
+Recorded before implementation; see phase-corp-voip-edit-2026-11-16.md.
+
+## Corp telephony IPv6 capture limitation (2026-11-16, P1, confirmed)
+
+BusinessDefaults forces IPv4 DNS and disables IPv6; ConfigGenerator.BuildInbounds
+emits only the IPv4 TUN address. Accepting an editable IPv6 phone route would
+not establish IPv6 traffic capture. Keep the signed wire validator portable,
+but reject IPv6 telephony publication/application with a clear limitation
+until actual IPv6 capture is implemented and verified. Do not claim application
+or enable broad IPv6 behavior as part of this edit. Recorded before guards.
+
+## Corp editable telephony implementation review (2026-11-16, P1/P2, confirmed)
+
+Independent correctness/lifetime reviews found: P1 phone-only acceptance was
+persisted but ignored if the main signed site journal was absent; P1 a newer
+next-connection site acceptance could discard an immediate phone update before
+UI dispatch/engine acknowledgement; P2 inserting phone rules also reversed
+unrelated embedded IP exception precedence. Source verified in coordinator,
+ViewModel and routing composition before correction. Add embedded-main
+composition, retain pending immediate category revisions until acknowledged,
+and preserve old unrelated IP ordering. Unsupported IPv6 must be rejected
+before durable phone acceptance to avoid poisoning offline configuration.
