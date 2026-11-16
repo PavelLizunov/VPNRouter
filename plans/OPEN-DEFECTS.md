@@ -904,3 +904,14 @@ intentionally invalid `domain` rather than `domain_suffix`/`ip_cidr`. CI on
 dfd8993 still reports exactly that one compilation error in all five jobs.
 Record before correcting the remaining constructor; inspect all params helper
 calls rather than matching only supported rule types. No runtime tests ran.
+
+## Corp cached main apply metadata regression (2026-11-16, P1, confirmed)
+
+PR690/ebe4bc0 compiles; Business Ubuntu runs328 tests with327 passing. Existing
+ImmediateRequestCapture_DoesNotAdoptLaterNextConnectionPublication fails because
+coordinator TryLoad now forces ApplyNow=false on the cached main snapshot,
+changing its original publication metadata before a captured request reads it.
+Retain the main signed apply flag on load; loading still emits no Accepted
+notification and therefore cannot request a reconnect. Keep independent pending
+immediate intent tracking for new acceptances. Recorded before code correction;
+the existing regression assertion remains unchanged.

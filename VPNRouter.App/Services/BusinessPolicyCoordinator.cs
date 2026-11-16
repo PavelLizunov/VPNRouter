@@ -109,7 +109,7 @@ internal sealed class BusinessPolicyCoordinator : IDisposable, IAsyncDisposable
         {
             var main = _store.Load();
             var phone = _phoneStore?.Load()?.Phone;
-            Volatile.Write(ref _current, Compose(main, phone, false));
+            Volatile.Write(ref _current, Compose(main, phone, main?.ApplyNow == true));
             _loaded = true;
             SetUnavailable(false);
             return true;

@@ -58,3 +58,8 @@ Version2.50.10 is reserved for this new private Corp build.
 First CI on f72ce95 compiled product code but all six affected test jobs hit
 the same CS8752 params-array fixture ambiguity. Corrected constructor typing
 without changing runtime behavior or weakening assertions; new CI pending.
+
+CI on ebe4bc0 compiled and ran328 Business Ubuntu tests:327 passed, one
+existing cached-main capture regression failed. Preserve signed main apply
+metadata on load without publishing a reconnect notification. Existing test
+assertions remain intact; pending receipt intent tracking remains unchanged.
