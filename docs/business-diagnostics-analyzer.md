@@ -77,6 +77,12 @@ No_problem_evidenced describes only the inspected scope, never overall health.
 A verified delivery problem may coexist with unknown current tunnel health.
 Each assessment concerns the current reported attempt and has an explicit
 current or unknown time_scope, high/medium/low confidence and cited evidence.
+Use current only with a cited log line explicitly marked current in the packet,
+or a trusted operator fact. Packet-field references, including clock observations,
+collector fields and the files inventory, have unknown time scope. They can still
+establish an evidence-quality problem with time_scope unknown. The same rule
+applies to confirmed/probable/unknown findings; historical requires a cited line
+explicitly marked historical. Do not infer a current scope from report freshness.
 Historical incidents belong in the historical confirmed findings; by themselves
 they cannot make the current client_runtime assessment problem_found. A current
 startup warning about an earlier exit does not establish when or why it crashed.
@@ -106,6 +112,8 @@ Evidence is either `{ "kind": "log", "file": "app-01.txt", "line": 12 }`,
 or `{ "kind": "packet", "field": "received_utc" }`. Every reference must resolve
 to the supplied packet; file/line references must actually be present. The
 publisher validates structure, bounds and references independently of the model.
+Packet references may cite received_utc, report_id, input_sha256, prompt_version,
+an existing collector scalar, or files (the supplied inventory, unknown scope).
 It rejects a current-runtime failure conclusion supported only by historical or
 unresolved-time evidence; route that result to review/insufficient data instead.
 
