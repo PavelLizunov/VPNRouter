@@ -4,8 +4,7 @@ using Avalonia.Platform;
 
 namespace VPNRouter.App.ViewModels.Internals;
 
-// Known flag assets and explicit provider labels. Trusted node metadata can supply
-// country codes independently; an unsupported code must never open a missing asset.
+// Explicit provider labels support legacy subscriptions; metadata supplies country codes independently.
 internal static class BusinessServerCountry
 {
     private static readonly (string Code, string[] Labels)[] Countries =
@@ -32,34 +31,13 @@ internal static class BusinessServerCountry
 
     internal static IImage? Flag(string code)
     {
-        if (!Countries.Any(country => country.Code == code)) return null;
+        if (code.Length != 2 || !code.All(c => char.IsAsciiLetter(c))) return null;
+        code = code.ToUpperInvariant();
         if (!Flags.TryGetValue(code, out var image))
         {
-            if (code is "CH" or "RO")
-            {
-                image = new DrawingImage
-                {
-                    Drawing = code == "RO" ? new DrawingGroup
-                    {
-                        Children =
-                        {
-                            new GeometryDrawing { Brush = Brushes.Blue, Geometry = Geometry.Parse("M0,0 L8,0 L8,16 L0,16 Z") },
-                            new GeometryDrawing { Brush = Brushes.Yellow, Geometry = Geometry.Parse("M8,0 L16,0 L16,16 L8,16 Z") },
-                            new GeometryDrawing { Brush = Brushes.Red, Geometry = Geometry.Parse("M16,0 L24,0 L24,16 L16,16 Z") }
-                        }
-                    } : new DrawingGroup
-                    {
-                        Children =
-                        {
-                            new GeometryDrawing { Brush = Brushes.Red, Geometry = Geometry.Parse("M0,0 L16,0 L16,16 L0,16 Z") },
-                            new GeometryDrawing { Brush = Brushes.White, Geometry = Geometry.Parse("M6,3 L10,3 L10,6 L13,6 L13,10 L10,10 L10,13 L6,13 L6,10 L3,10 L3,6 L6,6 Z") }
-                        }
-                    }
-                };
-                Flags[code] = image;
-                return image;
-            }
-            using var stream = AssetLoader.Open(new Uri($"avares://VPNRouter.App/Assets/Flags/{code}.png"));
+            var uri = new Uri($"avares://VPNRouter.App/Assets/Flags/ISO/{code}.png");
+            if (!AssetLoader.Exists(uri)) return null;
+            using var stream = AssetLoader.Open(uri);
             Flags[code] = image = new Bitmap(stream);
         }
         return image;

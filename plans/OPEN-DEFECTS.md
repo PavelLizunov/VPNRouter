@@ -915,3 +915,14 @@ Retain the main signed apply flag on load; loading still emits no Accepted
 notification and therefore cannot request a reconnect. Keep independent pending
 immediate intent tracking for new acceptances. Recorded before code correction;
 the existing regression assertion remains unchanged.
+
+## Business server country coverage (2026-11-17, P2, confirmed)
+
+Delivered Corp2.50.10 source57a27c1 restricts flags to ten countries. A live
+read-only metadata check confirms the two newest reported nodes provide IT
+and AL, but neither renders. Prepare all249 ISO3166-1 flags plus XK, retain
+legacy name fallback and reject malformed/unassigned asset codes safely.
+Country comes from existing GeoIP metadata; no external IP service is added.
+Corp2.50.11 delivery and necessary builds are explicitly owner-authorized.
+Scope and verification: phase-business-server-country-flags-2026-11-17.md.
+The separate null-country metadata behavior is not the observed two-node cause.
