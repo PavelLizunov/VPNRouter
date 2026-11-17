@@ -915,3 +915,39 @@ Retain the main signed apply flag on load; loading still emits no Accepted
 notification and therefore cannot request a reconnect. Keep independent pending
 immediate intent tracking for new acceptances. Recorded before code correction;
 the existing regression assertion remains unchanged.
+
+## Corp rules category model and note removal (2026-11-17, P2, fixed in static release 192dd795)
+
+Owner screenshots and follow-up reject fixed Sites/Telephony navigation, exposed
+notes, oversized direction selects, crowded pagination and history bottom gaps.
+Existing UI has no persistent category model. Record before a unified Rules
+workspace and separately persisted category metadata. Owner explicitly authorized
+clearing current saved comments; snapshot both signed feeds first and preserve
+every address/action. The existing Python receiver and edge normalization gate
+can provide metadata persistence without a compiled rebuild. Scope and wire:
+vpnctl docs/specs/corp-rule-categories.md.
+
+Independent metadata boundary tests found safe-integer overflow response
+ambiguity (14/15 passed): classify impossible next revision as400 and retain409
+for stale expected_revision. Recorded before correcting the implementation.
+
+Unified editor independent review found initial revision0 publication blocked,
+orphan assignments after abandoning draft additions, and category form input
+discarded on save failure. Record before correcting publication eligibility,
+assignment lifecycle and recoverable form persistence. These defects were
+corrected before the corresponding static activation.
+
+Fresh published390px inspection found a mobile density regression in the new
+unified table: appended desktop cell padding overrides the earlier mobile reset,
+and two stacked row actions stretch every row to217px. Recorded before a narrow
+CSS correction: reset unified mobile cell padding and keep row actions together.
+
+All category/note changes are live: receiver source40b3fc26 and vpnctl static
+source192dd795. All15 metadata contract tests pass. Real category CRUD and
+incognito persistence pass; invalid CSRF403, missing session401 and stale409
+are rejected. Initial-publication and partial-save browser mocks pass. Current
+main8/33 and phone7/5 comments are empty; address/action hashes match the
+archived original. Mobile rows were reduced from217px to155px without overflow
+at320/390px. No compiled build or broad CI ran under the owner prohibition.
+Historical signed revisions remain immutable. Test categories were removed;
+metadata revision6 retains defaults with no explicit assignments.
