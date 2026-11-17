@@ -951,3 +951,15 @@ archived original. Mobile rows were reduced from217px to155px without overflow
 at320/390px. No compiled build or broad CI ran under the owner prohibition.
 Historical signed revisions remain immutable. Test categories were removed;
 metadata revision6 retains defaults with no explicit assignments.
+
+## Corp multi-company receiver review (2026-11-17, P1/P2, corrected before activation)
+
+Owner resumed per-company username/password implementation. Trusted support
+namespaces/provisioning must preserve existing opaque policy IDs (not assume
+UUIDs) and existing report/category identities. Diff review found root-service
+identity enablement checked too late and a pending key-write recovery window
+that could recreate a removed key. Record copied from lead ledger before
+publication: gate root identity before dispatch; consume one key-creation intent
+before attempting its separate commit, retain full credential on uncertainty,
+never recreate removed/completed authority. Registry+HTTP tests12pass, category
+regression15pass, receiver regression26pass. No production activation yet.

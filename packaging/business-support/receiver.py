@@ -29,6 +29,11 @@ _category_spec = importlib.util.spec_from_file_location(
 corp_categories = importlib.util.module_from_spec(_category_spec)
 _category_spec.loader.exec_module(corp_categories)
 
+_company_spec = importlib.util.spec_from_file_location(
+    "_vpnrouter_corp_companies", Path(__file__).with_name("companies.py"))
+corp_companies = importlib.util.module_from_spec(_company_spec)
+_company_spec.loader.exec_module(corp_companies)
+
 MAX_BODY = 24 * 1024 * 1024
 MAX_EXPANDED = 20 * 1024 * 1024
 QUOTA = 512 * 1024 * 1024
@@ -256,6 +261,8 @@ class Store:
         self.quota = quota
         self.lock = MutationLock(self.root)
         self.inbox = None
+        self.require_company_header = False
+        self.companies = None
         if inbox_config:
             config = json.loads(private_file(inbox_config, self.root))
             identity = config.get("corp_identity_sha256", "")
@@ -263,7 +270,13 @@ class Store:
             if (config.get("schema") != 1 or not re.fullmatch(r"[0-9a-f]{64}", identity) or
                     not re.fullmatch(r"[A-Za-z0-9._~+/=-]{32,512}", token)):
                 raise ValueError("invalid inbox configuration")
+            self.companies = corp_companies.Companies(
+                self.key_file, identity, config.get("legacy_policy_id"), config.get("upload_endpoint"))
             self.inbox = (identity, token)
+            strict = config.get("require_company_header", False)
+            if type(strict) is not bool:
+                raise ValueError("invalid company header mode")
+            self.require_company_header = strict
         self.reserved = 0
         self.attempts = {}
         self.active = set()
@@ -410,15 +423,47 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not self.path.startswith("/internal/"):
             return False
         capability = store.inbox
-        supplied = self.headers.get("Authorization", "")
+        authorizations = self.headers.get_all("Authorization", [])
         if capability is None:
             self.reply(404, {"error": "not found"})
             return True
         identity, token = capability
-        if not hmac.compare_digest(supplied.encode(), ("Bearer " + token).encode()) or not enabled_identity(store.key_file, identity):
+        if (len(authorizations) != 1 or
+                not hmac.compare_digest(authorizations[0].encode(), ("Bearer " + token).encode())):
+            self.reply(401, {"error": "service identity required"})
+            return True
+        if not enabled_identity(store.key_file, identity):
             self.reply(401, {"error": "service identity required"})
             return True
         parsed = urlsplit(self.path)
+        company_headers = self.headers.get_all("X-Corp-Company", [])
+        if parsed.path == "/internal/corp-companies/provision":
+            if company_headers:
+                self.reply(400, {"error": "invalid company"})
+            else:
+                self.provision_company(parsed)
+            return True
+        if not company_headers and store.require_company_header:
+            self.reply(400, {"error": "company required"})
+            return True
+        if len(company_headers) > 1:
+            self.reply(400, {"error": "invalid company"})
+            return True
+        if company_headers:
+            try:
+                identity = store.companies.resolve(company_headers[0]) if store.companies else None
+            except ValueError:
+                self.reply(400, {"error": "invalid company"})
+                return True
+            except (OSError, RecursionError):
+                self.reply(503, {"error": "storage unavailable"})
+                return True
+            if identity is None:
+                self.reply(404, {"error": "company not found"})
+                return True
+        if not enabled_identity(store.key_file, identity):
+            self.reply(401, {"error": "service identity required"})
+            return True
         if parsed.path in ("/internal/corp-categories/state", "/internal/corp-categories/save"):
             self.category_request(parsed, identity)
             return True
@@ -490,6 +535,44 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.reply(200, {"schema": 1, "report": report_summary(receipt),
                                  "analysis": job.get("result"), "provenance": job.get("provenance")})
         return True
+
+    def provision_company(self, parsed):
+        if self.command != "POST":
+            self.reply(405, {"error": "method not allowed"})
+            return
+        try:
+            lengths = self.headers.get_all("Content-Length", [])
+            if (self.path != parsed.path or self.headers.get_all("Transfer-Encoding") or
+                    self.headers.get_content_type() != "application/json" or len(lengths) != 1 or
+                    not lengths[0].isascii() or not lengths[0].isdigit() or len(lengths[0]) > 4 or
+                    not 0 < int(lengths[0]) <= 4096):
+                raise ValueError("invalid request")
+            raw = self.rfile.read(int(lengths[0]))
+            if len(raw) != int(lengths[0]):
+                raise ValueError("incomplete request")
+            def unique(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError("duplicate field")
+                    result[key] = value
+                return result
+            body = json.loads(raw, object_pairs_hook=unique)
+            if not isinstance(body, dict) or set(body) != {"policy_id", "label"}:
+                raise ValueError("invalid request")
+            corp_companies.policy_id(body["policy_id"])
+            corp_companies.label_value(body["label"])
+        except (OSError, ValueError, TypeError, UnicodeError, RecursionError):
+            self.reply(400, {"error": "invalid request"})
+            return
+        try:
+            if self.server.store.companies is None:
+                raise ValueError("provisioning unavailable")
+            result = self.server.store.companies.provision(body["policy_id"], body["label"])
+        except (OSError, ValueError, TypeError, RecursionError):
+            self.reply(503, {"error": "provisioning unavailable"})
+            return
+        self.reply(200, result)
 
     def category_request(self, parsed, identity):
         if self.command != "POST":
