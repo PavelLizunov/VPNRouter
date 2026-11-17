@@ -16,9 +16,7 @@ public static partial class Strings
     public static string BusinessMenu => Ru ? "Меню" : "Menu";
     public static string BusinessLanguage => Ru ? "Язык" : "Language";
     public static string BusinessLanguageSaveFailed => Ru ? "Не удалось сохранить язык." : "Could not save language.";
-    public static string BusinessDetails => Ru ? "Подробнее" : "Details";
     public static string BusinessFullCompact => Ru ? "Весь трафик с исключениями" : "All traffic with exceptions";
-    public static string BusinessModesHint => Ru ? "Россия и UIS — напрямую." : "Russia and UIS use Direct.";
     public static string BusinessUpdateServers => Ru ? "Обновить список" : "Update list";
     public static string BusinessSubscriptionNotConfigured => Ru ? "Список встроен в эту сборку. Для обновления нужна новая версия." : "This build has an embedded list. Updating requires a newer build.";
     public static string BusinessSubscriptionUpdating => Ru ? "Обновляем список серверов…" : "Updating server list…";
@@ -62,7 +60,6 @@ public static partial class Strings
         return meaning + (Ru ? $" Проба {amount} {unit} назад." : $" Sample {amount} {unit} ago.") +
             (stale ? (Ru ? " Данные устарели." : " Data is stale.") : string.Empty);
     }
-    public static string BusinessCountryHint => Ru ? "Страна узла из vpnctld или явного названия подписки" : "Node country from vpnctld or an explicit subscription label";
     public static string BusinessCountryName(string code) => (code, Ru) switch
     {
         ("DE", true) => "Германия", ("DE", false) => "Germany",
@@ -80,9 +77,6 @@ public static partial class Strings
     };
     public static string BusinessSplit => Ru ? "Выбранные приложения и сайты" : "Selected apps and sites";
     public static string BusinessFull => Ru ? "Всё, кроме российских ресурсов и UIS" : "Everything except Russian resources and UIS";
-    public static string BusinessHint => Ru
-        ? "Российские ресурсы и телефония UIS направляются напрямую."
-        : "Russian resources and UIS telephony are routed directly.";
     public static string BusinessConfigMissing => Ru
         ? "Не удалось подготовить корпоративную конфигурацию. Обратитесь к администратору."
         : "The Business configuration could not be prepared. Contact your administrator.";

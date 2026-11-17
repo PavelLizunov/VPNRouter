@@ -51,7 +51,6 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     public string PolicyStatus => _client?.BusinessPolicyStatusText ?? string.Empty;
     public bool HasPolicyStatus => !string.IsNullOrEmpty(PolicyStatus);
     public string Language => Strings.BusinessLanguage;
-    public string CountryHint => Strings.BusinessCountryHint;
     public string Server => Strings.BusinessServer;
     public string ServerRefresh => Strings.BusinessServerRefresh;
     public string UpdateServers => Strings.BusinessUpdateServers;
@@ -69,9 +68,6 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     public string Split => Strings.BusinessSplit;
     public string Full => Strings.BusinessFull;
     public string FullCompact => Strings.BusinessFullCompact;
-    public string ModesHint => Strings.BusinessModesHint;
-    public string Hint => Strings.BusinessHint;
-    public string Details => Strings.BusinessDetails;
 
     internal void Refresh() => OnPropertyChanged(string.Empty);
 }

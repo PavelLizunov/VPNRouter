@@ -70,7 +70,8 @@
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <Image Source="{Binding LogoSource}" Width="36" Height="36" Stretch="Uniform"
                        RenderOptions.BitmapInterpolationMode="HighQuality"/>
-                <TextBlock Grid.Column="1" Text="VPNRouter Business" FontSize="16" FontWeight="SemiBold"
+                <TextBlock Grid.Column="1" Text="{Binding AppVersionShortText, StringFormat='VPNRouter Business {0}'}"
+                           AutomationProperties.AutomationId="BusinessProductVersion" FontSize="16" FontWeight="SemiBold"
                            TextWrapping="Wrap" VerticalAlignment="Center"/>
                 <Button Grid.Column="2" x:Name="BusinessMenuButton" Width="28" Height="28" Padding="0"
                         Background="Transparent" BorderThickness="0"

@@ -926,3 +926,5 @@ Country comes from existing GeoIP metadata; no external IP service is added.
 Corp2.50.11 delivery and necessary builds are explicitly owner-authorized.
 Scope and verification: phase-business-server-country-flags-2026-11-17.md.
 The separate null-country metadata behavior is not the observed two-node cause.
+
+- [ ] **P2** - The compact Business heading omits the installed version, so an employee cannot read it from the main screen. Bind the existing short version in the heading. Source change under review in #693.
