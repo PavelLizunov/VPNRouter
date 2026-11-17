@@ -140,6 +140,14 @@ paths, URL credentials, query strings, fragments, redirects and public HTTP.
 HTTPS uses normal certificate validation. There is no alternate-model fallback.
 Responses requests set `store: false`; provider tool/function output is rejected.
 
+Optional `company_prompt_file` selects a separate private UTF-8 generic prompt
+for completed, enabled company registrations from the upload-key registry.
+New companies receive no legacy operator facts. The configured legacy identity
+retains its existing prompt, context and revision; without this optional field,
+processing remains legacy-only. Enrollment rereads registrations on every call
+and rotates a durable cursor after each processed report under a fixed
+nonblocking lock, so legacy backlog cannot starve another company.
+
 Optional timeout, lease, attempts, polling and retry defaults are 90, 300, 3, 15
 and 30 seconds respectively. Timeout is at most 120 seconds; leases must be
 130-3600 seconds so they outlast the request deadline. Attempts are bounded to

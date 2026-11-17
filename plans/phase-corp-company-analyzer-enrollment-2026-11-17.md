@@ -58,4 +58,9 @@ no-client-build constraint; retain the scoped Python verification/review evidenc
 
 ## Outcome
 
-Implementation and live acceptance pending.
+Implemented registry enrollment, generic prompt isolation and durable round-robin
+scheduling. Existing identity-specific analyzer AST is unchanged. All84 scoped
+Python tests passed, including five independent enrollment/provider isolation
+scenarios. Independent diff review returned no findings. AST/diff/secret gates
+are checked before publication. Live service cutover remains pending; backend
+70bc69f3 and its verified hosted artifact remain unchanged.

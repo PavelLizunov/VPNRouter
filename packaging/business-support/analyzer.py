@@ -20,6 +20,7 @@ import uuid
 import zipfile
 
 import receiver
+import company_analysis
 
 MAX_INPUT = 192 * 1024
 MAX_RESULT = 24 * 1024
@@ -138,6 +139,12 @@ def load_config(path, root):
         raise Invalid('configuration')
     value['_prompt'] = prompt
     value['_prompt_sha'] = digest(prompt.encode())
+    if 'company_prompt_file' in value:
+        company_prompt = receiver.private_file(value['company_prompt_file'], root, 32768).decode('utf-8')
+        if not company_prompt.strip():
+            raise Invalid('configuration')
+        value['_company_prompt'] = company_prompt
+        value['_company_prompt_sha'] = digest(company_prompt.encode())
     if value.get('wire_api') not in ('responses', 'chat_completions'):
         raise Invalid('configuration')
     if 'thinking_mode' in value and (value['wire_api'] != 'chat_completions' or
@@ -610,7 +617,7 @@ def main():
     while True:
         try:
             config = load_config(args.config, args.reports)
-            summary = run_once(args.reports, config)
+            summary = company_analysis.run_once(args.reports, config, run_once)
         except (OSError, ValueError, TypeError, KeyError, AttributeError, UnicodeError, RecursionError):
             summary = {'state': 'unavailable', 'processed': 0}
             config = {'poll_seconds': 15}

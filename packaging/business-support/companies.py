@@ -162,6 +162,21 @@ class Companies:
             seen.add(entry["identity"])
         return registry
 
+    def active_identities(self) -> list[str]:
+        """Read completed registrations and enabled keys without changing either."""
+        with self.locked() as fd:
+            registry = self._registry(fd)
+            keys = _read(fd, self.keys.name)
+            if not isinstance(keys, dict):
+                raise ValueError("invalid keys")
+            for identity, entry in keys.items():
+                if (not isinstance(identity, str) or not re.fullmatch(r"[0-9a-f]{64}", identity) or
+                        not isinstance(entry, dict) or type(entry.get("enabled")) is not bool):
+                    raise ValueError("invalid keys")
+            return sorted(entry["identity"] for entry in registry.values()
+                          if not entry["pending"] and
+                          keys.get(entry["identity"], {}).get("enabled") is True)
+
     def resolve(self, policy):
         policy_id(policy)
         with self.locked() as fd:
