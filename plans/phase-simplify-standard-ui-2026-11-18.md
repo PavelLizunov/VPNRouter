@@ -19,3 +19,7 @@ to deletion. The headless regression deletes a different row from the selection
 and checks the stored server and selection. Narrow Russian rendering runs in
 the existing UI smoke job. Static binding, workflow and whitespace checks passed.
 The project contract now identifies the PR base for each edition.
+
+The first 360 px CI render (run 44194961677) detected 25% overlap between
+the Russian protocol-use badge and the ping text. Give metadata a full
+row below the actions, wrap it at narrow sizes, and repeat the same render.
