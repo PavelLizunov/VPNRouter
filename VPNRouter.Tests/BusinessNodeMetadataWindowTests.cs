@@ -93,12 +93,13 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Contains("Data is stale", choice.MetricsHint);
             Assert.True(choice.IsGood);
 
-            var unsupported = Snapshot(Node("node.example.invalid", "CA"));
-            choice.UpdateMetadata(unsupported, unsupported.Nodes.Values.Single());
+            var canada = Snapshot(Node("node.example.invalid", "CA", total: null, available: null,
+                load: null, observed: null, age: null, freshness: "unknown", activity: "unknown"));
+            choice.UpdateMetadata(canada, canada.Nodes.Values.Single());
             Assert.Equal("CA", choice.CountryCode);
             Assert.Equal("CA", choice.CountryName);
             Assert.True(choice.HasCountry);
-            Assert.Null(choice.CountryFlag);
+            Assert.NotNull(choice.CountryFlag);
 
             var future = Snapshot(Node("node.example.invalid", "CH", observed: 2001, age: 0));
             choice.UpdateMetadata(future, future.Nodes.Values.Single());
@@ -111,6 +112,24 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Equal("Activity: no data", choice.MetricsText);
         }
         finally { Strings.Lang = previousLanguage; }
+    }
+
+    [AvaloniaFact]
+    public void NewCountriesWithOpaqueNamesRenderWithoutHealthSamples()
+    {
+        foreach (var country in new[] { "IT", "AL" })
+        {
+            var choice = new BusinessServerChoiceViewModel(new(new VlessServerEntry
+                { Name = "Node", Server = "node.example.invalid", Port = 443 }));
+            var snapshot = Snapshot(Node("node.example.invalid", country, total: null, available: null,
+                load: null, observed: null, age: null, freshness: "unknown", activity: "unknown"));
+            choice.UpdateMetadata(snapshot, snapshot.Nodes.Values.Single());
+
+            Assert.Equal(country, choice.CountryCode);
+            Assert.True(choice.HasCountry);
+            Assert.NotNull(choice.CountryFlag);
+            Assert.False(choice.IsActivityLow || choice.IsActivityMedium || choice.IsActivityHigh);
+        }
     }
 
     [AvaloniaFact]
@@ -285,18 +304,31 @@ public sealed class BusinessNodeMetadataWindowTests
     }
 
     [AvaloniaTheory]
-    [InlineData(340, "en")]
-    [InlineData(420, "en")]
-    [InlineData(340, "ru")]
-    [InlineData(420, "ru")]
-    public async Task NarrowWindow_RendersCountryAndLoadWithoutHorizontalOverflow(int width, string language)
+    [InlineData(340, "en", "CH")]
+    [InlineData(420, "en", "CH")]
+    [InlineData(340, "ru", "CH")]
+    [InlineData(420, "ru", "CH")]
+    [InlineData(340, "en", "IT")]
+    [InlineData(420, "en", "IT")]
+    [InlineData(340, "ru", "IT")]
+    [InlineData(420, "ru", "IT")]
+    [InlineData(340, "en", "AL")]
+    [InlineData(420, "en", "AL")]
+    [InlineData(340, "ru", "AL")]
+    [InlineData(420, "ru", "AL")]
+    public async Task NarrowWindow_RendersCountryAndLoadWithoutHorizontalOverflow(int width, string language, string country)
     {
         using var fixture = new Fixture(width: width, language: language);
         var round = fixture.Controller!.RefreshAsync();
-        (await fixture.Fetch.NextAsync()).Result.SetResult(Snapshot(Node("node.example.invalid", "CH", available: 1024, load: 0)));
+        (await fixture.Fetch.NextAsync()).Result.SetResult(Snapshot(Node("node.example.invalid", country, available: 1024, load: 0)));
         await round.WaitAsync(Budget);
         Flush(fixture.Window);
         var selected = Assert.IsType<BusinessServerChoiceViewModel>(fixture.Selector.SelectedItem);
+        Assert.Equal(country, selected.CountryCode);
+        Assert.NotNull(selected.CountryFlag);
+        Assert.Contains(fixture.Selector.GetVisualDescendants().OfType<Image>(), image =>
+            ReferenceEquals(image.Source, selected.CountryFlag) && image.IsEffectivelyVisible &&
+            image.Bounds.Width > 0 && image.Bounds.Height > 0);
         Assert.Contains(fixture.Selector.GetVisualDescendants().OfType<TextBlock>(),
             text => text.Text == selected.MetricsText && text.IsEffectivelyVisible);
         var scroll = Assert.IsType<ScrollViewer>(fixture.Window.Content);
@@ -314,7 +346,7 @@ public sealed class BusinessNodeMetadataWindowTests
         menu.Hide();
         Flush(fixture.Window);
         // Capture closes the window; all live-window assertions must precede it.
-        ScreenshotHelper.Capture(fixture.Window, $"business-node-metadata-{language}-{width}");
+        ScreenshotHelper.Capture(fixture.Window, $"business-node-metadata-{country}-{language}-{width}");
     }
 
     private static object Node(string host, string? country, long? total = 1024, long? available = 512,
