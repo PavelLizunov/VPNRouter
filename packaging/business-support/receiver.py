@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import hmac
 import http.server
+import importlib.util
 import ipaddress
 import json
 import os
@@ -22,6 +23,11 @@ import time
 import unicodedata
 import zipfile
 from urllib.parse import urlsplit, parse_qs
+
+_category_spec = importlib.util.spec_from_file_location(
+    "_vpnrouter_corp_categories", Path(__file__).with_name("categories.py"))
+corp_categories = importlib.util.module_from_spec(_category_spec)
+_category_spec.loader.exec_module(corp_categories)
 
 MAX_BODY = 24 * 1024 * 1024
 MAX_EXPANDED = 20 * 1024 * 1024
@@ -413,6 +419,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply(401, {"error": "service identity required"})
             return True
         parsed = urlsplit(self.path)
+        if parsed.path in ("/internal/corp-categories/state", "/internal/corp-categories/save"):
+            self.category_request(parsed, identity)
+            return True
         base = "/internal/corp-diagnostics/reports"
         match = re.fullmatch(base + r"/([0-9a-f]{64})(/retry)?", parsed.path)
         with store.lock:
@@ -481,6 +490,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.reply(200, {"schema": 1, "report": report_summary(receipt),
                                  "analysis": job.get("result"), "provenance": job.get("provenance")})
         return True
+
+    def category_request(self, parsed, identity):
+        if self.command != "POST":
+            self.reply(405, {"message": "Для работы с категориями отправьте запрос сохранения из интерфейса."})
+            return
+        try:
+            lengths = self.headers.get_all("Content-Length", [])
+            expected = self.headers.get_all("X-Corp-Expected-Length", [])
+            if (self.path != parsed.path or self.headers.get_all("Transfer-Encoding") or
+                    self.headers.get_content_type() != "application/json" or
+                    len(lengths) != 1 or len(expected) != 1):
+                raise ValueError("invalid metadata request")
+            for length in (lengths[0], expected[0]):
+                if (not length.isascii() or not length.isdigit() or len(length) > 10 or
+                        int(length) > corp_categories.MAX_BODY):
+                    raise ValueError("invalid metadata length")
+            size = int(lengths[0])
+            if size != int(expected[0]):
+                raise ValueError("metadata length mismatch")
+            raw = self.rfile.read(size)
+            if len(raw) != size:
+                raise ValueError("incomplete metadata request")
+            body = corp_categories.decode(raw)
+            if not isinstance(body, dict) or (parsed.path.endswith("/state") and body != {}):
+                raise ValueError("invalid metadata object")
+        except (OSError, ValueError, TypeError, RecursionError):
+            self.reply(400, {"message": "Не удалось прочитать запрос категорий. Обновите страницу и повторите попытку."})
+            return
+        try:
+            store = self.server.store
+            metadata = corp_categories.CategoryStore(store.root, identity, store.lock)
+            result = metadata.state() if parsed.path.endswith("/state") else metadata.save(body)
+            self.reply(200, result)
+        except corp_categories.CategoryError as error:
+            self.reply(error.status, {"message": str(error)})
 
     def do_GET(self):
         if self.internal():
