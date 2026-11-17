@@ -266,7 +266,6 @@
           </Border>
         </StackPanel>
 
-        <!-- The link box takes the full width on its own row (a link is long and was squeezed between two buttons at 360 px); the buttons sit below it. -->
         <Border Classes="form-card" IsVisible="{Binding IsVlessMode}" Padding="10">
           <Grid RowDefinitions="Auto,Auto" RowSpacing="8">
             <TextBox Grid.Row="0" Text="{Binding VlessUri}"
@@ -276,23 +275,16 @@
                      VerticalContentAlignment="Center"
                      AcceptsReturn="False"
                      AutomationProperties.Name="{Binding L_WmVlessUri}"/>
-            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-              <Button Grid.Column="0" Content="{Binding LblRemove}"
-                      Command="{Binding RemoveServerCommand}"
-                      Classes="danger-soft"
-                      Padding="14,6" CornerRadius="{StaticResource RadiusSm}"
-                      AutomationProperties.Name="{Binding L_TipDeleteServer}"/>
-              <Button Grid.Column="2" Classes="solid"
-                      Command="{Binding AddServerCommand}"
-                      Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                      Padding="16,6" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"
-                      AutomationProperties.Name="{Binding LblAddServers}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <icons:Pictogram Id="add" Width="14" Height="14" VerticalAlignment="Center"/>
-                  <TextBlock Text="{Binding LblAddServers}" VerticalAlignment="Center"/>
-                </StackPanel>
-              </Button>
-            </Grid>
+            <Button Grid.Row="1" HorizontalAlignment="Right" Classes="solid"
+                    Command="{Binding AddServerCommand}"
+                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                    Padding="16,6" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"
+                    AutomationProperties.Name="{Binding LblAddServers}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <icons:Pictogram Id="add" Width="14" Height="14" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding LblAddServers}" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
           </Grid>
         </Border>
         <StackPanel Orientation="Horizontal" Spacing="8"

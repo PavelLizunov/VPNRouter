@@ -11,3 +11,11 @@ Verification gates: Release build and test suite in exact-head CI; exercise
 row deletion and import bindings; update this outcome; review the form and
 its consumers; inspect isolated list and narrow screenshots; verify the
 public command surface and custom-config path. Live install applies at release.
+
+## Implementation
+
+The server form now has one import action, while the row passes its own server
+to deletion. The headless regression deletes a different row from the selection
+and checks the stored server and selection. Narrow Russian rendering runs in
+the existing UI smoke job. Static binding, workflow and whitespace checks passed.
+The project contract now identifies the PR base for each edition.

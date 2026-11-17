@@ -56,7 +56,9 @@ Read the relevant zone document before changing that area:
 - Tags, releases, deployments, merges and stable cuts require an explicit owner
   command. Verification readiness never grants release authority by itself.
 - Default flow: branch -> implementation -> build/tests -> commit -> immediate
-  `git push -u origin HEAD` -> PR to `main` -> actual green checks.
+  `git push -u origin HEAD` -> PR -> actual green checks. Target `main` for
+  Standard and `business` for the Corp client and its support receiver. The
+  Corp portal and policy backend live in `PavelLizunov/vpnctl`.
 - Make a concrete, low-risk assumption when scope is clear. Ask only for a real
   semantic choice, new authority or a destructive action whose target cannot be
   proven.
