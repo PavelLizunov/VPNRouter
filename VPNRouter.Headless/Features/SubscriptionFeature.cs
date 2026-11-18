@@ -234,6 +234,7 @@ public sealed class SubscriptionFeature
             targets = subs.Where(s => s.Enabled).ToList();
         }
 
+        var chain = SubscriptionChainSelection.Capture(app);
         var previousRows = targets.SelectMany(s => s.Servers).ToList();
         int done = 0;
         int total = targets.Count;
@@ -259,8 +260,21 @@ public sealed class SubscriptionFeature
             progress?.Invoke(new { stage = "refresh_subscription", completed = done, total });
         }
 
+        VlessServerEntry? successor = null;
+        if (chain != null)
+        {
+            successor = chain.Match(subs.FirstOrDefault(s => s.Id == chain.FeedId),
+                subs.Where(s => s.Enabled).SelectMany(s => s.Servers));
+            if (successor == null) throw new RouterException("subscription_refresh_failed");
+        }
         RemoveRetiredCopies(settings, previousRows, targets.Any(s => s.Url == app.SubscriptionUrl));
         ReconcileActiveSubscriptionServer(settings);
+        if (successor != null)
+        {
+            app.ActiveSubscriptionServer = settings.Vless.ActiveServer = successor.Name;
+            app.ActiveSubscriptionId = chain!.FeedId;
+            app.ActiveSubscriptionRow = SubscriptionEntry.RowKey(successor);
+        }
 
         _storage.SaveSettings(settings, revision);
         _logger.Information("[SubscriptionFeature] Refreshed {Count} subscriptions", targets.Count);
@@ -277,6 +291,13 @@ public sealed class SubscriptionFeature
         var fetched = registrations.FirstOrDefault(s => s.Id == rejected.Id);
         if (fetched == null) throw new RouterException("conflict");
 
+        var selectedRegistration = registrations.FirstOrDefault(s => s.Id == app.ActiveSubscriptionId &&
+            s.FindExactRow(app.ActiveSubscriptionServer, app.ActiveSubscriptionRow) != null);
+        if (selectedRegistration != null)
+        {
+            app.ActiveSubscriptionId = null;
+            app.ActiveSubscriptionRow = null;
+        }
         var evicted = registrations.SelectMany(s => s.Servers).ToList();
         foreach (var registration in registrations)
         {

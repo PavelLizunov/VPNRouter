@@ -68,6 +68,10 @@ public sealed class ServerFeature
                 : (detached.Vless?.ActiveServer ?? string.Empty);
         }
 
+        var pickedFeed = configMode == "subscribe" && settings.App.ActiveSubscriptionId != null
+            ? settings.App.Subscriptions.FirstOrDefault(s => s.Enabled && s.Id == settings.App.ActiveSubscriptionId)
+            : null;
+        var pickedRow = pickedFeed?.FindExactRow(settings.App.ActiveSubscriptionServer, settings.App.ActiveSubscriptionRow);
         var mapped = BuildUnifiedServerIdMap(settings);
         var total = mapped.Count;
 
@@ -77,8 +81,9 @@ public sealed class ServerFeature
             .Select(tuple =>
             {
                 var s = tuple.Server;
-                var isSelected = !string.IsNullOrEmpty(activeServer) &&
-                                 string.Equals(activeServer, s.Name, StringComparison.OrdinalIgnoreCase);
+                var isSelected = pickedRow != null
+                    ? tuple.IsSubscription && tuple.SubscriptionId == pickedFeed!.Id && ReferenceEquals(pickedRow, s)
+                    : !string.IsNullOrEmpty(activeServer) && string.Equals(activeServer, s.Name, StringComparison.OrdinalIgnoreCase);
                 var displayName = string.IsNullOrWhiteSpace(s.Name) ? $"{s.Server}:{s.Port}" : s.Name;
 
                 return new
@@ -191,8 +196,9 @@ public sealed class ServerFeature
         if (match.IsSubscription)
         {
             settings.App.ConfigMode = "subscribe";
-            settings.App.ActiveSubscriptionServer = serverName;
-            settings.Vless.ActiveServer = serverName;
+            settings.App.ActiveSubscriptionId = match.SubscriptionId;
+            settings.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(server);
+            settings.App.ActiveSubscriptionServer = settings.Vless.ActiveServer = server.Name;
         }
         else
         {
