@@ -1095,7 +1095,7 @@ public class MainActivity : AvaloniaMainActivity, ISharedPreferencesOnSharedPref
             }
             else
             {
-                var resolved = AndroidStorage.GetActiveServer();
+                var resolved = AndroidStorage.GetActiveServer(command);
                 if (resolved is null)
                 {
                     ShowPreparationError(Localization.AndroidErrorNoServerConfigured);

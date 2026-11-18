@@ -19,6 +19,9 @@ internal static class AndroidSubscriptionRefresh
     internal const string SelectedFeedRow = "selected_subscription_row";
     internal const string ManualUri = "vless_uri";
     internal const string ConfigMode = "config_mode";
+    private const string ResolvedCommand = "vpn_resolved_server_command";
+    private const string ResolvedFeedId = "vpn_resolved_feed_id";
+    private const string ResolvedRow = "vpn_resolved_feed_row";
     internal const string UiCommand = "vpn_ui_command";
     internal const string CustomJson = "custom_config_json";
     internal const string CustomName = "custom_config_name";
@@ -97,6 +100,13 @@ internal static class AndroidSubscriptionRefresh
 
         var affected = subscriptions.Where(s => AppliesTo(s, refreshed, rejected)).ToList();
         if (affected.Count == 0) throw new InvalidOperationException("Subscription changed during refresh.");
+        // Only a command which already resolved this selection can have the old row in flight.
+        // An unrelated refresh must leave a newer command still awaiting its own feed untouched.
+        var resolved = read(ResolvedCommand);
+        var prepared = IsCurrentSelection(resolved, read) &&
+            (read("vpn_state_command") != resolved || read("vpn_state") == "connecting");
+        var resolvedFeed = prepared ? read(ResolvedFeedId) : null;
+        var retained = prepared && resolvedFeed == null ? ReadRetainedManual(read) : null;
         var oldRows = affected.SelectMany(s => s.Servers ?? []).Where(row => row != null).ToList();
         foreach (var current in affected) CopyCache(refreshed, current);
 
@@ -124,6 +134,11 @@ internal static class AndroidSubscriptionRefresh
             }
         }
 
+        var resolvedRow = resolvedFeed != null ? read(ResolvedRow) : null;
+        if ((resolvedRow != null && affected.Any(feed => feed.Id == resolvedFeed) &&
+             !refreshed.Servers.Any(row => RowIdentity(row) == resolvedRow)) ||
+            (retained != null && updates.ContainsKey(ManualUri) && read(SubscriptionUrl) == refreshed.Url))
+            updates[SupersededSelection] = resolved;
         updates[Subscriptions] = JsonSerializer.Serialize(subscriptions, options);
         commit(updates);
         return selected;
@@ -149,9 +164,12 @@ internal static class AndroidSubscriptionRefresh
         List<VlessServerEntry> servers, JsonSerializerOptions options)
     {
         if (!string.IsNullOrWhiteSpace(read(Subscriptions)) || read(SubscriptionUrl) is not { Length: > 0 } url) return;
-        var feed = new SubscriptionEntry { Id = "legacy-default", Name = "Default", Url = url, Servers = servers };
+        var feed = LegacyFeed(url, servers);
         changes[Subscriptions] = JsonSerializer.Serialize(new List<SubscriptionEntry> { feed }, options);
     }
+
+    internal static SubscriptionEntry LegacyFeed(string url, List<VlessServerEntry> rows) =>
+        new() { Id = "legacy-default", Name = "Default", Enabled = true, Url = url, Servers = rows };
 
     private static int RemoveRetainedManualCopy(List<VlessServerEntry> servers, VlessServerEntry? retired, JsonSerializerOptions options)
     {
@@ -227,6 +245,18 @@ internal static class AndroidSubscriptionRefresh
             feed.LastServerCount = 0;
             feed.LastRefreshedAt = null;
             feed.UserInfo = null;
+        }
+        // The legacy single-feed layout stored its rows in the standalone collection.
+        // Move those copies out when the old source changes. Other registrations retain their own caches.
+        var legacy = previous.Find(f => f?.Id == "legacy-default" && !string.IsNullOrEmpty(f.Url));
+        if (legacy?.Servers is { Count: > 0 } legacyRows && !next.Any(f => f is { Enabled: true } && f.Id == legacy.Id && f.Url == legacy.Url))
+        {
+            var owned = legacyRows.Where(row => row != null).Select(RowIdentity).ToHashSet(StringComparer.Ordinal);
+            if (mode == "manual" && ServerUriParser.TryParse(read(ManualUri) ?? string.Empty) is { } manual)
+                owned.Remove(RowIdentity(manual));
+            var standalone = ReadStandalone(read, options);
+            if (standalone.RemoveAll(row => row != null && owned.Contains(RowIdentity(row))) > 0)
+                changes[StandaloneServers] = JsonSerializer.Serialize(standalone, options);
         }
         if (mode == "subscribe")
         {
@@ -319,6 +349,22 @@ internal static class AndroidSubscriptionRefresh
         }
         BindFeed(changes, null, null);
         commit(changes);
+    }
+
+    internal static VlessServerEntry? ResolveForConnect(string command, List<VlessServerEntry> standalone,
+        List<SubscriptionEntry> subscriptions, string mode, Func<string, string?> read,
+        Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
+    {
+        if (!IsCurrentSelection(command, read)) return null;
+        var row = ResolveActiveServer(standalone, subscriptions, mode, read, commit, options);
+        if (row == null) return null;
+        SelectedSources.TryGetValue(row, out var source);
+        if (source?.Id != null || ReadRetainedManual(read) != null)
+            commit(new Dictionary<string, string?>
+            {
+                [ResolvedCommand] = command, [ResolvedFeedId] = source?.Id, [ResolvedRow] = RowIdentity(row)
+            });
+        return row;
     }
 
     internal static VlessServerEntry? ResolveActiveServer(List<VlessServerEntry> standalone,

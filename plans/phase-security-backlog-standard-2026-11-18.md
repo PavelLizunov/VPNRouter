@@ -170,3 +170,7 @@ Android now reconciles the saved input and selected source across Custom Save, r
 The desktop display follow-up covers the visible Simple route mode, live group-member notifications, selection indicators after Apply and Stop, actual generated proxy groups, same-endpoint labels and status from a service-owned tunnel.
 
 A desktop subscription pick now records its registration and row in the settings. Simple Connect uses that identity after refresh and keeps a later editor choice for the next command. Command tests cover provider reorder, YAML save and reopen with duplicate names and UUIDs, an unnamed probe winner and its required detour. Legacy settings with only a name keep their previous lookup behavior.
+
+Follow up the Android review by testing refresh retirement between row resolution and dispatch, every generated member after a legacy URL edit, and raw empty-URL matching in the built-in Manual list.
+
+The Connect reader now records the exact feed row resolved by its command. A refresh retiring that row invalidates the command in the cache write. New regression cases cover both auto-select settings, a later command, an established tunnel, the full legacy replacement group and the Manual picker with an empty URL. Local checks passed for C# syntax in four configurations and 33 Android source-order assertions. Hosted execution and device acceptance are pending.
