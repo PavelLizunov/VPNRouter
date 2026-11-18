@@ -89,9 +89,15 @@ public partial class MainWindowViewModel
     private void RemoveSubscription(SubscriptionViewModel? sub)
     {
         if (sub == null) return;
+        bool removedInput = IsSubscribeMode && SimpleConnectPolicy.SameUrl(SmpInput, sub.Url);
         Subscriptions.Remove(sub);
         _settings.App.Subscriptions.RemoveAll(e => e.Id == sub.Id);
         RebuildSubscriptionPool();
+        if (removedInput)
+        {
+            var selected = Subscriptions.FirstOrDefault(s => s.Id == SelectedSubscriptionServer?.SubscriptionId);
+            SmpInput = selected?.Url ?? Subscriptions.FirstOrDefault(s => s.Enabled)?.Url ?? string.Empty;
+        }
         SaveSettings();
     }
 

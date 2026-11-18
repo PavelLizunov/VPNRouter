@@ -174,3 +174,5 @@ A desktop subscription pick now records its registration and row in the settings
 Follow up the Android review by testing refresh retirement between row resolution and dispatch, every generated member after a legacy URL edit, and raw empty-URL matching in the built-in Manual list.
 
 The Connect reader now records the exact feed row resolved by its command. A refresh retiring that row invalidates the command in the cache write. New regression cases cover both auto-select settings, a later command, an established tunnel, the full legacy replacement group and the Manual picker with an empty URL. Local checks passed for C# syntax in four configurations and 33 Android source-order assertions. Hosted execution and device acceptance are pending.
+
+Follow up desktop selection review. Preserve required detours when refreshed hop metadata changes, prevent a removed feed from reappearing through the Simple field, honor edits made after publishing a probe winner, and persist the exact replacement row after a confirmed failover. Cover failure, cancellation and saved-settings reopen.

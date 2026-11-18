@@ -400,6 +400,71 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
         Assert.Single(http.SentRequests);
     }
 
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RemovingSelectedFeedRebindsItsUrlAndPreservesAnIndependentDraft(bool hasDraft)
+    {
+        var a = new SubscriptionEntry { Url = Feed, Servers = [ServerUriParser.Parse(Link("a"))] };
+        var b = new SubscriptionEntry { Url = NextFeed, Servers = [ServerUriParser.Parse(Link("b"))] };
+        var c = new SubscriptionEntry { Url = Feed + "/c", Servers = [ServerUriParser.Parse(Link("c"))] };
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.Subscriptions = [a, b, c];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store);
+        vm.SelectedSubscriptionServer = vm.SubscriptionServers.Single(row => row.SubscriptionId == b.Id);
+        Assert.Equal(b.Url, vm.SmpInput);
+        if (hasDraft) vm.SmpInput = c.Url;
+        vm.RemoveSubscriptionCommand.Execute(vm.Subscriptions.Single(feed => feed.Id == b.Id));
+        var expected = hasDraft ? c : a;
+        Assert.Equal(expected.Url, vm.SmpInput);
+        vm.SimpleProbe = (rows, _) => Task.FromResult(rows.Select(row => new ServerLiveness(row, true, 1)).ToList());
+        var starts = CaptureSimpleStarts(vm);
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        Assert.Equal(expected.Servers[0].Server, Assert.Single(EngineSelection(Assert.Single(starts))).Server);
+        var saved = SettingsLoader.Copy(store.Load(AppPaths.ConfigYamlPath));
+        Assert.Equal(new[] { a.Id, c.Id }, saved.App.Subscriptions.Select(feed => feed.Id));
+        Assert.Equal(expected.Id, saved.App.ActiveSubscriptionId);
+    }
+
+    [AvaloniaFact]
+    public async Task TypingTheOriginalFeedAfterTheProbeWinnerIsPublishedSurvivesRestart()
+    {
+        var a = new SubscriptionEntry { Url = Feed, Servers = [ServerUriParser.Parse(Link("a"))] };
+        var b = new SubscriptionEntry { Url = NextFeed, Servers = [ServerUriParser.Parse(Link("b"))] };
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.Subscriptions = [a, b];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using (var vm = new MainWindowViewModel(store))
+        {
+            Assert.Equal(a.Url, vm.SmpInput);
+            vm.SimpleProbe = (rows, _) => Task.FromResult(rows.Select(row => new ServerLiveness(row, row.Name == "b", 1)).ToList());
+            AppSettings? started = null;
+            string? inputAtStart = null;
+            vm.SimpleTunnelStart = (submitted, _, _) =>
+            {
+                started = submitted;
+                inputAtStart = vm.SmpInput;
+                vm.SmpInput = a.Url;
+                return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.Connected));
+            };
+            await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            Assert.Equal(b.Url, inputAtStart);
+            Assert.Equal(b.Servers[0].Server, Assert.Single(EngineSelection(Assert.IsType<AppSettings>(started))).Server);
+            Assert.True(vm.HasPendingAppChanges);
+        }
+        var saved = SettingsLoader.Copy(store.Load(AppPaths.ConfigYamlPath));
+        Assert.Equal(a.Id, saved.App.ActiveSubscriptionId);
+        store.Save(saved, AppPaths.ConfigYamlPath);
+        using var reopened = new MainWindowViewModel(store);
+        Assert.Equal(a.Url, reopened.SmpInput);
+        Assert.Equal(a.Servers[0].Server, reopened.SelectedSubscriptionServer?.Server);
+    }
+
     private static List<AppSettings> CaptureSimpleStarts(MainWindowViewModel vm)
     {
         var starts = new List<AppSettings>();

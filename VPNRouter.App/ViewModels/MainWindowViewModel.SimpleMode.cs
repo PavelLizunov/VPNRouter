@@ -296,6 +296,7 @@ public partial class MainWindowViewModel
         var generation = _connectionGeneration;
         _simplePreparationGeneration = generation;
         var input = SmpInput;
+        var editorInput = input;
         var revision = _routingSettingsRevision;
         Func<bool>? choiceUnchanged = null;
         bool Preparing() => !_disposed && IsConnecting && !IsConnected && !IsApplying && !_isReconnecting
@@ -326,7 +327,7 @@ public partial class MainWindowViewModel
             SaveSettings();
             var submitted = CaptureConnectionSettings();
             revision = _routingSettingsRevision;
-            choiceUnchanged = CaptureSimpleChoice();
+            choiceUnchanged = CaptureSimpleChoice(out editorInput);
             var selectedSource = submitted.App.Subscriptions.FirstOrDefault(s => s.Enabled && s.Id == submitted.App.ActiveSubscriptionId);
             if (kind == SmpInputKind.SubscriptionUrl && !SimpleConnectPolicy.SameUrl(selectedSource?.Url, input))
                 selectedSource = submitted.App.Subscriptions.FirstOrDefault(s => s.Enabled && SimpleConnectPolicy.SameUrl(s.Url, input));
@@ -348,7 +349,7 @@ public partial class MainWindowViewModel
                 if (choiceUnchanged())
                 {
                     PublishSimpleRefresh(submitted, liveRows, rows);
-                    choiceUnchanged = CaptureSimpleChoice();
+                    choiceUnchanged = CaptureSimpleChoice(out editorInput);
                 }
             }
 
@@ -388,7 +389,7 @@ public partial class MainWindowViewModel
                     if (winner != null) ApplySmartConnectSelection(chosen, winner);
                     if (ConnectionIntent.Normalize(submitted.App.ConnectionIntent) != ConnectionIntent.General)
                         StatusText = $"{ConnectionIntentStatusText} -> {chosen.Name}";
-                    choiceUnchanged = CaptureSimpleChoice();
+                    choiceUnchanged = CaptureSimpleChoice(out editorInput);
                 }
             }
 
@@ -401,7 +402,7 @@ public partial class MainWindowViewModel
             if (_simplePreparationGeneration == generation) IsConnecting = false;
             if (!_disposed && choiceUnchanged != null && (revision != _routingSettingsRevision || !choiceUnchanged()))
             {
-                if (SmpInput != input && (IsSimpleMode ||
+                if (SmpInput != editorInput && (IsSimpleMode ||
                     (IsSubscribeMode && SimpleInputDetector.Classify(SmpInput) == SmpInputKind.SubscriptionUrl) ||
                     (IsVlessMode && SimpleInputDetector.Classify(SmpInput) == SmpInputKind.ServerUri)))
                     ApplyPendingSimpleInput();
@@ -506,9 +507,9 @@ public partial class MainWindowViewModel
         finally { _isLoadingUI = loading; }
     }
 
-    private Func<bool> CaptureSimpleChoice()
+    private Func<bool> CaptureSimpleChoice(out string editorInput)
     {
-        var input = SmpInput;
+        var input = editorInput = SmpInput;
         var mode = _settings.App.ConfigMode;
         var intent = ConnectionIntentIndex;
         var tabs = (IsSimpleMode, SelectedTabIndex, SelectedServerModeIndex, IsSubscribeMode, IsVlessMode, SelectedCustomConfig);
