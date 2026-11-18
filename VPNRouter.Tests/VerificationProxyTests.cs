@@ -1,4 +1,3 @@
-using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using VPNRouter.Core.Services;
 
@@ -20,15 +19,12 @@ public sealed class VerificationProxyTests
         Assert.Equal("127.0.0.1", (string?)inbound["listen"]);
 
         using var handler = first.CreateHttpHandler(TimeSpan.FromSeconds(5));
-        var proxy = Assert.IsType<WebProxy>(handler.Proxy);
-        Assert.True(handler.UseProxy);
-        Assert.Equal(new Uri("http://127.0.0.1:18080"), proxy.Address);
+        Assert.False(handler.UseProxy);
+        Assert.Null(handler.Proxy);
+        Assert.Null(handler.DefaultProxyCredentials);
+        Assert.Null(handler.Credentials);
         Assert.NotNull(handler.ConnectCallback);
         Assert.Null(handler.SslOptions.RemoteCertificateValidationCallback);
-        Assert.False(proxy.IsBypassed(new Uri(DeepVerifyConstants.ProbeUrl)));
-        var credential = Assert.IsType<NetworkCredential>(proxy.Credentials);
-        Assert.Equal((string?)user["username"], credential.UserName);
-        Assert.Equal(password, credential.Password);
     }
 
     [Fact]

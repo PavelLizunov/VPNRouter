@@ -69,44 +69,47 @@ internal static class AndroidSubscriptionRefresh
         using var write = WriteLock.EnterScope();
         var json = read(Subscriptions);
         List<SubscriptionEntry> subscriptions;
-        SubscriptionEntry? current;
         if (string.IsNullOrWhiteSpace(json) && read(SubscriptionUrl) == refreshed.Url)
         {
             // The old single-feed format kept its cache in servers_json and had no persistent ID.
-            current = new SubscriptionEntry
+            subscriptions = [new SubscriptionEntry
             {
                 Id = refreshed.Id, Name = "Default", Url = refreshed.Url,
                 Servers = ReadStandalone(read, options)
-            };
-            subscriptions = [current];
+            }];
         }
         else
         {
             subscriptions = JsonSerializer.Deserialize<List<SubscriptionEntry>>(json ?? "[]", options) ?? [];
-            current = subscriptions.Find(s => s != null && s.Id == refreshed.Id && s.Url == refreshed.Url);
-            if (current is null) throw new InvalidOperationException("Subscription changed during refresh.");
         }
 
+        var affected = subscriptions.Where(s => AppliesTo(s, refreshed, rejected)).ToList();
+        if (affected.Count == 0) throw new InvalidOperationException("Subscription changed during refresh.");
+        var oldRows = affected.SelectMany(s => s.Servers ?? []).Where(row => row != null).ToList();
+        foreach (var current in affected) CopyCache(refreshed, current);
+
         var updates = new Dictionary<string, string?>();
-        if (rejected)
-            RemoveRejectedCopies(current, subscriptions, read, options, updates);
-        else if (selectOnSuccess)
+        // Once a registration is replaced, a later rejection cannot identify its former standalone copies.
+        RemoveSupersededCopies(refreshed.Url, oldRows, subscriptions, read, options, updates);
+        if (!rejected && selectOnSuccess)
         {
-            current.Enabled = true;
+            affected[0].Enabled = true;
             updates[SelectedName] = refreshed.Servers[0].Name;
             updates[SubscriptionUrl] = refreshed.Url;
             updates[ManualUri] = null;
             updates[ConfigMode] = "subscribe";
         }
 
-        CopyCache(refreshed, current);
         updates[Subscriptions] = JsonSerializer.Serialize(subscriptions, options);
         commit(updates);
     }
 
+    internal static bool AppliesTo(SubscriptionEntry? registration, SubscriptionEntry refreshed, bool rejected) =>
+        registration != null && registration.Url == refreshed.Url && (rejected || registration.Id == refreshed.Id);
+
     internal static void CopyCache(SubscriptionEntry refreshed, SubscriptionEntry current)
     {
-        current.Servers = refreshed.Servers;
+        current.Servers = [.. refreshed.Servers];
         current.LastServerCount = refreshed.LastServerCount;
         current.LastRefreshedAt = refreshed.LastRefreshedAt;
         if (refreshed.UserInfo != null) current.UserInfo = refreshed.UserInfo;
@@ -115,22 +118,26 @@ internal static class AndroidSubscriptionRefresh
     private static List<VlessServerEntry> ReadStandalone(Func<string, string?> read, JsonSerializerOptions options) =>
         JsonSerializer.Deserialize<List<VlessServerEntry>>(read(StandaloneServers) ?? "[]", options) ?? [];
 
-    private static void RemoveRejectedCopies(SubscriptionEntry current, List<SubscriptionEntry> subscriptions,
-        Func<string, string?> read, JsonSerializerOptions options, Dictionary<string, string?> updates)
+    private static void RemoveSupersededCopies(string url, List<VlessServerEntry> oldRows,
+        List<SubscriptionEntry> subscriptions, Func<string, string?> read, JsonSerializerOptions options,
+        Dictionary<string, string?> updates)
     {
-        var oldRows = current.Servers ?? [];
         if (oldRows.Count == 0) return;
 
         // A name or endpoint alone can also identify an independently saved manual server.
         string Identity(VlessServerEntry row) => JsonSerializer.Serialize(row, options);
         var oldCopies = oldRows.Select(Identity).ToHashSet(StringComparer.Ordinal);
-        var survivingRows = subscriptions.Where(s => s != null && s != current && s.Enabled)
-            .SelectMany(s => s.Servers ?? []).Where(row => row != null).ToList();
+        foreach (var subscription in subscriptions)
+        {
+            if (subscription?.Servers != null)
+                oldCopies.ExceptWith(subscription.Servers.Where(row => row != null).Select(Identity));
+        }
+
         var manual = ServerUriParser.TryParse(read(ManualUri) ?? string.Empty);
         if (manual != null)
         {
             var manualKey = Identity(manual);
-            if (oldCopies.Contains(manualKey) && read(SubscriptionUrl) == current.Url && read(ConfigMode) is null or "subscribe")
+            if (oldCopies.Contains(manualKey) && read(SubscriptionUrl) == url && read(ConfigMode) is null or "subscribe")
             {
                 updates[ManualUri] = null;
                 manual = null;
@@ -140,8 +147,6 @@ internal static class AndroidSubscriptionRefresh
                 oldCopies.Remove(manualKey);
             }
         }
-        oldCopies.ExceptWith(survivingRows.Select(Identity));
-
         var standalone = ReadStandalone(read, options);
         if (standalone.RemoveAll(row => oldCopies.Contains(Identity(row))) > 0)
             updates[StandaloneServers] = JsonSerializer.Serialize(standalone, options);
@@ -149,7 +154,7 @@ internal static class AndroidSubscriptionRefresh
         var selected = read(SelectedName);
         bool IsSelected(VlessServerEntry row) => string.Equals(row?.Name, selected, StringComparison.OrdinalIgnoreCase);
         if (!string.IsNullOrEmpty(selected) && oldRows.Any(IsSelected)
-            && !standalone.Any(IsSelected) && !survivingRows.Any(IsSelected)
+            && !standalone.Any(IsSelected) && !subscriptions.Any(s => s is { Enabled: true } && s.Servers?.Any(IsSelected) == true)
             && (manual == null || !IsSelected(manual)))
             updates[SelectedName] = null;
     }

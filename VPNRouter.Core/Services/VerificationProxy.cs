@@ -55,21 +55,46 @@ internal sealed class VerificationProxy
 
     public SocketsHttpHandler CreateHttpHandler(TimeSpan connectTimeout) => new()
     {
-        UseProxy = true,
-        Proxy = new WebProxy($"http://127.0.0.1:{_port}")
-        {
-            Credentials = new NetworkCredential(UserName, _password),
-        },
+        UseProxy = false,
         ConnectTimeout = connectTimeout,
-        ConnectCallback = ConnectToProxyAsync,
+        ConnectCallback = OpenTunnelAsync,
     };
 
-    // The HTTP proxy protocol travels inside a pinned TLS stream. HttpClient still verifies
-    // the destination certificate independently when it establishes TLS through CONNECT.
+    // Both HTTP and HTTPS origins travel through CONNECT. Only this private request is
+    // authenticated; the outer handler owns origin requests, redirects and destination TLS.
+    private async ValueTask<Stream> OpenTunnelAsync(SocketsHttpConnectionContext context, CancellationToken ct)
+    {
+        using var transport = new HttpMessageInvoker(new SocketsHttpHandler
+        {
+            UseProxy = false,
+            AllowAutoRedirect = false,
+            UseCookies = false,
+            ConnectCallback = ConnectToProxyAsync,
+        });
+        using var connect = new HttpRequestMessage(HttpMethod.Connect, $"http://127.0.0.1:{_port}");
+        var target = new UriBuilder(Uri.UriSchemeHttp, context.DnsEndPoint.Host, context.DnsEndPoint.Port);
+        connect.Headers.Host = target.Uri.GetComponents(UriComponents.HostAndPort, UriFormat.UriEscaped);
+
+        var response = await transport.SendAsync(connect, ct).ConfigureAwait(false);
+        try
+        {
+            if (response.StatusCode != HttpStatusCode.OK)
+                throw new HttpRequestException("Verification proxy refused CONNECT", null, response.StatusCode);
+            // A successful CONNECT detaches the duplex stream from the inner connection pool.
+            return await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
+    }
+
     private async ValueTask<Stream> ConnectToProxyAsync(SocketsHttpConnectionContext context, CancellationToken ct)
     {
-        if (context.DnsEndPoint.Host != "127.0.0.1" || context.DnsEndPoint.Port != _port)
-            throw new IOException("Unexpected verification proxy address");
+        if (context.DnsEndPoint.Host != "127.0.0.1" || context.DnsEndPoint.Port != _port ||
+            context.InitialRequestMessage.Method != HttpMethod.Connect)
+            throw new IOException("Unexpected verification proxy request");
 
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         SslStream? tls = null;
@@ -82,15 +107,9 @@ internal sealed class VerificationProxy
                 TargetHost = "localhost",
                 RemoteCertificateValidationCallback = (_, cert, _, _) => MatchesCertificate(cert),
             }, ct).ConfigureAwait(false);
-            var connect = context.InitialRequestMessage;
-            if (connect.Method == HttpMethod.Connect &&
-                connect.RequestUri is { Scheme: "http", Host: "127.0.0.1" } address && address.Port == _port)
-            {
-                // sing-box closes a challenged CONNECT immediately. Authenticate the first
-                // CONNECT on this pinned connection before HttpClient sends it.
-                var credentials = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{UserName}:{_password}"));
-                connect.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", credentials);
-            }
+            // This transport handles one CONNECT, with no challenge or redirect to another peer.
+            var credentials = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{UserName}:{_password}"));
+            context.InitialRequestMessage.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", credentials);
             return tls;
         }
         catch

@@ -89,12 +89,25 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests
                 CustomConfigInjector.Inject("{}", [], settings, onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet,
                     checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
 
+#if VPNROUTER_BUSINESS
             Assert.Throws<InvalidOperationException>(() =>
                 ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, resolveRuleSet: null,
                     checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
             Assert.Throws<InvalidOperationException>(() =>
                 CustomConfigInjector.Inject("{}", [], settings, onMissingRuleSet: null,
                     checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+#else
+            var missing = new List<string>();
+            var cold = ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, resolveRuleSet: null,
+                onMissingRuleSet: missing.Add, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            Assert.Single(missing);
+            Assert.DoesNotContain(cold.Route.RuleSet ?? [], entry => entry.Tag == "vpnrouter-geoip-ru");
+            missing.Clear();
+            var imported = CustomConfigInjector.Inject("{}", [], settings, onMissingRuleSet: missing.Add,
+                checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            Assert.Single(missing);
+            Assert.DoesNotContain("vpnrouter-geosite-ru", imported);
+#endif
         });
     }
 
