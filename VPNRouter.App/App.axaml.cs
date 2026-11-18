@@ -87,6 +87,7 @@ public partial class App : Application
 
             mainWindow.Closing += (_, e) =>
             {
+                if (_viewModel?.IsShutdownPrepared == true) return;
                 e.Cancel = true;
                 if (e.CloseReason == WindowCloseReason.WindowClosing)
                     HideToTray(mainWindow);
@@ -94,11 +95,9 @@ public partial class App : Application
                     mainWindow.Hide();
             };
 
-            desktop.ShutdownRequested += (_, _) =>
+            desktop.ShutdownRequested += (_, e) =>
             {
-                VPNRouter.App.Services.AppAutomationDriver.Stop();
-                _viewModel?.QuitCommand.Execute(null);
-                try { VPNRouter.Core.Services.LockFile.Release(Serilog.Log.Logger); } catch { }
+                if (_viewModel?.TryPrepareQuit() == false) e.Cancel = true;
             };
 
             SetupTrayIcon(desktop);
@@ -125,6 +124,8 @@ public partial class App : Application
 
             desktop.Exit += (_, _) =>
             {
+                VPNRouter.App.Services.AppAutomationDriver.Stop();
+                try { VPNRouter.Core.Services.LockFile.Release(Serilog.Log.Logger); } catch { }
                 try { VPNRouter.App.Services.SingleInstance.Release(); } catch { }
             };
 

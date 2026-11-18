@@ -25,15 +25,17 @@ internal interface IWindowsRegistration : IDisposable
 [SupportedOSPlatform("windows")]
 internal sealed class WindowsServiceRegistration(string name, IntPtr handle) : IWindowsRegistration
 {
-    internal static IWindowsRegistration? Open(string name, bool writable)
+    internal static IWindowsRegistration? Open(string name, bool writable) =>
+        OpenWithAccess(name, writable ? 2u | 16u | 32u | 0x10000u : 0u);
+
+    internal static IWindowsRegistration? OpenWithAccess(string name, uint additionalAccess)
     {
         var manager = Native.OpenSCManager(null, null, 1); // SC_MANAGER_CONNECT
         if (manager == IntPtr.Zero) throw new Win32Exception();
         try
         {
             const uint query = 1 | 4; // QUERY_CONFIG | QUERY_STATUS
-            const uint change = 2 | 16 | 32 | 0x10000; // CHANGE_CONFIG | START | STOP | DELETE
-            var handle = Native.OpenService(manager, name, writable ? query | change : query);
+            var handle = Native.OpenService(manager, name, query | additionalAccess);
             if (handle != IntPtr.Zero) return new WindowsServiceRegistration(name, handle);
             var error = Marshal.GetLastWin32Error();
             if (error == Native.ERROR_SERVICE_DOES_NOT_EXIST) return null;

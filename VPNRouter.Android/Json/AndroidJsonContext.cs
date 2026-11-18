@@ -10,6 +10,7 @@ namespace VPNRouter.Android.Json;
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(CustomCategory))]
+[JsonSerializable(typeof(AndroidPerAppPolicy))]
 [JsonSerializable(typeof(Dictionary<string, AndroidStorage.ServerTestResultDto>))]
 [JsonSerializable(typeof(List<CustomCategory>))]
 [JsonSerializable(typeof(List<string>))]

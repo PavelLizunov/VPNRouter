@@ -426,6 +426,7 @@ public class MainActivity : AvaloniaMainActivity
     {
         _isActivityPaused = false;
         base.OnResume();
+        AndroidApp.RefreshPerAppSelection();
         try
         {
             var live = VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel();
@@ -523,6 +524,7 @@ public class MainActivity : AvaloniaMainActivity
                 case ActionTunnelUp:
                     global::Android.Util.Log.Info("VpnRouter", "Phase 1.I: ACTION_TUNNEL_UP received");
                     SetIntent(true);
+                    AndroidApp.RefreshPerAppSelection();
                     break;
                 case ActionTunnelDown:
                     global::Android.Util.Log.Info("VpnRouter", "Phase 1.I: ACTION_TUNNEL_DOWN received");
@@ -555,6 +557,7 @@ public class MainActivity : AvaloniaMainActivity
         if (previousActive)
         {
             SetIntent(true);
+            AndroidApp.RefreshPerAppSelection();
             if (context is not null)
                 global::Android.Widget.Toast.MakeText(context, message + " " + Localization.PreviousTunnelActive,
                     global::Android.Widget.ToastLength.Long)?.Show();

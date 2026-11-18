@@ -122,6 +122,7 @@ public final class VpnRouterService extends VpnService {
     private String pendingPerAppMode;
     private String[] pendingPerAppPackages;
     private String pendingPerAppPrefs;
+    private volatile String establishedAppPolicy;
     private String pendingDnsTunnelDomain;
     private String[] pendingDnsTunnelResolvers;
     private String pendingDnsTunnelCert;
@@ -470,6 +471,7 @@ public final class VpnRouterService extends VpnService {
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                     .edit()
                     .putString(KEY_VPN_STATE, state)
+                    .putString("vpn_active_per_app_policy", STATE_CONNECTED.equals(state) ? establishedAppPolicy : null)
                     .putString(KEY_VPN_STATE_REASON, reason)
                     .putInt(KEY_VPN_STATE_PID, android.os.Process.myPid())
                     .putLong(KEY_VPN_STATE_AT_MS, System.currentTimeMillis())
@@ -547,6 +549,7 @@ public final class VpnRouterService extends VpnService {
             return;
         }
         session = new AndroidTunnelSession();
+        establishedAppPolicy = null;
         acquireConnectWakeLock();
         try {
             startSlipstreamIfNeeded();
@@ -1136,20 +1139,31 @@ public final class VpnRouterService extends VpnService {
         }
         List<String> selected = packages == null
                 ? java.util.Collections.emptyList() : java.util.Arrays.asList(packages);
-        if (isInclude || (!isExclude && !profileIncludes.isEmpty())) {
+        java.util.Set<String> applied = new java.util.TreeSet<>();
+        boolean allowlist = isInclude || (!isExclude && !profileIncludes.isEmpty());
+        if (allowlist) {
             AndroidTunnelPolicy.requireAllowedPackage(isInclude ? selected : profileIncludes,
-                    pkg -> addPackage(builder, pkg, true));
+                    pkg -> addPackage(builder, pkg, true, applied));
         } else {
             Iterable<String> excluded = isExclude ? selected : profileExcludes;
-            AndroidTunnelPolicy.requireExcludedPackages(excluded, pkg -> addPackage(builder, pkg, false));
+            AndroidTunnelPolicy.requireExcludedPackages(excluded, pkg -> addPackage(builder, pkg, false, applied));
             builder.addDisallowedApplication(getPackageName());
         }
 
+        // The profile can supply its own packages when the picker is off. Keep what the
+        // builder accepted separate from the picker selection submitted for this session.
+        String activeMode = allowlist ? "include" : (isExclude || !applied.isEmpty() ? "exclude" : "off");
+        String snapshot = new org.json.JSONObject()
+                .put("ActiveMode", activeMode)
+                .put("ActivePackages", new org.json.JSONArray(applied))
+                .put("RequestedMode", mode == null ? "off" : mode)
+                .put("RequestedPackages", new org.json.JSONArray(selected)).toString();
         requireMainStartPermitted();
         ParcelFileDescriptor pfd = builder.establish();
         if (pfd == null) {
             throw new Exception("VpnService.Builder.establish returned null");
         }
+        establishedAppPolicy = snapshot;
         return pfd;
     }
 
@@ -1203,10 +1217,11 @@ public final class VpnRouterService extends VpnService {
         return packages;
     }
 
-    private static boolean addPackage(Builder builder, String pkg, boolean allow) {
+    private static boolean addPackage(Builder builder, String pkg, boolean allow, java.util.Set<String> applied) {
         try {
             if (allow) builder.addAllowedApplication(pkg);
             else builder.addDisallowedApplication(pkg);
+            applied.add(pkg);
             return true;
         } catch (PackageManager.NameNotFoundException e) {
             return false;

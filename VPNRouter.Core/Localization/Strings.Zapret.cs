@@ -78,8 +78,16 @@ public static partial class Strings
     };
 
     internal static string ZapretStopPending => Ru
-        ? "Не удалось остановить Zapret. Повторите остановку."
-        : "Zapret is still running. Try stopping it again.";
+        ? "Не удалось подтвердить остановку Zapret. Повторите остановку."
+        : "Zapret exit is unconfirmed. Try stopping it again.";
+
+    internal static string MainServiceOwnerConflict => Ru
+        ? "Образ службы не соответствует этой редакции. Для службы в другом каталоге используйте CLI её установки."
+        : "The registered service image does not match this edition. Use the CLI from its installation to manage a relocated service.";
+
+    internal static string ZapretQuitPending => Ru
+        ? "VPNRouter остаётся открытым. Завершение работы Zapret не подтверждено. Повторите «Выход»."
+        : "VPNRouter is staying open. Zapret shutdown is unconfirmed. Choose Quit again.";
 
     internal static string ZapretRepairPackage => Ru
         ? "Откройте «Прочее» → «Обслуживание Zapret» и скачайте пакет заново."

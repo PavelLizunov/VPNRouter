@@ -618,15 +618,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return Strings.RelativeTimeLongAgo;
     }
 
-    private static void OpenFolderInExplorer(string path)
+    internal Action<ProcessStartInfo> LaunchFolder { get; set; } = info =>
+    {
+        using var process = Process.Start(info);
+    };
+
+    private void OpenFolderInExplorer(string path)
     {
         try
         {
             if (Directory.Exists(path))
-            {
-                var psi = VPNRouter.App.Services.FileManagerHelper.BuildOpenDirectoryStartInfo(path);
-                Process.Start(psi);
-            }
+                LaunchFolder(Services.FileManagerHelper.BuildOpenDirectoryStartInfo(path));
         }
         catch (Exception ex)
         {
@@ -691,15 +693,29 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return sb.ToString();
     }
 
+    internal Action RequestDesktopShutdown { get; set; } = () =>
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.Shutdown();
+    };
+
     [RelayCommand]
     private void Quit()
     {
+        if (TryPrepareQuit()) RequestDesktopShutdown();
+    }
+
+    internal bool IsShutdownPrepared => _disposed;
+
+    internal bool TryPrepareQuit()
+    {
+        if (_disposed) return true;
+        if (!TryReleaseZapretForShutdown()) return false;
+
         if (_engine.IsRunning)
             _engine.Stop();
 
         StopSubRefreshTimer();
-
-        StopZapret();
 
 #if PLATFORM_WINDOWS
         try { _tgProxy?.Stop(); }
@@ -709,18 +725,40 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SaveSettings();
 
         Dispose();
+        return true;
+    }
 
+    private bool TryReleaseZapretForShutdown()
+    {
+#if PLATFORM_WINDOWS
+        if (_zapretProbeCts != null)
+        {
+            _zapretProbeCts.Cancel();
+        }
+        else if (_zapret == null || _zapret.TryDispose())
+        {
+            if (_zapret != null) _zapret.ImmediateExitDetected -= OnZapretImmediateExit;
+            _zapret = null;
+            return true;
+        }
+
+        ZapretStatus = StatusText = Core.Localization.Strings.ZapretQuitPending;
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            desktop.Shutdown();
+            Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
+        return false;
+#else
+        return true;
+#endif
     }
 
     public void Dispose()
     {
         if (_disposed) return;
+        if (!TryReleaseZapretForShutdown())
+            throw new InvalidOperationException(Core.Localization.Strings.ZapretQuitPending);
         _disposed = true;
 
 #if PLATFORM_WINDOWS
-        _zapretProbeCts?.Cancel();
         try { _tgProxyLifetimeCts.Cancel(); }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: TgProxy cancellation failed"); }
 #endif
@@ -789,17 +827,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _tgProxy cleanup failed"); }
-
-        try
-        {
-            if (_zapret != null)
-            {
-                _zapret.ImmediateExitDetected -= OnZapretImmediateExit;
-                _zapret.Dispose();
-                _zapret = null;
-            }
-        }
-        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _zapret cleanup failed"); }
 #endif
 
         try { StopZapretProbeElapsedTimer(); }

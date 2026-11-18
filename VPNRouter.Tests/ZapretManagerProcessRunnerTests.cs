@@ -149,6 +149,15 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
     }
 
     [Fact]
+    public void UnknownNativeProcessStateIsDistinctFromTheLegacyHasExitedFallback()
+    {
+        using var process = new System.Diagnostics.Process();
+        using var handle = new ProcessHandle(process, new ProcessRequest("unused", []));
+        Assert.True(handle.HasExited);
+        Assert.Null(handle.QueryHasExited());
+    }
+
+    [Fact]
     public void FailedStopKeepsOwnershipAndBlocksReplacementUntilRetrySucceeds()
     {
         var runner = new FakeProcessRunner();

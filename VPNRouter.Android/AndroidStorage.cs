@@ -60,6 +60,20 @@ public static class AndroidStorage
 
     public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
 
+    public static AndroidPerAppPolicy? GetActivePerAppPolicy()
+    {
+        if (!VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel()) return null;
+        var json = GetString("vpn_active_per_app_policy");
+        if (json is null) return null;
+        try
+        {
+            var policy = JsonSerializer.Deserialize(json, AndroidJsonContext.Default.AndroidPerAppPolicy);
+            return policy is { ActiveMode: not null, ActivePackages: not null, RequestedMode: not null, RequestedPackages: not null }
+                ? policy : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
     /// <summary>The connection-state record of <c>VpnRouterService</c>, resolved for this process (see <see cref="VpnStateResolver"/>).</summary>
     public static VpnStateSnapshot ResolveVpnState() =>
         VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ResolveVpnState();
