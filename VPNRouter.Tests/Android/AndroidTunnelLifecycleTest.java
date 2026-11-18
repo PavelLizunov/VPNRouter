@@ -33,8 +33,8 @@ public final class AndroidTunnelLifecycleTest {
                 && source.contains("EXTRA_COLD_START_ONLY = \"cold_start_only\""), "cold start marker keys differ");
         requireOrdered(activity, "void OnMissingRuleSet(string _) => coldStartOnly = true;",
                 "BuildConfigJsonFromCustom(rawJson, singboxLogPath, OnMissingRuleSet)",
-                "DispatchTunnelStart(configJson, coldStartOnly);", "BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet)",
-                "DispatchTunnelStart(configJson, coldStartOnly, entry);", ".PutExtra(ExtraColdStartOnly, coldStartOnly)");
+                "DispatchTunnelStart(command, configJson, coldStartOnly);", "BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet)",
+                "DispatchTunnelStart(command, configJson, coldStartOnly, entry);", ".PutExtra(ExtraColdStartOnly, coldStartOnly)");
         String imported = builder.substring(builder.indexOf("internal static string BuildConfigJsonFromCustom("));
         requireOrdered(imported, "settings.App.BlockAds = AndroidStorage.GetBlockAds();",
                 "CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet)");
@@ -72,8 +72,18 @@ public final class AndroidTunnelLifecycleTest {
         String request = activity.substring(requestStart, activity.indexOf("protected override", requestStart));
         require(request.contains("StartService(intent);") && !request.contains("SetIntent("),
                 "requesting stop published a result before the service");
-        requireOrdered(activity, "case ActionTunnelUp:", "case ActionTunnelDown:", "SetIntent(AndroidStorage.HasConfirmedTunnel());",
+        requireOrdered(activity, "case ActionTunnelUp:", "case ActionTunnelDown:", "SetIntent(AndroidStorage.HasConfirmedTunnel(), refresh: action == ActionTunnelDown);",
                 "AndroidApp.RefreshPerAppSelection();", "case ActionTunnelError:");
+        requireOrdered(activity, "private void DispatchTunnelStart(", "if (!AndroidStorage.IsCurrentUiCommand(command)) return;",
+                ".PutExtra(AndroidStorage.UiCommandKey, command)", "StartForegroundService(intent)");
+        requireOrdered(dispatch, "if (uiCommand != null && !uiCommand.equals(prefs.getString(UI_COMMAND, null)))", "return;",
+                "AndroidTunnelPolicy.Preferences selection = readAppPreferences(prefs);", "sourcePrefs = selection.snapshot();",
+                "mode = selection.mode", "packages = selection.packages", "prepareTunnelConfig(cfg,",
+                "pendingPerAppPrefs = sourcePrefs;", "startTunnel(checked);");
+        requireOrdered(source, "RESTART_FLAGS = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE",
+                "RESTART_FLAGS | PendingIntent.FLAG_UPDATE_CURRENT", "private void cancelScheduledRestart()", "remove(RESTART_TICKET)",
+                "RESTART_FLAGS | PendingIntent.FLAG_NO_CREATE");
+        requireOrdered(activity, "case ActionTunnelError:", "if (!AndroidStorage.IsCurrentStateEvent(", "PresentTunnelError(");
         String app = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.axaml.cs"));
         String summary = app.substring(app.indexOf("private void UpdatePerAppSummary("),
                 app.indexOf("private void OnSaveClicked("));

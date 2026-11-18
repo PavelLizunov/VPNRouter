@@ -60,6 +60,18 @@ public static class AndroidStorage
 
     public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
 
+    internal const string UiCommandKey = "vpn_ui_command";
+    internal const string StateEventKey = "vpn_state_event";
+
+    internal static string? BeginUiCommand()
+    {
+        string id = Guid.NewGuid().ToString("N");
+        return SetString(UiCommandKey, id) ? id : null;
+    }
+
+    internal static bool IsCurrentUiCommand(string? id) => id != null && id == GetString(UiCommandKey);
+    internal static bool IsCurrentStateEvent(string? id) => id != null && id == GetString(StateEventKey);
+
     internal static bool HasConfirmedTunnel() => TunnelStateResync.IsConfirmedConnected(
         ResolveVpnState(), VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
 
@@ -512,6 +524,18 @@ public static class AndroidStorage
                 $"per-app package list unreadable ({result.Reason}: {result.Detail}); reset to empty");
         }
         return new List<string>();
+    }
+
+    public static bool SavePerAppSelection(string mode, IEnumerable<string> packages, bool rememberPickerMode = false)
+    {
+        var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+        using var editor = prefs?.Edit();
+        if (editor is null) return false;
+        editor.PutString(KeyPerAppPackages, JsonSerializer.Serialize(new List<string>(packages), JsonOptions));
+        editor.PutString(KeyPerAppMode, mode);
+        if (rememberPickerMode) editor.PutString(KeyPerAppLastMode, mode);
+        editor.Apply();
+        return true;
     }
 
     public static bool SetPerAppPackages(IEnumerable<string>? packages)

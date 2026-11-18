@@ -103,6 +103,11 @@ public final class VpnRouterService extends VpnService {
     // Single connection-state record read by the quick-settings tile and the app screen
     // (VPNRouter.Core VpnStateCodec parses these four words; this service is the only writer).
     public static final String ACTION_TILE_START = "com.ninitux.vpnrouter.TILE_START";
+    private static final String UI_COMMAND = "vpn_ui_command";
+    private static final String STATE_EVENT = "vpn_state_event";
+    private static final String RESTART_TICKET = "vpn_swipe_restart";
+    private static final int RESTART_FLAGS = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE;
+
     private static final String STATE_DISCONNECTED = "disconnected";
     private static final String STATE_CONNECTING = "connecting";
     private static final String STATE_CONNECTED = "connected";
@@ -180,6 +185,9 @@ public final class VpnRouterService extends VpnService {
 
     private void broadcastTunnelEvent(Intent event) {
         String pkg = getPackageName();
+        if (ACTION_TUNNEL_ERROR.equals(event.getAction())) {
+            event.putExtra(STATE_EVENT, getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(STATE_EVENT, null));
+        }
         sendBroadcast(event.setPackage(pkg), pkg + ".permission.TUNNEL_STATUS");
     }
 
@@ -356,7 +364,16 @@ public final class VpnRouterService extends VpnService {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (ended) return START_NOT_STICKY;
         String action = intent != null ? intent.getAction() : null;
-        stopRequested = ACTION_STOP.equals(action);
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String uiCommand = intent == null ? null : intent.getStringExtra(UI_COMMAND);
+        String restartTicket = intent == null ? null : intent.getStringExtra(RESTART_TICKET);
+        boolean scheduledRestart = ACTION_RESTART.equals(action);
+        if (scheduledRestart && (restartTicket == null || !restartTicket.equals(prefs.getString(RESTART_TICKET, null)))) {
+            submitCommand(startId, () -> { if (commandServer == null) finishCommand(startId); });
+            return START_NOT_STICKY;
+        }
+        if (ACTION_STOP.equals(action)) stopRequested = true;
+        else if (uiCommand == null || uiCommand.equals(prefs.getString(UI_COMMAND, null))) stopRequested = false;
         if (ACTION_START.equals(action)) {
             String nText = intent.getStringExtra(EXTRA_NOTIF_TEXT);
             if (nText != null && !nText.isEmpty()) notifText = nText;
@@ -378,22 +395,33 @@ public final class VpnRouterService extends VpnService {
             submitCommand(startId, new Runnable() {
                 @Override
                 public void run() {
+                    if (uiCommand != null && !uiCommand.equals(prefs.getString(UI_COMMAND, null))) {
+                        if (commandServer == null) finishCommand(startId);
+                        return;
+                    }
                     if (coldStartOnly && commandServer != null) {
                         reportFailure("config-invalid", true);
                         return;
                     }
-                    // Legacy callers supply allowed_packages alone. The UI sends an explicit mode.
-                    boolean legacyInclude;
+                    String mode;
+                    String[] packages;
                     String sourcePrefs;
                     try {
-                        legacyInclude = AndroidTunnelPolicy.usesLegacyAllowlist(perAppMode, perAppPkgs, allowed);
-                        sourcePrefs = readAppPreferences(getSharedPreferences(PREFS_NAME, MODE_PRIVATE)).snapshot();
+                        AndroidTunnelPolicy.Preferences selection = readAppPreferences(prefs);
+                        sourcePrefs = selection.snapshot();
+                        if (uiCommand != null) {
+                            // Establish and record the same picker revision.
+                            mode = selection.mode == null ? "off" : selection.mode;
+                            packages = selection.packages.toArray(new String[0]);
+                        } else {
+                            boolean legacyInclude = AndroidTunnelPolicy.usesLegacyAllowlist(perAppMode, perAppPkgs, allowed);
+                            mode = legacyInclude ? "include" : perAppMode;
+                            packages = legacyInclude ? allowed : perAppPkgs;
+                        }
                     } catch (Exception e) {
                         reportStartFailure(e, commandServer != null);
                         return;
                     }
-                    String mode = legacyInclude ? "include" : perAppMode;
-                    String[] packages = legacyInclude ? allowed : perAppPkgs;
                     String checked = prepareTunnelConfig(cfg, mode, packages, dnsDomain);
                     if (checked == null) return;
                     pendingConfigJson = cfg;
@@ -409,6 +437,8 @@ public final class VpnRouterService extends VpnService {
                 }
             });
         } else if (ACTION_STOP.equals(action)) {
+            // A UI stop has already superseded its preparation. Notification and tile stops arrive here directly.
+            if (uiCommand == null) prefs.edit().remove(UI_COMMAND).apply();
             cancelScheduledRestart();
             submitCommand(startId, new Runnable() {
                 @Override
@@ -427,6 +457,11 @@ public final class VpnRouterService extends VpnService {
             submitCommand(startId, new Runnable() {
                 @Override
                 public void run() {
+                    if (scheduledRestart && !restartTicket.equals(prefs.getString(RESTART_TICKET, null))) {
+                        if (commandServer == null) finishCommand(startId);
+                        return;
+                    }
+                    if (scheduledRestart) prefs.edit().remove(RESTART_TICKET).apply();
                     if (commandServer != null) {
                         Log.i(LOG_TAG, "AND-NODOZE: restart/always-on intent but tunnel "
                                 + "already running — no-op (service survived the swipe)");
@@ -471,6 +506,7 @@ public final class VpnRouterService extends VpnService {
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                     .edit()
                     .putString(KEY_VPN_STATE, state)
+                    .putString(STATE_EVENT, java.util.UUID.randomUUID().toString())
                     .putString("vpn_active_per_app_policy", STATE_CONNECTED.equals(state) ? establishedAppPolicy : null)
                     .putString(KEY_VPN_STATE_REASON, reason)
                     .putInt(KEY_VPN_STATE_PID, android.os.Process.myPid())
@@ -676,8 +712,10 @@ public final class VpnRouterService extends VpnService {
 
     private static AndroidTunnelPolicy.Preferences readAppPreferences(SharedPreferences prefs)
             throws org.json.JSONException {
-        return new AndroidTunnelPolicy.Preferences(prefs.getString(EXTRA_PER_APP_MODE, null),
-                prefs.getString(EXTRA_PER_APP_PACKAGES, "[]"));
+        java.util.Map<String, ?> values = prefs.getAll();
+        String packages = (String) values.get(EXTRA_PER_APP_PACKAGES);
+        return new AndroidTunnelPolicy.Preferences((String) values.get(EXTRA_PER_APP_MODE),
+                packages == null ? "[]" : packages);
     }
 
     private boolean loadLastGoodConfig() {
@@ -990,6 +1028,7 @@ public final class VpnRouterService extends VpnService {
     public synchronized void onRevoke() {
         if (ended) return;
         ended = true;
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().remove(UI_COMMAND).apply();
         cancelScheduledRestart();
         submitLifecycle(() -> {
             writeVpnState(STATE_ERROR, "no-permission");
@@ -1015,11 +1054,13 @@ public final class VpnRouterService extends VpnService {
     public void onTaskRemoved(Intent rootIntent) {
         try {
             if (!ended && !stopRequested && commandServer != null && isIgnoringBatteryOptimizations()) {
+                String ticket = java.util.UUID.randomUUID().toString();
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(RESTART_TICKET, ticket).apply();
                 Intent restart = new Intent(getApplicationContext(), VpnRouterService.class)
-                        .setAction(ACTION_RESTART);
+                        .setAction(ACTION_RESTART).putExtra(RESTART_TICKET, ticket);
                 PendingIntent pi = PendingIntent.getService(
                         this, 1, restart,
-                        PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+                        RESTART_FLAGS | PendingIntent.FLAG_UPDATE_CURRENT);
                 AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
                 if (am != null && pi != null) {
                     am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
@@ -1039,12 +1080,13 @@ public final class VpnRouterService extends VpnService {
     }
 
     private void cancelScheduledRestart() {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().remove(RESTART_TICKET).apply();
         try {
             Intent restart = new Intent(getApplicationContext(), VpnRouterService.class)
                     .setAction(ACTION_RESTART);
             PendingIntent pi = PendingIntent.getService(
                     this, 1, restart,
-                    PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+                    RESTART_FLAGS | PendingIntent.FLAG_NO_CREATE);
             if (pi != null) {
                 AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
                 if (am != null) am.cancel(pi);

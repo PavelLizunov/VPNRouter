@@ -146,8 +146,8 @@ public static class AndroidConfigShare
         {
             try
             {
-                AndroidStorage.SetPerAppMode(doc.PerAppFilter.Mode);
-                AndroidStorage.SetPerAppPackages(doc.PerAppFilter.Packages ?? new List<string>());
+                if (!AndroidStorage.SavePerAppSelection(doc.PerAppFilter.Mode, doc.PerAppFilter.Packages ?? new List<string>()))
+                    return ApplyResult.PartialSuccess("Could not save per-app filter settings.", backupPath);
             }
             catch (Exception ex)
             {

@@ -261,6 +261,7 @@ public sealed class VpnTileService : TileService
     {
         Prefs().Edit()!
             .PutString(KeyState, VpnStateCodec.Encode(state))!
+            .PutString(AndroidStorage.StateEventKey, Guid.NewGuid().ToString("N"))!
             .PutString(KeyStateReason, reason)!
             .PutInt(KeyStatePid, global::Android.OS.Process.MyPid())!
             .PutLong(KeyStateAtMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())!

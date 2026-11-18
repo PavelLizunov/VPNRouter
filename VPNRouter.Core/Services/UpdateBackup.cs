@@ -53,6 +53,7 @@ public static class UpdateBackup
     public sealed record RestoreResult(bool Restored, string Reason)
     {
         public bool OperationInProgress { get; init; }
+        public bool RelaunchRejected { get; init; }
     }
 
     public static string? GetSnapshotGeneration(string installDir)
@@ -194,7 +195,9 @@ public static class UpdateBackup
 
     internal static RestoreResult RestoreSnapshot(
         string installDir,
-        Action<string, string> moveDirectory)
+        Action<string, string> moveDirectory,
+        Action<string>? validateCandidate = null,
+        Action? relaunch = null)
     {
         ArgumentNullException.ThrowIfNull(moveDirectory);
 
@@ -224,6 +227,15 @@ public static class UpdateBackup
 
         if (!Directory.Exists(bak))
             return new RestoreResult(false, $"no snapshot at '{bak}' — nothing to restore");
+
+        try
+        {
+            validateCandidate?.Invoke(bak);
+        }
+        catch (Exception ex)
+        {
+            return new RestoreResult(false, $"snapshot verification failed: {ex.Message}") { RelaunchRejected = true };
+        }
 
         try
         {
@@ -262,6 +274,24 @@ public static class UpdateBackup
             }
 
             moveDirectory(bak, app);
+            try
+            {
+                relaunch?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    moveDirectory(app, bak);
+                    if (appMovedToStage) moveDirectory(stage, app);
+                }
+                catch (Exception restoreError)
+                {
+                    return new RestoreResult(false, $"rollback relaunch and compensation failed: {restoreError.Message}")
+                    { RelaunchRejected = true };
+                }
+                return new RestoreResult(false, $"rollback relaunch failed: {ex.Message}") { RelaunchRejected = true };
+            }
             try { File.Delete(generationPath); }
             catch { }
 

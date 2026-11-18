@@ -411,27 +411,41 @@ public static class ZapretActions
         return parts.Length == 1 || ushort.TryParse(parts[1], System.Globalization.NumberStyles.None, null, out var last) && last >= first;
     }
 
+    internal const string PreinstallDisabledSuffix = ".disabled-before-install";
+    internal const string PreinstallLoadedSuffix = ".load-on-install";
+
+    private static void SetFilterFlag(string package, string flag, string? value)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(flag)!);
+        var disabled = flag + PreinstallDisabledSuffix;
+        if (value == null)
+        {
+            // Flowseal reads absence as off. Remember which switch the user turned off until publication.
+            if (!ZapretUpdater.HasInstalledPackage(package)) File.WriteAllText(disabled, "");
+            File.Delete(flag);
+        }
+        else
+        {
+            File.WriteAllText(flag, value);
+            if (File.Exists(disabled)) File.Delete(disabled);
+        }
+    }
+
     public static void SetGameFilterMode(GameFilterMode mode)
     {
         try
         {
             ZapretRuntimeDirectory.WithPackage(package =>
             {
-                var flag = GameFilterFlagPath(package);
-                Directory.CreateDirectory(Path.GetDirectoryName(flag)!);
-                if (mode == GameFilterMode.Off)
-                {
-                    File.Delete(flag);
-                    return;
-                }
                 var val = mode switch
                 {
                     GameFilterMode.All => "all",
                     GameFilterMode.TcpOnly => "tcp",
                     GameFilterMode.UdpOnly => "udp",
+                    GameFilterMode.Off => null,
                     _ => ""
                 };
-                File.WriteAllText(flag, val);
+                SetFilterFlag(package, GameFilterFlagPath(package), val);
             });
         }
         catch { }
@@ -454,7 +468,12 @@ public static class ZapretActions
     {
         var list = IpSetListPath(package);
         if (!File.Exists(list)) return IpSetMode.Any;
-        var content = File.ReadAllText(list).Trim();
+        return ClassifyIpSet(File.ReadAllText(list));
+    }
+
+    internal static IpSetMode ClassifyIpSet(string text)
+    {
+        var content = text.Trim();
         if (content.Length == 0) return IpSetMode.Any;
         if (content == "203.0.113.113/32") return IpSetMode.None;
         return IpSetMode.Loaded;
@@ -470,17 +489,28 @@ public static class ZapretActions
                 var backup = list + ".backup";
                 Directory.CreateDirectory(Path.GetDirectoryName(list)!);
                 var current = GetIpSetMode(package);
-                if (current == mode) return;
-
-                if (mode is IpSetMode.Any or IpSetMode.None)
+                var pending = list + PreinstallLoadedSuffix;
+                if (mode == IpSetMode.Loaded && current != mode && !File.Exists(backup))
+                {
+                    // The first package can supply the list that is missing before download.
+                    if (!ZapretUpdater.HasInstalledPackage(package)) File.WriteAllText(pending, "");
+                    return;
+                }
+                if (current == mode)
+                {
+                    if (mode == IpSetMode.Any && !File.Exists(list) && !ZapretUpdater.HasInstalledPackage(package))
+                        File.WriteAllText(list, "");
+                }
+                else if (mode is IpSetMode.Any or IpSetMode.None)
                 {
                     if (current == IpSetMode.Loaded) File.Move(list, backup, overwrite: true);
                     File.WriteAllText(list, mode == IpSetMode.Any ? "" : "203.0.113.113/32");
                 }
-                else if (mode == IpSetMode.Loaded && File.Exists(backup))
+                else if (mode == IpSetMode.Loaded)
                 {
                     File.Move(backup, list, overwrite: true);
                 }
+                if (File.Exists(pending)) File.Delete(pending);
             });
         }
         catch { }
@@ -544,12 +574,7 @@ public static class ZapretActions
         try
         {
             ZapretRuntimeDirectory.WithPackage(package =>
-            {
-                var flag = AutoUpdateFlagPath(package);
-                Directory.CreateDirectory(Path.GetDirectoryName(flag)!);
-                if (enabled) File.WriteAllText(flag, "ENABLED");
-                else File.Delete(flag);
-            });
+                SetFilterFlag(package, AutoUpdateFlagPath(package), enabled ? "ENABLED" : null));
         }
         catch { }
     }
