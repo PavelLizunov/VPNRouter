@@ -368,7 +368,9 @@
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="{Binding L_GameFilter}"
                                                FontWeight="SemiBold" FontSize="10"/>
-                                    <ComboBox SelectedIndex="{Binding GameFilterModeIndex}"
+                                    <ComboBox x:Name="GameFilterModePicker"
+                                              SelectedIndex="{Binding GameFilterModeIndex, Mode=TwoWay}"
+                                              PlaceholderText="{Binding L_GameFilterDefault}"
                                               HorizontalAlignment="Stretch"
                                               Padding="8,5" FontSize="11">
                                         <ComboBoxItem Content="{Binding L_GameFilterOff}"/>

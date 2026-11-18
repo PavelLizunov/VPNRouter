@@ -50,6 +50,31 @@ public sealed class ConnectConsentGateTests
         Assert.True(gate.TryOpen());
     }
 
+    [Theory]
+    [InlineData("latest")]
+    [InlineData("another-stop")]
+    public void RecreatedDialogDropsSupersededResultAndRechecksPendingConnect(string current)
+    {
+        var firstActivity = new ConnectConsentGate();
+        Assert.True(firstActivity.OpenOrQueue("before-stop"));
+        Assert.False(firstActivity.OpenOrQueue("next"));
+        Assert.False(firstActivity.OpenOrQueue("latest"));
+        var saved = firstActivity.Requests;
+
+        var recreated = new ConnectConsentGate();
+        Assert.True(recreated.OpenOrQueue(saved.Owner!));
+        Assert.False(recreated.OpenOrQueue(saved.Pending!));
+        var (resultOwner, next) = recreated.ResolveResult(id => id == current);
+        Assert.Null(resultOwner); // Neither grant nor denial belongs to the later Connect.
+        Assert.Equal(current == "latest" ? current : null, next);
+        Assert.False(recreated.IsOpen);
+        if (next != null)
+        {
+            Assert.True(recreated.OpenOrQueue(next));
+            Assert.Equal(next, recreated.ResolveResult(id => id == next).Owner);
+        }
+    }
+
     [Fact]
     public async Task ManyRacingRequests_OpenExactlyOneDialog()
     {

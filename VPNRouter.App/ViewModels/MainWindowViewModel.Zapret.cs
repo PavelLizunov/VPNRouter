@@ -214,7 +214,7 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblFlowsealHosts))]
     private bool _flowsealHostsInstalled;
-    [ObservableProperty] private int _gameFilterModeIndex;
+    [ObservableProperty] private int _gameFilterModeIndex = -1;
     [ObservableProperty] private int _ipSetModeIndex;
     [ObservableProperty] private bool _zapretAutoUpdateCheck;
 
@@ -1307,7 +1307,7 @@ public partial class MainWindowViewModel
 #if PLATFORM_WINDOWS
     partial void OnGameFilterModeIndexChanged(int value)
     {
-        if (_isLoadingUI) return;
+        if (_isLoadingUI || value < 0) return;
         ZapretActions.SetGameFilterMode((ZapretActions.GameFilterMode)value);
     }
 

@@ -35,6 +35,7 @@ public static partial class Strings
         : "Diagnostics and service controls. Not needed for most users.";
 
     public static string GameFilter => Ru ? "Игровой фильтр (диапазон 1024-65535)" : "Game filter (port range 1024-65535)";
+    public static string GameFilterDefault => Ru ? "По умолчанию при автонастройке (TCP + UDP)" : "One-click default (TCP + UDP)";
     public static string GameFilterOff => Ru ? "Выкл" : "Off";
     public static string GameFilterAll => Ru ? "TCP + UDP" : "TCP + UDP";
     public static string GameFilterTcp => "TCP";

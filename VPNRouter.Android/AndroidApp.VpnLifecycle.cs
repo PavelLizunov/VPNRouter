@@ -26,7 +26,7 @@ public partial class AndroidApp
             var savedUrl = AndroidStorage.GetSubscriptionUrl();
             var typedSubscription = input.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
                 || input.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
-            var subscriptionUrl = typedSubscription ? input : input.Length == 0 ? savedUrl : null;
+            var subscriptionUrl = typedSubscription ? input : input.Length == 0 && AndroidStorage.GetConfigMode() == "subscribe" ? savedUrl : null;
             if (!string.IsNullOrEmpty(subscriptionUrl))
             {
                 var hasCurrentCache = savedUrl == subscriptionUrl && AndroidStorage.GetSubscriptions().Exists(s =>
@@ -39,7 +39,7 @@ public partial class AndroidApp
                 }
             }
 
-            if (input.Length > 0)
+            if (input.Length > 0 && !string.Equals(input, AndroidStorage.SavedServerInput(), StringComparison.Ordinal))
             {
                 OnSaveClicked(sender, e);
                 if (_serverInputError is { IsVisible: true }) return;

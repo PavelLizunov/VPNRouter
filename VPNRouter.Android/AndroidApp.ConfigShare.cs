@@ -586,10 +586,8 @@ public partial class AndroidApp
             _ccCustomInput.Text = AndroidStorage.GetCustomConfigJson() ?? string.Empty;
         }
 
-        if (_serverInput is not null && mode == "manual")
-        {
-            _serverInput.Text = AndroidStorage.GetVlessUri() ?? string.Empty;
-        }
+        if (_serverInput is not null) _serverInput.Text = AndroidStorage.SavedServerInput();
+        if (_serverInputError is not null) _serverInputError.IsVisible = false;
 
         if (_ccModeSubBtn is not null) StyleSegmentButton(_ccModeSubBtn, mode == "subscribe");
         if (_ccModeManualBtn is not null) StyleSegmentButton(_ccModeManualBtn, mode == "manual");

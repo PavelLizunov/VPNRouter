@@ -154,6 +154,7 @@ public partial class MainWindowViewModel
     public string L_FullTunnelTitle => Strings.FullTunnelTitle;
     public string L_GameFilter => Strings.GameFilter;
     public string L_GameFilterAll => Strings.GameFilterAll;
+    public string L_GameFilterDefault => global::VPNRouter.Core.Localization.Strings.GameFilterDefault;
     public string L_GameFilterOff => Strings.GameFilterOff;
     public string L_GameFilterTcp => Strings.GameFilterTcp;
     public string L_GameFilterUdp => Strings.GameFilterUdp;

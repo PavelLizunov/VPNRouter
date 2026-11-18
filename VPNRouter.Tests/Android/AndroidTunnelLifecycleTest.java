@@ -94,6 +94,15 @@ public final class AndroidTunnelLifecycleTest {
                 "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))", "else if (loadLastGoodConfig())");
         require(source.contains("synchronized void onTaskRemoved(") && source.contains("synchronized void onRevoke(")
                 && source.contains("synchronized int onStartCommand("), "swipe scheduling must serialize with revoke and stop");
+        requireOrdered(activity, "var (command, pending) = _consentGate.ResolveResult(AndroidStorage.IsCurrentUiCommand);",
+                "if (pending != null)", "Post(() => RequestConnect(pending))",
+                "!AndroidStorage.IsCurrentUiCommand(command)", "resultCode == Result.Ok", "StartTunnelService(command)");
+        String free = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.FreeConfigs.cs"));
+        requireOrdered(free, "AndroidStorage.ApplyFreeConfig(", "RefreshConfigModeUiFromStorage();",
+                "RequestConnect(command);");
+        String simple = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.VpnLifecycle.cs"));
+        requireOrdered(simple, "!string.Equals(input, AndroidStorage.SavedServerInput()", "OnSaveClicked(sender, e);",
+                "activity.RequestConnect();");
         String external = Files.readString(root.resolve("VPNRouter.Android/VpnControlReceiver.cs"));
         require(external.contains("SvcActionStart = \"com.ninitux.vpnrouter.TILE_START\""), "external restore requires an unticketed action");
         String qr = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.QrScanApply.cs"));

@@ -151,10 +151,10 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
     {
         if (!OperatingSystem.IsLinux()) return;
         var store = new InMemorySettingsStore();
+        using var vm = new MainWindowViewModel(store);
         var settings = store.Load();
         settings.App.ZapretStrategy = "keep-until-reset";
         store.Save(settings);
-        using var vm = new MainWindowViewModel(store);
         const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
         var engine = (VPNRouter.Core.Services.VpnEngine)typeof(MainWindowViewModel).GetField("_engine", fields)!.GetValue(vm)!;
         var managerField = engine.GetType().GetField("_singBox", fields)!;
