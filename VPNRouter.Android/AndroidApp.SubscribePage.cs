@@ -484,30 +484,20 @@ public partial class AndroidApp
         if (_subsAggListStack is null || _subsAggEmptyHint is null) return;
         _subsAggListStack.Children.Clear();
 
-        var aggregated = _subs
-            .Where(s => s != null && s.Enabled && s.Servers != null)
-            .SelectMany(s => s.Servers)
-            .Where(s => !string.IsNullOrWhiteSpace(s?.Server))
-            .ToList();
-        if (aggregated.Count == 0)
+        foreach (var feed in _subs.Where(s => s is { Enabled: true, Servers: not null }))
         {
-            _subsAggEmptyHint.IsVisible = true;
-            return;
+            var activeName = AndroidStorage.SelectedNameForFeed(feed);
+            foreach (var server in feed.Servers.Where(s => !string.IsNullOrWhiteSpace(s?.Server)))
+                _subsAggListStack.Children.Add(BuildAggregatedServerRow(feed, server, activeName));
         }
-        _subsAggEmptyHint.IsVisible = false;
-
-        var activeName = AndroidStorage.GetSelectedServerName();
-        foreach (var srv in aggregated)
-        {
-            _subsAggListStack.Children.Add(BuildAggregatedServerRow(srv, activeName));
-        }
+        _subsAggEmptyHint.IsVisible = _subsAggListStack.Children.Count == 0;
     }
 
-    private Control BuildAggregatedServerRow(VlessServerEntry srv, string? activeServerName)
+    private Control BuildAggregatedServerRow(SubscriptionEntry source, VlessServerEntry srv, string? activeServerName)
     {
         var key = AndroidStorage.BuildServerKey(srv);
         var hasResult = _subsAggResults.TryGetValue(key, out var result);
-        return BuildServerRowCore(srv, activeServerName, hasResult ? result : null,
+        return BuildServerRowCore(source, srv, activeServerName, hasResult ? result : null,
             _subsAggTestingKeys.Contains(key), TestSingleAggregatedServerAsync);
     }
 

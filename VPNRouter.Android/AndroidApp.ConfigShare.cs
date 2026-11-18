@@ -605,10 +605,13 @@ public partial class AndroidApp
 
     private void ReloadServerListFromStorage()
     {
-        try
-        {
-        }
-        catch { }
+        _cachedServers = AndroidStorage.GetServers();
+        _subs = AndroidStorage.GetSubscriptions();
+        if (_srvCurrentSub is { } previous)
+            _srvCurrentSub = _subs.Find(s => s.Id == previous.Id && s.Url == previous.Url);
+        UpdateServerListView();
+        RebuildSubsList();
+        RebuildServerList();
     }
 
     internal void RefreshConfigShareLocalization()

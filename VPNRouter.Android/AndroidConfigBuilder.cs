@@ -33,6 +33,7 @@ public static class AndroidConfigBuilder
         if (!entry.UseAsSingleOutbound && AndroidStorage.GetAutoSelectBestServer())
         {
             var pool = GetAllCandidateServers();
+            AndroidSubscriptionRefresh.PutSelectedServerFirst(pool, entry);
             if (pool.Count > 1)
             {
                 foreach (var s in pool)

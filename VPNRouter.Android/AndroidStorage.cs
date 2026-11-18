@@ -41,8 +41,8 @@ public static class AndroidStorage
     private const string KeyPlaceholderPruneCount = "v4_placeholder_prune_count";
 
     private const string KeyConfigMode = AndroidSubscriptionRefresh.ConfigMode;
-    private const string KeyCustomConfigJson = "custom_config_json";
-    private const string KeyCustomConfigName = "custom_config_name";
+    private const string KeyCustomConfigJson = AndroidSubscriptionRefresh.CustomJson;
+    private const string KeyCustomConfigName = AndroidSubscriptionRefresh.CustomName;
 
     public static string GetConfigMode()
     {
@@ -90,7 +90,7 @@ public static class AndroidStorage
         }
     }
 
-    internal static bool IsCurrentUiCommand(string? id) => id != null && id == GetString(UiCommandKey);
+    internal static bool IsCurrentUiCommand(string? id) => AndroidSubscriptionRefresh.IsCurrentSelection(id, GetString);
 
     internal static bool HasConfirmedTunnel() => TunnelStateResync.IsConfirmedConnected(
         ResolveVpnState(), VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
@@ -125,17 +125,18 @@ public static class AndroidStorage
     public static string? GetSubscriptionUrl() => GetString(KeySubscriptionUrl);
     public static bool SetSubscriptionUrl(string? value)
     {
-        if (value == GetSubscriptionUrl() || GetString(KeySubscriptions) != null)
-            return SetString(KeySubscriptionUrl, value);
+        if (value == GetSubscriptionUrl()) return true;
 
         try
         {
             // Materialize the old layout before changing the URL that identifies its cache.
-            var previous = GetSubscriptions();
+            var previous = GetString(KeySubscriptions) == null ? GetSubscriptions() : null;
             var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private);
             using var editor = prefs?.Edit();
             if (editor == null) return false;
-            editor.PutString(KeySubscriptions, JsonSerializer.Serialize(previous, JsonOptions));
+            if (previous != null) editor.PutString(KeySubscriptions, JsonSerializer.Serialize(previous, JsonOptions));
+            editor.Remove(AndroidSubscriptionRefresh.SelectedFeedId);
+            editor.Remove(AndroidSubscriptionRefresh.SelectedFeedRow);
             if (string.IsNullOrWhiteSpace(value)) editor.Remove(KeySubscriptionUrl);
             else editor.PutString(KeySubscriptionUrl, value);
             return editor.Commit();
@@ -421,31 +422,32 @@ public static class AndroidStorage
         WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveSingleServer(server, uri, command,
             key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
-    public static VlessServerEntry? GetActiveServer()
-    {
-        var selectedName = GetSelectedServerName();
-        if (AndroidSubscriptionRefresh.ReadRetainedManual(GetString) is { } retained &&
-            (string.IsNullOrEmpty(selectedName) || string.Equals(selectedName, retained.Name, StringComparison.OrdinalIgnoreCase)))
-            return retained;
-        var servers = GetServers();
+    internal static bool SelectSubscriptionServer(SubscriptionEntry source, VlessServerEntry row, string? command) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveFeedSelection(source, row, command, GetSubscriptions(),
+            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
-        return AndroidSubscriptionRefresh.ResolveActiveServer(selectedName, servers, GetSubscriptionsBare(),
-            GetConfigMode(), GetVlessUri(), name => SetSelectedServerName(name));
+    internal static void ImportProfile(ConfigShareDocument doc) =>
+        WithCommandPreferences(prefs =>
+        {
+            AndroidSubscriptionRefresh.ImportProfile(doc, key => prefs.GetString(key, null),
+                changes => CommitStrings(prefs, changes), JsonOptions);
+            return true;
+        });
+
+    public static VlessServerEntry? GetActiveServer() =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.ResolveActiveServer(GetServers(), GetSubscriptions(),
+            GetConfigMode(), key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
+
+    internal static string? SelectedNameForFeed(SubscriptionEntry? source)
+    {
+        if (source == null || GetConfigMode() != "subscribe") return null;
+        var feedId = GetString(AndroidSubscriptionRefresh.SelectedFeedId);
+        var url = GetSubscriptionUrl();
+        if (feedId != null && feedId != source.Id || url != null && url != source.Url) return null;
+        return GetSelectedServerName();
     }
 
-    private static List<SubscriptionEntry> GetSubscriptionsBare()
-    {
-        var json = GetString(KeySubscriptions);
-        if (string.IsNullOrWhiteSpace(json)) return new List<SubscriptionEntry>();
-        try
-        {
-            return JsonSerializer.Deserialize<List<SubscriptionEntry>>(json, JsonOptions) ?? new List<SubscriptionEntry>();
-        }
-        catch
-        {
-            return new List<SubscriptionEntry>();
-        }
-    }
+    internal static string? SelectedFeedRow => GetString(AndroidSubscriptionRefresh.SelectedFeedRow);
 
     public static string? GetLanguage() => GetString(KeyLanguage);
     public static bool SetLanguage(string? value) => SetString(KeyLanguage, value);
@@ -1002,7 +1004,8 @@ public static class AndroidStorage
             var liveKeys = new[]
             {
                 KeyVlessUri, KeySubscriptionUrl, KeyServersJson, AndroidSubscriptionRefresh.LegacyManualOwner,
-                KeySelectedServerName, KeyLanguage, KeyTheme,
+                KeySelectedServerName, AndroidSubscriptionRefresh.SelectedFeedId, AndroidSubscriptionRefresh.SelectedFeedRow,
+                AndroidSubscriptionRefresh.SupersededSelection, KeyLanguage, KeyTheme,
                 KeySubscriptions, KeyPerAppMode, KeyPerAppPackages,
                 KeyPerAppLastMode, KeyRoutingMode, KeyBypassRussianTraffic,
                 KeyBlockOnVpnFail, KeyDnsStrategy, KeyBlockAds, KeyUpdateChannel,
