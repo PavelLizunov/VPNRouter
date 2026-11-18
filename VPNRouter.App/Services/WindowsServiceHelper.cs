@@ -14,160 +14,160 @@ public static class WindowsServiceHelper
 
     public record ServiceResult(bool Success, string Message);
 
-    public static bool IsInstalled()
+    private const uint ChangeConfig = 2, StartService = 16, StopService = 32, DeleteService = 0x10000;
+
+    internal static Func<string, uint, IWindowsRegistration?> OpenRegistration { get; set; } =
+        (name, access) => WindowsServiceRegistration.OpenWithAccess(name, access);
+    internal static Func<string, bool> ServiceExeExists { get; set; } = File.Exists;
+    internal static Func<string[], (int ExitCode, string Output)> SystemSc { get; set; } = RunSc;
+
+    private static string EditionExe
     {
-        var (code, _) = RunSc("query", ServiceName);
-        return code == 0;
-    }
-
-    public static bool IsRunning()
-    {
-        var (code, output) = RunSc("query", ServiceName);
-        if (code != 0) return false;
-        return output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static ServiceResult Install(string? exePath = null)
-    {
-        exePath ??= ResolveServiceExePath();
-        if (exePath == null || !File.Exists(exePath))
-            return new ServiceResult(false, $"Service executable not found: {exePath}");
-
-        if (IsInstalled())
-            return new ServiceResult(false, $"Service '{ServiceName}' is already installed.");
-
-        var (code, output) = RunSc(
-            WindowsServiceCommand.BuildCreateArguments(
-                ServiceName, exePath, DisplayName));
-        if (code != 0)
-            return new ServiceResult(false, $"sc create failed (exit {code}): {output}");
-
-        RunSc("description", ServiceName, Description);
-        RunSc(WindowsServiceCommand.BuildFailureRecoveryArguments(ServiceName));
-
-        return new ServiceResult(true, $"Service installed at: {exePath}");
-    }
-
-    public static ServiceResult Uninstall()
-    {
-        if (!IsInstalled())
-            return new ServiceResult(false, $"Service '{ServiceName}' is not installed.");
-
-        if (IsRunning())
+        get
         {
-            var stopResult = Stop();
-            if (!stopResult.Success)
-                return new ServiceResult(false, $"Cannot stop before uninstall: {stopResult.Message}");
+            var root = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            if (!Path.IsPathFullyQualified(root)) throw new IOException("Could not resolve Program Files.");
+            return Path.Combine(root, ServiceName, "app", "VPNRouter.Service.exe");
         }
-
-        var (code, output) = RunSc("delete", ServiceName);
-        return code == 0
-            ? new ServiceResult(true, $"Service '{ServiceName}' uninstalled.")
-            : new ServiceResult(false, $"sc delete failed (exit {code}): {output}");
     }
 
-    public static ServiceResult Start()
+    private static void CheckOwner(IWindowsRegistration registration)
     {
-        if (!IsInstalled())
-            return new ServiceResult(false, $"Service '{ServiceName}' is not installed.");
-        if (IsRunning())
-            return new ServiceResult(true, $"Service '{ServiceName}' is already running.");
+        if (!MainServiceRegistration.Matches(registration.Config, EditionExe))
+            throw new InvalidOperationException(VPNRouter.Core.Localization.Strings.MainServiceOwnerConflict);
+    }
 
-        var (code, output) = RunSc("start", ServiceName);
-        if (code != 0)
-            return new ServiceResult(false, $"sc start failed (exit {code}): {output}");
+    private static string? ResolveName() =>
+        MainServiceRegistration.Resolve(EditionExe, VPNRouter.Core.ProductEdition.IsBusiness, OpenRegistration);
 
-        for (int i = 0; i < 20; i++)
+    internal static (bool Installed, bool Running, int? Pid, string? Error, string? Name) GetState()
+    {
+        try
         {
+            using var service = MainServiceRegistration.OpenVerified(ResolveName(), EditionExe, 0, OpenRegistration);
+            if (service == null) return (false, false, null, null, null);
+            var status = service.Handle.ProcessStatus;
+            return (true, status.State == 4, status.State == 4 && status.Pid > 0 ? status.Pid : null, null, service.Name);
+        }
+        catch (Exception ex) { return (false, false, null, ex.Message, null); }
+    }
+
+    public static bool IsInstalled() => GetState().Installed;
+    public static bool IsRunning() => GetState().Running;
+
+    private static ServiceResult WithOwned(uint access, Func<MainServiceRegistration, ServiceResult> action, string? name = null)
+    {
+        try
+        {
+            using var service = MainServiceRegistration.OpenVerified(name ?? ResolveName(), EditionExe, access, OpenRegistration);
+            return service == null ? new(false, "Service is not installed.") : action(service);
+        }
+        catch (Exception ex) { return new(false, ex.Message); }
+    }
+
+    public static ServiceResult Install(string? exePath = null) => InstallNamed(ServiceName, exePath);
+
+    private static ServiceResult InstallNamed(string name, string? exePath = null)
+    {
+        exePath ??= EditionExe;
+        if (!string.Equals(exePath, EditionExe, StringComparison.OrdinalIgnoreCase))
+            return new(false, VPNRouter.Core.Localization.Strings.MainServiceOwnerConflict);
+        try
+        {
+            using var requested = OpenRegistration(name, 0);
+            if (requested != null) CheckOwner(requested);
+            if (MainServiceRegistration.Resolve(EditionExe, VPNRouter.Core.ProductEdition.IsBusiness, OpenRegistration,
+                    ignoreForeign: true) is string existing)
+                return new(false, $"Service '{existing}' is already installed.");
+        }
+        catch (Exception ex) { return new(false, ex.Message); }
+
+        if (!ServiceExeExists(exePath)) return new(false, $"Service executable not found: {exePath}");
+
+        // SCM create also refuses a registration that appeared after the read.
+        var (code, output) = SystemSc(WindowsServiceCommand.BuildCreateArguments(name, exePath, DisplayName));
+        if (code != 0) return new(false, $"sc create failed (exit {code}): {output}");
+        return WithOwned(ChangeConfig, service =>
+        {
+            var description = SystemSc(["description", name, Description]);
+            if (description.ExitCode != 0) return new(false, description.Output);
+            CheckOwner(service.Handle);
+            var recovery = SystemSc(WindowsServiceCommand.BuildFailureRecoveryArguments(name));
+            return recovery.ExitCode == 0 ? new(true, $"Service installed at: {exePath}") : new(false, recovery.Output);
+        }, name);
+    }
+
+    private static void StopAndWait(IWindowsRegistration registration)
+    {
+        try { registration.Stop(); }
+        catch (TimeoutException)
+        {
+            // The native helper waits five seconds. Allow the main VPN service its full shutdown budget.
+            if (!System.Threading.SpinWait.SpinUntil(() => !registration.IsActive, TimeSpan.FromSeconds(10))) throw;
+        }
+    }
+
+    public static ServiceResult Uninstall() => WithOwned(StopService | DeleteService, Remove);
+
+    private static ServiceResult Remove(MainServiceRegistration service)
+    {
+        StopAndWait(service.Handle);
+        CheckOwner(service.Handle);
+        service.Handle.Delete();
+        return new(true, $"Service '{service.Name}' uninstalled.");
+    }
+
+    internal static ServiceResult Reinstall()
+    {
+        string? name = null;
+        var removed = WithOwned(StopService | DeleteService, service => { name = service.Name; return Remove(service); });
+        return removed.Success ? InstallNamed(name!) : removed;
+    }
+
+    public static ServiceResult Start() => WithOwned(StartService, service =>
+    {
+        service.Handle.Start();
+        for (var i = 0; i < 20; i++)
+        {
+            if (service.Handle.ProcessStatus.State == 4) return new(true, $"Service '{service.Name}' started.");
             System.Threading.Thread.Sleep(500);
-            if (IsRunning())
-                return new ServiceResult(true, $"Service '{ServiceName}' started.");
         }
-        return new ServiceResult(false, "Service did not reach RUNNING state within 10 seconds.");
-    }
+        return new(false, "Service did not reach RUNNING state within 10 seconds.");
+    });
 
-    public static ServiceResult Stop()
+    public static ServiceResult Stop() => WithOwned(StopService, service =>
     {
-        if (!IsInstalled())
-            return new ServiceResult(false, $"Service '{ServiceName}' is not installed.");
-        if (!IsRunning())
-            return new ServiceResult(true, $"Service '{ServiceName}' is already stopped.");
-
-        var (code, output) = RunSc("stop", ServiceName);
-        if (code != 0)
-            return new ServiceResult(false, $"sc stop failed (exit {code}): {output}");
-
-        for (int i = 0; i < 30; i++)
-        {
-            System.Threading.Thread.Sleep(500);
-            if (!IsRunning())
-                return new ServiceResult(true, $"Service '{ServiceName}' stopped.");
-        }
-        return new ServiceResult(false, "Service did not stop within 15 seconds.");
-    }
+        StopAndWait(service.Handle);
+        return new(true, $"Service '{service.Name}' stopped.");
+    });
 
     public static string? GetBinPath()
     {
-        var (code, output) = RunSc("qc", ServiceName);
-        if (code != 0) return null;
-
-        foreach (var line in output.Split('\n'))
-        {
-            var label = "BINARY_PATH_NAME";
-            var idx = line.IndexOf(label, StringComparison.OrdinalIgnoreCase);
-            if (idx < 0) continue;
-            var colon = line.IndexOf(':', idx);
-            if (colon < 0) continue;
-
-            return line[(colon + 1)..].Trim();
-        }
-        return null;
+        using var service = MainServiceRegistration.OpenVerified(ResolveName(), EditionExe, 0, OpenRegistration);
+        return service?.Handle.Config.Image;
     }
 
     public static ServiceResult EnsureCurrentBinPath(string? currentServiceExePath = null)
     {
-        if (!IsInstalled())
-            return new ServiceResult(true, "Service not installed; nothing to heal.");
-
-        currentServiceExePath ??= ResolveServiceExePath();
-        if (currentServiceExePath == null)
-            return new ServiceResult(false, "VPNRouter.Service.exe not found near current app — skipping binPath heal.");
-
-        var installed = GetBinPath();
-        if (installed == null)
-            return new ServiceResult(false, "Couldn't parse installed binPath from sc qc.");
-
-        if (WindowsServiceCommand.IsCurrentImagePath(installed, currentServiceExePath))
-            return new ServiceResult(true, "binPath already correct, no-op.");
-
-        if (!WindowsServiceCommand.IsRecognizedVpnRouterImagePath(installed, out _))
+        if (currentServiceExePath != null && !string.Equals(currentServiceExePath, EditionExe, StringComparison.OrdinalIgnoreCase))
+            return new(false, VPNRouter.Core.Localization.Strings.MainServiceOwnerConflict);
+        try
         {
-            return new ServiceResult(
-                false,
-                $"Service '{ServiceName}' has an unrecognized ImagePath; refusing to overwrite it.");
+            using var existing = MainServiceRegistration.OpenVerified(ResolveName(), EditionExe, 0, OpenRegistration);
+            if (existing == null) return new(true, "Service not installed.");
+            if (WindowsServiceCommand.IsCurrentImagePath(existing.Handle.Config.Image, EditionExe))
+                return new(true, "binPath already correct.");
+            if (!ServiceExeExists(EditionExe)) return new(false, $"Service executable not found: {EditionExe}");
+            return WithOwned(ChangeConfig, service =>
+            {
+                service.Handle.Configure(WindowsServiceCommand.FormatImagePath(EditionExe), service.Handle.Config.Start);
+                return new(true, $"binPath updated: {EditionExe}");
+            }, existing.Name);
         }
-
-        var expected = WindowsServiceCommand.FormatImagePath(currentServiceExePath);
-        var (code, output) = RunSc(
-            "config", ServiceName, "binPath=", expected);
-        if (code != 0)
-            return new ServiceResult(false, $"sc config binPath= failed (exit {code}): {output}");
-
-        return new ServiceResult(true, $"binPath updated: {installed} → {expected} (effective next service start).");
+        catch (Exception ex) { return new(false, ex.Message); }
     }
 
-    public static string? ResolveServiceExePath()
-    {
-        var baseDir = AppContext.BaseDirectory;
-
-        var sameDir = Path.Combine(baseDir, "VPNRouter.Service.exe");
-        if (File.Exists(sameDir)) return sameDir;
-
-        var subDir = Path.Combine(baseDir, "service", "VPNRouter.Service.exe");
-        if (File.Exists(subDir)) return subDir;
-
-        return null;
-    }
+    public static string? ResolveServiceExePath() => ServiceExeExists(EditionExe) ? EditionExe : null;
 
     private static (int ExitCode, string Output) RunSc(params string[] arguments)
     {
@@ -176,11 +176,16 @@ public static class WindowsServiceHelper
             var psi = new ProcessStartInfo
             {
                 FileName = WindowsServiceCommand.GetSystemScPath(),
+                WorkingDirectory = Environment.SystemDirectory,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            var windows = Path.GetDirectoryName(psi.WorkingDirectory)!;
+            psi.Environment.Clear();
+            psi.Environment["SystemRoot"] = psi.Environment["WINDIR"] = windows;
+            psi.Environment["PATH"] = psi.WorkingDirectory;
             foreach (var argument in arguments)
                 psi.ArgumentList.Add(argument);
 

@@ -255,7 +255,8 @@ public sealed class BusinessPolicyPortalTransportTests
 
     private static SingBoxConfig Generate(AppSettings settings, Func<VlessServerEntry, bool>? alive = null)
     {
-        var config = ConfigGenerator.Generate(new Profile(), [], settings, isServerAlive: alive);
+        var config = ConfigGenerator.Generate(new Profile(), [], settings, null, alive, resolveRuleSet: null,
+            checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
         if (!ProductEdition.IsBusiness)
         {
             BusinessDefaults.ApplyDns(config, settings.App.CustomRules);
@@ -299,7 +300,7 @@ public sealed class BusinessPolicyPortalTransportTests
         {
             AppPaths.OverrideDataDir(_root);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
         }
 

@@ -1,0 +1,244 @@
+using System.Reflection;
+using Avalonia.Controls;
+using VPNRouter.App.Controls;
+using Avalonia.Threading;
+using Avalonia.Headless.XUnit;
+using VPNRouter.App.ViewModels;
+using VPNRouter.App.ViewModels.Internals;
+using VPNRouter.App.Views.Pages;
+using Strings = VPNRouter.Core.Localization.Strings;
+using VPNRouter.Core;
+using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
+
+namespace VPNRouter.Tests;
+
+[Collection(SafeModeStateCollection.Name)]
+public sealed class SimpleConnectStatusTests
+{
+    [AvaloniaFact]
+    public async Task PendingRoutingAndServerEditsStayOutOfTheConnectedStatus()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.RoutingMode = "split";
+        settings.App.UiMode = "simple";
+        settings.App.Subscriptions = [new()
+        {
+            Enabled = true, Url = "https://feed.invalid/status", Servers =
+            [
+                Entry("accepted", "accepted.invalid"), Entry("pending", "pending.invalid")
+            ]
+        }];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        var engine = Engine(vm);
+        using var view = new OpenPage(vm);
+        var page = view.Page;
+        var probing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.SimpleProbe = async (rows, _) =>
+        {
+            probing.TrySetResult();
+            await resume.Task;
+            return rows.Select(s => new ServerLiveness(s, true, 1)).ToList();
+        };
+        vm.SimpleTunnelStart = (submission, _, _) =>
+        {
+            engine.CommitTunnelInfo(Generate(submission));
+            return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.Connected));
+        };
+
+        var start = vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        try
+        {
+            await probing.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            var splitInput = page.FindControl<RadioButton>("SplitInput")!;
+            Assert.True(splitInput.IsChecked);
+            splitInput.SetCurrentValue(RadioButton.IsCheckedProperty, false);
+            vm.SelectedSubscriptionServer = vm.SubscriptionServers.Single(s => s.Name == "pending");
+        }
+        finally
+        {
+            resume.TrySetResult();
+            await start.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(vm.HasPendingAppChanges);
+        Assert.Contains(Strings.SmpCfgSplit, BoundText(page, "ActiveMode"));
+        Assert.Contains(Strings.SmpCfgFull, BoundText(page, "PendingConfig"));
+        Assert.Contains("pending", BoundText(page, "PendingConfig"));
+        Assert.True(page.FindControl<TextBlock>("ActiveMode")!.IsEffectivelyVisible);
+        Assert.True(page.FindControl<TextBlock>("PendingConfig")!.IsEffectivelyVisible);
+        Assert.Contains("accepted.invalid", BoundText(page, "ConnectionDetails"));
+        Assert.False(vm.IsSplitTunnel);
+        Assert.Equal("pending", vm.SelectedSubscriptionServer?.Name);
+        Assert.Contains("subscribe/split", vm.StatusText);
+        Assert.Contains("accepted.invalid", vm.StatusText);
+        Assert.DoesNotContain("pending", vm.StatusText);
+        Assert.Contains("accepted.invalid", vm.SmpActiveServerLine);
+        Assert.Contains("accepted.invalid", vm.SimpleActiveOutboundLine);
+        Assert.Equal("accepted", vm.SmpConfigServer?.Name);
+        Assert.False(vm.SelectedSubscriptionServer!.IsActive);
+        Assert.True(vm.SubscriptionServers.Single(s => s.Name == "accepted").IsActive);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("generated", true)]
+    [InlineData("subscribe", false)]
+    public void AutoGroupChangesTheOpenCardAndRejectsOldTags(string mode, bool autoSelect)
+    {
+        var first = Entry("same", "one.invalid");
+        // The Business portal must identify one direct VLESS choice by name.
+        var second = Entry(ProductEdition.IsBusiness ? "secondary" : "same", autoSelect ? "two.invalid" : "one.invalid", 8443);
+        var secondTag = ProductEdition.IsBusiness ? "vless-secondary" : "vless-same-2";
+        var settings = new AppSettings();
+        settings.App.ConfigMode = mode;
+        settings.Vless.AutoSelectBestServer = autoSelect;
+        settings.Vless.ActiveServer = first.Name;
+        if (mode == "subscribe") settings.App.Subscriptions = [new() { Servers = [first, second] }];
+        else settings.Vless.Servers = [first, second];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm);
+        var page = view.Page;
+        var submission = VpnEngine.CopySessionSettings(settings);
+        var accepted = Generate(submission);
+        submission.Vless.Servers.Clear();
+        submission.App.Subscriptions.Clear();
+        submission.App.RoutingMode = "full";
+        Assert.Equal("split", accepted.RoutingMode);
+        var engine = Engine(vm);
+        engine.CommitTunnelInfo(accepted);
+        vm.IsConnected = true;
+        vm.AutoSelectBestServer = !autoSelect;
+        vm.HasPendingAppChanges = true;
+        Assert.True(accepted.UsesAutoGroup);
+        Assert.Equal(mode == "subscribe" ? 2 : 0, accepted.SubscriptionServerCount);
+        Assert.Null(accepted.FindMember("another-session"));
+
+        vm.ObserveAutoMember(accepted, "vless-same");
+        Assert.Equal(first.Port, vm.SmpConfigServer?.Port);
+        Assert.True(vm.SmpConfigServer!.IsActive);
+        vm.ObserveAutoMember(accepted, secondTag);
+        Assert.Equal(second.Port, vm.SmpConfigServer?.Port);
+        Assert.True(vm.SmpConfigServer!.IsActive);
+        Assert.Equal(second.Name, BoundText(page, "ConfigName"));
+        Assert.Contains(second.Server, BoundText(page, "ConnectionDetails"));
+
+        vm.ObserveAutoMember(accepted, null);
+        Assert.Null(vm.SmpConfigServer);
+        Assert.DoesNotContain(second.Server, BoundText(page, "ConnectionDetails"));
+
+        vm.ObserveAutoMember(accepted, secondTag);
+        Assert.True(vm.SmpConfigServer!.IsActive);
+        // An Apply that narrows the same pool to one row keeps IsConnected true.
+        var replacement = VpnEngine.CopySessionSettings(settings);
+        if (mode == "subscribe") replacement.App.Subscriptions[0].Servers.RemoveAt(1);
+        else replacement.Vless.Servers.RemoveAt(1);
+        engine.CommitTunnelInfo(Generate(replacement));
+        ReportStatus(engine, "Applied (restart, PID 42)");
+        vm.ObserveAutoMember(accepted, secondTag);
+        var rows = mode == "subscribe" ? vm.SubscriptionServers : vm.Servers;
+        Assert.Equal(first.Port, Assert.Single(rows, row => row.IsActive).Port);
+        Assert.Contains(first.Server, BoundText(page, "ConnectionDetails"));
+
+        vm.IsConnecting = true;
+        ReportStatus(engine, "Stopped");
+        vm.IsConnected = false;
+        vm.IsConnecting = false;
+        Assert.DoesNotContain(rows, row => row.IsActive);
+    }
+
+    [AvaloniaFact]
+    public void SingleProxyKeepsItsProtocolWhenTwoRowsShareAnEndpoint()
+    {
+        var vless = Entry("vless", "shared.invalid");
+        var hy2 = Entry("hy2", "shared.invalid");
+        hy2.Protocol = "hysteria2";
+        hy2.Password = "fixture";
+        // Keep the selected row second at an identical address and port in each edition.
+        var (first, selected) = ProductEdition.IsBusiness ? (hy2, vless) : (vless, hy2);
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.ActiveSubscriptionServer = selected.Name;
+        settings.App.Subscriptions = [new() { Servers = [first, selected] }];
+        settings.Vless.AutoSelectBestServer = true;
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm);
+        var page = view.Page;
+        var tunnel = Generate(settings);
+        Assert.False(tunnel.UsesAutoGroup);
+        Assert.Equal(selected.Name, tunnel.Server.Name);
+        Engine(vm).CommitTunnelInfo(tunnel);
+        vm.IsConnected = true;
+        Assert.Equal(selected.Name, BoundText(page, "ConfigName"));
+        var disc = page.FindControl<ProtocolDisc>("ConfigProtocol")!;
+        Assert.True(disc.IsEffectivelyVisible);
+        Assert.Equal(ProductEdition.IsBusiness ? ProtocolGroup.Daily : ProtocolGroup.GamesVoice, disc.Group);
+        Assert.Equal(selected.Name, Assert.Single(vm.SubscriptionServers, row => row.IsActive).Name);
+
+        // A subsequently detected service owns a different process, even if a local snapshot exists.
+        vm.SyncConnectedWithVpnRuntime(vpnRunning: true);
+        Assert.Equal(Strings.SmpStatusConnectedNoDetails, vm.StatusText);
+        Assert.Equal(Strings.SmpStatusConnectedNoDetails, BoundText(page, "ConnectionDetails"));
+        Assert.Equal(Strings.SmpModeUnknown, BoundText(page, "ActiveMode"));
+        Assert.Equal(Strings.SmpStatusConnectedNoDetails, BoundText(page, "ConfigName"));
+        Assert.False(disc.IsEffectivelyVisible);
+        Assert.Null(vm.SmpConfigServer);
+        Assert.Empty(vm.SimpleActiveOutboundLine);
+        Assert.DoesNotContain(vm.SubscriptionServers, row => row.IsActive);
+    }
+
+    private static MainWindowViewModel CreateVm(InMemorySettingsStore store) =>
+        ProductEdition.IsBusiness
+            ? new MainWindowViewModel(store, null, null, null, businessBootstrap: (_, _) => null)
+            : new MainWindowViewModel(store);
+
+    private static VpnEngine Engine(MainWindowViewModel vm) =>
+        Assert.IsType<VpnEngine>(typeof(MainWindowViewModel)
+            .GetField("_engine", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(vm));
+
+    private static VlessServerEntry Entry(string name, string host, int port = 443) =>
+        new() { Name = name, Server = host, Port = port, Security = "none", Uuid = "00000000-0000-4000-8000-000000000001" };
+
+    private static AcceptedTunnelInfo Generate(AppSettings settings)
+    {
+        settings.App.BypassRussianTraffic = false;
+        var sources = new Dictionary<string, VlessServerEntry>();
+        var json = ConfigPipeline.Generate(new Profile { Name = "offline" }, [], settings, proxySources: sources);
+        return new AcceptedTunnelInfo(settings, json, "", null, sources);
+    }
+
+    private sealed class OpenPage : IDisposable
+    {
+        public SimplePage Page { get; }
+        private readonly Window _window;
+
+        public OpenPage(MainWindowViewModel vm)
+        {
+            Page = new SimplePage { DataContext = vm };
+            _window = new Window { Content = Page, Width = 520, Height = 800 };
+            _window.Show();
+        }
+
+        public void Dispose() => _window.Close();
+    }
+
+    private static string BoundText(SimplePage page, string name)
+    {
+        Dispatcher.UIThread.RunJobs();
+        return page.FindControl<TextBlock>(name)!.Text!;
+    }
+
+    private static void ReportStatus(VpnEngine engine, string message)
+    {
+        typeof(VpnEngine).GetMethod("OnStatus", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(engine, [message]);
+        Dispatcher.UIThread.RunJobs();
+    }
+}

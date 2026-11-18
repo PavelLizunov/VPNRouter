@@ -7,13 +7,66 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public sealed class ConnectConsentGate
 {
-    private int _open;
+    private readonly Lock _sync = new();
+    private string? _owner;
+    private string? _pending;
 
-    public bool IsOpen => Volatile.Read(ref _open) == 1;
+    public ConnectConsentGate() { }
 
-    /// <summary>True when the caller may open the dialog; false when one is already open.</summary>
-    public bool TryOpen() => Interlocked.CompareExchange(ref _open, 1, 0) == 0;
+    internal ConnectConsentGate(string? owner, string? pending)
+    {
+        _owner = owner;
+        _pending = pending;
+    }
 
-    /// <summary>Call when the dialog returned its result, whatever the result was.</summary>
-    public void Close() => Volatile.Write(ref _open, 0);
+    internal (string? Owner, string? Pending) Requests
+    {
+        get { lock (_sync) return (_owner, _pending); }
+    }
+
+    public bool IsOpen => Requests.Owner != null;
+    public bool TryOpen() => OpenOrQueue(string.Empty);
+
+    internal bool OpenOrQueue(string command)
+    {
+        lock (_sync)
+        {
+            if (_owner != null)
+            {
+                if (command.Length > 0 && command != _owner) _pending = command;
+                return false;
+            }
+            _pending = null;
+            _owner = command;
+            return true;
+        }
+    }
+
+    public void Close()
+    {
+        lock (_sync) _owner = _pending = null;
+    }
+
+    internal string? ResolveResult(Func<string?, bool> isCurrent)
+    {
+        lock (_sync)
+        {
+            if (_owner == null) return null;
+            var owner = _owner;
+            _owner = null;
+            if (!isCurrent(_pending)) _pending = null;
+            return isCurrent(owner) ? owner : null;
+        }
+    }
+
+    internal string? ClaimPending(bool currentActivity, Func<string?, bool> isCurrent)
+    {
+        lock (_sync)
+        {
+            if (!currentActivity || _owner != null || _pending == null) return null;
+            var pending = _pending;
+            _pending = null;
+            return isCurrent(pending) ? pending : null;
+        }
+    }
 }

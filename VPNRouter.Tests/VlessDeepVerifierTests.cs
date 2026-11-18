@@ -42,7 +42,7 @@ public sealed class VlessDeepVerifierTests
     public void BuildSingleOutboundConfig_HappyPathVless_ProducesValidShape()
     {
         var entry = CleanVlessEntry();
-        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, socksPort: 10808, clashPort: 9090);
+        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808));
 
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -50,7 +50,7 @@ public sealed class VlessDeepVerifierTests
         var inbounds = root.GetProperty("inbounds");
         Assert.Equal(1, inbounds.GetArrayLength());
         var socksIn = inbounds[0];
-        Assert.Equal("socks", socksIn.GetProperty("type").GetString());
+        Assert.Equal("http", socksIn.GetProperty("type").GetString());
         Assert.Equal("127.0.0.1", socksIn.GetProperty("listen").GetString());
         Assert.Equal(10808, socksIn.GetProperty("listen_port").GetInt32());
 
@@ -63,15 +63,14 @@ public sealed class VlessDeepVerifierTests
 
         Assert.Equal("proxy", root.GetProperty("route").GetProperty("final").GetString());
 
-        var clash = root.GetProperty("experimental").GetProperty("clash_api");
-        Assert.Equal($"127.0.0.1:9090", clash.GetProperty("external_controller").GetString());
+        Assert.False(root.TryGetProperty("experimental", out _));
     }
 
     [Fact]
     public void BuildSingleOutboundConfig_VlessRealityCredentials_FlowDownToProxyOutbound()
     {
         var entry = CleanVlessEntry();
-        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, 10808, 9090);
+        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808));
 
         using var doc = JsonDocument.Parse(json);
         var proxy = doc.RootElement.GetProperty("outbounds")[0];
@@ -110,7 +109,7 @@ public sealed class VlessDeepVerifierTests
             },
         };
 
-        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, 10808, 9090);
+        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808));
         using var doc = JsonDocument.Parse(json);
         var proxy = doc.RootElement.GetProperty("outbounds")[0];
 
@@ -138,7 +137,7 @@ public sealed class VlessDeepVerifierTests
             Tls = new VlessTlsConfig { Enabled = true, ServerName = "tuic.example.com" },
         };
 
-        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, 10808, 9090);
+        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808));
         using var doc = JsonDocument.Parse(json);
         var proxy = doc.RootElement.GetProperty("outbounds")[0];
 
@@ -162,7 +161,7 @@ public sealed class VlessDeepVerifierTests
             Password = "ss-password",
         };
 
-        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, 10808, 9090);
+        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808));
         using var doc = JsonDocument.Parse(json);
         var proxy = doc.RootElement.GetProperty("outbounds")[0];
 
@@ -208,25 +207,5 @@ public sealed class VlessDeepVerifierTests
     {
         var ip = IPAddress.Parse(ipString);
         Assert.Equal(expected, DeepVerifyProbe.IsPrivateOrLoopback(ip));
-    }
-
-    [Fact]
-    public void TrimSnippet_LongInput_TruncatesWithEllipsis()
-    {
-        var verbose = string.Join('\n', new[] { "line one of stderr", "line two with more", "line three more text" });
-        var snip = DeepVerifyProbe.TrimSnippet(verbose, 20);
-
-        Assert.True(snip.Length <= 21);
-        Assert.DoesNotContain('\n', snip);
-        Assert.DoesNotContain('\r', snip);
-        Assert.EndsWith("…", snip);
-    }
-
-    [Fact]
-    public void TrimSnippet_ShortInput_NoEllipsis()
-    {
-        var snip = DeepVerifyProbe.TrimSnippet("short", 80);
-        Assert.Equal("short", snip);
-        Assert.DoesNotContain("…", snip);
     }
 }

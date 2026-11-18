@@ -203,7 +203,7 @@ public sealed class CustomConfigFeature
         // Delete the file on disk ONLY after settings are safely committed
         try
         {
-            _customStorage.DeleteCustomConfig(match.Name);
+            _customStorage.DeleteRegistrationFiles(match, configs);
         }
         catch (Exception ex)
         {

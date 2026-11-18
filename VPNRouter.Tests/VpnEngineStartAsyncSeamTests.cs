@@ -328,8 +328,8 @@ public sealed class VpnEngineStartAsyncSeamTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
-            Assert.Contains("validation", ex.Message,
-                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("validation", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("this is not json", ex.ToString(), StringComparison.Ordinal);
             Assert.False(engine.IsRunning);
         }
         finally

@@ -16,15 +16,16 @@ public class TestUpdateSettings : CommandSettings
     [Description("Target version label (e.g. 2.31.10-r2). Used for assertions; required.")]
     public string TargetVersion { get; set; } = string.Empty;
 
-    [CommandOption("--staged-dir <DIR>")]
-    [Description(
-        "Pre-extracted update payload dir. When set, GitHub download is skipped " +
-        "and the payload is applied directly. Used by CI to test the helper.cmd " +
-        "parser without depending on a published release.")]
-    public string? StagedDir { get; set; }
+    [CommandOption("--archive <ZIP>")]
+    [Description("Local Windows release archive for the dedicated CI installation.")]
+    public string? Archive { get; set; }
+
+    [CommandOption("--sha256 <SHA256>")]
+    [Description("Expected release archive SHA-256 for the local CI fixture.")]
+    public string? Sha256 { get; set; }
 
     [CommandOption("--repo <REPO>")]
-    [Description("GitHub repo in owner/name form (default: PavelLizunov/VPNRouter). Ignored when --staged-dir is set.")]
+    [Description("GitHub repo in owner/name form (default: PavelLizunov/VPNRouter). Ignored when --archive is set.")]
     public string Repo { get; set; } = "PavelLizunov/VPNRouter";
 }
 
@@ -50,7 +51,7 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
         Log.Information("Current AppVersion : {Cur}", AppVersion.Version);
         Log.Information("Target version     : {Tgt}", settings.TargetVersion);
         Log.Information("App base dir       : {Dir}", AppContext.BaseDirectory);
-        Log.Information("Staged dir         : {Dir}", settings.StagedDir ?? "(none — will download from GitHub)");
+        Log.Information("Release archive    : {Dir}", settings.Archive ?? "(none — will download from GitHub)");
         Log.Information("GitHub repo        : {Repo}", settings.Repo);
 
         var updateSettings = new UpdateSettings
@@ -79,15 +80,14 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
         string extractedDir;
         UpdateSourceInfo? info = null;
 
-        if (!string.IsNullOrEmpty(settings.StagedDir))
+        if (!string.IsNullOrEmpty(settings.Archive))
         {
-            extractedDir = Path.GetFullPath(settings.StagedDir);
-            if (!Directory.Exists(extractedDir))
+            if (!OperatingSystem.IsWindows() || settings.Sha256 is not { Length: 64 } || !settings.Sha256.All(Uri.IsHexDigit))
             {
-                Log.Error("--staged-dir does not exist: {Dir}", extractedDir);
+                Log.Error("Local Windows fixture requires --archive and its --sha256 digest.");
                 return 3;
             }
-            Log.Information("Skipping GitHub download — using pre-staged payload at {Dir}", extractedDir);
+            extractedDir = checker.StageWindowsCiArchive(settings.Archive, settings.TargetVersion, settings.Sha256);
         }
         else
         {
@@ -146,13 +146,13 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
                 AssetName: $"VPNRouter-v{settings.TargetVersion}-win.zip",
                 DownloadUrl: string.Empty,
                 AssetSize: 0,
-                AssetSha256: null,
+                AssetSha256: settings.Sha256,
                 IsPrerelease: false,
                 ReleaseNotes: string.Empty);
             await source.ApplyAsync(info, extractedDir).ConfigureAwait(false);
-            Log.Information("ApplyAsync dispatched. helper.cmd will run after this process exits.");
+            Log.Information("ApplyAsync dispatched. the publisher will run after this process exits.");
             Log.Information("CI workflow should now poll {Log} for 'helper done' or fail patterns.",
-                Path.Combine(AppPaths.LogsDir, "update.log"));
+                Path.Combine(AppContext.BaseDirectory, "..", "update.log"));
         }
         catch (Exception ex)
         {

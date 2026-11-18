@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "VPNRouter.Android/**"
+      - "VPNRouter.Tests/Android/**"
       - "VPNRouter.Core/**"
       - "Directory.Build.props"
       - "global.json"
@@ -23,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup .NET 8 + 10 SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
@@ -45,6 +48,35 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Check per-app tunnel policy
+        run: |
+          mkdir -p "$RUNNER_TEMP/tunnel-policy"
+          cd "$RUNNER_TEMP/tunnel-policy"
+          artifact=org/json/json/20250517/json-20250517.jar
+          curl -fsSL --retry 2 --retry-max-time 20 -o json.jar "https://repo.maven.apache.org/maven2/$artifact" ||
+            curl -fsSL --retry 2 --retry-max-time 20 -o json.jar "https://maven-central.storage-download.googleapis.com/maven2/$artifact"
+          echo '3ea61b2a06e31edf1c91134fe9106b0ebb16628be169f3db75bc7a2b06b45796  json.jar' | sha256sum --check
+          javac -classpath json.jar -d . "$GITHUB_WORKSPACE/VPNRouter.Android/AndroidTunnelPolicy.java" \
+            "$GITHUB_WORKSPACE/VPNRouter.Tests/Android/AndroidTunnelPolicyTest.java"
+          java -classpath .:json.jar com.ninitux.vpnrouter.AndroidTunnelPolicyTest
+
+      - name: Check native engine ownership and diagnostic privacy
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-engine"
+          javac -d "$RUNNER_TEMP/native-engine" \
+            VPNRouter.Android/NativeEngineSlot.java VPNRouter.Tests/Android/NativeEngineSlotTest.java \
+            VPNRouter.Android/NativeReportPrivacy.java VPNRouter.Tests/Android/NativeReportPrivacyTest.java
+          java -cp "$RUNNER_TEMP/native-engine" com.ninitux.vpnrouter.NativeEngineSlotTest
+          java -cp "$RUNNER_TEMP/native-engine" com.ninitux.vpnrouter.NativeReportPrivacyTest "$(mktemp -d)"
+
+      - name: Check Android tunnel retirement and stats retries
+        run: |
+          mkdir -p "$RUNNER_TEMP/tunnel-lifecycle"
+          javac -d "$RUNNER_TEMP/tunnel-lifecycle" \
+            VPNRouter.Android/AndroidTunnelSession.java VPNRouter.Android/AndroidTunnelStart.java VPNRouter.Android/AndroidStatsSubscription.java \
+            VPNRouter.Tests/Android/AndroidTunnelLifecycleTest.java
+          java -cp "$RUNNER_TEMP/tunnel-lifecycle" com.ninitux.vpnrouter.AndroidTunnelLifecycleTest
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd  # v4.0.4
@@ -114,3 +146,12 @@ jobs:
             done
             rm -rf "$WORK"
           done
+
+      - name: Retain the verified APK for device testing
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: android-device-test-${{ github.event.pull_request.head.sha }}
+          path: VPNRouter.Android/bin/Release/**/android-arm64/*-Signed.apk
+          if-no-files-found: error
+          retention-days: 1

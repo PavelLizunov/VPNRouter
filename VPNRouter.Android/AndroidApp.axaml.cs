@@ -48,10 +48,7 @@ public partial class AndroidApp : Avalonia.Application
     private DateTime _lastErrorAt;
     private static readonly TimeSpan ErrorDisplayWindow = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan HealthProbeInterval = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan HealthStaleThreshold = TimeSpan.FromSeconds(60);
     private DateTime _lastHealthProbeAt;
-    private long _lastHealthLogSize = -1;
-    private DateTime _lastHealthLogMTime;
     private bool _lastHealthOk;
     private bool _firstProbePending;
     private string? _lastFormattedUptimeTitle;
@@ -196,7 +193,6 @@ public partial class AndroidApp : Avalonia.Application
     private ListBox? _appPickerList;
     private Avalonia.Controls.Button? _appPickerSaveBtn;
     private Avalonia.Controls.Button? _perAppPickButton;
-    private TextBlock? _perAppCountLabel;
     private TextBlock? _autostartCardTitleText;
     private TextBlock? _autostartCardSubText;
     private List<AppListLoader.AppEntry> _appPickerCache = new();
@@ -876,6 +872,8 @@ public partial class AndroidApp : Avalonia.Application
         _configRowLabel = new TextBlock
         {
             Text = Localization.SmpConfigRowLabel,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
             FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
         };
@@ -884,6 +882,7 @@ public partial class AndroidApp : Avalonia.Application
         _configRowValue = new TextBlock
         {
             Text = Localization.SimpleConfigSummary,
+            TextWrapping = TextWrapping.Wrap,
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
         };
@@ -915,33 +914,26 @@ public partial class AndroidApp : Avalonia.Application
         };
         togglePill.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
 
-        var configRowGrid = new Grid
+        var header = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
             ColumnSpacing = 10,
-            Margin = new Thickness(12, 8),
         };
         Grid.SetColumn(flagIcon, 0);
-        configRowGrid.Children.Add(flagIcon);
-        var configRowText = new StackPanel
-        {
-            Spacing = 1,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { _configRowLabel, _configRowValue }
-        };
-        Grid.SetColumn(configRowText, 1);
-        configRowGrid.Children.Add(configRowText);
+        header.Children.Add(flagIcon);
+        Grid.SetColumn(_configRowLabel, 1);
+        header.Children.Add(_configRowLabel);
         Grid.SetColumn(togglePill, 2);
-        configRowGrid.Children.Add(togglePill);
+        header.Children.Add(togglePill);
 
         var configRowButton = new Avalonia.Controls.Button
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(0),
+            Padding = new Thickness(12, 8),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(radiusSm),
-            Content = configRowGrid,
+            Content = new StackPanel { Spacing = 3, Children = { header, _configRowValue } },
         };
         configRowButton.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceRaisedBrush");
         configRowButton.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderSubtleBrush");
@@ -968,9 +960,7 @@ public partial class AndroidApp : Avalonia.Application
             CornerRadius = new CornerRadius(radiusXs),
             Watermark = Localization.SmpInputWatermark,
         };
-        var existingSub = AndroidStorage.GetSubscriptionUrl();
-        var existingUri = AndroidStorage.GetVlessUri();
-        _serverInput.Text = existingSub ?? existingUri ?? string.Empty;
+        BindSimpleInput();
 
         var smpQrButton = new Avalonia.Controls.Button
         {
@@ -1097,24 +1087,11 @@ public partial class AndroidApp : Avalonia.Application
         _perAppPickButton.HorizontalAlignment = HorizontalAlignment.Stretch;
         _perAppPickButton.Margin = new Thickness(24, 4, 0, 0);
 
-        var initialPerAppCount = AndroidStorage.GetPerAppPackages().Count;
-        var initialMode = AndroidStorage.GetPerAppMode();
-        var initialCountFmt = initialMode == "exclude"
-            ? Localization.PerAppCountExclude
-            : Localization.PerAppCountInclude;
-        _perAppCountLabel = new TextBlock
-        {
-            Text = string.Format(initialCountFmt, initialPerAppCount),
-            FontSize = UiScale.Fs(9),
-            Margin = new Thickness(24, 2, 0, 0),
-        };
-        _perAppCountLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-
         var perAppStack = new StackPanel
         {
             Spacing = 0,
             IsVisible = AndroidStorage.GetPerAppMode() != "off",
-            Children = { _perAppPickButton, _perAppCountLabel },
+            Children = { _perAppPickButton },
         };
         _splitRadio.Tag = perAppStack;
 
@@ -1446,6 +1423,8 @@ public partial class AndroidApp : Avalonia.Application
     {
         var activity = MainActivity.Instance;
         if (activity is null) return;
+        var command = ReserveConnectCommand();
+        if (command == null) return;
         MainActivity.PendingQrScanCallback = (success, text) =>
         {
             Dispatcher.UIThread.Post(async () =>
@@ -1461,7 +1440,7 @@ public partial class AndroidApp : Avalonia.Application
                     ShowMenuFeedback(msg);
                     return;
                 }
-                await ApplyScannedTextAsync(text);
+                await ApplyScannedTextAsync(text, command);
             });
         };
         activity.RequestQrCodeScan();
@@ -1508,40 +1487,32 @@ public partial class AndroidApp : Avalonia.Application
                 _configRowIcon.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
             }
         }
-        var mode = _fullRadio?.IsChecked == true ? Localization.SmpFullOption : Localization.SmpSplitOption;
-        string src;
-        switch (configMode)
-        {
-            case "subscribe":
-                src = Localization.SmpSourceSubscription;
-                break;
-            case "custom":
-                src = Localization.CcSourceCustom;
-                break;
-            default:
-                src = Localization.SmpSourceManual;
-                break;
-        }
-        _configRowValue.Text = $"{src} · {mode.ToLower()}";
+        UpdatePerAppSummary(configMode);
     }
 
-    private void OnSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void UpdatePerAppSummary(string? configMode = null)
     {
-        if (_serverInput is null || _serverInputError is null) return;
+        var savedMode = AndroidStorage.GetPerAppMode();
+        var policy = VPNRouter.Core.Localization.Strings.PerAppPolicySummary(AndroidStorage.GetActivePerAppPolicy(),
+            savedMode, AndroidStorage.GetPerAppPackages());
+        if (_appPickerModeHint is not null)
+            _appPickerModeHint.Text = _appPickerMode == savedMode ? policy : policy + "\n" + Localization.PerAppSaveModeHint;
+        if (_configRowValue is null) return;
+        var src = (configMode ?? AndroidStorage.GetConfigMode()) switch
+        {
+            "subscribe" => Localization.SmpSourceSubscription,
+            "custom" => Localization.CcSourceCustom,
+            _ => Localization.SmpSourceManual,
+        };
+        if (_configRowLabel is not null) _configRowLabel.Text = $"{Localization.SmpConfigRowLabel} · {src}";
+        _configRowValue.Text = policy;
+    }
+
+    private bool TrySaveServerInput(string command)
+    {
+        if (_serverInput is null || _serverInputError is null || !AndroidStorage.IsCurrentUiCommand(command)) return false;
         var raw = (_serverInput.Text ?? string.Empty).Trim();
         _serverInputError.IsVisible = false;
-
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            AndroidStorage.SetVlessUri(null);
-            AndroidStorage.SetSubscriptionUrl(null);
-            AndroidStorage.SetServers(null);
-            AndroidStorage.SetSelectedServerName(null);
-            _cachedServers = new List<VlessServerEntry>();
-            UpdateServerListView();
-            UpdateConfigSummary();
-            return;
-        }
 
         if (ServerUriParser.IsSupportedScheme(raw))
         {
@@ -1552,18 +1523,14 @@ public partial class AndroidApp : Avalonia.Application
                 {
                     _serverInputError.Text = Localization.SaveStatusUriBadHost;
                     _serverInputError.IsVisible = true;
-                    return;
+                    return false;
                 }
-                AndroidStorage.SetVlessUri(raw);
-                AndroidStorage.SetSubscriptionUrl(null);
-                AndroidStorage.SetServers(null);
-                AndroidStorage.SetSelectedServerName(null);
-                AndroidStorage.SetConfigMode("manual");
-                _ccMode = "manual";
-                ApplyCcModeVisuals();
-                _cachedServers = new List<VlessServerEntry>();
+                if (!AndroidStorage.SelectSingleServer(parsed, raw, command)) return false;
+                RefreshConfigModeUiFromStorage();
+                _cachedServers = AndroidStorage.GetServers();
                 UpdateServerListView();
                 UpdateConfigSummary();
+                return true;
             }
             catch (PlaceholderConfigException ex)
             {
@@ -1577,7 +1544,7 @@ public partial class AndroidApp : Avalonia.Application
                 _serverInputError.Text = string.Format(Localization.SaveStatusUriInvalid, ex.Message);
                 _serverInputError.IsVisible = true;
             }
-            return;
+            return false;
         }
 
         if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
@@ -1586,14 +1553,14 @@ public partial class AndroidApp : Avalonia.Application
             AndroidStorage.SetSubscriptionUrl(raw);
             AndroidStorage.SetVlessUri(null);
             AndroidStorage.SetConfigMode("subscribe");
-            _ccMode = "subscribe";
-            ApplyCcModeVisuals();
+            RefreshConfigModeUiFromStorage();
             UpdateConfigSummary();
-            return;
+            return true;
         }
 
         _serverInputError.Text = Localization.SaveStatusUnknown;
         _serverInputError.IsVisible = true;
+        return false;
     }
 
 
@@ -1736,7 +1703,6 @@ public partial class AndroidApp : Avalonia.Application
         }
         ApplyHealthCheckDisplay();
         ApplyErrorOneLinerDisplay();
-        if (_configRowLabel is not null) _configRowLabel.Text = Localization.SmpConfigRowLabel;
         if (_configRowToggleText is not null)
             _configRowToggleText.Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange;
         if (_serverInputLabel is not null) _serverInputLabel.Text = Localization.SmpInputLabel;

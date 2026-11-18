@@ -237,7 +237,7 @@ public sealed class BusinessPolicyEngineTests
         }];
         settings.Vless.ActiveServer = "fixture";
         var apply = (Task<bool>)typeof(VpnEngine).GetMethod("ApplyGatedAsync", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .Invoke(fixture.Engine, [settings, TestContext.Current.CancellationToken, true])!;
+            .Invoke(fixture.Engine, [settings, TestContext.Current.CancellationToken, true, false])!;
         Assert.False(await apply);
         Assert.Equal(1, fixture.ProcessScanner.Calls);
         Assert.Empty(fixture.Runner.StartCalls);

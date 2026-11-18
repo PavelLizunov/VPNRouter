@@ -1,44 +1,73 @@
-﻿using VPNRouter.Core.Models;
-using VPNRouter.Core.Services;
+using Serilog;
+using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.Tests;
 
 public class FreeConfigCacheMigrationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Load_LegacyVerdictKeepsProfileAndRequiresFreshVerification(bool asyncRead)
+    {
+        var dir = Directory.CreateTempSubdirectory("vpnrouter-test-");
+        try
+        {
+            var path = Path.Combine(dir.FullName, "free_configs.json");
+            var raw = $"vless://{Guid.Empty:D}@profile.example.com:443?security=tls";
+            var tested = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+            File.WriteAllText(path, $$"""
+                {"schema_version":1,"Configs":[{"Id":"saved","RawUri":"{{raw}}","Status":8,
+                 "LastTestedAt":"{{tested:O}}","LastDeepVerifyAt":"{{tested:O}}","LatencyMs":42,"MeasuredBandwidthMbps":20}]}
+                """);
+            using var logger = new LoggerConfiguration().CreateLogger();
+            var cache = new FreeConfigCache(logger, path);
+            var file = asyncRead ? await cache.LoadAsync(TestContext.Current.CancellationToken) : cache.Load();
+            var entry = Assert.Single(file.Configs);
+            Assert.Equal(raw, entry.RawUri);
+            Assert.Equal("profile.example.com", entry.ToVlessServerEntry().Server);
+            Assert.True(entry.RequiresSavedRecheck);
+            Assert.Equal(tested, entry.LastTestedAt);
+            Assert.True(FreeConfigFreshness.IsStale(entry, tested));
+            Assert.False(FreeConfigKeepPolicy.ShouldKeepInLiveCache(entry));
+            Assert.True(FreeConfigKeepPolicy.ShouldRetainInSavedList(entry, tested.AddDays(30)));
+            Assert.False(FreeConfigKeepPolicy.ShouldRetainInSavedList(entry, tested.AddDays(30).AddTicks(1)));
+            Assert.Equal(FreeConfigStatus.Unknown, entry.Status);
+            Assert.Null(entry.LastDeepVerifyAt);
+            Assert.Null(entry.MeasuredBandwidthMbps);
+            Assert.Equal(0, entry.LatencyMs);
+            cache.Save(file);
+            var reopened = cache.Load();
+            Assert.Equal(FreeConfigCache.CurrentSchemaVersion, reopened.SchemaVersion);
+            var saved = Assert.Single(reopened.Configs);
+            Assert.True(saved.RequiresSavedRecheck);
+            Assert.Equal(FreeConfigStatus.Unknown, saved.Status);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void Load_WithCorruptedSubThresholdLatencies_ResetsToZero()
     {
-        var file = new VPNRouter.Core.Services.FreeConfigs.FreeConfigCache.CacheFile
+        var dir = Directory.CreateTempSubdirectory("vpnrouter-test-");
+        try
         {
-            Configs = new()
+            using var logger = new LoggerConfiguration().CreateLogger();
+            var cache = new FreeConfigCache(logger, Path.Combine(dir.FullName, "free_configs.json"));
+            var latencies = new[] { 1, 4, 0, 5, 42 };
+            cache.Save(new FreeConfigCache.CacheFile
             {
-                MakeEntry(1),
-                MakeEntry(4),
-                MakeEntry(0),
-                MakeEntry(5),
-                MakeEntry(42),
-            },
-        };
+                Configs = latencies.Select(ms => new FreeConfigEntry { LatencyMs = ms }).ToList()
+            });
 
-        var t = typeof(VPNRouter.Core.Services.FreeConfigs.FreeConfigCache);
-        var m = t.GetMethod("HealCorruptedSubThresholdLatencies",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        Assert.NotNull(m);
-        m!.Invoke(null, new object[] { file });
-
-        Assert.Equal(0, file.Configs[0].LatencyMs);
-        Assert.Equal(0, file.Configs[1].LatencyMs);
-        Assert.Equal(0, file.Configs[2].LatencyMs);
-        Assert.Equal(5, file.Configs[3].LatencyMs);
-        Assert.Equal(42, file.Configs[4].LatencyMs);
-    }
-
-    private static VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry MakeEntry(int latency) =>
-        new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
+            Assert.Equal(new[] { 0, 0, 0, 5, 42 }, cache.Load().Configs.Select(e => e.LatencyMs));
+        }
+        finally
         {
-            Host = "1.2.3.4",
-            Port = 443,
-            LatencyMs = latency,
-            Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
-        };
+            dir.Delete(recursive: true);
+        }
+    }
 }

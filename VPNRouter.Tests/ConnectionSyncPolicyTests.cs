@@ -7,9 +7,10 @@ public sealed class ConnectionSyncPolicyTests
 {
     private static RuntimeSyncAction Sync(
         bool vpnRunning = false, bool uiConnected = false, bool inTransition = false, bool failedStart = false,
-        bool engineRunning = false, double secondsSinceConnect = 600, bool connectedBefore = true) =>
+        bool engineRunning = false, double secondsSinceConnect = 600, bool connectedBefore = true,
+        bool externalTunnel = false) =>
         ConnectionSyncPolicy.DecideRuntimeSync(
-            vpnRunning, uiConnected, inTransition, failedStart, engineRunning, secondsSinceConnect, connectedBefore);
+            vpnRunning, uiConnected, externalTunnel, inTransition, failedStart, engineRunning, secondsSinceConnect, connectedBefore);
 
     [Fact]
     public void RoutingChangeRestart_TunnelGap_DoesNotFlipTheWindowToNotConnected()
@@ -35,6 +36,9 @@ public sealed class ConnectionSyncPolicyTests
     {
         Assert.Equal(RuntimeSyncAction.MarkConnectedViaService, Sync(vpnRunning: true, uiConnected: false, engineRunning: false));
         Assert.Equal(RuntimeSyncAction.MarkConnectedViaService, Sync(vpnRunning: true, uiConnected: true, failedStart: true, engineRunning: false));
+        Assert.Equal(RuntimeSyncAction.MarkConnectedViaService, Sync(vpnRunning: true, uiConnected: true));
+        Assert.Equal(RuntimeSyncAction.None, Sync(vpnRunning: true, uiConnected: true, externalTunnel: true));
+        Assert.Equal(RuntimeSyncAction.AdoptRunningEngine, Sync(vpnRunning: true, uiConnected: true, engineRunning: true, externalTunnel: true));
     }
 
     [Fact]

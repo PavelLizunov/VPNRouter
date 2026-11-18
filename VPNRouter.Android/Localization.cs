@@ -128,6 +128,22 @@ internal static class Localization
     public static string ServiceRunningLine(int pid) => global::VPNRouter.Core.Localization.Strings.ServiceRunningLine(pid);
     public static string ServiceStoppedLine => global::VPNRouter.Core.Localization.Strings.ServiceStoppedLine;
     public static string AndroidErrorNoServerConfigured => global::VPNRouter.Core.Localization.Strings.AndroidErrorNoServerConfigured;
+    public static string PreviousTunnelActive => Ru ? "Прежнее VPN-соединение активно." : "The previous VPN connection is still active.";
+    public static string TunnelError(string? code) => code switch
+    {
+        "apps-empty" => Ru ? "Выберите хотя бы одно установленное приложение для VPN." : "Select at least one installed app for the VPN.",
+        "apps-missing" => Ru ? "Проверьте, что все приложения в списке исключений установлены." : "Check that every app in the VPN exclusion list is installed.",
+        "per-app-listener" => Ru ? "Для VPN по приложениям нужен профиль с одним входом TUN без дополнительных сервисов и слушающих портов."
+            : "For per-app VPN, use a profile with one TUN inbound and no additional services or listeners.",
+        "dns-unavailable" => Ru ? "Это устройство не поддерживает DNS-туннель." : "DNS tunnels are unavailable on this device.",
+        "dns-invalid" => Ru ? "Проверьте режим DNS и адрес DNS-сервера в профиле VPN." : "Check the DNS mode and DNS server address in the VPN profile.",
+        "config-invalid" => Ru ? "Проверьте профиль VPN и настройки выбора приложений." : "Check the VPN profile and app selection settings.",
+        "command-unavailable" => Ru ? "Не удалось отправить команду подключения. Попробуйте ещё раз." : "Could not submit the connection request. Try again.",
+        "tunnel-closing" => Ru ? "Прежний туннель ещё закрывается. Попробуйте подключиться позже." : "The previous tunnel is still closing. Try connecting again shortly.",
+        "foreground-start-blocked" => Ru ? "Откройте приложение, чтобы запустить VPN." : "Open the app to start the VPN.",
+        "no-permission" => Ru ? "Разрешите приложению создать VPN-соединение." : "Allow the app to create a VPN connection.",
+        _ => Ru ? "Не удалось запустить VPN." : "The VPN could not start."
+    };
     public static string AndroidDeleteCategoryConfirm => global::VPNRouter.Core.Localization.Strings.AndroidDeleteCategoryConfirm;
     public static string SmpAutostartCardTitle => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardTitle;
     public static string SmpAutostartCardOn => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOn;
@@ -741,6 +757,7 @@ internal static class Localization
     public static string PerAppModeOff => global::VPNRouter.Core.Localization.Strings.PerAppModeOff;
     public static string PerAppModeInclude => global::VPNRouter.Core.Localization.Strings.PerAppModeInclude;
     public static string PerAppModeExclude => global::VPNRouter.Core.Localization.Strings.PerAppModeExclude;
+    public static string PerAppSaveModeHint => global::VPNRouter.Core.Localization.Strings.PerAppSaveModeHint;
     public static string PerAppPickButton => global::VPNRouter.Core.Localization.Strings.PerAppPickButton;
     public static string PerAppCount => global::VPNRouter.Core.Localization.Strings.PerAppCount;
     public static string PerAppShowingCount => global::VPNRouter.Core.Localization.Strings.PerAppShowingCount;

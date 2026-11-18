@@ -9,6 +9,13 @@ public interface IProcessRunner
         CancellationToken ct = default);
 
     IProcessHandle Start(ProcessRequest request);
+
+    IProcessHandle Start(ProcessRequest request, Action<IProcessHandle> observe)
+    {
+        var handle = Start(request);
+        observe(handle);
+        return handle;
+    }
 }
 
 public sealed record ProcessRequest(
@@ -19,7 +26,10 @@ public sealed record ProcessRequest(
     bool CaptureStdout = true,
     bool CaptureStderr = true,
     string? StdinInput = null,
-    TimeSpan? Timeout = null);
+    TimeSpan? Timeout = null)
+{
+    public bool ClearInheritedEnvironment { get; init; }
+}
 
 public sealed record ProcessResult(
     int ExitCode,
@@ -33,6 +43,13 @@ public interface IProcessHandle : IDisposable
     int Pid { get; }
 
     bool HasExited { get; }
+
+    // Ownership decisions require positive evidence before releasing the process handle.
+    bool? QueryHasExited()
+    {
+        try { return HasExited; }
+        catch { return null; }
+    }
 
     Task<int> WaitForExitAsync(CancellationToken ct);
 
@@ -48,6 +65,8 @@ public interface IProcessHandle : IDisposable
     event EventHandler<int>? Exited;
 
     void SuppressExitedEvent();
+
+    void DisposeAfterExit() => Dispose();
 
     ProcessSnapshot? TryGetSnapshot();
 }

@@ -547,7 +547,7 @@ public partial class AndroidApp
         var routing = AndroidStorage.GetRoutingMode();
         if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";
         if (_fullRadio is not null) _fullRadio.IsChecked = routing == "full";
-        UpdatePerAppFormCountLabel();
+        UpdateConfigSummary();
 
         _cfgImportPendingDoc = null;
         if (_cfgImportApplyBtn is not null) _cfgImportApplyBtn.IsVisible = false;
@@ -574,7 +574,18 @@ public partial class AndroidApp
         _cfgImportStatus.IsVisible = !string.IsNullOrEmpty(text);
     }
 
-    private void RefreshConfigModeUiFromStorage()
+    private string? _boundServerInput;
+
+    private void BindSimpleInput(bool preserveEdit = false)
+    {
+        if (_serverInput == null) return;
+        var saved = AndroidStorage.SavedServerInput();
+        var text = AndroidSubscriptionRefresh.RebindSimpleInput(_serverInput.Text, preserveEdit ? _boundServerInput : null, saved);
+        if (_serverInput.Text != text) _serverInput.Text = text;
+        _boundServerInput = saved;
+    }
+
+    private void RefreshConfigModeUiFromStorage(bool preserveInputEdit = false)
     {
         var mode = AndroidStorage.GetConfigMode();
         _ccMode = mode;
@@ -586,10 +597,8 @@ public partial class AndroidApp
             _ccCustomInput.Text = AndroidStorage.GetCustomConfigJson() ?? string.Empty;
         }
 
-        if (_serverInput is not null && mode == "manual")
-        {
-            _serverInput.Text = AndroidStorage.GetVlessUri() ?? string.Empty;
-        }
+        BindSimpleInput(preserveInputEdit);
+        if (_serverInputError is not null) _serverInputError.IsVisible = false;
 
         if (_ccModeSubBtn is not null) StyleSegmentButton(_ccModeSubBtn, mode == "subscribe");
         if (_ccModeManualBtn is not null) StyleSegmentButton(_ccModeManualBtn, mode == "manual");
@@ -598,10 +607,13 @@ public partial class AndroidApp
 
     private void ReloadServerListFromStorage()
     {
-        try
-        {
-        }
-        catch { }
+        _cachedServers = AndroidStorage.GetServers();
+        _subs = AndroidStorage.GetSubscriptions();
+        if (_srvCurrentSub is { } previous)
+            _srvCurrentSub = _subs.Find(s => s.Id == previous.Id && s.Url == previous.Url);
+        UpdateServerListView();
+        RebuildSubsList();
+        RebuildServerList();
     }
 
     internal void RefreshConfigShareLocalization()

@@ -2,8 +2,13 @@ package com.ninitux.vpnrouter;
 
 import android.content.Context;
 import android.util.Log;
+import android.system.Os;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 
 import io.nekohasekai.libbox.BridgeOptions;
 import io.nekohasekai.libbox.BridgeSession;
@@ -22,16 +27,17 @@ import io.nekohasekai.libbox.SystemProxyStatus;
 
 /**
  * The one place that talks to the libbox lifecycle API (sing-box 1.14): process-wide setup and a
- * {@link CommandServer} per running engine. The command server's gRPC listener is never started,
- * so there is no socket or port to clash with a second engine in the same process.
+ * {@link CommandServer} per running engine. Only the main tunnel serves status, on an app-private Unix socket.
  */
 public final class LibboxRuntime {
 
     private static final String LOG_TAG = "VpnRouter.Libbox";
     private static final String CRASH_REPORT_SOURCE = "vpnrouter";
     private static final long STOP_TIMEOUT_MS = 4_000L;
+    private static final NativeEngineSlot<CommandServer> MAIN = new NativeEngineSlot<>("libbox-main");
+    private static final NativeEngineSlot<CommandServer> VERIFY = new NativeEngineSlot<>("libbox-verify");
     private static final Object SETUP_LOCK = new Object();
-    private static boolean setupDone;
+    private static FutureTask<Void> setup;
 
     private LibboxRuntime() { }
 
@@ -39,76 +45,88 @@ public final class LibboxRuntime {
         return Libbox.version();
     }
 
-    /** Writes the Go runtime's stderr to files/data/CrashReport-vpnrouter.log (set up by libbox). */
     static void ensureSetup(Context ctx) throws Exception {
+        FutureTask<Void> pending;
         synchronized (SETUP_LOCK) {
-            if (setupDone) return;
-
-            File filesDir = ctx.getFilesDir();
-            File workingDir = new File(filesDir, "data");
-            File cacheDir = ctx.getCacheDir();
-            if (!workingDir.exists()) {
-                //noinspection ResultOfMethodCallIgnored
-                workingDir.mkdirs();
+            if (setup == null) {
+                Context app = ctx.getApplicationContext();
+                FutureTask<Void> init = new FutureTask<>(() -> { setupOnce(app); return null; });
+                Thread worker = new Thread(init, "libbox-setup");
+                worker.setDaemon(true);
+                worker.start();
+                setup = init;
             }
-
-            SetupOptions options = new SetupOptions();
-            options.setBasePath(filesDir.getAbsolutePath());
-            options.setWorkingPath(workingDir.getAbsolutePath());
-            options.setTempPath(cacheDir.getAbsolutePath());
-            options.setFixAndroidStack(false);
-            options.setCrashReportSource(CRASH_REPORT_SOURCE);
-            Libbox.setup(options);
-
-            setupDone = true;
-            Log.i(LOG_TAG, "libbox setup OK (base=" + filesDir.getAbsolutePath() + ")");
+            pending = setup;
         }
-    }
-
-    /** Validates the config and starts the engine; the returned server must be passed to {@link #stop}. */
-    static CommandServer start(String configJson, PlatformInterface platform) throws Exception {
-        Libbox.checkConfig(configJson);
-        CommandServer server = Libbox.newCommandServer(new QuietHandler(), platform);
         try {
-            server.startOrReloadService(configJson, new OverrideOptions());
-        } catch (Exception e) {
-            stop(server);
-            throw e;
-        }
-        return server;
-    }
-
-    /** Closes the engine, waiting at most four seconds so a stuck shutdown cannot block the caller. */
-    static void stop(final CommandServer server) {
-        if (server == null) return;
-        Thread closer = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    server.closeService();
-                } catch (Exception e) {
-                    Log.w(LOG_TAG, "closeService threw: " + e.getMessage());
-                }
-                try {
-                    server.close();
-                } catch (Exception e) {
-                    Log.w(LOG_TAG, "close threw: " + e.getMessage());
-                }
-            }
-        }, "libbox-stop");
-        closer.setDaemon(true);
-        closer.start();
-        try {
-            closer.join(STOP_TIMEOUT_MS);
+            pending.get(6, TimeUnit.SECONDS);
+        } catch (ExecutionException e) {
+            synchronized (SETUP_LOCK) { if (setup == pending) setup = null; }
+            throw new IOException("Native runtime setup failed");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        }
-        if (closer.isAlive()) {
-            Log.w(LOG_TAG, "engine shutdown still running after " + STOP_TIMEOUT_MS + " ms; continuing");
+            throw e;
         }
     }
 
-    /** Only the engine's own requests reach this handler: the app runs no command client. */
+    private static void setupOnce(Context ctx) throws Exception {
+        File filesDir = ctx.getFilesDir().getCanonicalFile();
+        File workingDir = new File(filesDir, "data");
+        if (!workingDir.equals(workingDir.getCanonicalFile()) ||
+                (!workingDir.isDirectory() && !workingDir.mkdir()))
+            throw new IOException("Native working directory unavailable");
+
+        // The pinned AAR writes every config here, and copies it into reports on a crash.
+        // Replace only its diagnostic destinations, before setup can archive an older run.
+        NativeReportPrivacy.prepare(filesDir, workingDir, ctx.getNoBackupFilesDir().getCanonicalFile(),
+                "CrashReport-" + CRASH_REPORT_SOURCE + ".log", Os::symlink);
+
+        SetupOptions options = new SetupOptions();
+        options.setBasePath(filesDir.getAbsolutePath());
+        options.setCommandServerListenPort(0); // app-private command.sock
+        options.setWorkingPath(workingDir.getAbsolutePath());
+        options.setTempPath(ctx.getCacheDir().getAbsolutePath());
+        options.setFixAndroidStack(false);
+        options.setCrashReportSource(CRASH_REPORT_SOURCE);
+        Libbox.setup(options);
+    }
+
+    static NativeEngineSlot.Session<CommandServer> beginVerification(Context ctx, String json, PlatformInterface platform) {
+        return VERIFY.begin(engineLifecycle(ctx, json, platform, false));
+    }
+
+    static CommandServer startChecked(String json, PlatformInterface platform, boolean servePrivateStatus) throws Exception {
+        if (!servePrivateStatus) throw new IllegalArgumentException("Main tunnel status required");
+        return MAIN.start(engineLifecycle(null, json, platform, true), 30_000L);
+    }
+
+    private static NativeEngineSlot.Lifecycle<CommandServer> engineLifecycle(
+            Context ctx, String config, PlatformInterface platform, boolean main) {
+        return new NativeEngineSlot.Lifecycle<CommandServer>() {
+            public CommandServer create() throws Exception {
+                if (!main) {
+                    ensureSetup(ctx);
+                    Libbox.checkConfig(config);
+                }
+                return Libbox.newCommandServer(new QuietHandler(), platform);
+            }
+
+            public void activate(CommandServer server) throws Exception {
+                if (main) server.start();
+                server.startOrReloadService(config, new OverrideOptions());
+            }
+
+            public void close(CommandServer server) throws Exception {
+                try { server.closeService(); }
+                finally { server.close(); }
+            }
+        };
+    }
+
+    static boolean isMainIdle() { return MAIN.isIdle(); }
+    static boolean mainStartPermitted() { return MAIN.callbacksPermitted(); }
+    static boolean stopMain(CommandServer server) { return MAIN.stop(server, STOP_TIMEOUT_MS); }
+
     private static final class QuietHandler implements CommandServerHandler {
         @Override
         public int connectSSHAgent() throws Exception {
@@ -140,9 +158,7 @@ public final class LibboxRuntime {
 
         @Override
         public void writeDebugMessage(String message) {
-            if (message != null && !message.isEmpty()) {
-                Log.d("Libbox", message);
-            }
+            // Native debug output may contain configuration fields.
         }
     }
 

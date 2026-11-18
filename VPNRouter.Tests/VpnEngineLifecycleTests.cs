@@ -281,22 +281,40 @@ public sealed class VpnEngineLifecycleTests
     }
 
     [Fact]
-    public async Task ProbeFailoverRestart_UnderCancelledProbeToken_BringsReplacementUp()
+    public async Task ProbeFailoverRestart_UnderCancelledProbeToken_KeepsRunningChild()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "Drives SingBoxManager's Windows spawn path (see lifecycle harness).");
 
-        var (engine, settings, cleanup) = await StartHappyPathWithSettingsAsync();
-        using var lifecycleDispose = cleanup;
-        Assert.True(engine.IsRunning);
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient().Setup("generate_204", "");
+        try
+        {
+            var (engine, _, cleanup) = await StartHappyPathWithSettingsAsync();
+            using var lifecycleDispose = cleanup;
+            Assert.True(engine.IsRunning);
 
-        using var probeCts = new CancellationTokenSource();
-        probeCts.Cancel();
+            var originalPid = engine.SingBoxPid;
+            Assert.NotNull(originalPid);
+            var accepted = Assert.IsType<AppSettings>(typeof(VpnEngine).GetField("_failoverSettingsContext",
+                BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(engine));
+            var liveProbe = Assert.IsAssignableFrom<CancellationTokenSource>(typeof(VpnEngine).GetField("_probeCts",
+                BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(engine)).Token;
+            using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(liveProbe);
+            probeCts.Cancel();
 
-        var ok = await engine.ExecuteProbeFailoverRestartAsync(settings, probeCts.Token);
+            var ok = await engine.ExecuteProbeFailoverRestartAsync(accepted, probeCts.Token);
 
-        Assert.True(ok, "failover restart self-cancelled — no replacement came up");
-        Assert.True(engine.IsRunning, "replacement is not running after the failover restart");
+            Assert.False(ok);
+            Assert.Equal(originalPid, engine.SingBoxPid);
+            Assert.True(engine.IsRunning);
+
+            Assert.True(await engine.ExecuteProbeFailoverRestartAsync(accepted, liveProbe));
+            Assert.True(liveProbe.IsCancellationRequested);
+            Assert.True(engine.IsRunning);
+            Assert.NotEqual(originalPid, engine.SingBoxPid);
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
     }
 
     [Fact]
@@ -703,6 +721,7 @@ public sealed class VpnEngineLifecycleTests
             new(new AppSettings(), sanityCheck);
         public AutoFailoverEngine WireFailoverWithStop(ConfigSanityCheck sanityCheck) =>
             new(new AppSettings(), sanityCheck);
-        public void SchedulePostStartProbe(AppSettings settings, ConfigSanityCheck sanityCheck, CancellationToken ct) { }
+        public void SchedulePostStartProbe(AppSettings settings, ConfigSanityCheck sanityCheck,
+            Func<CancellationToken, Task<ProbeResult>> probeProxy, CancellationToken ct) { }
     }
 }

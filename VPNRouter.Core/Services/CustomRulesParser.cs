@@ -47,7 +47,6 @@ public static class CustomRulesParser
             {
                 enabled = false;
                 trimmed = trimmed[1..].TrimStart();
-                if (trimmed.Length == 0) continue;
             }
 
             var commentStart = FindInlineCommentStart(trimmed);
@@ -68,71 +67,45 @@ public static class CustomRulesParser
 
             var (action, type, value) = tokens.Value;
 
-            if (!KnownActions.Contains(action))
-            {
-                errors.Add(new ParseError(i + 1, raw,
-                    $"Unknown action '{action}'. Allowed: direct / proxy / block"));
-                continue;
-            }
-
-            if (!KnownTypes.Contains(type))
-            {
-                errors.Add(new ParseError(i + 1, raw,
-                    $"Unknown type '{type}'. Allowed: domain / domain_suffix / domain_keyword / " +
-                    $"ip_cidr / port / port_range / network / process_name / geosite / geoip"));
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                errors.Add(new ParseError(i + 1, raw, "Empty value"));
-                continue;
-            }
-
-            var values = value
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(v => v.Length > 0)
-                .ToList();
-            if (values.Count == 0)
-            {
-                errors.Add(new ParseError(i + 1, raw, "Empty value list after splitting on ','"));
-                continue;
-            }
-
-            var lowerType = type.ToLowerInvariant();
-            string? typeError = lowerType switch
-            {
-                "ip_cidr"     => values.All(IsValidCidr) ? null
-                    : "Invalid CIDR format (expected e.g. 10.0.0.0/8)",
-                "port"        => values.All(IsValidPort) ? null
-                    : "Invalid port (must be 1-65535)",
-                "port_range"  => values.All(IsValidPortRange) ? null
-                    : "Invalid port range (expected MIN-MAX, both 1-65535, MIN <= MAX)",
-                "network"     => values.All(v => KnownNetworks.Contains(v)) ? null
-                    : "Invalid network (must be 'tcp' or 'udp')",
-                "geosite"     => values.All(IsValidRuleSetName) ? null
-                    : "Invalid geosite name (lowercase letters/digits/dash, e.g. 'ru', 'ads', 'category-games')",
-                "geoip"       => values.All(IsValidRuleSetName) ? null
-                    : "Invalid geoip name (lowercase letters/digits/dash, e.g. 'ru', 'cn', 'us')",
-                _             => null,
-            };
-            if (typeError != null)
-            {
-                errors.Add(new ParseError(i + 1, raw, typeError));
-                continue;
-            }
-
-            rules.Add(new CustomRule
-            {
-                Action = action.ToLowerInvariant(),
-                Type = lowerType,
-                Value = string.Join(", ", values),
-                Comment = comment,
-                Enabled = enabled,
-            });
+            var rule = new CustomRule { Action = action, Type = type, Value = value, Comment = comment, Enabled = enabled };
+            if (Normalize(rule) is { } reason)
+                errors.Add(new ParseError(i + 1, raw, reason));
+            else
+                rules.Add(rule);
         }
 
         return new ParseResult(rules, errors);
+    }
+
+    // Callers validate detached rows before publishing any part of a replacement.
+    public static string? Normalize(CustomRule rule)
+    {
+        if (!KnownActions.Contains(rule.Action)) return "Unknown action (expected direct, proxy or block)";
+        if (!KnownTypes.Contains(rule.Type)) return "Unknown rule type";
+        if (string.IsNullOrWhiteSpace(rule.Value) || rule.Value.Any(c => c is '\r' or '\n') ||
+            FindInlineCommentStart(" " + rule.Value) >= 0 || rule.Comment?.Any(c => c is '\r' or '\n') == true)
+            return "Invalid or empty rule value";
+
+        var type = rule.Type.ToLowerInvariant();
+        var values = rule.Value.Split(',', StringSplitOptions.TrimEntries);
+        if (values.Any(string.IsNullOrEmpty)) return "Empty rule value";
+        if (values.Any(v => v.Any(char.IsControl))) return "Invalid rule value";
+        string? error = type switch
+        {
+            "ip_cidr" when !values.All(IsValidCidr) => "Invalid CIDR",
+            "port" when !values.All(IsValidPort) => "Invalid port (must be 1-65535)",
+            "port_range" when !values.All(v => ToSingBoxPortRange(v) != null) => "Invalid port range",
+            "network" when !values.All(KnownNetworks.Contains) => "Invalid network (expected tcp or udp)",
+            "geosite" or "geoip" when !values.All(IsValidRuleSetName) => "Invalid rule-set category name",
+            _ => null,
+        };
+        if (error != null) return error;
+        if (type is "geosite" or "geoip" or "network")
+            values = values.Select(v => v.ToLowerInvariant()).ToArray();
+        rule.Action = rule.Action.ToLowerInvariant();
+        rule.Type = type;
+        rule.Value = string.Join(", ", values);
+        return null;
     }
 
     public static string SerializeToText(IReadOnlyList<CustomRule>? rules)
@@ -207,31 +180,40 @@ public static class CustomRulesParser
 
     private static bool IsValidCidr(string v)
     {
-        var slashIdx = v.IndexOf('/');
-        if (slashIdx < 1 || slashIdx == v.Length - 1) return false;
-        var ip = v[..slashIdx];
-        var bitsStr = v[(slashIdx + 1)..];
-        if (!int.TryParse(bitsStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var bits))
-            return false;
-        if (System.Net.IPAddress.TryParse(ip, out var addr))
-        {
-            int max = addr.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 32 : 128;
-            return bits >= 0 && bits <= max;
-        }
-        return false;
+        var parts = v.Split('/');
+        if (parts.Length > 2 || parts[0].Contains('%') ||
+            !System.Net.IPAddress.TryParse(parts[0], out var address)) return false;
+        bool ipv4 = address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
+        // IPAddress.TryParse also accepts legacy abbreviated/octal IPv4 values that sing-box rejects.
+        if (ipv4 && address.ToString() != parts[0]) return false;
+        if (parts.Length == 1) return true; // Native sing-box also accepts a single address.
+        return uint.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var bits)
+            && bits <= (ipv4 ? 32u : 128u);
     }
 
     private static bool IsValidPort(string v) =>
         int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var p) &&
         p >= 1 && p <= 65535;
 
-    private static bool IsValidPortRange(string v)
+    // Saved settings use MIN-MAX. Imported sing-box ranges can also have open bounds.
+    internal static string? ToSingBoxPortRange(string value)
     {
-        var dashIdx = v.IndexOf('-');
-        if (dashIdx < 1 || dashIdx == v.Length - 1) return false;
-        if (!int.TryParse(v[..dashIdx], out var min)) return false;
-        if (!int.TryParse(v[(dashIdx + 1)..], out var max)) return false;
-        return min >= 1 && max <= 65535 && min <= max;
+        bool native = value.Contains(':');
+        var bounds = value.Split(native ? ':' : '-', StringSplitOptions.TrimEntries);
+        if (bounds.Length != 2) return null;
+
+        ushort min = 0, max = ushort.MaxValue;
+        if ((!native || bounds[0].Length > 0) &&
+            !ushort.TryParse(bounds[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out min))
+            return null;
+        if ((!native || bounds[1].Length > 0) &&
+            !ushort.TryParse(bounds[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out max))
+            return null;
+        if (min > max || (!native && min == 0)) return null;
+
+        var start = bounds[0].Length == 0 ? "" : min.ToString(CultureInfo.InvariantCulture);
+        var end = bounds[1].Length == 0 ? "" : max.ToString(CultureInfo.InvariantCulture);
+        return $"{start}:{end}";
     }
 
     private static bool IsValidRuleSetName(string v)
@@ -239,7 +221,7 @@ public static class CustomRulesParser
         if (v.Length == 0 || v.Length > 64) return false;
         foreach (var c in v)
         {
-            if (!(c == '-' || c == '_' || char.IsLower(c) || char.IsDigit(c)))
+            if (!(c == '-' || c == '_' || char.IsAsciiLetterOrDigit(c)))
                 return false;
         }
         return true;

@@ -27,7 +27,9 @@ public partial class UpdateChecker : IDesktopInstaller
         _settings = settings;
         _currentVersion = currentVersion;
         _http = http ?? throw new ArgumentNullException(nameof(http));
-        _stagingDir = Path.Combine(AppPaths.DataDir, "update-staging");
+        _stagingDir = !ProductEdition.IsBusiness && OperatingSystem.IsWindows() && ZapretRuntimeDirectory.TestRoot is null
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "VPNRouter Update Staging")
+            : Path.Combine(AppPaths.DataDir, "update-staging");
     }
 
     public Task<UpdateSourceInfo?> CheckAsync(CancellationToken ct = default)

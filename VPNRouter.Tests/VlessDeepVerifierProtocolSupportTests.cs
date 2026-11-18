@@ -94,7 +94,7 @@ public class VlessDeepVerifierProtocolSupportTests
     [Fact]
     public void BuildSingleOutboundConfig_Awg_EmitsEndpointNotVlessOutbound()
     {
-        var json = VlessDeepVerifier.BuildSingleOutboundConfig(AwgEntry(), 1080, 9090);
+        var json = VlessDeepVerifier.BuildSingleOutboundConfig(AwgEntry(), new VerificationProxy(1080));
         var root = JsonNode.Parse(json)!.AsObject();
 
         var endpoints = Assert.IsType<JsonArray>(root["endpoints"]);

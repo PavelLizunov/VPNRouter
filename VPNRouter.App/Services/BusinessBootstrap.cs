@@ -17,7 +17,8 @@ internal static class BusinessBootstrap
             AppPaths.GeoDir, AppPaths.ConfigYamlPath);
 
     internal static BusinessPolicyCoordinator? Apply(AppSettings settings, ISettingsStore store, string connection,
-        string bundleDirectory, string geoDirectory, string settingsPath)
+        string bundleDirectory, string geoDirectory, string settingsPath,
+        Func<string, CancellationToken, Task<bool>>? checkGeoContents = null)
     {
         BusinessProvisioningStore.ValidateBundle(connection);
         BusinessPolicyCoordinator? policy = null;
@@ -35,13 +36,8 @@ internal static class BusinessBootstrap
             BusinessDefaults.Apply(settings, BusinessClientConfiguration.SelectStartupConnection(settings, connection),
                 ReadRules(), policy?.Current);
             settings.BusinessPolicy = policy?.Current;
-            foreach (var name in new[] { "geoip-ru.srs", "geosite-ru.srs" })
-            {
-                var source = Path.Combine(bundleDirectory, "geo", name);
-                if (!File.Exists(source) || !RuleSetFile.IsValidBinary(source))
-                    throw new InvalidDataException("Bundled Business bypass data missing.");
-                File.Copy(source, Path.Combine(geoDirectory, name), overwrite: true);
-            }
+            GeoDataDownloader.InstallBusinessBundle(Path.Combine(bundleDirectory, "geo"), geoDirectory,
+                checkGeoContents ?? RuleSetFile.CheckContentsAsync);
             store.Save(settings, settingsPath);
             return policy;
         }

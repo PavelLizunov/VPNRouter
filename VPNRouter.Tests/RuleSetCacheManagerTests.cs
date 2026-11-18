@@ -35,7 +35,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var filename = "test-fresh.srs";
         var path = ExpectedCachedFile(filename);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var bytes = Encoding.UTF8.GetBytes("cached-bytes-fresh");
+        var bytes = RuleSetSamples.UpstreamGeositeTldRu();
         File.WriteAllBytes(path, bytes);
 
         var counting = new CountingHandler();
@@ -45,6 +45,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: ct);
@@ -60,10 +61,10 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var filename = "test-stale.srs";
         var path = ExpectedCachedFile(filename);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("OLD"));
+        File.WriteAllBytes(path, RuleSetSamples.UpstreamGeositeTldRu());
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-8));
 
-        var freshBody = Encoding.UTF8.GetBytes("FRESH-BYTES");
+        var freshBody = RuleSetSamples.KeywordRule();
         var handler = new StaticResponseHandler(HttpStatusCode.OK, freshBody);
         var client = new HttpClient(handler);
 
@@ -71,6 +72,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: ct);
@@ -80,13 +82,42 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         Assert.Equal(freshBody, await File.ReadAllBytesAsync(path, ct));
     }
 
+    [Theory]
+    [InlineData("user-geosite-example.srs", true)]
+    [InlineData("user-geosite-example.srs", false)]
+    [InlineData("adblock_reject.srs", true)]
+    [InlineData("adblock_reject.srs", false)]
+    public async Task UnreadableRefreshUsesOnlyValidCachedSet(string filename, bool validStale)
+    {
+        var path = ExpectedCachedFile(filename);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var invalid = RuleSetSamples.IntactEnvelope();
+        var original = validStale ? RuleSetSamples.KeywordRule() : invalid;
+        File.WriteAllBytes(path, original);
+        if (validStale) File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-30));
+        var timestamp = File.GetLastWriteTimeUtc(path);
+        var response = new StaticResponseHandler(HttpStatusCode.OK, invalid);
+        using var client = new HttpClient(response);
+
+        var result = await RuleSetCacheManager.EnsureLocalAsync("https://example.invalid/rules", filename,
+            RuleSetSamples.CheckFixtureContentsAsync, httpClient: client, cacheDir: _tempCacheDir,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(RuleSetFile.IsValidBinary(invalid));
+        Assert.Equal(validStale ? path : null, result);
+        Assert.Equal(1, response.RequestCount);
+        Assert.Equal(original, File.ReadAllBytes(path));
+        Assert.Equal(timestamp, File.GetLastWriteTimeUtc(path));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.tmp"));
+    }
+
     [Fact]
     public async Task EnsureLocal_StaleCache_FetchFails_ReturnsStale()
     {
         var filename = "test-fallback.srs";
         var path = ExpectedCachedFile(filename);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var stale = Encoding.UTF8.GetBytes("STALE-FALLBACK");
+        var stale = RuleSetSamples.UpstreamGeositeTldRu();
         File.WriteAllBytes(path, stale);
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-30));
 
@@ -97,6 +128,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: ct);
@@ -104,6 +136,38 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         Assert.Equal(path, result);
         Assert.Equal(1, handler.RequestCount);
         Assert.Equal(stale, await File.ReadAllBytesAsync(path, ct));
+    }
+
+    [Fact]
+    public void CustomGeoRule_RegistersValidStaleFileWhenRefreshFails()
+    {
+        var tags = new[] { "user-geosite-first", "user-geosite-second" };
+        var bytes = RuleSetSamples.UpstreamGeositeTldRu();
+        Directory.CreateDirectory(Path.Combine(_tempCacheDir, RuleSetCacheManager.CacheSubdir));
+        foreach (var tag in tags)
+        {
+            var path = ExpectedCachedFile(tag + ".srs");
+            File.WriteAllBytes(path, bytes);
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-30));
+        }
+        var handler = new ThrowingHandler(new HttpRequestException("offline"));
+        using var client = new HttpClient(handler);
+        var config = new VPNRouter.Core.Models.SingBoxConfig();
+
+        ConfigGenerator.ApplyCustomRules(config,
+            [new() { Action = "block", Type = "geosite", Value = "first, second, first" }],
+            (url, file) => RuleSetCacheManager.EnsureLocalAsync(url, file, RuleSetSamples.CheckFixtureContentsAsync,
+                httpClient: client, cacheDir: _tempCacheDir).GetAwaiter().GetResult());
+
+        Assert.Equal(tags, config.Route.RuleSet!.Select(entry => entry.Tag));
+        Assert.Equal(tags, Assert.Single(config.Route.Rules).RuleSet);
+        Assert.Equal(tags, Assert.Single(config.Dns.Rules).RuleSet);
+        Assert.All(config.Route.RuleSet!, entry =>
+        {
+            Assert.Equal(ExpectedCachedFile(entry.Tag + ".srs"), entry.Path);
+            Assert.Equal(bytes, File.ReadAllBytes(entry.Path!));
+        });
+        Assert.Equal(2, handler.RequestCount);
     }
 
     [Fact]
@@ -117,6 +181,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: TestContext.Current.CancellationToken);
@@ -133,7 +198,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var path = ExpectedCachedFile(filename);
         Assert.False(File.Exists(path));
 
-        var body = Encoding.UTF8.GetBytes("FIRST-FETCH");
+        var body = RuleSetSamples.UpstreamGeositeTldRu();
         var handler = new StaticResponseHandler(HttpStatusCode.OK, body);
         var client = new HttpClient(handler);
 
@@ -141,6 +206,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: ct);
@@ -161,6 +227,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/missing.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: TestContext.Current.CancellationToken);
@@ -175,24 +242,23 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var filename = "test-atomic.srs";
         var path = ExpectedCachedFile(filename);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var tmpPath = path + ".tmp";
         var ct = TestContext.Current.CancellationToken;
-        await File.WriteAllBytesAsync(tmpPath, Encoding.UTF8.GetBytes("PREV-TMP"), ct);
 
-        var body = Encoding.UTF8.GetBytes("CLEAN-FRESH");
+        var body = RuleSetSamples.UpstreamGeositeTldRu();
         var handler = new StaticResponseHandler(HttpStatusCode.OK, body);
         var client = new HttpClient(handler);
 
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/atomic.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: ct);
 
         Assert.Equal(path, result);
         Assert.Equal(body, await File.ReadAllBytesAsync(path, ct));
-        Assert.False(File.Exists(tmpPath));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.tmp"));
     }
 
     [Fact]
@@ -229,6 +295,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/blocked.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: TestContext.Current.CancellationToken);
@@ -241,15 +308,15 @@ public sealed class RuleSetCacheManagerTests : IDisposable
     public async Task EnsureLocal_AdBlockUrl_AfterFetch_FileExistsAndIsBinary()
     {
         var filename = "adblock_reject.srs";
-        var fakeSrs = new byte[4096];
-        new Random(42).NextBytes(fakeSrs);
-        var handler = new StaticResponseHandler(HttpStatusCode.OK, fakeSrs);
+        var validSrs = RuleSetSamples.UpstreamGeositeTldRu();
+        var handler = new StaticResponseHandler(HttpStatusCode.OK, validSrs);
         var client = new HttpClient(handler);
 
         var ct = TestContext.Current.CancellationToken;
         var path = await RuleSetCacheManager.EnsureLocalAsync(
             "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: ct);
@@ -257,7 +324,81 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         Assert.NotNull(path);
         Assert.EndsWith(filename, path);
         Assert.True(File.Exists(path));
-        Assert.Equal(fakeSrs, await File.ReadAllBytesAsync(path, ct));
+        Assert.Equal(validSrs, await File.ReadAllBytesAsync(path, ct));
+    }
+
+    [Fact]
+    public async Task EnsureLocal_DamagedCachedFile_TriggersFetchAndOverwritesWithValid()
+    {
+        var filename = "test-corrupt-cache.srs";
+        var path = ExpectedCachedFile(filename);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        // Corrupt cache: not valid SRS binary
+        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("DAMAGED_CORRUPT_NOT_SRS"));
+
+        var validSrs = RuleSetSamples.UpstreamGeositeTldRu();
+        var handler = new StaticResponseHandler(HttpStatusCode.OK, validSrs);
+        var client = new HttpClient(handler);
+
+        var ct = TestContext.Current.CancellationToken;
+        var result = await RuleSetCacheManager.EnsureLocalAsync(
+            "https://example.invalid/test.srs",
+            filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
+            httpClient: client,
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
+
+        Assert.Equal(path, result);
+        Assert.Equal(1, handler.RequestCount);
+        Assert.Equal(validSrs, await File.ReadAllBytesAsync(path, ct));
+    }
+
+    [Fact]
+    public async Task EnsureLocal_DamagedCachedFile_FetchFails_ReturnsNullNotDamaged()
+    {
+        var filename = "test-corrupt-cache-fail.srs";
+        var path = ExpectedCachedFile(filename);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        // Corrupt cache: not valid SRS binary
+        File.WriteAllBytes(path, Encoding.UTF8.GetBytes("DAMAGED_CORRUPT_NOT_SRS"));
+
+        var handler = new ThrowingHandler(new HttpRequestException("fetch failed"));
+        var client = new HttpClient(handler);
+
+        var ct = TestContext.Current.CancellationToken;
+        var result = await RuleSetCacheManager.EnsureLocalAsync(
+            "https://example.invalid/test.srs",
+            filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
+            httpClient: client,
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
+
+        Assert.Null(result);
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task EnsureLocal_DownloadedInvalidBinary_RejectedAndNotCached()
+    {
+        var filename = "test-invalid-download.srs";
+        var path = ExpectedCachedFile(filename);
+
+        var invalidBinary = Encoding.UTF8.GetBytes("SOME_BINARY_GARBAGE_NOT_SRS");
+        var handler = new StaticResponseHandler(HttpStatusCode.OK, invalidBinary);
+        var client = new HttpClient(handler);
+
+        var result = await RuleSetCacheManager.EnsureLocalAsync(
+            "https://example.invalid/invalid.srs",
+            filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
+            httpClient: client,
+            cacheDir: _tempCacheDir,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Null(result);
+        Assert.False(File.Exists(path));
     }
 
     [Fact]
@@ -272,6 +413,7 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/x.srs",
             filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
             httpClient: client,
             cacheDir: _tempCacheDir,
             cancellationToken: cts.Token);

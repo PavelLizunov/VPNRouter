@@ -25,7 +25,7 @@ public class RevealInFileManagerTests
         Assert.False(psi.UseShellExecute);
         if (OperatingSystem.IsWindows())
         {
-            Assert.Equal("explorer.exe", psi.FileName);
+            Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), psi.FileName);
             Assert.Single(psi.ArgumentList);
             Assert.Equal($"/select,{malPath}", psi.ArgumentList[0]);
         }

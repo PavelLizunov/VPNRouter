@@ -97,6 +97,7 @@ public partial class MainWindowViewModel
         Interlocked.Increment(ref _connectionGeneration);
         _problemScanCts?.Cancel();
         _problemScanCts = null;
+        if (AppContext.TryGetSwitch("VPNRouter.Tests.DisableBackgroundServices", out var disabled) && disabled) return;
         if (!connected)
         {
             // The TUN adapter is removed a few seconds after a stop; measure the network once it is gone.

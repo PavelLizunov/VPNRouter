@@ -1,4 +1,5 @@
-﻿using VPNRouter.Core.Models;
+﻿using System.Text.Json;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
@@ -70,18 +71,31 @@ public class CustomRulesV2_30_GeneratorTests
     }
 
     [Fact]
-    public void BuildRule_PortRange_ExpandedToPortList()
+    public void Apply_EmitsEveryPortRangeAndTransportInRuleOrder()
     {
-        var rule = new VPNRouter.Core.Models.CustomRule
-        {
-            Action = "proxy", Type = "port_range", Value = "1024-1029", Enabled = true,
-        };
-        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomRouteRule(rule);
-        Assert.NotNull(route);
-        Assert.NotNull(route!.Port);
-        Assert.True(route.Port!.Count >= 2);
-        Assert.Contains(1024, route.Port!);
-        Assert.Contains(1029, route.Port!);
+        var config = NewConfigWithEmptyRoutes();
+        ConfigGenerator.ApplyCustomRules(config,
+        [
+            new() { Action = "block", Type = "port_range", Value = "1-45000, 50000-65535" },
+            new() { Action = "proxy", Type = "network", Value = "TCP, udp, tcp" },
+            new() { Action = "direct", Type = "network", Value = "udp" },
+        ]);
+
+        using var json = JsonDocument.Parse(ConfigGenerator.Serialize(config));
+        var rules = json.RootElement.GetProperty("route").GetProperty("rules");
+        Assert.Equal(3, rules.GetArrayLength());
+        Assert.Equal("reject", rules[0].GetProperty("action").GetString());
+        Assert.Equal(new[] { "1:45000", "50000:65535" },
+            rules[0].GetProperty("port_range").EnumerateArray().Select(v => v.GetString()));
+        Assert.False(rules[0].TryGetProperty("port", out _));
+        Assert.Equal("proxy", rules[1].GetProperty("outbound").GetString());
+        Assert.Equal(new[] { "tcp", "udp" }, rules[1].GetProperty("network").EnumerateArray().Select(v => v.GetString()));
+        Assert.Equal("udp", rules[2].GetProperty("network").GetString());
+
+        var reloaded = json.RootElement.Deserialize(VPNRouter.Core.Json.AppJsonContext.Default.SingBoxConfig)!;
+        Assert.Equal("tcp,udp", reloaded.Route.Rules[1].Network);
+        Assert.Equal("udp", reloaded.Route.Rules[2].Network);
+        Assert.Equal(config.Route.Rules[0].PortRange, reloaded.Route.Rules[0].PortRange);
     }
 
     [Fact]
@@ -129,34 +143,78 @@ public class CustomRulesV2_30_GeneratorTests
         Assert.Empty(config.Dns.Rules);
     }
 
-    [Fact]
-    public void Apply_GeositeRule_RegistersRuleSetEntry()
+    [Theory]
+    [InlineData("geosite")]
+    [InlineData("geoip")]
+    public void Apply_ReferencesOnlyRegisteredSetsAndResolvesEachOnce(string type)
     {
-        var cacheDir = System.IO.Path.Combine(
-            VPNRouter.Core.AppPaths.CacheDir,
-            VPNRouter.Core.Services.RuleSetCacheManager.CacheSubdir);
-        System.IO.Directory.CreateDirectory(cacheDir);
-        var stubPath = System.IO.Path.Combine(cacheDir, "user-geosite-ads.srs");
-        System.IO.File.WriteAllBytes(stubPath, new byte[] { 0x53, 0x52, 0x53, 0x00 });
-        try
+        var config = NewConfigWithEmptyRoutes();
+        var calls = new List<string>();
+        var prefix = $"user-{type}-";
+        string? Resolve(string url, string filename)
         {
-            var config = NewConfigWithEmptyRoutes();
-            var rules = new List<VPNRouter.Core.Models.CustomRule>
-            {
-                new() { Action = "block", Type = "geosite", Value = "ads", Enabled = true },
-            };
-            VPNRouter.Core.Services.ConfigGenerator.ApplyCustomRules(config, rules);
-            Assert.NotNull(config.Route.RuleSet);
-            Assert.Single(config.Route.RuleSet!);
-            Assert.Equal("user-geosite-ads", config.Route.RuleSet![0].Tag);
-            Assert.Equal("local", config.Route.RuleSet![0].Type);
-            Assert.NotNull(config.Route.RuleSet![0].Path);
-            Assert.EndsWith("user-geosite-ads.srs", config.Route.RuleSet![0].Path!);
+            calls.Add(filename);
+            Assert.EndsWith("/" + filename["user-".Length..], url);
+            return filename == prefix + "missing.srs" ? null : Path.Combine("cache", filename);
         }
-        finally
+
+        ConfigGenerator.ApplyCustomRules(config,
+        [
+            new() { Type = type, Action = "direct", Value = "First, missing, FIRST" },
+            new() { Type = type, Action = "block", Value = "second, first, second" },
+            new() { Type = type, Action = "proxy", Value = "second" },
+            new() { Type = type, Action = "direct", Value = "missing" },
+            new() { Type = type, Action = "proxy", Value = "disabled", Enabled = false },
+        ], Resolve);
+
+        var first = prefix + "first";
+        var second = prefix + "second";
+        Assert.Equal(new[] { first + ".srs", prefix + "missing.srs", second + ".srs" }, calls);
+        Assert.Equal(new[] { first, second }, config.Route.RuleSet!.Select(entry => entry.Tag));
+        Assert.All(config.Route.RuleSet!, entry =>
         {
-            try { System.IO.File.Delete(stubPath); } catch { }
+            Assert.Equal("local", entry.Type);
+            Assert.Equal("binary", entry.Format);
+            Assert.Equal(Path.Combine("cache", entry.Tag + ".srs"), entry.Path);
+        });
+        Assert.Equal(3, config.Route.Rules.Count);
+        Assert.Equal(new[] { first }, config.Route.Rules[0].RuleSet);
+        Assert.Equal(new[] { second, first }, config.Route.Rules[1].RuleSet);
+        Assert.Equal(new[] { second }, config.Route.Rules[2].RuleSet);
+        Assert.Equal("direct", config.Route.Rules[0].Outbound);
+        Assert.Equal("reject", config.Route.Rules[1].Action);
+        Assert.Equal("proxy", config.Route.Rules[2].Outbound);
+
+        if (type == "geosite")
+        {
+            Assert.Equal(2, config.Dns.Rules.Count);
+            Assert.Equal("reject", config.Dns.Rules[0].Action);
+            Assert.Equal(config.Route.Rules[1].RuleSet, config.Dns.Rules[0].RuleSet);
+            Assert.Equal("vpn-dns", config.Dns.Rules[1].Server);
+            Assert.Equal(config.Route.Rules[2].RuleSet, config.Dns.Rules[1].RuleSet);
         }
+        else Assert.Empty(config.Dns.Rules);
+    }
+
+    [Fact]
+    public void Apply_MissingSetPreviouslyUsedByDirectRule_LeavesOriginalRulesIntact()
+    {
+        var config = NewConfigWithEmptyRoutes();
+        var original = new RouteRule { Action = "sniff" };
+        config.Route.Rules.Add(original);
+        int resolutions = 0;
+
+        Assert.Throws<InvalidOperationException>(() => ConfigGenerator.ApplyCustomRules(config,
+        [
+            new() { Action = "block", Type = "domain", Value = "example.org" },
+            new() { Action = "direct", Type = "geoip", Value = "missing" },
+            new() { Action = "proxy", Type = "geoip", Value = "missing" },
+        ], (_, _) => { resolutions++; return null; }));
+
+        Assert.Equal(1, resolutions);
+        Assert.Same(original, Assert.Single(config.Route.Rules));
+        Assert.Empty(config.Dns.Rules);
+        Assert.Null(config.Route.RuleSet);
     }
 
     [Fact]

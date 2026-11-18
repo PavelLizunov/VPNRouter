@@ -56,7 +56,7 @@ public class ConfigGeneratorTests
     {
         var settings = new AppSettings
         {
-            App = new AppConfig { LogLevel = "info" },
+            App = new AppConfig { LogLevel = "info", BypassRussianTraffic = false },
             Tun = new TunSettings(),
             Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },
             SingBox = new SingBoxSettings(),
@@ -147,39 +147,39 @@ public class ConfigGeneratorTests
         settings.App.BypassRussianTraffic = true;
         settings.App.BlockAds = true;
 
-        if (!GeoDataDownloader.AreGeoFilesAvailable())
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
         {
-            return;
-        }
+            var profile = CreateProfile();
+            var processes = new[] { "Discord.exe", "firefox.exe" };
 
-        var profile = CreateProfile();
-        var processes = new[] { "Discord.exe", "firefox.exe" };
+            var config = ConfigGenerator.Generate(profile, processes, settings, null, null, (_, name) => name,
+                checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
 
-        var config = ConfigGenerator.Generate(profile, processes, settings);
+            var rules = config.Route.Rules;
+            Assert.True(rules.Count >= 5, $"expected ≥5 rules, got {rules.Count}");
+            Assert.Equal("sniff", rules[0].Action);
+            Assert.Equal("hijack-dns", rules[1].Action);
+            Assert.Equal("icmp", rules[2].Network);
+            Assert.True(rules[3].IpIsPrivate);
 
-        var rules = config.Route.Rules;
-        Assert.True(rules.Count >= 5, $"expected ≥5 rules, got {rules.Count}");
-        Assert.Equal("sniff", rules[0].Action);
-        Assert.Equal("hijack-dns", rules[1].Action);
-        Assert.True(rules[2].IpIsPrivate, "rule[2] should be the private-ip → direct rule");
+            var tail = rules.Skip(4).ToList();
+            Assert.Contains(tail, r =>
+                r.RuleSet != null
+                && r.RuleSet.Contains("vpnrouter-geosite-ru")
+                && r.Action == "route"
+                && r.Outbound == "direct");
+            Assert.Contains(tail, r =>
+                r.RuleSet != null
+                && r.RuleSet.Contains("vpnrouter-adblock")
+                && r.Action == "reject");
+            Assert.Equal("proxy", config.Route.Final);
 
-        var tail = rules.Skip(3).ToList();
-        Assert.Contains(tail, r =>
-            r.RuleSet != null
-            && r.RuleSet.Contains("vpnrouter-geosite-ru")
-            && r.Action == "route"
-            && r.Outbound == "direct");
-        Assert.Contains(tail, r =>
-            r.RuleSet != null
-            && r.RuleSet.Contains("vpnrouter-adblock")
-            && r.Action == "reject");
-        Assert.Equal("proxy", config.Route.Final);
-
-        var geoDnsRule = config.Dns.Rules.Single(r =>
-            r.RuleSet?.Contains("vpnrouter-geosite-ru") == true);
-        Assert.Equal("vpn-dns", geoDnsRule.Server);
-        Assert.Equal("proxy", config.Dns.Servers.Single(s => s.Tag == "vpn-dns").Detour);
-        Assert.DoesNotContain(config.Dns.Servers, s => s.Tag == "vpnrouter-dns-ru");
+            var geoDnsRule = config.Dns.Rules.Single(r =>
+                r.RuleSet?.Contains("vpnrouter-geosite-ru") == true);
+            Assert.Equal(ProductEdition.IsBusiness ? "local-dns" : "vpn-dns", geoDnsRule.Server);
+            Assert.Equal("proxy", config.Dns.Servers.Single(s => s.Tag == "vpn-dns").Detour);
+            Assert.DoesNotContain(config.Dns.Servers, s => s.Tag == "vpnrouter-dns-ru");
+        });
     }
 
     [Theory]
@@ -198,7 +198,7 @@ public class ConfigGeneratorTests
         {
             AppPaths.OverrideDataDir(tempDataDir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
 
             var settings = CreateSettings();
@@ -207,7 +207,8 @@ public class ConfigGeneratorTests
             settings.App.RoutingAppsMode = appsMode;
             settings.App.RoutingAppsInclude = new List<string> { "firefox.exe" };
             settings.App.RoutingAppsExclude = new List<string> { "firefox.exe" };
-            var config = ConfigGenerator.Generate(CreateProfile(), Array.Empty<string>(), settings);
+            var config = ConfigGenerator.Generate(CreateProfile(), [], settings, null, null, resolveRuleSet: null,
+                checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
             var serialized = System.Text.Json.Nodes.JsonNode.Parse(ConfigGenerator.Serialize(config))!;
             var routeRules = serialized["route"]!["rules"]!.AsArray();
             var bypassRules = routeRules.Where(r => r?["rule_set"]?.AsArray()
@@ -243,7 +244,7 @@ public class ConfigGeneratorTests
 
             var geoRule = config.Dns.Rules.Single(r =>
                 r.RuleSet?.Contains("vpnrouter-geosite-ru") == true);
-            Assert.Equal("vpn-dns", geoRule.Server);
+            Assert.Equal(ProductEdition.IsBusiness ? "local-dns" : "vpn-dns", geoRule.Server);
             Assert.Equal("proxy", config.Dns.Servers.Single(s => s.Tag == "vpn-dns").Detour);
             Assert.DoesNotContain(config.Dns.Servers, s => s.Tag == "vpnrouter-dns-ru");
         }
@@ -264,12 +265,19 @@ public class ConfigGeneratorTests
         {
             AppPaths.OverrideDataDir(tempDataDir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.ZeroFilled(155));
 
             var settings = CreateSettings();
             settings.App.BypassRussianTraffic = true;
-            var config = ConfigGenerator.Generate(CreateProfile(), Array.Empty<string>(), settings);
+            if (ProductEdition.IsBusiness)
+            {
+                Assert.Throws<InvalidOperationException>(() => ConfigGenerator.Generate(CreateProfile(), [], settings, null, null,
+                    resolveRuleSet: null, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+                return;
+            }
+            var config = ConfigGenerator.Generate(CreateProfile(), [], settings, null, null, resolveRuleSet: null,
+                checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
 
             Assert.DoesNotContain(config.Route.RuleSet ?? new List<RuleSetEntry>(), r => r.Tag.StartsWith("vpnrouter-geo", StringComparison.Ordinal));
             Assert.DoesNotContain(config.Route.Rules, r => r.RuleSet?.Any(tag => tag.StartsWith("vpnrouter-geo", StringComparison.Ordinal)) == true);

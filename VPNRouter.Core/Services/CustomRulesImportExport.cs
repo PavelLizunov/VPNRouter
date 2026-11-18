@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -26,13 +25,30 @@ public static class CustomRulesImportExport
             return new ImportResult(new(), new() { "Empty input" }, Format.Auto);
 
         var detected = format == Format.Auto ? Detect(text) : format;
-        return detected switch
+        try
         {
-            Format.Csv => ImportCsv(text),
-            Format.VpnrouterJson => ImportVpnrouterJson(text),
-            Format.SingBoxJson => ImportSingBoxJson(text),
-            _ => new ImportResult(new(), new() { "Unknown format" }, detected),
-        };
+            var result = detected switch
+            {
+                Format.Csv => ImportCsv(text),
+                Format.VpnrouterJson => ImportVpnrouterJson(text),
+                Format.SingBoxJson => ImportSingBoxJson(text),
+                _ => throw new FormatException("Unknown rule format"),
+            };
+            foreach (var row in result.Rules)
+            {
+                if (CustomRulesParser.Normalize(row) is { } error)
+                    throw new FormatException(error);
+            }
+            return result;
+        }
+        catch (FormatException ex)
+        {
+            return new ImportResult([], [ex.Message], detected);
+        }
+        catch (JsonException)
+        {
+            return new ImportResult([], ["Invalid rules JSON"], detected);
+        }
     }
 
     public static string ExportToText(IReadOnlyList<CustomRule> rules, Format format = Format.VpnrouterJson)
@@ -49,24 +65,35 @@ public static class CustomRulesImportExport
     public static Format Detect(string text)
     {
         var trimmed = text.TrimStart();
-        if (trimmed.StartsWith("[") || trimmed.StartsWith("{"))
+        if (!trimmed.StartsWith("[") && !trimmed.StartsWith("{"))
+            return Format.Csv;
+
+        try
         {
-            if (trimmed.Contains("\"outbound\":") ||
-                trimmed.Contains("\"domain_suffix\":") ||
-                trimmed.Contains("\"ip_cidr\":") ||
-                trimmed.Contains("\"process_name\":["))
-            {
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("route", out _))
                 return Format.SingBoxJson;
-            }
-            return Format.VpnrouterJson;
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("rules", out var nested))
+                root = nested;
+            if (root.ValueKind == JsonValueKind.Array && root.EnumerateArray().Any(rule =>
+                rule.ValueKind == JsonValueKind.Object &&
+                (rule.TryGetProperty("outbound", out _) || MatchFields.Any(key => rule.TryGetProperty(key, out _)))))
+                return Format.SingBoxJson;
         }
-        return Format.Csv;
+        catch (JsonException) { /* The importer reports malformed JSON. */ }
+        return Format.VpnrouterJson;
     }
+
+    private static readonly string[] MatchFields =
+    [
+        "domain", "domain_suffix", "domain_keyword", "ip_cidr", "port",
+        "port_range", "network", "process_name", "rule_set",
+    ];
 
     private static ImportResult ImportCsv(string text)
     {
         var rules = new List<CustomRule>();
-        var warnings = new List<string>();
         var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         bool isFirst = true;
         for (int i = 0; i < lines.Length; i++)
@@ -76,32 +103,22 @@ public static class CustomRulesImportExport
             if (isFirst)
             {
                 isFirst = false;
-                if (line.StartsWith("action", StringComparison.OrdinalIgnoreCase))
+                if (line.Equals("action,type,value,comment,enabled", StringComparison.OrdinalIgnoreCase) ||
+                    line.Equals("action,type,value", StringComparison.OrdinalIgnoreCase) ||
+                    line.Equals("action,type,value,comment", StringComparison.OrdinalIgnoreCase))
                     continue;
             }
             var fields = ParseCsvLine(line);
-            if (fields.Count < 3)
+            if (fields.Count is < 3 or > 5)
+                throw new FormatException($"Line {i + 1}: expected 3 to 5 CSV fields");
+            rules.Add(new CustomRule
             {
-                warnings.Add($"Line {i + 1}: expected at least 3 fields (action,type,value), got {fields.Count}");
-                continue;
-            }
-            try
-            {
-                rules.Add(new CustomRule
-                {
-                    Action = fields[0].Trim().ToLowerInvariant(),
-                    Type = fields[1].Trim().ToLowerInvariant(),
-                    Value = fields[2].Trim(),
-                    Comment = fields.Count > 3 ? fields[3].Trim() : string.Empty,
-                    Enabled = fields.Count <= 4 || ParseBool(fields[4]),
-                });
-            }
-            catch (Exception ex)
-            {
-                warnings.Add($"Line {i + 1}: {ex.Message}");
-            }
+                Action = fields[0].Trim(), Type = fields[1].Trim(), Value = fields[2].Trim(),
+                Comment = fields.Count > 3 ? fields[3].Trim() : string.Empty,
+                Enabled = fields.Count <= 4 || ParseBool(fields[4]),
+            });
         }
-        return new ImportResult(rules, warnings, Format.Csv);
+        return new ImportResult(rules, [], Format.Csv);
     }
 
     private static string ExportCsv(IReadOnlyList<CustomRule> rules)
@@ -124,7 +141,7 @@ public static class CustomRulesImportExport
     {
         var fields = new List<string>();
         var cur = new StringBuilder();
-        bool inQuotes = false;
+        bool inQuotes = false, closedQuote = false;
         for (int i = 0; i < line.Length; i++)
         {
             var c = line[i];
@@ -140,17 +157,21 @@ public static class CustomRulesImportExport
                     else
                     {
                         inQuotes = false;
+                        closedQuote = true;
                     }
                 }
                 else cur.Append(c);
             }
             else
             {
-                if (c == ',') { fields.Add(cur.ToString()); cur.Clear(); }
+                if (c == ',') { fields.Add(cur.ToString()); cur.Clear(); closedQuote = false; }
+                else if (closedQuote) throw new FormatException("Unexpected character after quoted CSV field");
                 else if (c == '"' && cur.Length == 0) inQuotes = true;
+                else if (c == '"') throw new FormatException("Invalid quote in CSV field");
                 else cur.Append(c);
             }
         }
+        if (inQuotes) throw new FormatException("Unclosed quoted CSV field");
         fields.Add(cur.ToString());
         return fields;
     }
@@ -165,50 +186,60 @@ public static class CustomRulesImportExport
     private static bool ParseBool(string s)
     {
         var v = s.Trim().ToLowerInvariant();
-        return v == "true" || v == "1" || v == "yes" || v == "y";
+        return v switch
+        {
+            "true" or "1" or "yes" or "y" => true,
+            "false" or "0" or "no" or "n" => false,
+            _ => throw new FormatException("Invalid CSV enabled flag"),
+        };
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static void RequireObject(JsonElement obj)
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        WriteIndented = true,
-        TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            Json.AppJsonContext.Default,
-            new DefaultJsonTypeInfoResolver()),
-    };
+        if (obj.ValueKind != JsonValueKind.Object ||
+            obj.EnumerateObject().GroupBy(p => p.Name).Any(g => g.Count() > 1))
+            throw new FormatException("Expected a rules object with unique fields");
+    }
+
+    private static string StringValue(JsonElement element) =>
+        element.ValueKind == JsonValueKind.String ? element.GetString()! : throw new FormatException("Expected a string");
+
+    private static string RequiredString(JsonElement obj, string key) =>
+        obj.TryGetProperty(key, out var value) ? StringValue(value) : throw new FormatException($"Missing {key}");
+
+    private static JsonElement RulesArray(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            RequireObject(root);
+            if (!root.TryGetProperty("rules", out var rules)) throw new FormatException("Missing rules array");
+            root = rules;
+        }
+        return root.ValueKind == JsonValueKind.Array ? root : throw new FormatException("Expected rules array");
+    }
 
     private static ImportResult ImportVpnrouterJson(string text)
     {
-        var warnings = new List<string>();
-        try
+        using var doc = JsonDocument.Parse(text);
+        var rules = new List<CustomRule>();
+        foreach (var item in RulesArray(doc.RootElement).EnumerateArray())
         {
-            using var doc = JsonDocument.Parse(text);
-            var root = doc.RootElement;
-            JsonElement arr;
-            if (root.ValueKind == JsonValueKind.Array)
+            RequireObject(item);
+            if (item.EnumerateObject().Any(p => p.Name is not ("action" or "type" or "value" or "comment" or "enabled")))
+                throw new FormatException("Unsupported custom rule field");
+            rules.Add(new CustomRule
             {
-                arr = root;
-            }
-            else if (root.ValueKind == JsonValueKind.Object &&
-                     root.TryGetProperty("rules", out var inner) &&
-                     inner.ValueKind == JsonValueKind.Array)
-            {
-                arr = inner;
-            }
-            else
-            {
-                warnings.Add("JSON: expected an array of rules, or an object with a \"rules\" array");
-                return new ImportResult(new(), warnings, Format.VpnrouterJson);
-            }
-            var rules = JsonSerializer.Deserialize(arr.GetRawText(), VPNRouter.Core.Json.AppJsonContext.Default.ListCustomRule)
-                ?? new List<CustomRule>();
-            return new ImportResult(rules, warnings, Format.VpnrouterJson);
+                Action = RequiredString(item, "action"), Type = RequiredString(item, "type"),
+                Value = RequiredString(item, "value"),
+                Comment = item.TryGetProperty("comment", out var comment) ? StringValue(comment) : "",
+                Enabled = !item.TryGetProperty("enabled", out var enabled) || (enabled.ValueKind switch
+                {
+                    JsonValueKind.True => true, JsonValueKind.False => false,
+                    _ => throw new FormatException("Expected a boolean enabled flag"),
+                }),
+            });
         }
-        catch (Exception ex)
-        {
-            warnings.Add($"JSON parse failed: {ex.Message}");
-            return new ImportResult(new(), warnings, Format.VpnrouterJson);
-        }
+        return new ImportResult(rules, [], Format.VpnrouterJson);
     }
 
     private static string ExportVpnrouterJson(IReadOnlyList<CustomRule> rules)
@@ -218,196 +249,121 @@ public static class CustomRulesImportExport
 
     private static ImportResult ImportSingBoxJson(string text)
     {
+        using var doc = JsonDocument.Parse(text);
+        var root = doc.RootElement;
+        var container = root;
+        var declaredSets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var declaredOutbounds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            RequireObject(root);
+            ReadDeclaredTags(root, "outbounds", declaredOutbounds);
+            ReadDeclaredTags(root, "endpoints", declaredOutbounds);
+            ReadDeclaredTags(root, "rule_set", declaredSets);
+            if (root.TryGetProperty("route", out var route))
+            {
+                if (root.TryGetProperty("rules", out _)) throw new FormatException("Ambiguous rules arrays");
+                RequireObject(route);
+                ReadDeclaredTags(route, "rule_set", declaredSets);
+                container = route;
+            }
+        }
+
         var rules = new List<CustomRule>();
-        var warnings = new List<string>();
+        int index = 0;
+        foreach (var item in RulesArray(container).EnumerateArray())
+        {
+            index++;
+            RequireObject(item);
+            var matchers = item.EnumerateObject().Where(p => p.Name is not ("type" or "outbound" or "action" or "invert")).ToList();
+            if (matchers.Count != 1 || !MatchFields.Contains(matchers[0].Name) ||
+                (item.TryGetProperty("invert", out var invert) && invert.ValueKind != JsonValueKind.False) ||
+                (item.TryGetProperty("type", out var type) && StringValue(type) != "default"))
+                throw new FormatException($"Rule {index}: expected one supported matcher and no modifiers");
 
-        JsonElement root;
-        try
-        {
-            using var doc = JsonDocument.Parse(text);
-            root = doc.RootElement.Clone();
-        }
-        catch (Exception ex)
-        {
-            warnings.Add($"sing-box JSON parse failed: {ex.Message}");
-            return new ImportResult(rules, warnings, Format.SingBoxJson);
-        }
-
-        JsonElement rulesArray;
-        if (root.ValueKind == JsonValueKind.Array)
-        {
-            rulesArray = root;
-        }
-        else if (root.ValueKind == JsonValueKind.Object)
-        {
-            if (root.TryGetProperty("rules", out var inner)) rulesArray = inner;
-            else if (root.TryGetProperty("route", out var route)
-                  && route.TryGetProperty("rules", out var nested)) rulesArray = nested;
-            else
+            var outbound = item.TryGetProperty("outbound", out var o) ? StringValue(o).ToLowerInvariant() : null;
+            var action = item.TryGetProperty("action", out var a) ? StringValue(a) : null;
+            if (outbound != null && declaredOutbounds.Contains(outbound))
+                throw new FormatException($"Rule {index}: cannot import a separately defined outbound");
+            var direction = (action, outbound) switch
             {
-                warnings.Add("sing-box JSON: no rules array found at root, .rules, or .route.rules");
-                return new ImportResult(rules, warnings, Format.SingBoxJson);
-            }
-        }
-        else
-        {
-            warnings.Add("sing-box JSON: root is neither array nor object");
-            return new ImportResult(rules, warnings, Format.SingBoxJson);
-        }
-
-        if (rulesArray.ValueKind != JsonValueKind.Array)
-        {
-            warnings.Add("sing-box JSON: rules is not an array");
-            return new ImportResult(rules, warnings, Format.SingBoxJson);
-        }
-
-        int idx = 0;
-        foreach (var rule in rulesArray.EnumerateArray())
-        {
-            idx++;
-            if (rule.ValueKind != JsonValueKind.Object) continue;
-
-            string action;
-            if (rule.TryGetProperty("action", out var actionEl) &&
-                actionEl.GetString()?.Equals("reject", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                action = "block";
-            }
-            else
-            {
-                var outbound = rule.TryGetProperty("outbound", out var o) ? o.GetString() : null;
-                if (string.IsNullOrEmpty(outbound) || outbound == "direct")
-                    action = "direct";
-                else if (outbound == "block" || outbound == "reject") action = "block";
-                else action = "proxy";
-            }
-
-            var matchFields = new[]
-            {
-                ("domain", "domain"),
-                ("domain_suffix", "domain_suffix"),
-                ("domain_keyword", "domain_keyword"),
-                ("ip_cidr", "ip_cidr"),
-                ("port", "port"),
-                ("port_range", "port_range"),
-                ("network", "network"),
-                ("process_name", "process_name"),
-                ("rule_set", "geosite"),
+                ("reject", null) or (null, "block" or "reject") => "block",
+                ("route" or null, "proxy") => "proxy",
+                ("route" or null, "direct") => "direct",
+                _ => throw new FormatException($"Rule {index}: unsupported action or outbound"),
             };
 
-            int matchCount = 0;
-            foreach (var (jsonKey, ourType) in matchFields)
+            var matcher = matchers[0];
+            JsonElement[] elements = matcher.Value.ValueKind == JsonValueKind.Array
+                ? matcher.Value.EnumerateArray().ToArray() : [matcher.Value];
+            if (elements.Length == 0) throw new FormatException($"Rule {index}: empty matcher");
+            var values = elements.Select(v => matcher.Name == "port" && v.ValueKind == JsonValueKind.Number
+                ? v.GetRawText() : StringValue(v)).ToList();
+            if (values.Any(v => v.Length == 0 || v != v.Trim() || v.Contains(',')))
+                throw new FormatException($"Rule {index}: unrepresentable matcher value");
+
+            void AddRow(string kind, IEnumerable<string> entries) => rules.Add(new CustomRule
             {
-                if (!rule.TryGetProperty(jsonKey, out var matchEl)) continue;
+                Action = direction, Type = kind, Value = string.Join(", ", entries), Comment = $"sing-box import #{index}",
+            });
 
-                var values = new List<string>();
-                if (matchEl.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var v in matchEl.EnumerateArray())
-                        values.Add(v.ToString());
-                }
-                else if (matchEl.ValueKind == JsonValueKind.String ||
-                         matchEl.ValueKind == JsonValueKind.Number)
-                {
-                    values.Add(matchEl.ToString());
-                }
-                if (values.Count == 0) continue;
-
-                if (jsonKey == "rule_set")
-                {
-                    var cleaned = values.Select(v =>
-                    {
-                        var name = v;
-                        foreach (var pfx in new[] { "user-geosite-", "user-geoip-", "vpnrouter-geosite-", "vpnrouter-geoip-" })
-                            if (name.StartsWith(pfx)) name = name[pfx.Length..];
-                        return name;
-                    }).ToList();
-                    values = cleaned;
-                }
-
-                rules.Add(new CustomRule
-                {
-                    Action = action,
-                    Type = ourType,
-                    Value = string.Join(", ", values),
-                    Comment = $"sing-box import #{idx}",
-                    Enabled = true,
-                });
-                matchCount++;
-            }
-
-            if (matchCount == 0)
+            if (matcher.Name == "rule_set")
             {
-                warnings.Add($"sing-box rule #{idx}: no recognized match fields, skipped");
+                if (values.Any(declaredSets.Contains))
+                    throw new FormatException($"Rule {index}: cannot infer the content of a declared rule-set");
+                // Tags within the same matcher are alternatives with the same action.
+                foreach (var group in values.Select(DecodeRuleSetTag).GroupBy(t => t.Type))
+                    AddRow(group.Key, group.Select(t => t.Name));
             }
-            else if (matchCount > 1)
+            else if (matcher.Name == "port_range")
             {
-                warnings.Add($"sing-box rule #{idx}: had {matchCount} match types — exploded into {matchCount} rows (our schema is one-match-per-rule)");
+                AddRow(matcher.Name, values.Select(v =>
+                {
+                    var range = CustomRulesParser.ToSingBoxPortRange(v) ?? throw new FormatException("Invalid port range");
+                    return range.StartsWith(':') || range.EndsWith(':') || range.StartsWith("0:", StringComparison.Ordinal)
+                        ? range : range.Replace(':', '-');
+                }));
             }
+            else AddRow(matcher.Name, values);
         }
+        return new ImportResult(rules, [], Format.SingBoxJson);
+    }
 
-        return new ImportResult(rules, warnings, Format.SingBoxJson);
+    private static void ReadDeclaredTags(JsonElement obj, string key, HashSet<string> tags)
+    {
+        if (!obj.TryGetProperty(key, out var declarations)) return;
+        if (declarations.ValueKind != JsonValueKind.Array) throw new FormatException($"Expected an array for {key}");
+        foreach (var declaration in declarations.EnumerateArray())
+        {
+            RequireObject(declaration);
+            if (!declaration.TryGetProperty("tag", out var tag)) continue;
+            var name = StringValue(tag);
+            if (key == "outbounds" && declaration.EnumerateObject().All(p => p.Name is "tag" or "type") &&
+                declaration.TryGetProperty("type", out var type) &&
+                (StringValue(type), name) is ("direct", "direct") or ("block", "block" or "reject"))
+                continue;
+            tags.Add(name);
+        }
+    }
+
+    private static (string Type, string Name) DecodeRuleSetTag(string tag)
+    {
+        if (tag.Equals("vpnrouter-geosite-ru", StringComparison.OrdinalIgnoreCase)) return ("geosite", "tld-ru");
+        if (tag.Equals("vpnrouter-geoip-ru", StringComparison.OrdinalIgnoreCase)) return ("geoip", "ru");
+        foreach (var type in new[] { "geosite", "geoip" })
+        {
+            var prefix = $"user-{type}-";
+            if (tag.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return (type, tag[prefix.Length..]);
+        }
+        throw new FormatException("Unknown rule-set tag");
     }
 
     private static string ExportSingBoxJson(IReadOnlyList<CustomRule> rules)
     {
-        var entries = new List<object>();
-        foreach (var r in rules)
-        {
-            if (!r.Enabled) continue;
-            var values = (r.Value ?? string.Empty)
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToList();
-            if (values.Count == 0) continue;
-
-            var entry = new Dictionary<string, object>();
-
-            switch ((r.Type ?? "domain_suffix").ToLowerInvariant())
-            {
-                case "domain": entry["domain"] = values; break;
-                case "domain_suffix": entry["domain_suffix"] = values; break;
-                case "domain_keyword": entry["domain_keyword"] = values; break;
-                case "ip_cidr": entry["ip_cidr"] = values; break;
-                case "port":
-                    var ports = values.Select(v => int.TryParse(v, out var p) ? p : 0)
-                                       .Where(p => p > 0).ToList();
-                    if (ports.Count == 0) continue;
-                    entry["port"] = ports;
-                    break;
-                case "port_range":
-                    entry["port_range"] = values;
-                    break;
-                case "network":
-                    entry["network"] = values[0];
-                    break;
-                case "process_name": entry["process_name"] = values; break;
-                case "geosite":
-                    entry["rule_set"] = values.Select(v => "user-geosite-" + v).ToList();
-                    break;
-                case "geoip":
-                    entry["rule_set"] = values.Select(v => "user-geoip-" + v).ToList();
-                    break;
-                default: continue;
-            }
-
-            switch ((r.Action ?? "direct").ToLowerInvariant())
-            {
-                case "direct":
-                    entry["action"] = "route";
-                    entry["outbound"] = "direct";
-                    break;
-                case "proxy":
-                    entry["action"] = "route";
-                    entry["outbound"] = "proxy";
-                    break;
-                case "block":
-                    entry["action"] = "reject";
-                    break;
-                default: continue;
-            }
-
-            entries.Add(entry);
-        }
-        return JsonSerializer.Serialize(entries, JsonOptions);
+        var routes = rules.Where(rule => rule.Enabled)
+            .Select(rule => ConfigGenerator.BuildCustomRouteRule(rule) ?? throw new FormatException("Invalid custom rule"))
+            .ToList();
+        return JsonSerializer.Serialize(routes, Json.AppJsonContext.Default.ListRouteRule);
     }
 }

@@ -103,6 +103,34 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
     }
 
     [Fact]
+    public void StartWithJson_FailedConfigWrite_ReleasesLeaseBeforeAnyChildStarts()
+    {
+        var exe = VPNRouter.Core.AppPaths.SingBoxExePath;
+        File.WriteAllText(exe, "fixture");
+        Directory.CreateDirectory(VPNRouter.Core.AppPaths.CurrentConfigPath);
+        var runner = new FakeProcessRunner();
+        using var manager = new SingBoxManager(
+            new SingBoxSettings { ExecutablePath = exe }, null, new FakeHttpClient(), runner);
+
+        var lease = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lease, manager);
+        var previousExe = ProcessOwnership.ConfiguredExePath;
+        try
+        {
+            Assert.Throws<UnauthorizedAccessException>(() => manager.StartWithJson("{}"));
+
+            Assert.Empty(runner.StartCalls);
+            Assert.Null(manager.OwnedProcessHandle);
+            Assert.False(lease.HasOwnership);
+            Assert.True(manager.TryRetireForReplacement());
+        }
+        finally
+        {
+            ProcessOwnership.ConfiguredExePath = previousExe;
+        }
+    }
+
+    [Fact]
     public void StartWithJson_ThrowingStartedSubscriber_KillsProcessAndReleasesLease()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),
@@ -455,11 +483,13 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         }
     }
 
-    [Fact]
-    public void ReloadConfigJsonWithResult_LinuxCapabilityMode_FailedExactStop_ReturnsFalseWithRetainedHandleAndLock()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReloadConfigJsonWithResult_UnixFailedExactStop_PreservesActiveFileHandleAndLock(bool escalated)
     {
-        Assert.SkipUnless(OperatingSystem.IsLinux(),
-            "Linux-only — exercises the capability-mode Stop branch.");
+        Assert.SkipUnless(OperatingSystem.IsLinux() || (OperatingSystem.IsMacOS() && escalated),
+            "Requires the Linux capability or Unix escalated stop path.");
 
         var priorDataDir = GetAppPathsDataDir();
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-failed-stop-{Guid.NewGuid():N}");
@@ -475,12 +505,25 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         try
         {
+            if (escalated)
+            {
+                SetField(manager, "_linuxUsedPkexec", true);
+                // The isolated record points at an absent child. Exact stop refuses before sending a signal.
+                ProcessOwnership.WriteRuntimeOwnerRecord(Path.Combine(tempDir, "runtime-owner.json"),
+                    new OwnedProcessIdentity(int.MaxValue, 1, Path.Combine(tempDir, "fixture-sing-box")));
+            }
+            const string previous = """{"route":{"final":"proxy"}}""";
+            var configPath = manager.WriteConfigToDisk(previous);
             var result = manager.ReloadConfigJsonWithResult("{}", forceRestart: true);
+
+            Assert.Equal(previous, File.ReadAllText(configPath));
+            Assert.Empty(Directory.EnumerateFiles(VPNRouter.Core.AppPaths.ConfigDir, "current-*.tmp"));
 
             Assert.False(result, "ReloadConfigJsonWithResult must return false when exact stop is unconfirmed.");
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.Empty(runner.StartCalls);
             Assert.Same(handle, GetField(manager, "_handle"));
+            Assert.False(handle.DisposeCalled);
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
         }

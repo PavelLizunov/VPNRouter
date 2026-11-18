@@ -12,8 +12,8 @@ public sealed class DeepVerifierDnsPrivacyTests
         var entry = VlessDeepVerifierTests.CleanVlessEntry();
         var configs = new[]
         {
-            VlessDeepVerifier.BuildSingleOutboundConfig(entry, 10808, 9090),
-            FreeConfigDeepVerifier.BuildSingleOutboundConfig(entry, 10809, 9091)
+            VlessDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808)),
+            FreeConfigDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10809))
         };
 
         foreach (var config in configs)

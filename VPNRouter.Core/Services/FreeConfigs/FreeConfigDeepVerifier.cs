@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 using Serilog;
 using VPNRouter.Core.Models;
 
@@ -85,28 +83,24 @@ public sealed class FreeConfigDeepVerifier
         using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
         if (policy != null)
             policy.Authorize(SingBoxRuntimeOperation.Verify);
-
-        cfg.LastTestedAt = DateTime.UtcNow;
+        ct.ThrowIfCancellationRequested();
+        cfg.BeginDeepRecheck();
+        var entry = ServerUriParser.TryParse(cfg.RawUri);
+        if (entry == null || !string.IsNullOrEmpty(entry.DetourVia))
+        {
+            cfg.LastError = entry == null ? "invalid server entry" : DeepVerifyConstants.DetourNote;
+            return;
+        }
 
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
-
-        var socksPort = NetPortUtil.FindFreePort();
-        var clashPort = NetPortUtil.FindFreePort();
-        string? tmpConfigPath = null;
-        Process? process = null;
-        var stderrBuffer = new System.Text.StringBuilder(
-            DeepVerifyProbe.MaxDiagnosticBufferChars);
-
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         overallCts.CancelAfter(OverallTimeout);
-
-        var sw = Stopwatch.StartNew();
-        var cc = cfg.CountryCode ?? "??";
-
+        string? tmpConfigPath = null;
+        Process? process = null;
         try
         {
-            var vless = ServerUriParser.Parse(cfg.RawUri);
-            var configJson = BuildSingleOutboundConfig(vless, socksPort, clashPort);
+            var proxy = new VerificationProxy(NetPortUtil.FindFreePort());
+            var configJson = BuildSingleOutboundConfig(entry, proxy);
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-verify-{Guid.NewGuid():N}.json");
             await using (var writer = new StreamWriter(AppPaths.CreatePrivateFile(tmpConfigPath, FileMode.CreateNew)))
                 await writer.WriteAsync(configJson.AsMemory(), overallCts.Token);
@@ -126,95 +120,79 @@ public sealed class FreeConfigDeepVerifier
             process = new Process
             {
                 StartInfo = startInfo,
-                EnableRaisingEvents = false,
+                EnableRaisingEvents = true,
             };
-            process.ErrorDataReceived += (_, e) =>
-                DeepVerifyProbe.AppendSanitizedLine(
-                    stderrBuffer,
-                    e.Data,
-                    DeepVerifyProbe.MaxDiagnosticBufferChars);
+            process.OutputDataReceived += (_, e) => proxy.ObserveChildOutput(e.Data);
+            process.ErrorDataReceived += (_, e) => proxy.ObserveChildOutput(e.Data);
+            process.Exited += OnVerifierExit;
 
             if (!process.Start())
             {
                 cfg.LastError = "sing-box spawn failed";
-                _logger.Warning("[DV] {host}:{port} [{cc}] → spawn failed", cfg.Host, cfg.Port, cc);
                 return;
             }
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
+            if (process.HasExited || !await proxy.WaitUntilBoundAsync(EffectiveSocksBindWait, overallCts.Token))
             {
-                var stderrSnip = DeepVerifyProbe.ReadSanitizedSnippet(stderrBuffer, 300);
-                cfg.LastError = $"sing-box didn't bind: {DeepVerifyProbe.TrimSnippet(stderrSnip, 80)}";
-                _logger.Warning("[DV] {host}:{port} [{cc}] → didn't bind. stderr: {err}",
-                    cfg.Host, cfg.Port, cc, stderrSnip);
+                cfg.LastError = proxy.StartupError;
                 return;
             }
 
-            var (httpOk, httpLatencyMs, httpErr) = await DeepVerifyProbe.ProbeViaSocksAsync(socksPort, HttpTimeout, overallCts.Token);
-
-            if (httpOk)
+            var (httpOk, httpLatencyMs, httpErr) = await DeepVerifyProbe.ProbeViaProxyAsync(proxy, HttpTimeout, overallCts.Token);
+            if (!httpOk)
             {
-                cfg.Status = FreeConfigStatus.Verified;
-                cfg.LastDeepVerifyAt = DateTime.UtcNow;
-                if (cfg.LatencyMs == 0)
-                {
-                    cfg.LatencyMs = httpLatencyMs;
-                }
-                cfg.LastError = null;
+                cfg.Status = FreeConfigStatus.TlsFailed;
+                cfg.LastError = httpErr ?? "HTTP verification failed";
+                return;
+            }
 
-                if (MeasureBandwidth)
+            if (MeasureBandwidth)
+            {
+                try
                 {
-                    var (bwOk, mbps, bwErr) = await DeepVerifyProbe.MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
+                    var (bwOk, mbps, _) = await DeepVerifyProbe.MeasureBandwidthViaProxyAsync(proxy, overallCts.Token);
                     if (bwOk)
                     {
                         cfg.MeasuredBandwidthMbps = (int)Math.Round(mbps);
                         cfg.BandwidthTestedAt = DateTime.UtcNow;
-                        _logger.Information("[DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms · {mbps} Mbps",
-                            cfg.Host, cfg.Port, cc, httpLatencyMs, cfg.MeasuredBandwidthMbps);
-                    }
-                    else
-                    {
-                        _logger.Information("[DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms · bw test failed: {err}",
-                            cfg.Host, cfg.Port, cc, httpLatencyMs, bwErr);
                     }
                 }
-                else
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested && !process.HasExited)
                 {
-                    _logger.Information("[DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms",
-                        cfg.Host, cfg.Port, cc, httpLatencyMs);
+                    _logger.Debug("[DV] Optional bandwidth measurement timed out");
                 }
             }
-            else
-            {
-                if (cfg.Status == FreeConfigStatus.Ok || cfg.Status == FreeConfigStatus.Slow
-                    || cfg.Status == FreeConfigStatus.Verified)
-                    cfg.Status = FreeConfigStatus.TlsFailed;
-                cfg.LastError = httpErr ?? "http failed";
 
-                var stderrSnip = DeepVerifyProbe.ReadSanitizedSnippet(stderrBuffer, 200);
-                _logger.Information("[DV] {host}:{port} [{cc}] ✗ {err} (total {total}ms){sbErr}",
-                    cfg.Host, cfg.Port, cc, httpErr, sw.ElapsedMilliseconds,
-                    string.IsNullOrWhiteSpace(stderrSnip) ? "" : $" | sb-err: {stderrSnip}");
+            ct.ThrowIfCancellationRequested();
+            if (process.HasExited)
+            {
+                cfg.LastError = "verification engine stopped";
+                return;
             }
+            cfg.Status = FreeConfigStatus.Verified;
+            cfg.LastDeepVerifyAt = DateTime.UtcNow;
+            cfg.LastVerifyFailedAt = null;
+            if (cfg.LatencyMs == 0) cfg.LatencyMs = httpLatencyMs;
+            cfg.LastError = null;
+            _logger.Information("[DV] Verified in {LatencyMs} ms", httpLatencyMs);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (OperationCanceledException)
         {
-            cfg.LastError = "deep verify timeout";
-            _logger.Warning("[DV] {host}:{port} [{cc}] → TIMEOUT after {ms}ms",
-                cfg.Host, cfg.Port, cc, sw.ElapsedMilliseconds);
+            cfg.LastError = process?.HasExited == true ? "verification engine stopped" : "deep verify timeout";
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[DV] {host}:{port} [{cc}] → THREW {type}",
-                cfg.Host, cfg.Port, cc, ex.GetType().Name);
-            cfg.LastError = ex.GetType().Name;
+            _logger.Warning("[DV] Verification failed ({Type})", ex.GetType().Name);
+            cfg.LastError = "verification failed";
         }
         finally
         {
             try
             {
+                if (process != null) process.Exited -= OnVerifierExit;
                 if (process != null && !process.HasExited)
                 {
                     process.Kill(entireProcessTree: true);
@@ -229,8 +207,13 @@ public sealed class FreeConfigDeepVerifier
                 try { File.Delete(tmpConfigPath); } catch { }
             }
         }
+
+        void OnVerifierExit(object? sender, EventArgs args)
+        {
+            try { overallCts.Cancel(); } catch (ObjectDisposedException) { }
+        }
     }
 
-    internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int? clashPort) =>
-        VlessDeepVerifier.BuildSingleOutboundConfig(s, socksPort, clashPort);
+    internal static string BuildSingleOutboundConfig(VlessServerEntry s, VerificationProxy proxy) =>
+        VlessDeepVerifier.BuildSingleOutboundConfig(s, proxy);
 }

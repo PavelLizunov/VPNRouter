@@ -35,6 +35,7 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 english.BusinessDiagnostics=VPNRouter Business - Collect diagnostics
 russian.BusinessDiagnostics=VPNRouter Business - Собрать диагностику
 [Files]
+Source: "installer\zapret-maintenance.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 Source: "business-README.ru.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "support\Collect-VPNRouterBusiness-Diagnostics.ps1"; DestDir: "{app}\support"; Flags: ignoreversion
 Source: "support\Send-VPNRouterBusiness-Diagnostics.ps1"; DestDir: "{app}\support"; Flags: ignoreversion
@@ -52,27 +53,65 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\app\VPNRouter.App.exe"; Description: "{cm:LaunchProgram,VPNRouter Business}"; WorkingDir: "{app}\app"; Flags: nowait postinstall skipifsilent runascurrentuser
 [Code]
+var StoppedMainService: String;
+
+#include "installer\purge-zapret-runtime.iss"
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var Code: Integer;
+begin
+  if CurStep = ssPostInstall then begin
+    try
+      FinishZapretUpgrade;
+    finally
+      if StoppedMainService <> '' then begin
+        if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+            '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\installer\stop-vpnrouter.ps1') +
+            '" -InstallDir "' + ExpandConstant('{app}') + '" -RestartService -MainServiceName ' + StoppedMainService,
+            '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+          RaiseException('Could not restart the previously running Business service.');
+      end;
+    end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var I, Code: Integer;
+begin
+  if CurUninstallStep <> usUninstall then Exit;
+  if (not Exec(ExpandConstant('{app}\app\VPNRouter.App.exe'), '--remove-zapret-service',
+      ExpandConstant('{app}\app'), SW_HIDE, ewWaitUntilTerminated, Code)) or (Code <> 0) then
+    Log('Could not verify or remove the installed Zapret service. Its registered files will be retained.');
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/DELETEDATA') = 0 then begin
+      PurgeZapretData('VPNRouterBusiness', 'PurgeRuntime');
+      Exit;
+    end;
+end;
 function StopBusiness: Boolean;
 var Code: Integer;
 begin
   ExtractTemporaryFile('stop-vpnrouter.ps1');
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\stop-vpnrouter.ps1') +
-    '" -InstallDir "' + ExpandConstant('{app}') + '" -DataDir "' +
+    '" -InstallDir "' + ExpandConstant('{app}') + '" -Business -DataDir "' +
     ExpandConstant('{commonappdata}\VPNRouterBusiness') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Result := Result and ((Code = 0) or (Code = 10));
+  if Result and (Code = 10) then StoppedMainService := 'VPNRouter';
+  if Result and (Code = 11) then StoppedMainService := 'VPNRouterBusiness';
+  Result := Result and ((Code = 0) or (Code = 10) or (Code = 11));
 end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
-  if not StopBusiness then Result := 'Close VPNRouter Business and try again.';
+  if not PrepareZapretUpgrade('VPNRouterBusiness') then Result := 'Could not secure the legacy Zapret service before upgrade.'
+  else if not StopBusiness then Result := 'Close VPNRouter Business and try again.';
 end;
 function InitializeUninstall: Boolean;
 var Code: Integer;
 begin
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\installer\stop-vpnrouter.ps1') +
-    '" -InstallDir "' + ExpandConstant('{app}') + '" -DataDir "' +
+    '" -InstallDir "' + ExpandConstant('{app}') + '" -Business -DataDir "' +
     ExpandConstant('{commonappdata}\VPNRouterBusiness') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Result := Result and ((Code = 0) or (Code = 10));
+  Result := Result and ((Code = 0) or (Code = 10) or (Code = 11));
 end;

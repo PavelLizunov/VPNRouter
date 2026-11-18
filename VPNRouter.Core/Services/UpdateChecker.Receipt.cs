@@ -14,6 +14,8 @@ public partial class UpdateChecker
 
     internal static void DeleteInstallReceiptForDowngrade(string? dataDir = null)
     {
+        if (dataDir is null && UseProtectedWindowsReceipt)
+            DeleteInstallReceiptForDowngrade(WindowsInstallDir);
         var receiptPath = Path.Combine(dataDir ?? AppPaths.DataDir, ".update-installed-version");
         if (!File.Exists(receiptPath))
             return;
@@ -43,11 +45,17 @@ public partial class UpdateChecker
         return backupPath;
     }
 
+    private static bool UseProtectedWindowsReceipt => OperatingSystem.IsWindows() && !ProductEdition.IsBusiness && ZapretRuntimeDirectory.TestRoot is null;
+    private static string WindowsInstallDir => UpdateBackup.SnapshotInstallDirectory(AppContext.BaseDirectory)
+        ?? Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+
     public static string? CheckInstallReceipt(string currentVersion)
     {
         try
         {
-            var receiptPath = Path.Combine(AppPaths.DataDir, ".update-installed-version");
+            var protectedReceipt = UseProtectedWindowsReceipt ? Path.Combine(WindowsInstallDir, ".update-installed-version") : null;
+            var receiptPath = protectedReceipt != null && File.Exists(protectedReceipt)
+                ? protectedReceipt : Path.Combine(AppPaths.DataDir, ".update-installed-version");
             if (!File.Exists(receiptPath))
                 return null;
 
@@ -68,7 +76,7 @@ public partial class UpdateChecker
                 return null;
             }
 
-            var updateLogPath = Path.Combine(AppPaths.LogsDir, "update.log");
+            var updateLogPath = Path.Combine(receiptPath == protectedReceipt ? WindowsInstallDir : AppPaths.LogsDir, "update.log");
             return $"Last update attempt did not take effect. Still running {currentVersion}. " +
                    $"See {updateLogPath} for details.";
         }
@@ -95,7 +103,7 @@ public partial class UpdateChecker
     {
         try
         {
-            var receiptPath = Path.Combine(AppPaths.DataDir, ".update-installed-version");
+            var receiptPath = Path.Combine(WindowsInstallDir, ".update-installed-version");
             File.WriteAllText(receiptPath, $"{DateTime.UtcNow:o}\n{_currentVersion}\n");
         }
         catch

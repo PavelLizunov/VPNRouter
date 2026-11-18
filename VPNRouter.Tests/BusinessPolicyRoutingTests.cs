@@ -28,7 +28,8 @@ public sealed class BusinessPolicyRoutingTests
         BusinessDefaults.Apply(settings, BusinessDefaultsTests.SampleConnection, BusinessBootstrap.ReadRules(), policy);
         settings.App.RoutingMode = mode;
 
-        var config = ConfigGenerator.Generate(new Profile(), [], settings);
+        var config = ConfigGenerator.Generate(new Profile(), [], settings, null, null,
+            resolveRuleSet: null, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
         if (!ProductEdition.IsBusiness)
         {
             BusinessDefaults.ApplyDns(config, settings.App.CustomRules);
@@ -193,7 +194,7 @@ public sealed class BusinessPolicyRoutingTests
         {
             AppPaths.OverrideDataDir(_root);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
         }
 

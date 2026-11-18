@@ -185,6 +185,13 @@ public sealed class VpnTileService : TileService
             .AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop | ActivityFlags.SingleTop)
             .PutExtra(TileIntentContract.ExtraReason, reason);
 
+        if (reason is TileIntentContract.ReasonPermission or TileIntentContract.ReasonConnect)
+        {
+            var command = AndroidStorage.BeginUiCommand();
+            if (command == null) return;
+            intent.PutExtra(AndroidStorage.UiCommandKey, command);
+        }
+
         if (OperatingSystem.IsAndroidVersionAtLeast(34))
         {
             var pending = PendingIntent.GetActivity(
@@ -261,6 +268,7 @@ public sealed class VpnTileService : TileService
     {
         Prefs().Edit()!
             .PutString(KeyState, VpnStateCodec.Encode(state))!
+            .PutString(AndroidStorage.StateEventKey, Guid.NewGuid().ToString("N"))!
             .PutString(KeyStateReason, reason)!
             .PutInt(KeyStatePid, global::Android.OS.Process.MyPid())!
             .PutLong(KeyStateAtMs, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())!

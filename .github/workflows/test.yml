@@ -30,8 +30,29 @@ jobs:
         run: git rev-parse HEAD
       - name: Record selected SDK and bundled VSTest
         run: python .github/scripts/report-test-sdk.py
+      - name: Provision the pinned core for loopback verification
+        if: runner.os == 'Linux'
+        working-directory: packaging/arch
+        shell: python
+        run: &provision_linux_verifier |
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, str(Path.cwd()))
+          import build_package as package
+          work = Path(os.environ["RUNNER_TEMP"]) / "vpnrouter-verifier"
+          work.mkdir()
+          archive = package.acquire_archive(package.RUNTIME_URL, package.RUNTIME_SHA256, "runtime.tar.gz", work, None)
+          package.staging_tools.safe_extract(archive, work / "core", package.RUNTIME_SHA256)
+          core = package.find_file(work / "core", "sing-box")
+          core.chmod(0o700)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"VPNROUTER_TEST_VERIFIER_RUNTIME={core}\n")
+      - name: Build the Business Windows service
+        if: runner.os == 'Windows'
+        run: dotnet build VPNRouter.Service/VPNRouter.Service.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true
       - name: Business compiled policy contracts
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true --filter "FullyQualifiedName~BusinessPolicy|FullyQualifiedName~BusinessDefaults" --logger "console;verbosity=normal"
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true --filter "FullyQualifiedName~BusinessPolicy|FullyQualifiedName~BusinessDefaults|FullyQualifiedName~ConfigGeneratorRemoteRuleSetGuardTests|FullyQualifiedName~RuleSetFileTests|FullyQualifiedName~ServiceSettingsReceipt|FullyQualifiedName~ServiceFlyoutOwnershipTests|FullyQualifiedName~MainServiceRegistrationTests|FullyQualifiedName~WindowsRollbackRelaunchTests|FullyQualifiedName~VPNRouterServiceShutdownTests|FullyQualifiedName~MainWindowViewModelZapretProbeTests|FullyQualifiedName~ZapretUpdaterDownloadTests|FullyQualifiedName~WindowsMaintenanceFixtureCompletes|FullyQualifiedName~WindowsStopRetainsTheExactHandle|FullyQualifiedName~DesktopExitWaitsForOwnedLinuxTunnelWithUnreadableStatus|FullyQualifiedName~QueuedStartupFailover_DiscardsReplacedChildOrCancelledProbe|FullyQualifiedName~GeneratedStartupProbes_UseAcceptedControllerForSingleOutboundWarmupAndDelay|FullyQualifiedName~SimpleConnectSubmissionTests|FullyQualifiedName~SubscriptionChainRefreshTests|FullyQualifiedName~SimpleConnectStatusTests|FullyQualifiedName~SubmittedSettings_SurviveUiEditsBeforeWorkerConsumesThem|FullyQualifiedName~StartWithJson_FailedConfigWrite_ReleasesLeaseBeforeAnyChildStarts|FullyQualifiedName~ApplyAsync_FailedGenerationOrReload_PreservesActiveTunnel" --logger "console;verbosity=normal"
       - name: Upload synthetic policy screenshots
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -63,6 +84,11 @@ jobs:
 
       - name: Build
         run: dotnet build VPNRouter.sln -c Release --no-restore
+
+      - name: Provision the pinned core for loopback verification
+        working-directory: packaging/arch
+        shell: python
+        run: *provision_linux_verifier
 
       - name: Test
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"
@@ -144,5 +170,33 @@ jobs:
         run: python .github/scripts/report-test-sdk.py
       - name: Publish CLI (Windows)
         run: dotnet publish VPNRouter.CLI/VPNRouter.CLI.csproj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\vpnrouter-cli"
+      - name: Compile Windows installer scripts with a test payload
+        shell: pwsh
+        run: |
+          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (!(Test-Path -LiteralPath $compiler -PathType Leaf)) {
+            $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.4.exe'
+            Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $setup
+            if ((Get-FileHash -Algorithm SHA256 $setup).Hash -ne 'a549929319f9120716677c685535ca4671e4b937b5fdc87e2585f32d8eb30e8c') {
+              throw 'Inno Setup installer checksum mismatch'
+            }
+            $toolsDir = Join-Path $env:RUNNER_TEMP 'inno-test-compiler'
+            $install = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /DIR=`"$toolsDir`"" -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw "Inno Setup installation failed with $($install.ExitCode)" }
+            $compiler = Join-Path $toolsDir 'ISCC.exe'
+          }
+          $payload = Join-Path $env:RUNNER_TEMP 'installer-test-payload'
+          $output = Join-Path $env:RUNNER_TEMP 'installer-test-output'
+          New-Item -ItemType Directory -Path "$payload\app", $output | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\vpnrouter-cli\VPNRouter.CLI.exe" "$payload\app"
+          foreach ($script in Get-ChildItem 'packaging/windows/*.iss') {
+            & $compiler /Q /DAppVersion=0.0.0 "/DPayloadDir=$payload" "/DOutputDir=$output" $script.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed for $($script.Name)" }
+          }
+          foreach ($file in Get-Item packaging/windows/install.ps1, packaging/windows/uninstall.ps1, packaging/windows/installer/*.ps1) {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors)
+            if ($errors) { throw ($errors -join [Environment]::NewLine) }
+          }
       - name: Characterization and release-gate contracts (Windows)
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "(FullyQualifiedName~Characterization|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests|FullyQualifiedName~ReleaseDefectGateTests|FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PlatformReleaseWorkflowTests|FullyQualifiedName~ReleaseSafetyBehaviorTests|FullyQualifiedName~ReleaseIntegrityWorkflowTests|FullyQualifiedName~AptReleaseWorkflowTests|FullyQualifiedName~PerformanceShareLinkTests|FullyQualifiedName~UrlValidationSecurityTests|FullyQualifiedName~Night|FullyQualifiedName~CommittedFirewallConfigTests|FullyQualifiedName~SingBoxManagerRestartTunLockTests|FullyQualifiedName~SingBoxManagerSuppressExitedEventTests|FullyQualifiedName~MvmTwoPhaseStartTimerTests|FullyQualifiedName~FreeConfigFetcherTests|FullyQualifiedName~ZapretAutoStrategyR4Tests|FullyQualifiedName~VPNRouter.Tests)&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff&FullyQualifiedName!~HeadlessGui" --blame-hang-timeout 4m --blame-hang-dump-type none
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "(FullyQualifiedName~Characterization|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests|FullyQualifiedName~ReleaseDefectGateTests|FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PlatformReleaseWorkflowTests|FullyQualifiedName~ReleaseSafetyBehaviorTests|FullyQualifiedName~ReleaseIntegrityWorkflowTests|FullyQualifiedName~AptReleaseWorkflowTests|FullyQualifiedName~PerformanceShareLinkTests|FullyQualifiedName~UrlValidationSecurityTests|FullyQualifiedName~Night|FullyQualifiedName~CommittedFirewallConfigTests|FullyQualifiedName~SingBoxManagerRestartTunLockTests|FullyQualifiedName~SingBoxManagerSuppressExitedEventTests|FullyQualifiedName~MvmTwoPhaseStartTimerTests|FullyQualifiedName~FreeConfigFetcherTests|FullyQualifiedName~ZapretAutoStrategyR4Tests|FullyQualifiedName~VPNRouter.Tests)&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff&FullyQualifiedName!~HeadlessGui" --logger "console;verbosity=normal" --blame-hang-timeout 4m --blame-hang-dump-type none

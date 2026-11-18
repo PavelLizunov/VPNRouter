@@ -153,6 +153,9 @@ public static partial class Strings
     public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
     public static string SmpConfigRowChange => Ru ? "Изменить" : "Change";
     public static string SmpConfigRowHide   => Ru ? "Свернуть" : "Hide";
+    internal static string SmpActiveMode(string mode) => Ru ? $"Сейчас · {mode}" : $"Active · {mode}";
+    internal static string SmpPendingConfig(string config) => Ru ? $"Ожидает применения · {config}" : $"Pending · {config}";
+    internal static string SmpModeUnknown => Ru ? "Действующий режим неизвестен" : "Active mode unavailable";
     public static string SmpCfgSubscribe   => Ru ? "подписка"       : "subscribe";
     public static string SmpCfgManual      => Ru ? "вручную"        : "manual";
     public static string SmpCfgCustom      => Ru ? "свой"           : "custom";

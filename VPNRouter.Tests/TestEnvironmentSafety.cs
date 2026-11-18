@@ -24,6 +24,12 @@ internal static class TestEnvironmentSafety
         _testDataDir = testDataDir;
         AppContext.SetSwitch("VPNRouter.Tests.DisableBackgroundServices", true);
         VPNRouter.Core.AppPaths.OverrideDataDir(testDataDir);
+        ZapretRuntimeDirectory.TestRoot = () =>
+        {
+            var logicalRoot = System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(VPNRouter.Core.AppPaths.DataDir));
+            var fixture = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(logicalRoot));
+            return Path.Combine(testDataDir, "zapret-fixtures", fixture);
+        };
         VPNRouter.Core.AppPaths.EnsureDirectories();
         AppDomain.CurrentDomain.ProcessExit += (_, _) => DeleteTestDataDirectory();
 

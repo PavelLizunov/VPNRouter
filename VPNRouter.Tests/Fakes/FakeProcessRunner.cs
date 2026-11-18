@@ -81,6 +81,16 @@ public sealed class FakeProcessRunner : IProcessRunner
         return factory(request);
     }
 
+    public Action<ProcessRequest, FakeProcessHandle>? AfterObserversAttached { get; set; }
+
+    public IProcessHandle Start(ProcessRequest request, Action<IProcessHandle> observe)
+    {
+        var handle = (FakeProcessHandle)Start(request);
+        observe(handle);
+        AfterObserversAttached?.Invoke(request, handle);
+        return handle;
+    }
+
     private sealed record RunMatcher(
         Func<ProcessRequest, bool> Predicate,
         Func<ProcessRequest, Task<ProcessResult>> Handler);
@@ -102,9 +112,14 @@ public sealed class FakeProcessHandle : IProcessHandle
 
     public int Pid { get; }
 
-    public bool HasExited => _exit.Task.IsCompleted;
+    public bool ExitQueryUnavailable { get; set; }
+    public bool HasExited => QueryHasExited() ?? true;
+    public bool? QueryHasExited() => ExitQueryUnavailable ? null : _exit.Task.IsCompleted;
 
     public int KillCallCount { get; private set; }
+    public bool RefuseKill { get; set; }
+    public Action? OnWaitForExit { get; init; }
+    public bool? LastKillIncludedChildren { get; private set; }
     public int DisposeCallCount { get; private set; }
 
     public event EventHandler<string>? OutputLine;
@@ -113,12 +128,15 @@ public sealed class FakeProcessHandle : IProcessHandle
 
     public Task<int> WaitForExitAsync(CancellationToken ct)
     {
+        OnWaitForExit?.Invoke();
         return _exit.Task.WaitAsync(ct);
     }
 
     public void Kill(bool entireProcessTree = true)
     {
         KillCallCount++;
+        LastKillIncludedChildren = entireProcessTree;
+        if (RefuseKill) throw new InvalidOperationException("The fixture refused to stop.");
         SignalExit(exitCode: -1);
     }
 
@@ -152,6 +170,11 @@ public sealed class FakeProcessHandle : IProcessHandle
     {
         if (_exit.TrySetResult(exitCode) && (!_exitedSuppressed || SimulateExitedRaceLost))
             Exited?.Invoke(this, exitCode);
+    }
+
+    public void DisposeAfterExit()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0) DisposeCallCount++;
     }
 
     public void Dispose()

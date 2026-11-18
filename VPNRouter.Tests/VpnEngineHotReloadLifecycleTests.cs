@@ -174,7 +174,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
                                 StubProcessMonitor monitor,
                                 AppSettings settings,
                                 IDisposable cleanup)>
-        StartHappyPathAsync()
+        StartHappyPathAsync(bool isolatedProfile = false)
     {
         var previousDataDir = AppPaths.DataDir;
         var tempDataDir = Path.Combine(
@@ -197,6 +197,14 @@ public sealed class VpnEngineHotReloadLifecycleTests
         var engine = BuildEngine(dnsHardening, out var firewall, out var monitor);
 
         var settings = BuildHappyPathSettings(stubExe);
+        if (isolatedProfile)
+        {
+            var profile = Path.Combine(tempDataDir, "receipt-profile.json");
+            File.WriteAllText(profile, """{"profiles":[{"name":"Receipt","dns_mode":"vpn_only","processes":[]}]}""");
+            settings.ProfileSources = [new ProfileSource { Type = "local", Path = profile }];
+            settings.ActiveProfile = "Receipt";
+            settings.SingBox.ClashApi = "127.0.0.1:0";
+        }
 
         var cleanup = new HotReloadCleanup(
             engine,
@@ -258,6 +266,319 @@ public sealed class VpnEngineHotReloadLifecycleTests
             try { Directory.Delete(_tempDataDir, recursive: true); } catch { }
             try { File.Delete(_stubExe); } catch { }
         }
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, true)]
+    public async Task ServiceSettingsReceipt_Characterization_WaitsForReplacementAndRecoversAcceptedPolicy(
+        bool ready, bool resumeFails, bool crashAfterAcceptance)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows service Apply uses the Windows restart path.");
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient().Setup("generate_204", "");
+        try
+        {
+            var (engine, _, handles, _, _, initial, cleanup) = await StartHappyPathAsync(isolatedProfile: true);
+            using var fixture = cleanup;
+            var previousJson = File.ReadAllText(AppPaths.CurrentConfigPath);
+            var candidate = SettingsLoader.Copy(initial);
+            candidate.Vless.Servers[0].Server = "192.0.2.42";
+            candidate.SingBox.ClashApi = "0.0.0.0:39990";
+            if (resumeFails) candidate.Monitoring.HealthCheckInterval = -2;
+            bool accepted = ready && !resumeFails;
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
+            var failoverSettings = typeof(VpnEngine).GetField("_failoverSettingsContext", flags)!;
+            var originalSnapshot = Assert.IsType<AppSettings>(failoverSettings.GetValue(engine));
+            Assert.NotSame(initial, originalSnapshot);
+            var initialServer = initial.Vless.Servers[0].Server;
+            var initialInfo = Assert.IsType<AcceptedTunnelInfo>(engine.AcceptedTunnel);
+            Assert.Equal(initialServer, initialInfo.Server.Address);
+            initial.App.ConfigMode = "custom";
+            initial.App.CustomConfig = "unsaved-fixture.json";
+            initial.Vless.Servers[0].Server = "unsaved.invalid";
+            var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
+            var beforeApply = Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null]));
+            Assert.Contains(initialServer, beforeApply);
+            Assert.DoesNotContain("unsaved.invalid", beforeApply);
+            var deferredLift = typeof(HealthMonitor).GetField("_deferredBlockRuleDisable", flags)!;
+            deferredLift.SetValue(monitor, 1);
+            engine.StatusChanged += status =>
+            {
+                if (crashAfterAcceptance && status.StartsWith("Applied (restart", StringComparison.Ordinal))
+                    handles[1].SignalExit(1);
+            };
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var result = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            engine.ConfirmServiceReplacement = async (handle, json, ct) =>
+            {
+                Assert.Same(handles[1], handle);
+                Assert.Contains("192.0.2.42", json);
+                entered.TrySetResult();
+                return await result.Task.WaitAsync(ct);
+            };
+
+            var apply = engine.ApplyAsync(candidate, TestContext.Current.CancellationToken);
+            try
+            {
+                await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+                Assert.False(apply.IsCompleted);
+                Assert.Same(initialInfo, engine.AcceptedTunnel);
+                Assert.Same(originalSnapshot, failoverSettings.GetValue(engine));
+                candidate.App.ConfigMode = "custom";
+                candidate.Vless.Servers[0].Server = "also-unsaved.invalid";
+            }
+            finally { result.TrySetResult(ready); }
+            Assert.Equal(accepted, await apply);
+            Assert.Equal(accepted ? "192.0.2.42" : initialServer, engine.AcceptedTunnel?.Server.Address);
+            if (!accepted) Assert.Same(initialInfo, engine.AcceptedTunnel);
+            var activeSnapshot = Assert.IsType<AppSettings>(failoverSettings.GetValue(engine));
+            Assert.Equal(!accepted, ReferenceEquals(originalSnapshot, activeSnapshot));
+            Assert.NotSame(candidate, activeSnapshot);
+            Assert.Equal("generated", activeSnapshot.App.ConfigMode);
+            Assert.Equal(1, Assert.IsType<int>(deferredLift.GetValue(monitor)));
+            if (crashAfterAcceptance) Assert.True(handles[1].HasExited);
+            if (!accepted) Assert.Equal(previousJson, File.ReadAllText(AppPaths.CurrentConfigPath));
+            var recoveryJson = Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null]));
+            using var json = System.Text.Json.JsonDocument.Parse(recoveryJson);
+            var proxies = json.RootElement.GetProperty("outbounds").EnumerateArray()
+                .Where(outbound => outbound.GetProperty("type").GetString() == "vless").ToArray();
+            Assert.Single(proxies, outbound => outbound.GetProperty("tag").GetString() == "proxy");
+            var expectedServer = accepted ? "192.0.2.42" : initialServer;
+            Assert.All(proxies, outbound => Assert.Equal(expectedServer, outbound.GetProperty("server").GetString()));
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
+    }
+
+    [Theory]
+    [InlineData("external", true)]
+    [InlineData("external", false)]
+    [InlineData("desktop-picker", true)]
+    [InlineData("desktop-picker", false)]
+    [InlineData("legacy", true)]
+    [InlineData("legacy", false)]
+    public async Task ServiceSettingsReceipt_Characterization_RecoversAcceptedImport(string registration, bool acceptEdit)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Exercises the Windows replacement path with fake processes.");
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient().Setup("generate_204", "");
+        try
+        {
+            var (engine, _, _, _, _, initial, cleanup) = await StartHappyPathAsync(isolatedProfile: true);
+            using var fixture = cleanup;
+            var runner = Assert.IsType<FakeProcessRunner>(SingBoxManager.Runner);
+            runner.OnRun(r => r.Arguments.SequenceEqual(["check", "-c", "stdin"]),
+                new ProcessResult(0, "", "", TimeSpan.Zero, false));
+
+            var directory = Directory.CreateDirectory(Path.Combine(AppPaths.DataDir, "imports")).FullName;
+            var source = Path.Combine(directory, "source.json");
+            var srs = Path.Combine(directory, "allowed.srs");
+            File.WriteAllBytes(srs, RuleSetSamples.KeywordRule());
+            const string first = """
+                {"outbounds":[{"type":"socks","tag":"proxy","server":"192.0.2.41","server_port":1080},
+                    {"type":"direct","tag":"direct"}],
+                 "route":{"rule_set":[{"type":"local","tag":"allowed","format":"binary","path":"allowed.srs"}]}}
+                """;
+            File.WriteAllText(source, first);
+            var normalizedFirst = CustomConfigInjector.ReadImport(source);
+            var settings = SettingsLoader.Copy(initial);
+            settings.App.ConfigMode = "custom";
+            if (registration == "legacy")
+            {
+                settings.App.CustomConfig = source;
+                settings.App.CustomConfigs = [];
+            }
+            else
+            {
+                if (registration == "desktop-picker")
+                    source = CustomConfigInjector.CopyToProgramData(source, "desk");
+                settings.App.CustomConfigs = [new CustomConfigEntry { Name = "desk", Path = source }];
+                settings.App.ActiveCustomConfig = ""; // Fall back to the first named entry.
+            }
+            var acceptedPath = CustomConfigInjector.GetAcceptedImportPath(source, registration == "legacy" ? null : "desk");
+            Assert.NotEqual(source, acceptedPath);
+            SettingsLoader.Save(settings);
+            Assert.True(await engine.ApplyAsync(settings, TestContext.Current.CancellationToken));
+            Assert.Equal(normalizedFirst, File.ReadAllText(acceptedPath));
+
+            File.WriteAllText(source, normalizedFirst.Replace("192.0.2.41", "192.0.2.42"));
+            var normalizedEdit = CustomConfigInjector.ReadImport(source);
+            string? copyBeforeConfirmation = null;
+            string? candidateJson = null;
+            engine.ConfirmServiceReplacement = (_, json, _) =>
+            {
+                copyBeforeConfirmation = File.ReadAllText(acceptedPath);
+                candidateJson = json;
+                File.WriteAllText(source, normalizedFirst.Replace("192.0.2.41", "192.0.2.43"));
+                return Task.FromResult(acceptEdit);
+            };
+            Assert.Equal(acceptEdit, await engine.ApplyAsync(settings, TestContext.Current.CancellationToken));
+            Assert.Equal(normalizedFirst, copyBeforeConfirmation);
+            Assert.NotNull(candidateJson);
+            Assert.Contains("192.0.2.42", candidateJson);
+            var accepted = acceptEdit ? normalizedEdit : normalizedFirst;
+            Assert.Equal(accepted, File.ReadAllText(acceptedPath));
+            using var raw = System.Text.Json.JsonDocument.Parse(accepted);
+            Assert.Equal(srs, raw.RootElement.GetProperty("route").GetProperty("rule_set")[0].GetProperty("path").GetString());
+
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
+            void CheckProxy(string json)
+            {
+                using var recovered = System.Text.Json.JsonDocument.Parse(json);
+                var proxy = Assert.Single(recovered.RootElement.GetProperty("outbounds").EnumerateArray(),
+                    ob => ob.GetProperty("tag").GetString() == "proxy");
+                Assert.Equal(acceptEdit ? "192.0.2.42" : "192.0.2.41", proxy.GetProperty("server").GetString());
+            }
+            void CheckRecovery()
+            {
+                var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
+                CheckProxy(Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null])));
+            }
+            CheckRecovery();
+            Assert.Equal(source, VpnEngine.ResolveCustomConfigPath(settings));
+
+            if (acceptEdit)
+            {
+                File.Delete(source);
+                CheckRecovery();
+            }
+            engine.Stop();
+            var reopened = SettingsLoader.Load();
+            using var restored = BuildEngine(new NullWindowsDnsHardening(), out _, out _);
+            await restored.StartAsync(reopened, TestContext.Current.CancellationToken,
+                skipVpnConflictCheck: true, restoreAcceptedImport: true);
+            CheckProxy(File.ReadAllText(AppPaths.CurrentConfigPath));
+            if (!acceptEdit) File.Delete(source);
+            Assert.Equal(acceptedPath, VpnEngine.ResolveCustomConfigPath(reopened));
+            if (registration != "legacy")
+            {
+                var removed = Assert.Single(reopened.App.CustomConfigs);
+                reopened.App.CustomConfigs.Clear();
+                CustomConfigInjector.ForgetAcceptedImport(removed, reopened.App.CustomConfigs);
+                Assert.False(File.Exists(acceptedPath));
+                var activeMonitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(restored));
+                var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
+                CheckProxy(Assert.IsType<string>(recover.Invoke(activeMonitor, [new List<string>(), null])));
+                Assert.False(File.Exists(acceptedPath));
+            }
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ServiceSettingsReceipt_Characterization_FailedStartupPublicationRetiresChildAndRetryRestoresRecovery(
+        bool refuseFirstCleanup)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Uses the Windows lifecycle with fake children.");
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient().Setup("generate_204", "");
+        try
+        {
+            var (engine, _, handles, _, _, settings, cleanup) = await StartHappyPathAsync(isolatedProfile: true);
+            using var fixture = cleanup;
+            engine.Stop();
+            var source = Path.Combine(AppPaths.DataDir, "fixture-import.json");
+            File.WriteAllText(source, """
+                {"outbounds":[{"type":"socks","tag":"proxy","server":"192.0.2.41","server_port":1080},
+                              {"type":"direct","tag":"direct"}]}
+                """);
+            settings.App.ConfigMode = "custom";
+            settings.App.CustomConfigs = [new CustomConfigEntry { Name = "fixture", Path = source }];
+            var snapshot = VpnEngine.ResolveCustomConfigFiles(settings).AcceptedPath!;
+            Directory.CreateDirectory(snapshot);
+            var statuses = new List<string>();
+            engine.StatusChanged += statuses.Add;
+            engine.ConfirmServiceReplacement = (_, _, _) => Task.FromResult(true);
+            void ConfigureChild(int _) => handles[^1].RefuseKill = refuseFirstCleanup;
+            engine.SingBoxStarted += ConfigureChild;
+            var failure = await Record.ExceptionAsync(() => engine.StartAsync(settings, TestContext.Current.CancellationToken,
+                skipVpnConflictCheck: true));
+            engine.SingBoxStarted -= ConfigureChild;
+            try
+            {
+                if (refuseFirstCleanup)
+                    Assert.IsType<InvalidOperationException>(failure);
+                else
+                    Assert.True(failure is IOException or UnauthorizedAccessException, failure?.ToString());
+                Assert.Equal(2, handles.Count);
+                Assert.Equal(!refuseFirstCleanup, handles[^1].HasExited);
+                Assert.Equal(refuseFirstCleanup, engine.HasActiveTunnel);
+                Assert.DoesNotContain("Warming up network...", statuses);
+                Assert.DoesNotContain("VPN Router is running", statuses);
+                Assert.False(await engine.ApplyAsync(settings, TestContext.Current.CancellationToken));
+                if (refuseFirstCleanup)
+                {
+                    await Assert.ThrowsAsync<InvalidOperationException>(() => engine.StartAsync(settings,
+                        TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
+                    Assert.Equal(2, handles.Count);
+                }
+            }
+            finally { handles[^1].RefuseKill = false; }
+            Directory.Delete(snapshot);
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
+            Assert.Equal(3, handles.Count);
+            Assert.True(engine.HasActiveTunnel);
+            Assert.Equal(CustomConfigInjector.ReadImport(source), File.ReadAllText(snapshot));
+
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
+            monitor.Stop();
+            Assert.False(await engine.ApplyAsync(settings, TestContext.Current.CancellationToken));
+            Assert.Equal(3, handles.Count);
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
+            Assert.Equal(4, handles.Count);
+            Assert.True(handles[2].HasExited);
+            Assert.False(handles[3].HasExited);
+            var restored = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
+            var manager = Assert.IsType<SingBoxManager>(typeof(VpnEngine).GetField("_singBox", flags)!.GetValue(engine));
+            Assert.True(restored.IsMonitoring(manager));
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
+    }
+
+    [Fact]
+    public async Task Characterization_ChildExitReturnsWhileMonitorIsLockedAndStaleRecoveryIsDiscarded()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The fixture uses the Windows lifecycle with fake children.");
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient().Setup("generate_204", "");
+        try
+        {
+            var (engine, _, handles, firewall, _, settings, cleanup) = await StartHappyPathAsync(isolatedProfile: true);
+            using var fixture = cleanup;
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
+            var gate = typeof(HealthMonitor).GetField("_settingsWork", flags)!.GetValue(monitor)!;
+            using var returned = new ManualResetEventSlim();
+            Task signal;
+            Task stale;
+            lock (gate)
+            {
+                signal = Task.Run(() => { handles[0].SignalExit(1); returned.Set(); });
+                Assert.True(returned.Wait(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+                stale = monitor.QueueCrashRecoveryAsync(handles[0]);
+                monitor.PauseForApply();
+                monitor.ResumeAfterApply(new Profile { Name = "Receipt" }, settings, scan: null);
+            }
+            await Task.WhenAll(signal, stale);
+            Assert.Equal(0, firewall.EnableBlockRulesCount);
+            using var differentChild = new FakeProcessHandle(handles[0].Pid);
+            await monitor.QueueCrashRecoveryAsync(differentChild);
+            Assert.Equal(0, firewall.EnableBlockRulesCount);
+            await monitor.QueueCrashRecoveryAsync(handles[0]);
+            Assert.Equal(1, firewall.EnableBlockRulesCount);
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
     }
 
     [Fact]
@@ -341,7 +662,9 @@ public sealed class VpnEngineHotReloadLifecycleTests
             await StartHappyPathAsync();
         using var _ = cleanup;
 
+        Assert.NotNull(engine.AcceptedTunnel);
         engine.Stop();
+        Assert.Null(engine.AcceptedTunnel);
         var handlesAfterStop = spawnedHandles.Count;
 
         var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);

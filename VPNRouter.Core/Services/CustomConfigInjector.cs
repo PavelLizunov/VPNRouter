@@ -15,7 +15,12 @@ public static partial class CustomConfigInjector
             Json.AppJsonContext.Default,
             new DefaultJsonTypeInfoResolver()),
     };
-    public static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings)
+    public static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings) =>
+        Inject(rawJson, processNames, settings, onMissingRuleSet: null);
+
+    internal static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings,
+        Action<string>? onMissingRuleSet, Func<string, CancellationToken, Task<bool>>? checkGeoContents = null,
+        Func<string, string, string?>? resolveRuleSet = null)
     {
         var config = JsonNode.Parse(rawJson) as JsonObject
             ?? throw new JsonException("Custom sing-box config root is not an object");
@@ -40,12 +45,18 @@ public static partial class CustomConfigInjector
 
         RemoveLegacyGeoDns(config);
 
-        var hasGeoBypass = settings.App.BypassRussianTraffic
-            && GeoDataDownloader.AreGeoFilesAvailable();
+        checkGeoContents ??= RuleSetFile.ForRuntime(settings.SingBox);
+        var hasGeoBypass = GeoDataDownloader.UseGeoBypass(settings.App.BypassRussianTraffic, onMissingRuleSet, checkGeoContents);
         if (hasGeoBypass)
             _ = EnsureGeoProxyDns(config, proxyTag);
 
-        EnsureDnsHijackRule(config, isActionBased);
+        string? adBlockPath = null;
+        if (settings.App.BlockAds)
+        {
+            resolveRuleSet ??= (url, name) => RuleSetCacheManager.EnsureLocal(url, name, checkGeoContents);
+            adBlockPath = ConfigGenerator.ResolveAdBlock(resolveRuleSet, onMissingRuleSet);
+        }
+        if (!settings.App.BlockAds) EnsureDnsHijackRule(config);
 
         if (!isFullTunnel && processes.Count > 0)
         {
@@ -76,10 +87,78 @@ public static partial class CustomConfigInjector
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
         EnsureUrltest(config);
+        if (settings.App.BlockAds) InjectAdBlock(config, adBlockPath);
         EnsureTunSelfRouteGuard(config);
 
         return config.ToJsonString(InjectorOutputOptions);
     }
+
+    private static string RegisterAdBlockSet(JsonObject route, string path)
+    {
+        var sets = (route["rule_set"] ??= new JsonArray()).AsArray();
+        var declared = sets.OfType<JsonObject>().ToLookup(set => StjNodeHelpers.AsString(set["tag"]));
+        const string baseTag = ConfigGenerator.AdBlockRuleSetTag;
+        var tag = baseTag;
+        var local = new JsonObject { ["type"] = "local", ["format"] = "binary", ["path"] = path, ["tag"] = tag };
+        // A native import can already use the preferred tag for an unrelated source.
+        for (int suffix = 2; declared.Contains(tag) && !declared[tag].Any(set => JsonNode.DeepEquals(set, local)); suffix++)
+        {
+            tag = $"{baseTag}-{suffix}";
+            local["tag"] = tag;
+        }
+        if (!declared.Contains(tag)) sets.Add(local);
+        return tag;
+    }
+
+    private static void InjectAdBlock(JsonObject config, string? path)
+    {
+        var route = (config["route"] ??= new JsonObject()).AsObject();
+        JsonObject? adMatch = null;
+        if (path != null)
+        {
+            var tag = RegisterAdBlockSet(route, path);
+            adMatch = new JsonObject { ["rule_set"] = new JsonArray(JsonValue.Create(tag)) };
+            var reject = adMatch.DeepClone().AsObject();
+            reject["action"] = "reject";
+            var dns = (config["dns"] ??= new JsonObject()).AsObject();
+            var dnsRules = (dns["rules"] ??= new JsonArray()).AsArray();
+            if (dnsRules.Count == 0 || !JsonNode.DeepEquals(dnsRules[0], reject))
+                dnsRules.Insert(0, reject);
+        }
+
+        var routeRules = (route["rules"] ??= new JsonArray()).AsArray();
+        var dnsMatch = new JsonObject
+        {
+            ["type"] = "logical", ["mode"] = "or",
+            ["rules"] = new JsonArray(new JsonObject { ["port"] = 53 }, new JsonObject { ["protocol"] = "dns" })
+        };
+
+        // Keep the first-match semantics of the import. Only intercept a flow at the
+        // point where the original rule (or route.final) would actually forward it.
+        for (int i = 0; i <= routeRules.Count; i++)
+        {
+            var forward = i < routeRules.Count ? routeRules[i] as JsonObject : null;
+            if (forward != null && !IsTerminalForward(forward)) continue;
+
+            var match = ForwardMatch(forward);
+            var hijack = GuardForward(match, dnsMatch, "hijack-dns");
+            var block = adMatch == null ? null : GuardForward(match, adMatch, "reject");
+            int previous = i - (block == null ? 1 : 2);
+            if (previous >= 0 && JsonNode.DeepEquals(routeRules[previous], hijack) &&
+                (block == null || JsonNode.DeepEquals(routeRules[previous + 1], block)))
+                continue;
+            routeRules.Insert(i++, hijack);
+            if (block != null) routeRules.Insert(i++, block);
+        }
+    }
+
+    private static bool IsTerminalForward(JsonObject rule) => (string?)rule["action"] switch
+    {
+        null or "" or "route" or "direct" => true,
+        // Native route matching continues past bypass when it names no outbound.
+        "bypass" => !string.IsNullOrEmpty((string?)rule["outbound"]),
+        _ => false
+    };
 
     private static void ThrowIfPlaceholderProxy(JsonObject config)
     {

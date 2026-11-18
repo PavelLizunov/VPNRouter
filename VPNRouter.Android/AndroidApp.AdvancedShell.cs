@@ -391,12 +391,12 @@ public partial class AndroidApp
         StopFreeConfigsBackgroundWork();
 
         ReloadServerList();
-        UpdateConfigSummary();
+        BindSimpleInput(preserveEdit: true);
 
         var routing = AndroidStorage.GetRoutingMode();
         if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";
         if (_fullRadio is not null) _fullRadio.IsChecked = routing == "full";
-        UpdatePerAppFormCountLabel();
+        UpdateConfigSummary();
     }
 
     private void SelectAdvancedTab(AdvancedTab tab)

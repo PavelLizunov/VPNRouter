@@ -17,7 +17,7 @@ public sealed class BusinessBootstrapCacheTests
         {
             var settings = RealSettingsStore.Instance.Load(fixture.SettingsPath);
             BusinessBootstrap.Apply(settings, RealSettingsStore.Instance, bundle,
-                fixture.BundleDirectory, fixture.GeoDirectory, fixture.SettingsPath);
+                fixture.BundleDirectory, fixture.GeoDirectory, fixture.SettingsPath, RuleSetSamples.CheckFixtureContentsAsync);
 
             var persisted = RealSettingsStore.Instance.Load(fixture.SettingsPath);
             Assert.Equal(5, persisted.Vless.Servers.Count);
@@ -28,7 +28,7 @@ public sealed class BusinessBootstrapCacheTests
             Assert.Equal(BusinessClientConfiguration.Parse(bundle).SourceHash, persisted.App.BusinessSubscriptionSource);
         }
 
-        Assert.Equal(RuleSetSamples.IntactEnvelope(), File.ReadAllBytes(Path.Combine(fixture.GeoDirectory, "geoip-ru.srs")));
+        Assert.Equal(RuleSetSamples.GeoIpRule(), File.ReadAllBytes(Path.Combine(fixture.GeoDirectory, "geoip-ru.srs")));
         Assert.Equal(RuleSetSamples.UpstreamGeositeTldRu(), File.ReadAllBytes(Path.Combine(fixture.GeoDirectory, "geosite-ru.srs")));
     }
 
@@ -45,7 +45,7 @@ public sealed class BusinessBootstrapCacheTests
 
         var settings = RealSettingsStore.Instance.Load(fixture.SettingsPath);
         BusinessBootstrap.Apply(settings, RealSettingsStore.Instance, bundle,
-            fixture.BundleDirectory, fixture.GeoDirectory, fixture.SettingsPath);
+            fixture.BundleDirectory, fixture.GeoDirectory, fixture.SettingsPath, RuleSetSamples.CheckFixtureContentsAsync);
 
         var persisted = RealSettingsStore.Instance.Load(fixture.SettingsPath);
         Assert.Equal(3, persisted.Vless.Servers.Count);
@@ -53,6 +53,36 @@ public sealed class BusinessBootstrapCacheTests
         Assert.Equal("Iceland VLESS", persisted.Vless.ActiveServer);
         Assert.Equal("full", persisted.App.RoutingMode);
         Assert.DoesNotContain(persisted.Vless.Servers, server => server.Server == "192.0.2.4");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void InvalidBundledGeoIpCanOnlyUseAnExistingReadableCopy(bool hasStale)
+    {
+        using var fixture = new BootstrapFixture();
+        var name = "geoip-ru.srs";
+        var source = Path.Combine(fixture.BundleDirectory, "geo");
+        File.WriteAllBytes(Path.Combine(source, name), RuleSetSamples.IntactEnvelope(12 * 1024));
+        var dest = Path.Combine(fixture.GeoDirectory, name);
+
+        if (hasStale)
+        {
+            var oldBytes = RuleSetSamples.GeoIpRule();
+            File.WriteAllBytes(dest, oldBytes);
+            File.SetLastWriteTimeUtc(dest, DateTime.UtcNow.AddDays(-30));
+            var oldTime = File.GetLastWriteTimeUtc(dest);
+            GeoDataDownloader.InstallBusinessBundle(source, fixture.GeoDirectory, RuleSetSamples.CheckFixtureContentsAsync);
+            Assert.Equal(oldBytes, File.ReadAllBytes(dest));
+            Assert.Equal(oldTime, File.GetLastWriteTimeUtc(dest));
+        }
+        else
+        {
+            Assert.Throws<InvalidDataException>(() =>
+                GeoDataDownloader.InstallBusinessBundle(source, fixture.GeoDirectory, RuleSetSamples.CheckFixtureContentsAsync));
+            Assert.False(File.Exists(dest));
+        }
+        Assert.Empty(Directory.GetFiles(fixture.GeoDirectory, "*.tmp"));
     }
 
     private sealed class BootstrapFixture : IDisposable
@@ -70,7 +100,7 @@ public sealed class BusinessBootstrapCacheTests
             var source = Path.Combine(BundleDirectory, "geo");
             Directory.CreateDirectory(source);
             Directory.CreateDirectory(GeoDirectory);
-            File.WriteAllBytes(Path.Combine(source, "geoip-ru.srs"), RuleSetSamples.IntactEnvelope());
+            File.WriteAllBytes(Path.Combine(source, "geoip-ru.srs"), RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(Path.Combine(source, "geosite-ru.srs"), RuleSetSamples.UpstreamGeositeTldRu());
         }
 

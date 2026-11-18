@@ -9,7 +9,13 @@ namespace VPNRouter.Core.Services;
 public sealed record StartupContext(
     AppSettings Settings,
     StartupMode Mode,
-    bool SkipVpnConflictCheck = false);
+    bool SkipVpnConflictCheck = false)
+{
+    internal bool RequireCompleteRuleSets { get; init; }
+    internal bool RestoreAcceptedImport { get; init; }
+    internal string? SessionImportJson { get; init; }
+    internal bool ValidateRequiredRuleSets => Mode != StartupMode.ColdStart || RequireCompleteRuleSets;
+}
 
 public sealed record StartupResult(
     bool Success,
@@ -17,7 +23,12 @@ public sealed record StartupResult(
     int? ProcessId,
     TimeSpan Duration,
     string? ConfigJson = null,
-    Profile? Profile = null);
+    Profile? Profile = null)
+{
+    internal Action? PublishAcceptedImport { get; init; }
+    internal string? ImportedJson { get; init; }
+    internal IReadOnlyDictionary<string, VlessServerEntry> ProxySources { get; init; } = new Dictionary<string, VlessServerEntry>();
+}
 
 public enum StartupMode
 {
@@ -48,6 +59,10 @@ internal interface IStartupHost
 
     bool IsCurrentStart(int pid);
 
+    bool CallerConfirmsProxy => false;
+
+    CancellationToken BeginStartupProbes(CancellationToken ct) => ct;
+
     void OnRestartAttempted(int attempt, int max);
 
     void OnFailoverRequested(string reason);
@@ -57,6 +72,8 @@ internal interface IStartupHost
     void OnProcessDetected(string name, int pid);
 
     void SetActiveServerAddress(string address);
+
+    void CommitTunnelInfo(AcceptedTunnelInfo tunnel) { }
 
     void SetActiveModes(string configMode, string routingMode, string tunFingerprint);
 
@@ -83,6 +100,7 @@ internal interface IStartupHost
     void SchedulePostStartProbe(
         AppSettings settings,
         ConfigSanityCheck sanityCheck,
+        Func<CancellationToken, Task<ProbeResult>> probeProxy,
         CancellationToken ct);
 }
 
@@ -110,7 +128,8 @@ internal sealed class StartupPipeline
 
     public async Task<StartupResult> ExecuteAsync(
         StartupContext context,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<Task>? retireAfterValidation = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         var policy = EffectivePolicy;
@@ -119,14 +138,18 @@ internal sealed class StartupPipeline
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var settings = context.Settings;
 
-        if (context.Mode != StartupMode.HotReload)
+        if (context.Mode != StartupMode.HotReload && retireAfterValidation == null)
         {
             PreflightConflictAndDns(settings, context.SkipVpnConflictCheck);
             await PreflightGeoDataAsync(settings, ct);
         }
 
-        var (profile, isCustomConfig, customConfigJson) =
-            await ResolveProfileAndServersAsync(settings, context.Mode, ct);
+        var routingMode = string.Equals(settings.App.RoutingMode, "full", StringComparison.OrdinalIgnoreCase)
+            ? "full" : "split";
+        var tunFingerprint = VpnEngine.ComputeTunFingerprint(settings.Tun);
+        var (profile, customConfigJson, serverAddress, publishAcceptedImport) =
+            await ResolveProfileAndServersAsync(context, ct);
+        bool isCustomConfig = customConfigJson != null;
 
         var scanResult = await ScanProcessesPhaseAsync(profile, settings, ct).ConfigureAwait(false);
 
@@ -134,16 +157,50 @@ internal sealed class StartupPipeline
             ? null
             : await TryProbeUdpForNaivePairingAsync(settings, ct).ConfigureAwait(false);
 
+        var current = (_host as StartupHostInternal)?.SingBox;
+        Func<string, CancellationToken, Task<bool>>? checkRuleSet =
+            context.Mode == StartupMode.HotReload && current != null ? current.CheckRuleSetAsync : null;
+        var proxySources = new Dictionary<string, VlessServerEntry>(StringComparer.Ordinal);
         var configJson = GenerateConfigPhase(
             profile,
             scanResult,
             settings,
-            isCustomConfig,
             customConfigJson,
-            context.Mode,
-            isServerAlive);
+            context.ValidateRequiredRuleSets,
+            isServerAlive,
+            checkRuleSet,
+            proxySources);
 
         ct.ThrowIfCancellationRequested();
+
+        if (isCustomConfig && (context.Mode == StartupMode.HotReload || retireAfterValidation != null))
+        {
+            // Failover provisions a new manager after validation. Hot Apply uses the existing deployment.
+            var nextDeployment = retireAfterValidation == null ? null : settings.SingBox;
+            if (current == null || !await current.CheckCandidateAsync(configJson, ct, nextDeployment).ConfigureAwait(false))
+                throw new InvalidOperationException("The imported VPN configuration failed native validation.");
+            ct.ThrowIfCancellationRequested();
+        }
+
+        var monitorController = context.Mode == StartupMode.HotReload ? default :
+            ClashSingBoxApi.ReadLocalController(configJson);
+        if (context.Mode != StartupMode.HotReload)
+            await ClashSingBoxApi.ResolveControlTargetsAsync(monitorController.Endpoint, ct).ConfigureAwait(false);
+
+        if (retireAfterValidation != null)
+        {
+            // A rejected automatic replacement must leave the current process and its policy in place.
+            _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
+            if (!isCustomConfig && sanityCheck.CheckBeforeStart(configJson).IsDead)
+                throw new InvalidOperationException("The replacement server configuration is invalid.");
+            await retireAfterValidation().ConfigureAwait(false);
+            PreflightConflictAndDns(settings, context.SkipVpnConflictCheck);
+        }
+
+        _host.SetActiveModes(isCustomConfig ? "custom" : "generated", routingMode, tunFingerprint);
+        _host.SetActiveServerAddress(serverAddress);
+        _host.SetActiveProfile(profile);
+        _host.SetScanResult(scanResult);
 
         if (context.Mode == StartupMode.HotReload)
         {
@@ -153,7 +210,12 @@ internal sealed class StartupPipeline
                 ProcessId: null,
                 Duration: sw.Elapsed,
                 ConfigJson: configJson,
-                Profile: profile);
+                Profile: profile)
+            {
+                PublishAcceptedImport = publishAcceptedImport,
+                ImportedJson = customConfigJson,
+                ProxySources = proxySources
+            };
         }
 
         if (context.Mode == StartupMode.ColdStart && !isCustomConfig)
@@ -170,6 +232,7 @@ internal sealed class StartupPipeline
             }
         }
 
+        var tunnelInfo = new AcceptedTunnelInfo(settings, configJson, serverAddress, monitorController, proxySources);
         await DeployAndSetupFirewallPhaseAsync(
             settings, profile, scanResult, ct);
 
@@ -184,7 +247,7 @@ internal sealed class StartupPipeline
         }
 
         var pid = await StartSingBoxPhaseAsync(
-            settings, configJson, isCustomConfig, ct);
+            settings, configJson, monitorController, ct);
 
         ct.ThrowIfCancellationRequested();
 
@@ -196,7 +259,17 @@ internal sealed class StartupPipeline
             committedFirewall.UpdateCommittedConfig(configJson, profile.BlockOnVpnFail && isFullTunnel);
         }
 
-        StartMonitorsPhase(settings, profile, scanResult);
+        void CommitStart()
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!_host.IsCurrentStart(pid))
+                throw new InvalidOperationException("The tunnel exited before its startup settings could be accepted.");
+            publishAcceptedImport?.Invoke();
+            _host.CommitTunnelInfo(tunnelInfo);
+        }
+        StartMonitorsPhase(settings, profile, scanResult, monitorController, customConfigJson, CommitStart);
+
+        _ = ScheduleStartupProbes(pid, settings, isCustomConfig, monitorController, ct);
 
         _host.OnStatus("VPN Router is running");
 
@@ -258,12 +331,13 @@ internal sealed class StartupPipeline
 
     private async Task PreflightGeoDataAsync(AppSettings settings, CancellationToken ct)
     {
-        if (settings.App.BypassRussianTraffic && !GeoDataDownloader.AreGeoFilesAvailable())
+        var checkContents = RuleSetFile.ForRuntime(settings.SingBox);
+        if (settings.App.BypassRussianTraffic && !GeoDataDownloader.AreGeoFilesAvailable(checkContents))
         {
             _host.OnStatus("Downloading geo data...");
             try
             {
-                var downloader = new GeoDataDownloader(_host.Logger);
+                var downloader = new GeoDataDownloader(PolicyHttpClient.Shared, _host.Logger, checkContents);
                 var ok = await downloader.EnsureGeoFilesAsync(ct);
                 if (!ok)
                     _host.Logger?.Warning(
@@ -277,22 +351,13 @@ internal sealed class StartupPipeline
         }
     }
 
-    private async Task<(Profile profile, bool isCustom, string? rawCustomJson)>
-        ResolveProfileAndServersAsync(
-            AppSettings settings,
-            StartupMode mode,
-            CancellationToken ct)
+    private async Task<(Profile profile, string? rawCustomJson, string serverAddress, Action? publishAcceptedImport)>
+        ResolveProfileAndServersAsync(StartupContext context, CancellationToken ct)
     {
-        var isCustomConfig = (settings.App.ConfigMode ?? "generated")
-            .Equals("custom", StringComparison.OrdinalIgnoreCase);
-        var activeConfigMode = isCustomConfig ? "custom" : "generated";
-        var activeRoutingMode = (settings.App.RoutingMode ?? "split")
-            .Equals("full", StringComparison.OrdinalIgnoreCase) ? "full" : "split";
-        var tunFingerprint = VpnEngine.ComputeTunFingerprint(settings.Tun);
-
-        _host.SetActiveModes(activeConfigMode, activeRoutingMode, tunFingerprint);
-
-        var rawCustomJson = ResolveServerSource(settings, isCustomConfig);
+        var settings = context.Settings;
+        var isCustomConfig = context.SessionImportJson != null ||
+            string.Equals(settings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase);
+        var (rawCustomJson, serverAddress, publishAcceptedImport) = ResolveServerSource(context, isCustomConfig);
 
         ct.ThrowIfCancellationRequested();
 
@@ -301,7 +366,7 @@ internal sealed class StartupPipeline
 
         ct.ThrowIfCancellationRequested();
 
-        var activeProfile = SelectActiveProfile(settings, mode, manager, collection, isCustomConfig);
+        var activeProfile = SelectActiveProfile(settings, context.Mode, manager, collection, isCustomConfig);
 
         AddCustomAppsToProfile(activeProfile, settings);
 
@@ -309,25 +374,33 @@ internal sealed class StartupPipeline
             VpnEngine.RemoveExcludedApps(activeProfile, settings.ExcludedApps);
 
         _host.OnStatus($"Profile loaded ({activeProfile.Processes.Count} rules)");
-        _host.SetActiveProfile(activeProfile);
 
         ct.ThrowIfCancellationRequested();
 
-        return (activeProfile, isCustomConfig, rawCustomJson);
+        return (activeProfile, rawCustomJson, serverAddress, publishAcceptedImport);
     }
 
-    private string? ResolveServerSource(AppSettings settings, bool isCustomConfig)
+    private (string? rawCustomJson, string serverAddress, Action? publishAcceptedImport) ResolveServerSource(
+        StartupContext context, bool isCustomConfig)
     {
-        string? rawCustomJson = null;
+        var settings = context.Settings;
+        string? rawCustomJson = context.SessionImportJson;
+        Action? publishAcceptedImport = null;
+        string serverAddress;
 
         if (isCustomConfig)
         {
-            var customPath = VpnEngine.ResolveCustomConfigPath(settings);
-            if (string.IsNullOrEmpty(customPath) || !File.Exists(customPath))
-                throw new InvalidOperationException(
-                    "Custom config not found. Add a config in the Servers tab.");
+            if (rawCustomJson == null)
+            {
+                var (customPath, acceptedPath) = VpnEngine.ResolveCustomConfigFiles(settings, context.RestoreAcceptedImport);
+                if (string.IsNullOrEmpty(customPath) || !File.Exists(customPath))
+                    throw new InvalidOperationException(
+                        "Custom config not found. Add a config in the Servers tab.");
 
-            rawCustomJson = File.ReadAllText(customPath);
+                rawCustomJson = CustomConfigInjector.ReadImport(customPath);
+                if (acceptedPath != null && customPath != acceptedPath)
+                    publishAcceptedImport = () => CustomConfigInjector.WriteImportCopy(acceptedPath, rawCustomJson);
+            }
             var (isValid, errors) = CustomConfigInjector.Validate(rawCustomJson);
             if (!isValid)
                 throw new InvalidOperationException(
@@ -335,10 +408,9 @@ internal sealed class StartupPipeline
 
             try
             {
-                var (_, srv) = CustomConfigInjector.ParseConfigInfo(rawCustomJson);
-                _host.SetActiveServerAddress(srv);
+                (_, serverAddress) = CustomConfigInjector.ParseConfigInfo(rawCustomJson);
             }
-            catch { _host.SetActiveServerAddress(""); }
+            catch { serverAddress = ""; }
         }
         else
         {
@@ -361,13 +433,10 @@ internal sealed class StartupPipeline
             }
 
             var activeServers = settings.Vless.GetActiveServers();
-            _host.SetActiveServerAddress(
-                activeServers.Count > 0
-                    ? activeServers[0].Server
-                    : allServers[0].Server);
+            serverAddress = activeServers.Count > 0 ? activeServers[0].Server : allServers[0].Server;
         }
 
-        return rawCustomJson;
+        return (rawCustomJson, serverAddress, publishAcceptedImport);
     }
 
     private async Task<(ProfileManager manager, ProfileCollection collection)> LoadProfileCatalogueAsync(
@@ -445,7 +514,7 @@ internal sealed class StartupPipeline
             if (missing.Count > 0)
             {
                 _host.OnWarning($"Skipped {missing.Count} unknown profile(s)");
-                if (mode == StartupMode.ColdStart || mode == StartupMode.AutoFailover)
+                if (mode == StartupMode.ColdStart)
                     PersistSanitizedActiveProfile(settings, names, missing, profileName);
             }
         }
@@ -565,8 +634,6 @@ internal sealed class StartupPipeline
             "[StartupPipeline] Resolved {Count} process names",
             scanResult.ProcessNames.Count);
 
-        _host.SetScanResult(scanResult);
-
         ct.ThrowIfCancellationRequested();
 
         var detectedSubnets = NetworkInterfaceDetector.DetectWireGuardSubnets(
@@ -623,32 +690,18 @@ internal sealed class StartupPipeline
         Profile profile,
         ScanResult scanResult,
         AppSettings settings,
-        bool isCustomConfig,
         string? rawCustomJson,
-        StartupMode mode,
-        Func<VlessServerEntry, bool>? isServerAlive = null)
+        bool validateRequiredRuleSets,
+        Func<VlessServerEntry, bool>? isServerAlive,
+        Func<string, CancellationToken, Task<bool>>? checkRuleSet,
+        Dictionary<string, VlessServerEntry> proxySources)
     {
-        if (isCustomConfig)
+        Action<string>? onMissingRuleSet = validateRequiredRuleSets ? ConfigGenerator.RejectMissingRuleSet : null;
+        if (rawCustomJson != null)
         {
-            var customPath = VpnEngine.ResolveCustomConfigPath(settings);
-            var activeEntry = settings.App.CustomConfigs
-                .FirstOrDefault(c => c.Name == settings.App.ActiveCustomConfig);
-            var configName = activeEntry?.Name ?? "custom";
-            var localCopy = CustomConfigInjector.GetProgramDataPath(configName);
-
-            if (!File.Exists(localCopy) && File.Exists(customPath))
-            {
-                localCopy = CustomConfigInjector.CopyToProgramData(customPath, configName);
-                _host.Logger?.Information(
-                    "[StartupPipeline] Copied selected custom configuration");
-            }
-
-            var injectSource = (rawCustomJson != null && File.Exists(customPath))
-                ? rawCustomJson
-                : File.ReadAllText(localCopy);
             var configJson = CustomConfigInjector.Inject(
-                injectSource, scanResult.ProcessNames, settings);
-            _host.OnStatus("Applied process routing to selected custom configuration");
+                rawCustomJson, scanResult.ProcessNames, settings, onMissingRuleSet, checkRuleSet);
+            _host.OnStatus("Prepared process routing for the selected custom configuration");
             return configJson;
         }
 
@@ -659,7 +712,10 @@ internal sealed class StartupPipeline
             ConfigPipeline.ValidationMode.Strict,
             warningSink: msg => _host.OnWarning(msg),
             logger: _host.Logger,
-            isServerAlive: isServerAlive);
+            isServerAlive: isServerAlive,
+            onMissingRuleSet: onMissingRuleSet,
+            checkRuleSet: checkRuleSet,
+            proxySources: proxySources);
         return json;
     }
 
@@ -726,28 +782,14 @@ internal sealed class StartupPipeline
         if (EffectivePolicy != null)
             return;
 
-        var exePath = OperatingSystem.IsWindows()
-            ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
-            : AppPaths.SingBoxExePath;
-        var bundledPath = Path.Combine(AppContext.BaseDirectory,
-            OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
-
-        if (File.Exists(bundledPath))
+        var exePath = AppPaths.DeployedSingBoxExePath(settings.SingBox);
+        var source = AppPaths.SingBoxDeploymentSource(AppPaths.BundledSingBoxExePath, exePath);
+        if (source != exePath)
         {
-            bool needDeploy = !File.Exists(exePath);
-            if (!needDeploy)
-            {
-                var installedSize = new FileInfo(exePath).Length;
-                var bundledSize = new FileInfo(bundledPath).Length;
-                needDeploy = installedSize != bundledSize;
-            }
-            if (needDeploy)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(exePath)!);
-                File.Copy(bundledPath, exePath, overwrite: true);
-                _host.Logger?.Information(
-                    "[StartupPipeline] Deployed sing-box from bundle to {Path}", exePath);
-            }
+            Directory.CreateDirectory(Path.GetDirectoryName(exePath)!);
+            File.Copy(source, exePath, overwrite: true);
+            _host.Logger?.Information(
+                "[StartupPipeline] Deployed sing-box from bundle to {Path}", exePath);
         }
         else if (!File.Exists(exePath))
         {
@@ -758,12 +800,12 @@ internal sealed class StartupPipeline
     private async Task<int> StartSingBoxPhaseAsync(
         AppSettings settings,
         string configJson,
-        bool isCustomConfig,
+        (Uri Endpoint, string? Secret) controller,
         CancellationToken ct)
     {
         _host.OnStatus("Starting sing-box...");
 
-        var singBox = new SingBoxManager(settings.SingBox, _host.Logger);
+        var singBox = new SingBoxManager(settings.SingBox, controller, _host.Logger);
         singBox.Started += pid => _host.OnSingBoxStarted(pid);
         _host.SetSingBoxManager(singBox);
         if (settings.BusinessPolicy is { } businessPolicy)
@@ -786,25 +828,35 @@ internal sealed class StartupPipeline
         _host.Logger?.Information("[StartupPipeline] sing-box started (PID {Pid})", pid);
         _host.OnStatus($"sing-box started (PID {pid})");
 
-        ScheduleWarmupProbe(pid, settings, ct);
-
-        if (!isCustomConfig)
-        {
-            _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
-            _host.SchedulePostStartProbe(settings, sanityCheck, ct);
-        }
-
         return pid;
     }
 
-    private void ScheduleWarmupProbe(int pidSnapshot, AppSettings settings, CancellationToken ct)
+    internal Task ScheduleStartupProbes(int pid, AppSettings settings, bool isCustomConfig,
+        (Uri Endpoint, string? Secret) controller, CancellationToken ct)
     {
+        var token = _host.BeginStartupProbes(ct);
+        if (isCustomConfig) return ScheduleWarmupProbe(pid, settings, null, token);
+
+        _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
+        Task<ProbeResult> ProbeProxy(CancellationToken probeToken) =>
+            sanityCheck.ProbeAsync(controller.Endpoint, controller.Secret, probeToken);
+        bool singleOutbound = (settings.App.ConfigMode ?? "generated").Trim().Equals("generated", StringComparison.OrdinalIgnoreCase) &&
+            settings.Vless.GetActiveServers().FirstOrDefault()?.UseAsSingleOutbound == true;
+        var warmup = ScheduleWarmupProbe(pid, settings, singleOutbound ? ProbeProxy : null, token);
+        _host.SchedulePostStartProbe(settings, sanityCheck, ProbeProxy, token);
+        return warmup;
+    }
+
+    private Task ScheduleWarmupProbe(int pidSnapshot, AppSettings settings,
+        Func<CancellationToken, Task<ProbeResult>>? exactProxy, CancellationToken ct)
+    {
+        if (_host.CallerConfirmsProxy) return Task.CompletedTask;
         _host.OnStatus("Warming up network...");
         var seamHttp = WarmupHttp;
-        _ = Task.Run(async () =>
+        return Task.Run(async () =>
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            using var inlineHttp = seamHttp == null
+            using var inlineHttp = seamHttp == null && exactProxy == null
                 ? new HttpClient { Timeout = TimeSpan.FromSeconds(3) }
                 : null;
             for (int attempt = 1; attempt <= 15; attempt++)
@@ -812,7 +864,13 @@ internal sealed class StartupPipeline
                 try
                 {
                     await Task.Delay(1000, ct);
-                    if (seamHttp != null)
+                    if (exactProxy != null)
+                    {
+                        if (!_host.IsCurrentStart(pidSnapshot)) return;
+                        var probe = await exactProxy(ct);
+                        if (probe.IsDead) continue;
+                    }
+                    else if (seamHttp != null)
                     {
                         var resp = await seamHttp.SendAsync(
                             new HttpRequest(
@@ -868,7 +926,7 @@ internal sealed class StartupPipeline
                 "Wave 39 firewall DNS lockdown NOT installed (BR-7: prefer " +
                 "internet-up + DNS-leak-risk over internet-down + lockdown-on)",
                 sw.ElapsedMilliseconds);
-            if (_host.IsCurrentStart(pidSnapshot))
+            if (exactProxy == null && _host.IsCurrentStart(pidSnapshot))
                 _host.OnStatus($"Connected (PID {pidSnapshot})");
         }, ct);
     }
@@ -876,7 +934,10 @@ internal sealed class StartupPipeline
     private void StartMonitorsPhase(
         AppSettings settings,
         Profile activeProfile,
-        ScanResult scanResult)
+        ScanResult scanResult,
+        (Uri Endpoint, string? Secret) controller,
+        string? importJson,
+        Action commit)
     {
         var profile = activeProfile;
         var etw = _host.MonitorFactory();
@@ -892,8 +953,9 @@ internal sealed class StartupPipeline
         var healthMonitor = new HealthMonitor(
             singBox, _host.Scanner, firewall,
             settings.Monitoring, _host.Logger,
-            clashApiBase: settings.SingBox?.ClashApi,
-            clashApiSecret: settings.SingBox?.ClashApiSecret);
+            clashApiBase: controller.Endpoint.Authority,
+            clashApiSecret: controller.Secret) { AcceptedImportJson = importJson };
+        _host.SetHealthMonitor(healthMonitor);
 
         etw.ProcessStarted += (_, e) =>
         {
@@ -914,14 +976,12 @@ internal sealed class StartupPipeline
         healthMonitor.FailoverRequested += (_, reason) => _host.OnFailoverRequested(reason);
 
         etw.Start();
-        healthMonitor.Start(profile, settings, scanResult);
-
-        _host.SetHealthMonitor(healthMonitor);
 
         if (profile.BlockOnVpnFail)
             _host.OnStatus("Firewall leak protection ready (armed for VPN failure)");
 
         _dnsHardening.Apply(settings, _host.Logger);
+        healthMonitor.ResumeAfterApply(profile, settings, scanResult, commit: commit);
     }
 }
 

@@ -152,6 +152,63 @@ public sealed class VpnEngineOrchestratorTests
     }
 
     [Fact]
+    public void ResolveCustomConfigPath_KeepsAcceptedRevisionsSeparateFromEditableAndLegacyFiles()
+    {
+        var previousDir = VPNRouter.Core.AppPaths.DataDir;
+        var temporary = Directory.CreateTempSubdirectory("vpnrouter-import-recovery-");
+        VPNRouter.Core.AppPaths.OverrideDataDir(temporary.FullName);
+        try
+        {
+            var source = Path.Combine(temporary.FullName, "source.json");
+            var entry = new CustomConfigEntry { Name = "desk", Path = source };
+            var settings = new AppSettings { App = new AppConfig { CustomConfigs = [entry] } };
+            var historical = CustomConfigInjector.GetProgramDataPath(entry.Name);
+            CustomConfigInjector.WriteImportCopy(historical, "{}");
+            Assert.Equal(historical, VpnEngine.ResolveCustomConfigFiles(settings, preferAccepted: true).SourcePath);
+
+            File.WriteAllText(source, "{}");
+            var accepted = VpnEngine.ResolveCustomConfigFiles(settings).AcceptedPath!;
+            CustomConfigInjector.WriteImportCopy(accepted, "{}");
+            Assert.Equal(source, VpnEngine.ResolveCustomConfigPath(settings));
+            Assert.Equal(accepted, VpnEngine.ResolveCustomConfigFiles(settings, preferAccepted: true).SourcePath);
+
+            var alias = new CustomConfigEntry { Name = "alias", Path = accepted };
+            CustomConfigInjector.ForgetAcceptedImport(entry, [alias]);
+            Assert.True(File.Exists(accepted));
+            CustomConfigInjector.ForgetAcceptedImport(entry, [entry]);
+            Assert.True(File.Exists(accepted));
+            var other = new CustomConfigEntry { Name = "desk", Path = Path.Combine(temporary.FullName, "other.json") };
+            var otherAccepted = CustomConfigInjector.GetAcceptedImportPath(other.Path, other.Name);
+            CustomConfigInjector.WriteImportCopy(otherAccepted, "{}");
+            CustomConfigInjector.ForgetAcceptedImport(entry, [other]);
+            Assert.False(File.Exists(accepted));
+            Assert.True(File.Exists(otherAccepted));
+            Assert.True(File.Exists(historical));
+            Assert.True(File.Exists(source));
+
+            settings.App.CustomConfigs.Clear();
+            settings.App.CustomConfig = source;
+            var scalar = VpnEngine.ResolveCustomConfigFiles(settings).AcceptedPath!;
+            CustomConfigInjector.WriteImportCopy(scalar, "{}");
+            Assert.NotEqual(accepted, scalar);
+            File.Delete(source);
+            Assert.Equal(scalar, VpnEngine.ResolveCustomConfigFiles(settings, preferAccepted: true).SourcePath);
+            settings.App.CustomConfig = other.Path;
+            Assert.Equal(other.Path, VpnEngine.ResolveCustomConfigFiles(settings, preferAccepted: true).SourcePath);
+
+            settings.App.CustomConfig = string.Empty;
+            var conventional = Path.Combine(VPNRouter.Core.AppPaths.ConfigDir, "custom.json");
+            File.WriteAllText(conventional, "{}");
+            Assert.Equal(conventional, VpnEngine.ResolveCustomConfigFiles(settings, preferAccepted: true).SourcePath);
+        }
+        finally
+        {
+            VPNRouter.Core.AppPaths.OverrideDataDir(previousDir);
+            temporary.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void ResolveCustomConfigPath_MultiConfig_NonExistentFiles_FallsBackToLegacyEmptyConfig()
     {
         var settings = new AppSettings

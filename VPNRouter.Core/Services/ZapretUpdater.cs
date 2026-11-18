@@ -1,5 +1,9 @@
+using System.Globalization;
 using System.IO.Compression;
+using System.Net;
 using System.Net.Http;
+using System.Reflection.PortableExecutable;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Serilog;
@@ -30,13 +34,13 @@ public class ZapretUpdater
     private const string FlowsealRepo = "Flowseal/zapret-discord-youtube";
 
     public const string FlowsealRepoPublic = FlowsealRepo;
+    private const int MaxArchiveBytes = 64 * 1024 * 1024;
+    private const int MaxEntries = 1024;
+    private const int MaxEntryBytes = 32 * 1024 * 1024;
+    private const int MaxExpandedBytes = 128 * 1024 * 1024;
     private const string GitHubApiBase = "https://api.github.com/repos";
 
     private static readonly SemaphoreSlim _downloadLock = new(1, 1);
-
-    private static readonly string _dataDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "VPNRouter");
 
     private readonly ILogger _logger;
 
@@ -44,7 +48,8 @@ public class ZapretUpdater
 
     private static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(5);
 
-    public static string ZapretDir => Path.Combine(AppPaths.DataDir, "zapret");
+    public static string ZapretDir => ZapretRuntimeDirectory.Package;
+    public static string PackageDisplayPath => Path.Combine(ZapretRuntimeDirectory.Root, "zapret");
     public static string BinDir => Path.Combine(ZapretDir, "bin");
     public static string ListsDir => Path.Combine(ZapretDir, "lists");
     public static string WinwsExePath => Path.Combine(BinDir, "winws.exe");
@@ -69,30 +74,44 @@ public class ZapretUpdater
             ["Accept"] = "application/vnd.github.v3+json",
         };
 
-    public static bool IsInstalled() => File.Exists(WinwsExePath);
+    public static bool IsInstalled()
+    {
+        try
+        {
+            if (!Directory.Exists(ZapretRuntimeDirectory.Root)) return false;
+            return ZapretRuntimeDirectory.WithPackage(HasInstalledPackage);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { return false; }
+    }
 
     public static string? GetLocalVersion()
     {
         try
         {
-            if (File.Exists(VersionFilePath))
-                return File.ReadAllText(VersionFilePath).Trim();
-
-            var serviceBat = Path.Combine(ZapretDir, "service.bat");
-            if (File.Exists(serviceBat))
+            return ZapretRuntimeDirectory.WithPackage(package =>
             {
-                foreach (var line in File.ReadLines(serviceBat).Take(5))
+                var version = Path.Combine(package, "version.txt");
+                if (File.Exists(version)) return File.ReadAllText(version).Trim();
+
+                var serviceBat = Path.Combine(package, "service.bat");
+                if (File.Exists(serviceBat))
                 {
-                    var m = Regex.Match(line, @"LOCAL_VERSION=(.+)""");
-                    if (m.Success) return m.Groups[1].Value.Trim();
+                    foreach (var line in File.ReadLines(serviceBat).Take(5))
+                    {
+                        var match = Regex.Match(line, @"LOCAL_VERSION=(.+)""");
+                        if (match.Success) return match.Groups[1].Value.Trim();
+                    }
                 }
-            }
+                return null;
+            });
         }
         catch { }
         return null;
     }
 
-    public async Task DownloadAndExtractAsync(CancellationToken ct)
+    public Task DownloadAndExtractAsync(CancellationToken ct) => DownloadAndExtractAsync(ct, null);
+
+    internal async Task DownloadAndExtractAsync(CancellationToken ct, ZapretManager? owner)
     {
         if (!await _downloadLock.WaitAsync(TimeSpan.Zero, ct).ConfigureAwait(false))
         {
@@ -103,8 +122,6 @@ public class ZapretUpdater
 
         try
         {
-            CleanupStaleTemps();
-
             StatusChanged?.Invoke("Fetching release info...");
             _logger.Information("[ZapretUpdater] Checking latest release");
 
@@ -159,6 +176,7 @@ public class ZapretUpdater
             _logger.Information("[ZapretUpdater] Latest release: {Tag}", tagName);
 
             string? zipUrl = null;
+            string? digest = null;
             long? expectedSize = null;
             foreach (var asset in root.GetProperty("assets").EnumerateArray())
             {
@@ -166,13 +184,13 @@ public class ZapretUpdater
                 if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
                     zipUrl = asset.GetProperty("browser_download_url").GetString();
+                    if (asset.TryGetProperty("digest", out var digestProperty) && digestProperty.ValueKind == JsonValueKind.String)
+                        digest = digestProperty.GetString();
                     if (asset.TryGetProperty("size", out var sizeProp) && sizeProp.ValueKind == JsonValueKind.Number)
                         expectedSize = sizeProp.GetInt64();
                     break;
                 }
             }
-            if (zipUrl == null && root.TryGetProperty("zipball_url", out var zb))
-                zipUrl = zb.GetString();
 
             if (zipUrl == null)
             {
@@ -181,11 +199,23 @@ public class ZapretUpdater
                     "No ZIP asset found in the Flowseal release — upstream changed their release format.");
             }
 
+            if (!Uri.TryCreate(zipUrl, UriKind.Absolute, out var assetUri) || assetUri.Scheme != Uri.UriSchemeHttps
+                || !assetUri.IsDefaultPort || assetUri.UserInfo.Length != 0 || assetUri.Host != "github.com"
+                || !assetUri.AbsolutePath.StartsWith("/" + FlowsealRepo + "/releases/download/", StringComparison.OrdinalIgnoreCase))
+                throw new ZapretDownloadException(ZapretErrorCategory.Invalid, "Unexpected Zapret release asset location.");
+
+            if (digest is null || !Regex.IsMatch(digest, @"^(?i:sha256):[a-fA-F0-9]{64}\z"))
+                throw new ZapretDownloadException(ZapretErrorCategory.Invalid, "The Zapret release archive has no valid SHA-256 digest.");
+
+            if (expectedSize is <= 0 or > MaxArchiveBytes)
+                throw new ZapretDownloadException(ZapretErrorCategory.Invalid, "Unexpected Zapret archive size.");
+            var runtimeRoot = ZapretRuntimeDirectory.Root;
+            using var installLock = OpenInstallLock(runtimeRoot);
             StatusChanged?.Invoke($"Downloading {tagName}...");
             _logger.Information("[ZapretUpdater] Downloading: {Url} (expected {Size} bytes)",
                 zipUrl, expectedSize?.ToString() ?? "unknown");
 
-            var tempZip = Path.Combine(Path.GetTempPath(), $"vpnr-zapret-{Guid.NewGuid():N}.zip");
+            var tempZip = Path.Combine(runtimeRoot, $"vpnr-zapret-{Guid.NewGuid():N}.zip");
             try
             {
                 await RetryAsync(
@@ -196,7 +226,7 @@ public class ZapretUpdater
                         await using (var response = await _http.SendStreamingAsync(
                             new HttpRequest(
                                 HttpMethod.Get,
-                                new Uri(zipUrl),
+                                assetUri,
                                 Headers: GitHubApiHeaders,
                                 Timeout: DefaultDownloadTimeout),
                             ct).ConfigureAwait(false))
@@ -207,8 +237,15 @@ public class ZapretUpdater
                                     inner: null,
                                     statusCode: (System.Net.HttpStatusCode)response.StatusCode);
 
-                            using (var file = File.Create(tempZip))
-                                await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
+                            using var file = new FileStream(tempZip, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                            var buffer = new byte[65536];
+                            int read;
+                            while ((read = await response.Body.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                            {
+                                if (file.Position + read > (expectedSize ?? MaxArchiveBytes))
+                                    throw new ZapretDownloadException(ZapretErrorCategory.Invalid, "The Zapret archive exceeded its expected size.");
+                                await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                            }
                         }
 
                         if (expectedSize.HasValue)
@@ -233,17 +270,23 @@ public class ZapretUpdater
                     },
                     ct).ConfigureAwait(false);
 
+                using (var archive = File.OpenRead(tempZip))
+                {
+                    var actual = Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(archive, ct).ConfigureAwait(false));
+                    if (!actual.Equals(digest[7..], StringComparison.OrdinalIgnoreCase))
+                        throw new ZapretDownloadException(ZapretErrorCategory.Corrupted, "The Zapret release archive failed its SHA-256 check.");
+                }
                 var zipSize = new FileInfo(tempZip).Length;
                 _logger.Information("[ZapretUpdater] Downloaded {Size} KB", zipSize / 1024);
 
                 StatusChanged?.Invoke("Extracting...");
-                var tempDir = Path.Combine(Path.GetTempPath(), $"vpnr-zapret-extract-{Guid.NewGuid():N}");
+                var tempDir = Path.Combine(runtimeRoot, $"vpnr-zapret-extract-{Guid.NewGuid():N}");
                 try
                 {
                     _logger.Information("[ZapretUpdater] Extracting to {Dir}", tempDir);
                     try
                     {
-                        ZipFile.ExtractToDirectory(tempZip, tempDir, overwriteFiles: true);
+                        ExtractPackage(tempZip, tempDir, ct);
                     }
                     catch (InvalidDataException ide)
                     {
@@ -273,43 +316,15 @@ public class ZapretUpdater
                             "Upstream release format changed — report a bug.");
                     }
 
-                    StopWinDivertService();
+                    ValidatePackage(extractedRoot);
 
                     StatusChanged?.Invoke("Installing...");
-                    bool allCopied;
-                    try
-                    {
-                        Directory.CreateDirectory(ZapretDir);
-                        allCopied = CopyDirectoryOverwrite(extractedRoot, ZapretDir, _logger);
-                    }
-                    catch (UnauthorizedAccessException ua)
-                    {
-                        throw new ZapretDownloadException(
-                            ZapretErrorCategory.FileSystem,
-                            $"Permission denied writing to {ZapretDir}. Run VPNRouter as administrator.",
-                            ua);
-                    }
-                    catch (IOException ioe)
-                    {
-                        throw new ZapretDownloadException(
-                            ZapretErrorCategory.FileSystem,
-                            $"Couldn't install files (antivirus may be blocking): {ioe.Message}",
-                            ioe);
-                    }
-
-                    if (allCopied)
-                    {
-                        var version = ParseVersionFromServiceBat() ?? tagName;
-                        try { File.WriteAllText(VersionFilePath, version); } catch { }
-                        _logger.Information("[ZapretUpdater] Installed version {Version}", version);
-                        StatusChanged?.Invoke($"Installed {version}");
-                    }
-                    else
-                    {
-                        _logger.Warning("[ZapretUpdater] Some files were locked — version NOT updated. " +
-                            "Stop zapret/winws and re-run the update to complete installation.");
-                        StatusChanged?.Invoke("Partial install — some files locked. Stop zapret and retry.");
-                    }
+                    var version = ParseVersionFromServiceBat(extractedRoot) ?? tagName;
+                    File.WriteAllText(Path.Combine(extractedRoot, "version.txt"), version);
+                    ct.ThrowIfCancellationRequested();
+                    PublishVerifiedPackage(extractedRoot, owner: owner);
+                    _logger.Information("[ZapretUpdater] Installed version {Version}", version);
+                    StatusChanged?.Invoke($"Installed {version}");
                 }
                 catch (ZapretDownloadException)
                 {
@@ -413,148 +428,393 @@ public class ZapretUpdater
         _ => ex.GetType().Name,
     };
 
-    private void CleanupStaleTemps()
+    private static void ExtractPackage(string zip, string target, CancellationToken ct)
+    {
+        using var archive = ZipFile.OpenRead(zip);
+        if (archive.Entries.Count is 0 or > MaxEntries)
+            throw new InvalidDataException("Unexpected file count in the Zapret package.");
+        long total = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var buffer = new byte[65536];
+        var root = Path.GetFullPath(target);
+        if (!Path.EndsInDirectorySeparator(root)) root += Path.DirectorySeparatorChar;
+        Directory.CreateDirectory(root);
+        foreach (var entry in archive.Entries)
+        {
+            ct.ThrowIfCancellationRequested();
+            var name = entry.FullName.TrimEnd('/');
+            var parts = name.Split('/');
+            if (parts.Length > 16 || !seen.Add(name) || parts.Any(part =>
+                    part.Length is 0 or > 128 || part.EndsWith('.') || part.EndsWith(' ') ||
+                    part.IndexOfAny(['\\', ':', '*', '?', '"', '<', '>', '|']) >= 0 || part.Any(char.IsControl) ||
+                    Regex.IsMatch(part, @"^(?i:CON|NUL|AUX|PRN|CONIN\$|CONOUT\$|COM[0-9¹²³]|LPT[0-9¹²³])(?:\.|$)")) ||
+                ((entry.ExternalAttributes >> 16) & 0xf000) == 0xa000 ||
+                (entry.ExternalAttributes & (int)FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("Unexpected path or link in the Zapret package.");
+            if (entry.Length > MaxEntryBytes || entry.Length > MaxExpandedBytes - total)
+                throw new InvalidDataException("Expanded Zapret package exceeds its size limit.");
+            total += entry.Length;
+            var dest = Path.GetFullPath(Path.Combine(root, name));
+            if (!dest.StartsWith(root, StringComparison.Ordinal))
+                throw new InvalidDataException("Zapret archive entry is outside its staging directory.");
+            if (entry.FullName.EndsWith('/'))
+            {
+                if (entry.Length != 0) throw new InvalidDataException("Invalid Zapret directory entry.");
+                Directory.CreateDirectory(dest);
+                continue;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            using var source = entry.Open();
+            using var output = new FileStream(dest, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            int read;
+            while ((read = source.Read(buffer)) > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (output.Position + read > entry.Length)
+                    throw new InvalidDataException("Zapret file exceeds its declared size.");
+                output.Write(buffer, 0, read);
+            }
+            if (output.Position != entry.Length) throw new InvalidDataException("Incomplete Zapret file.");
+        }
+    }
+
+    private static void ValidatePackage(string root)
+    {
+        string[] required =
+        [
+            "bin/winws.exe", "bin/cygwin1.dll", "bin/WinDivert.dll", "bin/WinDivert64.sys",
+            "lists/list-general.txt"
+        ];
+        foreach (var name in required)
+        {
+            var file = new FileInfo(Path.Combine(root, name));
+            if (!file.Exists || file.Length == 0)
+                throw new ZapretDownloadException(ZapretErrorCategory.Invalid, $"The Zapret package is missing {name}.");
+            if (name.StartsWith("bin/", StringComparison.Ordinal) && !IsAmd64Image(file))
+                throw new ZapretDownloadException(ZapretErrorCategory.Invalid, $"Expected a 64-bit Windows image at {name}.");
+        }
+        if (!Directory.EnumerateFiles(root, "general*.bat").Any(file =>
+                ExtractWinwsArgs(file, "%BIN%", "%LISTS%") is { } options &&
+                (options.Contains("--wf-tcp=", StringComparison.Ordinal) || options.Contains("--wf-udp=", StringComparison.Ordinal)) &&
+                options.Contains("--dpi-desync=", StringComparison.Ordinal)))
+            throw new ZapretDownloadException(ZapretErrorCategory.Invalid, "The Zapret package has no usable strategy.");
+    }
+
+    private static bool IsAmd64Image(FileInfo file)
+    {
+        using var input = file.OpenRead();
+        var length = input.Length;
+        if (length is < 64 or > MaxEntryBytes) return false;
+        try
+        {
+            using var reader = new PEReader(input);
+            var headers = reader.PEHeaders;
+            var coff = headers.CoffHeader;
+            var pe = headers.PEHeader;
+            const int optionalHeaderSize = 112 + 16 * 8; // PE32+ with the standard directory table
+            if (pe?.Magic != PEMagic.PE32Plus || coff.Machine != Machine.Amd64 ||
+                headers.CoffHeaderStartOffset < 64 + 4 || coff.SizeOfOptionalHeader != optionalHeaderSize ||
+                coff.NumberOfSections is < 1 or > 96 || pe.NumberOfRvaAndSizes is < 0 or > 16 ||
+                !coff.Characteristics.HasFlag(Characteristics.ExecutableImage) ||
+                coff.Characteristics.HasFlag(Characteristics.Bit32Machine) || headers.CorHeader != null)
+                return false;
+
+            var dll = file.Extension.Equals(".dll", StringComparison.OrdinalIgnoreCase);
+            var driver = file.Extension.Equals(".sys", StringComparison.OrdinalIgnoreCase);
+            if (driver ? pe.Subsystem != Subsystem.Native :
+                pe.Subsystem is not (Subsystem.WindowsCui or Subsystem.WindowsGui) ||
+                coff.Characteristics.HasFlag(Characteristics.Dll) != dll)
+                return false;
+
+            var tableEnd = (long)headers.PEHeaderStartOffset + optionalHeaderSize + 40 * coff.NumberOfSections;
+            if (pe.FileAlignment is < 512 or > 65536 || !int.IsPow2(pe.FileAlignment) ||
+                !int.IsPow2(pe.SectionAlignment) || pe.SectionAlignment < pe.FileAlignment ||
+                (pe.SectionAlignment < 4096 && pe.SectionAlignment != pe.FileAlignment) ||
+                pe.SizeOfHeaders < tableEnd || pe.SizeOfHeaders > length ||
+                pe.SizeOfHeaders % pe.FileAlignment != 0 || pe.SizeOfImage < pe.SizeOfHeaders ||
+                pe.SizeOfImage % pe.SectionAlignment != 0 || pe.ImageBase % 65536 != 0)
+                return false;
+
+            long rawEnd = pe.SizeOfHeaders;
+            long virtualEnd = pe.SizeOfHeaders;
+            var hasCode = false;
+            var hasEntry = dll && pe.AddressOfEntryPoint == 0;
+            foreach (var section in headers.SectionHeaders)
+            {
+                if (section.VirtualAddress < virtualEnd || section.VirtualAddress % pe.SectionAlignment != 0 ||
+                    section.VirtualSize <= 0 || section.SizeOfRawData < 0)
+                    return false;
+                virtualEnd = (long)section.VirtualAddress + Math.Max(section.VirtualSize, section.SizeOfRawData);
+                if (virtualEnd > pe.SizeOfImage) return false;
+                if (section.SizeOfRawData == 0) continue; // e.g. .bss
+
+                // Some Flowseal .rsrc sections end before the next aligned file offset.
+                if (section.PointerToRawData < rawEnd || section.PointerToRawData % pe.FileAlignment != 0)
+                    return false;
+                rawEnd = (long)section.PointerToRawData + section.SizeOfRawData;
+                if (rawEnd > length) return false;
+
+                if (!section.SectionCharacteristics.HasFlag(SectionCharacteristics.ContainsCode | SectionCharacteristics.MemExecute))
+                    continue;
+                hasCode = true;
+                var entryOffset = (long)pe.AddressOfEntryPoint - section.VirtualAddress;
+                if (entryOffset >= 0 && entryOffset < Math.Min(section.VirtualSize, section.SizeOfRawData))
+                    hasEntry = true;
+            }
+            return hasCode && hasEntry && HasValidImageDirectories(input, headers, rawEnd);
+        }
+        catch (BadImageFormatException) { return false; }
+    }
+
+    private static bool HasValidImageDirectories(FileStream input, PEHeaders headers, long lastRawEnd)
+    {
+        var pe = headers.PEHeader!;
+        input.Position = headers.PEHeaderStartOffset + 112; // First PE32+ data directory
+        using var table = new BinaryReader(input, Encoding.UTF8, leaveOpen: true);
+        for (var index = 0; index < pe.NumberOfRvaAndSizes; index++)
+        {
+            long address = table.ReadUInt32();
+            long size = table.ReadUInt32();
+            if (address == 0 && size == 0) continue;
+            // Slots 7 and 15 are reserved. The four native components cannot declare a CLR header (14).
+            if (address == 0 || index is 7 or 14 or 15) return false;
+            if (index == 4) // Certificates use an aligned file offset following the mapped image.
+            {
+                if (address < lastRawEnd || address % 8 != 0 || size < 8 || size % 8 != 0 ||
+                    address + size > input.Length) return false;
+                continue;
+            }
+
+            // GlobalPtr names a mapped address with zero size. Other directory bytes must exist on disk.
+            var globalPointer = index == 8;
+            if ((size == 0) != globalPointer) return false;
+            var end = address + (globalPointer ? 1 : size);
+            long covered = address < pe.SizeOfHeaders ? pe.SizeOfHeaders : address;
+            foreach (var section in headers.SectionHeaders)
+            {
+                if (covered >= end || section.VirtualAddress > covered) break;
+                var mappedSize = globalPointer ? section.VirtualSize : Math.Min(section.VirtualSize, section.SizeOfRawData);
+                covered = Math.Max(covered, (long)section.VirtualAddress + mappedSize);
+            }
+            if (covered < end) return false;
+        }
+        return true;
+    }
+
+    private static IDisposable OpenInstallLock(string root)
     {
         try
         {
-            var tempRoot = Path.GetTempPath();
-            var cutoff = DateTime.UtcNow.AddHours(-1);
-
-            foreach (var f in Directory.GetFiles(tempRoot, "vpnr-zapret-*.zip"))
-            {
-                try
-                {
-                    if (File.GetLastWriteTimeUtc(f) < cutoff)
-                    {
-                        File.Delete(f);
-                        _logger.Debug("[ZapretUpdater] Cleaned stale temp {File}", Path.GetFileName(f));
-                    }
-                }
-                catch { }
-            }
-
-            foreach (var d in Directory.GetDirectories(tempRoot, "vpnr-zapret-extract-*"))
-            {
-                try
-                {
-                    if (Directory.GetLastWriteTimeUtc(d) < cutoff)
-                    {
-                        Directory.Delete(d, recursive: true);
-                        _logger.Debug("[ZapretUpdater] Cleaned stale temp dir {Dir}", Path.GetFileName(d));
-                    }
-                }
-                catch { }
-            }
+            return ZapretRuntimeDirectory.LockInstallation(root, repair: true);
         }
-        catch (Exception ex)
+        catch (IOException ex) when (ZapretRuntimeDirectory.IsLockContention(ex))
         {
-            _logger.Debug("[ZapretUpdater] Temp cleanup skipped: {Msg}", ex.Message);
+            throw new ZapretDownloadException(ZapretErrorCategory.Concurrent, "Could not lock the Zapret installation for update.", ex);
         }
     }
 
-    private void StopWinDivertService()
+    private static void SeedUserLists(string staged, string package)
     {
-        if (!OperatingSystem.IsWindows()) return;
-
-        foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
+        var installed = HasInstalledPackage(package);
+        using var legacy = installed ? null : OpenLegacyDirectory(package);
+        var lists = Directory.CreateDirectory(Path.Combine(staged, "lists")).FullName;
+        var oldLists = Path.Combine(package, "lists");
+        foreach (var (name, fallback) in new[]
         {
-            try
-            {
-                proc.Kill(entireProcessTree: true);
-                proc.WaitForExit(3000);
-                _logger.Information("[ZapretUpdater] Killed winws.exe (PID {Pid}) before update", proc.Id);
-            }
-            catch { }
-            finally { proc.Dispose(); }
-        }
-
-        var scPath = OperatingSystem.IsWindows() ? WindowsServiceCommand.GetSystemScPath() : "sc";
-        var serviceNames = new[] { "WinDivert", "WinDivert14", "WinDivert15", "windivert" };
-        foreach (var name in serviceNames)
+            ("ipset-exclude-user.txt", "203.0.113.113/32"),
+            ("list-exclude-user.txt", "domain.example.abc"),
+            ("list-general-user.txt", "domain.example.abc")
+        })
         {
-            try
-            {
-                var psi = new System.Diagnostics.ProcessStartInfo(scPath)
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
-                psi.ArgumentList.Add("stop");
-                psi.ArgumentList.Add(name);
-                using var p = System.Diagnostics.Process.Start(psi);
-                p?.WaitForExit(5000);
-                var stdout = p?.StandardOutput.ReadToEnd() ?? "";
-                if (p?.ExitCode == 0 || stdout.Contains("STOPPED", StringComparison.OrdinalIgnoreCase))
-                    _logger.Information("[ZapretUpdater] Stopped {Svc} driver service", name);
-            }
-            catch (Exception ex)
-            {
-                _logger.Debug("[ZapretUpdater] sc stop {Svc} failed: {Msg}", name, ex.Message);
-            }
+            var source = Path.Combine(oldLists, name);
+            var target = Path.Combine(lists, name);
+            if (File.Exists(source)) File.Copy(source, target, overwrite: true);
+            else if (ReadLegacyList(legacy, name) is { } list) File.WriteAllText(target, list);
+            else if (!File.Exists(target)) File.WriteAllText(target, fallback + Environment.NewLine);
         }
-
-        foreach (var name in serviceNames)
+        SeedIpSet(package, lists, installed, legacy);
+        foreach (var name in new[] { "game_filter.enabled", "check_updates.enabled" })
         {
-            try
+            var source = Path.Combine(package, "utils", name);
+            var target = Path.Combine(staged, "utils", name);
+            if (File.Exists(source))
             {
-                var psi = new System.Diagnostics.ProcessStartInfo(scPath)
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
-                psi.ArgumentList.Add("delete");
-                psi.ArgumentList.Add(name);
-                using var p = System.Diagnostics.Process.Start(psi);
-                p?.WaitForExit(3000);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(source, target, overwrite: true);
             }
-            catch { }
+            else if (installed || File.Exists(source + ZapretActions.PreinstallDisabledSuffix))
+            {
+                ZapretActions.SetFilterFlag(staged, target, null);
+            }
+            else if (legacy != null)
+            {
+                var text = legacy.ReadText(Path.Combine("utils", name), 4096, out var missing);
+                if (missing) ZapretActions.SetFilterFlag(staged, target, null);
+                if (text == null) continue;
+                // The update flag encodes presence alone. Never carry its bytes into the package.
+                var setting = name == "check_updates.enabled" ? "ENABLED" : ZapretActions.NormalizeLegacyGameFilter(text);
+                if (setting == null) continue;
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.WriteAllText(target, setting);
+            }
         }
-
-        System.Threading.Thread.Sleep(2000);
     }
 
-    private static void CopyDirectory(string source, string dest)
+    internal static bool HasInstalledPackage(string package) => File.Exists(Path.Combine(package, "bin", "winws.exe"));
+
+    private static ZapretLegacyFilterDirectory? OpenLegacyDirectory(string package)
     {
-        Directory.CreateDirectory(dest);
-        foreach (var file in Directory.GetFiles(source))
-            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
-        foreach (var dir in Directory.GetDirectories(source))
-            CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)));
+        var path = Path.Combine(AppPaths.DataDir, "zapret");
+        return Path.GetFullPath(path).Equals(Path.GetFullPath(package),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+            ? null : ZapretLegacyFilterDirectory.Open(path);
     }
 
-    internal static bool CopyDirectoryOverwrite(string source, string dest, ILogger logger)
+    private const int MaxLegacyListBytes = 4 * 1024 * 1024;
+    private static readonly IdnMapping LegacyDomainNames = new() { UseStd3AsciiRules = true };
+
+    private static string? ReadLegacyList(ZapretLegacyFilterDirectory? legacy, string name)
     {
-        Directory.CreateDirectory(dest);
-        var allCopied = true;
-        foreach (var file in Directory.GetFiles(source))
-        {
-            var destFile = Path.Combine(dest, Path.GetFileName(file));
-            try
-            {
-                File.Copy(file, destFile, overwrite: true);
-            }
-            catch (Exception ex)
-            {
-                allCopied = false;
-                logger.Warning("[ZapretUpdater] Skipped locked file {File}: {Msg}",
-                    Path.GetFileName(file), ex.Message);
-            }
-        }
-        foreach (var dir in Directory.GetDirectories(source))
-        {
-            if (!CopyDirectoryOverwrite(dir, Path.Combine(dest, Path.GetFileName(dir)), logger))
-                allCopied = false;
-        }
-        return allCopied;
+        if (legacy == null) return null;
+        var text = legacy.ReadText(Path.Combine("lists", name), MaxLegacyListBytes, out var missing);
+        if (missing && name == "ipset-all.txt") return ""; // Any in the privacy parent
+        return text == null ? null : NormalizeLegacyList(text, domains: name.StartsWith("list-", StringComparison.Ordinal));
     }
 
-    private static string? ParseVersionFromServiceBat()
+    private static void SeedIpSet(string package, string lists, bool installed, ZapretLegacyFilterDirectory? legacy)
     {
-        var serviceBat = Path.Combine(ZapretDir, "service.bat");
+        const string name = "ipset-all.txt";
+        var source = Path.Combine(package, "lists", name);
+        var target = Path.Combine(lists, name);
+        var backup = target + ".backup";
+        var hasProtectedBackup = File.Exists(source + ".backup");
+        if (hasProtectedBackup) File.Copy(source + ".backup", backup, overwrite: true);
+        else if (ReadLegacyList(legacy, name + ".backup") is { } saved) File.WriteAllText(backup, saved);
+
+        var hasActive = File.Exists(source);
+        var mode = ZapretActions.GetIpSetMode(package);
+        if (installed)
+        {
+            if (!hasActive) File.WriteAllText(target, "");
+            else if (mode != ZapretActions.IpSetMode.Loaded || !File.Exists(target)) File.Copy(source, target, overwrite: true);
+            return;
+        }
+
+        var loadOnInstall = File.Exists(source + ZapretActions.PreinstallLoadedSuffix);
+        if (hasActive && (!loadOnInstall || mode == ZapretActions.IpSetMode.Loaded))
+        {
+            File.Copy(source, target, overwrite: true);
+            // A new Any/None choice can mask the only old copy of the loaded list.
+            if (mode != ZapretActions.IpSetMode.Loaded && !File.Exists(backup) &&
+                ReadLegacyList(legacy, name) is { } previous && ZapretActions.ClassifyIpSet(previous) == ZapretActions.IpSetMode.Loaded)
+                File.WriteAllText(backup, previous);
+            return;
+        }
+
+        if (loadOnInstall && hasProtectedBackup && ZapretActions.ClassifyIpSet(File.ReadAllText(backup)) == ZapretActions.IpSetMode.Loaded)
+        {
+            File.Copy(backup, target, overwrite: true);
+            return;
+        }
+
+        var active = ReadLegacyList(legacy, name);
+        if (active != null && (!loadOnInstall || ZapretActions.ClassifyIpSet(active) == ZapretActions.IpSetMode.Loaded))
+            File.WriteAllText(target, active);
+        else if (loadOnInstall && File.Exists(backup) && ZapretActions.ClassifyIpSet(File.ReadAllText(backup)) == ZapretActions.IpSetMode.Loaded)
+            File.Copy(backup, target, overwrite: true);
+        // A pending Loaded choice without saved data uses the verified package's list.
+    }
+
+    private static string? NormalizeLegacyList(string text, bool domains)
+    {
+        using var reader = new StringReader(text);
+        var result = new StringBuilder();
+        while (reader.ReadLine() is string raw)
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line[0] is '#' or ';' or '/') continue;
+            if (domains)
+            {
+                var host = NormalizeLegacyDomain(line);
+                if (host == null) return null;
+                line = host;
+            }
+            else if (!IsLegacyIpNetwork(line)) return null;
+
+            if (result.Length + line.Length + 1 > MaxLegacyListBytes) return null;
+            result.Append(line).Append('\n');
+        }
+        return result.ToString();
+    }
+
+    private static string? NormalizeLegacyDomain(string line)
+    {
+        var exact = line[0] == '^';
+        var host = exact ? line[1..] : line;
+        if (host.Length is 0 or > 254) return null;
+        try
+        {
+            host = LegacyDomainNames.GetAscii(host);
+            if (!host.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.') ||
+                Uri.CheckHostName(host) is not (UriHostNameType.Dns or UriHostNameType.IPv4)) return null;
+            return exact ? "^" + host : host;
+        }
+        catch (ArgumentException) { return null; }
+    }
+
+    private static bool IsLegacyIpNetwork(string line)
+    {
+        if (line.Length > 64) return false;
+        var parts = line.Split('/', 2);
+        if (!parts[0].All(c => char.IsAsciiHexDigit(c) || c is '.' or ':') ||
+            !IPAddress.TryParse(parts[0], out var address)) return false;
+        bool ipv4 = address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
+        if (ipv4 && parts[0] != address.ToString()) return false; // Exclude abbreviated and octal IPv4.
+        return parts.Length == 1 || (parts[1].Length > 0 && parts[1].All(char.IsAsciiDigit) &&
+            uint.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var prefix) && prefix <= (ipv4 ? 32u : 128u));
+    }
+
+    internal static void PublishVerifiedPackage(string staged, Action? afterDetach = null, ZapretManager? owner = null) =>
+        ZapretRuntimeDirectory.WithPackage(destination =>
+        {
+            if (!Directory.Exists(staged)) throw new DirectoryNotFoundException(staged);
+            SeedUserLists(staged, destination);
+            if (owner?.HasDriverConflict() == true)
+                throw new InvalidOperationException(Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict));
+            var restore = owner?.SuspendOwnedStrategy();
+            try { ReplacePackage(staged, destination, afterDetach); }
+            catch (Exception publishError) when (restore != null)
+            {
+                try { restore(); }
+                catch (Exception restartError) { throw new AggregateException(publishError, restartError); }
+                throw;
+            }
+        });
+
+    private static void ReplacePackage(string staged, string destination, Action? afterDetach)
+    {
+        var previous = destination + ".previous";
+        if (Directory.Exists(previous)) Directory.Delete(previous, recursive: true);
+        if (Directory.Exists(destination)) Directory.Move(destination, previous);
+        try
+        {
+            afterDetach?.Invoke();
+            Directory.Move(staged, destination);
+        }
+        catch
+        {
+            if (Directory.Exists(previous)) Directory.Move(previous, destination);
+            throw;
+        }
+        // A running process can still have an old component open. The next update retries cleanup.
+        try { if (Directory.Exists(previous)) Directory.Delete(previous, recursive: true); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    private static string? ParseVersionFromServiceBat(string root)
+    {
+        var serviceBat = Path.Combine(root, "service.bat");
         if (!File.Exists(serviceBat)) return null;
         try
         {
@@ -570,18 +830,29 @@ public class ZapretUpdater
 
     public static List<ZapretStrategy> ParseStrategies()
     {
+        try
+        {
+            if (!Directory.Exists(ZapretRuntimeDirectory.Root)) return [];
+            return ZapretRuntimeDirectory.WithPackage(ParseStrategies);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { return []; }
+    }
+
+    private static List<ZapretStrategy> ParseStrategies(string package)
+    {
         var result = new List<ZapretStrategy>();
-        if (!Directory.Exists(ZapretDir)) return result;
+        if (!Directory.Exists(package)) return result;
 
         var binPath = "%BIN%";
         var listsPath = "%LISTS%";
 
-        foreach (var batFile in Directory.GetFiles(ZapretDir, "general*.bat"))
+        var game = ZapretActions.ReadGameFilter(package);
+        foreach (var batFile in Directory.GetFiles(package, "general*.bat"))
         {
             try
             {
                 var name = Path.GetFileNameWithoutExtension(batFile);
-                var args = ExtractWinwsArgs(batFile, binPath, listsPath);
+                var args = ExtractWinwsArgs(batFile, binPath, listsPath, game.Mode, game.Tcp, game.Udp);
                 if (!string.IsNullOrWhiteSpace(args))
                     result.Add(new ZapretStrategy(name, args, batFile));
             }
@@ -609,13 +880,15 @@ public class ZapretUpdater
         return result;
     }
 
-    private static string? ExtractWinwsArgs(string batPath, string binPath, string listsPath)
+    private static string? ExtractWinwsArgs(string batPath, string binPath, string listsPath, ZapretActions.GameFilterMode game = ZapretActions.GameFilterMode.Off,
+        string tcpPorts = "1024-65535", string udpPorts = "1024-65535")
     {
         var lines = File.ReadAllLines(batPath);
-        return ExtractWinwsArgsFromLines(lines, binPath, listsPath);
+        return ExtractWinwsArgsFromLines(lines, binPath, listsPath, game, tcpPorts, udpPorts);
     }
 
-    internal static string? ExtractWinwsArgsFromLines(string[] lines, string binPath, string listsPath)
+    internal static string? ExtractWinwsArgsFromLines(string[] lines, string binPath, string listsPath, ZapretActions.GameFilterMode game = ZapretActions.GameFilterMode.Off,
+        string tcpPorts = "1024-65535", string udpPorts = "1024-65535")
     {
 
         var cmdBuilder = new System.Text.StringBuilder();
@@ -663,6 +936,13 @@ public class ZapretUpdater
 
         args = args.Replace("%BIN%", binPath, StringComparison.OrdinalIgnoreCase);
         args = args.Replace("%LISTS%", listsPath, StringComparison.OrdinalIgnoreCase);
+
+        if (game is ZapretActions.GameFilterMode.All or ZapretActions.GameFilterMode.TcpOnly)
+            args = args.Replace("%GameFilterTCP%", tcpPorts, StringComparison.OrdinalIgnoreCase);
+        if (game is ZapretActions.GameFilterMode.All or ZapretActions.GameFilterMode.UdpOnly)
+            args = args.Replace("%GameFilterUDP%", udpPorts, StringComparison.OrdinalIgnoreCase);
+        if (game != ZapretActions.GameFilterMode.Off)
+            args = args.Replace("%GameFilter%", game == ZapretActions.GameFilterMode.UdpOnly ? udpPorts : tcpPorts, StringComparison.OrdinalIgnoreCase);
 
         args = Regex.Replace(args, @",\s*%GameFilter\w+%", "", RegexOptions.IgnoreCase);
         args = Regex.Replace(args, @"%GameFilter\w+%\s*,?", "", RegexOptions.IgnoreCase);

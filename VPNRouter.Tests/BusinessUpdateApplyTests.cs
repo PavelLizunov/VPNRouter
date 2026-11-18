@@ -21,6 +21,7 @@ public sealed class BusinessUpdateApplyTests
         AppPaths.OverrideDataDir(Path.Combine(fixture.Root, "data"));
         try
         {
+            File.WriteAllText(Path.Combine(fixture.App, "zapret-maintenance.ps1"), "param($Edition,$Operation); exit 9");
             using var bytes = new MemoryStream();
             using (var zip = new ZipArchive(bytes, ZipArchiveMode.Create, true))
             {
@@ -39,6 +40,17 @@ public sealed class BusinessUpdateApplyTests
             var info = new UpdateSourceInfo(fixture.Version, url, "business.zip", url, payload.Length, sha, false, "");
             var staged = await checker.DownloadAndStageAsync(legacy, true, TestContext.Current.CancellationToken);
             Assert.NotEmpty(checker.ValidateBusinessStageForApply(staged, info));
+            checker.ApplyBusinessUpdate(staged, info, _ =>
+            {
+                var path = Assert.Single(Directory.GetFiles(staged, "business-update-files-*.json"));
+                using var envelope = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(path));
+                using var resource = typeof(UpdateChecker).Assembly.GetManifestResourceStream("VPNRouter.Update.zapret-maintenance.ps1");
+                Assert.NotNull(resource);
+                using var expected = new MemoryStream();
+                resource.CopyTo(expected);
+                Assert.Equal(expected.ToArray(), envelope.RootElement.GetProperty("Prepare").GetBytesFromBase64());
+                File.Delete(path); // The fake launch consumed its manifest, as the real helper does.
+            });
             Assert.Throws<InvalidOperationException>(() => checker.ValidateBusinessStageForApply(fixture.Root, info));
             Assert.Throws<InvalidOperationException>(() => checker.ValidateBusinessStageForApply(staged, info with { AssetSha256 = new string('f', 64) }));
             Assert.Throws<InvalidOperationException>(() => checker.ValidateBusinessStageForApply(staged, info with { Version = "2.50.7" }));
@@ -62,10 +74,62 @@ public sealed class BusinessUpdateApplyTests
         var script = fixture.PrepareScript(int.MaxValue, 0, 100);
         var exit = RunHelper(script);
         Assert.True(exit == 0, "Helper exit=" + exit + "; safe log=" + (File.Exists(fixture.Log) ? File.ReadAllText(fixture.Log) : "absent"));
+        Assert.Equal("VPNRouterBusiness:Prepare:old bits", File.ReadAllText(fixture.PrepareMarker));
+        Assert.Equal("new bits", File.ReadAllText(fixture.MigrationMarker));
         Assert.Equal("new bits", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
         Assert.Equal("second file", File.ReadAllText(Path.Combine(fixture.Destination, "nested", "other.dll")));
         Assert.Equal("retained private fixture", File.ReadAllText(provisioning));
         Assert.Equal("VPNRouter.App.exe", File.ReadAllText(fixture.LaunchMarker));
+    }
+
+    [Fact]
+    public void WindowsHelperUsesCurrentPolicyWhenHistoricalPackageCannotMigrate()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new HelperFixture();
+        File.Delete(Path.Combine(fixture.Source, "zapret-maintenance.ps1"));
+        File.WriteAllText(Path.Combine(fixture.Source, "payload.dll"), "old release");
+        File.WriteAllText(Path.Combine(fixture.Destination, "payload.dll"), "current release");
+
+        Assert.Equal(0, RunHelper(fixture.PrepareScript(int.MaxValue, 0, 100)));
+        Assert.Equal("VPNRouterBusiness:Prepare:current release", File.ReadAllText(fixture.PrepareMarker));
+        Assert.Equal("old release", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
+        Assert.False(File.Exists(fixture.MigrationMarker));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WindowsHelperRefusesSnapshotLockBeforePrepareOrPublication(bool nested)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new HelperFixture(nested);
+        File.WriteAllText(Path.Combine(fixture.Source, "payload.dll"), "release");
+        File.WriteAllText(Path.Combine(fixture.Destination, "payload.dll"), "live");
+        var root = nested ? Directory.GetParent(fixture.Destination)!.FullName : fixture.Destination;
+        using var held = File.Open(Path.Combine(root, UpdateBackup.OperationLockName), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        Assert.Equal(1, RunHelper(fixture.PrepareScript(int.MaxValue, 0, 100)));
+        Assert.Contains("PHASE=LOCK_INSTALLATION", File.ReadAllText(fixture.Log));
+        Assert.False(File.Exists(fixture.PrepareMarker));
+        Assert.False(File.Exists(fixture.LaunchMarker));
+        Assert.Equal("live", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
+    }
+
+    [Fact]
+    public void WindowsHelperPreparationFailurePreservesTheInstalledPayload()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new HelperFixture();
+        fixture.PreparePolicy = "param($Edition,$Operation); exit 9";
+        File.WriteAllText(Path.Combine(fixture.Source, "zapret-maintenance.ps1"), "param($Edition,$Operation); exit 0");
+        File.WriteAllText(Path.Combine(fixture.Source, "payload.dll"), "new bits");
+        File.WriteAllText(Path.Combine(fixture.Destination, "payload.dll"), "old bits");
+
+        Assert.Equal(1, RunHelper(fixture.PrepareScript(int.MaxValue, 0, 100)));
+        Assert.Equal("old bits", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
+        Assert.False(File.Exists(fixture.MigrationMarker));
+        Assert.False(File.Exists(fixture.LaunchMarker));
+        Assert.Contains("ZAPRET_PREPARE_FAILED", File.ReadAllText(fixture.Log));
     }
 
     [Fact]
@@ -138,6 +202,7 @@ public sealed class BusinessUpdateApplyTests
     {
         const string script = "throw 'quoted $(text)'; # fixture";
         var info = UpdateChecker.CreateBusinessHelperStartInfo(script, true);
+        Assert.Equal(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"), info.FileName);
         Assert.True(info.UseShellExecute);
         Assert.Equal("runas", info.Verb);
         Assert.Equal(script, Encoding.Unicode.GetString(Convert.FromBase64String(info.ArgumentList[^1])));
@@ -169,23 +234,47 @@ public sealed class BusinessUpdateApplyTests
     {
         private string Root { get; } = Path.Combine(Path.GetTempPath(), "business-apply-" + Guid.NewGuid().ToString("N"));
         internal string Source => Path.Combine(Root, "source' ; throw 'INJECTED");
-        internal string Destination => Path.Combine(Root, "destination' ; throw 'INJECTED");
+        internal string Destination { get; }
         internal string Log => Path.Combine(Root, "helper.log");
+        internal string MigrationMarker => Path.Combine(Root, "migrated.txt");
+        internal string PreparePolicy { get; set; }
+        internal string PrepareMarker => Path.Combine(Root, "prepared.txt");
         internal string LaunchMarker => Path.Combine(Root, "launch.txt");
-        internal HelperFixture()
+        internal HelperFixture(bool nested = false)
         {
+            var install = Path.Combine(Root, "destination' ; throw 'INJECTED");
+            Destination = nested ? Path.Combine(install, "app") : install;
             Directory.CreateDirectory(Source);
             Directory.CreateDirectory(Destination);
+            var payload = Path.Combine(Destination, "payload.dll").Replace("'", "''");
+            var marker = PrepareMarker.Replace("'", "''");
+            File.WriteAllText(Path.Combine(Source, "zapret-maintenance.ps1"), "param($Edition,$Operation); exit 9");
+            var lockPath = Path.Combine(install, UpdateBackup.OperationLockName).Replace("'", "''");
+            PreparePolicy = $"param($Edition,$Operation)\nif (![IO.File]::Exists('{lockPath}')) {{ exit 8 }}\n$probe = $null\ntry {{ $probe = [IO.File]::Open('{lockPath}', 'Open', 'ReadWrite', 'None') }} " +
+                "catch [IO.IOException] { }\nif ($probe) { $probe.Dispose(); exit 8 }\n" +
+                $"$old = if ([IO.File]::Exists('{payload}')) {{ [IO.File]::ReadAllText('{payload}') }}\n" +
+                $"[IO.File]::WriteAllText('{marker}', $Edition + ':' + $Operation + ':' + $old)\nexit 0";
         }
         internal string PrepareScript(int parent, long started, int timeout)
         {
-            var manifest = UpdateChecker.CreateBusinessFileManifest(Source);
+            var manifest = UpdateChecker.CreateBusinessApplyManifest(
+                UpdateChecker.CreateBusinessFileManifest(Source), Encoding.UTF8.GetBytes(PreparePolicy));
             var path = Path.Combine(Root, "files.json");
             File.WriteAllBytes(path, manifest);
             var script = UpdateChecker.BuildBusinessApplyScript(Source, Destination, path,
                 Convert.ToHexString(SHA256.HashData(manifest)), Log, parent, started, timeout, false);
+            // Only the host ACL operation is faked. The publisher still clears inherited process state.
+            script = script.Replace("Set-RepairEnvironment $destination", """
+                function Get-RepairScratch([string]$app) { return [IO.Path]::Combine($app, '.repair-temp') }
+                Set-RepairEnvironment $destination
+                """, StringComparison.Ordinal);
             var marker = LaunchMarker.Replace("'", "''");
-            return "function Start-Process { param($FilePath, $WorkingDirectory) [IO.File]::WriteAllText('" + marker +
+            var migration = MigrationMarker.Replace("'", "''");
+            var payload = Path.Combine(Destination, "payload.dll").Replace("'", "''");
+            return "function Start-Process { param($FilePath, $WorkingDirectory, $ArgumentList, [switch]$Wait, [switch]$PassThru) " +
+                   "if ($env:TEMP -ne [IO.Path]::Combine($WorkingDirectory,'.repair-temp') -or $env:TEMP -ne $env:TMP) { throw 'Unprotected child environment' }; " +
+                   $"if ($ArgumentList -eq '--migrate-zapret') {{ if ([IO.File]::Exists('{payload}')) {{ [IO.File]::Copy('{payload}','{migration}') }}; " +
+                   "return [pscustomobject]@{ ExitCode=0 } }; [IO.File]::WriteAllText('" + marker +
                    "', [IO.Path]::GetFileName($FilePath)) }\n" + script;
         }
         public void Dispose() { try { Directory.Delete(Root, true); } catch { } }

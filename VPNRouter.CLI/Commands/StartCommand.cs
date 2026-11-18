@@ -352,7 +352,7 @@ public class StartCommand : AsyncCommand<StartSettings>
                     return 1;
                 }
 
-                var rawJson = File.ReadAllText(customPath);
+                var rawJson = CustomConfigInjector.ReadImport(customPath);
                 var (isValid, customErrors) = CustomConfigInjector.Validate(rawJson);
                 if (!isValid)
                 {

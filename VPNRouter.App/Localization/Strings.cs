@@ -97,6 +97,7 @@ public static class Strings
 
     public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;
     public static string Stopping => global::VPNRouter.Core.Localization.Strings.Stopping;
+    public static string TunnelStopUnconfirmed => global::VPNRouter.Core.Localization.Strings.TunnelStopUnconfirmed;
     public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
     public static string BadgeTooltipVpn => global::VPNRouter.Core.Localization.Strings.BadgeTooltipVpn;
@@ -433,6 +434,7 @@ public static class Strings
     public static string RunDiagnostics => global::VPNRouter.Core.Localization.Strings.RunDiagnostics;
     public static string ClearDiscordCache => global::VPNRouter.Core.Localization.Strings.ClearDiscordCache;
     public static string UpdateHostsFile => global::VPNRouter.Core.Localization.Strings.UpdateHostsFile;
+    public static string ZapretApplyServiceStrategy => global::VPNRouter.Core.Localization.Strings.ZapretApplyServiceStrategy;
     public static string OpenServiceMenu => global::VPNRouter.Core.Localization.Strings.OpenServiceMenu;
     public static string TipOpenServiceMenu => global::VPNRouter.Core.Localization.Strings.TipOpenServiceMenu;
 

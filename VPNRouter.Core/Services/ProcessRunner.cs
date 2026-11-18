@@ -91,7 +91,9 @@ public sealed class ProcessRunner : IProcessRunner
             TimedOut: timedOut);
     }
 
-    public IProcessHandle Start(ProcessRequest request)
+    public IProcessHandle Start(ProcessRequest request) => Start(request, _ => { });
+
+    public IProcessHandle Start(ProcessRequest request, Action<IProcessHandle> observe)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -99,8 +101,17 @@ public sealed class ProcessRunner : IProcessRunner
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
         var handle = new ProcessHandle(process, request);
-        handle.Begin();
-        return handle;
+        try
+        {
+            observe(handle);
+            handle.Begin();
+            return handle;
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
     }
 
     private static ProcessStartInfo BuildStartInfo(ProcessRequest r)
@@ -115,6 +126,7 @@ public sealed class ProcessRunner : IProcessRunner
             WorkingDirectory = r.WorkingDirectory ?? string.Empty,
         };
         foreach (var arg in r.Arguments) psi.ArgumentList.Add(arg);
+        if (r.ClearInheritedEnvironment) psi.Environment.Clear();
         if (r.EnvironmentOverrides != null)
         {
             foreach (var kv in r.EnvironmentOverrides) psi.Environment[kv.Key] = kv.Value;
@@ -147,13 +159,12 @@ internal sealed class ProcessHandle : IProcessHandle
 
     public int Pid { get; private set; }
 
-    public bool HasExited
+    public bool HasExited => QueryHasExited() ?? true;
+
+    public bool? QueryHasExited()
     {
-        get
-        {
-            try { return _process.HasExited; }
-            catch { return true;  }
-        }
+        try { return _process.HasExited; }
+        catch { return null; }
     }
 
     public event EventHandler<string>? OutputLine;
@@ -247,13 +258,16 @@ internal sealed class ProcessHandle : IProcessHandle
         try { _process.EnableRaisingEvents = false; } catch { }
     }
 
-    public void Dispose()
+    public void DisposeAfterExit() => Close(kill: false);
+    public void Dispose() => Close(kill: true);
+
+    private void Close(bool kill)
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         try { _process.EnableRaisingEvents = false; } catch { }
 
-        Kill(entireProcessTree: true);
+        if (kill) Kill(entireProcessTree: true);
 
         try { _process.Dispose(); } catch { }
     }

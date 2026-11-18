@@ -4,22 +4,32 @@ namespace VPNRouter.Core.Services;
 
 public static partial class ConfigGenerator
 {
-    private const string AdBlockRuleSetTag = "vpnrouter-adblock";
+    internal const string AdBlockRuleSetTag = "vpnrouter-adblock";
     private const string AdBlockRuleSetUrl =
         "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs";
     private const string AdBlockRuleSetFilename = "adblock_reject.srs";
 
-    private static void ApplyAdBlock(SingBoxConfig config)
+    internal static void RejectMissingRuleSet(string reason) => throw new InvalidOperationException(reason);
+
+    internal static string? ResolveAdBlock(Func<string, string, string?> resolveRuleSet,
+        Action<string>? onMissingRuleSet)
     {
-        var localPath = RuleSetCacheManager.EnsureLocal(
-            AdBlockRuleSetUrl,
-            AdBlockRuleSetFilename);
-        if (string.IsNullOrEmpty(localPath))
+        var localPath = resolveRuleSet(AdBlockRuleSetUrl, AdBlockRuleSetFilename);
+        if (string.IsNullOrWhiteSpace(localPath))
         {
+            onMissingRuleSet?.Invoke("Ad filtering requires a readable ad-block rule-set.");
             Serilog.Log.Logger.Warning(
                 "[ConfigGenerator] AdBlock rule-set unavailable (offline + no cache); generating config WITHOUT ad blocking");
-            return;
+            return null;
         }
+        return localPath;
+    }
+
+    private static void ApplyAdBlock(SingBoxConfig config, Func<string, string, string?> resolveRuleSet,
+        Action<string>? onMissingRuleSet)
+    {
+        var localPath = ResolveAdBlock(resolveRuleSet, onMissingRuleSet);
+        if (localPath == null) return;
 
         config.Route.RuleSet ??= new List<RuleSetEntry>();
         config.Route.RuleSet.Add(new RuleSetEntry
@@ -43,39 +53,80 @@ public static partial class ConfigGenerator
         });
     }
 
-    internal static void ApplyCustomRules(SingBoxConfig config, List<CustomRule> rules)
+    internal static bool RequiresLocalRuleSets(CustomRule rule) =>
+        rule.Enabled &&
+        (string.Equals(rule.Type, "geosite", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(rule.Type, "geoip", StringComparison.OrdinalIgnoreCase)) &&
+        (string.Equals(rule.Action, "block", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(rule.Action, "proxy", StringComparison.OrdinalIgnoreCase));
+
+    internal static void ApplyCustomRules(SingBoxConfig config, List<CustomRule> rules,
+        Func<string, string, string?>? resolveRuleSet = null)
     {
-        int insertAt = FindCustomRulesInsertionPoint(config);
+        resolveRuleSet ??= (url, file) => RuleSetCacheManager.EnsureLocal(url, file);
+        var entries = new List<RuleSetEntry>();
+        var routes = new List<RouteRule>();
+        var dnsRules = new List<DnsRule>();
+        var available = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var existing in config.Route.RuleSet ?? [])
+            available[existing.Tag] = true;
 
-        for (int idx = rules.Count - 1; idx >= 0; idx--)
+        bool Register(string type, string tag)
         {
-            var rule = rules[idx];
-            if (!rule.Enabled) continue;
+            if (available.TryGetValue(tag, out var found))
+                return found;
 
-            var isGeoType =
-                rule.Type.Equals("geosite", StringComparison.OrdinalIgnoreCase) ||
-                rule.Type.Equals("geoip", StringComparison.OrdinalIgnoreCase);
-            if (isGeoType)
+            var filename = tag + ".srs";
+            var upstreamFile = filename["user-".Length..];
+            var url = $"https://raw.githubusercontent.com/SagerNet/sing-{type.ToLowerInvariant()}/rule-set/{upstreamFile}";
+            var path = resolveRuleSet(url, filename);
+            found = !string.IsNullOrEmpty(path);
+            available.Add(tag, found);
+            if (found)
+                entries.Add(new RuleSetEntry { Tag = tag, Path = path });
+            return found;
+        }
+
+        foreach (var rule in rules)
+        {
+            if (!rule.Enabled) continue;
+            var route = BuildCustomRouteRule(rule);
+            if (route == null) throw new InvalidOperationException("Invalid enabled custom routing rule.");
+
+            if (route.RuleSet is { } requested)
             {
-                var registered = EnsureCustomRuleSetEntry(config, rule.Type, rule.Value);
-                if (registered.Count == 0)
+                var registered = new List<string>();
+                foreach (var tag in requested)
                 {
-                    continue;
+                    if (Register(rule.Type, tag))
+                        registered.Add(tag);
+                    else if (RequiresLocalRuleSets(rule))
+                        throw new InvalidOperationException($"Custom {rule.Action} rule requires unavailable rule-set '{tag}'.");
+                    else
+                        Serilog.Log.Logger.Warning("[ConfigGenerator] Skipping unavailable direct rule-set {Tag}", tag);
                 }
+                if (registered.Count == 0) continue;
+                route.RuleSet = registered;
             }
 
-            var built = BuildCustomRouteRule(rule);
-            if (built == null) continue;
-            config.Route.Rules.Insert(insertAt, built);
-
-            if (rule.Action.Equals("block", StringComparison.OrdinalIgnoreCase)
-                && IsDomainTypeForDns(rule.Type))
+            routes.Add(route);
+            if ((route.Action == "reject" && IsDomainTypeForDns(rule.Type)) ||
+                (route.Outbound == "proxy" && route.RuleSet != null && IsDomainTypeForDns(rule.Type)))
             {
-                var dnsReject = BuildCustomDnsRejectRule(rule);
-                if (dnsReject != null)
-                    config.Dns.Rules.Insert(0, dnsReject);
+                dnsRules.Add(new DnsRule
+                {
+                    CustomRule = rule,
+                    Action = route.Action, Server = route.Outbound == "proxy" ? "vpn-dns" : null,
+                    Domain = route.Domain, DomainSuffix = route.DomainSuffix,
+                    DomainKeyword = route.DomainKeyword, RuleSet = route.RuleSet,
+                });
             }
         }
+
+        if (entries.Count > 0)
+            (config.Route.RuleSet ??= []).AddRange(entries);
+        config.Route.Rules.InsertRange(FindCustomRulesInsertionPoint(config), routes);
+        config.Dns.Rules.InsertRange(0, dnsRules);
     }
 
     private static int FindCustomRulesInsertionPoint(SingBoxConfig config)
@@ -96,16 +147,13 @@ public static partial class ConfigGenerator
 
     internal static RouteRule? BuildCustomRouteRule(CustomRule rule)
     {
-        if (string.IsNullOrWhiteSpace(rule.Value)) return null;
-        var values = rule.Value
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(v => v.Length > 0)
-            .ToList();
-        if (values.Count == 0) return null;
+        var normalized = new CustomRule { Action = rule.Action, Type = rule.Type, Value = rule.Value };
+        if (CustomRulesParser.Normalize(normalized) != null) return null;
+        var values = normalized.Value.Split(',', StringSplitOptions.TrimEntries).ToList();
 
         var route = new RouteRule();
 
-        switch ((rule.Action ?? "direct").ToLowerInvariant())
+        switch (normalized.Action)
         {
             case "direct":
                 route.Action = "route";
@@ -122,7 +170,7 @@ public static partial class ConfigGenerator
                 return null;
         }
 
-        switch ((rule.Type ?? "domain_suffix").ToLowerInvariant())
+        switch (normalized.Type)
         {
             case "domain":
                 route.Domain = values;
@@ -137,38 +185,22 @@ public static partial class ConfigGenerator
                 route.IpCidr = values;
                 break;
             case "port":
-                var ports = new List<int>();
-                foreach (var v in values)
-                    if (int.TryParse(v, out var p) && p >= 1 && p <= 65535)
-                        ports.Add(p);
-                if (ports.Count == 0) return null;
-                route.Port = ports;
+                route.Port = values.Select(v => int.Parse(v, System.Globalization.CultureInfo.InvariantCulture)).ToList();
                 break;
             case "port_range":
-                var rangePorts = new List<int>();
-                foreach (var v in values)
-                {
-                    if (TryParsePortRange(v, out var min, out var max))
-                    {
-                        var step = Math.Max(1, (max - min) / 50);
-                        for (int p = min; p <= max; p += step) rangePorts.Add(p);
-                        if (!rangePorts.Contains(max)) rangePorts.Add(max);
-                    }
-                }
-                if (rangePorts.Count == 0) return null;
-                route.Port = rangePorts.Distinct().Take(64).ToList();
+                route.PortRange = values.Select(v => CustomRulesParser.ToSingBoxPortRange(v)!).ToList();
                 break;
             case "network":
-                route.Network = values[0].ToLowerInvariant();
+                route.Network = string.Join(",", values.Select(v => v.ToLowerInvariant()).Distinct());
                 break;
             case "process_name":
                 route.ProcessName = values;
                 break;
             case "geosite":
             case "geoip":
-                var tagPrefix = string.Equals(rule.Type, "geosite", StringComparison.OrdinalIgnoreCase)
+                var tagPrefix = normalized.Type == "geosite"
                     ? "user-geosite-" : "user-geoip-";
-                route.RuleSet = values.Select(v => tagPrefix + v).ToList();
+                route.RuleSet = values.Select(v => tagPrefix + v).Distinct(StringComparer.Ordinal).ToList();
                 break;
             default:
                 return null;
@@ -176,30 +208,7 @@ public static partial class ConfigGenerator
         return route;
     }
 
-    private static DnsRule? BuildCustomDnsRejectRule(CustomRule rule)
-    {
-        if (string.IsNullOrWhiteSpace(rule.Value)) return null;
-        var values = rule.Value
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(v => v.Length > 0)
-            .ToList();
-        if (values.Count == 0) return null;
-
-        var dns = new DnsRule { Action = "reject" };
-        switch (rule.Type.ToLowerInvariant())
-        {
-            case "domain":         dns.Domain = values; break;
-            case "domain_suffix":  dns.DomainSuffix = values; break;
-            case "domain_keyword": dns.DomainKeyword = values; break;
-            case "geosite":
-                dns.RuleSet = values.Select(v => "user-geosite-" + v).ToList();
-                break;
-            default: return null;
-        }
-        return dns;
-    }
-
-    private static bool IsDomainTypeForDns(string type) => type.ToLowerInvariant() switch
+    private static bool IsDomainTypeForDns(string? type) => (type ?? "domain_suffix").ToLowerInvariant() switch
     {
         "domain" or "domain_suffix" or "domain_keyword" or "geosite" => true,
         _ => false,
@@ -252,63 +261,6 @@ public static partial class ConfigGenerator
                 Add(name + suffix);
         }
         return result;
-    }
-
-    private static List<string> EnsureCustomRuleSetEntry(SingBoxConfig config, string type, string value)
-    {
-        config.Route.RuleSet ??= new List<RuleSetEntry>();
-
-        var values = value
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(v => v.Length > 0)
-            .ToList();
-
-        var isSite = type.Equals("geosite", StringComparison.OrdinalIgnoreCase);
-        var prefix = isSite ? "user-geosite-" : "user-geoip-";
-        var urlBase = isSite
-            ? "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-"
-            : "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-";
-
-        var registered = new List<string>();
-        foreach (var name in values)
-        {
-            var tag = prefix + name;
-            if (config.Route.RuleSet.Any(rs => rs.Tag == tag))
-            {
-                registered.Add(tag);
-                continue;
-            }
-
-            var srsName = (isSite ? "user-geosite-" : "user-geoip-") + name + ".srs";
-            var localPath = RuleSetCacheManager.EnsureLocal(urlBase + name + ".srs", srsName);
-            if (string.IsNullOrEmpty(localPath))
-            {
-                Serilog.Log.Logger.Warning(
-                    "[ConfigGenerator] Custom rule-set '{Tag}' unavailable (offline + no cache); rule will be omitted",
-                    tag);
-                continue;
-            }
-
-            config.Route.RuleSet.Add(new RuleSetEntry
-            {
-                Type = "local",
-                Tag = tag,
-                Format = "binary",
-                Path = localPath,
-            });
-            registered.Add(tag);
-        }
-        return registered;
-    }
-
-    private static bool TryParsePortRange(string s, out int min, out int max)
-    {
-        min = max = 0;
-        var dashIdx = s.IndexOf('-');
-        if (dashIdx < 1 || dashIdx == s.Length - 1) return false;
-        if (!int.TryParse(s[..dashIdx], out min)) return false;
-        if (!int.TryParse(s[(dashIdx + 1)..], out max)) return false;
-        return min >= 1 && max <= 65535 && min <= max;
     }
 
     private const string GeoIpRuleSetTag = "vpnrouter-geoip-ru";

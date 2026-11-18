@@ -17,7 +17,7 @@ public static class NaivePairing
         VlessServerEntry naive, IEnumerable<VlessServerEntry> pool,
         Func<VlessServerEntry, bool>? isAlive = null)
     {
-        if (naive == null || pool == null) return null;
+        if (naive == null || naive.UseAsSingleOutbound || pool == null) return null;
         var list = pool as IReadOnlyList<VlessServerEntry> ?? pool.ToList();
         bool Alive(VlessServerEntry s) => isAlive == null || isAlive(s);
 

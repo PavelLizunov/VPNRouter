@@ -26,9 +26,13 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
+    internal static void RefreshPerAppSelection() =>
+        Dispatcher.UIThread.Post(() => (Current as AndroidApp)?.UpdatePerAppSummary());
+
     private void OnTunnelModeRadioChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var splitOn = _splitRadio?.IsChecked == true;
+        if (sender is not Avalonia.Controls.RadioButton { IsChecked: true } radio) return;
+        var splitOn = ReferenceEquals(radio, _splitRadio);
 
         if (splitOn)
         {
@@ -52,18 +56,7 @@ public partial class AndroidApp
             perAppStack.IsVisible = splitOn;
         }
 
-        UpdatePerAppFormCountLabel();
-    }
-
-    private void UpdatePerAppFormCountLabel()
-    {
-        if (_perAppCountLabel is null) return;
-        var count = AndroidStorage.GetPerAppPackages().Count;
-        var mode = AndroidStorage.GetPerAppMode();
-        var fmt = mode == "exclude"
-            ? Localization.PerAppCountExclude
-            : Localization.PerAppCountInclude;
-        _perAppCountLabel.Text = string.Format(fmt, count);
+        UpdatePerAppSummary();
     }
 
     private void OnPerAppPickButtonClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -131,10 +124,8 @@ public partial class AndroidApp
 
     private void OnAppPickerSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        AndroidStorage.SetPerAppPackages(_appPickerSelected);
-        AndroidStorage.SetPerAppMode(_appPickerMode);
-        AndroidStorage.SetPerAppLastMode(_appPickerMode);
-        UpdatePerAppFormCountLabel();
+        AndroidStorage.SavePerAppSelection(_appPickerMode, _appPickerSelected, rememberPickerMode: true);
+        UpdatePerAppSummary();
     }
 
     private void OnAppPickerModeIncludeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -157,12 +148,7 @@ public partial class AndroidApp
         var excludeActive = _appPickerMode == "exclude";
         StyleSegment(_appPickerModeIncludeBtn, includeActive);
         StyleSegment(_appPickerModeExcludeBtn, excludeActive);
-        if (_appPickerModeHint is not null)
-        {
-            _appPickerModeHint.Text = excludeActive
-                ? Localization.PerAppHintExclude
-                : Localization.PerAppHintInclude;
-        }
+        UpdatePerAppSummary();
     }
 
     private void StyleSegment(Avalonia.Controls.Button? btn, bool active)
@@ -343,6 +329,7 @@ public partial class AndroidApp
                 _appPickerSelected.Remove(app.PackageName);
 
             AndroidStorage.SetPerAppPackages(_appPickerSelected);
+            UpdatePerAppSummary();
 
             if (!string.IsNullOrEmpty(_advAppsActiveCategoryId))
             {
@@ -540,9 +527,6 @@ public partial class AndroidApp
         modeRow.Children.Add(_appPickerModeExcludeBtn);
         _appPickerModeHint = new TextBlock
         {
-            Text = _appPickerMode == "exclude"
-                ? Localization.PerAppHintExclude
-                : Localization.PerAppHintInclude,
             FontSize = UiScale.Fs(9),
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,

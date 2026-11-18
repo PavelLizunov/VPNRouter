@@ -61,6 +61,22 @@ public sealed class UpdateBackupTests
     }
 
     [Fact]
+    public void SnapshotLeavesPrivateRepairScratchInPlace()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            var scratch = Directory.CreateDirectory(Path.Combine(root, "app", ".repair-temp")).FullName;
+            File.WriteAllText(Path.Combine(scratch, "transient.txt"), "fixture");
+            var result = UpdateBackup.CreateSnapshot(root);
+            Assert.True(result.Success, result.Diagnostic);
+            Assert.False(Directory.Exists(Path.Combine(result.SnapshotPath, ".repair-temp")));
+            Assert.True(File.Exists(Path.Combine(scratch, "transient.txt")));
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
     public void DeleteSnapshot_StaleGenerationCannotDeleteReplacement()
     {
         var root = CreateFakeInstall();
@@ -105,7 +121,7 @@ public sealed class UpdateBackupTests
                 FileShare.None);
 
             var create = UpdateBackup.CreateSnapshot(root);
-            var restore = UpdateBackup.RestoreSnapshot(root);
+            var restore = UpdateBackup.RestoreSnapshot(root, Directory.Move);
             var delete = UpdateBackup.DeleteSnapshot(root);
 
             Assert.False(create.Success);
@@ -135,13 +151,13 @@ public sealed class UpdateBackupTests
             File.Delete(Directory.GetFiles(Path.Combine(root, "app", "runtimes", "win-x64", "native"))
                 .First());
 
-            var r = UpdateBackup.RestoreSnapshot(root);
+            var r = UpdateBackup.RestoreSnapshot(root, Directory.Move);
             Assert.True(r.Restored, $"RestoreSnapshot failed: {r.Reason}");
 
             Assert.Contains("dll-content", File.ReadAllText(firstFile));
 
             Assert.False(Directory.Exists(Path.Combine(root, "app.bak")));
-            var second = UpdateBackup.RestoreSnapshot(root);
+            var second = UpdateBackup.RestoreSnapshot(root, Directory.Move);
             Assert.False(second.Restored);
         }
         finally { CleanUp(root); }
@@ -165,7 +181,7 @@ public sealed class UpdateBackupTests
                 Directory.Move(source, destination);
             });
 
-            var stage = Path.Combine(root, "app.bak.tmp");
+            var stage = Assert.Single(Directory.GetDirectories(root, "app.displaced-*"));
             Assert.False(result.Restored);
             Assert.Contains("restore failed", result.Reason);
             Assert.Contains("compensation failed", result.Reason);
@@ -188,11 +204,84 @@ public sealed class UpdateBackupTests
             });
 
             Assert.False(retry.Restored);
-            Assert.Contains("previous app tree was restored", retry.Reason);
-            Assert.Equal("recoverable", File.ReadAllText(Path.Combine(root, "app", "current-tree.txt")));
+            Assert.Equal(1, retryMove);
+            Assert.False(Directory.Exists(Path.Combine(root, "app")));
+            Assert.Equal("recoverable", File.ReadAllText(Path.Combine(stage, "current-tree.txt")));
+            Assert.True(UpdateBackup.RestoreSnapshot(root, Directory.Move).Restored);
+            Assert.True(Directory.Exists(stage)); // An earlier transaction's tree remains available for recovery.
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
+    public void AmbiguousLegacyStageIsNeverPromotedOrDeleted()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            var stage = Directory.CreateDirectory(Path.Combine(root, "app.bak.tmp")).FullName;
+            var evidence = Path.Combine(stage, "partial.txt");
+            File.WriteAllText(evidence, "ambiguous");
+            Assert.True(UpdateBackup.CreateSnapshot(root).Success);
+            var app = Path.Combine(root, "app");
+            Directory.Delete(app, true);
+            var result = UpdateBackup.RestoreSnapshot(root, Directory.Move, relaunch: () => throw new IOException("fixture"));
+            Assert.True(result.RelaunchRejected);
+            Assert.False(Directory.Exists(app));
             Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
-            Assert.False(Directory.Exists(stage));
-            Assert.Equal(2, retryMove);
+            Assert.True(UpdateBackup.RestoreSnapshot(root, Directory.Move).Restored);
+            Assert.True(UpdateBackup.DeleteSnapshot(root));
+            Assert.Equal("ambiguous", File.ReadAllText(evidence));
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
+    public void FlatInstallReadsOnlyItsOwnMarkerAndLock()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            var app = Path.Combine(root, "app");
+            var flat = Directory.CreateDirectory(Path.Combine(root, "relocated-flat")).FullName;
+            File.WriteAllText(Path.Combine(app, UpdateBackup.FailureMarkerName), "sibling");
+            Assert.Equal(root, UpdateBackup.SnapshotInstallDirectory(app + Path.DirectorySeparatorChar));
+            Assert.Null(UpdateBackup.SnapshotInstallDirectory(flat + Path.DirectorySeparatorChar));
+            Assert.False(UpdateBackup.HasApplicationFailureMarker(flat));
+            File.WriteAllText(Path.Combine(flat, UpdateBackup.FailureMarkerName), "flat");
+            Assert.Equal("flat", UpdateBackup.ReadApplicationFailureMarker(flat));
+            Assert.False(UpdateBackup.CheckFlatInstall(flat).Restored);
+            using var held = File.Open(Path.Combine(flat, UpdateBackup.OperationLockName), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            Assert.True(UpdateBackup.CheckFlatInstall(flat).OperationInProgress);
+            Assert.Equal("sibling", UpdateBackup.ReadApplicationFailureMarker(app));
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
+    public void CompensationRevalidatesThisTransactionsDisplacedTreeUnderLock()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            Assert.True(UpdateBackup.CreateSnapshot(root).Success);
+            var app = Path.Combine(root, "app");
+            File.WriteAllText(Path.Combine(app, "live.txt"), "retained");
+            var verified = new List<string>();
+            void Verify(string path)
+            {
+                Assert.True(UpdateBackup.RestoreSnapshot(root, Directory.Move).OperationInProgress);
+                verified.Add(path);
+                if (path != app) throw new UnauthorizedAccessException("Fixture ACL no longer trusted.");
+            }
+            var result = UpdateBackup.RestoreSnapshot(root, Directory.Move,
+                relaunch: () => throw new IOException("fixture"), validateDisplaced: Verify);
+            var stage = Assert.Single(Directory.GetDirectories(root, "app.displaced-*"));
+            Assert.True(result.RelaunchRejected);
+            Assert.Equal(new[] { app, stage }, verified);
+            Assert.False(Directory.Exists(app));
+            Assert.True(Directory.Exists(Path.Combine(root, "app.bak")));
+            Assert.Equal("retained", File.ReadAllText(Path.Combine(stage, "live.txt")));
         }
         finally { CleanUp(root); }
     }

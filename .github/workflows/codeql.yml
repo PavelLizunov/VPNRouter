@@ -24,6 +24,9 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Record CodeQL worker and SDK
+        run: python .github/scripts/report-test-sdk.py
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
         with:

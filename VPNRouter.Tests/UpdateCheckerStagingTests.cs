@@ -11,7 +11,7 @@ namespace VPNRouter.Tests;
 
 public class UpdateCheckerStagingTests
 {
-    private const string DownloadUrl = "https://example.test/VPNRouter-update.zip";
+    private const string DownloadUrl = "https://github.com/PavelLizunov/VPNRouter/releases/download/v9.9.9/VPNRouter-v9.9.9-win.zip";
 
     private static byte[] MinimalUpdateZip()
     {

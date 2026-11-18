@@ -67,10 +67,22 @@ public static partial class ConfigGenerator
         IEnumerable<string> resolvedProcessNames,
         AppSettings settings,
         bool? strictDnsOverride = null,
-        Func<VlessServerEntry, bool>? isServerAlive = null)
+        Func<VlessServerEntry, bool>? isServerAlive = null) =>
+        Generate(profile, resolvedProcessNames, settings, strictDnsOverride, isServerAlive,
+            resolveRuleSet: null);
+
+    internal static SingBoxConfig Generate(
+        Profile profile,
+        IEnumerable<string> resolvedProcessNames,
+        AppSettings settings,
+        bool? strictDnsOverride,
+        Func<VlessServerEntry, bool>? isServerAlive,
+        Func<string, string, string?>? resolveRuleSet, Action<string>? onMissingRuleSet = null,
+        Func<string, CancellationToken, Task<bool>>? checkGeoContents = null)
     {
-        if (ProductEdition.IsBusiness && settings.App.BypassRussianTraffic && !GeoDataDownloader.AreGeoFilesAvailable())
-            throw new InvalidOperationException(Localization.Strings.BusinessGeoMissing);
+        checkGeoContents ??= RuleSetFile.ForRuntime(settings.SingBox);
+        resolveRuleSet ??= (url, filename) => RuleSetCacheManager.EnsureLocal(url, filename, checkGeoContents);
+        var useGeoBypass = GeoDataDownloader.UseGeoBypass(settings.App.BypassRussianTraffic, onMissingRuleSet, checkGeoContents);
         var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
             .ToLowerInvariant();
         var isExcludeMode = routingAppsMode == "exclude";
@@ -120,24 +132,24 @@ public static partial class ConfigGenerator
 
         if (customFirst)
         {
-            if (settings.App.BlockAds) ApplyAdBlock(config);
-            if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
+            if (settings.App.BlockAds) ApplyAdBlock(config, resolveRuleSet, onMissingRuleSet);
+            if (useGeoBypass)
                 ApplyGeoBypass(config);
             if (settings.App.CustomRules?.Count > 0)
-                ApplyCustomRules(config, settings.App.CustomRules);
+                ApplyCustomRules(config, settings.App.CustomRules, resolveRuleSet);
         }
         else
         {
             if (settings.App.CustomRules?.Count > 0)
-                ApplyCustomRules(config, settings.App.CustomRules);
-            if (settings.App.BlockAds) ApplyAdBlock(config);
-            if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
+                ApplyCustomRules(config, settings.App.CustomRules, resolveRuleSet);
+            if (settings.App.BlockAds) ApplyAdBlock(config, resolveRuleSet, onMissingRuleSet);
+            if (useGeoBypass)
                 ApplyGeoBypass(config);
         }
 
         if (ProductEdition.IsBusiness)
         {
-            BusinessDefaults.ApplyDns(config, settings.App.CustomRules ?? []);
+            BusinessDefaults.ApplyDns(config, settings.App.CustomRules ?? [], customFirst);
             BusinessDefaults.ApplyDomainTransports(config, hasUdpProxy, proxyCarriesUdpNatively,
                 settings.App.BlockQuicOnTcpProxy);
             ApplyBusinessPortal(config, settings);

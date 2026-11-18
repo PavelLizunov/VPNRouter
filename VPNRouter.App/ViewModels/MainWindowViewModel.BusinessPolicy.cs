@@ -63,7 +63,7 @@ public partial class MainWindowViewModel
     internal AppSettings CaptureBusinessConnectionSettings(BusinessPolicySnapshot? policy)
     {
         if (_businessPolicyStartupBlocked) throw new BusinessPolicyStartupException();
-        var captured = _businessRules == null ? _settings :
+        var captured = _businessRules == null ? VpnEngine.CopySessionSettings(_settings) :
             BusinessPolicySettings.Capture(_settings, _businessRules, policy);
         _businessPolicyRuntimeBlocked = false;
         return captured;

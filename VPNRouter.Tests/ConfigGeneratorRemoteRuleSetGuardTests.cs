@@ -2,29 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
+public sealed class ConfigGeneratorRemoteRuleSetGuardTests
 {
-    private readonly string _origDataDir;
-    private readonly string _testDir;
-
-    public ConfigGeneratorRemoteRuleSetGuardTests()
-    {
-        _testDir = Path.Combine(Path.GetTempPath(), "vpnr-cfggen-rs-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_testDir);
-        _origDataDir = Environment.GetEnvironmentVariable("ProgramData") ?? "";
-    }
-
-    public void Dispose()
-    {
-        try { Directory.Delete(_testDir, recursive: true); } catch { }
-    }
-
     private static AppSettings BuildSettings(bool blockAds, bool bypassRu, List<CustomRule>? customRules = null)
     {
         var s = new AppSettings();
@@ -58,41 +44,405 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
     public void Generate_ToggleMatrix_NoRemoteRuleSets(bool blockAds, bool bypassRu)
     {
         var settings = BuildSettings(blockAds, bypassRu);
-        var profile = BuildProfile();
-        var processes = new[] { "Discord.exe" };
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
+        {
+            var path = Path.Combine(AppPaths.CacheDir, "adblock_reject.srs");
+            Directory.CreateDirectory(AppPaths.CacheDir);
+            File.WriteAllBytes(path, RuleSetSamples.KeywordRule());
+            var stale = DateTime.UtcNow.AddDays(-30);
+            File.SetLastWriteTimeUtc(path, stale);
+            File.SetLastWriteTimeUtc(AppPaths.GeoIpRuPath, stale);
+            File.SetLastWriteTimeUtc(AppPaths.GeoSiteRuPath, stale);
 
-        var config = ConfigGenerator.Generate(profile, processes, settings);
-        var ruleSet = config.Route.RuleSet ?? new List<RuleSetEntry>();
+            string Resolve(string _, string filename)
+            {
+                Assert.Equal("adblock_reject.srs", filename);
+                return path;
+            }
 
-        var remoteEntries = ruleSet
-            .Where(rs => string.Equals(rs.Type, "remote", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        Assert.True(remoteEntries.Count == 0,
-            $"Found {remoteEntries.Count} type:remote rule-set entries — these crash sing-box on TLS timeout. " +
-            $"Tags: {string.Join(", ", remoteEntries.Select(r => r.Tag))}. " +
-            "Route through RuleSetCacheManager + emit type:local instead.");
+            var config = ConfigGenerator.Generate(BuildProfile(), ["Discord.exe"], settings, null, null, Resolve,
+                onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            var entries = config.Route.RuleSet ?? [];
+            Assert.All(entries, entry => Assert.Equal("local", entry.Type));
+            const string adTag = "vpnrouter-adblock";
+            Assert.Equal(blockAds, entries.Any(entry => entry.Tag == adTag && entry.Path == path));
+            Assert.Equal(blockAds, config.Route.Rules.Any(r => r.Action == "reject" && r.RuleSet?.Contains(adTag) == true));
+            Assert.Equal(blockAds, config.Dns.Rules.Any(r => r.Action == "reject" && r.RuleSet?.Contains(adTag) == true));
+            Assert.Equal(bypassRu, entries.Any(entry => entry.Tag == "vpnrouter-geoip-ru"));
+            Assert.Equal(bypassRu, entries.Any(entry => entry.Tag == "vpnrouter-geosite-ru"));
+        });
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void HotApplyRejectsUnreadableBuiltInSetInGeneratedAndImportedConfig(bool damageGeoIp)
+    {
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
+        {
+            File.WriteAllBytes(damageGeoIp ? AppPaths.GeoIpRuPath : AppPaths.GeoSiteRuPath,
+                RuleSetSamples.IntactEnvelope(12 * 1024));
+            var settings = BuildSettings(blockAds: false, bypassRu: true);
+            Assert.Throws<InvalidOperationException>(() =>
+                ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, resolveRuleSet: null,
+                    onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+            Assert.Throws<InvalidOperationException>(() =>
+                CustomConfigInjector.Inject("{}", [], settings, onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet,
+                    checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+
+#if VPNROUTER_BUSINESS
+            Assert.Throws<InvalidOperationException>(() =>
+                ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, resolveRuleSet: null,
+                    checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+            Assert.Throws<InvalidOperationException>(() =>
+                CustomConfigInjector.Inject("{}", [], settings, onMissingRuleSet: null,
+                    checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+#else
+            var missing = new List<string>();
+            var cold = ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, resolveRuleSet: null,
+                onMissingRuleSet: missing.Add, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            Assert.Single(missing);
+            Assert.DoesNotContain(cold.Route.RuleSet ?? [], entry => entry.Tag == "vpnrouter-geoip-ru");
+            missing.Clear();
+            var imported = CustomConfigInjector.Inject("{}", [], settings, onMissingRuleSet: missing.Add,
+                checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            Assert.Single(missing);
+            Assert.DoesNotContain("vpnrouter-geosite-ru", imported);
+#endif
+        });
+    }
+
+    private sealed class UnreadableRefresh : HttpMessageHandler
+    {
+        public int Requests { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Requests++;
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(RuleSetSamples.IntactEnvelope())
+            });
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ImportedAdFilterKeepsValidatedCacheAndBothRejects(bool stale)
+    {
+        const string imported = """
+            {
+              "outbounds": [
+                {"type":"socks","tag":"proxy","server":"10.0.0.2","server_port":1080},
+                {"type":"direct","tag":"direct"}
+              ],
+              "route": {
+                "rule_set": [{"type":"inline","tag":"vpnrouter-adblock","rules":[{"domain":"example.test"}]}],
+                "rules": [{"action":"sniff"},{"rule_set":"vpnrouter-adblock","action":"route","outbound":"proxy"}]
+              },
+              "dns": {"rules":[{"domain":"example.test","action":"reject"}]}
+            }
+            """;
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
+        {
+            var dir = Directory.CreateDirectory(Path.Combine(AppPaths.CacheDir, RuleSetCacheManager.CacheSubdir));
+            var path = Path.Combine(dir.FullName, "adblock_reject.srs");
+            var original = RuleSetSamples.KeywordRule();
+            File.WriteAllBytes(path, original);
+            if (stale) File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-30));
+            var timestamp = File.GetLastWriteTimeUtc(path);
+            var refresh = new UnreadableRefresh();
+            using var client = new HttpClient(refresh);
+            var runtime = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
+            if (runtime != null) Assert.True(File.Exists(runtime), "Missing supplied verifier runtime");
+            Task<bool> Validate(string file, CancellationToken ct) => runtime == null
+                ? RuleSetSamples.CheckFixtureContentsAsync(file, ct)
+                : RuleSetSamples.CheckWithRuntimeAsync(file, ct, runtime);
+            string? Resolve(string url, string file) =>
+                RuleSetCacheManager.EnsureLocal(url, file, Validate, httpClient: client);
+
+            Assert.True(CustomConfigInjector.Validate(imported).IsValid);
+            var candidate = CustomConfigInjector.Inject(imported, [], BuildSettings(true, false),
+                ConfigGenerator.RejectMissingRuleSet, resolveRuleSet: Resolve);
+            var config = JsonNode.Parse(candidate)!;
+            var sets = config["route"]!["rule_set"]!.AsArray();
+            Assert.Equal("inline", sets[0]!["type"]!.GetValue<string>());
+            Assert.Equal("vpnrouter-adblock", sets[0]!["tag"]!.GetValue<string>());
+            var managed = Assert.Single(sets, s => s?["path"]?.GetValue<string>() == path);
+            Assert.Equal("local", managed!["type"]!.GetValue<string>());
+            var tag = managed["tag"]!.GetValue<string>();
+            Assert.NotEqual("vpnrouter-adblock", tag);
+            var routeRules = config["route"]!["rules"]!.AsArray();
+            var importedRule = Assert.Single(routeRules, r => r?["rule_set"] is JsonValue v && v.GetValue<string>() == "vpnrouter-adblock");
+            var scopedReject = routeRules[routeRules.IndexOf(importedRule) - 1]!;
+            Assert.Equal("reject", (string?)scopedReject["action"]);
+            Assert.Equal("vpnrouter-adblock", (string?)scopedReject["rules"]![0]!["rule_set"]);
+            Assert.Equal(tag, (string?)scopedReject["rules"]![1]!["rule_set"]![0]);
+            Assert.Equal(tag, (string?)routeRules.Last()!["rule_set"]![0]);
+            var dnsReject = config["dns"]!["rules"]![0]!;
+            Assert.Equal("reject", dnsReject["action"]!.GetValue<string>());
+            Assert.Equal(tag, dnsReject["rule_set"]![0]!.GetValue<string>());
+            Assert.Equal(stale ? 1 : 0, refresh.Requests);
+            Assert.Equal(original, File.ReadAllBytes(path));
+            Assert.Equal(timestamp, File.GetLastWriteTimeUtc(path));
+        });
     }
 
     [Fact]
-    public void Generate_WithCustomGeositeRule_NoRemoteRuleSets()
+    public void ImportedLocalRuleSetKeepsItsSourceDirectoryAfterCopy()
     {
-        var customRules = new List<CustomRule>
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
         {
-            new() { Enabled = true, Type = "geosite", Action = "direct", Value = "ru,cn" },
-            new() { Enabled = true, Type = "geoip",   Action = "direct", Value = "ru" },
-        };
-        var settings = BuildSettings(blockAds: false, bypassRu: false, customRules: customRules);
-        var profile = BuildProfile();
-        var processes = new[] { "Discord.exe" };
+            var sourceDir = Directory.CreateDirectory(Path.Combine(AppPaths.DataDir, "import"));
+            var source = Path.Combine(sourceDir.FullName, "external.json");
+            const string raw = """
+                {"route":{"rule_set":[{"type":"local","tag":"personal","format":"source","path":"rules/local.json"},
+                    {"type":"inline","tag":"inline","rules":[{"domain":"example.test"}]}]}}
+                """;
+            File.WriteAllText(source, raw);
+            var copied = CustomConfigInjector.CopyToProgramData(source, "relative-rules");
+            Assert.Equal(raw, File.ReadAllText(source));
+            File.Delete(source);
 
-        var config = ConfigGenerator.Generate(profile, processes, settings);
-        var ruleSet = config.Route.RuleSet ?? new List<RuleSetEntry>();
+            var saved = CustomConfigInjector.ReadImport(copied);
+            Assert.Equal(saved, File.ReadAllText(copied));
+            var sets = JsonNode.Parse(saved)!["route"]!["rule_set"]!;
+            Assert.Equal(Path.Combine(sourceDir.FullName, "rules", "local.json"), (string?)sets[0]!["path"]);
+            Assert.Equal("inline", (string?)sets[1]!["type"]);
+        });
+    }
 
-        var remoteEntries = ruleSet
-            .Where(rs => string.Equals(rs.Type, "remote", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        Assert.True(remoteEntries.Count == 0,
-            $"Found {remoteEntries.Count} type:remote rule-set entries from custom geosite/geoip rules. " +
-            $"Tags: {string.Join(", ", remoteEntries.Select(r => r.Tag))}.");
+    [Fact]
+    public void ReimportKeepsScopedDenialsAndOnlyInterceptsFlowsTheImportWouldForward()
+    {
+        const string source = """
+            {"route":{"rules":[
+                 {"inbound":"guest","source_ip_cidr":"192.0.2.0/24","action":"reject","method":"drop"},
+                 {"network":"udp","source_ip_cidr":"198.51.100.0/24","outbound":"proxy","udp_timeout":"4s"},
+                 {"inbound":"internal","protocol":"dns","outbound":"legacy-block"},
+                 {"action":"sniff","network":"tcp","sniffer":["tls"]},
+                 {"type":"logical","mode":"or","invert":true,"rules":[{"protocol":"tls"},{"port":443}],
+                  "action":"route","outbound":"proxy"}]},
+             "outbounds":[{"type":"socks","tag":"proxy","server":"127.0.0.1","server_port":1080},
+                          {"type":"block","tag":"legacy-block"}]}
+            """;
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
+        {
+            string Inject(string raw) => CustomConfigInjector.Inject(raw, [], BuildSettings(true, false),
+                ConfigGenerator.RejectMissingRuleSet, resolveRuleSet: (_, _) => AppPaths.GeoSiteRuPath);
+            var first = JsonNode.Parse(Inject(source))!;
+            var config = JsonNode.Parse(Inject(first.ToJsonString()))!;
+            var rules = config["route"]!["rules"]!.AsArray();
+            Assert.True(JsonNode.DeepEquals(first["route"]!["rules"], rules), "Re-import changed routing precedence.");
+            Assert.Single(config["route"]!["rule_set"]!.AsArray());
+
+            var original = JsonNode.Parse(source)!["route"]!["rules"]!.AsArray();
+            Assert.Equal(new[] { "reject", "hijack-dns", "reject", "forward", "reject", "sniff",
+                "hijack-dns", "reject", "route", "hijack-dns", "reject" },
+                rules.Select(r => (string?)r?["action"] ?? "forward"));
+            Assert.True(JsonNode.DeepEquals(original[0], rules[0]));
+            Assert.True(JsonNode.DeepEquals(original[1], rules[3]));
+            Assert.Equal("internal", (string?)rules[4]!["inbound"]);
+            Assert.Equal("dns", (string?)rules[4]!["protocol"]);
+            Assert.True(JsonNode.DeepEquals(original[3], rules[5]));
+            Assert.True(JsonNode.DeepEquals(original[4], rules[8]));
+            Assert.Single(rules, r => (string?)r?["action"] == "sniff");
+
+            var dnsMatch = JsonNode.Parse("""{"type":"logical","mode":"or","rules":[{"port":53},{"protocol":"dns"}]}""");
+            var adMatch = JsonNode.Parse("""{"rule_set":["vpnrouter-adblock"]}""");
+            foreach (var (index, expectedMatch) in new[] {
+                (1, """{"network":"udp","source_ip_cidr":"198.51.100.0/24"}"""),
+                (6, """{"type":"logical","mode":"or","invert":true,"rules":[{"protocol":"tls"},{"port":443}]}""")
+            })
+            {
+                var match = JsonNode.Parse(expectedMatch);
+                foreach (var guard in new[] { rules[index]!, rules[index + 1]! })
+                {
+                    Assert.Equal("and", (string?)guard["mode"]);
+                    Assert.True(JsonNode.DeepEquals(match, guard["rules"]![0]));
+                }
+                Assert.True(JsonNode.DeepEquals(dnsMatch, rules[index]!["rules"]![1]));
+                Assert.True(JsonNode.DeepEquals(adMatch, rules[index + 1]!["rules"]![1]));
+            }
+
+            var finalDns = rules[9]!.DeepClone().AsObject();
+            finalDns.Remove("action");
+            Assert.True(JsonNode.DeepEquals(dnsMatch, finalDns));
+            var dnsReject = Assert.Single(config["dns"]!["rules"]!.AsArray(), r => (string?)r?["action"] == "reject");
+            Assert.True(JsonNode.DeepEquals(rules[10], dnsReject));
+
+            CheckWithConfiguredRuntime(config);
+        });
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void UnnamedBypassFallsThroughToTheOriginalDenial(string? emptyOutbound)
+    {
+        const string source = """
+            {"route":{"rules":[{"network":"udp","action":"bypass"},
+                {"inbound":"guest","port":53,"action":"reject","method":"drop"},
+                {"network":"tcp","action":"bypass","outbound":"proxy"}]},
+             "outbounds":[{"type":"socks","tag":"proxy","server":"127.0.0.1","server_port":1080}]}
+            """;
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
+        {
+            var original = JsonNode.Parse(source)!;
+            var originalRules = original["route"]!["rules"]!.AsArray();
+            if (emptyOutbound != null) originalRules[0]!["outbound"] = emptyOutbound;
+            var config = JsonNode.Parse(CustomConfigInjector.Inject(original.ToJsonString(), [], BuildSettings(true, false),
+                ConfigGenerator.RejectMissingRuleSet, resolveRuleSet: (_, _) => AppPaths.GeoSiteRuPath))!;
+            var rules = config["route"]!["rules"]!.AsArray();
+            Assert.Equal(new[] { "bypass", "reject", "hijack-dns", "reject", "bypass", "hijack-dns", "reject" },
+                rules.Select(r => (string?)r?["action"]));
+            Assert.True(JsonNode.DeepEquals(originalRules[0], rules[0]));
+            Assert.True(JsonNode.DeepEquals(originalRules[1], rules[1]));
+            Assert.True(JsonNode.DeepEquals(originalRules[2], rules[4]));
+            Assert.Equal("tcp", (string?)rules[2]!["rules"]![0]!["network"]);
+            Assert.Equal("tcp", (string?)rules[3]!["rules"]![0]!["network"]);
+            CheckWithConfiguredRuntime(config);
+        });
+    }
+
+    [Fact]
+    public void ColdAdFilterFallbackInterceptsDnsWithoutALegacyDnsOutbound()
+    {
+        const string source = """
+            {"outbounds":[{"type":"socks","tag":"proxy","server":"127.0.0.1","server_port":1080}],
+             "route":{"rules":[{"network":"udp","outbound":"proxy"}]}}
+            """;
+        var missing = new List<string>();
+        var config = JsonNode.Parse(CustomConfigInjector.Inject(source, [], BuildSettings(true, false),
+            missing.Add, resolveRuleSet: (_, _) => null))!;
+        Assert.Single(missing);
+        Assert.DoesNotContain("dns-out", config.ToJsonString());
+        Assert.DoesNotContain("vpnrouter-adblock", config.ToJsonString());
+        var rules = config["route"]!["rules"]!.AsArray();
+        Assert.Equal(new[] { "hijack-dns", "forward", "hijack-dns" },
+            rules.Select(r => (string?)r?["action"] ?? "forward"));
+        Assert.Equal("udp", (string?)rules[0]!["rules"]![0]!["network"]);
+        var intercepted = JsonNode.Parse("""{"type":"logical","mode":"or","rules":[{"port":53},{"protocol":"dns"}]}""");
+        Assert.True(JsonNode.DeepEquals(intercepted, rules[0]!["rules"]![1]));
+        var final = rules[2]!.DeepClone().AsObject();
+        final.Remove("action");
+        Assert.True(JsonNode.DeepEquals(intercepted, final));
+        CheckWithConfiguredRuntime(config);
+    }
+
+    private static void CheckWithConfiguredRuntime(JsonNode config)
+    {
+        var runtime = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
+        if (runtime == null) return;
+        var result = new ProcessRunner().RunAsync(new ProcessRequest(Path.GetFullPath(runtime), ["check", "-c", "stdin"],
+            StdinInput: config.ToJsonString(), Timeout: TimeSpan.FromSeconds(15)), TestContext.Current.CancellationToken)
+            .GetAwaiter().GetResult();
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(result.TimedOut);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ImportedAdFilterMarksOnlyIncompleteEnabledCandidates(bool enabled)
+    {
+        var settings = BuildSettings(enabled, false);
+        int reads = 0;
+        string? Missing(string url, string file) { reads++; return null; }
+        var omissions = new List<string>();
+        var cold = CustomConfigInjector.Inject("{}", [], settings, omissions.Add, resolveRuleSet: Missing);
+        Assert.Equal(enabled ? 1 : 0, reads);
+        Assert.Equal(enabled ? 1 : 0, omissions.Count);
+        Assert.DoesNotContain("vpnrouter-adblock", cold);
+        if (enabled)
+            Assert.Throws<InvalidOperationException>(() => CustomConfigInjector.Inject("{}", [], settings,
+                ConfigGenerator.RejectMissingRuleSet, resolveRuleSet: Missing));
+        else
+            Assert.Equal(cold, CustomConfigInjector.Inject("{}", [], settings,
+                ConfigGenerator.RejectMissingRuleSet, resolveRuleSet: Missing));
+        Assert.Equal(enabled ? 2 : 0, reads);
+    }
+
+    [Theory]
+    [InlineData("custom_first")]
+    [InlineData("toggles_first")]
+    public void MissingAdFilterBlocksReplacementAndMarksColdFallback(string priority)
+    {
+        var settings = BuildSettings(blockAds: true, bypassRu: false);
+        settings.App.CustomRulesPriority = priority;
+        SingBoxConfig Generate(Action<string>? onMissing) =>
+            ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, (_, _) => null, onMissing);
+
+        Assert.Throws<InvalidOperationException>(() => Generate(ConfigGenerator.RejectMissingRuleSet));
+        var missing = new List<string>();
+        var cold = Generate(missing.Add);
+        Assert.Single(missing);
+        Assert.DoesNotContain(cold.Route.RuleSet ?? [], entry => entry.Tag == "vpnrouter-adblock");
+        Assert.DoesNotContain(cold.Dns.Rules, rule => rule.RuleSet?.Contains("vpnrouter-adblock") == true);
+        Assert.DoesNotContain(cold.Route.Rules, rule => rule.RuleSet?.Contains("vpnrouter-adblock") == true);
+    }
+
+    [Fact]
+    public void DisabledPoliciesCanReplaceWithoutReadingRuleSets()
+    {
+        var settings = BuildSettings(blockAds: false, bypassRu: false);
+        var config = ConfigGenerator.Generate(BuildProfile(), [], settings, null, null,
+            (_, _) => throw new InvalidOperationException("Unexpected ad-filter lookup"),
+            ConfigGenerator.RejectMissingRuleSet,
+            (_, _) => throw new InvalidOperationException("Unexpected geo lookup"));
+        Assert.DoesNotContain(config.Route.RuleSet ?? [], entry => entry.Tag is
+            "vpnrouter-adblock" or "vpnrouter-geoip-ru" or "vpnrouter-geosite-ru");
+
+        var imported = CustomConfigInjector.Inject("{}", [], settings, ConfigGenerator.RejectMissingRuleSet,
+            (_, _) => throw new InvalidOperationException("Unexpected geo lookup"));
+        Assert.DoesNotContain("vpnrouter-geoip-ru", imported);
+        Assert.DoesNotContain("vpnrouter-geosite-ru", imported);
+    }
+
+    [Theory]
+    [InlineData("custom_first")]
+    [InlineData("toggles_first")]
+    public void Generate_PartialDirectAndCompleteBlock_EmitOnlyRegisteredReferences(string priority)
+    {
+        var settings = BuildSettings(false, false,
+        [
+            new() { Type = "geoip", Action = "direct", Value = "first, missing" },
+            new() { Type = "geosite", Action = "block", Value = "first, second" },
+        ]);
+        settings.App.CustomRulesPriority = priority;
+        var config = ConfigGenerator.Generate(BuildProfile(), [], settings, null, null,
+            (_, file) => file == "user-geoip-missing.srs" ? null : Path.Combine("cache", file));
+
+        var tags = config.Route.RuleSet!.Select(entry => entry.Tag);
+        Assert.Equal(new[] { "user-geoip-first", "user-geosite-first", "user-geosite-second" }, tags);
+        Assert.All(config.Route.RuleSet!, entry => Assert.Equal("local", entry.Type));
+        var direct = Assert.Single(config.Route.Rules, r => r.RuleSet != null && r.Outbound == "direct");
+        Assert.Equal(new[] { "user-geoip-first" }, direct.RuleSet);
+        var reject = Assert.Single(config.Route.Rules, r => r.RuleSet != null && r.Action == "reject");
+        var dns = Assert.Single(config.Dns.Rules, r => r.RuleSet != null);
+        Assert.Equal(new[] { "user-geosite-first", "user-geosite-second" }, reject.RuleSet);
+        Assert.Equal(reject.RuleSet, dns.RuleSet);
+        Assert.Equal("reject", dns.Action);
+    }
+
+    [Theory]
+    [InlineData("geosite", "block", true)]
+    [InlineData("geosite", "block", false)]
+    [InlineData("geoip", "block", true)]
+    [InlineData("geoip", "block", false)]
+    [InlineData("geosite", "proxy", true)]
+    [InlineData("geosite", "proxy", false)]
+    [InlineData("geoip", "proxy", true)]
+    [InlineData("geoip", "proxy", false)]
+    public void Generate_RequiresEveryProtectiveSet(string type, string action, bool firstAvailable)
+    {
+        var settings = BuildSettings(false, false,
+            [new CustomRule { Type = type, Action = action, Value = "first, second" }]);
+        string? Resolve(string url, string file) => firstAvailable && file == $"user-{type}-first.srs" ? file : null;
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, Resolve));
+
+        Assert.Contains(firstAvailable ? $"user-{type}-second" : $"user-{type}-first", error.Message);
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -17,6 +18,32 @@ internal static class SubscriptionRefreshDiff
         int activePort = 0,
         string? activeHpk = null)
     {
+        var selected = FindActiveServer(servers, activeName, activeUuid, activeHost, activePort);
+        return selected == null ? null : SignatureOf(selected.Server, selected.Port, selected.Uuid, selected.Awg?.HeaderProtectionKey);
+    }
+
+    internal static VlessServerEntry? FindRegisteredServer(SubscriptionEntry? source, IEnumerable<VlessServerEntry> all,
+        string? name, string? key, VlessServerEntry? previous, string? previousRoute)
+    {
+        if (source != null && previous != null && !string.IsNullOrEmpty(previous.DetourVia))
+            return new SubscriptionChainSelection(source.Id, source.Url, previous, previousRoute).Match(source, all);
+        var pool = source?.Servers ?? all;
+        var exact = source?.FindExactRow(name, key);
+        if (exact != null) return exact;
+        if (source != null && previous != null && previousRoute != null)
+        {
+            var equivalent = source.Servers.Where(s => s.Port == previous.Port && s.Server == previous.Server &&
+                SubscriptionEntry.RouteKey(s, source.Servers) == previousRoute).ToList();
+            if (equivalent.Count > 0) return equivalent.FirstOrDefault(s => s.Name == name) ?? equivalent[0];
+        }
+        return FindActiveServer(pool, name, previous?.Uuid, previous?.Server, previous?.Port ?? 0)
+            ?? pool.FirstOrDefault(s => !string.IsNullOrEmpty(name) && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
+            ?? pool.FirstOrDefault();
+    }
+
+    internal static VlessServerEntry? FindActiveServer(IEnumerable<VlessServerEntry>? servers,
+        string? activeName, string? activeUuid, string? activeHost, int activePort)
+    {
         if (servers == null) return null;
         var list = servers.Where(s => s != null).ToList();
         if (list.Count == 0) return null;
@@ -29,11 +56,13 @@ internal static class SubscriptionRefreshDiff
 
             if (byNameMatches.Count > 0)
             {
-                var best = byNameMatches.FirstOrDefault(s =>
-                    (!string.IsNullOrEmpty(activeUuid) && string.Equals(s.Uuid, activeUuid, System.StringComparison.Ordinal)) ||
-                    (!string.IsNullOrEmpty(activeHost) && string.Equals(s.Server, activeHost, System.StringComparison.OrdinalIgnoreCase) && s.Port == activePort))
+                bool SameEndpoint(VlessServerEntry s) => !string.IsNullOrEmpty(activeHost) && s.Port == activePort &&
+                    string.Equals(s.Server, activeHost, System.StringComparison.OrdinalIgnoreCase);
+                bool SameUuid(VlessServerEntry s) => !string.IsNullOrEmpty(activeUuid) && s.Uuid == activeUuid;
+                return byNameMatches.FirstOrDefault(s => SameEndpoint(s) && SameUuid(s))
+                    ?? byNameMatches.FirstOrDefault(SameEndpoint)
+                    ?? byNameMatches.FirstOrDefault(SameUuid)
                     ?? byNameMatches[0];
-                return SignatureOf(best.Server, best.Port, best.Uuid, best.Awg?.HeaderProtectionKey);
             }
         }
 
@@ -42,14 +71,14 @@ internal static class SubscriptionRefreshDiff
             var byEndpoint = list.FirstOrDefault(s =>
                 string.Equals(s.Server, activeHost, System.StringComparison.OrdinalIgnoreCase) &&
                 s.Port == activePort);
-            if (byEndpoint != null) return SignatureOf(byEndpoint.Server, byEndpoint.Port, byEndpoint.Uuid, byEndpoint.Awg?.HeaderProtectionKey);
+            if (byEndpoint != null) return byEndpoint;
         }
 
         if (!string.IsNullOrEmpty(activeUuid))
         {
             var byUuid = list.Where(s => string.Equals(s.Uuid, activeUuid, System.StringComparison.Ordinal)).Take(2).ToList();
             if (byUuid.Count == 1)
-                return SignatureOf(byUuid[0].Server, byUuid[0].Port, byUuid[0].Uuid, byUuid[0].Awg?.HeaderProtectionKey);
+                return byUuid[0];
         }
 
         return null;

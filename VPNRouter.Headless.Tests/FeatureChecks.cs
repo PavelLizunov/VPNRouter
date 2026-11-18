@@ -590,7 +590,7 @@ public static class FeatureChecks
         var rev = snap.GetProperty("revision").GetString()!;
 
         // 1. Valid rules.set
-        var rulesText = "direct domain_suffix example.com\nproxy port 443";
+        var rulesText = "block domain_suffix example.com\nproxy port 443";
         var setSnap = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("rules.set", ToJsonElement(new
         {
             revision = rev,
@@ -626,6 +626,26 @@ public static class FeatureChecks
             badRuleRejected = true;
         }
         Assert(badRuleRejected, "Invalid rule syntax must be rejected");
+
+        foreach (var (format, text) in new[]
+        {
+            ("singbox", """[{"outbound":"direct","port":80},{"outbound":"direct","network":"tcp","port_range":"1000:6000"}]"""),
+            ("singbox", """[{"action":"sniff","domain":"sample.example"}]"""),
+            ("json", """[{"action":"proxy","type":"geosite","value":"invalid.name"}]"""),
+            ("csv", "direct,domain,new.example\nblock,port,70000"),
+            ("csv", ""),
+        })
+        {
+            bool rejected = false;
+            try { await backend.ExecuteAsync("rules.import", ToJsonElement(new { revision = rev2, format, text })); }
+            catch (RouterException ex) when (ex.Code == "invalid_argument") { rejected = true; }
+            Assert(rejected, "Unsupported rules.import must reject the whole replacement");
+            var current = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("rules.get", ToJsonElement(new { })));
+            Assert(current.GetProperty("text").GetString() == getElem.GetProperty("text").GetString(),
+                "Failed replacement must retain the protective rules");
+            var snapshot = JsonSerializer.SerializeToElement(await backend.ExecuteAsync("snapshot", ToJsonElement(new { })));
+            Assert(snapshot.GetProperty("revision").GetString() == rev2, "Rejected import must preserve revision");
+        }
     }
 
     private static async Task CheckDiagnosticsCheckAndExportAsync(string baseDir)

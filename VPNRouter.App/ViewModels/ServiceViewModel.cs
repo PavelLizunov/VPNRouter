@@ -42,23 +42,18 @@ public partial class ServiceViewModel : ObservableObject
         _isLoading = true;
         try
         {
-            var isInstalled = WindowsServiceHelper.IsInstalled();
-            var isRunning = WindowsServiceHelper.IsRunning();
-            var pid = isRunning ? ResolveServicePid() : null;
-
-            if (Dispatcher.UIThread.CheckAccess())
+            var state = WindowsServiceHelper.GetState();
+            void Apply()
             {
-                ApplyState(isInstalled, isRunning, pid);
+                _isLoading = true;
+                ApplyState(state.Installed, state.Running, state.Pid);
+                if (state.Error != null || StatusMessage == VPNRouter.Core.Localization.Strings.MainServiceOwnerConflict)
+                    StatusMessage = state.Error ?? string.Empty;
                 _isLoading = false;
             }
-            else
-            {
-                Dispatcher.UIThread.Post(() =>
-                {
-                    ApplyState(isInstalled, isRunning, pid);
-                    _isLoading = false;
-                });
-            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Apply();
+            else Dispatcher.UIThread.Post(Apply);
         }
         catch
         {
@@ -74,28 +69,6 @@ public partial class ServiceViewModel : ObservableObject
         AutostartChecked = isInstalled;
         ServicePid = pid;
     }
-
-#if PLATFORM_WINDOWS
-    private static int? ResolveServicePid()
-    {
-        try
-        {
-            var procs = System.Diagnostics.Process.GetProcessesByName("VPNRouter.Service");
-            try
-            {
-                return procs.Length > 0 ? procs[0].Id : null;
-            }
-            finally
-            {
-                foreach (var p in procs) p.Dispose();
-            }
-        }
-        catch
-        {
-            return null;
-        }
-    }
-#endif
 
     partial void OnAutostartCheckedChanged(bool value)
     {
@@ -139,9 +112,6 @@ public partial class ServiceViewModel : ObservableObject
             else if (!wantInstalled && IsInstalled)
             {
                 StatusMessage = Strings.RemovingService;
-                if (IsRunning)
-                    await Task.Run(() => WindowsServiceHelper.Stop());
-
                 var uninstallResult = await Task.Run(() => WindowsServiceHelper.Uninstall());
                 StatusMessage = uninstallResult.Message;
                 if (!uninstallResult.Success)
@@ -167,8 +137,8 @@ public partial class ServiceViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            await Task.Run(() => WindowsServiceHelper.Stop());
-            var result = await Task.Run(() => WindowsServiceHelper.Start());
+            var result = await Task.Run(WindowsServiceHelper.Stop);
+            if (result.Success) result = await Task.Run(WindowsServiceHelper.Start);
             StatusMessage = result.Message;
         }
         finally
@@ -185,9 +155,7 @@ public partial class ServiceViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            if (IsRunning) await Task.Run(() => WindowsServiceHelper.Stop());
-            await Task.Run(() => WindowsServiceHelper.Uninstall());
-            var installResult = await Task.Run(() => WindowsServiceHelper.Install());
+            var installResult = await Task.Run(WindowsServiceHelper.Reinstall);
             if (installResult.Success)
             {
                 var startResult = await Task.Run(() => WindowsServiceHelper.Start());

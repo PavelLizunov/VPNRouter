@@ -1,5 +1,8 @@
 #nullable enable
 
+using System.Net;
+using System.Net.Sockets;
+using System.Text.Json;
 using Serilog;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -95,6 +98,45 @@ public sealed class VlessDeepVerifierProcessRunnerTests
     }
 
     [Fact]
+    public async Task VerifyAsync_ChildExitAfterReadinessCancelsPendingRequest()
+    {
+        var binPath = CreateFakeSingBoxBinary();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        TcpListener? listener = null;
+        try
+        {
+            var ready = new TaskCompletionSource<TcpListener>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var handle = new FakeProcessHandle();
+            var runner = new FakeProcessRunner().OnStart(_ => true, _ => handle);
+            runner.AfterObserversAttached = (request, child) =>
+            {
+                using var config = JsonDocument.Parse(File.ReadAllText(request.Arguments[2]));
+                var port = config.RootElement.GetProperty("inbounds")[0].GetProperty("listen_port").GetInt32();
+                listener = new TcpListener(IPAddress.Loopback, port);
+                listener.Start();
+                child.EmitOutput($"INFO[0000] inbound/http[verify-in]: tcp server started at 127.0.0.1:{port}");
+                ready.SetResult(listener);
+            };
+            var verifier = new VlessDeepVerifier(SilentLogger(), binPath, runner);
+            var verification = verifier.VerifyAsync(CleanEntry(), measureBandwidth: false, timeout.Token);
+            var engineListener = await ready.Task.WaitAsync(timeout.Token);
+            using var pending = await engineListener.AcceptTcpClientAsync(timeout.Token);
+            handle.SignalExit(1);
+
+            var result = await verification.WaitAsync(timeout.Token);
+            Assert.False(result.Ok);
+            Assert.Equal(DeepVerifyFailurePhase.LocalSpawn, result.FailurePhase);
+            Assert.Equal(0, handle.KillCallCount);
+        }
+        finally
+        {
+            listener?.Stop();
+            File.Delete(binPath);
+        }
+    }
+
+    [Fact]
     public async Task VerifyAsync_PortNeverBinds_KillsHandleInFinally()
     {
         var binPath = CreateFakeSingBoxBinary();
@@ -137,9 +179,7 @@ public sealed class VlessDeepVerifierProcessRunnerTests
                 await Task.Delay(20, TestContext.Current.CancellationToken);
             cts.Cancel();
 
-            var result = await probeTask;
-
-            Assert.False(result.Ok);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probeTask);
             Assert.True(handle.KillCallCount >= 1,
                 $"Kill should fire on caller cancellation; got {handle.KillCallCount}");
         }

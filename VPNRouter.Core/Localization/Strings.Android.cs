@@ -366,9 +366,9 @@ public static partial class Strings
 
     public static string ZapretAvBlockToast => Ru
         ? "Zapret (winws.exe) был остановлен сразу после запуска. Возможно его блокирует антивирус. " +
-          @"Добавьте в исключения: C:\ProgramData\VPNRouter\zapret\ (вся папка)."
+          "Папка Zapret: " + Services.ZapretUpdater.PackageDisplayPath
         : "Zapret (winws.exe) exited immediately after launch. Likely an antivirus is blocking it. " +
-          @"Whitelist: C:\ProgramData\VPNRouter\zapret\ (whole folder).";
+          "Zapret folder: " + Services.ZapretUpdater.PackageDisplayPath;
 
     public static string ZapretAvBlockCopyPath => Ru ? "Скопировать путь" : "Copy path";
 

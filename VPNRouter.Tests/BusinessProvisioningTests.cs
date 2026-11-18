@@ -62,7 +62,7 @@ public sealed class BusinessProvisioningTests
             Assert.Equal(Updates, cfg.UpdatesEndpoint!.AbsoluteUri);
             var loaded = RealSettingsStore.Instance.Load(fixture.SettingsPath);
             BusinessBootstrap.Apply(loaded, RealSettingsStore.Instance, provisioned,
-                fixture.BundleDirectory, fixture.GeoDirectory, fixture.SettingsPath);
+                fixture.BundleDirectory, fixture.GeoDirectory, fixture.SettingsPath, RuleSetSamples.CheckFixtureContentsAsync);
             var persisted = RealSettingsStore.Instance.Load(fixture.SettingsPath);
             Assert.Equal("full", persisted.App.RoutingMode);
             Assert.Equal("Finland VLESS", persisted.Vless.ActiveServer);
@@ -128,7 +128,7 @@ public sealed class BusinessProvisioningTests
         var invalid = Bundle(connection: BusinessClientConfigurationTests.Three + "\nmalformed-provider-row");
 
         Assert.Throws<InvalidDataException>(() => BusinessBootstrap.Apply(settings, RealSettingsStore.Instance,
-            invalid, fixture.BundleDirectory, fixture.GeoDirectory, fixture.SettingsPath));
+            invalid, fixture.BundleDirectory, fixture.GeoDirectory, fixture.SettingsPath, RuleSetSamples.CheckFixtureContentsAsync));
 
         Assert.Same(previousPool, settings.Vless);
         Assert.Equal("full", settings.App.RoutingMode);
@@ -267,7 +267,7 @@ public sealed class BusinessProvisioningTests
         {
             Directory.CreateDirectory(Path.Combine(BundleDirectory, "geo"));
             Directory.CreateDirectory(GeoDirectory);
-            File.WriteAllBytes(Path.Combine(BundleDirectory, "geo", "geoip-ru.srs"), RuleSetSamples.IntactEnvelope());
+            File.WriteAllBytes(Path.Combine(BundleDirectory, "geo", "geoip-ru.srs"), RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(Path.Combine(BundleDirectory, "geo", "geosite-ru.srs"), RuleSetSamples.UpstreamGeositeTldRu());
         }
 

@@ -8,6 +8,32 @@ namespace VPNRouter.Core.Services;
 
 public partial class SingBoxManager
 {
+    private static readonly IHttpClient LocalControllerHttp =
+        new PolicyHttpClient(new HttpClient(ClashSingBoxApi.CreateControllerHandler()));
+    private volatile HttpRequest? _clashConfigsRequest;
+
+    internal void SetClashController((Uri Endpoint, string? Secret) controller) =>
+        _clashConfigsRequest = ConfigsRequest(controller);
+
+    private HttpRequest CurrentConfigsRequest => _clashConfigsRequest ??
+        ConfigsRequest((ClashSingBoxApi.LocalController(_settings.ClashApi), _settings.ClashApiSecret));
+
+    private static HttpRequest ConfigsRequest((Uri Endpoint, string? Secret) controller) =>
+        new(HttpMethod.Get, new Uri(controller.Endpoint, "/configs"),
+            Headers: string.IsNullOrEmpty(controller.Secret) ? null :
+                new Dictionary<string, string> { ["Authorization"] = $"Bearer {controller.Secret}" },
+            Timeout: TimeSpan.FromSeconds(3));
+
+    private async Task<HttpResponse> SendClashRequestAsync(HttpRequest request, CancellationToken ct)
+    {
+        if (ReferenceEquals(_http, LocalControllerHttp))
+            return await _http.SendAsync(request, ct).ConfigureAwait(false);
+
+        var addresses = await ClashSingBoxApi.ResolveControlTargetsAsync(request.Uri, ct).ConfigureAwait(false);
+        var directUri = new UriBuilder(request.Uri) { Host = addresses[0].ToString() }.Uri;
+        return await _http.SendAsync(request with { Uri = directUri }, ct).ConfigureAwait(false);
+    }
+
     public string WriteConfigToDisk(string configJson)
     {
         lock (_lifecycleGate)
@@ -29,17 +55,18 @@ public partial class SingBoxManager
 
         try
         {
-            var url = $"http://{_settings.ClashApi}/configs?force=true";
+            var configs = CurrentConfigsRequest;
             var body = $"{{\"path\":\"{_currentConfigPath.Replace("\\", "\\\\")}\"}}";
             var bodyBytes = Encoding.UTF8.GetBytes(body);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            var response = _http.SendAsync(new HttpRequest(
-                HttpMethod.Put, new Uri(url),
-                Headers: ClashAuthHeaders(),
-                Body: bodyBytes,
-                BodyContentType: "application/json",
-                Timeout: TimeSpan.FromSeconds(3)), cts.Token).GetAwaiter().GetResult();
+            var response = SendClashRequestAsync(configs with
+            {
+                Method = HttpMethod.Put,
+                Uri = new Uri(configs.Uri, "?force=true"),
+                Body = bodyBytes,
+                BodyContentType = "application/json"
+            }, cts.Token).GetAwaiter().GetResult();
 
             if (response.IsSuccess())
             {
@@ -69,17 +96,9 @@ public partial class SingBoxManager
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            var response = _http.SendAsync(new HttpRequest(
-                HttpMethod.Get, new Uri($"http://{_settings.ClashApi}/configs"),
-                Headers: ClashAuthHeaders(),
-                Timeout: TimeSpan.FromSeconds(3)), cts.Token).GetAwaiter().GetResult();
+            var response = SendClashRequestAsync(CurrentConfigsRequest, cts.Token).GetAwaiter().GetResult();
             return response.IsSuccess();
         }
         catch { return false; }
     }
-
-    private Dictionary<string, string>? ClashAuthHeaders()
-        => string.IsNullOrEmpty(_settings.ClashApiSecret)
-            ? null
-            : new Dictionary<string, string> { ["Authorization"] = $"Bearer {_settings.ClashApiSecret}" };
 }

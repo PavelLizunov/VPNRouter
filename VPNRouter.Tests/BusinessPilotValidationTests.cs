@@ -30,6 +30,8 @@ public sealed class BusinessPilotValidationTests
             // capabilities from an empty AppPaths/bin or an unconditional policy.
             Assert.True(previousPolicy == null, "Windows packaging validation must not inherit a scoped Headless runtime policy.");
             var capabilities = ReadPackagedCapabilities(bundle!);
+            Task<bool> CheckPayloadGeo(string path, CancellationToken ct) =>
+                RuleSetSamples.CheckWithRuntimeAsync(path, ct, Path.Combine(bundle!, "sing-box.exe"));
             SingBoxFeatures.OverrideAwg = capabilities.Awg;
             SingBoxFeatures.OverrideXhttp = capabilities.Xhttp;
             Assert.Equal(capabilities.Awg, SingBoxFeatures.AwgAvailable);
@@ -55,7 +57,8 @@ public sealed class BusinessPilotValidationTests
             PrivateStep("private data directories", AppPaths.EnsureDirectories);
             Assert.False(File.Exists(AppPaths.ConfigYamlPath));
             var settings = PrivateStep("first settings load", () => RealSettingsStore.Instance.Load(AppPaths.ConfigYamlPath));
-            PrivateStep("Business bootstrap", () => BusinessBootstrap.Apply(settings, RealSettingsStore.Instance, bundle));
+            PrivateStep("Business bootstrap", () => BusinessBootstrap.Apply(settings, RealSettingsStore.Instance, connection,
+                bundle!, AppPaths.GeoDir, AppPaths.ConfigYamlPath, CheckPayloadGeo));
             var services = PrivateStep("service metadata", () => BusinessClientConfiguration.Parse(connection));
             Assert.True(services.Subscription != null, "Private delivery must include the subscription reference.");
             Assert.True(services.SupportEndpoint != null && !string.IsNullOrWhiteSpace(services.SupportToken),
@@ -65,11 +68,12 @@ public sealed class BusinessPilotValidationTests
             Assert.Equal(rows.Length, settings.Vless.Servers.Count);
             Assert.Equal(awgRows, settings.Vless.Servers.Count(server => server.Protocol == "amneziawg"));
             Assert.Equal(6, settings.App.RoutingAppsInclude.Count);
-            Assert.True(GeoDataDownloader.AreGeoFilesAvailable());
+            Assert.True(GeoDataDownloader.AreGeoFilesAvailable(CheckPayloadGeo));
             foreach (var mode in new[] { "split", "full" })
             {
                 settings.App.RoutingMode = mode;
-                var config = PrivateStep("native configuration generation", () => ConfigGenerator.Generate(new Profile(), [], settings));
+                var config = PrivateStep("native configuration generation", () => ConfigGenerator.Generate(new Profile(), [], settings,
+                    null, null, resolveRuleSet: null, checkGeoContents: CheckPayloadGeo));
                 Assert.Equal(mode == "split" ? "direct" : "proxy", config.Route.Final);
                 Assert.Equal("direct", config.Route.Rules.First(r => r.RuleSet != null).Outbound);
                 Assert.Contains(config.Dns.Rules, r => r.RuleSet != null && r.Server == "local-dns");
