@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.OS;
+using Java.Interop;
 using Serilog;
 using VPNRouter.Core.Services;
 
@@ -121,15 +122,20 @@ public sealed class AndroidSingBoxRuntime
     public static bool HasLiveTunnel() => QueryService("hasLiveTunnel");
     public static bool HasRecentTunnelStatus() => QueryService("hasRecentTunnelStatus");
 
+    private static JniType? _serviceClass;
+
+    // JNI owns this global class reference for the process. Both the command monitor and
+    // status queries need it across Stop, even when Android destroys the service instance.
+    internal static JniObjectReference ServiceClassReference =>
+        JniType.GetCachedJniType(ref _serviceClass, "com/ninitux/vpnrouter/VpnRouterService").PeerReference;
+
     private static bool QueryService(string methodName)
     {
         try
         {
-            var loader = Application.Context?.ClassLoader;
-            using var service = loader?.LoadClass("com.ninitux.vpnrouter.VpnRouterService");
-            using var method = service?.GetMethod(methodName);
-            using var result = method?.Invoke(null);
-            return result is Java.Lang.Boolean value && value.BooleanValue();
+            var service = ServiceClassReference;
+            var method = JniEnvironment.StaticMethods.GetStaticMethodID(service, methodName, "()Z");
+            return JniEnvironment.StaticMethods.CallStaticBooleanMethod(service, method);
         }
         catch (Exception)
         {

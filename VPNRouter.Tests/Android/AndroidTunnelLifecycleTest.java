@@ -28,6 +28,14 @@ public final class AndroidTunnelLifecycleTest {
         String dispatch = source.substring(source.indexOf("int onStartCommand("),
                 source.indexOf("public IBinder onBind("));
         String activity = Files.readString(root.resolve("VPNRouter.Android/MainActivity.cs"));
+        // The status probe runs between command reservations. Disposing a LoadClass peer
+        // here used to invalidate the monitor cached by the first Connect in this process.
+        String runtime = Files.readString(root.resolve("VPNRouter.Core/Platform/Android/AndroidSingBoxRuntime.cs"));
+        requireOrdered(runtime, "JniType.GetCachedJniType(", "private static bool QueryService(",
+                "var service = ServiceClassReference;", "CallStaticBooleanMethod(service, method)");
+        String storage = Files.readString(root.resolve("VPNRouter.Android/AndroidStorage.cs"));
+        requireOrdered(storage, "private static T WithCommandPreferences", "AndroidSingBoxRuntime.ServiceClassReference",
+                "MonitorEnter(reference)", "action(prefs)", "MonitorExit(reference)");
         String builder = Files.readString(root.resolve("VPNRouter.Android/AndroidConfigBuilder.cs"));
         require(activity.contains("ExtraColdStartOnly = \"cold_start_only\"")
                 && source.contains("EXTRA_COLD_START_ONLY = \"cold_start_only\""), "cold start marker keys differ");
@@ -125,9 +133,11 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(qr, "var command = reserved ?? AndroidStorage.BeginUiCommand();", "await RefreshStoredSubscriptionAsync(",
                 "if (!AndroidStorage.IsCurrentUiCommand(command)) return;", "RequestConnect(command);");
         String app = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.axaml.cs"));
+        requireOrdered(app, "_configRowValue = new TextBlock", "TextWrapping = TextWrapping.Wrap",
+                "Children = { header, _configRowValue }");
         String summary = app.substring(app.indexOf("private void UpdatePerAppSummary("),
                 app.indexOf("private void OnSaveClicked("));
-        requireOrdered(summary, "PerAppPolicySummary(AndroidStorage.GetActivePerAppPolicy()", "_appPickerModeHint.Text =", "_configRowValue.Text =");
+        requireOrdered(summary, "PerAppPolicySummary(AndroidStorage.GetActivePerAppPolicy()", "_appPickerModeHint.Text =", "_configRowValue.Text = policy;");
     }
 
     private static void requireOrdered(String source, String... steps) {

@@ -77,14 +77,17 @@ public static class AndroidStorage
             return WithCommandPreferences(prefs =>
             {
                 string id = Guid.NewGuid().ToString("N");
-                using var editor = prefs.Edit();
-                if (editor == null) return null;
+                using var editor = prefs.Edit() ?? throw new InvalidOperationException("Preferences unavailable.");
                 editor.PutString(UiCommandKey, id);
                 editor.Apply();
                 return id;
             });
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter", $"VPN command reservation failed ({ex.GetType().Name})");
+            return null;
+        }
     }
 
     internal static bool IsCurrentUiCommand(string? id) => id != null && id == GetString(UiCommandKey);
@@ -192,16 +195,12 @@ public static class AndroidStorage
         }
     }
 
-    private static readonly Lazy<Java.Lang.Class> CommandMonitor = new(() =>
-        Application.Context.ClassLoader?.LoadClass("com.ninitux.vpnrouter.VpnRouterService") ??
-        throw new InvalidOperationException("VPN command monitor unavailable."));
-
     private static T WithCommandPreferences<T>(Func<ISharedPreferences, T> action)
     {
         var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private)
             ?? throw new InvalidOperationException("Preferences unavailable.");
         // The service takes the same Java monitor when a tile, stop or revoke supersedes the UI.
-        var reference = ((Java.Interop.IJavaPeerable)CommandMonitor.Value).PeerReference;
+        var reference = VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ServiceClassReference;
         Java.Interop.JniEnvironment.Monitors.MonitorEnter(reference);
         try { return action(prefs); }
         finally { Java.Interop.JniEnvironment.Monitors.MonitorExit(reference); }

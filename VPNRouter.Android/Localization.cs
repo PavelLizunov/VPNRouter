@@ -138,6 +138,7 @@ internal static class Localization
         "dns-unavailable" => Ru ? "Это устройство не поддерживает DNS-туннель." : "DNS tunnels are unavailable on this device.",
         "dns-invalid" => Ru ? "Проверьте режим DNS и адрес DNS-сервера в профиле VPN." : "Check the DNS mode and DNS server address in the VPN profile.",
         "config-invalid" => Ru ? "Проверьте профиль VPN и настройки выбора приложений." : "Check the VPN profile and app selection settings.",
+        "command-unavailable" => Ru ? "Не удалось отправить команду подключения. Попробуйте ещё раз." : "Could not submit the connection request. Try again.",
         "tunnel-closing" => Ru ? "Прежний туннель ещё закрывается. Попробуйте подключиться позже." : "The previous tunnel is still closing. Try connecting again shortly.",
         "foreground-start-blocked" => Ru ? "Откройте приложение, чтобы запустить VPN." : "Open the app to start the VPN.",
         "no-permission" => Ru ? "Разрешите приложению создать VPN-соединение." : "Allow the app to create a VPN connection.",
