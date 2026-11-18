@@ -53,7 +53,9 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/tunnel-policy"
           cd "$RUNNER_TEMP/tunnel-policy"
-          curl -fsSLo json.jar https://repo.maven.apache.org/maven2/org/json/json/20250517/json-20250517.jar
+          artifact=org/json/json/20250517/json-20250517.jar
+          curl -fsSL --retry 2 --retry-max-time 20 -o json.jar "https://repo.maven.apache.org/maven2/$artifact" ||
+            curl -fsSL --retry 2 --retry-max-time 20 -o json.jar "https://maven-central.storage-download.googleapis.com/maven2/$artifact"
           echo '3ea61b2a06e31edf1c91134fe9106b0ebb16628be169f3db75bc7a2b06b45796  json.jar' | sha256sum --check
           javac -classpath json.jar -d . "$GITHUB_WORKSPACE/VPNRouter.Android/AndroidTunnelPolicy.java" \
             "$GITHUB_WORKSPACE/VPNRouter.Tests/Android/AndroidTunnelPolicyTest.java"
