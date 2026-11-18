@@ -11,6 +11,14 @@ public sealed class ConnectConsentGate
     private string? _owner;
     private string? _pending;
 
+    public ConnectConsentGate() { }
+
+    internal ConnectConsentGate(string? owner, string? pending)
+    {
+        _owner = owner;
+        _pending = pending;
+    }
+
     internal (string? Owner, string? Pending) Requests
     {
         get { lock (_sync) return (_owner, _pending); }
@@ -28,26 +36,37 @@ public sealed class ConnectConsentGate
                 if (command.Length > 0 && command != _owner) _pending = command;
                 return false;
             }
+            _pending = null;
             _owner = command;
             return true;
         }
     }
 
-    public void Close() => TakeResult();
-
-    internal (string? Owner, string? Pending) ResolveResult(Func<string?, bool> isCurrent)
+    public void Close()
     {
-        var (owner, pending) = TakeResult();
-        return (isCurrent(owner) ? owner : null, isCurrent(pending) ? pending : null);
+        lock (_sync) _owner = _pending = null;
     }
 
-    private (string? Owner, string? Pending) TakeResult()
+    internal string? ResolveResult(Func<string?, bool> isCurrent)
     {
         lock (_sync)
         {
-            var requests = (_owner, _pending);
-            _owner = _pending = null;
-            return requests;
+            if (_owner == null) return null;
+            var owner = _owner;
+            _owner = null;
+            if (!isCurrent(_pending)) _pending = null;
+            return isCurrent(owner) ? owner : null;
+        }
+    }
+
+    internal string? ClaimPending(bool currentActivity, Func<string?, bool> isCurrent)
+    {
+        lock (_sync)
+        {
+            if (!currentActivity || _owner != null || _pending == null) return null;
+            var pending = _pending;
+            _pending = null;
+            return isCurrent(pending) ? pending : null;
         }
     }
 }

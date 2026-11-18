@@ -39,7 +39,7 @@ public partial class AndroidApp
                 }
             }
 
-            if (input.Length > 0 && !string.Equals(input, AndroidStorage.SavedServerInput(), StringComparison.Ordinal))
+            if (AndroidSubscriptionRefresh.HasServerInputEdit(input, AndroidStorage.SavedServerInput()))
             {
                 OnSaveClicked(sender, e);
                 if (_serverInputError is { IsVisible: true }) return;

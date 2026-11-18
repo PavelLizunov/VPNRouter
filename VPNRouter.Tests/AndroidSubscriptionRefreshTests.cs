@@ -335,6 +335,37 @@ public class AndroidSubscriptionRefreshTests
     }
 
     [Fact]
+    public void SimpleConnect_UnchangedPaddedFreeUriKeepsTheSelectedServerWithAnotherSubscription()
+    {
+        var other = new SubscriptionEntry { Url = Feed, Enabled = true, Servers = [ServerUriParser.Parse(OldTargetUri)] };
+        using var prefs = new PreferenceFile(new()
+        {
+            ["subscriptions_json"] = JsonSerializer.Serialize(new[] { other }),
+            ["subscription_url"] = Feed,
+            ["selected_server_name"] = other.Servers[0].Name,
+            ["config_mode"] = "subscribe"
+        });
+        const string raw = " " + FreshUri + "\t";
+        Assert.True(AndroidSubscriptionRefresh.SaveFreeConfig(ServerUriParser.Parse(raw), raw, "qr-command",
+            prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+
+        var reopened = prefs.Reload();
+        var saved = reopened["vless_uri"];
+        Assert.Equal(raw, saved);
+        Assert.False(AndroidSubscriptionRefresh.HasServerInputEdit(FreshUri, saved));
+        Assert.False(AndroidSubscriptionRefresh.HasServerInputEdit(raw, FreshUri));
+        Assert.True(AndroidSubscriptionRefresh.HasServerInputEdit(OldTargetUri, saved));
+        var selected = Assert.Single(JsonSerializer.Deserialize<List<VlessServerEntry>>(reopened["servers_json"])!,
+            row => row.Name == reopened["selected_server_name"]);
+        Assert.True(selected.UseAsSingleOutbound);
+        Assert.Equal("fresh.invalid", selected.Server);
+        Assert.Equal("manual", reopened["config_mode"]);
+        var retained = Assert.Single(JsonSerializer.Deserialize<List<SubscriptionEntry>>(reopened["subscriptions_json"])!);
+        Assert.True(retained.Enabled);
+        Assert.Equal(other.Servers[0].Server, Assert.Single(retained.Servers).Server);
+    }
+
+    [Fact]
     public async Task LaterFreeSelection_PreservesLegacyFeedOwnershipForRejection()
     {
         var old = VlessUriParser.Parse(OldTargetUri);
