@@ -19,3 +19,7 @@ Prepare the version in a PR to main. The published tag must identify the
 accepted source and all staging jobs must run at that tag. The release
 ledger still records Android issue #689 as open. The device acceptance
 covered normal HTTPS IPv4 routing and passive listener observations.
+
+The owner approved a one-time exception for the Android #689 release
+gate on 2026-11-19. The exception applies to Standard v2.50.6-r1 as a
+prerelease. #689 remains open and the stable release gate still applies.
