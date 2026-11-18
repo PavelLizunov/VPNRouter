@@ -109,9 +109,16 @@ public static class SettingsMigrator
 
         if (vless != null && !string.IsNullOrEmpty(vless.ActiveServer))
         {
-            var effective = vless.GetEffectiveServers();
-            var stillPresent = effective.Any(s =>
-                string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase));
+            IEnumerable<VlessServerEntry> candidates = vless.GetEffectiveServers();
+            if (string.Equals(settings.App?.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase) && subs != null)
+            {
+                var subscribed = subs.Where(sub => sub is { Enabled: true, Servers: not null })
+                    .SelectMany(sub => sub.Servers)
+                    .Where(row => !string.IsNullOrWhiteSpace(row?.Server));
+                candidates = candidates.Concat(subscribed);
+            }
+            var stillPresent = candidates.Any(s =>
+                string.Equals(s?.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase));
             if (!stillPresent)
             {
                 logger?.Warning(

@@ -181,9 +181,11 @@ public static class SubscriptionRefreshChecks
             && kept.LastRefreshedAt == other.LastRefreshedAt && reloaded.App.StrictDns,
             "Eviction must preserve the other feed's saved state and unrelated settings");
         var active = refreshAll ? kept.Servers.Single().Name : manual.Name;
-        Assert(reloaded.App.ConfigMode == (refreshAll ? "subscribe" : "generated")
-            && reloaded.App.ActiveSubscriptionServer == (refreshAll ? active : string.Empty)
-            && reloaded.Vless.ActiveServer == active, "Persisted selection must resolve to the surviving source");
+        var mode = refreshAll ? "subscribe" : "generated";
+        Assert(reloaded.App.ConfigMode == mode, $"Rejected chain: expected {mode} mode after reload");
+        Assert(reloaded.App.ActiveSubscriptionServer == (refreshAll ? active : string.Empty),
+            $"Rejected chain: wrong subscription selection after reload in {mode} mode");
+        Assert(reloaded.Vless.ActiveServer == active, $"Rejected chain: wrong active server after reload in {mode} mode");
         var resolved = VlessServersResolver.Resolve(reloaded);
         Assert(resolved.Any(s => s.Name == active) && resolved.All(s => s.Server != "exit.invalid"),
             "Offline selection after restart must not return the historical direct target");
