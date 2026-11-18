@@ -65,6 +65,7 @@ public final class VpnRouterService extends VpnService {
     public static final String ACTION_STOP = "com.ninitux.vpnrouter.STOP";
     public static final String ACTION_RESTART = "com.ninitux.vpnrouter.RESTART";
     public static final String EXTRA_CONFIG_JSON = "config_json";
+    public static final String EXTRA_COLD_START_ONLY = "cold_start_only";
     public static final String EXTRA_ALLOWED_PACKAGES = "allowed_packages";
     public static final String EXTRA_PER_APP_MODE = "per_app_mode";
     public static final String EXTRA_PER_APP_PACKAGES = "per_app_packages";
@@ -364,6 +365,7 @@ public final class VpnRouterService extends VpnService {
                 return START_NOT_STICKY;
             }
             final String cfg = intent.getStringExtra(EXTRA_CONFIG_JSON);
+            final boolean coldStartOnly = intent.getBooleanExtra(EXTRA_COLD_START_ONLY, false);
             final String[] allowed = intent.getStringArrayExtra(EXTRA_ALLOWED_PACKAGES);
             final String perAppMode = intent.getStringExtra(EXTRA_PER_APP_MODE);
             final String[] perAppPkgs = intent.getStringArrayExtra(EXTRA_PER_APP_PACKAGES);
@@ -375,6 +377,10 @@ public final class VpnRouterService extends VpnService {
             submitCommand(startId, new Runnable() {
                 @Override
                 public void run() {
+                    if (coldStartOnly && commandServer != null) {
+                        reportFailure("config-invalid", true);
+                        return;
+                    }
                     // Legacy callers supply allowed_packages alone. The UI sends an explicit mode.
                     boolean legacyInclude;
                     String sourcePrefs;

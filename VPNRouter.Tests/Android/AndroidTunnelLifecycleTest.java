@@ -27,7 +27,20 @@ public final class AndroidTunnelLifecycleTest {
         String source = Files.readString(root.resolve("VPNRouter.Android/VpnRouterService.java"));
         String dispatch = source.substring(source.indexOf("public int onStartCommand("),
                 source.indexOf("public IBinder onBind("));
-        requireOrdered(dispatch, "prepareTunnelConfig(cfg,", "if (checked == null) return;",
+        String activity = Files.readString(root.resolve("VPNRouter.Android/MainActivity.cs"));
+        String builder = Files.readString(root.resolve("VPNRouter.Android/AndroidConfigBuilder.cs"));
+        require(activity.contains("ExtraColdStartOnly = \"cold_start_only\"")
+                && source.contains("EXTRA_COLD_START_ONLY = \"cold_start_only\""), "cold start marker keys differ");
+        requireOrdered(activity, "void OnMissingRuleSet(string _) => coldStartOnly = true;",
+                "BuildConfigJsonFromCustom(rawJson, singboxLogPath, OnMissingRuleSet)",
+                "DispatchTunnelStart(configJson, coldStartOnly);", "BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet)",
+                "DispatchTunnelStart(configJson, coldStartOnly, entry);", ".PutExtra(ExtraColdStartOnly, coldStartOnly)");
+        require(builder.contains("resolveRuleSet: null, onMissingRuleSet: onMissingRuleSet)")
+                && builder.contains("CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet)"),
+                "Android builder did not propagate rule-set availability");
+        requireOrdered(dispatch, "getBooleanExtra(EXTRA_COLD_START_ONLY, false)", "submitCommand(startId,",
+                "if (coldStartOnly && commandServer != null)", "reportFailure(\"config-invalid\", true);",
+                "return;", "prepareTunnelConfig(cfg,", "if (checked == null) return;",
                 "pendingConfigJson = cfg;", "startTunnel(checked);");
         require(!dispatch.contains("retireTunnel()"), "service retired the old tunnel during preflight");
         requireOrdered(dispatch, "else if (loadLastGoodConfig())", "prepareTunnelConfig(pendingConfigJson,",
@@ -52,7 +65,7 @@ public final class AndroidTunnelLifecycleTest {
     private static void requireOrdered(String source, String... steps) {
         int offset = 0;
         for (String step : steps) {
-            int found = source.indexOf(step);
+            int found = source.indexOf(step, offset);
             require(found >= offset, "Missing or misplaced service step: " + step);
             offset = found + step.length();
         }

@@ -223,7 +223,7 @@ public sealed class ConfigStorage
 
                     _cachedSettings = CloneSettings(settings);
                     _cachedRevision = Convert.ToHexStringLower(SHA256.HashData(yamlBytes));
-                    _logger.Information("[ConfigStorage] Persisted settings to {Path}, new revision {Rev}", ConfigPath, _cachedRevision);
+                    _logger.Information("[ConfigStorage] Persisted settings");
                 }
                 catch (RouterException)
                 {
@@ -273,7 +273,7 @@ public sealed class ConfigStorage
             var parsed = SettingsLoader.Parse(exactRead.Value.Yaml);
             _cachedSettings = parsed;
             _cachedRevision = exactRead.Value.Revision;
-            _logger.Information("[ConfigStorage] Loaded existing config from {Path} (rev: {Rev})", ConfigPath, _cachedRevision);
+            _logger.Information("[ConfigStorage] Loaded existing settings");
         }
         catch (Exception ex)
         {
@@ -334,7 +334,7 @@ public sealed class ConfigStorage
         }
         catch (Exception ex)
         {
-            _logger.Warning("[ConfigStorage] Failed to read {Path}: {ErrorType}", ConfigPath, ex.GetType().Name);
+            _logger.Warning("[ConfigStorage] Failed to read settings: {ErrorType}", ex.GetType().Name);
             throw new RouterException("storage_error", "Failed to read configuration file from storage", ex);
         }
     }
@@ -356,7 +356,7 @@ public sealed class ConfigStorage
         }
         catch (Exception ex)
         {
-            _logger.Warning("[ConfigStorage] Failed to create named mutex '{LockName}': {ErrorType}; failing closed", lockName, ex.GetType().Name);
+            _logger.Warning("[ConfigStorage] Failed to create settings mutex: {ErrorType}; failing closed", ex.GetType().Name);
             throw new RouterException("storage_error", "Failed to acquire configuration lock");
         }
 
@@ -372,7 +372,7 @@ public sealed class ConfigStorage
         catch (Exception ex)
         {
             mutex.Dispose();
-            _logger.Warning("[ConfigStorage] Exception waiting on named mutex '{LockName}': {ErrorType}; failing closed", lockName, ex.GetType().Name);
+            _logger.Warning("[ConfigStorage] Exception waiting on settings mutex: {ErrorType}; failing closed", ex.GetType().Name);
             throw new RouterException("storage_error", "Failed to acquire configuration lock");
         }
 

@@ -890,6 +890,12 @@ public partial class MainWindowViewModel
         if (_isLoadingUI) return;
 
         BackupConfigFile();
+        ReadSettingsFromControls();
+        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
+    }
+
+    private void ReadSettingsFromControls()
+    {
         ApplyConfigModeToSettings();
         ApplySubscriptionsToSettings();
         ApplyRoutingToSettings();
@@ -897,8 +903,6 @@ public partial class MainWindowViewModel
         ApplyServersToSettings();
         ApplyCustomConfigsToSettings();
         ApplyAppSelectionToSettings();
-
-        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
     private void BackupConfigFile()

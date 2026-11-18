@@ -13,7 +13,10 @@ public static class AndroidConfigBuilder
         return BuildConfigJson(entry, logOutputPath);
     }
 
-    public static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath = null)
+    public static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath = null) =>
+        BuildConfigJson(entry, logOutputPath, onMissingRuleSet: null);
+
+    internal static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath, Action<string>? onMissingRuleSet)
     {
         var settings = new AppSettings();
         settings.App.RoutingMode = "full";
@@ -55,7 +58,8 @@ public static class AndroidConfigBuilder
         };
 
         var processNames = System.Array.Empty<string>();
-        var sbConfig = ConfigGenerator.Generate(profile, processNames, settings);
+        var sbConfig = ConfigGenerator.Generate(profile, processNames, settings, strictDnsOverride: null,
+            isServerAlive: null, resolveRuleSet: null, onMissingRuleSet: onMissingRuleSet);
 
         try
         {
@@ -79,7 +83,10 @@ public static class AndroidConfigBuilder
         return InjectDpiBypass(patched, AndroidStorage.GetDpiBypassMode());
     }
 
-    public static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath = null)
+    public static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath = null) =>
+        BuildConfigJsonFromCustom(rawJson, logOutputPath, onMissingRuleSet: null);
+
+    internal static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath, Action<string>? onMissingRuleSet)
     {
         var settings = new AppSettings();
         settings.App.RoutingMode = "full";
@@ -96,7 +103,7 @@ public static class AndroidConfigBuilder
 
         var processNames = System.Array.Empty<string>();
 
-        var injectedJson = CustomConfigInjector.Inject(rawJson, processNames, settings);
+        var injectedJson = CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet);
 
         var patched = PatchLogPathForAndroid(injectedJson, logOutputPath);
 

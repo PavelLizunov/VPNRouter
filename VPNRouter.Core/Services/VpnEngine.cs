@@ -171,41 +171,46 @@ public partial class VpnEngine : IDisposable
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (HasLiveOrStartingSingBox())
-            {
-                _logger?.Warning(
-                    "[VpnEngine] StartAsync ignored - sing-box already {State} (PID {Pid}); use ApplyAsync/ReloadConfigJson for reconfigure",
-                    _singBox?.State,
-                    SingBoxPid);
-                return;
-            }
-
-            _sessionCts?.Dispose();
-            _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            ResetFailoverContext(settings);
-            try
-            {
-                await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                if (!IsRunning)
-                {
-                    _logger?.Warning(
-                        "[VpnEngine] StartAsync failed to bring up VPN, tearing down partial state ({ExceptionType})", ex.GetType().Name);
-                    try { TeardownInternal(); } catch { }
-                }
-                else
-                {
-                    _logger?.Warning(
-                        "[VpnEngine] StartAsync threw after sing-box came up, leaving live tunnel for Stop/Dispose ({ExceptionType})", ex.GetType().Name);
-                }
-                throw;
-            }
+            await StartSessionGatedAsync(settings, ct, skipVpnConflictCheck).ConfigureAwait(false);
         }
         finally
         {
             _lifecycleGate.Release();
+        }
+    }
+
+    private async Task StartSessionGatedAsync(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck)
+    {
+        if (HasLiveOrStartingSingBox())
+        {
+            _logger?.Warning(
+                "[VpnEngine] StartAsync ignored - sing-box already {State} (PID {Pid}); use ApplyAsync/ReloadConfigJson for reconfigure",
+                _singBox?.State,
+                SingBoxPid);
+            return;
+        }
+
+        _sessionCts?.Dispose();
+        _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        ResetFailoverContext(settings);
+        try
+        {
+            await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            if (!IsRunning)
+            {
+                _logger?.Warning(
+                    "[VpnEngine] StartAsync failed to bring up VPN, tearing down partial state ({ExceptionType})", ex.GetType().Name);
+                try { TeardownInternal(); } catch { }
+            }
+            else
+            {
+                _logger?.Warning(
+                    "[VpnEngine] StartAsync threw after sing-box came up, leaving live tunnel for Stop/Dispose ({ExceptionType})", ex.GetType().Name);
+            }
+            throw;
         }
     }
 
@@ -220,19 +225,29 @@ public partial class VpnEngine : IDisposable
         return singBox.HasActiveTunnel;
     }
 
-    internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck)
+    internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck,
+        Action? retireAfterValidation = null)
     {
-        _skipVpnConflictCheck = skipVpnConflictCheck;
-        _warmupConfirmed = false;
-        _postStartPhase = false;
+        async Task PrepareRuntimeAsync()
+        {
+            ct.ThrowIfCancellationRequested();
+            retireAfterValidation?.Invoke();
+            _skipVpnConflictCheck = skipVpnConflictCheck;
+            _warmupConfirmed = false;
+            _postStartPhase = false;
+            if (_splitDriver is not null)
+                await _splitDriver.SweepStaleStateAsync(ct).ConfigureAwait(false);
+        }
+
         var host = new VpnEngineStartupHost(this);
         var pipeline = new StartupPipeline(host, dnsHardening: _dnsHardening);
-        if (_splitDriver is not null)
-            await _splitDriver.SweepStaleStateAsync(ct).ConfigureAwait(false);
+        var mode = retireAfterValidation == null ? StartupMode.ColdStart : StartupMode.AutoFailover;
+        if (mode == StartupMode.ColdStart)
+            await PrepareRuntimeAsync().ConfigureAwait(false);
 
         var result = await pipeline.ExecuteAsync(
-            new StartupContext(settings, StartupMode.ColdStart, skipVpnConflictCheck),
-            ct);
+            new StartupContext(settings, mode, skipVpnConflictCheck), ct,
+            retireAfterValidation: mode == StartupMode.AutoFailover ? PrepareRuntimeAsync : null);
 
         if (result.EarlyReturn)
         {
@@ -289,7 +304,7 @@ public partial class VpnEngine : IDisposable
         }
     }
 
-    private async Task<bool> ApplyGatedAsync(AppSettings settings, CancellationToken ct, bool forceRestart)
+    private async Task<bool> ApplyGatedAsync(AppSettings settings, CancellationToken ct, bool forceRestart, bool verifySelection = false)
     {
         if (_sessionCts is null || _sessionCts.IsCancellationRequested)
         {
@@ -311,6 +326,8 @@ public partial class VpnEngine : IDisposable
         var oldProfile = _activeProfile;
         var oldScanResult = _scanResult;
         var configCommitted = false;
+        var previousSettings = _failoverSettingsContext;
+        bool pausedHealth = false;
 
         void RestoreActiveBaseline()
         {
@@ -321,6 +338,11 @@ public partial class VpnEngine : IDisposable
             ActiveServerAddress = oldServerAddress;
             _activeProfile = oldProfile;
             _scanResult = oldScanResult;
+            if (pausedHealth && oldProfile != null && previousSettings != null && HasActiveTunnel)
+            {
+                pausedHealth = false;
+                _healthMonitor?.Start(oldProfile, previousSettings, oldScanResult);
+            }
         }
 
         OnStatus("Applying config changes...");
@@ -341,6 +363,12 @@ public partial class VpnEngine : IDisposable
             }
 
             var configJson = result.ConfigJson;
+            if (verifySelection)
+            {
+                var sanity = _sanityCheck ??= new ConfigSanityCheck(_logger);
+                if (sanity.CheckBeforeStart(configJson).IsDead || !await _singBox.CheckCandidateAsync(configJson, ct).ConfigureAwait(false))
+                    throw new InvalidOperationException("Selected proxy configuration failed validation");
+            }
 
             var newConfigMode = (settings.App.ConfigMode ?? "generated")
                 .Equals("custom", StringComparison.OrdinalIgnoreCase)
@@ -399,6 +427,11 @@ public partial class VpnEngine : IDisposable
                 ? "[VpnEngine] Forced full restart (structural change)"
                 : "[VpnEngine] Applying config via full restart");
 
+            if (verifySelection && _healthMonitor != null)
+            {
+                _healthMonitor.Stop();
+                pausedHealth = true;
+            }
             if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart: true))
             {
                 RestoreActiveBaseline();
@@ -415,6 +448,8 @@ public partial class VpnEngine : IDisposable
             // Restart replaces the link and resolved drops its per-link settings.
             ApplyUnixDnsSettings(settings);
             ResetFailoverContext(settings);
+            if (pausedHealth && result.Profile != null)
+                _healthMonitor?.Start(result.Profile, settings, _scanResult);
             UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 

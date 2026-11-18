@@ -69,6 +69,10 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [Theory]
     [InlineData("unconfirmed-reload")]
     [InlineData("missing-rule-set")]
+    [InlineData("missing-ad-filter")]
+    [InlineData("failover-missing-ad-filter")]
+    [InlineData("verified-free-missing-rule-set")]
+    [InlineData("verified-free-invalid-native")]
     [InlineData("damaged-built-in")]
     [InlineData("missing-custom-config")]
     public async Task ApplyAsync_FailedGenerationOrReload_PreservesActiveTunnel(string scenario)
@@ -196,12 +200,18 @@ public sealed class VpnEngineApplyStructuralChangeTests
             const string originalJson = """{"route":{"final":"proxy"}}""";
             File.WriteAllText(VPNRouter.Core.AppPaths.CurrentConfigPath, originalJson);
             string expectedFailure = "Apply failed: sing-box reload or restart was not confirmed";
-            if (scenario == "missing-rule-set")
+            if (scenario is "missing-rule-set" or "verified-free-missing-rule-set")
             {
                 // A file at the cache directory path makes resolution fail before it can fetch.
                 Directory.CreateDirectory(VPNRouter.Core.AppPaths.CacheDir);
                 File.WriteAllText(Path.Combine(VPNRouter.Core.AppPaths.CacheDir, RuleSetCacheManager.CacheSubdir), "fixture");
                 settings.App.CustomRules = [new() { Action = "block", Type = "geosite", Value = "example" }];
+            }
+            if (scenario is "missing-ad-filter" or "failover-missing-ad-filter")
+            {
+                Directory.CreateDirectory(VPNRouter.Core.AppPaths.CacheDir);
+                File.WriteAllText(Path.Combine(VPNRouter.Core.AppPaths.CacheDir, RuleSetCacheManager.CacheSubdir), "fixture");
+                settings.App.BlockAds = true;
             }
             if (scenario == "damaged-built-in")
             {
@@ -220,8 +230,44 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 expectedFailure = "Apply failed: check the selected configuration and required rule sets, then retry.";
             }
 
-            var result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken,
-                forceRestart: invalidCandidate);
+            bool result;
+            if (scenario == "failover-missing-ad-filter")
+            {
+                var activeProfile = new Profile { Name = "Original profile" };
+                SetField(engine, "_activeProfile", activeProfile);
+                SetField(engine, "_warmupConfirmed", true);
+                engine.EnterPostStartPhase();
+                engine.ResetFailoverContext(settings);
+                expectedFailure = "Automatic failover rejected before tunnel replacement.";
+
+                result = await engine.ExecuteFailoverRestartAsync(settings, TestContext.Current.CancellationToken);
+
+                Assert.DoesNotContain("Stopping...", statuses);
+                Assert.Same(activeProfile, GetField(engine, "_activeProfile"));
+                Assert.True(Assert.IsType<bool>(GetField(engine, "_warmupConfirmed")));
+                Assert.Same(settings, GetField(engine, "_failoverSettingsContext"));
+                Assert.Equal(0, dnsHardening.RestoreCount);
+            }
+            else if (scenario.StartsWith("verified-free-", StringComparison.Ordinal))
+            {
+                runner.OnRun(r => r.Arguments.SequenceEqual(["check", "-c", "stdin"]),
+                    new ProcessResult(1, "", "", TimeSpan.Zero, false));
+                var previous = SettingsLoader.Copy(settings);
+                previous.Vless.ActiveServer = "previous selection";
+                SetField(engine, "_failoverSettingsContext", previous);
+                settings.Vless.Servers[0].UseAsSingleOutbound = true;
+                bool saved = false;
+                result = await engine.ConnectVerifiedFreeConfigAsync(settings, () => saved = true,
+                    skipVpnConflictCheck: false, TestContext.Current.CancellationToken);
+                Assert.False(saved);
+                Assert.Equal("previous selection", previous.Vless.ActiveServer);
+                Assert.DoesNotContain("Stopping...", statuses);
+            }
+            else
+            {
+                result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken,
+                    forceRestart: invalidCandidate);
+            }
 
             Assert.False(result);
             Assert.False(initialHandle.HasExited);
@@ -231,7 +277,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
             Assert.Contains(expectedFailure, statuses);
             Assert.Contains(sink.Events, e => e.Properties.ContainsKey("Status") && e.RenderMessage().Contains(expectedFailure));
-            if (invalidCandidate)
+            if (invalidCandidate && scenario != "failover-missing-ad-filter")
                 Assert.Contains(sink.Events, e => e.Properties.ContainsKey("ExceptionType") && e.Exception is null);
             sink.AssertExcludes("user-geosite-example", "fixture-private-selection", "TestProfile", "10.0.0.1");
             Assert.DoesNotContain(statuses, s => s.StartsWith("Applied"));
@@ -250,7 +296,16 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 Assert.DoesNotContain(fakeHttp.SentRequests, r => r.Method != HttpMethod.Get);
             }
             Assert.Empty(runner.StartCalls);
-            Assert.Empty(runner.RunCalls);
+            if (scenario == "verified-free-invalid-native")
+            {
+                var check = Assert.Single(runner.RunCalls);
+                Assert.Equal(new[] { "check", "-c", "stdin" }, check.Arguments);
+                Assert.Contains("outbounds", check.StdinInput);
+            }
+            else
+            {
+                Assert.Empty(runner.RunCalls);
+            }
             Assert.Equal(0, fakeDriver.EngageCount);
             Assert.Equal(0, fakeDriver.DisengageCount);
 

@@ -55,11 +55,12 @@ public class GeoDataDownloader
         catch (UnauthorizedAccessException) { return false; }
     }
 
-    internal static bool UseGeoBypass(bool enabled, bool required, Func<string, CancellationToken, Task<bool>>? checkContents)
+    internal static bool UseGeoBypass(bool enabled, Action<string>? onMissingRuleSet,
+        Func<string, CancellationToken, Task<bool>>? checkContents)
     {
         if (!enabled) return false;
         if (AreGeoFilesAvailable(checkContents ?? RuleSetFile.CheckContentsAsync)) return true;
-        if (required) throw new InvalidOperationException("The enabled RU bypass requires readable geoip and geosite rule-sets.");
+        onMissingRuleSet?.Invoke("The enabled RU bypass requires readable geoip and geosite rule-sets.");
         return false;
     }
 

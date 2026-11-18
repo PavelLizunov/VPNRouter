@@ -9,11 +9,15 @@ public static partial class ConfigGenerator
         "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs";
     private const string AdBlockRuleSetFilename = "adblock_reject.srs";
 
-    private static void ApplyAdBlock(SingBoxConfig config, Func<string, string, string?> resolveRuleSet)
+    internal static void RejectMissingRuleSet(string reason) => throw new InvalidOperationException(reason);
+
+    private static void ApplyAdBlock(SingBoxConfig config, Func<string, string, string?> resolveRuleSet,
+        Action<string>? onMissingRuleSet)
     {
         var localPath = resolveRuleSet(AdBlockRuleSetUrl, AdBlockRuleSetFilename);
-        if (string.IsNullOrEmpty(localPath))
+        if (string.IsNullOrWhiteSpace(localPath))
         {
+            onMissingRuleSet?.Invoke("Ad filtering requires a readable ad-block rule-set.");
             Serilog.Log.Logger.Warning(
                 "[ConfigGenerator] AdBlock rule-set unavailable (offline + no cache); generating config WITHOUT ad blocking");
             return;

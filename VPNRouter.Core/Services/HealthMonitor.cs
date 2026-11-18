@@ -521,7 +521,7 @@ public class HealthMonitor : IDisposable
                         scan = freshScan;
                         _singBox.ReloadConfigJson(configJson, forceRestart: true);
                     }
-                    catch (Exception)
+                    catch (Exception) when (!_singBox.HasActiveTunnel)
                     {
                         _logger.Warning(
                             "[HealthMonitor] Config regen before full restart failed — " +
@@ -691,7 +691,7 @@ public class HealthMonitor : IDisposable
                 if (File.Exists(namedPath))
                 {
                     var rawJson = File.ReadAllText(namedPath);
-                    return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
+                    return CustomConfigInjector.Inject(rawJson, processNames, _appSettings, ConfigGenerator.RejectMissingRuleSet);
                 }
             }
 
@@ -700,14 +700,14 @@ public class HealthMonitor : IDisposable
             if (File.Exists(legacyPath))
             {
                 var rawJson = File.ReadAllText(legacyPath);
-                return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
+                return CustomConfigInjector.Inject(rawJson, processNames, _appSettings, ConfigGenerator.RejectMissingRuleSet);
             }
 
             if (!string.IsNullOrEmpty(_appSettings.App.CustomConfig))
             {
                 var customPath = Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig);
                 var fallbackJson = File.ReadAllText(customPath);
-                return CustomConfigInjector.Inject(fallbackJson, processNames, _appSettings);
+                return CustomConfigInjector.Inject(fallbackJson, processNames, _appSettings, ConfigGenerator.RejectMissingRuleSet);
             }
         }
 
@@ -718,7 +718,8 @@ public class HealthMonitor : IDisposable
             ConfigPipeline.ValidationMode.Advisory,
             warningSink: null,
             logger: _logger,
-            strictDnsOverride: (strictDnsFailedOverOverride ?? _strictDnsFailedOver) ? false : (bool?)null);
+            strictDnsOverride: (strictDnsFailedOverOverride ?? _strictDnsFailedOver) ? false : (bool?)null,
+            onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet);
     }
 
     private static List<string> FilterForSingBox(IEnumerable<string> names) =>

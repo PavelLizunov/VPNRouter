@@ -83,11 +83,12 @@ public sealed class RuleSetCacheManagerTests : IDisposable
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task IntactEnvelopeWithInvalidContents_NeverReplacesOrSuppliesCustomSet(bool validStale)
+    [InlineData("user-geosite-example.srs", true)]
+    [InlineData("user-geosite-example.srs", false)]
+    [InlineData("adblock_reject.srs", true)]
+    [InlineData("adblock_reject.srs", false)]
+    public async Task UnreadableRefreshUsesOnlyValidCachedSet(string filename, bool validStale)
     {
-        const string filename = "user-geosite-example.srs";
         var path = ExpectedCachedFile(filename);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var invalid = RuleSetSamples.IntactEnvelope();

@@ -45,12 +45,30 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests
         var settings = BuildSettings(blockAds, bypassRu);
         RuleSetSamples.WithBuiltInGeoFiles(() =>
         {
-            var config = ConfigGenerator.Generate(BuildProfile(), ["Discord.exe"], settings, null, null,
-                (_, filename) => Path.Combine("cache", filename), checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            var path = Path.Combine(AppPaths.CacheDir, "adblock_reject.srs");
+            Directory.CreateDirectory(AppPaths.CacheDir);
+            File.WriteAllBytes(path, RuleSetSamples.KeywordRule());
+            var stale = DateTime.UtcNow.AddDays(-30);
+            File.SetLastWriteTimeUtc(path, stale);
+            File.SetLastWriteTimeUtc(AppPaths.GeoIpRuPath, stale);
+            File.SetLastWriteTimeUtc(AppPaths.GeoSiteRuPath, stale);
+
+            string Resolve(string _, string filename)
+            {
+                Assert.Equal("adblock_reject.srs", filename);
+                return path;
+            }
+
+            var config = ConfigGenerator.Generate(BuildProfile(), ["Discord.exe"], settings, null, null, Resolve,
+                onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
             var entries = config.Route.RuleSet ?? [];
             Assert.All(entries, entry => Assert.Equal("local", entry.Type));
-            Assert.Equal(blockAds, entries.Any(entry => entry.Tag == "vpnrouter-adblock"));
+            const string adTag = "vpnrouter-adblock";
+            Assert.Equal(blockAds, entries.Any(entry => entry.Tag == adTag && entry.Path == path));
+            Assert.Equal(blockAds, config.Route.Rules.Any(r => r.Action == "reject" && r.RuleSet?.Contains(adTag) == true));
+            Assert.Equal(blockAds, config.Dns.Rules.Any(r => r.Action == "reject" && r.RuleSet?.Contains(adTag) == true));
             Assert.Equal(bypassRu, entries.Any(entry => entry.Tag == "vpnrouter-geoip-ru"));
+            Assert.Equal(bypassRu, entries.Any(entry => entry.Tag == "vpnrouter-geosite-ru"));
         });
     }
 
@@ -66,11 +84,58 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests
             var settings = BuildSettings(blockAds: false, bypassRu: true);
             Assert.Throws<InvalidOperationException>(() =>
                 ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, resolveRuleSet: null,
-                    requireGeo: true, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+                    onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
             Assert.Throws<InvalidOperationException>(() =>
-                CustomConfigInjector.Inject("{}", [], settings, requireGeo: true,
+                CustomConfigInjector.Inject("{}", [], settings, onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet,
                     checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+
+            var missing = new List<string>();
+            var cold = ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, resolveRuleSet: null,
+                onMissingRuleSet: missing.Add, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            Assert.Single(missing);
+            Assert.DoesNotContain(cold.Route.RuleSet ?? [], entry => entry.Tag == "vpnrouter-geoip-ru");
+            missing.Clear();
+            var imported = CustomConfigInjector.Inject("{}", [], settings, onMissingRuleSet: missing.Add,
+                checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            Assert.Single(missing);
+            Assert.DoesNotContain("vpnrouter-geosite-ru", imported);
         });
+    }
+
+    [Theory]
+    [InlineData("custom_first")]
+    [InlineData("toggles_first")]
+    public void MissingAdFilterBlocksReplacementAndMarksColdFallback(string priority)
+    {
+        var settings = BuildSettings(blockAds: true, bypassRu: false);
+        settings.App.CustomRulesPriority = priority;
+        SingBoxConfig Generate(Action<string>? onMissing) =>
+            ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, (_, _) => null, onMissing);
+
+        Assert.Throws<InvalidOperationException>(() => Generate(ConfigGenerator.RejectMissingRuleSet));
+        var missing = new List<string>();
+        var cold = Generate(missing.Add);
+        Assert.Single(missing);
+        Assert.DoesNotContain(cold.Route.RuleSet ?? [], entry => entry.Tag == "vpnrouter-adblock");
+        Assert.DoesNotContain(cold.Dns.Rules, rule => rule.RuleSet?.Contains("vpnrouter-adblock") == true);
+        Assert.DoesNotContain(cold.Route.Rules, rule => rule.RuleSet?.Contains("vpnrouter-adblock") == true);
+    }
+
+    [Fact]
+    public void DisabledPoliciesCanReplaceWithoutReadingRuleSets()
+    {
+        var settings = BuildSettings(blockAds: false, bypassRu: false);
+        var config = ConfigGenerator.Generate(BuildProfile(), [], settings, null, null,
+            (_, _) => throw new InvalidOperationException("Unexpected ad-filter lookup"),
+            ConfigGenerator.RejectMissingRuleSet,
+            (_, _) => throw new InvalidOperationException("Unexpected geo lookup"));
+        Assert.DoesNotContain(config.Route.RuleSet ?? [], entry => entry.Tag is
+            "vpnrouter-adblock" or "vpnrouter-geoip-ru" or "vpnrouter-geosite-ru");
+
+        var imported = CustomConfigInjector.Inject("{}", [], settings, ConfigGenerator.RejectMissingRuleSet,
+            (_, _) => throw new InvalidOperationException("Unexpected geo lookup"));
+        Assert.DoesNotContain("vpnrouter-geoip-ru", imported);
+        Assert.DoesNotContain("vpnrouter-geosite-ru", imported);
     }
 
     [Theory]
