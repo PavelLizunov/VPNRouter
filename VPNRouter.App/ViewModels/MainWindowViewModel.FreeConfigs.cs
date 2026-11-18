@@ -17,8 +17,7 @@ public partial class MainWindowViewModel
         {
             if (entry.Status != FreeConfigStatus.Verified)
             {
-                _logger.Warning("[VM] ApplyFreeConfig rejected: entry not Verified (status={Status}, {Host}:{Port})",
-                    entry.Status, entry.Host, entry.Port);
+                _logger.Warning("[VM] ApplyFreeConfig rejected (status={Status})", entry.Status);
                 return false;
             }
 
@@ -38,31 +37,11 @@ public partial class MainWindowViewModel
             var prevIsVlessMode = IsVlessMode;
             var prevSelectedModeIndex = SelectedServerModeIndex;
 
-            var existingVm = Servers.FirstOrDefault(s =>
-                string.Equals(s.Server, newEntry.Server, StringComparison.OrdinalIgnoreCase) &&
-                s.Port == newEntry.Port &&
-                string.Equals(s.Uuid, newEntry.Uuid, StringComparison.OrdinalIgnoreCase));
-
-            var oldEphemeral = Servers
-                .Where(s => s != existingVm && s.Name.StartsWith("⚡ free", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            foreach (var old in oldEphemeral)
-            {
-                Servers.Remove(old);
-            }
-
-            ServerViewModel target;
-            if (existingVm != null)
-            {
-                target = existingVm;
-            }
-            else
-            {
-                var displayName = string.IsNullOrWhiteSpace(newEntry.Name) ? "⚡ free" : newEntry.Name;
-                newEntry.Name = displayName;
-                target = new ServerViewModel(newEntry);
-                Servers.Add(target);
-            }
+            var entries = Servers.Select(s => s.ToEntry()).ToList();
+            var index = FreeConfigSelection.SelectOrAdd(entries, newEntry);
+            bool added = index == Servers.Count;
+            var target = added ? new ServerViewModel(entries[index]) : Servers[index];
+            if (added) Servers.Add(target);
 
             IsConnecting = true;
             SelectedServer = target;
@@ -109,7 +88,7 @@ public partial class MainWindowViewModel
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 StatusText = isPhaseA ? Strings.StartTimeoutPhaseA : Strings.StartTimeoutPhaseB;
 
-                if (existingVm == null)
+                if (added)
                 {
                     Servers.Remove(target);
                 }
@@ -135,7 +114,7 @@ public partial class MainWindowViewModel
                     }
                     catch (Exception rollbackEx)
                     {
-                        _logger.Warning(rollbackEx, "[VM] ApplyFreeConfig: rollback start failed");
+                        _logger.Warning("[VM] ApplyFreeConfig: rollback start failed ({Type})", rollbackEx.GetType().Name);
                         IsConnected = false;
                         ConnectButtonText = Strings.StartVPN;
                         RefreshActiveIndicator();
@@ -157,7 +136,7 @@ public partial class MainWindowViewModel
                 try { await startTask; }
                 catch (Exception ex)
                 {
-                    _logger.Warning(ex, "[VM] ApplyFreeConfig: start task did not reach Connected");
+                    _logger.Warning("[VM] ApplyFreeConfig: start task did not reach Connected ({Type})", ex.GetType().Name);
                 }
 
                 if (outcome == Internals.TwoPhaseStartOutcome.Cancelled)
@@ -185,7 +164,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "ApplyFreeConfig failed");
+            _logger.Warning("ApplyFreeConfig failed ({Type})", ex.GetType().Name);
             IsConnecting = false;
             return false;
         }

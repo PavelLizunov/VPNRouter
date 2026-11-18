@@ -13,26 +13,12 @@ public static class AndroidConfigBuilder
         return BuildConfigJson(entry, logOutputPath);
     }
 
-    private static void ApplyClashApiSecret(AppSettings settings)
-    {
-        try
-        {
-            var secret = AndroidStorage.GetClashApiSecret();
-            settings.SingBox.ClashApiSecret = secret;
-            VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ClashApiSecret = secret;
-        }
-        catch
-        {
-        }
-    }
-
     public static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath = null)
     {
         var settings = new AppSettings();
         settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "generated";
-        ApplyClashApiSecret(settings);
         settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
         settings.App.BlockAds = AndroidStorage.GetBlockAds();
         settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
@@ -41,7 +27,7 @@ public static class AndroidConfigBuilder
             "prefer_ipv4" => false,
             _ => true,
         };
-        if (AndroidStorage.GetAutoSelectBestServer())
+        if (!entry.UseAsSingleOutbound && AndroidStorage.GetAutoSelectBestServer())
         {
             var pool = GetAllCandidateServers();
             if (pool.Count > 1)
@@ -99,7 +85,6 @@ public static class AndroidConfigBuilder
         settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "custom";
-        ApplyClashApiSecret(settings);
         settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
         settings.App.BlockAds = AndroidStorage.GetBlockAds();
         settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch

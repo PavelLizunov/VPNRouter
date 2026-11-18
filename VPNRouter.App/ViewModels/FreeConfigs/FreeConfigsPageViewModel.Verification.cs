@@ -331,7 +331,7 @@ public partial class FreeConfigsPageViewModel
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "DeepVerify failed");
+            _logger.Warning("DeepVerify failed ({Type})", ex.GetType().Name);
             StatusText = Strings.FcStatusFailed(ex.Message);
             try { await Dispatcher.UIThread.InvokeAsync(TrimAndReclaim); } catch { }
         }

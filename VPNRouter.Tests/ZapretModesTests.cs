@@ -90,6 +90,16 @@ public sealed class ZapretModesTests : IDisposable
         Assert.True(ZapretActions.IsGameFilterConfigured);
     }
 
+    [Fact]
+    public void GameFilter_ExpandsTheInstalledModesValidatedPortRanges()
+    {
+        Write(GameFlag, "mode=all\ntcp=443,8443\nudp=5000-5010");
+        var mode = ZapretActions.ReadGameFilter();
+        var line = "start \"\" \"%BIN%winws.exe\" --wf-tcp=%GameFilterTCP% --wf-udp=%GameFilterUDP%";
+        Assert.Equal("--wf-tcp=443,8443 --wf-udp=5000-5010",
+            ZapretUpdater.ExtractWinwsArgsFromLines([line], "%BIN%", "%LISTS%", mode.Mode, mode.Tcp, mode.Udp));
+    }
+
     // ---- ipset ----------------------------------------------------------------------------------
 
     [Fact]

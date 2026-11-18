@@ -10,14 +10,14 @@ public static class FreeConfigFreshness
     {
         if (entry == null) return false;
         if (!entry.LastVerifyFailedAt.HasValue) return false;
-        if (!entry.LastTestedAt.HasValue) return true;
-        return entry.LastVerifyFailedAt.Value >= entry.LastTestedAt.Value;
+        var lastCheck = entry.LastDeepVerifyAt ?? entry.LastTestedAt;
+        return !lastCheck.HasValue || entry.LastVerifyFailedAt.Value >= lastCheck.Value;
     }
 
     public static bool IsStale(FreeConfigEntry entry, System.DateTime nowUtc)
     {
         if (entry == null) return false;
-        if (HasFailedLastCheck(entry)) return true;
+        if (entry.RequiresSavedRecheck || HasFailedLastCheck(entry)) return true;
         if (!entry.LastTestedAt.HasValue) return true;
         return (nowUtc - entry.LastTestedAt.Value).TotalHours > StaleAfterHours;
     }
@@ -26,6 +26,7 @@ public static class FreeConfigFreshness
     {
         if (entry == null) return FreeConfigFreshnessTier.Fresh;
         if (HasFailedLastCheck(entry)) return FreeConfigFreshnessTier.Failed;
+        if (entry.RequiresSavedRecheck) return FreeConfigFreshnessTier.Stale;
         if (!entry.LastTestedAt.HasValue) return FreeConfigFreshnessTier.Fresh;
         var ageDays = (nowUtc - entry.LastTestedAt.Value).TotalDays;
         if (ageDays < 1) return FreeConfigFreshnessTier.Fresh;
@@ -70,14 +71,26 @@ public static class FreeConfigFreshness
         System.DateTime? LastTestedAt,
         System.DateTime? LastDeepVerifyAt)
     {
+        public FreeConfigStatus Status { get; init; } = FreeConfigStatus.Verified;
+
+        public DateTime? LastVerifyFailedAt { get; init; }
+        public DateTime? BandwidthTestedAt { get; init; }
+        public string? LastError { get; init; }
+
         public static RecheckSnapshot Capture(FreeConfigEntry entry)
         {
-            if (entry == null) return new RecheckSnapshot(0, null, null, null);
+            if (entry == null) return new RecheckSnapshot(0, null, null, null) { Status = FreeConfigStatus.Unknown };
             return new RecheckSnapshot(
                 entry.LatencyMs,
                 entry.MeasuredBandwidthMbps,
                 entry.LastTestedAt,
-                entry.LastDeepVerifyAt);
+                entry.LastDeepVerifyAt)
+            {
+                Status = entry.Status,
+                LastVerifyFailedAt = entry.LastVerifyFailedAt,
+                BandwidthTestedAt = entry.BandwidthTestedAt,
+                LastError = entry.LastError,
+            };
         }
     }
 
@@ -89,18 +102,20 @@ public static class FreeConfigFreshness
         if (entry == null) return;
 
         bool verifySucceeded =
-            entry.LastDeepVerifyAt.HasValue &&
+            entry.Status == FreeConfigStatus.Verified && entry.LastDeepVerifyAt.HasValue &&
             (!prior.LastDeepVerifyAt.HasValue ||
              entry.LastDeepVerifyAt.Value > prior.LastDeepVerifyAt.Value);
 
         if (verifySucceeded)
         {
             entry.Status = FreeConfigStatus.Verified;
+            entry.RequiresSavedRecheck = false;
             entry.LastVerifyFailedAt = null;
         }
         else
         {
-            entry.Status = FreeConfigStatus.Verified;
+            if (entry.Status == FreeConfigStatus.Verified) entry.Status = FreeConfigStatus.Unknown;
+            entry.RequiresSavedRecheck |= prior.Status == FreeConfigStatus.Verified;
             entry.LatencyMs = prior.LatencyMs;
             entry.MeasuredBandwidthMbps = prior.MeasuredBandwidthMbps;
             entry.LastTestedAt = prior.LastTestedAt;
@@ -111,7 +126,11 @@ public static class FreeConfigFreshness
     public static void RestorePriorState(FreeConfigEntry entry, in RecheckSnapshot prior)
     {
         if (entry == null) return;
-        entry.Status = FreeConfigStatus.Verified;
+        entry.Status = prior.Status;
+        entry.LastVerifyFailedAt = prior.LastVerifyFailedAt;
+        entry.BandwidthTestedAt = prior.BandwidthTestedAt;
+        entry.LastError = prior.LastError;
+        entry.LastDeepVerifyAt = prior.LastDeepVerifyAt;
         entry.LatencyMs = prior.LatencyMs;
         entry.MeasuredBandwidthMbps = prior.MeasuredBandwidthMbps;
         entry.LastTestedAt = prior.LastTestedAt;

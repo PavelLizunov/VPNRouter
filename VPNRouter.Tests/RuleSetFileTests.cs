@@ -27,6 +27,36 @@ public sealed class RuleSetFileTests
     }
 
     [Fact]
+    public async Task PackagedParserDistinguishesRuleContentsFromAnIntactEnvelope()
+    {
+        var configured = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
+        var runtime = configured ?? Path.Combine(AppContext.BaseDirectory,
+            OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
+        bool linuxCi = OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
+        if (linuxCi) Assert.False(string.IsNullOrWhiteSpace(configured), "Linux CI must supply VPNROUTER_TEST_VERIFIER_RUNTIME");
+        Assert.SkipUnless(configured != null || File.Exists(runtime), "Requires the pinned or packaged sing-box parser");
+        Assert.True(File.Exists(runtime), $"Missing sing-box parser: {runtime}");
+
+        var ct = TestContext.Current.CancellationToken;
+        var dir = Directory.CreateTempSubdirectory("vpnr-ruleset-check-");
+        try
+        {
+            var path = Path.Combine(dir.FullName, "candidate.tmp");
+            foreach (var bytes in new[] { RuleSetSamples.KeywordRule(), RuleSetSamples.UpstreamGeositeTldRu(), RuleSetSamples.GeoIpRule() })
+            {
+                await File.WriteAllBytesAsync(path, bytes, ct);
+                Assert.True(await RuleSetSamples.CheckWithRuntimeAsync(path, ct, runtime));
+            }
+            await File.WriteAllBytesAsync(path, RuleSetSamples.IntactEnvelope(), ct);
+            Assert.True(RuleSetFile.IsValidBinary(path));
+            Assert.False(await RuleSetSamples.CheckWithRuntimeAsync(path, ct, runtime));
+            File.Delete(path);
+            Assert.False(await RuleSetSamples.CheckWithRuntimeAsync(path, ct, runtime));
+        }
+        finally { dir.Delete(recursive: true); }
+    }
+
+    [Fact]
     public void ZeroFilledFileOfThePublishedLength_IsInvalid()
     {
         Assert.False(RuleSetFile.IsValidBinary(RuleSetSamples.ZeroFilled(155)));

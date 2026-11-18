@@ -197,13 +197,14 @@
        AndroidManifest.xml directly. -->
   <ItemGroup>
     <AndroidJavaSource Include="VpnRouterService.java" />
-    <!-- Bug #1 (2026-05-11) — libbox-backed Deep Verify for the Free
-         Configs page. Self-contained Java helper (no VpnRouterService
-         dependency) that spins a transient sing-box.Service per config
-         to upgrade single-✓ entries to ✓✓ via a real HTTP probe. C#
-         side calls verifyConfigSync(...) through reflection from
-         AndroidFreeConfigDeepVerifier.cs. -->
+    <AndroidJavaSource Include="AndroidTunnelSession.java" />
+    <AndroidJavaSource Include="AndroidStatsSubscription.java" />
+    <AndroidJavaSource Include="AndroidTunnelPolicy.java" />
+    <!-- AndroidFreeConfigDeepVerifier starts and closes each embedded engine through this bridge. -->
     <AndroidJavaSource Include="AndroidDeepVerifyBox.java" />
+    <AndroidJavaSource Include="LibboxRuntime.java" />
+    <AndroidJavaSource Include="NativeEngineSlot.java" />
+    <AndroidJavaSource Include="NativeReportPrivacy.java" />
     <!-- Bug-AND-023 v2 (2026-05-17) — Java bridge over IntentIntegrator
          from zxing-android-embedded. C# side (MainActivity.cs) reaches
          into it via reflection because the aar import uses Bind="false". -->

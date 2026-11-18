@@ -2,9 +2,7 @@
 
 #if PLATFORM_WINDOWS
 using System.Net;
-using System.Net.Sockets;
 using System.Reflection;
-using System.Text;
 using System.Text.Json;
 using Avalonia.Headless.XUnit;
 using VPNRouter.App.Localization;
@@ -15,15 +13,6 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Characterization tests for <c>MainWindowViewModel.ProbeAndStartZapretAsync</c>, the orchestrator behind the
-/// "Enable bypass" button: pre-probe ipset cleanup, the cached-winner shortcut, the Flowseal sweep, starting the winner,
-/// reading back whether winws is alive, the probe cache and the saved settings. They pin what the view model does with
-/// each kind of sweep result before the method is split. The sweep itself is replaced through
-/// <c>MainWindowViewModel.FlowsealProbe</c>; every process request goes to a fake runner, the warm-start target probe
-/// talks to a loopback listener, and all files live under a temporary data directory, so nothing starts winws, touches
-/// WinDivert or reaches the internet.
-/// </summary>
 public sealed class MainWindowViewModelZapretProbeTests : IDisposable
 {
     private const int FakeWinwsPid = 4242;
@@ -32,17 +21,18 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     private readonly string _originalDataDir;
     private readonly string _tempDataDir;
     private readonly string _originalLang;
-    private readonly Func<string, IProgress<ZapretAutoStrategy.FlowsealProgress>?, Serilog.ILogger?, CancellationToken,
-        Task<ZapretAutoStrategy.FlowsealSweepResult>> _originalProbe;
+    private readonly Func<ZapretManager, IProgress<ZapretAutoStrategy.StrategyProgress>?, Serilog.ILogger?, CancellationToken,
+        Task<ZapretAutoStrategy.StrategySweepResult>> _originalProbe;
 
     private readonly FakeProcessRunner _runner = new();
     private readonly FakeProcessHandle _handle = new(FakeWinwsPid);
     private readonly InMemorySettingsStore _store = new();
-    private readonly List<LoopbackHttp> _servers = new();
+    private readonly Func<bool> _originalAnyWinws = ZapretAutoStrategy.AnyWinwsRunning;
+    private readonly Func<HttpMessageHandler> _originalHandler = ZapretAutoStrategy.CreateHandler;
     private readonly List<MainWindowViewModel> _models = new();
 
-    private Func<string, IProgress<ZapretAutoStrategy.FlowsealProgress>?, CancellationToken,
-        Task<ZapretAutoStrategy.FlowsealSweepResult>>? _probeImpl;
+    private Func<ZapretManager, IProgress<ZapretAutoStrategy.StrategyProgress>?, CancellationToken,
+        Task<ZapretAutoStrategy.StrategySweepResult>>? _probeImpl;
 
     private int _probeCalls;
 
@@ -50,31 +40,34 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     {
         _originalDataDir = AppPaths.DataDir;
         _originalLang = VPNRouter.App.Localization.Strings.Lang;
-        _originalProbe = MainWindowViewModel.FlowsealProbe;
+        _originalProbe = MainWindowViewModel.InstalledProbe;
+        SetProbeResponse(HttpStatusCode.ServiceUnavailable);
+        ZapretAutoStrategy.AnyWinwsRunning = () => false;
         _tempDataDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-vm-zapret-probe-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDataDir);
         AppPaths.OverrideDataDir(_tempDataDir);
 
         _runner.OnStart(_ => true, _ => _handle);
-        MainWindowViewModel.FlowsealProbe = (_, progress, _, ct) =>
+        MainWindowViewModel.InstalledProbe = (manager, progress, _, ct) =>
         {
             Interlocked.Increment(ref _probeCalls);
             if (_probeImpl is null)
                 throw new InvalidOperationException("the sweep was not expected to run in this test");
-            return _probeImpl(ZapretUpdater.ZapretDir, progress, ct);
+            return _probeImpl(manager, progress, ct);
         };
     }
 
     public void Dispose()
     {
-        MainWindowViewModel.FlowsealProbe = _originalProbe;
+        MainWindowViewModel.InstalledProbe = _originalProbe;
+        ZapretAutoStrategy.AnyWinwsRunning = _originalAnyWinws;
         VPNRouter.App.Localization.Strings.Lang = _originalLang;
         foreach (var vm in _models)
         {
             try { vm.Dispose(); }
             catch { }
         }
-        foreach (var server in _servers) server.Dispose();
+        ZapretAutoStrategy.CreateHandler = _originalHandler;
         AppPaths.OverrideDataDir(_originalDataDir);
         try { Directory.Delete(_tempDataDir, recursive: true); }
         catch { }
@@ -98,8 +91,6 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
 
     private MainWindowViewModel NewVm(params string[] strategyNames)
     {
-        Assert.SkipWhen(ZapretManager.IsWinwsRunning(), "a real winws is running, its pid would change the outcome");
-
         WriteZapretFile("stub winws for tests", "bin", "winws.exe");
         foreach (var name in strategyNames) WriteStrategy(name);
 
@@ -133,16 +124,14 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         return (T?)field!.GetValue(vm);
     }
 
-    private static ZapretAutoStrategy.FlowsealSweepResult Sweep(
+    private static ZapretAutoStrategy.StrategySweepResult Sweep(
         string? winner,
         string? diagnostic = null,
         IReadOnlyDictionary<string, ZapretStrategyTestResult>? perStrategy = null,
-        string? probeLogPath = null,
-        bool earlyWinner = false,
-        IReadOnlyList<string>? errorLines = null) =>
-        new(winner, 1, 1, string.Empty, diagnostic, errorLines, perStrategy, probeLogPath, earlyWinner);
+        string? probeLogPath = null) =>
+        new(winner, 1, 1, diagnostic, perStrategy, probeLogPath);
 
-    private void SweepReturns(ZapretAutoStrategy.FlowsealSweepResult result) =>
+    private void SweepReturns(ZapretAutoStrategy.StrategySweepResult result) =>
         _probeImpl = (_, _, _) => Task.FromResult(result);
 
     private static void SeedCache(
@@ -163,16 +152,8 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         File.WriteAllText(Path.Combine(AppPaths.CacheDir, "zapret_probe.json"), JsonSerializer.Serialize(entry));
     }
 
-    private LoopbackHttp Loopback(int status)
-    {
-        var server = new LoopbackHttp(status);
-        _servers.Add(server);
-        return server;
-    }
-
-    private static void WriteTargets(LoopbackHttp server) =>
-        WriteZapretFile(
-            $"Alpha = \"{server.Url}a\"\r\nBeta = \"{server.Url}b\"\r\n", "utils", "targets.txt");
+    private static void SetProbeResponse(HttpStatusCode status) =>
+        ZapretAutoStrategy.CreateHandler = () => new ZapretTestHandler(_ => status);
 
     private static void UseRussian(MainWindowViewModel vm)
     {
@@ -180,74 +161,13 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         VPNRouter.App.Localization.Strings.Lang = "ru";
     }
 
-    private static string WrapperPath() => ZapretPath("_vpnrouter_silent.bat");
-
-    /// <summary>A minimal HTTP server: answers every request with a fixed status and an empty body.</summary>
-    private sealed class LoopbackHttp : IDisposable
-    {
-        private readonly TcpListener _listener;
-        private readonly CancellationTokenSource _cts = new();
-
-        public LoopbackHttp(int status)
-        {
-            _listener = new TcpListener(IPAddress.Loopback, 0);
-            _listener.Start();
-            Url = $"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/";
-            _ = Task.Run(() => AcceptLoopAsync(status));
-        }
-
-        public string Url { get; }
-
-        private async Task AcceptLoopAsync(int status)
-        {
-            try
-            {
-                while (!_cts.IsCancellationRequested)
-                {
-                    var client = await _listener.AcceptTcpClientAsync(_cts.Token);
-                    _ = Task.Run(() => HandleAsync(client, status));
-                }
-            }
-            catch { }
-        }
-
-        private static async Task HandleAsync(TcpClient client, int status)
-        {
-            using (client)
-            {
-                try
-                {
-                    var stream = client.GetStream();
-                    var buffer = new byte[2048];
-                    var seen = new StringBuilder();
-                    while (!seen.ToString().Contains("\r\n\r\n"))
-                    {
-                        var n = await stream.ReadAsync(buffer, CancellationToken.None);
-                        if (n == 0) return;
-                        seen.Append(Encoding.ASCII.GetString(buffer, 0, n));
-                    }
-                    var response = Encoding.ASCII.GetBytes(
-                        $"HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-                    await stream.WriteAsync(response, CancellationToken.None);
-                }
-                catch { }
-            }
-        }
-
-        public void Dispose()
-        {
-            _cts.Cancel();
-            _listener.Stop();
-        }
-    }
-
     // ---- seam ---------------------------------------------------------------------------------------
 
     [Fact]
-    public void FlowsealProbe_DefaultsToTheRealSweep()
+    public void InstalledProbe_DefaultsToTheRealSweep()
     {
-        Func<string, IProgress<ZapretAutoStrategy.FlowsealProgress>?, Serilog.ILogger?, CancellationToken,
-            Task<ZapretAutoStrategy.FlowsealSweepResult>> real = ZapretAutoStrategy.RunFlowsealProbeAsync;
+        Func<ZapretManager, IProgress<ZapretAutoStrategy.StrategyProgress>?, Serilog.ILogger?, CancellationToken,
+            Task<ZapretAutoStrategy.StrategySweepResult>> real = ZapretAutoStrategy.RunInstalledProbeAsync;
 
         Assert.Equal(real, _originalProbe);
     }
@@ -255,24 +175,45 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     [AvaloniaFact]
     public async Task Probe_ThroughTheDefaultWiring_RunsTheRealSweepAndStartsItsWinner()
     {
-        Assert.SkipUnless(
-            OperatingSystem.IsWindows() && ZapretAutoStrategy.IsRunningAsAdmin(),
-            "the real Flowseal sweep needs Windows and an elevated process");
+        Assert.SkipUnless(ZapretAutoStrategy.IsRunningAsAdmin(), "The Windows probe requires elevation.");
         var vm = NewVm("general", "general (ALT)");
-        MainWindowViewModel.FlowsealProbe = _originalProbe;
-        WriteZapretFile(
-            "Write-Output '[1/2] general.bat'\r\n" +
-            "Write-Output '  [Discord][HTTP] https://discord.com status=OK'\r\n" +
-            "Write-Output '[2/2] general (ALT).bat'\r\n" +
-            "Write-Output '  [Discord][HTTP] https://discord.com status=OK'\r\n" +
-            "Write-Output 'Best config: general (ALT).bat'\r\n",
-            "utils", "test zapret.ps1");
+        var runner = new FakeProcessRunner().OnStart(_ => true, _ => new FakeProcessHandle(FakeWinwsPid));
+        SetField(vm, "_zapret", new ZapretManager(runner: runner));
+        SetProbeResponse(HttpStatusCode.OK);
+        MainWindowViewModel.InstalledProbe = _originalProbe;
 
         await Run(vm);
 
         Assert.True(vm.ZapretEnabled);
-        Assert.Equal("general (ALT)", vm.ZapretWinningStrategy);
-        Assert.Equal($"Running [general (ALT)] (PID {FakeWinwsPid})", vm.ZapretStatus);
+        Assert.Equal("general", vm.ZapretWinningStrategy);
+        Assert.Equal(2, runner.StartCalls.Count);
+        Assert.All(runner.StartCalls, call => Assert.Equal(ZapretUpdater.WinwsExePath, call.ExecutablePath));
+    }
+
+    [AvaloniaFact]
+    public async Task RunTestsCommand_ShowsDirectHttpsResultsWithoutStartingWinws()
+    {
+        var vm = NewVm("general");
+        SetProbeResponse(HttpStatusCode.OK);
+        await vm.RunZapretTestsCommand.ExecuteAsync(null);
+
+        Assert.Equal(8, vm.ZapretActionOutput.Count);
+        Assert.Contains("discord.com — HTTPS reachable", vm.ZapretActionOutput);
+        Assert.Empty(_runner.StartCalls);
+        Assert.False(vm.IsZapretActionRunning);
+    }
+
+    [AvaloniaFact]
+    public async Task OtherRunningHelper_ReportsConflictWithoutStartingOrStoppingAnyProcess()
+    {
+        var vm = NewVm("general");
+        ZapretAutoStrategy.AnyWinwsRunning = () => true;
+        await Run(vm);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.ZapretOtherHelper, vm.ZapretStatus);
+        Assert.False(vm.ZapretEnabled);
+        Assert.Empty(_runner.StartCalls);
+        Assert.Equal(0, _handle.KillCallCount);
+        Assert.Equal(0, _probeCalls);
     }
 
     // ---- state while the sweep runs -----------------------------------------------------------------
@@ -316,13 +257,13 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
             void Snap() => seen.Add((vm.ZapretProbeIndex, vm.ZapretProbeTotal, vm.ZapretProbeStrategy,
                 vm.ZapretProbePassCount, vm.ZapretProbeTotalCount));
 
-            progress!.Report(new ZapretAutoStrategy.FlowsealProgress(2, 3, "general (ALT)", 0, 0));
+            progress!.Report(new ZapretAutoStrategy.StrategyProgress(2, 3, "general (ALT)", 0, 0));
             await Task.Yield();
             Snap();
-            progress.Report(new ZapretAutoStrategy.FlowsealProgress(2, 3, "", 5, 6));
+            progress.Report(new ZapretAutoStrategy.StrategyProgress(2, 3, "", 5, 6));
             await Task.Yield();
             Snap();
-            progress.Report(new ZapretAutoStrategy.FlowsealProgress(3, 3, "general (ALT2)", 0, 0));
+            progress.Report(new ZapretAutoStrategy.StrategyProgress(3, 3, "general (ALT2)", 0, 0));
             await Task.Yield();
             Snap();
             return Sweep(null);
@@ -343,7 +284,7 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     // ---- a winner --------------------------------------------------------------------------------------
 
     [AvaloniaFact]
-    public async Task Winner_FromABat_IsStartedThroughTheSilentWrapper_AndRecordedEverywhere()
+    public async Task Winner_StartsInstalledWinwsAndRecordsItsMeasuredScore()
     {
         var vm = NewVm("general (ALT3)", "general");
         var savesBefore = _store.SaveCount;
@@ -354,8 +295,8 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         };
         _probeImpl = async (_, progress, _) =>
         {
-            progress!.Report(new ZapretAutoStrategy.FlowsealProgress(1, 2, "general", 0, 0));
-            progress.Report(new ZapretAutoStrategy.FlowsealProgress(1, 2, "", 7, 9));
+            progress!.Report(new ZapretAutoStrategy.StrategyProgress(1, 2, "general", 0, 0));
+            progress.Report(new ZapretAutoStrategy.StrategyProgress(2, 2, "", 2, 9));
             await Task.Yield();
             return Sweep("general", perStrategy: perStrategy, probeLogPath: @"C:\logs\probe.log");
         };
@@ -363,12 +304,9 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         await Run(vm);
 
         var start = Assert.Single(_runner.StartCalls);
-        Assert.Equal("cmd.exe", start.ExecutablePath);
-        Assert.Equal(new[] { "/c", WrapperPath() }, start.Arguments);
-        Assert.Equal(ZapretUpdater.ZapretDir, start.WorkingDirectory);
-        Assert.Contains(
-            "\"%BIN%winws.exe\" " + string.Format(StrategyArgs, "general"),
-            File.ReadAllText(WrapperPath()));
+        Assert.Equal(ZapretUpdater.WinwsExePath, start.ExecutablePath);
+        Assert.Equal(new[] { "--wf-tcp=443", "--tag=general" }, start.Arguments);
+        Assert.Equal(ZapretUpdater.BinDir, start.WorkingDirectory);
 
         Assert.True(vm.ZapretEnabled);
         Assert.False(vm.IsZapretFallback);
@@ -393,47 +331,10 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     }
 
     [AvaloniaFact]
-    public async Task Winner_NameIsMatchedIgnoringBatSuffixCaseAndSpaces_ButReportedAsGiven()
-    {
-        var vm = NewVm("general (ALT)");
-        SweepReturns(Sweep("  GENERAL (alt).BAT "));
-
-        await Run(vm);
-
-        Assert.Single(_runner.StartCalls);
-        Assert.True(vm.ZapretEnabled);
-        Assert.Equal("  GENERAL (alt).BAT ", vm.ZapretWinningStrategy);
-        Assert.Equal($"Running [  GENERAL (alt).BAT ] (PID {FakeWinwsPid})", vm.ZapretStatus);
-        Assert.Equal(-1, vm.ZapretStrategies.IndexOf("  GENERAL (alt).BAT "));
-    }
-
-    [AvaloniaFact]
-    public async Task Winner_WithoutABat_IsStartedThroughTheLaunchBat()
+    public async Task Winner_WithoutInstalledStrategy_ShowsRepairAndStartsNothing()
     {
         var vm = NewVm("general");
-        SetField(vm, "_parsedStrategies", new List<ZapretStrategy>
-        {
-            new("general", "--wf-tcp=443 --no-bat", BatPath: null),
-        });
-        SweepReturns(Sweep("general"));
-
-        await Run(vm);
-
-        var start = Assert.Single(_runner.StartCalls);
-        Assert.Equal("cmd.exe", start.ExecutablePath);
-        Assert.Equal(new[] { "/c", Path.Combine(ZapretUpdater.BinDir, "_vpnrouter_launch.bat") }, start.Arguments);
-        Assert.Null(start.WorkingDirectory);
-        Assert.Contains("winws.exe\" --wf-tcp=443 --no-bat", File.ReadAllText(Path.Combine(ZapretUpdater.BinDir, "_vpnrouter_launch.bat")));
-        Assert.True(vm.ZapretEnabled);
-        Assert.Equal($"Running [general] (PID {FakeWinwsPid})", vm.ZapretStatus);
-    }
-
-    [AvaloniaFact]
-    public async Task Winner_WithoutABat_AndNoWinwsExecutable_ReportsTheStartError()
-    {
-        var vm = NewVm("general");
-        SetField(vm, "_parsedStrategies", new List<ZapretStrategy> { new("general", "--x", BatPath: null) });
-        File.Delete(ZapretUpdater.WinwsExePath);
+        SetField(vm, "_parsedStrategies", new List<ZapretStrategy> { new("general", "--wf-tcp=443") });
         SweepReturns(Sweep("general"));
 
         await Run(vm);
@@ -441,9 +342,8 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         Assert.Empty(_runner.StartCalls);
         Assert.False(vm.ZapretEnabled);
         Assert.True(vm.IsZapretFallback);
-        Assert.Equal("Error starting general: winws.exe not found. Download zapret first.", vm.ZapretStatus);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.ZapretRepairPackage, vm.ZapretStatus);
         Assert.Null(ZapretProbeCache.TryLoad());
-        Assert.False(vm.IsZapretProbing);
     }
 
     [AvaloniaFact]
@@ -459,7 +359,7 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
 
         Assert.False(vm.ZapretEnabled);
         Assert.True(vm.IsZapretFallback);
-        Assert.Equal("Error starting general: boom", vm.ZapretStatus);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.ZapretRepairPackage, vm.ZapretStatus);
         Assert.Equal(string.Empty, vm.ZapretWinningStrategy);
         Assert.Null(ZapretProbeCache.TryLoad());
     }
@@ -494,7 +394,7 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         Assert.Empty(_runner.StartCalls);
         Assert.False(vm.ZapretEnabled);
         Assert.True(vm.IsZapretFallback);
-        Assert.Equal("Winner general (ALT9) not found in strategy list", vm.ZapretStatus);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.ZapretRepairPackage, vm.ZapretStatus);
         Assert.Null(ZapretProbeCache.TryLoad());
     }
 
@@ -521,9 +421,9 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     [InlineData("sweep_timeout",
         "Strategy probe exceeded 10 min cap. Check network and retry.",
         "Подбор стратегии превысил 10 минут. Проверьте интернет и попробуйте ещё раз.")]
-    [InlineData("missing_script",
-        "Flowseal script missing. Update Zapret via Advanced settings.",
-        "Скрипт Flowseal не найден. Обнови Zapret через «Тонкую настройку».")]
+    [InlineData("missing_package",
+        "Open Advanced → Zapret maintenance and download the package again.",
+        "Откройте «Прочее» → «Обслуживание Zapret» и скачайте пакет заново.")]
     [InlineData("canceled", "Probe canceled.", "Подбор отменён.")]
     public async Task NoWinner_DiagnosticSelectsTheStatusText(string diagnostic, string english, string russian)
     {
@@ -548,7 +448,7 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     public async Task NoWinner_WithoutAKnownDiagnostic_UsesTheGenericFailureText(string? diagnostic)
     {
         var vm = NewVm("general");
-        SweepReturns(Sweep(null, diagnostic, errorLines: new[] { "script said no" }));
+        SweepReturns(Sweep(null, diagnostic));
 
         await Run(vm);
 
@@ -597,11 +497,11 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     public async Task SweepThatThrows_IsReportedAsAnError_AndTheProbeFlagsAreStillReset()
     {
         var vm = NewVm("general");
-        _probeImpl = (_, _, _) => throw new InvalidOperationException("script host exploded");
+        _probeImpl = (_, _, _) => throw new InvalidOperationException("probe failed");
 
         await Run(vm);
 
-        Assert.Equal("Error: script host exploded", vm.ZapretStatus);
+        Assert.Equal("Error: probe failed", vm.ZapretStatus);
         Assert.True(vm.IsZapretFallback);
         Assert.False(vm.ZapretEnabled);
         Assert.False(vm.IsZapretProbing);
@@ -616,7 +516,7 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     {
         var vm = NewVm("general (ALT)");
         SeedCache("general (ALT)", successRunCount: 3, passed: 4, total: 5);
-        WriteTargets(Loopback(200));
+        SetProbeResponse(HttpStatusCode.OK);
 
         await Run(vm);
 
@@ -625,13 +525,13 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         Assert.True(vm.ZapretEnabled);
         Assert.Equal("general (ALT)", vm.ZapretWinningStrategy);
         Assert.Equal($"Running [general (ALT)] (PID {FakeWinwsPid}, warm)", vm.ZapretStatus);
-        Assert.Equal((2, 2), (vm.ZapretProbePassCount, vm.ZapretProbeTotalCount));
+        Assert.Equal((8, 8), (vm.ZapretProbePassCount, vm.ZapretProbeTotalCount));
         Assert.Equal(vm.ZapretStrategies.IndexOf("general (ALT)"), vm.ZapretStrategyIndex);
 
         var cache = ZapretProbeCache.TryLoad()!;
         Assert.Equal("general (ALT)", cache.Strategy);
         Assert.Equal(4, cache.SuccessRunCount);
-        Assert.Equal((4, 5), (cache.TargetsPassed, cache.TargetsTotal));
+        Assert.Equal((8, 8), (cache.TargetsPassed, cache.TargetsTotal));
         Assert.Equal("general (ALT)", _store.LastSave!.Value.Settings.App.ZapretStrategy);
         Assert.False(vm.IsZapretProbing);
     }
@@ -642,7 +542,7 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         var vm = NewVm("general");
         UseRussian(vm);
         SeedCache("general");
-        WriteTargets(Loopback(204));
+        SetProbeResponse(HttpStatusCode.NoContent);
 
         await Run(vm);
 
@@ -654,7 +554,7 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     {
         var vm = NewVm("general");
         SeedCache("general", successRunCount: 3, failureCount: 0, passed: 4, total: 5);
-        WriteTargets(Loopback(503));
+        SetProbeResponse(HttpStatusCode.ServiceUnavailable);
         SweepReturns(Sweep(null));
 
         await Run(vm);
@@ -718,6 +618,30 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task DriverConflictPreservesCurrentStrategyOnManualRestartAndFreshProbe()
+    {
+        var vm = NewVm("general");
+        bool conflict = false;
+        var manager = new ZapretManager(runner: _runner) { HasDriverConflict = () => conflict };
+        SetField(vm, "_zapret", manager);
+        manager.Start("--wf-tcp=443");
+        vm.ZapretStrategyIndex = vm.ZapretStrategies.IndexOf("general");
+        vm.ZapretWinningStrategy = "previous";
+        vm.ZapretEnabled = true;
+        conflict = true;
+
+        await vm.StartZapretWithSelectedStrategyCommand.ExecuteAsync(null);
+        await vm.ForceFreshProbeCommand.ExecuteAsync(null);
+
+        Assert.Single(_runner.StartCalls);
+        Assert.Equal(0, _handle.KillCallCount);
+        Assert.Equal(0, _probeCalls);
+        Assert.True(vm.ZapretEnabled);
+        Assert.Equal("previous", vm.ZapretWinningStrategy);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict), vm.ZapretStatus);
+    }
+
+    [AvaloniaFact]
     public async Task ForceFreshProbeFlag_IgnoresAReliableCache()
     {
         var vm = NewVm("general");
@@ -729,50 +653,6 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
 
         Assert.Equal(1, _probeCalls);
         Assert.Empty(_runner.StartCalls);
-    }
-
-    // ---- ipset cleanup and the manager ---------------------------------------------------------------------
-
-    [AvaloniaFact]
-    public async Task OrphanedIpsetFlag_IsRestoredBeforeTheSweepStarts()
-    {
-        var vm = NewVm("general");
-        WriteZapretFile("203.0.113.113/32\r\n", "lists", "ipset-all.txt");
-        WriteZapretFile("1.2.3.0/24\r\n", "lists", "ipset-all.test-backup.txt");
-        WriteZapretFile("1", "ipset_switched.flag");
-        string? liveDuringSweep = null;
-        bool? flagDuringSweep = null;
-        _probeImpl = (_, _, _) =>
-        {
-            liveDuringSweep = File.ReadAllText(ZapretPath("lists", "ipset-all.txt"));
-            flagDuringSweep = File.Exists(ZapretPath("ipset_switched.flag"));
-            return Task.FromResult(Sweep(null));
-        };
-
-        await Run(vm);
-
-        Assert.Equal("1.2.3.0/24\r\n", liveDuringSweep);
-        Assert.False(flagDuringSweep);
-        Assert.False(File.Exists(ZapretPath("ipset_switched.flag")));
-        Assert.False(File.Exists(ZapretPath("lists", "ipset-all.test-backup.txt")));
-    }
-
-    [AvaloniaFact]
-    public async Task IpsetFlagLeftBehindBySweep_IsRestoredAfterwards_EvenWhenTheSweepThrows()
-    {
-        var vm = NewVm("general");
-        WriteZapretFile("203.0.113.113/32\r\n", "lists", "ipset-all.txt");
-        _probeImpl = (_, _, _) =>
-        {
-            WriteZapretFile("9.9.9.0/24\r\n", "lists", "ipset-all.test-backup.txt");
-            WriteZapretFile("1", "ipset_switched.flag");
-            throw new InvalidOperationException("interrupted");
-        };
-
-        await Run(vm);
-
-        Assert.Equal("9.9.9.0/24\r\n", File.ReadAllText(ZapretPath("lists", "ipset-all.txt")));
-        Assert.False(File.Exists(ZapretPath("ipset_switched.flag")));
     }
 
     [AvaloniaFact]

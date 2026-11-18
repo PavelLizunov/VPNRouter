@@ -43,6 +43,7 @@ public class CustomConfigInjectorTests
 
     private static AppSettings CreateSettings() => new()
     {
+        App = new AppConfig { BypassRussianTraffic = false },
         SingBox = new SingBoxSettings { ClashApi = "127.0.0.1:9090" }
     };
 
@@ -477,7 +478,7 @@ public class CustomConfigInjectorTests
         {
             AppPaths.OverrideDataDir(tempDataDir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(10 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
 
             var source = (JsonNode.Parse(ActionConfig) as JsonObject)!;
@@ -516,7 +517,8 @@ public class CustomConfigInjectorTests
             settings.App.BypassRussianTraffic = true;
             settings.App.RoutingAppsMode = "exclude";
             settings.App.RoutingAppsExclude = new List<string> { "Steam.exe" };
-            var result = CustomConfigInjector.Inject(source.ToJsonString(), Array.Empty<string>(), settings);
+            var result = CustomConfigInjector.Inject(source.ToJsonString(), [], settings, requireGeo: false,
+                checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
             var parsed = (JsonNode.Parse(result) as JsonObject)!;
             var resultServers = (parsed["dns"]?["servers"] as JsonArray)!;
             var resultRules = (parsed["dns"]?["rules"] as JsonArray)!;

@@ -134,9 +134,8 @@ public partial class AndroidApp
 
             _connectionStartedAt = DateTime.UtcNow;
             _statsPrevAt = default; _lastStatsSubtitle = null;
-            _lastHealthLogSize = -1;
-            _lastHealthLogMTime = DateTime.MinValue;
             _firstProbePending = true;
+            _lastHealthProbeAt = DateTime.MinValue;
             _lastHealthOk = false;
             _lastError = null;
             if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
@@ -401,41 +400,8 @@ public partial class AndroidApp
     private void RunHealthProbe()
     {
         _lastHealthProbeAt = DateTime.UtcNow;
-        try
-        {
-            var ctx = global::Android.App.Application.Context;
-            var filesDir = ctx.FilesDir;
-            if (filesDir is null)
-            {
-                _lastHealthOk = false;
-                return;
-            }
-            var logPath = System.IO.Path.Combine(filesDir.AbsolutePath, "singbox.log");
-            if (!System.IO.File.Exists(logPath))
-            {
-                _lastHealthOk = false;
-                return;
-            }
-
-            var info = new System.IO.FileInfo(logPath);
-            var size = info.Length;
-            var mtime = info.LastWriteTimeUtc;
-            var grew = _lastHealthLogSize >= 0 && size > _lastHealthLogSize;
-            var recent = (DateTime.UtcNow - mtime) < HealthStaleThreshold;
-
-            var vpnUp = MainActivity.IsVpnTransportActive(
-                global::Android.App.Application.Context);
-
-            _lastHealthOk = grew || recent || vpnUp;
-            _lastHealthLogSize = size;
-            _lastHealthLogMTime = mtime;
-            _firstProbePending = false;
-        }
-        catch
-        {
-            _lastHealthOk = false;
-            _firstProbePending = false;
-        }
+        _lastHealthOk = VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasRecentTunnelStatus();
+        _firstProbePending = false;
     }
 
     private void ApplyHealthCheckDisplay()

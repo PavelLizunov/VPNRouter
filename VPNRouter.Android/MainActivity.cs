@@ -189,7 +189,7 @@ public class MainActivity : AvaloniaMainActivity
         }
         else
         {
-            RegisterReceiver(_tunnelReceiver, filter);
+            RegisterReceiver(_tunnelReceiver, filter, PackageName + ".permission.TUNNEL_STATUS", null);
         }
 
         try
@@ -427,7 +427,7 @@ public class MainActivity : AvaloniaMainActivity
         base.OnResume();
         try
         {
-            var live = AndroidStorage.GetTunnelLive();
+            var live = VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel();
             var vpnActive = IsVpnTransportActive();
             if (VPNRouter.Core.Services.TunnelStateResync.TryResolveOnResume(
                     IntendedConnected, live, vpnActive, out var corrected))
@@ -528,15 +528,8 @@ public class MainActivity : AvaloniaMainActivity
                     SetIntent(false);
                     break;
                 case ActionTunnelError:
-                    var msg = intent?.GetStringExtra(ExtraErrorMessage) ?? "(no detail)";
-                    global::Android.Util.Log.Warn("VpnRouter", $"Phase 1.I: ACTION_TUNNEL_ERROR — {msg}");
-                    try { TunnelErrorReported?.Invoke(msg); }
-                    catch (Exception ex)
-                    {
-                        global::Android.Util.Log.Warn("VpnRouter",
-                            $"AND-DIAG: TunnelErrorReported handler threw: {ex}");
-                    }
-                    SetIntent(false);
+                    PresentTunnelError(context, Localization.TunnelError(intent?.GetStringExtra(ExtraErrorMessage)),
+                        intent?.GetBooleanExtra("previous_tunnel_active", false) == true);
                     break;
                 case ActionStats:
                     if (_isActivityPaused) break;
@@ -555,6 +548,27 @@ public class MainActivity : AvaloniaMainActivity
             }
         }
     }
+
+    private static void PresentTunnelError(Context? context, string message, bool previousActive)
+    {
+        if (previousActive)
+        {
+            SetIntent(true);
+            if (context is not null)
+                global::Android.Widget.Toast.MakeText(context, message + " " + Localization.PreviousTunnelActive,
+                    global::Android.Widget.ToastLength.Long)?.Show();
+            return;
+        }
+        SetIntent(false, refresh: true);
+        try { TunnelErrorReported?.Invoke(message); }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter", $"Tunnel error handler failed ({ex.GetType().Name})");
+        }
+    }
+
+    private void PresentStartError(string message) =>
+        PresentTunnelError(this, message, VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
 
     private readonly VPNRouter.Core.Services.ConnectConsentGate _consentGate = new();
 
@@ -634,7 +648,7 @@ public class MainActivity : AvaloniaMainActivity
         {
             global::Android.Util.Log.Warn("VpnRouter",
                 $"Phase 1.D: consent denied (resultCode={resultCode})");
-            SetIntent(false);
+            PresentStartError(Localization.TunnelError("no-permission"));
         }
     }
 
@@ -890,7 +904,7 @@ public class MainActivity : AvaloniaMainActivity
             {
                 global::Android.Util.Log.Error("VpnRouter",
                     "AND-CC: ConfigMode=custom but custom_config_json is empty");
-                SetIntent(false);
+                PresentStartError(Localization.TunnelError("config-invalid"));
                 return;
             }
 
@@ -904,8 +918,8 @@ public class MainActivity : AvaloniaMainActivity
             catch (Exception ex)
             {
                 global::Android.Util.Log.Error("VpnRouter",
-                    $"AND-CC: BuildConfigJsonFromCustom failed — {ex.GetType().Name}: {ex.Message}");
-                SetIntent(false);
+                    $"AND-CC: BuildConfigJsonFromCustom failed ({ex.GetType().Name})");
+                PresentStartError(Localization.TunnelError("config-invalid"));
                 return;
             }
 
@@ -966,19 +980,7 @@ public class MainActivity : AvaloniaMainActivity
                 var resolved = AndroidStorage.GetActiveServer();
                 if (resolved is null)
                 {
-                    var msg = global::VPNRouter.Core.Localization.Strings.AndroidErrorNoServerConfigured;
-                    global::Android.Util.Log.Error("VpnRouter",
-                        $"DEFCT-005: GetActiveServer returned null — {msg}");
-                    try
-                    {
-                        TunnelErrorReported?.Invoke(msg);
-                    }
-                    catch (Exception cbEx)
-                    {
-                        global::Android.Util.Log.Warn("VpnRouter",
-                            $"DEFCT-005: TunnelErrorReported callback raised: {cbEx.Message}");
-                    }
-                    SetIntent(false);
+                    PresentStartError(Localization.AndroidErrorNoServerConfigured);
                     return;
                 }
                 entry = resolved;
@@ -987,8 +989,8 @@ public class MainActivity : AvaloniaMainActivity
         catch (Exception ex)
         {
             global::Android.Util.Log.Error("VpnRouter",
-                $"Phase 1.H: failed to resolve server entry — {ex.GetType().Name}: {ex.Message}");
-            SetIntent(false);
+                $"Failed to resolve VPN server ({ex.GetType().Name})");
+            PresentStartError(Localization.TunnelError("config-invalid"));
             return;
         }
 
@@ -1022,8 +1024,8 @@ public class MainActivity : AvaloniaMainActivity
         catch (Exception ex)
         {
             global::Android.Util.Log.Error("VpnRouter",
-                $"Phase 1.H: failed to generate sing-box config — {ex.GetType().Name}: {ex.Message}");
-            SetIntent(false);
+                $"Failed to generate VPN profile ({ex.GetType().Name})");
+            PresentStartError(Localization.TunnelError("config-invalid"));
             return;
         }
 
@@ -1071,20 +1073,21 @@ public class MainActivity : AvaloniaMainActivity
                 $"resolvers={resolvers.Length}, systemResolver={dnsTunnelEntry.DnsUseSystemResolver})");
         }
 
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+        try
         {
-            StartForegroundService(intent);
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.O) StartForegroundService(intent);
+            else StartService(intent);
         }
-        else
+        catch (Exception ex)
         {
-            StartService(intent);
+            global::Android.Util.Log.Warn("VpnRouter", $"Service start failed ({ex.GetType().Name})");
+            PresentStartError(Localization.TunnelError("foreground-start-blocked"));
         }
-        SetIntent(true);
     }
 
-    private static void SetIntent(bool connected)
+    private static void SetIntent(bool connected, bool refresh = false)
     {
-        if (_intendedConnected == connected) return;
+        if (_intendedConnected == connected && !refresh) return;
         _intendedConnected = connected;
         try { IntentChanged?.Invoke(connected); }
         catch (Exception ex)

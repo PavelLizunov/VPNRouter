@@ -42,7 +42,8 @@ public partial class App : Application
                 if (!string.IsNullOrEmpty(receiptWarn))
                 {
                     Serilog.Log.Warning("[Startup] {Warning}", receiptWarn);
-                    Program.PendingUpdateWarning = receiptWarn;
+                    Program.PendingUpdateWarning = string.IsNullOrEmpty(Program.PendingUpdateWarning)
+                        ? receiptWarn : Program.PendingUpdateWarning + Environment.NewLine + receiptWarn;
                 }
             }
             catch { }

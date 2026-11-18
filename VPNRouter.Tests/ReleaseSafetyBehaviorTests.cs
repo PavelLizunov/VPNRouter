@@ -238,9 +238,9 @@ public sealed class ReleaseSafetyBehaviorTests
         Assert.DoesNotContain("secrets.", legacy, StringComparison.Ordinal);
         Assert.DoesNotContain("gh release", legacy, StringComparison.Ordinal);
         var updater = ReadSource(".github/workflows/test-windows-update.yml");
-        Assert.Contains("(Join-Path $appDir 'update-copy-probe.txt') -Value 'old'", updater, StringComparison.Ordinal);
-        Assert.Contains("(Join-Path $stagedDir '_bootstrap\\update-copy-probe.txt') -Value 'new'", updater, StringComparison.Ordinal);
-        Assert.Contains("@('VPNRouter.Core.dll', 'VPNRouter.GUI.exe', 'update-copy-probe.txt')", updater, StringComparison.Ordinal);
+        Assert.Contains("(Join-Path $appDir 'stop-vpnrouter.ps1') -Value '# old fixture'", updater, StringComparison.Ordinal);
+        Assert.Contains("--archive $archive --sha256", updater, StringComparison.Ordinal);
+        Assert.Contains("@('VPNRouter.Core.dll', 'VPNRouter.GUI.exe', 'stop-vpnrouter.ps1')", updater, StringComparison.Ordinal);
         Assert.Contains("(Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash -ne $property.Value", updater, StringComparison.Ordinal);
         Assert.Contains("throw \"Updater did not install expected staged bytes:", updater, StringComparison.Ordinal);
         var build = ReadSource("build.ps1");

@@ -1,4 +1,3 @@
-using System.Text;
 using VPNRouter.Core;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -27,7 +26,7 @@ public sealed class GeoDataDownloaderDamagedFileTests : IDisposable
     }
 
     private Task<bool> EnsureAsync(FakeHttpClient http) =>
-        new GeoDataDownloader(http, Serilog.Core.Logger.None)
+        new GeoDataDownloader(http, Serilog.Core.Logger.None, RuleSetSamples.CheckFixtureContentsAsync)
             .EnsureFileAsync(Url, _dest, MinSize, "geosite-ru", TestContext.Current.CancellationToken);
 
     [Fact]
@@ -42,20 +41,21 @@ public sealed class GeoDataDownloaderDamagedFileTests : IDisposable
         Assert.True(ok);
         Assert.Single(http.SentStreamingRequests);
         Assert.Equal(published, File.ReadAllBytes(_dest));
-        Assert.False(File.Exists(_dest + ".tmp"));
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
     }
 
     [Fact]
-    public async Task DamagedFile_DownloadFails_ReportsUnavailableAndLeavesNoFile()
+    public async Task DamagedFile_DownloadFails_ReportsUnavailableAndLeavesOriginalBytes()
     {
-        File.WriteAllBytes(_dest, RuleSetSamples.ValidHeaderZeroedBody(155));
+        var damaged = RuleSetSamples.ValidHeaderZeroedBody(155);
+        File.WriteAllBytes(_dest, damaged);
         var http = new FakeHttpClient().ThrowOnStream("rules.example", new HttpRequestException("offline"));
 
         var ok = await EnsureAsync(http);
 
         Assert.False(ok);
-        Assert.False(File.Exists(_dest));
-        Assert.False(File.Exists(_dest + ".tmp"));
+        Assert.Equal(damaged, File.ReadAllBytes(_dest));
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public sealed class GeoDataDownloaderDamagedFileTests : IDisposable
 
         Assert.False(ok);
         Assert.False(File.Exists(_dest));
-        Assert.False(File.Exists(_dest + ".tmp"));
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
     }
 
     [Fact]
@@ -90,32 +90,37 @@ public sealed class GeoDataDownloaderDamagedFileTests : IDisposable
         var published = RuleSetSamples.UpstreamGeositeTldRu();
         File.WriteAllBytes(_dest, published);
         File.SetLastWriteTimeUtc(_dest, DateTime.UtcNow.AddDays(-30));
-        var html = Encoding.UTF8.GetBytes(new string('<', 200));
-        var http = new FakeHttpClient().SetupStream("rules.example", html);
+        var rejected = RuleSetSamples.IntactEnvelope(200);
+        Assert.True(RuleSetFile.IsValidBinary(rejected));
+        var staleTime = File.GetLastWriteTimeUtc(_dest);
+        var http = new FakeHttpClient().SetupStream("rules.example", rejected);
 
         var ok = await EnsureAsync(http);
 
         Assert.True(ok);
         Assert.Single(http.SentStreamingRequests);
         Assert.Equal(published, File.ReadAllBytes(_dest));
-        Assert.False(File.Exists(_dest + ".tmp"));
+        Assert.Equal(staleTime, File.GetLastWriteTimeUtc(_dest));
+        Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
     }
 
-    [Fact]
-    public void DamagedGeosite_MakesGeoFilesUnavailable()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UnreadableBuiltInSetMakesPairUnavailable(bool damageGeoIp)
     {
         var previousDataDir = AppPaths.DataDir;
         try
         {
             AppPaths.OverrideDataDir(_dir);
             Directory.CreateDirectory(AppPaths.GeoDir);
-            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(11 * 1024));
+            File.WriteAllBytes(AppPaths.GeoIpRuPath, RuleSetSamples.GeoIpRule());
 
             File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
-            Assert.True(GeoDataDownloader.AreGeoFilesAvailable());
+            Assert.True(GeoDataDownloader.AreGeoFilesAvailable(RuleSetSamples.CheckFixtureContentsAsync));
 
-            File.WriteAllBytes(AppPaths.GeoSiteRuPath, RuleSetSamples.ZeroFilled(155));
-            Assert.False(GeoDataDownloader.AreGeoFilesAvailable());
+            File.WriteAllBytes(damageGeoIp ? AppPaths.GeoIpRuPath : AppPaths.GeoSiteRuPath, RuleSetSamples.IntactEnvelope(12 * 1024));
+            Assert.False(GeoDataDownloader.AreGeoFilesAvailable(RuleSetSamples.CheckFixtureContentsAsync));
         }
         finally
         {

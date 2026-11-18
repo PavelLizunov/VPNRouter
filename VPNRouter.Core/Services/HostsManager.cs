@@ -38,6 +38,7 @@ public sealed class HostsManager
     private readonly IProcessRunner _runner;
 
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+    internal string SystemDirectory { get; init; } = OperatingSystem.IsWindows() ? Environment.SystemDirectory : string.Empty;
 
     private static readonly HostsManager DefaultInstance = new(new RealFileSystem(), HostsPath);
 
@@ -368,8 +369,10 @@ public sealed class HostsManager
     {
         try
         {
+            if (!Path.IsPathFullyQualified(SystemDirectory)) return;
             var result = _runner.RunAsync(new ProcessRequest(
-                ExecutablePath: "ipconfig",
+                ExecutablePath: Path.Combine(SystemDirectory, "ipconfig.exe"),
+                WorkingDirectory: SystemDirectory,
                 Arguments: new[] { "/flushdns" },
                 Timeout: TimeSpan.FromMilliseconds(5000))).GetAwaiter().GetResult();
 

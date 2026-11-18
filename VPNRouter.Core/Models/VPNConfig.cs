@@ -553,6 +553,32 @@ public class RuleSetEntry
     public string? UpdateInterval { get; set; }
 }
 
+// Keep the scalar Network property used by existing route builders and readers.
+internal sealed class RouteNetworkConverter : JsonConverter<string>
+{
+    public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+            return reader.GetString();
+
+        var networks = JsonSerializer.Deserialize(ref reader, Json.AppJsonContext.Default.ListString);
+        return networks is { Count: > 0 } ? string.Join(",", networks) : null;
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        if (!value.Contains(','))
+        {
+            writer.WriteStringValue(value);
+            return;
+        }
+        writer.WriteStartArray();
+        foreach (var network in value.Split(',', StringSplitOptions.TrimEntries))
+            writer.WriteStringValue(network);
+        writer.WriteEndArray();
+    }
+}
+
 public class RouteRule
 {
     [JsonPropertyName("inbound")]
@@ -569,6 +595,7 @@ public class RouteRule
 
     [JsonPropertyName("network")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonConverter(typeof(RouteNetworkConverter))]
     public string? Network { get; set; }
 
     [JsonPropertyName("ip_is_private")]
@@ -613,6 +640,10 @@ public class RouteRule
     [JsonPropertyName("port")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<int>? Port { get; set; }
+
+    [JsonPropertyName("port_range")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? PortRange { get; set; }
 }
 
 public class SingBoxExperimental

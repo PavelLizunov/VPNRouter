@@ -20,6 +20,12 @@ public sealed class DeepVerifyHostReflectionTests
 
     [Theory]
     [InlineData("ip=127.0.0.1\n")]
+    [InlineData("ip=0.0.0.0\n")]
+    [InlineData("ip=::\n")]
+    [InlineData("ip=fe80::1\n")]
+    [InlineData("ip=169.254.10.5\n")]
+    [InlineData("ip=fd00::1\n")]
+    [InlineData("ip=::ffff:127.0.0.1\n")]
     [InlineData("ip=10.0.0.5\n")]
     [InlineData("ip=172.16.1.1\n")]
     [InlineData("ip=192.168.1.100\n")]
@@ -45,6 +51,13 @@ public sealed class DeepVerifyHostReflectionTests
     }
 
     [Fact]
+    public void MappedHostAddressStillCountsAsHostReflection()
+    {
+        var (ok, _) = DeepVerifyProbe.EvaluateProbeResponse("ip=198.51.100.42\n", IPAddress.Parse("::ffff:198.51.100.42"));
+        Assert.False(ok);
+    }
+
+    [Fact]
     public void EvaluateProbeResponse_ReflectsKnownHostPublicIp_Rejected()
     {
         var previous = DeepVerifyProbe.KnownHostPublicIp;
@@ -66,6 +79,7 @@ public sealed class DeepVerifyHostReflectionTests
 
     [Theory]
     [InlineData("<html><body>error</body></html>")]
+    [InlineData("field=ip=127.0.0.1\n")]
     [InlineData("ip=not-an-ip\n")]
     [InlineData("ip=\n")]
     public void EvaluateProbeResponse_MalformedOrMissingIp_Rejected(string body)

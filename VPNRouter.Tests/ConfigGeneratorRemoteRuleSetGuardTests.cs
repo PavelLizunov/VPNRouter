@@ -8,23 +8,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
+public sealed class ConfigGeneratorRemoteRuleSetGuardTests
 {
-    private readonly string _origDataDir;
-    private readonly string _testDir;
-
-    public ConfigGeneratorRemoteRuleSetGuardTests()
-    {
-        _testDir = Path.Combine(Path.GetTempPath(), "vpnr-cfggen-rs-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_testDir);
-        _origDataDir = Environment.GetEnvironmentVariable("ProgramData") ?? "";
-    }
-
-    public void Dispose()
-    {
-        try { Directory.Delete(_testDir, recursive: true); } catch { }
-    }
-
     private static AppSettings BuildSettings(bool blockAds, bool bypassRu, List<CustomRule>? customRules = null)
     {
         var s = new AppSettings();
@@ -58,41 +43,80 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests : IDisposable
     public void Generate_ToggleMatrix_NoRemoteRuleSets(bool blockAds, bool bypassRu)
     {
         var settings = BuildSettings(blockAds, bypassRu);
-        var profile = BuildProfile();
-        var processes = new[] { "Discord.exe" };
-
-        var config = ConfigGenerator.Generate(profile, processes, settings);
-        var ruleSet = config.Route.RuleSet ?? new List<RuleSetEntry>();
-
-        var remoteEntries = ruleSet
-            .Where(rs => string.Equals(rs.Type, "remote", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        Assert.True(remoteEntries.Count == 0,
-            $"Found {remoteEntries.Count} type:remote rule-set entries — these crash sing-box on TLS timeout. " +
-            $"Tags: {string.Join(", ", remoteEntries.Select(r => r.Tag))}. " +
-            "Route through RuleSetCacheManager + emit type:local instead.");
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
+        {
+            var config = ConfigGenerator.Generate(BuildProfile(), ["Discord.exe"], settings, null, null,
+                (_, filename) => Path.Combine("cache", filename), checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
+            var entries = config.Route.RuleSet ?? [];
+            Assert.All(entries, entry => Assert.Equal("local", entry.Type));
+            Assert.Equal(blockAds, entries.Any(entry => entry.Tag == "vpnrouter-adblock"));
+            Assert.Equal(bypassRu, entries.Any(entry => entry.Tag == "vpnrouter-geoip-ru"));
+        });
     }
 
-    [Fact]
-    public void Generate_WithCustomGeositeRule_NoRemoteRuleSets()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void HotApplyRejectsUnreadableBuiltInSetInGeneratedAndImportedConfig(bool damageGeoIp)
     {
-        var customRules = new List<CustomRule>
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
         {
-            new() { Enabled = true, Type = "geosite", Action = "direct", Value = "ru,cn" },
-            new() { Enabled = true, Type = "geoip",   Action = "direct", Value = "ru" },
-        };
-        var settings = BuildSettings(blockAds: false, bypassRu: false, customRules: customRules);
-        var profile = BuildProfile();
-        var processes = new[] { "Discord.exe" };
+            File.WriteAllBytes(damageGeoIp ? AppPaths.GeoIpRuPath : AppPaths.GeoSiteRuPath,
+                RuleSetSamples.IntactEnvelope(12 * 1024));
+            var settings = BuildSettings(blockAds: false, bypassRu: true);
+            Assert.Throws<InvalidOperationException>(() =>
+                ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, resolveRuleSet: null,
+                    requireGeo: true, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+            Assert.Throws<InvalidOperationException>(() =>
+                CustomConfigInjector.Inject("{}", [], settings, requireGeo: true,
+                    checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync));
+        });
+    }
 
-        var config = ConfigGenerator.Generate(profile, processes, settings);
-        var ruleSet = config.Route.RuleSet ?? new List<RuleSetEntry>();
+    [Theory]
+    [InlineData("custom_first")]
+    [InlineData("toggles_first")]
+    public void Generate_PartialDirectAndCompleteBlock_EmitOnlyRegisteredReferences(string priority)
+    {
+        var settings = BuildSettings(false, false,
+        [
+            new() { Type = "geoip", Action = "direct", Value = "first, missing" },
+            new() { Type = "geosite", Action = "block", Value = "first, second" },
+        ]);
+        settings.App.CustomRulesPriority = priority;
+        var config = ConfigGenerator.Generate(BuildProfile(), [], settings, null, null,
+            (_, file) => file == "user-geoip-missing.srs" ? null : Path.Combine("cache", file));
 
-        var remoteEntries = ruleSet
-            .Where(rs => string.Equals(rs.Type, "remote", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        Assert.True(remoteEntries.Count == 0,
-            $"Found {remoteEntries.Count} type:remote rule-set entries from custom geosite/geoip rules. " +
-            $"Tags: {string.Join(", ", remoteEntries.Select(r => r.Tag))}.");
+        var tags = config.Route.RuleSet!.Select(entry => entry.Tag);
+        Assert.Equal(new[] { "user-geoip-first", "user-geosite-first", "user-geosite-second" }, tags);
+        Assert.All(config.Route.RuleSet!, entry => Assert.Equal("local", entry.Type));
+        var direct = Assert.Single(config.Route.Rules, r => r.RuleSet != null && r.Outbound == "direct");
+        Assert.Equal(new[] { "user-geoip-first" }, direct.RuleSet);
+        var reject = Assert.Single(config.Route.Rules, r => r.RuleSet != null && r.Action == "reject");
+        var dns = Assert.Single(config.Dns.Rules, r => r.RuleSet != null);
+        Assert.Equal(new[] { "user-geosite-first", "user-geosite-second" }, reject.RuleSet);
+        Assert.Equal(reject.RuleSet, dns.RuleSet);
+        Assert.Equal("reject", dns.Action);
+    }
+
+    [Theory]
+    [InlineData("geosite", "block", true)]
+    [InlineData("geosite", "block", false)]
+    [InlineData("geoip", "block", true)]
+    [InlineData("geoip", "block", false)]
+    [InlineData("geosite", "proxy", true)]
+    [InlineData("geosite", "proxy", false)]
+    [InlineData("geoip", "proxy", true)]
+    [InlineData("geoip", "proxy", false)]
+    public void Generate_RequiresEveryProtectiveSet(string type, string action, bool firstAvailable)
+    {
+        var settings = BuildSettings(false, false,
+            [new CustomRule { Type = type, Action = action, Value = "first, second" }]);
+        string? Resolve(string url, string file) => firstAvailable && file == $"user-{type}-first.srs" ? file : null;
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ConfigGenerator.Generate(BuildProfile(), [], settings, null, null, Resolve));
+
+        Assert.Contains(firstAvailable ? $"user-{type}-second" : $"user-{type}-first", error.Message);
     }
 }

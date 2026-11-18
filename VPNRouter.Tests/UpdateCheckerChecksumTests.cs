@@ -15,7 +15,8 @@ namespace VPNRouter.Tests;
 
 public class UpdateCheckerChecksumTests
 {
-    private const string DownloadUrl = "https://example.test/VPNRouter-update.zip";
+    private static string DownloadUrl(string version) =>
+        $"https://github.com/PavelLizunov/VPNRouter/releases/download/v{version}/VPNRouter-v{version}-win.zip";
 
     private static byte[] MinimalUpdateZip()
     {
@@ -35,7 +36,7 @@ public class UpdateCheckerChecksumTests
     private static UpdateInfo Info(string version, string? inlineSha) => new()
     {
         LatestVersion = version,
-        DownloadUrl = DownloadUrl,
+        DownloadUrl = DownloadUrl(version),
         SizeBytes = 0,
         FullChecksumSha256 = inlineSha,
         HasLiteUpdate = false,
@@ -45,7 +46,7 @@ public class UpdateCheckerChecksumTests
     public async Task DownloadAndStageAsync_InlineShaMatch_StagesSuccessfully()
     {
         var zip = MinimalUpdateZip();
-        var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
+        var http = new FakeHttpClient().SetupStream(DownloadUrl("7.7.7"), zip);
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
         var dir = await checker.DownloadAndStageAsync(Info("7.7.7", Sha256Hex(zip)), TestContext.Current.CancellationToken);
@@ -68,7 +69,7 @@ public class UpdateCheckerChecksumTests
     public async Task DownloadAndStageAsync_InlineShaMismatch_RefusesAndDeletesAsset()
     {
         var zip = MinimalUpdateZip();
-        var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
+        var http = new FakeHttpClient().SetupStream(DownloadUrl("8.8.8"), zip);
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
         var stagingBase = Path.Combine(AppPaths.DataDir, "update-staging");
@@ -97,7 +98,7 @@ public class UpdateCheckerChecksumTests
     public async Task DownloadAndStageAsync_InlineShaMalformedLength_Throws()
     {
         var zip = MinimalUpdateZip();
-        var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
+        var http = new FakeHttpClient().SetupStream(DownloadUrl("5.5.5"), zip);
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
@@ -108,7 +109,7 @@ public class UpdateCheckerChecksumTests
     public async Task DownloadAndStageAsync_MissingDigest_RefusesExtract()
     {
         var zip = MinimalUpdateZip();
-        var http = new FakeHttpClient().SetupStream(DownloadUrl, zip);
+        var http = new FakeHttpClient().SetupStream(DownloadUrl("9.9.9"), zip);
         var checker = new UpdateChecker(new UpdateSettings(), "2.44.1-r4", http);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(

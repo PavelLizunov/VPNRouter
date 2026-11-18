@@ -67,9 +67,11 @@ public sealed class VpnEngineApplyStructuralChangeTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ApplyAsync_FailedGenerationOrReload_ReportsFailureAndRestoresBaseline(bool missingCustomConfig)
+    [InlineData("unconfirmed-reload")]
+    [InlineData("missing-rule-set")]
+    [InlineData("damaged-built-in")]
+    [InlineData("missing-custom-config")]
+    public async Task ApplyAsync_FailedGenerationOrReload_PreservesActiveTunnel(string scenario)
     {
         var priorDataDir = GetAppPathsDataDir();
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-apply-reload-fail-{Guid.NewGuid():N}");
@@ -129,7 +131,8 @@ public sealed class VpnEngineApplyStructuralChangeTests
         using var sessionCts = new CancellationTokenSource();
         SetField(engine, "_sessionCts", sessionCts);
 
-        var fakeHttp = new FakeHttpClient().Setup("/configs", "{}");
+        bool invalidCandidate = scenario != "unconfirmed-reload";
+        var fakeHttp = new FakeHttpClient().Setup("/configs", "{}", statusCode: invalidCandidate ? 503 : 200);
         var runner = new FakeProcessRunner();
         var singBox = new SingBoxManager(
             new SingBoxSettings { ExecutablePath = "sing-box.exe", ClashApi = "127.0.0.1:9090" },
@@ -190,22 +193,47 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
         try
         {
-            if (missingCustomConfig)
+            const string originalJson = """{"route":{"final":"proxy"}}""";
+            File.WriteAllText(VPNRouter.Core.AppPaths.CurrentConfigPath, originalJson);
+            string expectedFailure = "Apply failed: sing-box reload or restart was not confirmed";
+            if (scenario == "missing-rule-set")
+            {
+                // A file at the cache directory path makes resolution fail before it can fetch.
+                Directory.CreateDirectory(VPNRouter.Core.AppPaths.CacheDir);
+                File.WriteAllText(Path.Combine(VPNRouter.Core.AppPaths.CacheDir, RuleSetCacheManager.CacheSubdir), "fixture");
+                settings.App.CustomRules = [new() { Action = "block", Type = "geosite", Value = "example" }];
+            }
+            if (scenario == "damaged-built-in")
+            {
+                Directory.CreateDirectory(VPNRouter.Core.AppPaths.GeoDir);
+                File.WriteAllBytes(VPNRouter.Core.AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(12 * 1024));
+                File.WriteAllBytes(VPNRouter.Core.AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
+                settings.App.BypassRussianTraffic = true;
+            }
+            if (scenario == "missing-custom-config")
             {
                 settings.App.ConfigMode = "custom";
                 settings.App.CustomConfig = Path.Combine(tempDir, "fixture-private-selection.json");
             }
-            var expectedFailure = missingCustomConfig
-                ? "Apply failed: check the selected configuration and required rule sets, then retry."
-                : "Apply failed: sing-box reload or restart was not confirmed";
-            var result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
+            if (invalidCandidate)
+            {
+                expectedFailure = "Apply failed: check the selected configuration and required rule sets, then retry.";
+            }
+
+            var result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken,
+                forceRestart: invalidCandidate);
 
             Assert.False(result);
+            Assert.False(initialHandle.HasExited);
+            Assert.True(engine.HasActiveTunnel);
+            Assert.Equal(OperatingSystem.IsWindows() || !invalidCandidate, engine.IsRunning);
+            Assert.Equal(originalJson, File.ReadAllText(VPNRouter.Core.AppPaths.CurrentConfigPath));
+
             Assert.Contains(expectedFailure, statuses);
             Assert.Contains(sink.Events, e => e.Properties.ContainsKey("Status") && e.RenderMessage().Contains(expectedFailure));
-            if (missingCustomConfig)
+            if (invalidCandidate)
                 Assert.Contains(sink.Events, e => e.Properties.ContainsKey("ExceptionType") && e.Exception is null);
-            sink.AssertExcludes("TestProfile", "10.0.0.1", "fixture-private-selection");
+            sink.AssertExcludes("user-geosite-example", "fixture-private-selection", "TestProfile", "10.0.0.1");
             Assert.DoesNotContain(statuses, s => s.StartsWith("Applied"));
 
             Assert.Equal(baselineConfigMode, engine.ActiveConfigMode);

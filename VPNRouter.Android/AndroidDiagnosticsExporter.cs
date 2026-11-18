@@ -71,9 +71,6 @@ internal static class AndroidDiagnosticsExporter
             var singboxLog = ResolveSingboxLogPath();
             AddLogTail(staging, singboxLog, "singbox-tail.log", entries, warnings);
 
-            AddLogTail(staging, Path.Combine(AppPaths.DataDir, "data", "CrashReport-vpnrouter.log"),
-                "singbox-stderr-tail.log", entries, warnings);
-
             AddRecentCrashes(staging, entries, warnings);
 
             var zipPath = BuildZip(staging, stamp, warnings);
@@ -101,7 +98,6 @@ internal static class AndroidDiagnosticsExporter
         "Contents:",
         "  summary.txt               - version, Android, device, connected, mode, server count",
         "  singbox-tail.log          - last sing-box log lines (scrubbed)",
-        "  singbox-stderr-tail.log   - last Go-runtime stderr lines (scrubbed)",
         "  crash-*.txt               - recent crash reports (scrubbed)",
     });
 

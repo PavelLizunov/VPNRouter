@@ -378,7 +378,7 @@ public class NaiveProxySupportTests
             Username = "u", Password = "p", NaiveQuic = true,
             Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" },
         };
-        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, 11111, 22222);
+        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(11111));
         Assert.Contains("\"naive\"", json);
         Assert.Contains("\"quic\"", json);
     }

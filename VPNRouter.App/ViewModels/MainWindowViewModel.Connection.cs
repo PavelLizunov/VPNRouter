@@ -602,7 +602,7 @@ public partial class MainWindowViewModel
         }
     }
 
-    private bool IsServiceManagedVpn => IsConnected && !(_engine?.IsRunning ?? false);
+    private bool IsServiceManagedVpn => IsConnected && !(_engine?.HasActiveTunnel ?? false);
 
     private void RestoreConnectedStatus()
     {
@@ -641,6 +641,11 @@ public partial class MainWindowViewModel
     private async Task ReconnectAsync(string configName, ReconnectIntent intent = ReconnectIntent.Follow)
     {
         if (_isReconnecting) return;
+        if (IsServiceManagedVpn)
+        {
+            WarnServiceManagedReconnect(configName);
+            return;
+        }
         _isReconnecting = true;
         IsConnecting = true;
         StatusText = IsRussian
@@ -651,14 +656,9 @@ public partial class MainWindowViewModel
             "[VM] Reconnecting (intent={Intent}, vlessMode={VlessMode}, subscribeMode={SubscribeMode})",
             intent, IsVlessMode, IsSubscribeMode);
 
+        bool startingCold = false;
         try
         {
-            var applyInPlace = _engine.IsRunning;
-            if (!applyInPlace)
-            {
-                await Task.Run(() => _engine.Stop());
-            }
-
             if (intent == ReconnectIntent.ManualVless)
             {
                 IsSubscribeMode = false;
@@ -704,7 +704,7 @@ public partial class MainWindowViewModel
                     "[VM] Reconnecting with {Count} aggregated subscription servers", aggregated.Count);
             }
 
-            if (applyInPlace)
+            if (_engine.HasActiveTunnel)
             {
                 _logger.Information("[VM] ReconnectAsync applying new config via ApplyAsync(forceRestart=true)");
                 var applied = await Task.Run(() => _engine.ApplyAsync(
@@ -719,10 +719,21 @@ public partial class MainWindowViewModel
                     return;
                 }
 
-                _logger.Warning("[VM] ReconnectAsync ApplyAsync returned false; falling back to Stop+Start");
-                await Task.Run(() => _engine.Stop());
+                if (_engine.HasActiveTunnel)
+                {
+                    // Generation can reject new routing rules while the previous tunnel is healthy.
+                    StatusText = Strings.ApplyFailed;
+                    return;
+                }
+                _logger.Warning("[VM] ReconnectAsync ApplyAsync returned false and sing-box stopped; retrying startup");
             }
 
+            if (!await Task.Run(_engine.TryPrepareColdReconnect))
+            {
+                StatusText = Strings.ApplyFailed;
+                return;
+            }
+            startingCold = true;
             const int maxRetries = 3;
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
@@ -768,6 +779,11 @@ public partial class MainWindowViewModel
         }
         catch (OperationCanceledException)
         {
+            if (!startingCold && _engine.HasActiveTunnel)
+            {
+                StatusText = Strings.ApplyFailed;
+                return;
+            }
             _logger.Error("[VM] Reconnect timed out");
             try { await Task.Run(() => _engine.Stop()); } catch { }
             IsConnected = false;
@@ -787,7 +803,7 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             _logger.Error("[VM] Reconnect failed ({ExceptionType})", ex.GetType().Name);
-            IsConnected = false;
+            IsConnected = _engine.HasActiveTunnel;
             StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
             ConnectButtonText = Strings.StartVPN;
         }

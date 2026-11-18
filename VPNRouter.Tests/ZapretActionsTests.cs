@@ -9,16 +9,44 @@ namespace VPNRouter.Tests;
 
 public sealed class ZapretActionsTests : IDisposable
 {
-    private readonly IProcessRunner _originalRunner;
+    private readonly IProcessRunner _originalRunner = ZapretActions.ProcessRunner;
+    private readonly Action<ProcessStartInfo> _originalLauncher = ZapretActions.ProcessLauncher;
+    private readonly Func<string> _originalSystem = ZapretActions.GetSystemDirectory;
+    private readonly Func<string> _originalPreview = ZapretActions.GetHostsPreviewDirectory;
+    private readonly IHttpClient _originalHttp = ZapretActions.Http;
+    private readonly string _root = Directory.CreateTempSubdirectory("vpnrouter-zapret-tools-").FullName;
+    private readonly List<ProcessStartInfo> _launched = new();
+    private readonly FakeHttpClient _http = new();
+    private const string HostsUrl = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/hosts";
+
+    private string WindowsDir => Path.Combine(_root, "Windows R&D (test)");
+    private string SystemDir => Path.Combine(WindowsDir, "System32");
+    private string HostsPath => Path.Combine(SystemDir, "drivers", "etc", "hosts");
+    private string PreviewDir => Path.Combine(_root, "Preview %value% O'Brien");
 
     public ZapretActionsTests()
     {
-        _originalRunner = ZapretActions.ProcessRunner;
+        ZapretActions.GetSystemDirectory = () => SystemDir;
+        ZapretActions.GetHostsPreviewDirectory = () => PreviewDir;
+        ZapretActions.ProcessLauncher = _launched.Add;
+        ZapretActions.Http = _http;
     }
 
     public void Dispose()
     {
         ZapretActions.ProcessRunner = _originalRunner;
+        ZapretActions.ProcessLauncher = _originalLauncher;
+        ZapretActions.GetSystemDirectory = _originalSystem;
+        ZapretActions.GetHostsPreviewDirectory = _originalPreview;
+        ZapretActions.Http = _originalHttp;
+        Directory.Delete(_root, recursive: true);
+    }
+
+    private static async Task<List<string>> ReadLinesAsync(IAsyncEnumerable<string> action)
+    {
+        var lines = new List<string>();
+        await foreach (var line in action) lines.Add(line);
+        return lines;
     }
 
     private static ProcessResult Ok(string stdout) =>
@@ -47,7 +75,7 @@ public sealed class ZapretActionsTests : IDisposable
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(
-            r => r.ExecutablePath == ZapretActions.ScExecutablePath
+            r => r.ExecutablePath == Path.Combine(SystemDir, "sc.exe")
               && r.Arguments.Count == 2
               && r.Arguments[0] == "query"
               && r.Arguments[1] == "BFE",
@@ -59,7 +87,7 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.True(actual);
         Assert.Single(fake.RunCalls);
         var req = fake.RunCalls[0];
-        Assert.Equal(ZapretActions.ScExecutablePath, req.ExecutablePath);
+        Assert.Equal(Path.Combine(SystemDir, "sc.exe"), req.ExecutablePath);
         Assert.Equal(new[] { "query", "BFE" }, req.Arguments.ToArray());
         Assert.Equal(TimeSpan.FromSeconds(2), req.Timeout);
         Assert.True(req.CaptureStdout, "must capture stdout to parse RUNNING token");
@@ -69,7 +97,7 @@ public sealed class ZapretActionsTests : IDisposable
     public void IsServiceRunning_OutputContainsStoppedOnly_ReturnsFalse()
     {
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath, Ok(ScQueryStopped));
+        fake.OnRun(r => r.ExecutablePath == Path.Combine(SystemDir, "sc.exe"), Ok(ScQueryStopped));
         ZapretActions.ProcessRunner = fake;
 
         Assert.False(ZapretActions.IsServiceRunning("zapret"));
@@ -111,7 +139,7 @@ public sealed class ZapretActionsTests : IDisposable
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(
-            r => r.ExecutablePath == ZapretActions.ScExecutablePath
+            r => r.ExecutablePath == Path.Combine(SystemDir, "sc.exe")
               && r.Arguments.Count == 3
               && r.Arguments[0] == "query"
               && r.Arguments[1] == "state="
@@ -130,7 +158,7 @@ public sealed class ZapretActionsTests : IDisposable
     public void IsAnyServiceMatching_OutputMissesSubstring_ReturnsFalse()
     {
         var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == ZapretActions.ScExecutablePath,
+        fake.OnRun(r => r.ExecutablePath == Path.Combine(SystemDir, "sc.exe"),
             Ok("SERVICE_NAME: DnsCache\r\nSERVICE_NAME: BFE\r\n"));
         ZapretActions.ProcessRunner = fake;
 
@@ -153,85 +181,132 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Equal(TimeSpan.FromSeconds(5), req.Timeout);
     }
 
-    [Fact]
-    public void RunNetsh_ZeroExitCode_ReturnsTrueAndPopulatesOutput()
+    [Theory]
+    [InlineData(0, "RFC 1323 Timestamps                 : enabled\r\n", "✓ TCP timestamps enabled")]
+    [InlineData(0, "Timestamps: disabled", "⚠ TCP timestamps disabled")]
+    [InlineData(1, "Timestamps: enabled", "? Couldn't read TCP timestamps")]
+    public async Task Diagnostics_UsesOnlyPinnedReadOnlyQueries(int exitCode, string output, string status)
     {
-        const string netshOut =
-            "Querying active state...\r\n" +
-            "TCP Global Parameters\r\n" +
-            "----------------------------------------------\r\n" +
-            "Timestamps                          : enabled\r\n";
-        var fake = new FakeProcessRunner();
-        fake.OnRun(
-            r => r.ExecutablePath == "netsh"
-              && r.Arguments.SequenceEqual(new[] { "interface", "tcp", "show", "global" }),
-            Ok(netshOut));
-        ZapretActions.ProcessRunner = fake;
+        var sc = Path.Combine(SystemDir, "sc.exe");
+        var netsh = Path.Combine(SystemDir, "netsh.exe");
+        var runner = new FakeProcessRunner()
+            .OnRun(r => r.ExecutablePath == sc, Ok(ScQueryStopped))
+            .OnRun(r => r.ExecutablePath == netsh, Ok(output) with { ExitCode = exitCode });
+        ZapretActions.ProcessRunner = runner;
 
-        var ok = ZapretActions.RunNetsh("interface tcp show global", out var captured);
+        var lines = await ReadLinesAsync(ZapretActions.RunDiagnosticsAsync(TestContext.Current.CancellationToken));
 
-        Assert.True(ok);
-        Assert.Contains("Timestamps", captured);
-        Assert.Contains("enabled", captured);
-        var req = fake.RunCalls[0];
-        Assert.Equal("netsh", req.ExecutablePath);
-        Assert.Equal(new[] { "interface", "tcp", "show", "global" }, req.Arguments.ToArray());
+        Assert.Contains(lines, line => line.StartsWith(status, StringComparison.Ordinal));
+        Assert.All(runner.RunCalls, r =>
+        {
+            Assert.True(Path.IsPathFullyQualified(r.ExecutablePath));
+            Assert.Equal(SystemDir, r.WorkingDirectory);
+            Assert.True(r.ClearInheritedEnvironment);
+            Assert.Equal($"{SystemDir};{WindowsDir}", r.EnvironmentOverrides!["PATH"]);
+        });
+        var tcp = Assert.Single(runner.RunCalls, r => r.ExecutablePath == netsh);
+        Assert.Equal(new[] { "interface", "tcp", "show", "global" }, tcp.Arguments.ToArray());
+        string[][] queries = [
+            ["query", "BFE"], ["query", "Killer"], ["query", "GoodbyeDPI"], ["query", "TracSrvWrapper"],
+            ["query", "EPWD"], ["query", "state=", "all"], ["query", "WinDivert"]
+        ];
+        var calls = runner.RunCalls.Where(r => r.ExecutablePath == sc).ToArray();
+        Assert.Equal(queries.Length + 1, runner.RunCalls.Count);
+        Assert.Equal(queries.Length, calls.Length);
+        for (var i = 0; i < queries.Length; i++) Assert.Equal(queries[i], calls[i].Arguments.ToArray());
+        Assert.Empty(runner.StartCalls);
+        Assert.Empty(_launched);
     }
 
     [Fact]
-    public void RunNetsh_NonzeroExitCode_ReturnsFalseButStillPopulatesOutput()
+    public void WinwsArguments_KeepEachOptionAndResolveOnlyPackagePlaceholders()
     {
-        var fake = new FakeProcessRunner();
-        fake.OnRun(r => r.ExecutablePath == "netsh",
-            new ProcessResult(
-                ExitCode: 1,
-                Stdout: "The system cannot find the file specified.\r\n",
-                Stderr: "",
-                Duration: TimeSpan.FromMilliseconds(5),
-                TimedOut: false));
-        ZapretActions.ProcessRunner = fake;
-
-        var ok = ZapretActions.RunNetsh("dnsclient show state", out var captured);
-
-        Assert.False(ok);
-        Assert.Contains("cannot find", captured);
-    }
-
-    [Fact]
-    public void BuildCygwinLaunchBat_UsesSetBinAndSetLists_NotLiteralPaths()
-    {
-        const string fakeBinDir = @"C:\ProgramData\VPNRouter\zapret\bin";
-        const string fakeListsDir = @"C:\ProgramData\VPNRouter\zapret\lists";
-        const string args = "--wf-tcp=443 --dpi-desync=fake,split2";
-
-        var bat = ZapretManager.BuildCygwinLaunchBat(fakeBinDir, fakeListsDir, args);
-
-        Assert.Contains("set \"BIN=", bat);
-        Assert.Contains("set \"LISTS=", bat);
-        Assert.Contains("cd /d \"%BIN%\"", bat);
-        Assert.DoesNotContain($"cd /d \"{fakeBinDir}", bat);
-        Assert.Contains(args, bat);
-        Assert.Contains($"set \"BIN={fakeBinDir}{System.IO.Path.DirectorySeparatorChar}", bat);
-        Assert.Contains($"set \"LISTS={fakeListsDir}{System.IO.Path.DirectorySeparatorChar}", bat);
+        var actual = ZapretManager.ExpandArguments("--wf-tcp=80,443 --hostlist=%LISTS%domains.txt", fromPackage: false);
+        Assert.Equal(new[] { "--wf-tcp=80,443", "--hostlist=" + Path.Combine(ZapretUpdater.ListsDir, "domains.txt") }, actual);
     }
 
     [Theory]
-    [InlineData("& whoami > C:\\pwn.txt")]
-    [InlineData("| powershell.exe -c calc.exe")]
-    [InlineData("arg \r\n net user hacker password /add")]
-    [InlineData("arg ^ echo hello")]
-    [InlineData("arg < input.txt")]
-    [InlineData("arg > output.txt")]
-    [InlineData("arg %EVIL%")]
-    public void BuildCygwinLaunchBat_RejectsShellMetacharacters(string maliciousArgs)
+    [InlineData("--unrecognized=1")]
+    [InlineData("--hostlist=../outside.txt")]
+    public void WinwsArguments_RejectUnsupportedCustomInputs(string text)
     {
-        const string fakeBinDir = @"C:\ProgramData\VPNRouter\zapret\bin";
-        const string fakeListsDir = @"C:\ProgramData\VPNRouter\zapret\lists";
+        Assert.Throws<ArgumentException>(() => ZapretManager.ExpandArguments(text, fromPackage: false));
+    }
 
-        var ex = Assert.Throws<ArgumentException>(() =>
-            ZapretManager.BuildCygwinLaunchBat(fakeBinDir, fakeListsDir, maliciousArgs));
+    private static readonly ZapretServiceOwnership MenuPaths = new(
+        Path.Combine(Path.GetTempPath(), "legacy", "bin"), Path.Combine(Path.GetTempPath(), "protected runtime", "bin"));
 
-        Assert.Contains("Zapret arguments contain disallowed shell metacharacters", ex.Message);
+    private static string MenuImage(string option) => ZapretActions.ServiceImage(
+        Path.Combine(MenuPaths.ProtectedBin, "winws.exe"), [option]);
+
+    [Fact]
+    public void ServiceMenu_CreatesZapretFromVerifiedImageWhenVacant()
+    {
+        var image = MenuImage("--wf-tcp=443");
+        var created = new FakeRegistration(new(image, 0x10, 2));
+        var names = new List<string>();
+        var outcome = ZapretActions.ApplyServiceStrategy(MenuPaths, image,
+            (name, writable) => { Assert.False(writable); names.Add(name); return null; },
+            supplied => { Assert.Equal(image, supplied); return created; });
+
+        Assert.Equal("zapret", names[0]);
+        Assert.Equal(ZapretActions.ServiceApply.Created, outcome);
+        Assert.True(created.IsActive);
+    }
+
+    [Theory]
+    [InlineData("zapret")]
+    [InlineData("WinDivert")]
+    public void ServiceMenu_ForeignRegistrationPreventsChanges(string foreign)
+    {
+        var other = new FakeRegistration(new("foreign", foreign == "zapret" ? 0x10u : 1u, 2)) { IsActive = true };
+        var outcome = ZapretActions.ApplyServiceStrategy(MenuPaths, MenuImage("--wf-tcp=443"),
+            (name, writable) => { Assert.False(writable); return name == foreign ? other : null; },
+            _ => throw new InvalidOperationException("Unexpected create"));
+        Assert.Equal(ZapretActions.ServiceApply.Conflict, outcome);
+        Assert.True(other.IsActive);
+        Assert.Equal(0, other.Changes);
+    }
+
+    [Theory]
+    [InlineData(2, true)]
+    [InlineData(3, false)]
+    [InlineData(4, false)]
+    public void ServiceMenu_PreservesExistingStartupModeAndActivity(int start, bool active)
+    {
+        var service = new FakeRegistration(new(MenuImage("--wf-tcp=80"), 0x10, (uint)start)) { IsActive = active };
+        var image = MenuImage("--wf-tcp=443");
+        var outcome = ZapretActions.ApplyServiceStrategy(MenuPaths, image,
+            (name, _) => name == "zapret" ? service : null,
+            _ => throw new InvalidOperationException("Unexpected create"));
+        Assert.Equal(start == 4 ? ZapretActions.ServiceApply.Disabled :
+            active ? ZapretActions.ServiceApply.Running : ZapretActions.ServiceApply.Stopped, outcome);
+        Assert.Equal(new ServiceConfig(image, 0x10, (uint)start), service.Config);
+        Assert.Equal(active, service.IsActive);
+        Assert.Equal(1, service.Changes);
+    }
+
+    [Fact]
+    public void ServiceMenu_PendingMigrationIsHandledByTheServiceOwner()
+    {
+        var service = new FakeRegistration(new(MenuImage("--wf-tcp=80"), 0x10, 4));
+        service.Values["VPNRouterMigrationV1"] = Array.Empty<string>();
+        var outcome = ZapretActions.ApplyServiceStrategy(MenuPaths, MenuImage("--wf-tcp=443"),
+            (name, writable) => { Assert.False(writable); return name == "zapret" ? service : null; },
+            _ => throw new InvalidOperationException("Unexpected create"));
+        Assert.Equal(ZapretActions.ServiceApply.Migrate, outcome);
+        Assert.Equal(0, service.Changes);
+        Assert.False(service.IsActive);
+    }
+
+    [Fact]
+    public void ServiceMenu_QuotesTheSystemImageAndEachVerifiedOption()
+    {
+        var exe = Path.Combine(MenuPaths.ProtectedBin, "winws.exe");
+        string[] args = ["--wf-tcp=443", "--hostlist=protected runtime/list.txt"];
+        Assert.Equal($"\"{exe}\" \"--wf-tcp=443\" \"--hostlist=protected runtime/list.txt\"",
+            ZapretActions.ServiceImage(exe, args));
+        Assert.Throws<InvalidDataException>(() => ZapretActions.ServiceImage(exe, ["--hostlist=%LISTS%"]));
     }
 
     [Fact]
@@ -256,202 +331,79 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.Contains("--dpi-desync-fooling=md5sig", args);
     }
 
-    [Fact]
-    public void RunTests_MissingScriptFile_ThrowsFileNotFoundException()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateHosts_OpensPreviewAndSelectsSystemHostsWithPinnedTools(bool editorUnavailable)
     {
-        Assert.Throws<FileNotFoundException>(() => ZapretActions.RunTests());
+        const string current = "# existing hosts";
+        const string download = "# Flowseal\n127.0.0.1 example.test\n";
+        Directory.CreateDirectory(Path.GetDirectoryName(HostsPath)!);
+        File.WriteAllText(HostsPath, current);
+        _http.Setup(HostsUrl, download);
+        ZapretActions.ProcessLauncher = info =>
+        {
+            _launched.Add(info);
+            if (editorUnavailable && _launched.Count == 1) throw new System.ComponentModel.Win32Exception(2);
+        };
+
+        var lines = await ReadLinesAsync(ZapretActions.UpdateHostsAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(HostsUrl, Assert.Single(_http.SentRequests).Uri.AbsoluteUri);
+        Assert.Equal(2, _launched.Count);
+        Assert.All(_launched, info =>
+        {
+            Assert.True(Path.IsPathFullyQualified(info.FileName));
+            Assert.False(info.UseShellExecute);
+            Assert.Equal(SystemDir, info.WorkingDirectory);
+            Assert.Equal($"{SystemDir};{WindowsDir}", info.Environment["PATH"]);
+        });
+        var editor = _launched[0];
+        Assert.Equal(Path.Combine(SystemDir, "notepad.exe"), editor.FileName);
+        var preview = Assert.Single(editor.ArgumentList);
+        Assert.Empty(editor.Arguments);
+        Assert.Equal(PreviewDir, Path.GetDirectoryName(preview));
+        Assert.Matches(@"^zapret_hosts_[0-9a-f]{32}\.txt$", Path.GetFileName(preview));
+        Assert.Equal(download, File.ReadAllText(preview));
+        Assert.Contains(lines, line => line.Contains(preview, StringComparison.Ordinal) &&
+            line.StartsWith(editorUnavailable ? "✗" : "→", StringComparison.Ordinal));
+
+        var explorer = _launched[1];
+        Assert.Equal(Path.Combine(WindowsDir, "explorer.exe"), explorer.FileName);
+        Assert.Equal($"/select,\"{HostsPath}\"", explorer.Arguments);
+        Assert.Empty(explorer.ArgumentList);
+        Assert.Equal(current, File.ReadAllText(HostsPath));
+    }
+
+    [Fact]
+    public async Task UpdateHosts_CurrentEntriesSkipPreviewAndDesktopTools()
+    {
+        const string entries = "127.0.0.1 example.test\n";
+        Directory.CreateDirectory(Path.GetDirectoryName(HostsPath)!);
+        File.WriteAllText(HostsPath, entries);
+        _http.Setup(HostsUrl, entries);
+
+        var lines = await ReadLinesAsync(ZapretActions.UpdateHostsAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains(lines, line => line.Contains("up to date", StringComparison.Ordinal));
+        Assert.False(Directory.Exists(PreviewDir));
+        Assert.Empty(_launched);
     }
 
     [Theory]
-    [InlineData("zapret_dir_&_calc_")]
-    [InlineData("zapret_dir_|_cmd_")]
-    [InlineData("zapret_dir_^_echo_")]
-    [InlineData("zapret_dir_%EVIL%_")]
-    [InlineData("zapret_dir_\"_quote_")]
-    public void RunTests_PathWithMetacharacters_ThrowsArgumentException(string folderPrefix)
+    [InlineData("relative")]
+    [InlineData("invalid\"directory")]
+    [InlineData("invalid\ndirectory")]
+    public async Task UpdateHosts_RejectsInvalidSystemDirectoryBeforeLaunching(string directory)
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows() && folderPrefix.IndexOfAny(new[] { '"', '|' }) >= 0,
-            "Windows forbids this character in a directory name, so the fixture cannot be created.");
+        _http.Setup(HostsUrl, "127.0.0.1 example.test\n");
+        ZapretActions.GetSystemDirectory = () => directory == "relative" ? directory : Path.Combine(_root, directory);
 
-        var tempDir = Path.Combine(Path.GetTempPath(), $"{folderPrefix}{Guid.NewGuid():N}");
-        var utilsDir = Path.Combine(tempDir, "zapret", "utils");
-        Directory.CreateDirectory(utilsDir);
-        var testPath = Path.Combine(utilsDir, "test zapret.ps1");
-        File.WriteAllText(testPath, "# test");
+        await Assert.ThrowsAsync<IOException>(() =>
+            ReadLinesAsync(ZapretActions.UpdateHostsAsync(TestContext.Current.CancellationToken)));
 
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var dataDir = Path.Combine(appData, "VPNRouter");
-
-        AppPaths.OverrideDataDir(tempDir);
-        try
-        {
-            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.RunTests());
-            Assert.Contains("Test path contains disallowed shell metacharacters", ex.Message);
-        }
-        finally
-        {
-            AppPaths.OverrideDataDir(dataDir);
-            try { Directory.Delete(tempDir, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
-    public void OpenServiceMenu_PathWithMetacharacters_ThrowsArgumentException()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_dir_&_calc_{Guid.NewGuid():N}");
-        var zapretDir = Path.Combine(tempDir, "zapret");
-        Directory.CreateDirectory(zapretDir);
-        var servicePath = Path.Combine(zapretDir, "service.bat");
-        File.WriteAllText(servicePath, "@echo off");
-
-        var originalDataDir = AppPaths.DataDir;
-        AppPaths.OverrideDataDir(tempDir);
-        try
-        {
-            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(servicePath));
-            Assert.Contains("Service path contains disallowed shell metacharacters", ex.Message);
-        }
-        finally
-        {
-            AppPaths.OverrideDataDir(originalDataDir);
-            try { Directory.Delete(tempDir, recursive: true); } catch { }
-        }
-    }
-
-    [Theory]
-    [InlineData("temp\0path", "valid_hosts")]
-    [InlineData("temp\rpath", "valid_hosts")]
-    [InlineData("temp\npath", "valid_hosts")]
-    [InlineData("temp\"path", "valid_hosts")]
-    [InlineData("valid_temp", "hosts\0path")]
-    [InlineData("valid_temp", "hosts\rpath")]
-    [InlineData("valid_temp", "hosts\npath")]
-    [InlineData("valid_temp", "hosts\"path")]
-    public void OpenHostsEditHelpers_PathWithDisallowedCharacters_ThrowsArgumentException(string tempPath, string hostsPath)
-    {
-        var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath));
-        Assert.Contains("contains disallowed characters", ex.Message);
-    }
-
-    [Theory]
-    [InlineData(null, "valid_hosts")]
-    [InlineData("", "valid_hosts")]
-    [InlineData("   ", "valid_hosts")]
-    [InlineData("valid_temp", null)]
-    [InlineData("valid_temp", "")]
-    [InlineData("valid_temp", "   ")]
-    public void OpenHostsEditHelpers_NullOrWhitespace_ThrowsArgumentException(string? tempPath, string? hostsPath)
-    {
-        Assert.Throws<ArgumentException>(() => ZapretActions.OpenHostsEditHelpers(tempPath!, hostsPath!));
-    }
-
-    [Theory]
-    [InlineData(@"C:\Users\O'Brien\AppData\Local\Temp\hosts.txt", @"C:\Windows\System32\drivers\etc\hosts")]
-    [InlineData(@"C:\Work\R&D\Temp\hosts.txt", @"C:\Windows\System32\drivers\etc\hosts")]
-    [InlineData(@"C:\Path With Spaces\^caret\hosts.txt", @"C:\Windows\System32\drivers\etc\hosts")]
-    [InlineData(@"C:\Temp%20Folder\hosts.txt", @"C:\Windows\System32\drivers\etc\hosts")]
-    public void OpenHostsEditHelpers_LegalWindowsPaths_PassValidationAndTriggerLaunchers(string tempPath, string hostsPath)
-    {
-        var originalLauncher = ZapretActions.ProcessLauncher;
-        var launched = new List<ProcessStartInfo>();
-        ZapretActions.ProcessLauncher = psi => launched.Add(psi);
-
-        try
-        {
-            ZapretActions.OpenHostsEditHelpers(tempPath, hostsPath);
-
-            if (OperatingSystem.IsWindows())
-            {
-                Assert.Equal(2, launched.Count);
-                Assert.Equal("notepad.exe", launched[0].FileName);
-                Assert.Equal(tempPath, Assert.Single(launched[0].ArgumentList));
-                Assert.False(launched[0].UseShellExecute);
-
-                Assert.Equal("explorer.exe", launched[1].FileName);
-                Assert.Equal($"/select,\"{hostsPath}\"", launched[1].Arguments);
-                Assert.True(launched[1].UseShellExecute);
-            }
-            else
-            {
-                Assert.Empty(launched);
-            }
-        }
-        finally
-        {
-            ZapretActions.ProcessLauncher = originalLauncher;
-        }
-    }
-
-    [Fact]
-    public void BuildNotepadStartInfo_ConfiguresSafeProcessStartInfo()
-    {
-        const string tempPath = @"C:\Users\O'Brien\AppData\Local\Temp\hosts_temp.txt";
-        var psi = ZapretActions.BuildNotepadStartInfo(tempPath);
-
-        Assert.Equal("notepad.exe", psi.FileName);
-        Assert.False(psi.UseShellExecute);
-        var arg = Assert.Single(psi.ArgumentList);
-        Assert.Equal(tempPath, arg);
-    }
-
-    [Fact]
-    public void BuildExplorerStartInfo_ConfiguresSafeProcessStartInfo()
-    {
-        const string hostsPath = @"C:\Windows\System32\drivers\etc\hosts";
-        var psi = ZapretActions.BuildExplorerStartInfo(hostsPath);
-
-        Assert.Equal("explorer.exe", psi.FileName);
-        Assert.True(psi.UseShellExecute);
-        Assert.Equal($"/select,\"{hostsPath}\"", psi.Arguments);
-        Assert.Empty(psi.ArgumentList);
-    }
-
-    [Fact]
-    public void OpenServiceMenu_PathOutsideZapretDir_ThrowsArgumentException()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_test_{Guid.NewGuid():N}");
-        var zapretDir = Path.Combine(tempDir, "zapret");
-        Directory.CreateDirectory(zapretDir);
-
-        var outsideBat = Path.Combine(tempDir, "outside.bat");
-        File.WriteAllText(outsideBat, "@echo off");
-
-        var originalDataDir = AppPaths.DataDir;
-        AppPaths.OverrideDataDir(tempDir);
-        try
-        {
-            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(outsideBat));
-            Assert.Contains("Zapret directory", ex.Message);
-        }
-        finally
-        {
-            AppPaths.OverrideDataDir(originalDataDir);
-            try { Directory.Delete(tempDir, recursive: true); } catch { }
-        }
-    }
-
-    [Fact]
-    public void OpenServiceMenu_NonBatExtension_ThrowsArgumentException()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"zapret_test_{Guid.NewGuid():N}");
-        var zapretDir = Path.Combine(tempDir, "zapret");
-        Directory.CreateDirectory(zapretDir);
-
-        var exePath = Path.Combine(zapretDir, "service.exe");
-        File.WriteAllText(exePath, "fake");
-
-        var originalDataDir = AppPaths.DataDir;
-        AppPaths.OverrideDataDir(tempDir);
-        try
-        {
-            var ex = Assert.Throws<ArgumentException>(() => ZapretActions.OpenServiceMenu(exePath));
-            Assert.Contains(".bat file", ex.Message);
-        }
-        finally
-        {
-            AppPaths.OverrideDataDir(originalDataDir);
-            try { Directory.Delete(tempDir, recursive: true); } catch { }
-        }
+        Assert.Empty(_launched);
+        Assert.False(Directory.Exists(PreviewDir));
     }
 
     [Fact]
@@ -477,73 +429,4 @@ public sealed class ZapretActionsTests : IDisposable
         Assert.DoesNotContain("%LISTS%", args);
     }
 
-    [Theory]
-    [InlineData(@"C:\ProgramData\VPNRouter\zapret\service.bat")]
-    [InlineData(@"C:\Custom Path With Spaces\zapret\service.bat")]
-    [InlineData(@"C:\ProgramData\VPNRouter\zapret\custom (x86)\service.bat")]
-    public void BuildServiceMenuStartInfo_ConfiguresSafeProcessStartInfo(string servicePath)
-    {
-        var psi = ZapretActions.BuildServiceMenuStartInfo(servicePath, requireElevation: true);
-
-        Assert.Equal("cmd.exe", psi.FileName);
-        Assert.True(psi.UseShellExecute);
-        Assert.Equal("runas", psi.Verb);
-        Assert.Equal(Path.GetDirectoryName(servicePath), psi.WorkingDirectory);
-        Assert.Equal($"/k \"\"{servicePath}\"\"", psi.Arguments);
-        Assert.Empty(psi.ArgumentList);
-
-        var unelevatedPsi = ZapretActions.BuildServiceMenuStartInfo(servicePath, requireElevation: false);
-        Assert.Empty(unelevatedPsi.Verb);
-        Assert.Equal($"/k \"\"{servicePath}\"\"", unelevatedPsi.Arguments);
-    }
-
-    [Theory]
-    [InlineData("ordinary_path")]
-    [InlineData("nested path (x86)")]
-    public void BuildServiceMenuStartInfo_WindowsChildProcess_ExecutesPathsWithSpacesAndParentheses(string folderName)
-    {
-        Assert.SkipWhen(!OperatingSystem.IsWindows(), "Windows-only cmd execution test");
-
-        var tempRoot = Path.Combine(Path.GetTempPath(), $"vpnrouter_cmd_test ({Guid.NewGuid():N})");
-        var subDir = Path.Combine(tempRoot, folderName);
-        Directory.CreateDirectory(subDir);
-
-        var batPath = Path.Combine(subDir, "service.bat");
-        var tokenFile = Path.Combine(subDir, "token.txt");
-        const string expectedToken = "token_ok";
-
-        File.WriteAllText(batPath, $"@echo off\r\necho {expectedToken} > \"{tokenFile}\"\r\nexit\r\n");
-
-        Process? proc = null;
-        try
-        {
-            var psi = ZapretActions.BuildServiceMenuStartInfo(batPath, requireElevation: false);
-            psi.CreateNoWindow = true;
-            psi.WindowStyle = ProcessWindowStyle.Hidden;
-
-            proc = Process.Start(psi);
-            Assert.NotNull(proc);
-
-            var exited = proc!.WaitForExit(10000);
-            if (!exited)
-            {
-                try { proc.Kill(entireProcessTree: true); } catch { }
-                Assert.Fail("cmd.exe child process timed out after 10 seconds");
-            }
-
-            Assert.True(File.Exists(tokenFile), "Token file was not created by the batch file");
-            var tokenContent = File.ReadAllText(tokenFile).Trim();
-            Assert.Equal(expectedToken, tokenContent);
-        }
-        finally
-        {
-            if (proc != null)
-            {
-                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
-                proc.Dispose();
-            }
-
-            try { Directory.Delete(tempRoot, recursive: true); } catch { }
-        }
-    }
 }

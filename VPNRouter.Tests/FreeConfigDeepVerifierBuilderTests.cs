@@ -1,3 +1,4 @@
+using VPNRouter.Core.Services;
 using System.Text.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services.FreeConfigs;
@@ -23,7 +24,7 @@ public sealed class FreeConfigDeepVerifierBuilderTests
             },
         };
 
-        var json = FreeConfigDeepVerifier.BuildSingleOutboundConfig(entry, 10808, 9090);
+        var json = FreeConfigDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808));
         using var doc = JsonDocument.Parse(json);
         var outbound = doc.RootElement.GetProperty("outbounds")[0];
 
@@ -52,7 +53,7 @@ public sealed class FreeConfigDeepVerifierBuilderTests
             },
         };
 
-        var json = FreeConfigDeepVerifier.BuildSingleOutboundConfig(entry, 10808, null);
+        var json = FreeConfigDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808));
         using var doc = JsonDocument.Parse(json);
         var outbound = doc.RootElement.GetProperty("outbounds")[0];
 
@@ -76,7 +77,7 @@ public sealed class FreeConfigDeepVerifierBuilderTests
             Tls = new VlessTlsConfig { ServerName = "hy2.example.com" },
         };
 
-        var json = FreeConfigDeepVerifier.BuildSingleOutboundConfig(entry, 10808, 9090);
+        var json = FreeConfigDeepVerifier.BuildSingleOutboundConfig(entry, new VerificationProxy(10808));
         using var doc = JsonDocument.Parse(json);
         var outbound = doc.RootElement.GetProperty("outbounds")[0];
 

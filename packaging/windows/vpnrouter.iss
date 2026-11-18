@@ -84,6 +84,7 @@ Name: "service"; Description: "{cm:TaskService}"; GroupDescription: "{cm:TaskGro
 Name: "defender"; Description: "{cm:TaskDefender}"; GroupDescription: "{cm:TaskGroupSecurity}"; Flags: unchecked
 
 [Files]
+Source: "installer\zapret-maintenance.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion restartreplace
 Source: "installer\stop-vpnrouter.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "installer\stop-vpnrouter.ps1"; DestDir: "{tmp}"; Flags: dontcopy
@@ -98,8 +99,7 @@ Root: HKLM; Subkey: "Software\VPNRouter\Installer"; ValueType: dword; ValueName:
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Add-MpPreference -ExclusionPath '{app}','{commonappdata}\VPNRouter'"""; Flags: runhidden; Tasks: defender
-Filename: "{app}\app\VPNRouter.CLI.exe"; Parameters: "service install"; Flags: runhidden; Tasks: service
-Filename: "{app}\app\VPNRouter.CLI.exe"; Parameters: "service start"; Flags: runhidden; Tasks: service
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\installer\stop-vpnrouter.ps1"" -InstallDir ""{app}"" -InstallService"; Flags: runhidden; Tasks: service; Check: SystemChangesAllowed
 Filename: "{app}\app\VPNRouter.GUI.exe"; Description: "{cm:LaunchProgram,VPNRouter}"; WorkingDir: "{app}\app"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallDelete]
@@ -118,6 +118,8 @@ const
 
 var
   ServiceWasRunning: Boolean;
+
+#include "installer\purge-zapret-runtime.iss"
 
 function SwitchPresent(const Name: string): Boolean;
 var
@@ -178,10 +180,16 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Code: Integer;
 begin
+  if SystemChangesAllowed then
+    if not PrepareZapretUpgrade('VPNRouter') then begin
+      Result := 'Could not secure the legacy Zapret service before upgrade.';
+      Exit;
+    end;
   ExtractTemporaryFile('stop-vpnrouter.ps1');
   Code := StopVpnrouter(ExpandConstant('{tmp}\stop-vpnrouter.ps1'), WizardDirValue, False);
   ServiceWasRunning := (Code = 10);
-  Result := '';
+  if (Code = 0) or ServiceWasRunning then Result := ''
+  else Result := 'Could not stop the installed VPNRouter processes safely.';
 end;
 
 { The script installer wrote HKLM\...\Uninstall\VPNRouter; this installer has its own entry, so the old one would show twice. }
@@ -212,15 +220,19 @@ begin
   begin
     MigrateOldScriptInstall;
     RestrictDataDirectoryAcl;
+    FinishZapretUpgrade;
     if ServiceWasRunning and (not WizardIsTaskSelected('service')) then
-      Exec(ExpandConstant('{sys}\sc.exe'), 'start VPNRouter', '', SW_HIDE, ewWaitUntilTerminated, Code);
+      Exec(ExpandConstant(PowerShellExe), '-NoProfile -ExecutionPolicy Bypass -File "' +
+        ExpandConstant('{app}\installer\stop-vpnrouter.ps1') + '" -RestartService -InstallDir "' +
+        ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
   end;
 end;
 
 function InitializeUninstall: Boolean;
+var Code: Integer;
 begin
-  StopVpnrouter(ExpandConstant('{app}\installer\stop-vpnrouter.ps1'), ExpandConstant('{app}'), SystemChangesAllowed);
-  Result := True;
+  Code := StopVpnrouter(ExpandConstant('{app}\installer\stop-vpnrouter.ps1'), ExpandConstant('{app}'), SystemChangesAllowed);
+  Result := (Code = 0) or (Code = 10);
 end;
 
 procedure RunSystemCleanup;
@@ -253,17 +265,15 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
   begin
-    if not SwitchPresent('NOCLEANUP') then
+    if (not SwitchPresent('NOCLEANUP')) and (SystemChangesAllowed or
+       (CompareText(Trim(ParamValue('CLEANUPARGS', '')), '--dry-run') = 0)) then
       RunSystemCleanup;
     if SystemChangesAllowed then
       RemoveDefenderExclusions;
-  end
-  else if (CurUninstallStep = usPostUninstall) and SystemChangesAllowed and DirExists(DataDirectory) then
-  begin
-    if SwitchPresent('DELETEDATA') then
-      DelTree(DataDirectory, True, True, True)
-    else if (not UninstallSilent) and
-            (SuppressibleMsgBox(CustomMessage('AskDeleteData'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES) then
-      DelTree(DataDirectory, True, True, True);
+    if SystemChangesAllowed and (SwitchPresent('DELETEDATA') or (DirExists(DataDirectory) and (not UninstallSilent) and
+       (SuppressibleMsgBox(CustomMessage('AskDeleteData'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES))) then begin
+      PurgeZapretData('VPNRouter', 'PurgeData');
+      PurgeZapretData('VPNRouter', 'PurgeRuntime');
+    end;
   end;
 end;

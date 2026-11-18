@@ -46,6 +46,9 @@ public sealed class FreeConfigEntry
 
     public FreeConfigStatus Status { get; set; } = FreeConfigStatus.Unknown;
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RequiresSavedRecheck { get; set; }
+
     public int LatencyMs { get; set; }
 
     public DateTime? LastTestedAt { get; set; }
@@ -61,6 +64,13 @@ public sealed class FreeConfigEntry
     public DateTime? LastVerifyFailedAt { get; set; }
 
     public DateTime? LastDeepVerifyAt { get; set; }
+
+    internal void BeginDeepRecheck()
+    {
+        LastTestedAt = DateTime.UtcNow;
+        if (Status == FreeConfigStatus.Verified)
+            Status = FreeConfigStatus.Unknown;
+    }
 
     public VlessServerEntry ToVlessServerEntry()
     {

@@ -133,6 +133,28 @@ public sealed class WindowsInstallerContractTests
     }
 
     [Fact]
+    public void ZapretUpgradeChecksOwnershipBeforeStoppingAndMigratesWithoutLaunchingTheGui()
+    {
+        var prepare = Iss[Iss.IndexOf("function PrepareToInstall", StringComparison.Ordinal)..];
+        int guard = prepare.IndexOf("PrepareZapretUpgrade('VPNRouter')", StringComparison.Ordinal);
+        Assert.True(guard >= 0 && guard < prepare.IndexOf("Code := StopVpnrouter", StringComparison.Ordinal));
+        Assert.Contains("if SystemChangesAllowed then", prepare);
+        var service = Assert.Single(Section("Run").Split('\n'), line => line.Contains("Tasks: service"));
+        Assert.Contains("Check: SystemChangesAllowed", service);
+        Assert.Contains("-InstallService", service);
+        Assert.Contains("FinishZapretUpgrade;", prepare);
+        if (!OperatingSystem.IsWindows()) return;
+        var ps = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+        var info = new System.Diagnostics.ProcessStartInfo(ps) { UseShellExecute = false };
+        foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                     Path.Combine(Root, "VPNRouter.Tests", "Windows", "Test-ZapretMaintenance.ps1") })
+            info.ArgumentList.Add(arg);
+        using var process = System.Diagnostics.Process.Start(info)!;
+        Assert.True(process.WaitForExit(30_000));
+        Assert.Equal(0, process.ExitCode);
+    }
+
+    [Fact]
     public void GitIgnore_ReIncludesTheBuildScript()
     {
         var ignore = File.ReadAllText(Path.Combine(Root, ".gitignore"));
@@ -145,10 +167,11 @@ public sealed class WindowsInstallerContractTests
         // The owner saw "DeleteFile: code 5" on app\driver\mullvad-split-tunnel.sys: a loaded kernel driver locks its file.
         Assert.Contains("mullvad-split-tunnel", StopScript);
         Assert.Contains("Stop-Service -Name 'mullvad-split-tunnel'", StopScript);
-        Assert.Contains("Test-InRoots", StopScript);
+        Assert.Contains("Test-ProcessImage", StopScript);
         Assert.Contains("restartreplace", File.ReadAllText(Path.Combine(Root, "packaging", "windows", "vpnrouter.iss")));
-        var updater = File.ReadAllText(Path.Combine(Root, "VPNRouter.Core", "Services", "UpdateChecker.Apply.cs"));
-        Assert.Contains("sc stop mullvad-split-tunnel", updater);
+        var updater = File.ReadAllText(Path.Combine(Root, "packaging", "windows", "installer", "publish-windows-update.ps1"));
+        Assert.Contains("stop-vpnrouter.ps1", updater);
+        Assert.DoesNotContain("taskkill /IM", updater, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

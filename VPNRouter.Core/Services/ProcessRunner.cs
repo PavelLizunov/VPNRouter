@@ -91,7 +91,9 @@ public sealed class ProcessRunner : IProcessRunner
             TimedOut: timedOut);
     }
 
-    public IProcessHandle Start(ProcessRequest request)
+    public IProcessHandle Start(ProcessRequest request) => Start(request, _ => { });
+
+    public IProcessHandle Start(ProcessRequest request, Action<IProcessHandle> observe)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -99,8 +101,17 @@ public sealed class ProcessRunner : IProcessRunner
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
         var handle = new ProcessHandle(process, request);
-        handle.Begin();
-        return handle;
+        try
+        {
+            observe(handle);
+            handle.Begin();
+            return handle;
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
     }
 
     private static ProcessStartInfo BuildStartInfo(ProcessRequest r)
@@ -115,6 +126,7 @@ public sealed class ProcessRunner : IProcessRunner
             WorkingDirectory = r.WorkingDirectory ?? string.Empty,
         };
         foreach (var arg in r.Arguments) psi.ArgumentList.Add(arg);
+        if (r.ClearInheritedEnvironment) psi.Environment.Clear();
         if (r.EnvironmentOverrides != null)
         {
             foreach (var kv in r.EnvironmentOverrides) psi.Environment[kv.Key] = kv.Value;

@@ -74,6 +74,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\VPNRouter.Android\AndroidVerificationSession.cs" Link="Linked\AndroidVerificationSession.cs" />
     <Compile Include="..\VPNRouter.CLI\Helpers\StateFile.cs" Link="Linked\StateFile.cs" />
     <Compile Include="..\VPNRouter.CLI\Helpers\CliJsonContext.cs" Link="Linked\CliJsonContext.cs" />
   </ItemGroup>
