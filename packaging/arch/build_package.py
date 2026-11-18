@@ -55,7 +55,6 @@ ALLOWED_DOWNLOADS: dict[str, tuple[str, str]] = {
     CRONET_URL: (CRONET_SHA256, "cronet.tar.gz"),
 }
 
-DOTNET_REQUIRED_VERSION: str = "10.0.301"
 CHUNK_SIZE: int = 64 * 1024
 MAX_CACHE_READ_SIZE: int = 512 * 1024 * 1024
 MAX_DOWNLOAD_SIZE: int = 512 * 1024 * 1024
@@ -483,7 +482,7 @@ def get_tool_versions(
     dotnet_bin: str,
     source_tree: Path | None = None,
     env: dict[str, str] | None = None,
-    dotnet_version: str | None = DOTNET_REQUIRED_VERSION,
+    dotnet_version: str | None = None,
 ) -> dict[str, str]:
     def run_ver(cmd: list[str], cwd: Path | None = None, run_env: dict[str, str] | None = None, max_len: int = 128) -> str:
         try:
