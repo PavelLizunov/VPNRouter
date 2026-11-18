@@ -403,18 +403,7 @@ public partial class MainWindowViewModel
     private static bool TryStopVpnRouterService()
     {
         if (ProductEdition.IsBusiness) return false;
-        var psi = new System.Diagnostics.ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        psi.ArgumentList.Add("stop");
-        psi.ArgumentList.Add("VPNRouter");
-        using var proc = System.Diagnostics.Process.Start(psi);
-        proc?.WaitForExit(5000);
-        return proc is { HasExited: true, ExitCode: 0 };
+        return Services.WindowsServiceHelper.IsRunning() && Services.WindowsServiceHelper.Stop().Success;
     }
 #endif
 

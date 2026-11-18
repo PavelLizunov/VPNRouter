@@ -227,9 +227,7 @@ public partial class MainWindowViewModel
     private bool StopZapret()
     {
 #if PLATFORM_WINDOWS
-        try { _zapret?.Stop(); }
-        catch (Exception ex) { _logger.Debug(ex, "[VM] Could not stop the managed Zapret process"); }
-        if (_zapret?.IsRunning == true)
+        if (_zapret?.TryStop() == false)
         {
             ZapretStatus = Core.Localization.Strings.ZapretStopPending;
             return false;
@@ -241,7 +239,7 @@ public partial class MainWindowViewModel
     private bool IsZapretRunning()
     {
 #if PLATFORM_WINDOWS
-        return _zapret?.IsRunning == true;
+        return _zapret?.HasOwnedProcess == true;
 #else
         return false;
 #endif
@@ -520,7 +518,7 @@ public partial class MainWindowViewModel
         if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
             await UpdateZapretAsync();
-            if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
+            if (_disposed || !VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
         }
 
         try
@@ -562,6 +560,10 @@ public partial class MainWindowViewModel
                 ZapretStatus = IsRussian
                     ? $"Работает [{strategyName}] (PID {pid})"
                     : $"Running [{strategyName}] (PID {pid})";
+            }
+            else if (_zapret.HasOwnedProcess)
+            {
+                ZapretStatus = Core.Localization.Strings.ZapretStopPending;
             }
             else
             {
@@ -778,6 +780,10 @@ public partial class MainWindowViewModel
                 RefreshZapretStrategiesDisplay();
                 SaveSettings();
             }
+            else if (_zapret.HasOwnedProcess)
+            {
+                ZapretStatus = Core.Localization.Strings.ZapretStopPending;
+            }
             else
             {
                 ZapretEnabled = false;
@@ -947,13 +953,17 @@ public partial class MainWindowViewModel
                 ReportSweepWithoutWinner("not_admin");
                 return;
             }
-            // Finish any interrupted installation before holding its lock across the trial and winner launch.
-            if (!ZapretUpdater.IsInstalled())
+            if (!Directory.Exists(ZapretRuntimeDirectory.Root))
             {
                 ReportSweepWithoutWinner("missing_package");
                 return;
             }
             using var installLock = ZapretRuntimeDirectory.LockInstallation(ZapretRuntimeDirectory.Root);
+            if (!ZapretUpdater.IsInstalled())
+            {
+                ReportSweepWithoutWinner("missing_package");
+                return;
+            }
             if (_zapret.HasDriverConflict())
             {
                 ZapretStatus = Core.Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict);
@@ -997,15 +1007,16 @@ public partial class MainWindowViewModel
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            _zapret?.Stop();
             ReportSweepWithoutWinner("canceled");
         }
         catch (Exception ex)
         {
-            _zapret?.Stop();
             _logger.Error(ex, "[VM] Zapret strategy probe failed");
-            ZapretEnabled = false;
-            IsZapretFallback = true;
+            if (!IsZapretRunning())
+            {
+                ZapretEnabled = false;
+                IsZapretFallback = true;
+            }
             ZapretStatus = $"Error: {ex.Message}";
         }
         finally
@@ -1039,38 +1050,54 @@ public partial class MainWindowViewModel
             return;
         }
 
-        await Task.Delay(1500, ct);
-        if (_zapret.Pid is not int pid)
+        try
         {
-            IsZapretFallback = true;
-            ZapretEnabled = false;
-            ZapretStatus = IsRussian
-                ? $"Стратегия {parsed.Name} не запустилась"
-                : $"Strategy {parsed.Name} failed to start";
-            return;
-        }
+            await Task.Delay(1500, ct);
+            if (_zapret.Pid is not int pid)
+            {
+                if (_zapret.HasOwnedProcess)
+                {
+                    ZapretStatus = Core.Localization.Strings.ZapretStopPending;
+                    return;
+                }
+                IsZapretFallback = true;
+                ZapretEnabled = false;
+                ZapretStatus = IsRussian
+                    ? $"Стратегия {parsed.Name} не запустилась"
+                    : $"Strategy {parsed.Name} failed to start";
+                return;
+            }
 
-        ZapretEnabled = true;
-        ZapretWinningStrategy = parsed.Name;
-        ZapretStatus = IsRussian
-            ? $"Работает [{parsed.Name}] (PID {pid})"
-            : $"Running [{parsed.Name}] (PID {pid})";
-        ZapretStrategyIndex = ZapretStrategies.IndexOf(parsed.Name);
-        var scores = sweep.PerStrategyResults?.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal)
-            ?? new Dictionary<string, ZapretStrategyTestResult>(StringComparer.Ordinal);
-        scores.TryGetValue(parsed.Name, out var winnerScore);
-        ZapretProbePassCount = winnerScore?.Passed ?? 0;
-        ZapretProbeTotalCount = winnerScore?.Total ?? 0;
-        ZapretProbeCache.RecordSweepResults(parsed.Name, ZapretProbePassCount, ZapretProbeTotalCount, scores, _logger);
-        RefreshZapretStrategiesDisplay();
-        NotifyZapretSummaryChanged();
-        SaveSettings();
+            ZapretEnabled = true;
+            ZapretWinningStrategy = parsed.Name;
+            ZapretStatus = IsRussian
+                ? $"Работает [{parsed.Name}] (PID {pid})"
+                : $"Running [{parsed.Name}] (PID {pid})";
+            ZapretStrategyIndex = ZapretStrategies.IndexOf(parsed.Name);
+            var scores = sweep.PerStrategyResults?.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal)
+                ?? new Dictionary<string, ZapretStrategyTestResult>(StringComparer.Ordinal);
+            scores.TryGetValue(parsed.Name, out var winnerScore);
+            ZapretProbePassCount = winnerScore?.Passed ?? 0;
+            ZapretProbeTotalCount = winnerScore?.Total ?? 0;
+            ZapretProbeCache.RecordSweepResults(parsed.Name, ZapretProbePassCount, ZapretProbeTotalCount, scores, _logger);
+            RefreshZapretStrategiesDisplay();
+            NotifyZapretSummaryChanged();
+            SaveSettings();
+        }
+        catch
+        {
+            StopZapret();
+            throw;
+        }
     }
 
     private void ReportSweepWithoutWinner(string? diagnostic)
     {
-        IsZapretFallback = true;
-        ZapretEnabled = false;
+        if (!IsZapretRunning())
+        {
+            IsZapretFallback = true;
+            ZapretEnabled = false;
+        }
         ZapretStatus = diagnostic switch
         {
             "not_admin" => IsRussian
@@ -1080,7 +1107,7 @@ public partial class MainWindowViewModel
                 ? "Подбор стратегии превысил 10 минут. Проверьте интернет и попробуйте ещё раз."
                 : "Strategy probe exceeded 10 min cap. Check network and retry.",
             "missing_package" => Core.Localization.Strings.ZapretRepairPackage,
-            "helper_active" => Core.Localization.Strings.ZapretOtherHelper,
+            "helper_active" => IsZapretRunning() ? Core.Localization.Strings.ZapretStopPending : Core.Localization.Strings.ZapretOtherHelper,
             "driver_conflict" => Core.Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict),
             "canceled" => IsRussian ? "Подбор отменён." : "Probe canceled.",
             _ => Strings.ZapretOneTapAllFailedToast,
@@ -1094,9 +1121,12 @@ public partial class MainWindowViewModel
 
         ZapretProbeStrategy = strategy;
         ZapretProbeTotal = 1;
+        bool started = false;
+        bool keep = false;
         try
         {
             _zapret!.StartFromBat(path, parsed.Arguments);
+            started = true;
             await Task.Delay(1500, ct);
             if (_zapret.IsRunning)
             {
@@ -1114,6 +1144,7 @@ public partial class MainWindowViewModel
                         : $"Running [{strategy}] (PID {pid}, warm)";
                     ZapretStrategyIndex = ZapretStrategies.IndexOf(strategy);
                     SaveSettings();
+                    keep = true;
                     return true;
                 }
             }
@@ -1122,8 +1153,11 @@ public partial class MainWindowViewModel
         {
             _logger.Warning(ex, "[VM] Could not apply cached Zapret strategy");
         }
-
-        _zapret?.Stop();
+        finally
+        {
+            if (started && !keep && !StopZapret())
+                _logger.Warning("[VM] Could not confirm cached Zapret trial stopped");
+        }
         return false;
     }
 #endif

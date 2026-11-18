@@ -18,10 +18,15 @@ public class ZapretManager : IDisposable
 
     internal Func<bool> HasDriverConflict { get; init; } = ZapretActions.HasDriverConflict;
 
+    internal bool HasOwnedProcess
+    {
+        get { lock (_processGate) return _handle != null && _handle.QueryHasExited() != true; }
+    }
+
     public bool IsRunning => Pid.HasValue;
     public int? Pid
     {
-        get { lock (_processGate) return _handle is { HasExited: false } handle ? handle.Pid : null; }
+        get { lock (_processGate) return _handle is { } handle && handle.QueryHasExited() == false ? handle.Pid : null; }
     }
 
     public static bool IsWinwsRunning() => WinwsPid.HasValue;
@@ -157,16 +162,20 @@ public class ZapretManager : IDisposable
         };
     }
 
-    public void Stop()
+    public void Stop() => TryStop();
+
+    internal bool TryStop()
     {
-        lock (_processGate) StopOwnedProcess();
+        lock (_processGate) return StopOwnedProcess();
     }
 
     private bool StopOwnedProcess()
     {
         var handle = _handle;
         if (handle == null) return true;
-        if (!handle.HasExited)
+        var exited = handle.QueryHasExited();
+        if (exited == null) return false;
+        if (exited == false)
         {
             try
             {
@@ -179,22 +188,34 @@ public class ZapretManager : IDisposable
             {
                 _logger.Debug(ex, "[Zapret] Could not confirm winws exit");
             }
-            if (!handle.HasExited)
+            if (handle.QueryHasExited() != true)
             {
                 _logger.Warning("[Zapret] winws is still running (PID {Pid})", handle.Pid);
                 return false;
             }
         }
-        handle.Dispose();
+        try { handle.Dispose(); }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[Zapret] Could not release the owned winws handle");
+            return false;
+        }
         _handle = null;
         return true;
     }
 
-    public void Dispose()
+    internal bool TryDispose()
     {
         lock (_processGate)
         {
-            if (!_disposed) _disposed = StopOwnedProcess();
+            if (!StopOwnedProcess()) return false;
+            _disposed = true;
+            return true;
         }
+    }
+
+    public void Dispose()
+    {
+        if (!TryDispose()) throw new InvalidOperationException(Localization.Strings.ZapretStopPending);
     }
 }

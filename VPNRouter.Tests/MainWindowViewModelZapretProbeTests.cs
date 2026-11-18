@@ -642,6 +642,108 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task BusyInstallationPreservesTheRunningStrategyOnFreshProbe()
+    {
+        var vm = NewVm("general");
+        var manager = GetField<ZapretManager>(vm, "_zapret")!;
+        manager.Start("--wf-tcp=443");
+        vm.ZapretWinningStrategy = "previous";
+        vm.ZapretEnabled = true;
+        using var pin = ZapretRuntimeDirectory.LockInstallation(ZapretRuntimeDirectory.Root);
+
+        await vm.ForceFreshProbeCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, _probeCalls);
+        Assert.Equal(0, _handle.KillCallCount);
+        Assert.Equal(_handle.Pid, manager.Pid);
+        Assert.True(vm.ZapretEnabled);
+        Assert.Equal("previous", vm.ZapretWinningStrategy);
+        Assert.False(vm.IsZapretProbing);
+        Assert.StartsWith("Error:", vm.ZapretStatus);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void QuitOrDisposeKeepsUnconfirmedHandleUntilExplicitRetry(bool dispose, bool unknown)
+    {
+        var vm = NewVm("general");
+        var manager = GetField<ZapretManager>(vm, "_zapret")!;
+        manager.Start("--wf-tcp=443");
+        var shutdowns = 0;
+        vm.RequestDesktopShutdown = () => shutdowns++;
+        _handle.RefuseKill = !unknown;
+        _handle.ExitQueryUnavailable = unknown;
+        try
+        {
+            if (dispose) Assert.Throws<InvalidOperationException>(vm.Dispose);
+            else vm.QuitCommand.Execute(null);
+
+            Assert.Same(manager, GetField<ZapretManager>(vm, "_zapret"));
+            Assert.True(manager.HasOwnedProcess);
+            if (unknown) Assert.Null(manager.Pid);
+            Assert.Equal(0, _handle.DisposeCallCount);
+            Assert.Equal(unknown ? 0 : 1, _handle.KillCallCount);
+            Assert.Equal(0, shutdowns);
+            Assert.False(vm.IsShutdownPrepared);
+            Assert.Equal(VPNRouter.Core.Localization.Strings.ZapretQuitPending, vm.StatusText);
+        }
+        finally
+        {
+            _handle.RefuseKill = _handle.ExitQueryUnavailable = false;
+        }
+
+        if (dispose) vm.Dispose();
+        else vm.QuitCommand.Execute(null);
+        Assert.Null(GetField<ZapretManager>(vm, "_zapret"));
+        Assert.Equal(1, _handle.DisposeCallCount);
+        Assert.True(vm.IsShutdownPrepared);
+        Assert.Equal(dispose ? 0 : 1, shutdowns);
+    }
+
+    [AvaloniaFact]
+    public async Task QuitDuringProbeCancelsBeforeAllowingShutdownOnRetry()
+    {
+        var vm = NewVm("general");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _probeImpl = async (_, _, ct) =>
+        {
+            entered.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return Sweep(null);
+        };
+        var shutdowns = 0;
+        vm.RequestDesktopShutdown = () => shutdowns++;
+        var probe = vm.ForceFreshProbeCommand.ExecuteAsync(null);
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        vm.QuitCommand.Execute(null);
+        Assert.Equal(0, shutdowns);
+        await probe;
+        Assert.False(vm.IsZapretProbing);
+        vm.QuitCommand.Execute(null);
+        Assert.Equal(1, shutdowns);
+    }
+
+    [AvaloniaFact]
+    public void DpiFolderCommandOpensInstalledPackageWithSystemExplorer()
+    {
+        var vm = NewVm("general");
+        System.Diagnostics.ProcessStartInfo? launched = null;
+        vm.LaunchFolder = info => launched = info;
+
+        vm.OpenZapretFolderCommand.Execute(null);
+
+        Assert.NotNull(launched);
+        Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), launched.FileName);
+        Assert.False(launched.UseShellExecute);
+        Assert.Equal(Environment.SystemDirectory, launched.WorkingDirectory);
+        Assert.Equal(ZapretUpdater.ZapretDir, Assert.Single(launched.ArgumentList));
+    }
+
+    [AvaloniaFact]
     public async Task ForceFreshProbeFlag_IgnoresAReliableCache()
     {
         var vm = NewVm("general");

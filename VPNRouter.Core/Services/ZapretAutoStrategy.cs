@@ -162,7 +162,7 @@ public static class ZapretAutoStrategy
             foreach (var candidate in candidates)
             {
                 token.ThrowIfCancellationRequested();
-                if (manager.IsRunning || AnyWinwsRunning())
+                if (manager.HasOwnedProcess || AnyWinwsRunning())
                 {
                     diagnostic = "helper_active";
                     break;
@@ -170,9 +170,11 @@ public static class ZapretAutoStrategy
                 tested++;
                 progress?.Report(new StrategyProgress(tested, candidates.Count, candidate.Name));
                 int passed = 0;
+                bool started = false;
                 try
                 {
                     manager.StartFromBat(candidate.BatPath!, candidate.Arguments);
+                    started = true;
                     await Task.Delay(startupDelay, token);
                     if (manager.IsRunning)
                     {
@@ -188,11 +190,11 @@ public static class ZapretAutoStrategy
                 }
                 finally
                 {
-                    manager.Stop();
+                    if (started) manager.Stop();
                 }
 
                 token.ThrowIfCancellationRequested();
-                if (manager.IsRunning || AnyWinwsRunning())
+                if (manager.HasOwnedProcess || AnyWinwsRunning())
                 {
                     diagnostic = "helper_active";
                     break;

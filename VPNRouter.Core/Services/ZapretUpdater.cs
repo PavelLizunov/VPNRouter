@@ -1,5 +1,9 @@
+using System.Globalization;
 using System.IO.Compression;
+using System.Net;
 using System.Net.Http;
+using System.Reflection.PortableExecutable;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Serilog;
@@ -496,15 +500,102 @@ public class ZapretUpdater
     private static bool IsAmd64Image(FileInfo file)
     {
         using var input = file.OpenRead();
-        using var reader = new BinaryReader(input);
-        if (input.Length < 64 || reader.ReadUInt16() != 0x5a4d) return false;
-        input.Position = 0x3c;
-        var offset = reader.ReadUInt32();
-        if (offset < 64 || offset > input.Length - 26) return false;
-        input.Position = offset;
-        if (reader.ReadUInt32() != 0x00004550 || reader.ReadUInt16() != 0x8664) return false;
-        input.Position = offset + 24;
-        return reader.ReadUInt16() == 0x020b;
+        var length = input.Length;
+        if (length is < 64 or > MaxEntryBytes) return false;
+        try
+        {
+            using var reader = new PEReader(input);
+            var headers = reader.PEHeaders;
+            var coff = headers.CoffHeader;
+            var pe = headers.PEHeader;
+            const int optionalHeaderSize = 112 + 16 * 8; // PE32+ with the standard directory table
+            if (pe?.Magic != PEMagic.PE32Plus || coff.Machine != Machine.Amd64 ||
+                headers.CoffHeaderStartOffset < 64 + 4 || coff.SizeOfOptionalHeader != optionalHeaderSize ||
+                coff.NumberOfSections is < 1 or > 96 || pe.NumberOfRvaAndSizes is < 0 or > 16 ||
+                !coff.Characteristics.HasFlag(Characteristics.ExecutableImage) ||
+                coff.Characteristics.HasFlag(Characteristics.Bit32Machine) || headers.CorHeader != null)
+                return false;
+
+            var dll = file.Extension.Equals(".dll", StringComparison.OrdinalIgnoreCase);
+            var driver = file.Extension.Equals(".sys", StringComparison.OrdinalIgnoreCase);
+            if (driver ? pe.Subsystem != Subsystem.Native :
+                pe.Subsystem is not (Subsystem.WindowsCui or Subsystem.WindowsGui) ||
+                coff.Characteristics.HasFlag(Characteristics.Dll) != dll)
+                return false;
+
+            var tableEnd = (long)headers.PEHeaderStartOffset + optionalHeaderSize + 40 * coff.NumberOfSections;
+            if (pe.FileAlignment is < 512 or > 65536 || !int.IsPow2(pe.FileAlignment) ||
+                !int.IsPow2(pe.SectionAlignment) || pe.SectionAlignment < pe.FileAlignment ||
+                (pe.SectionAlignment < 4096 && pe.SectionAlignment != pe.FileAlignment) ||
+                pe.SizeOfHeaders < tableEnd || pe.SizeOfHeaders > length ||
+                pe.SizeOfHeaders % pe.FileAlignment != 0 || pe.SizeOfImage < pe.SizeOfHeaders ||
+                pe.SizeOfImage % pe.SectionAlignment != 0 || pe.ImageBase % 65536 != 0)
+                return false;
+
+            long rawEnd = pe.SizeOfHeaders;
+            long virtualEnd = pe.SizeOfHeaders;
+            var hasCode = false;
+            var hasEntry = dll && pe.AddressOfEntryPoint == 0;
+            foreach (var section in headers.SectionHeaders)
+            {
+                if (section.VirtualAddress < virtualEnd || section.VirtualAddress % pe.SectionAlignment != 0 ||
+                    section.VirtualSize <= 0 || section.SizeOfRawData < 0)
+                    return false;
+                virtualEnd = (long)section.VirtualAddress + Math.Max(section.VirtualSize, section.SizeOfRawData);
+                if (virtualEnd > pe.SizeOfImage) return false;
+                if (section.SizeOfRawData == 0) continue; // e.g. .bss
+
+                // Some Flowseal .rsrc sections end before the next aligned file offset.
+                if (section.PointerToRawData < rawEnd || section.PointerToRawData % pe.FileAlignment != 0)
+                    return false;
+                rawEnd = (long)section.PointerToRawData + section.SizeOfRawData;
+                if (rawEnd > length) return false;
+
+                if (!section.SectionCharacteristics.HasFlag(SectionCharacteristics.ContainsCode | SectionCharacteristics.MemExecute))
+                    continue;
+                hasCode = true;
+                var entryOffset = (long)pe.AddressOfEntryPoint - section.VirtualAddress;
+                if (entryOffset >= 0 && entryOffset < Math.Min(section.VirtualSize, section.SizeOfRawData))
+                    hasEntry = true;
+            }
+            return hasCode && hasEntry && HasValidImageDirectories(input, headers, rawEnd);
+        }
+        catch (BadImageFormatException) { return false; }
+    }
+
+    private static bool HasValidImageDirectories(FileStream input, PEHeaders headers, long lastRawEnd)
+    {
+        var pe = headers.PEHeader!;
+        input.Position = headers.PEHeaderStartOffset + 112; // First PE32+ data directory
+        using var table = new BinaryReader(input, Encoding.UTF8, leaveOpen: true);
+        for (var index = 0; index < pe.NumberOfRvaAndSizes; index++)
+        {
+            long address = table.ReadUInt32();
+            long size = table.ReadUInt32();
+            if (address == 0 && size == 0) continue;
+            // Slots 7 and 15 are reserved. The four native components cannot declare a CLR header (14).
+            if (address == 0 || index is 7 or 14 or 15) return false;
+            if (index == 4) // Certificates use an aligned file offset following the mapped image.
+            {
+                if (address < lastRawEnd || address % 8 != 0 || size < 8 || size % 8 != 0 ||
+                    address + size > input.Length) return false;
+                continue;
+            }
+
+            // GlobalPtr names a mapped address with zero size. Other directory bytes must exist on disk.
+            var globalPointer = index == 8;
+            if ((size == 0) != globalPointer) return false;
+            var end = address + (globalPointer ? 1 : size);
+            long covered = address < pe.SizeOfHeaders ? pe.SizeOfHeaders : address;
+            foreach (var section in headers.SectionHeaders)
+            {
+                if (covered >= end || section.VirtualAddress > covered) break;
+                var mappedSize = globalPointer ? section.VirtualSize : Math.Min(section.VirtualSize, section.SizeOfRawData);
+                covered = Math.Max(covered, (long)section.VirtualAddress + mappedSize);
+            }
+            if (covered < end) return false;
+        }
+        return true;
     }
 
     private static IDisposable OpenInstallLock(string root)
@@ -535,26 +626,133 @@ public class ZapretUpdater
             if (File.Exists(source)) File.Copy(source, target, overwrite: true);
             else if (!File.Exists(target)) File.WriteAllText(target, fallback + Environment.NewLine);
         }
-        var previous = File.Exists(Path.Combine(package, "bin", "winws.exe"));
+        var installed = File.Exists(Path.Combine(package, "bin", "winws.exe"));
+        var protectedUtils = Path.Combine(package, "utils");
+        bool hasFlags = Directory.Exists(protectedUtils);
+        bool hasLists = Directory.Exists(oldLists);
         foreach (var name in new[] { "game_filter.enabled", "check_updates.enabled" })
         {
-            var source = Path.Combine(package, "utils", name);
+            var source = Path.Combine(protectedUtils, name);
             if (File.Exists(source))
             {
                 var utils = Directory.CreateDirectory(Path.Combine(staged, "utils")).FullName;
                 File.Copy(source, Path.Combine(utils, name), overwrite: true);
             }
-            else if (previous && File.Exists(Path.Combine(staged, "utils", name)))
+            else if ((installed || hasFlags) && File.Exists(Path.Combine(staged, "utils", name)))
             {
                 File.Delete(Path.Combine(staged, "utils", name));
             }
         }
         const string list = "ipset-all.txt";
         var oldList = Path.Combine(oldLists, list);
-        if (File.Exists(oldList) && ZapretActions.GetIpSetMode(package) is ZapretActions.IpSetMode.Any or ZapretActions.IpSetMode.None)
-            File.Copy(oldList, Path.Combine(lists, list), overwrite: true);
+        if (File.Exists(oldList))
+        {
+            if (!installed || !File.Exists(Path.Combine(lists, list)) || ZapretActions.GetIpSetMode(package) is ZapretActions.IpSetMode.Any or ZapretActions.IpSetMode.None)
+                File.Copy(oldList, Path.Combine(lists, list), overwrite: true);
+        }
+        else if (installed || hasLists)
+        {
+            // A missing active list is Any, including settings saved before the first download.
+            File.WriteAllText(Path.Combine(lists, list), "");
+        }
         if (File.Exists(oldList + ".backup"))
             File.Copy(oldList + ".backup", Path.Combine(lists, list + ".backup"), overwrite: true);
+
+        if (installed || (hasFlags && hasLists)) return;
+        var legacyPath = Path.Combine(AppPaths.DataDir, "zapret");
+        if (Path.GetFullPath(legacyPath).Equals(Path.GetFullPath(package),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
+        using var legacy = ZapretLegacyFilterDirectory.Open(legacyPath);
+        if (legacy == null) return;
+        // A preinstall setter can already own one of the two settings directories.
+        if (!hasLists) SeedLegacyLists(legacy, lists);
+        if (!hasFlags) SeedLegacyFlags(legacy, staged);
+    }
+
+    private const int MaxLegacyListBytes = 4 * 1024 * 1024;
+    private static readonly IdnMapping LegacyDomainNames = new() { UseStd3AsciiRules = true };
+
+    private static void SeedLegacyLists(ZapretLegacyFilterDirectory legacy, string lists)
+    {
+        foreach (string name in new[] { "list-general-user.txt", "list-exclude-user.txt", "ipset-exclude-user.txt",
+            "ipset-all.txt", "ipset-all.txt.backup" })
+        {
+            var text = legacy.ReadText(Path.Combine("lists", name), MaxLegacyListBytes, out var missing);
+            if (missing && name == "ipset-all.txt") text = ""; // Any in the privacy parent
+            if (text == null) continue;
+            var list = NormalizeLegacyList(text, domains: name.StartsWith("list-", StringComparison.Ordinal));
+            if (list != null) File.WriteAllText(Path.Combine(lists, name), list);
+        }
+    }
+
+    private static void SeedLegacyFlags(ZapretLegacyFilterDirectory legacy, string staged)
+    {
+        foreach (string name in new[] { "game_filter.enabled", "check_updates.enabled" })
+        {
+            var text = legacy.ReadText(Path.Combine("utils", name), 4096, out var missing);
+            var flag = Path.Combine(staged, "utils", name);
+            if (missing)
+            {
+                if (File.Exists(flag)) File.Delete(flag);
+                continue;
+            }
+            if (text == null) continue;
+
+            // The update flag encodes presence alone. Never carry its bytes into the package.
+            var setting = name == "check_updates.enabled" ? "ENABLED" : ZapretActions.NormalizeLegacyGameFilter(text);
+            if (setting == null) continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(flag)!);
+            File.WriteAllText(flag, setting);
+        }
+    }
+
+    private static string? NormalizeLegacyList(string text, bool domains)
+    {
+        using var reader = new StringReader(text);
+        var result = new StringBuilder();
+        while (reader.ReadLine() is string raw)
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line[0] is '#' or ';' or '/') continue;
+            if (domains)
+            {
+                var host = NormalizeLegacyDomain(line);
+                if (host == null) return null;
+                line = host;
+            }
+            else if (!IsLegacyIpNetwork(line)) return null;
+
+            if (result.Length + line.Length + 1 > MaxLegacyListBytes) return null;
+            result.Append(line).Append('\n');
+        }
+        return result.ToString();
+    }
+
+    private static string? NormalizeLegacyDomain(string line)
+    {
+        var exact = line[0] == '^';
+        var host = exact ? line[1..] : line;
+        if (host.Length is 0 or > 254) return null;
+        try
+        {
+            host = LegacyDomainNames.GetAscii(host);
+            if (!host.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.') ||
+                Uri.CheckHostName(host) is not (UriHostNameType.Dns or UriHostNameType.IPv4)) return null;
+            return exact ? "^" + host : host;
+        }
+        catch (ArgumentException) { return null; }
+    }
+
+    private static bool IsLegacyIpNetwork(string line)
+    {
+        if (line.Length > 64) return false;
+        var parts = line.Split('/', 2);
+        if (!parts[0].All(c => char.IsAsciiHexDigit(c) || c is '.' or ':') ||
+            !IPAddress.TryParse(parts[0], out var address)) return false;
+        bool ipv4 = address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
+        if (ipv4 && parts[0] != address.ToString()) return false; // Exclude abbreviated and octal IPv4.
+        return parts.Length == 1 || (parts[1].Length > 0 && parts[1].All(char.IsAsciiDigit) &&
+            uint.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var prefix) && prefix <= (ipv4 ? 32u : 128u));
     }
 
     internal static void PublishVerifiedPackage(string staged, Action? afterDetach = null) =>

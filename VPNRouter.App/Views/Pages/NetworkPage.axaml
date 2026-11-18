@@ -1836,9 +1836,8 @@
                             Margin="0,0,6,4"/>
                   </WrapPanel>
 
-                  <StackPanel IsVisible="{Binding ServiceVm.IsBusy}"
-                              Margin="0,6,0,0" Spacing="3">
-                    <ProgressBar IsIndeterminate="True"
+                  <StackPanel Margin="0,6,0,0" Spacing="3" IsVisible="{Binding ServiceVm.StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <ProgressBar IsVisible="{Binding ServiceVm.IsBusy}" IsIndeterminate="True"
                                  Height="3" MinHeight="3"
                                  Foreground="{DynamicResource AccentSolidBrush}"/>
                     <TextBlock Text="{Binding ServiceVm.StatusMessage}"

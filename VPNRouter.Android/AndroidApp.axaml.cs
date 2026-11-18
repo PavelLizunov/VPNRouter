@@ -193,7 +193,6 @@ public partial class AndroidApp : Avalonia.Application
     private ListBox? _appPickerList;
     private Avalonia.Controls.Button? _appPickerSaveBtn;
     private Avalonia.Controls.Button? _perAppPickButton;
-    private TextBlock? _perAppCountLabel;
     private TextBlock? _autostartCardTitleText;
     private TextBlock? _autostartCardSubText;
     private List<AppListLoader.AppEntry> _appPickerCache = new();
@@ -881,6 +880,7 @@ public partial class AndroidApp : Avalonia.Application
         _configRowValue = new TextBlock
         {
             Text = Localization.SimpleConfigSummary,
+            TextWrapping = TextWrapping.Wrap,
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
         };
@@ -1094,24 +1094,11 @@ public partial class AndroidApp : Avalonia.Application
         _perAppPickButton.HorizontalAlignment = HorizontalAlignment.Stretch;
         _perAppPickButton.Margin = new Thickness(24, 4, 0, 0);
 
-        var initialPerAppCount = AndroidStorage.GetPerAppPackages().Count;
-        var initialMode = AndroidStorage.GetPerAppMode();
-        var initialCountFmt = initialMode == "exclude"
-            ? Localization.PerAppCountExclude
-            : Localization.PerAppCountInclude;
-        _perAppCountLabel = new TextBlock
-        {
-            Text = string.Format(initialCountFmt, initialPerAppCount),
-            FontSize = UiScale.Fs(9),
-            Margin = new Thickness(24, 2, 0, 0),
-        };
-        _perAppCountLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-
         var perAppStack = new StackPanel
         {
             Spacing = 0,
             IsVisible = AndroidStorage.GetPerAppMode() != "off",
-            Children = { _perAppPickButton, _perAppCountLabel },
+            Children = { _perAppPickButton },
         };
         _splitRadio.Tag = perAppStack;
 
@@ -1505,21 +1492,24 @@ public partial class AndroidApp : Avalonia.Application
                 _configRowIcon.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
             }
         }
-        var mode = _fullRadio?.IsChecked == true ? Localization.SmpFullOption : Localization.SmpSplitOption;
-        string src;
-        switch (configMode)
+        UpdatePerAppSummary(configMode);
+    }
+
+    private void UpdatePerAppSummary(string? configMode = null)
+    {
+        var savedMode = AndroidStorage.GetPerAppMode();
+        var policy = VPNRouter.Core.Localization.Strings.PerAppPolicySummary(AndroidStorage.GetActivePerAppPolicy(),
+            savedMode, AndroidStorage.GetPerAppPackages());
+        if (_appPickerModeHint is not null)
+            _appPickerModeHint.Text = _appPickerMode == savedMode ? policy : policy + "\n" + Localization.PerAppSaveModeHint;
+        if (_configRowValue is null) return;
+        var src = (configMode ?? AndroidStorage.GetConfigMode()) switch
         {
-            case "subscribe":
-                src = Localization.SmpSourceSubscription;
-                break;
-            case "custom":
-                src = Localization.CcSourceCustom;
-                break;
-            default:
-                src = Localization.SmpSourceManual;
-                break;
-        }
-        _configRowValue.Text = $"{src} · {mode.ToLower()}";
+            "subscribe" => Localization.SmpSourceSubscription,
+            "custom" => Localization.CcSourceCustom,
+            _ => Localization.SmpSourceManual,
+        };
+        _configRowValue.Text = $"{src} · {policy}";
     }
 
     private void OnSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

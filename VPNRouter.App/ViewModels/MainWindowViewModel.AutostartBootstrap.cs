@@ -158,6 +158,7 @@ public partial class MainWindowViewModel
     {
         try
         {
+            if (_disposed) return;
             if (!AutostartZapret)
             {
                 _logger.Debug("[App-Autostart] Zapret: AutostartZapret=false, skipping");
@@ -177,7 +178,7 @@ public partial class MainWindowViewModel
                 _logger.Information(
                     "[App-Autostart] Zapret: winws.exe already running, " +
                     "skipping spawn (idempotent)");
-                await Dispatcher.UIThread.InvokeAsync(() => ZapretEnabled = true);
+                await Dispatcher.UIThread.InvokeAsync(() => { if (!_disposed) ZapretEnabled = true; });
                 return;
             }
 
@@ -188,46 +189,55 @@ public partial class MainWindowViewModel
             _logger.Information(
                 "[App-Autostart] Zapret: starting [{Strategy}]", strategyName);
 
-            _zapret ??= new ZapretManager(_logger);
+            var manager = await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (_disposed || IsZapretProbing || IsZapretRunning()) return null;
+                _zapret ??= new ZapretManager(_logger);
 
-            if (strategyName == "custom")
-            {
-                _zapret.Start(ZapretCustomArgs);
-            }
-            else if (strategyName == "multisplit" || strategyName == "fake+multisplit")
-            {
-                _zapret.Start(ZapretManager.BuildLegacyArgs(strategyName));
-            }
-            else
-            {
-                var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategyName);
-                if (parsed == null)
+                if (strategyName == "custom")
                 {
-                    _logger.Warning(
-                        "[App-Autostart] Zapret: strategy not found in catalogue: {Name}",
-                        strategyName);
-                    return;
+                    _zapret.Start(ZapretCustomArgs);
                 }
-                if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
-                    _zapret.StartFromBat(parsed.BatPath, parsed.Arguments);
+                else if (strategyName == "multisplit" || strategyName == "fake+multisplit")
+                {
+                    _zapret.Start(ZapretManager.BuildLegacyArgs(strategyName));
+                }
                 else
-                    _zapret.Start(parsed.Arguments);
-            }
+                {
+                    var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategyName);
+                    if (parsed == null)
+                    {
+                        _logger.Warning(
+                            "[App-Autostart] Zapret: strategy not found in catalogue: {Name}",
+                            strategyName);
+                        return null;
+                    }
+                    if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
+                        _zapret.StartFromBat(parsed.BatPath, parsed.Arguments);
+                    else
+                        _zapret.Start(parsed.Arguments);
+                }
+                return _zapret;
+            });
+            if (manager == null) return;
 
             await Task.Delay(1500).ConfigureAwait(false);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                var winwsPid = ZapretManager.WinwsPid;
-                if (_zapret.IsRunning || winwsPid != null)
+                if (_disposed || !ReferenceEquals(_zapret, manager)) return;
+                if (manager.Pid is int pid)
                 {
                     ZapretEnabled = true;
-                    var pid = winwsPid ?? _zapret.Pid;
                     ZapretStatus = IsRussian
                         ? $"Работает [{strategyName}] (PID {pid})"
                         : $"Running [{strategyName}] (PID {pid})";
                     _logger.Information(
                         "[App-Autostart] Zapret: started successfully (PID {Pid})", pid);
+                }
+                else if (manager.HasOwnedProcess)
+                {
+                    ZapretStatus = Core.Localization.Strings.ZapretStopPending;
                 }
                 else
                 {

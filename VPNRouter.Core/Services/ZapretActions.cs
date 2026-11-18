@@ -358,31 +358,49 @@ public static class ZapretActions
 
     internal static (GameFilterMode Mode, string Tcp, string Udp) ReadGameFilter(string package)
     {
-        var (mode, tcp, udp) = DefaultGameFilter;
         try
         {
             var flag = new FileInfo(GameFilterFlagPath(package));
-            if (!flag.Exists || flag.Length > 4096) return (mode, tcp, udp);
-            foreach (var line in File.ReadLines(flag.FullName))
-            {
-                var entry = line.Trim().ToLowerInvariant().Split('=', 2, StringSplitOptions.TrimEntries);
-                if (entry.Length == 1 || entry[0] == "mode")
-                {
-                    mode = entry[^1] switch
-                    {
-                        "all" => GameFilterMode.All, "tcp" => GameFilterMode.TcpOnly, "udp" => GameFilterMode.UdpOnly, _ => GameFilterMode.Off
-                    };
-                }
-                else if (entry[0] is "tcp" or "udp")
-                {
-                    var ports = entry[1].Replace(" ", "");
-                    if (!ports.Split(',').All(ValidPortRange)) continue;
-                    if (entry[0] == "tcp") tcp = ports;
-                    else udp = ports;
-                }
-            }
+            return flag.Exists && flag.Length <= 4096 ? ParseGameFilter(File.ReadLines(flag.FullName)) : DefaultGameFilter;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return DefaultGameFilter; }
+    }
+
+    internal static string? NormalizeLegacyGameFilter(string text)
+    {
+        var (mode, tcp, udp) = ParseGameFilter(text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        var word = mode switch
+        {
+            GameFilterMode.All => "all",
+            GameFilterMode.TcpOnly => "tcp",
+            GameFilterMode.UdpOnly => "udp",
+            _ => null
+        };
+        if (word == null || (tcp == DefaultGameFilter.Tcp && udp == DefaultGameFilter.Udp)) return word;
+        return $"mode={word}\ntcp={tcp}\nudp={udp}\n";
+    }
+
+    private static (GameFilterMode Mode, string Tcp, string Udp) ParseGameFilter(IEnumerable<string> lines)
+    {
+        var (mode, tcp, udp) = DefaultGameFilter;
+        foreach (var line in lines)
+        {
+            var entry = line.Trim().ToLowerInvariant().Split('=', 2, StringSplitOptions.TrimEntries);
+            if (entry.Length == 1 || entry[0] == "mode")
+            {
+                mode = entry[^1] switch
+                {
+                    "all" => GameFilterMode.All, "tcp" => GameFilterMode.TcpOnly, "udp" => GameFilterMode.UdpOnly, _ => GameFilterMode.Off
+                };
+            }
+            else if (entry[0] is "tcp" or "udp")
+            {
+                var ports = entry[1].Replace(" ", "");
+                if (!ports.All(c => char.IsAsciiDigit(c) || c is ',' or '-') || !ports.Split(',').All(ValidPortRange)) continue;
+                if (entry[0] == "tcp") tcp = ports;
+                else udp = ports;
+            }
+        }
         return (mode, tcp, udp);
     }
 

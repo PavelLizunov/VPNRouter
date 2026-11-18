@@ -159,13 +159,12 @@ internal sealed class ProcessHandle : IProcessHandle
 
     public int Pid { get; private set; }
 
-    public bool HasExited
+    public bool HasExited => QueryHasExited() ?? true;
+
+    public bool? QueryHasExited()
     {
-        get
-        {
-            try { return _process.HasExited; }
-            catch { return true;  }
-        }
+        try { return _process.HasExited; }
+        catch { return null; }
     }
 
     public event EventHandler<string>? OutputLine;

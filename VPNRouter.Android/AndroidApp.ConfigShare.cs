@@ -547,7 +547,7 @@ public partial class AndroidApp
         var routing = AndroidStorage.GetRoutingMode();
         if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";
         if (_fullRadio is not null) _fullRadio.IsChecked = routing == "full";
-        UpdatePerAppFormCountLabel();
+        UpdateConfigSummary();
 
         _cfgImportPendingDoc = null;
         if (_cfgImportApplyBtn is not null) _cfgImportApplyBtn.IsVisible = false;

@@ -44,6 +44,13 @@ public interface IProcessHandle : IDisposable
 
     bool HasExited { get; }
 
+    // Ownership decisions require positive evidence before releasing the process handle.
+    bool? QueryHasExited()
+    {
+        try { return HasExited; }
+        catch { return null; }
+    }
+
     Task<int> WaitForExitAsync(CancellationToken ct);
 
     void Kill(bool entireProcessTree = true);
