@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -69,43 +68,12 @@ public partial class AndroidApp
 
         try
         {
-            var servers = AndroidStorage.GetServers() ?? new List<VlessServerEntry>();
-            var existing = servers.FirstOrDefault(s =>
-                string.Equals(s.Server, parsed.Server, StringComparison.OrdinalIgnoreCase) &&
-                s.Port == parsed.Port &&
-                string.Equals(s.Uuid, parsed.Uuid, StringComparison.OrdinalIgnoreCase));
-
-            string activeName;
-            if (existing is not null)
-            {
-                activeName = existing.Name ?? parsed.Server ?? string.Empty;
-            }
-            else
-            {
-                var baseName = string.IsNullOrWhiteSpace(parsed.Name) ? "QR" : parsed.Name!;
-                var displayName = baseName;
-                int suffix = 2;
-                while (servers.Any(s => string.Equals(s.Name, displayName, StringComparison.OrdinalIgnoreCase)))
-                    displayName = $"{baseName} #{suffix++}";
-                parsed.Name = displayName;
-                servers.Add(parsed);
-                AndroidStorage.SetServers(servers);
-                activeName = displayName;
-            }
-            AndroidStorage.SetSelectedServerName(activeName);
-            AndroidStorage.SetVlessUri(uri);
-            AndroidStorage.SetSubscriptionUrl(null);
+            if (!AndroidStorage.SelectSingleServer(parsed, uri, command)) return;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            global::Android.Util.Log.Warn("VpnRouter.QrScan",
-                $"ApplyScannedServerUri: persist failed — {ex.GetType().Name}: {ex.Message}");
-            try
-            {
-                AndroidStorage.SetVlessUri(uri);
-                AndroidStorage.SetSubscriptionUrl(null);
-            }
-            catch { }
+            ShowMenuFeedback(Localization.FcApplyFailed);
+            return;
         }
 
         RefreshConfigModeUiFromStorage();
@@ -121,7 +89,7 @@ public partial class AndroidApp
 
     private async Task ApplyScannedSubscriptionUrlAsync(string url, string? reserved = null)
     {
-        var command = reserved ?? AndroidStorage.BeginUiCommand();
+        var command = reserved ?? ReserveConnectCommand();
         if (command == null || !AndroidStorage.IsCurrentUiCommand(command)) return;
         var subs = AndroidStorage.GetSubscriptions();
         _subs = subs;

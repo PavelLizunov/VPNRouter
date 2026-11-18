@@ -58,7 +58,11 @@ public class ServiceSettingsReceiptTests
         };
         var config = CustomConfigInjector.Inject(raw.ToJsonString(), [], settings);
         var controller = ClashSingBoxApi.ReadLocalController(config);
-        using var manager = new SingBoxManager(settings.SingBox, controller);
+        // Even an injected general-purpose client must use the controller's direct socket policy.
+        using var generalHandler = new GeneralHttpHandler();
+        using var generalClient = new HttpClient(generalHandler);
+        using var injected = new PolicyHttpClient(generalClient);
+        using var manager = new SingBoxManager(settings.SingBox, controller, http: host == "localhost" ? injected : null);
         var ready = Task.Run(manager.IsRunning, ct);
         using var peer = await listener.AcceptTcpClientAsync(ct);
         using var stream = peer.GetStream();
@@ -72,6 +76,18 @@ public class ServiceSettingsReceiptTests
         else Assert.Equal($"Authorization: Bearer {secret}", Assert.Single(auth));
         await stream.WriteAsync("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"u8.ToArray(), ct);
         Assert.True(await ready);
+        Assert.False(generalHandler.Called);
+    }
+
+    private sealed class GeneralHttpHandler : HttpMessageHandler
+    {
+        public bool Called { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Called = true;
+            throw new InvalidOperationException("Controller request reached the general HTTP handler.");
+        }
     }
 
     [Fact]
@@ -86,10 +102,18 @@ public class ServiceSettingsReceiptTests
         Assert.Equal("http://127.0.0.1:9090/configs", first.Uri.AbsoluteUri);
         Assert.Equal("Bearer local-fixture", first.Headers!["Authorization"]);
 
+        manager.SetClashController((new Uri("http://localhost:9090"), "local-fixture"));
+        Assert.True(manager.IsRunning());
+        var local = transport.SentRequests[1];
+        Assert.True(System.Net.IPAddress.TryParse(local.Uri.IdnHost.Trim('[', ']'), out var address));
+        Assert.True(System.Net.IPAddress.IsLoopback(address!));
+        Assert.Equal("/configs", local.Uri.AbsolutePath);
+        Assert.Equal("Bearer local-fixture", local.Headers!["Authorization"]);
+
         manager.SetClashController(ClashSingBoxApi.ReadLocalController(
             """{"experimental":{"clash_api":{"external_controller":"192.0.2.77:9090","secret":"nonlocal-fixture"}}}"""));
         Assert.False(manager.IsRunning());
-        Assert.Single(transport.SentRequests);
+        Assert.Equal(2, transport.SentRequests.Count);
     }
 
     [Theory]

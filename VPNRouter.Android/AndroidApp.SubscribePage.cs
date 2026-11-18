@@ -958,7 +958,7 @@ public partial class AndroidApp
     {
         var activity = MainActivity.Instance;
         if (activity is null) return;
-        var command = AndroidStorage.BeginUiCommand();
+        var command = ReserveConnectCommand();
         if (command == null) return;
         MainActivity.PendingQrScanCallback = (success, text) =>
         {

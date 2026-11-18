@@ -114,8 +114,8 @@ public partial class AndroidApp
             return TestHookJson.Result(action, false, w => w.WriteString("error", "unsupported-value"));
 
         app._serverInput.Text = raw;
-        app.OnSaveClicked(null, new Avalonia.Interactivity.RoutedEventArgs());
-        var rejected = app._serverInputError?.IsVisible == true;
+        var command = app.ReserveConnectCommand();
+        var rejected = command == null || !app.TrySaveServerInput(command);
         return TestHookJson.Result(action, !rejected, w =>
         {
             w.WriteString("kind", kind);

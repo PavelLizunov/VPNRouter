@@ -122,21 +122,24 @@ public final class AndroidTunnelLifecycleTest {
         require(!result.contains("RequestConnect(") && !resume.contains("Post(() => RequestConnect("),
                 "consent retry must be claimed and started on the resumed activity");
         String free = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.FreeConfigs.cs"));
-        requireOrdered(free, "AndroidStorage.ApplyFreeConfig(", "RefreshConfigModeUiFromStorage();",
+        requireOrdered(free, "AndroidStorage.SelectSingleServer(", "RefreshConfigModeUiFromStorage();",
                 "RequestConnect(command);");
         String simple = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.VpnLifecycle.cs"));
-        requireOrdered(simple, "if (AndroidSubscriptionRefresh.HasServerInputEdit(input, AndroidStorage.SavedServerInput()))", "OnSaveClicked(sender, e);",
-                "activity.RequestConnect();");
+        requireOrdered(simple, "if (AndroidSubscriptionRefresh.HasServerInputEdit(input, AndroidStorage.SavedServerInput()))", "command = ReserveConnectCommand();",
+                "!TrySaveServerInput(command)",
+                "activity.RequestConnect(command);");
+        requireOrdered(simple, "private string? ReserveConnectCommand()", "AndroidStorage.BeginUiCommand();",
+                "if (command == null) ShowMenuFeedback(Localization.TunnelError(\"command-unavailable\"));", "return command;");
         String external = Files.readString(root.resolve("VPNRouter.Android/VpnControlReceiver.cs"));
         require(external.contains("SvcActionStart = \"com.ninitux.vpnrouter.TILE_START\""), "external restore requires an unticketed action");
         String qr = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.QrScanApply.cs"));
-        requireOrdered(qr, "var command = reserved ?? AndroidStorage.BeginUiCommand();", "await RefreshStoredSubscriptionAsync(",
+        requireOrdered(qr, "var command = reserved ?? ReserveConnectCommand();", "if (command == null || !AndroidStorage.IsCurrentUiCommand(command)) return;", "await RefreshStoredSubscriptionAsync(",
                 "if (!AndroidStorage.IsCurrentUiCommand(command)) return;", "RequestConnect(command);");
         String app = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.axaml.cs"));
         requireOrdered(app, "_configRowValue = new TextBlock", "TextWrapping = TextWrapping.Wrap",
                 "Children = { header, _configRowValue }");
         String summary = app.substring(app.indexOf("private void UpdatePerAppSummary("),
-                app.indexOf("private void OnSaveClicked("));
+                app.indexOf("private bool TrySaveServerInput("));
         requireOrdered(summary, "PerAppPolicySummary(AndroidStorage.GetActivePerAppPolicy()", "_appPickerModeHint.Text =", "_configRowValue.Text = policy;");
     }
 

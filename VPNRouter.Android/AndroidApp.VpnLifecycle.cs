@@ -12,6 +12,13 @@ public partial class AndroidApp
 {
     private bool _lifecycleEventsAttached;
 
+    private string? ReserveConnectCommand()
+    {
+        var command = AndroidStorage.BeginUiCommand();
+        if (command == null) ShowMenuFeedback(Localization.TunnelError("command-unavailable"));
+        return command;
+    }
+
     private async void OnConnectClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var activity = MainActivity.Instance;
@@ -39,10 +46,11 @@ public partial class AndroidApp
                 }
             }
 
+            string? command = null;
             if (AndroidSubscriptionRefresh.HasServerInputEdit(input, AndroidStorage.SavedServerInput()))
             {
-                OnSaveClicked(sender, e);
-                if (_serverInputError is { IsVisible: true }) return;
+                command = ReserveConnectCommand();
+                if (command == null || !TrySaveServerInput(command)) return;
             }
 
             if (_statusCard is not null)
@@ -52,7 +60,7 @@ public partial class AndroidApp
             }
             SetVpnChipState(ChipState.Connecting);
             UpdateZapretChipFromState();
-            activity.RequestConnect();
+            activity.RequestConnect(command);
         }
     }
 
