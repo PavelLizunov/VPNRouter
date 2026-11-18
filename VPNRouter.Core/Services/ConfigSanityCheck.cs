@@ -13,7 +13,7 @@ public sealed class ConfigSanityCheck
     public ConfigSanityCheck(ILogger? logger = null, HttpClient? httpClient = null)
     {
         _logger = logger;
-        _http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        _http = httpClient ?? new HttpClient(ClashSingBoxApi.CreateControllerHandler()) { Timeout = TimeSpan.FromSeconds(8) };
     }
 
     public PreStartCheckResult CheckBeforeStart(JsonObject singboxConfig)
@@ -142,9 +142,13 @@ public sealed class ConfigSanityCheck
         if (clashApiPort <= 0 || clashApiPort > 65535)
             return new ProbeResult(true, $"invalid Clash API port {clashApiPort}", 0);
 
-        var url = $"http://127.0.0.1:{clashApiPort}/proxies/proxy/delay" +
-                  $"?url={Uri.EscapeDataString("http://www.gstatic.com/generate_204")}" +
-                  $"&timeout=5000";
+        return await ProbeAsync(new Uri($"http://127.0.0.1:{clashApiPort}"), clashApiSecret, ct).ConfigureAwait(false);
+    }
+
+    internal async Task<ProbeResult> ProbeAsync(Uri controller, string? clashApiSecret, CancellationToken ct)
+    {
+        var url = new Uri(controller, "/proxies/proxy/delay" +
+            $"?url={Uri.EscapeDataString("http://www.gstatic.com/generate_204")}&timeout=5000");
 
         int lastDelay = 0;
         string? lastError = null;

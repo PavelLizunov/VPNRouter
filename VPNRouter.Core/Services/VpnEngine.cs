@@ -165,6 +165,14 @@ public partial class VpnEngine : IDisposable
         try { _unixDns.RestoreStrandedIfAny(_logger); } catch { }
     }
 
+    private static AppSettings CopySessionSettings(AppSettings settings)
+    {
+        var snapshot = SettingsLoader.Copy(settings);
+        if (settings.Tun?.AutoDetectedExcludeAddress is { Count: > 0 } detected)
+            snapshot.Tun.AutoDetectedExcludeAddress = [.. detected];
+        return snapshot;
+    }
+
     public Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false) =>
         StartAsync(settings, ct, skipVpnConflictCheck, restoreAcceptedImport: false);
 
@@ -173,6 +181,7 @@ public partial class VpnEngine : IDisposable
         var policy = EffectivePolicy;
         using var _ = SingBoxRuntimePolicy.EnterScope(policy);
         policy?.Authorize(SingBoxRuntimeOperation.Start);
+        settings = CopySessionSettings(settings);
 
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -318,6 +327,7 @@ public partial class VpnEngine : IDisposable
 
     public async Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct = default, bool forceRestart = false)
     {
+        settings = CopySessionSettings(settings);
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -607,14 +617,20 @@ public partial class VpnEngine : IDisposable
         }
     }
 
-    public void Stop()
+    public void Stop() => Stop(onlyOwnedSession: false);
+
+    internal void StopOwnedSession() => Stop(onlyOwnedSession: true);
+
+    private void Stop(bool onlyOwnedSession)
     {
         try { _sessionCts?.Cancel(); } catch { }
         try { _healthMonitor?.Stop(); } catch { }
         _lifecycleGate.Wait();
         try
         {
-            EndSession();
+            // A child with unreadable exit status still belongs to its manager.
+            if (!onlyOwnedSession || _singBox != null || _healthMonitor != null || _slipstream != null)
+                EndSession();
         }
         finally
         {

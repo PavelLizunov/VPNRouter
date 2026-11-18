@@ -53,20 +53,58 @@ public partial class VpnEngine
         }
     }
 
+    internal async Task<FailoverOutcome?> HandlePostStartFailureAsync(AutoFailoverEngine failover, string reason,
+        AppSettings captured, long generation, IProcessHandle? probeChild, CancellationToken ct)
+    {
+        try { await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return null; }
+        try
+        {
+            // Apply can roll back to a different child without changing the accepted settings or generation.
+            bool CanReplace() => !ct.IsCancellationRequested && (probeChild == null || IsCurrentProbeChild(probeChild));
+            if (!CanReplace() || generation != _failoverGeneration ||
+                !ReferenceEquals(captured, _failoverSettingsContext) || failover.IsCurrentIntent?.Invoke() != true)
+                return null;
+
+            return await failover.HandleDeadConfigAsync(reason, ct,
+                token => RestartFailoverGatedAsync(captured, token, generation, probeChild), CanReplace).ConfigureAwait(false);
+        }
+        finally
+        {
+            try { _lifecycleGate.Release(); } catch (ObjectDisposedException) { }
+        }
+    }
+
+    private bool IsCurrentProbeChild(IProcessHandle child) =>
+        !_warmupConfirmed && ReferenceEquals(child, _singBox?.OwnedProcessHandle) && child.QueryHasExited() == false;
+
     internal async Task<bool> ExecuteProbeFailoverRestartAsync(
         AppSettings captured,
         CancellationToken probeCt,
         long? expectedGeneration = null)
     {
         await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        try { return await RestartFailoverGatedAsync(captured, probeCt, expectedGeneration, null).ConfigureAwait(false); }
+        finally
+        {
+            try { _lifecycleGate.Release(); } catch (ObjectDisposedException) { }
+        }
+    }
+
+    private async Task<bool> RestartFailoverGatedAsync(AppSettings captured, CancellationToken probeCt,
+        long? expectedGeneration, IProcessHandle? probeChild)
+    {
         bool preserveCurrentSession = true;
 
         void RetireCurrentTunnel()
         {
+            probeCt.ThrowIfCancellationRequested();
+            if (probeChild != null && !IsCurrentProbeChild(probeChild))
+                throw new OperationCanceledException("The originating probe is no longer current.");
             if (_singBox is { } current)
             {
-                bool retired = _healthMonitor?.TryRetireForFailover(current.TryRetireForReplacement)
-                    ?? current.TryRetireForReplacement();
+                bool Retire() => current.TryRetireForReplacement(probeChild, probeCt);
+                bool retired = _healthMonitor?.TryRetireForFailover(Retire) ?? Retire();
                 if (!retired)
                     throw new InvalidOperationException("The current tunnel stop was not confirmed.");
             }
@@ -76,7 +114,8 @@ public partial class VpnEngine
 
         try
         {
-            if ((expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) ||
+            if (probeCt.IsCancellationRequested || (probeChild != null && !IsCurrentProbeChild(probeChild)) ||
+                (expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) ||
                 (_failoverSettingsContext is not null && !ReferenceEquals(_failoverSettingsContext, captured)))
             {
                 _logger?.Information(
@@ -101,7 +140,7 @@ public partial class VpnEngine
             if (validateBeforeRetiring)
             {
                 // Resolution can normalize subscription rows and runtime settings in place.
-                settings = SettingsLoader.Copy(captured);
+                settings = CopySessionSettings(captured);
                 retireAfterValidation = RetireCurrentTunnel;
             }
             await StartAsyncInternal(settings, session.Token, _skipVpnConflictCheck, retireAfterValidation,
@@ -125,10 +164,6 @@ public partial class VpnEngine
             _logger?.Warning("[VpnEngine] Rejected automatic replacement before teardown ({ExceptionType})", ex.GetType().Name);
             OnStatus("Automatic failover rejected before tunnel replacement.");
             return false;
-        }
-        finally
-        {
-            try { _lifecycleGate.Release(); } catch (ObjectDisposedException) { }
         }
     }
 }

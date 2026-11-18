@@ -63,12 +63,7 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         }
         else
         {
-            _http = localBind ? new HttpClient(new SocketsHttpHandler
-            {
-                UseProxy = false, AllowAutoRedirect = false, UseCookies = false,
-                ConnectCallback = async (_, ct) =>
-                    new NetworkStream(await OpenControlSocketAsync(uri, ct).ConfigureAwait(false), ownsSocket: true)
-            }) : new HttpClient();
+            _http = localBind ? new HttpClient(CreateControllerHandler()) : new HttpClient();
             _http.Timeout = Timeout.InfiniteTimeSpan;
             _ownsHttpClient = true;
         }
@@ -77,6 +72,15 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
             _http.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", secret);
     }
+
+    internal static SocketsHttpHandler CreateControllerHandler() => new()
+    {
+        UseProxy = false,
+        AllowAutoRedirect = false,
+        UseCookies = false,
+        ConnectCallback = async (context, ct) => new NetworkStream(
+            await OpenControlSocketAsync(context.InitialRequestMessage.RequestUri!, ct).ConfigureAwait(false), ownsSocket: true)
+    };
 
     public async Task<bool> ReloadConfigAsync(string configPath, CancellationToken ct = default)
     {

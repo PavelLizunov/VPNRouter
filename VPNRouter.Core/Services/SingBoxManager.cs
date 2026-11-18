@@ -175,10 +175,15 @@ public partial class SingBoxManager : IDisposable
 
     internal bool TryRetireForReplacement() => DisposeCore(requireConfirmedStop: true);
 
-    private bool DisposeCore(bool requireConfirmedStop)
+    internal bool TryRetireForReplacement(IProcessHandle? expectedChild, CancellationToken ct) =>
+        DisposeCore(requireConfirmedStop: true, expectedChild, ct);
+
+    private bool DisposeCore(bool requireConfirmedStop, IProcessHandle? expectedChild = null, CancellationToken ct = default)
     {
         lock (_lifecycleGate)
         {
+            if (ct.IsCancellationRequested || (expectedChild != null &&
+                (!ReferenceEquals(expectedChild, _handle) || expectedChild.QueryHasExited() != false))) return false;
             if (Volatile.Read(ref _disposed) != 0) return true;
 
             StopInternal(releaseLock: true);

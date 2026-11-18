@@ -514,7 +514,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WireSimpleHomeNotifications();
 
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger, updateSource, exitApplication);
-        UpdateVm.ReserveRestart = ReserveUpdateRestart;
+        UpdateVm.ReserveRestart = ReserveRestart;
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
@@ -714,14 +714,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return true;
         if (!TryReleaseZapretForShutdown()) return false;
 
-        if (_engine.HasActiveTunnel)
+        try { _engine.StopOwnedSession(); }
+        catch (InvalidOperationException)
         {
-            try { _engine.Stop(); }
-            catch (InvalidOperationException)
-            {
-                StatusText = Strings.TunnelStopUnconfirmed;
-                return false;
-            }
+            StatusText = Strings.TunnelStopUnconfirmed;
+            return false;
         }
 
         StopSubRefreshTimer();
@@ -739,17 +736,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private bool _restartReserved;
 
-    private Action<bool> ReserveUpdateRestart()
-    {
-        var finish = ReserveRestart();
-        try
-        {
-            if (_engine.HasActiveTunnel) _engine.Stop();
-            return finish;
-        }
-        catch { finish(false); throw; }
-    }
-
     private Action<bool> ReserveRestart()
     {
         if (_disposed || !IsZapretMagicButtonEnabled)
@@ -761,11 +747,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #if PLATFORM_WINDOWS
             restore = _zapret?.SuspendOwnedStrategy();
 #endif
+            _engine.StopOwnedSession();
             OnPropertyChanged(nameof(IsZapretMagicButtonEnabled));
         }
         catch
         {
-            _restartReserved = false;
+            try { restore?.Invoke(); }
+            finally { _restartReserved = false; }
             throw;
         }
         return committed =>
@@ -818,6 +806,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         if (!TryReleaseZapretForShutdown())
             throw new InvalidOperationException(Core.Localization.Strings.ZapretQuitPending);
+        _engine.StopOwnedSession();
         _disposed = true;
 
 #if PLATFORM_WINDOWS
