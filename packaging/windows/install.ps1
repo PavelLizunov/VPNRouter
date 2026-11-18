@@ -92,41 +92,47 @@ pause
 }
 
 
-function Assert-RepairObject($entry, [bool]$ancestor) {
-    if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Repair target is redirected.' }
-    $acl = Get-Acl -LiteralPath $entry.FullName -ErrorAction Stop
-    $trusted = @('S-1-5-18','S-1-5-32-544','S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
-    $denied = [Security.AccessControl.FileSystemRights]'Delete, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership'
-    if (!$ancestor) { $denied = $denied -bor [Security.AccessControl.FileSystemRights]::Write }
-    $ownerLimited = $false
-    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
-        $sid = $rule.IdentityReference.Value
-        $inheritOnly = $rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly
-        if (!$inheritOnly -and $sid -eq 'S-1-3-4') { $ownerLimited = $true }
-        if ($inheritOnly -and ($ancestor -or ($entry -is [IO.DirectoryInfo] -and $sid -eq 'S-1-3-0'))) { continue }
-        if ($rule.AccessControlType -eq 'Allow' -and $sid -notin $trusted -and ($rule.FileSystemRights -band $denied)) {
-            throw 'Repair requires an administrator-protected installation.'
+function Assert-TargetRepairCopy([IO.DirectoryInfo]$source, [string]$applicationDir) {
+    foreach ($file in $source.EnumerateFiles('*', [IO.SearchOption]::AllDirectories)) {
+        $relative = $file.FullName.Substring($source.FullName.Length + 1)
+        $installed = [IO.Path]::Combine($applicationDir, $relative)
+        if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -ne
+            (Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash) {
+            throw 'Installed repair payload does not match the verified release.'
         }
     }
-    if (!$ownerLimited -and $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin $trusted) {
-        throw 'Repair target owner cannot be verified.'
+}
+
+function Open-TargetFailureMarker([string]$applicationDir) {
+    $path = [IO.Path]::Combine($applicationDir, '.update-failed')
+    try { return [IO.File]::Open($path, 'Open', 'Read', 'Read') }
+    catch [IO.FileNotFoundException] { return $null }
+}
+
+function Complete-TargetRepair([string]$applicationDir, [IO.FileStream]$failureMarker, [switch]$NoLaunch) {
+    $marker = [IO.Path]::Combine($applicationDir, '.update-failed')
+    $saved = $null
+    if ($failureMarker) {
+        if ($failureMarker.Name -ne $marker) { throw 'Repair failure marker belongs to another installation.' }
+        $failureMarker.Dispose()
+        $saved = [IO.Path]::Combine((Get-RepairScratch $applicationDir), [Guid]::NewGuid().ToString('N') + '.marker')
+        [IO.File]::Move($marker, $saved)
+    } elseif ([IO.File]::Exists($marker)) { throw 'Another failure marker appeared during repair.' }
+    try {
+        if (!$NoLaunch) { Start-Process -FilePath (Join-Path $applicationDir 'VPNRouter.App.exe') -WorkingDirectory $applicationDir }
+    } catch {
+        if ($saved) { [IO.File]::Move($saved, $marker) }
+        throw
     }
+    if ($saved) { try { [IO.File]::Delete($saved) } catch { Warn "Repaired installation verified; private marker copy retained at $saved." } }
 }
 
 function Resolve-RepairApplication([string]$path) {
     if ($path -notmatch '^[a-zA-Z]:\\' -or $path.Substring(2).Contains(':')) { throw 'Expected a local installation directory.' }
     $dir = Get-Item -LiteralPath ([IO.Path]::GetFullPath($path)) -Force -ErrorAction Stop
     if ($dir -isnot [IO.DirectoryInfo] -or !$dir.Parent) { throw 'Expected an installed VPNRouter directory.' }
-    for ($parent = $dir.Parent; $parent; $parent = $parent.Parent) { Assert-RepairObject $parent $true }
-    $pending = New-Object 'Collections.Generic.Stack[IO.FileSystemInfo]'
-    $pending.Push($dir)
-    while ($pending.Count) {
-        $item = $pending.Pop()
-        Assert-RepairObject $item $false
-        if ($item -is [IO.DirectoryInfo]) {
-            foreach ($child in $item.EnumerateFileSystemInfos()) { $pending.Push($child) }
-        }
-    }
+    Assert-RepairRoot $dir
+    Assert-RepairTree $dir
     if ([IO.File]::Exists((Join-Path $dir.FullName 'vpnrouter-business-update.json')) -or
         [IO.File]::Exists((Join-Path $dir.FullName 'business-provisioning.json'))) {
         throw 'Use the Business updater to repair a Business installation.'
@@ -134,11 +140,6 @@ function Resolve-RepairApplication([string]$path) {
     if (!([IO.File]::Exists((Join-Path $dir.FullName 'VPNRouter.GUI.exe')) -or
           [IO.File]::Exists((Join-Path $dir.FullName 'VPNRouter.App.exe')))) { throw 'The repair target is not a VPNRouter installation.' }
     return $dir.FullName
-}
-
-if ($RepairApplicationDir) {
-    if (!$Repair) { throw 'RepairApplicationDir requires repair mode.' }
-    $AppDir = Resolve-RepairApplication $RepairApplicationDir
 }
 
 Say "VPNRouter installer running as Administrator"
@@ -159,6 +160,20 @@ function Get-InstallerHelper([string]$embedded, [string]$name, [string]$digest) 
 $installerHelpers = if ($PSScriptRoot) { [IO.Path]::Combine($PSScriptRoot, 'installer') }
 $environmentBytes = Get-InstallerHelper '__VPNROUTER_REPAIR_ENVIRONMENT__' 'repair-environment.ps1' '4a3f68e87e16be9e4837ce12cf64825f1fa2c01948ff5a8dea054019eb8eaf53'
 . ([scriptblock]::Create([Text.Encoding]::UTF8.GetString($environmentBytes)))
+$targetBytes = Get-InstallerHelper '__VPNROUTER_REPAIR_TARGET__' 'repair-target.ps1' '1eb207083ee3af10944b7e6e8289027fcada6e64962a5909db340f7c432f0525'
+. ([scriptblock]::Create([Text.Encoding]::UTF8.GetString($targetBytes)))
+
+$repairLock = $repairMarker = $null
+try {
+if ($RepairApplicationDir) {
+    if (!$Repair) { throw 'RepairApplicationDir requires repair mode.' }
+    $AppDir = Resolve-RepairApplication $RepairApplicationDir
+    $repairLock = Open-RepairInstallLock ([IO.DirectoryInfo]::new($AppDir))
+    $InstallRoot = [IO.Path]::GetDirectoryName($repairLock.Name)
+    $AppDir = Resolve-RepairApplication $AppDir
+    $repairMarker = Open-TargetFailureMarker $AppDir
+}
+
 
 Say "Querying GitHub for target release..."
 
@@ -255,6 +270,13 @@ if (-not (Test-Path (Join-Path $payloadDir "app\VPNRouter.App.exe"))) {
     exit 1
 }
 
+if ($RepairApplicationDir) {
+    foreach ($name in '.update-failed','.update-backup.lock','.repair-temp') {
+        $reserved = [IO.FileInfo]::new([IO.Path]::Combine($payloadDir, 'app', $name))
+        if ([int]$reserved.Attributes -ne -1) { throw 'Repair payload contains reserved installation state.' }
+    }
+}
+
 # Capture the old service's start mode and running state before stopping the old app.
 $canRestoreZapret = [IO.File]::Exists((Join-Path $payloadDir 'app\zapret-maintenance.ps1'))
 # Prepare belongs to the running installer even if the selected release contains an older helper.
@@ -348,6 +370,7 @@ if (!$RepairApplicationDir -and (Test-Path $InstallRoot) -and !$Repair) {
 try {
     if ($RepairApplicationDir) {
         Get-ChildItem -LiteralPath (Join-Path $payloadDir 'app') -Force | Copy-Item -Destination $AppDir -Recurse -Force -ErrorAction Stop
+        Assert-TargetRepairCopy ([IO.DirectoryInfo]::new((Join-Path $payloadDir 'app'))) $AppDir
     } else {
         Get-ChildItem $payloadDir -Force | Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop
     }
@@ -382,10 +405,15 @@ if ($canRestoreZapret) {
 if ($Repair) {
     if ($svcWasRunning -and (Test-OwnService)) { Start-OwnService }
     & (Join-Path $AppDir 'VPNRouter.CLI.exe') doctor
-    if ($RepairApplicationDir -and !$NoLaunch) {
-        Start-Process -FilePath (Join-Path $AppDir 'VPNRouter.App.exe') -WorkingDirectory $AppDir
+    if ($RepairApplicationDir) {
+        if ($LASTEXITCODE -eq 2) { Warn 'Repair files verified. Doctor reported additional configuration or runtime errors.' }
+        Complete-TargetRepair $AppDir $repairMarker -NoLaunch:$NoLaunch
     }
     return
+}
+} finally {
+    if ($repairMarker) { $repairMarker.Dispose() }
+    if ($repairLock) { $repairLock.Dispose() }
 }
 
 $exclOk = $false

@@ -63,8 +63,10 @@ function Invoke-RollbackRelaunch([string]$applicationDir) {
     try { [IO.File]::Delete($savedMarker) } catch { }
 }
 
-try { Invoke-RollbackRelaunch $env:VPNROUTER_ROLLBACK_APP } catch {
-    $code = $_.Exception.Data['TrampolineExit']
-    if ($code -in @(2, 3, 4)) { exit $code }
-    throw
+if ($env:VPNROUTER_ROLLBACK_DEFERRED -ne '1') {
+    try { Invoke-RollbackRelaunch $env:VPNROUTER_ROLLBACK_APP } catch {
+        $code = $_.Exception.Data['TrampolineExit']
+        if ($code -in @(2, 3, 4)) { exit $code }
+        throw
+    }
 }

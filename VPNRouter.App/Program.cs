@@ -86,6 +86,7 @@ sealed class Program
             RelaunchElevated(args);
             return;
         }
+        if (!RunInstallHealthCheck()) return;
 #endif
 
         InitializeLogging();
@@ -94,8 +95,6 @@ sealed class Program
 #if PLATFORM_WINDOWS
         PendingUpdateWarning = ZapretLegacyServices.RetryAsync(Log.Logger).GetAwaiter().GetResult().Message;
         HealServiceBinPath();
-        if (!RunInstallHealthCheck())
-            return;
 
         if (!HandleRouteAppArguments(args))
             return;
@@ -270,11 +269,11 @@ sealed class Program
                 var trigger = failureMarkerPresent
                     ? $"Update helper .update-failed marker present ({UpdateBackup.ReadApplicationFailureMarker(appDir)})"
                     : health.Diagnostic;
-                Console.Error.WriteLine($"[health] {trigger} — attempting local rollback first");
+                try { Console.Error.WriteLine($"[health] {trigger} — attempting local rollback first"); } catch { }
 
-                var rollback = Services.WindowsRollbackRelaunch.RestoreAndStart(appDir);
+                var rollback = Services.WindowsRollbackRelaunch.BeginAfterExit(appDir, out var handedOff);
 
-                if (rollback.Restored)
+                if (handedOff || rollback.Restored)
                 {
                     return false;
                 }

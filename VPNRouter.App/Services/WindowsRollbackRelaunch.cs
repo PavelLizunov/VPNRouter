@@ -24,7 +24,57 @@ internal static class WindowsRollbackRelaunch
             displaced => UpdateBackup.VerifyWindowsApplicationTree(installDir, displaced));
     }
 
-    private static void RunHelper(string app, bool validateOnly)
+    internal static UpdateBackup.RestoreResult BeginAfterExit(string applicationDir, out bool handedOff)
+    {
+        handedOff = false;
+        try
+        {
+            var install = UpdateBackup.SnapshotInstallDirectory(applicationDir);
+            UpdateBackup.VerifyWindowsInstallDirectory(install ?? applicationDir);
+            if (install == null) return UpdateBackup.CheckFlatInstall(applicationDir);
+            using var parent = Process.GetCurrentProcess();
+            var start = SystemShell(applicationDir);
+            start.Environment["VPNROUTER_ROLLBACK_DEFERRED"] = "1";
+            start.Environment["VPNROUTER_ROLLBACK_PID"] = parent.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            start.Environment["VPNROUTER_ROLLBACK_TICKS"] = parent.StartTime.ToUniversalTime().Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            start.Environment["VPNROUTER_ROLLBACK_IMAGE"] = Environment.ProcessPath!;
+            start.RedirectStandardInput = start.RedirectStandardOutput = true;
+            start.StandardInputEncoding = start.StandardOutputEncoding = new UTF8Encoding(false);
+            start.ArgumentList.Add("-Command");
+            start.ArgumentList.Add("& ([scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadLine()))))");
+            using var worker = Process.Start(start) ?? throw new IOException("Could not start the rollback worker.");
+            try
+            {
+                var script = LauncherScript() + "\n" + Resource("VPNRouter.Windows.RepairTarget")
+                    + "\n" + Resource("VPNRouter.Windows.RollbackWorker");
+                worker.StandardInput.WriteLine(Convert.ToBase64String(Encoding.UTF8.GetBytes(script)));
+                string? ReadStatus() => worker.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(45)).GetAwaiter().GetResult();
+                var status = ReadStatus();
+                if (status == "BUSY") return new(false, "Another update is in progress.") { OperationInProgress = true };
+                if (status != "LOCKED") throw new IOException("The rollback worker could not pin the installation and initiating process: " + status);
+                var backup = Path.Combine(install, "app.bak");
+                if (!Directory.Exists(backup)) return new(false, "No rollback snapshot.");
+                UpdateBackup.VerifyWindowsApplicationTree(install, backup);
+                if (!Directory.EnumerateFiles(backup, "*", SearchOption.AllDirectories).Skip(4).Any())
+                    return new(false, "Rollback snapshot is truncated.");
+                UpdateBackup.VerifyWindowsApplicationTree(install, applicationDir);
+                bool trampoline = RunHelper(backup, validateOnly: true);
+                worker.StandardInput.WriteLine(trampoline ? "TRAMPOLINE" : "DIRECT");
+                if (ReadStatus() != "READY") throw new IOException("The rollback worker did not accept the handoff.");
+                handedOff = true;
+                return new(false, "Rollback will proceed after the initiating App exits.");
+            }
+            finally
+            {
+                worker.StandardInput.Close();
+                // On cancellation the worker releases its lock before SelfRepair is allowed to proceed.
+                if (!handedOff && !worker.WaitForExit(5000)) throw new IOException("Rollback worker did not release its lock.");
+            }
+        }
+        catch (Exception ex) { return new(false, ex.Message) { RelaunchRejected = true }; }
+    }
+
+    private static bool CheckLauncher(string app)
     {
         var gui = Path.Combine(app, "VPNRouter.GUI.exe");
         bool trampoline = File.Exists(gui) && !IsStandaloneGui(app);
@@ -33,32 +83,49 @@ internal static class WindowsRollbackRelaunch
         if (trampoline && (Directory.Exists(Path.Combine(app, "_bootstrap")) ||
             !InstallHealthCheck.CheckApplicationFiles(app).IsHealthy))
             throw new IOException("The rollback snapshot requires bootstrap or repair before it can launch.");
-        using var environment = typeof(UpdateBackup).Assembly.GetManifestResourceStream("VPNRouter.Update.repair-environment.ps1")
-            ?? throw new IOException("Missing the trusted repair environment helper.");
-        using var launcher = typeof(WindowsRollbackRelaunch).Assembly.GetManifestResourceStream("VPNRouter.Windows.RollbackRelaunch")
-            ?? throw new IOException("Missing the trusted rollback launcher.");
-        using var environmentReader = new StreamReader(environment);
-        using var launcherReader = new StreamReader(launcher);
-        string script = environmentReader.ReadToEnd() + "\n" + launcherReader.ReadToEnd();
+        return trampoline;
+    }
 
+    private static string Resource(string name)
+    {
+        using var resource = typeof(WindowsRollbackRelaunch).Assembly.GetManifestResourceStream(name) ?? throw new IOException("Missing rollback resource: " + name);
+        using var reader = new StreamReader(resource);
+        return reader.ReadToEnd();
+    }
+
+    private static string LauncherScript() => Resource("VPNRouter.Windows.RollbackEnvironment") +
+        "\n" + Resource("VPNRouter.Windows.RollbackRelaunch");
+
+    private static ProcessStartInfo SystemShell(string app)
+    {
         var system = Environment.SystemDirectory;
         var shell = ZapretRuntimeDirectory.SystemFile(@"WindowsPowerShell\v1.0\powershell.exe");
         var start = new ProcessStartInfo(shell) { UseShellExecute = false, WorkingDirectory = system, CreateNoWindow = true };
         start.Environment.Clear();
         start.Environment["VPNROUTER_ROLLBACK_APP"] = app;
-        if (trampoline) start.Environment["VPNROUTER_ROLLBACK_TRAMPOLINE"] = "1";
-        if (validateOnly) start.Environment["VPNROUTER_ROLLBACK_PREFLIGHT"] = "1";
         start.Environment["SystemRoot"] = start.Environment["WINDIR"] = Directory.GetParent(system)!.FullName;
         start.Environment["SystemDrive"] = Path.GetPathRoot(system)!.TrimEnd('\\');
         start.Environment["PATH"] = system + ";" + Path.GetDirectoryName(shell);
         start.Environment["PSModulePath"] = Path.Combine(Path.GetDirectoryName(shell)!, "Modules");
         start.Environment["ComSpec"] = Path.Combine(system, "cmd.exe");
-        foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-EncodedCommand", Convert.ToBase64String(Encoding.Unicode.GetBytes(script)) })
-            start.ArgumentList.Add(arg);
+        start.ArgumentList.Add("-NoProfile");
+        start.ArgumentList.Add("-NonInteractive");
+        return start;
+    }
+
+    private static bool RunHelper(string app, bool validateOnly)
+    {
+        var start = SystemShell(app);
+        bool trampoline = CheckLauncher(app);
+        if (trampoline) start.Environment["VPNROUTER_ROLLBACK_TRAMPOLINE"] = "1";
+        if (validateOnly) start.Environment["VPNROUTER_ROLLBACK_PREFLIGHT"] = "1";
+        start.ArgumentList.Add("-EncodedCommand");
+        start.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(LauncherScript())));
 
         using var helper = Process.Start(start) ?? throw new IOException("Could not start the trusted rollback launcher.");
         helper.WaitForExit();
         if (helper.ExitCode != 0) throw new IOException($"Could not securely relaunch the restored application (exit {helper.ExitCode}).");
+        return trampoline;
     }
 
     internal static string VerifyRestoredApplication(string installDir) =>

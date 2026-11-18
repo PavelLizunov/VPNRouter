@@ -8,7 +8,7 @@ $loader = $ast.Find({ param($node) $node -is [Management.Automation.Language.Fun
 # Verify checkout pins as data. Only the synthetic policy below is ever executed.
 $installerHelpers = Join-Path $root 'packaging/windows/installer'
 $references = [regex]::Matches($installer, "Get-InstallerHelper '(__[A-Z_0-9]+__)' '([a-z-]+\.ps1)' '([a-f0-9]{64})'")
-if ($references.Count -ne 2) { throw 'Missing local installer source digests.' }
+if ($references.Count -ne 3) { throw 'Missing local installer source digests.' }
 foreach ($match in $references) {
     $reference = Get-InstallerHelper $match.Groups[1].Value $match.Groups[2].Value $match.Groups[3].Value
     if (!$reference.Length) { throw 'Missing installer helper source.' }
