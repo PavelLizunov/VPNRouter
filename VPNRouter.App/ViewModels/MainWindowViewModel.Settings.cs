@@ -622,13 +622,11 @@ public partial class MainWindowViewModel
     {
         IsSimpleMode = true;
 
-        var firstEnabledSub = _settings.App.Subscriptions
-            .FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
-        if (firstEnabledSub != null)
-            SmpInput = firstEnabledSub.Url;
-
         var configMode = _settings.App.ConfigMode ?? "generated";
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
+        SmpInput = IsSubscribeMode
+            ? _settings.App.Subscriptions.FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url))?.Url ?? string.Empty
+            : string.Empty;
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
         SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
         SelectedTabIndex = IsSubscribeMode ? 1 : 0;
@@ -922,7 +920,7 @@ public partial class MainWindowViewModel
     {
         // On the home screen IsVlessMode/IsSubscribeMode are leftovers of the last Advanced tab, not a choice: saving a routing change
         // from there turned a subscription into "server link" (tester log 01:03:31). The home screen changes the mode only by
-        // setting it itself (TryApplyVless / TryApplySubscriptionUrl).
+        // setting it itself (TryApplyVless / ApplySimpleSubscriptionInput).
         if (IsSimpleMode && !string.IsNullOrWhiteSpace(_settings.App.ConfigMode))
             return;
 

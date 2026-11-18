@@ -165,12 +165,14 @@ public partial class MainWindowViewModel
     }
 
     [RelayCommand]
-    private async Task ToggleConnectionAsync()
+    private Task ToggleConnectionAsync() => ToggleConnectionCoreAsync(null);
+
+    private async Task ToggleConnectionCoreAsync(AppSettings? submitted)
     {
         if (ProductEdition.IsBusiness && UpdateVm.IsDownloading) return;
         if (_businessPolicyApplyActive)
         {
-            await StopBusinessPolicyApplicationAsync();
+            if (submitted == null) await StopBusinessPolicyApplicationAsync();
             return;
         }
         if (_businessPolicyStartupBlocked && !_engine.IsRunning)
@@ -205,6 +207,7 @@ public partial class MainWindowViewModel
 
         if (toggle == ToggleAction.Stop)
         {
+            if (submitted != null) return;
             IsConnecting = true;
             StatusText = Strings.Stopping;
             try
@@ -239,8 +242,9 @@ public partial class MainWindowViewModel
             return;
         }
 
+        var startOverride = submitted == null ? null : SimpleTunnelStart;
 #if PLATFORM_WINDOWS
-        if (VPNRouter.App.Services.WindowsServiceHelper.IsRunning()
+        if (startOverride == null && VPNRouter.App.Services.WindowsServiceHelper.IsRunning()
             && TunOwnershipLock.IsOwnedByAnyone())
         {
             DetectServiceManagedVpn();
@@ -257,42 +261,36 @@ public partial class MainWindowViewModel
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
 
-            SaveSettings();
-            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-
-            var aggregatedServers = _settings.App.Subscriptions
-                .Where(s => s.Enabled)
-                .SelectMany(s => s.Servers)
-                .ToList();
-            if (IsSubscribeMode && aggregatedServers.Count > 0)
+            if (submitted == null)
             {
-                _settings.Vless.Servers = aggregatedServers;
-                _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                _logger.Information(
-                    "[VM] Connecting with {Count} aggregated subscription servers", aggregatedServers.Count);
+                SaveSettings();
+                _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+
+                var aggregatedServers = _settings.App.Subscriptions
+                    .Where(s => s.Enabled)
+                    .SelectMany(s => s.Servers)
+                    .ToList();
+                if (IsSubscribeMode && aggregatedServers.Count > 0)
+                {
+                    _settings.Vless.Servers = aggregatedServers;
+                    _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
+                    _logger.Information(
+                        "[VM] Connecting with {Count} aggregated subscription servers", aggregatedServers.Count);
+                }
             }
 
             try
             {
-                var capturedSettings = CaptureBusinessConnectionSettings();
+                var capturedSettings = submitted ?? CaptureBusinessConnectionSettings();
                 var skipConflictCheck = _skipVpnConflictThisSession;
-#if PLATFORM_WINDOWS
-                await Task.Run(() =>
-                {
-                    // A cold start may clean up processes only while the TUN is unclaimed.
-                    if (TunOwnershipLock.ProbeOwnership() != TunOwnershipStatus.Free) return;
-                    try { OrphanCleanup.KillOrphans(); } catch { }
-                    try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
-                    catch { }
-                });
-#endif
-                if (OperatingSystem.IsMacOS())
-                    await Task.Run(EnsureMacSudoAccess);
+                if (startOverride == null)
+                    await PrepareColdStartAsync();
 
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                var (startTask, outcome) = await RunTwoPhaseStartAsync(capturedSettings, cts.Token, skipConflictCheck);
+                var start = startOverride ?? RunTwoPhaseStartAsync;
+                var (startTask, outcome) = await start(capturedSettings, cts.Token, skipConflictCheck);
 
                 if (outcome == Internals.TwoPhaseStartOutcome.Connected)
                 {
@@ -399,6 +397,22 @@ public partial class MainWindowViewModel
         return Services.WindowsServiceHelper.IsRunning() && Services.WindowsServiceHelper.Stop().Success;
     }
 #endif
+
+    private async Task PrepareColdStartAsync()
+    {
+#if PLATFORM_WINDOWS
+        await Task.Run(() =>
+        {
+            // A cold start may clean up processes only while the TUN is unclaimed.
+            if (TunOwnershipLock.ProbeOwnership() != TunOwnershipStatus.Free) return;
+            try { OrphanCleanup.KillOrphans(); } catch { }
+            try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
+            catch { }
+        });
+#endif
+        if (OperatingSystem.IsMacOS())
+            await Task.Run(EnsureMacSudoAccess);
+    }
 
     private async Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)> RunTwoPhaseStartAsync(
         AppSettings capturedSettings, CancellationToken ct, bool skipConflictCheck)
