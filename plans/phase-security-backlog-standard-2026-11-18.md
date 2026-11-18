@@ -202,3 +202,11 @@ The default reinstall and both repair entry points take the installation lock be
 Offline PowerShell fixtures passed for repeated compensation, snapshot replacement, concurrent repair and reinstall, and abnormal doctor exit. Seven edited C# files passed syntax parsing. The Pages publication step embedded all three helpers byte for byte. Their raw installer digests and all four embedded rollback resource paths were checked. Windows CI selects the five-process regression for the edition-specific recovery decision. Native execution is pending.
 
 The Linux suite failed its installer cleanup assertion after the installer adopted Remove-Item -LiteralPath. Check that the final cleanup block releases the installation lock and removes the literal staging directory only when the payload can be discarded.
+
+## Final branch verification
+
+The complete [test run](https://github.com/PavelLizunov/VPNRouter/actions/runs/44368002825) passed at `45a79762`. [CodeQL](https://github.com/PavelLizunov/VPNRouter/actions/runs/44370174821) produced zero results in analysis 2198657437.
+
+- Windows ran the installed-App rollback, five-process compensation, installer cleanup, strategy ownership and repair fixtures. Source review traced the installation lock through Prepare, copy, doctor and marker handling. SCM conflict tests used fixture registrations.
+- Desktop and Headless checks exercised detour refresh, ambiguous successors, an explicit direct selection and reopening saved settings. The Simple page fixtures exercised the active and pending labels. Service acceptance, imported route and DNS filtering, and retention after a refused stop passed the applicable suites.
+- The device acceptance above covers the installed Android build, selected target, UID ranges and TUN lifecycle. Issue #689 stays open for external exit-IP evidence.
