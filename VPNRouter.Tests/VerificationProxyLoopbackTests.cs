@@ -59,6 +59,13 @@ public sealed class VerificationProxyLoopbackTests
             Assert.True(await proxy.WaitUntilBoundAsync(TimeSpan.FromSeconds(5), cts.Token));
 
             using var handler = proxy.CreateHttpHandler(TimeSpan.FromSeconds(4));
+            var connect = handler.ConnectCallback!;
+            var proxyConnections = 0;
+            handler.ConnectCallback = (context, token) =>
+            {
+                Interlocked.Increment(ref proxyConnections);
+                return connect(context, token);
+            };
             var trust = new X509ChainPolicy { TrustMode = X509ChainTrustMode.CustomRootTrust, RevocationMode = X509RevocationMode.NoCheck };
             trust.CustomTrustStore.Add(root);
             handler.SslOptions.CertificateChainPolicy = trust;
@@ -69,6 +76,7 @@ public sealed class VerificationProxyLoopbackTests
                 var response = await http.GetStringAsync($"https://127.0.0.1:{endpoint.Port}/trace", cts.Token);
                 Assert.Equal("ip=198.51.100.42\n", response);
                 await serve;
+                Assert.Equal(1, proxyConnections);
             }
             finally
             {
@@ -86,9 +94,11 @@ public sealed class VerificationProxyLoopbackTests
         await stream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions { ServerCertificate = cert }, ct);
         using var reader = new StreamReader(stream, leaveOpen: true);
         Assert.Equal("GET /trace HTTP/1.1", await reader.ReadLineAsync(ct));
-        while (!string.IsNullOrEmpty(await reader.ReadLineAsync(ct))) { }
+        while (await reader.ReadLineAsync(ct) is { Length: > 0 } header)
+            Assert.False(header.StartsWith("Proxy-Authorization:", StringComparison.OrdinalIgnoreCase));
         const string body = "ip=198.51.100.42\n";
-        var reply = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: {body.Length}\r\n\r\n{body}");
+        var reply = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Length: {body.Length}\r\n\r\n{body}");
         await stream.WriteAsync(reply, ct);
+        await stream.ShutdownAsync().WaitAsync(ct);
     }
 }

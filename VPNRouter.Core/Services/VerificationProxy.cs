@@ -1,10 +1,12 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -80,6 +82,15 @@ internal sealed class VerificationProxy
                 TargetHost = "localhost",
                 RemoteCertificateValidationCallback = (_, cert, _, _) => MatchesCertificate(cert),
             }, ct).ConfigureAwait(false);
+            var connect = context.InitialRequestMessage;
+            if (connect.Method == HttpMethod.Connect &&
+                connect.RequestUri is { Scheme: "http", Host: "127.0.0.1" } address && address.Port == _port)
+            {
+                // sing-box closes a challenged CONNECT immediately. Authenticate the first
+                // CONNECT on this pinned connection before HttpClient sends it.
+                var credentials = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{UserName}:{_password}"));
+                connect.Headers.ProxyAuthorization = new AuthenticationHeaderValue("Basic", credentials);
+            }
             return tls;
         }
         catch
