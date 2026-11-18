@@ -9,26 +9,36 @@ namespace VPNRouter.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private (string? Feed, string Route)? SelectedSubscriptionRoute() => SelectedSubscriptionServer is { } row
+        ? (row.SubscriptionId, SubscriptionEntry.RouteKey(row.SourceEntry,
+            SubscriptionServers.Where(s => s.SubscriptionId == row.SubscriptionId).Select(s => s.SourceEntry))) : null;
+
     private void RebuildSubscriptionPool()
     {
         var prevLoading = _isLoadingUI;
         _isLoadingUI = true;
         try
         {
-            var selectedUuid = SelectedSubscriptionServer?.Uuid;
-            var selectedName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
-            var selectedHost = SelectedSubscriptionServer?.Server;
-            var selectedPort = SelectedSubscriptionServer?.Port ?? 0;
-            SubscriptionServers.Clear();
+            var previous = SelectedSubscriptionServer;
+            var id = previous?.SubscriptionId ?? _settings.App.ActiveSubscriptionId;
+            var name = previous?.Name ?? _settings.App.ActiveSubscriptionServer;
+            var key = previous == null ? _settings.App.ActiveSubscriptionRow : SubscriptionEntry.RowKey(previous.SourceEntry);
+            var enabled = Subscriptions.Where(s => s.Enabled).ToList();
+            var source = enabled.FirstOrDefault(s => s.Id == id);
+            var entries = enabled.SelectMany(s => s.UnderlyingEntry.Servers);
+            var selected = SubscriptionRefreshDiff.FindRegisteredServer(source?.UnderlyingEntry, entries, name, key,
+                previous?.SourceEntry, SelectedSubscriptionRoute()?.Route);
 
-            var entries = Subscriptions.Where(s => s.Enabled).SelectMany(s => s.UnderlyingEntry.Servers).ToList();
-            foreach (var entry in entries)
-                SubscriptionServers.Add(new ServerViewModel(entry));
+            SubscriptionServers.Clear();
+            foreach (var feed in enabled)
+                foreach (var entry in feed.UnderlyingEntry.Servers)
+                    SubscriptionServers.Add(new ServerViewModel(entry) { SubscriptionId = feed.Id });
             ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
             ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
 
-            var selected = SubscriptionRefreshDiff.FindActiveServer(entries, selectedName, selectedUuid, selectedHost, selectedPort);
-            SelectedSubscriptionServer = selected == null ? SubscriptionServers.FirstOrDefault() : SubscriptionServers[entries.IndexOf(selected)];
+            SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault(row =>
+                (source == null || row.SubscriptionId == source.Id) && ReferenceEquals(row.SourceEntry, selected))
+                ?? SubscriptionServers.FirstOrDefault();
 
             RefreshActiveIndicator();
         }
@@ -91,14 +101,7 @@ public partial class MainWindowViewModel
         if (sub == null || string.IsNullOrWhiteSpace(sub.Url)) return;
         if (sub.IsRefreshing) return;
 
-        var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
-        var activeUuid = SelectedSubscriptionServer?.Uuid;
-        var activeHost = SelectedSubscriptionServer?.Server;
-        var activePort = SelectedSubscriptionServer?.Port ?? 0;
-        var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
-        var activeSigBefore = SelectedSubscriptionServer == null
-            ? null
-            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
+        var activeSigBefore = SelectedSubscriptionRoute();
 
         sub.IsRefreshing = true;
         try
@@ -124,12 +127,7 @@ public partial class MainWindowViewModel
 
         if (IsConnected && IsSubscribeMode && !IsConnecting && activeSigBefore != null)
         {
-            var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
-            var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
-                enabled.SelectMany(s => s.UnderlyingEntry.Servers
-                    ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid, activeHost, activePort, activeHpk);
-            var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
+            var activeChanged = activeSigBefore != SelectedSubscriptionRoute();
 
             if (!activeChanged)
             {
@@ -153,14 +151,7 @@ public partial class MainWindowViewModel
         var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
         if (enabled.Count == 0) return;
 
-        var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
-        var activeUuid = SelectedSubscriptionServer?.Uuid;
-        var activeHost = SelectedSubscriptionServer?.Server;
-        var activePort = SelectedSubscriptionServer?.Port ?? 0;
-        var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
-        var activeSigBefore = SelectedSubscriptionServer == null
-            ? null
-            : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
+        var activeSigBefore = SelectedSubscriptionRoute();
 
         foreach (var s in enabled) s.IsRefreshing = true;
         try
@@ -176,11 +167,7 @@ public partial class MainWindowViewModel
 
         if (IsConnected && IsSubscribeMode && !IsConnecting && activeSigBefore != null)
         {
-            var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
-                enabled.SelectMany(s => s.UnderlyingEntry.Servers
-                    ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid, activeHost, activePort, activeHpk);
-            var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
+            var activeChanged = activeSigBefore != SelectedSubscriptionRoute();
 
             if (!activeChanged)
             {
@@ -290,7 +277,7 @@ public partial class MainWindowViewModel
         _subRefreshTimer = null;
     }
 
-    private async Task RefreshSubscriptionSilentAsync()
+    internal async Task RefreshSubscriptionSilentAsync()
     {
         if (!IsConnected || !(_settings.App.ConfigMode ?? "generated")
             .Equals("subscribe", StringComparison.OrdinalIgnoreCase)) return;
@@ -306,16 +293,9 @@ public partial class MainWindowViewModel
         {
             _logger.Information("[SubRefresh] Checking {Count} subscription(s)...", enabled.Count);
 
-            var beforeUuids = SubscriptionServers.Select(s => s.Uuid).OrderBy(u => u).ToList();
+            var before = SubscriptionServers.Select(row => (row.SubscriptionId, SubscriptionEntry.RowKey(row.SourceEntry))).ToList();
 
-            var activeName = SelectedSubscriptionServer?.Name ?? _settings?.App?.ActiveSubscriptionServer;
-            var activeUuid = SelectedSubscriptionServer?.Uuid;
-            var activeHost = SelectedSubscriptionServer?.Server;
-            var activePort = SelectedSubscriptionServer?.Port ?? 0;
-            var activeHpk  = SelectedSubscriptionServer?.ToEntry()?.Awg?.HeaderProtectionKey;
-            var activeSigBefore = SelectedSubscriptionServer == null
-                ? null
-                : SubscriptionRefreshDiff.SignatureOf(SelectedSubscriptionServer.Server, SelectedSubscriptionServer.Port, SelectedSubscriptionServer.Uuid, activeHpk);
+            var activeSigBefore = SelectedSubscriptionRoute();
 
             await Task.WhenAll(enabled.Select(async s =>
             {
@@ -336,32 +316,18 @@ public partial class MainWindowViewModel
 
             if (ct.IsCancellationRequested) return;
 
-            var afterUuids = enabled
-                .SelectMany(s => s.UnderlyingEntry.Servers
-                    ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>())
-                .Select(srv => srv.Uuid ?? string.Empty)
-                .OrderBy(u => u, StringComparer.Ordinal)
-                .ToList();
-            var changed = !beforeUuids.SequenceEqual(afterUuids, StringComparer.Ordinal);
-
-            SaveSettings();
-
-            if (!changed)
+            var after = Subscriptions.Where(s => s.Enabled).SelectMany(s =>
+                s.UnderlyingEntry.Servers.Select(row => ((string?)s.Id, SubscriptionEntry.RowKey(row))));
+            if (before.SequenceEqual(after))
             {
-                _logger.Information("[SubRefresh] No UUID changes, skipping rebuild and reconnect");
+                SaveSettings();
                 return;
             }
 
-            var activeSigAfter = SubscriptionRefreshDiff.ActiveServerSignature(
-                enabled.SelectMany(s => s.UnderlyingEntry.Servers
-                    ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>()),
-                activeName, activeUuid, activeHost, activePort, activeHpk);
-            var activeChanged = !string.Equals(activeSigBefore, activeSigAfter, StringComparison.Ordinal);
-
-            var prevLoadingUi = _isLoadingUI;
-            _isLoadingUI = true;
-            try { RebuildSubscriptionPool(); }
-            finally { _isLoadingUI = prevLoadingUi; }
+            var selectionUnchanged = activeSigBefore == SelectedSubscriptionRoute();
+            RebuildSubscriptionPool();
+            SaveSettings();
+            var activeChanged = selectionUnchanged && activeSigBefore != SelectedSubscriptionRoute();
 
             if (!activeChanged)
             {
@@ -372,6 +338,7 @@ public partial class MainWindowViewModel
                 return;
             }
 
+            if (!IsConnected || IsConnecting || IsApplying || _isReconnecting) return;
             _logger.Information("[SubRefresh] Active server changed, reconnecting...");
             var reconnectName = SelectedSubscriptionServer?.Name ?? "subscription";
             await ReconnectAsync(reconnectName);

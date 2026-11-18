@@ -769,6 +769,8 @@ public partial class MainWindowViewModel
             Subscriptions.Add(new SubscriptionViewModel(entry));
 
         RebuildSubscriptionPool();
+        if (IsSubscribeMode && SelectedSubscriptionServer?.SubscriptionId is { } id)
+            SmpInput = Subscriptions.First(s => s.Id == id).Url;
     }
 
     private void LoadCustomConfigsIntoUI()
@@ -956,6 +958,8 @@ public partial class MainWindowViewModel
 
         var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
         _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
+        _settings.App.ActiveSubscriptionId = activeSub?.SubscriptionId;
+        _settings.App.ActiveSubscriptionRow = activeSub?.SubscriptionId != null ? SubscriptionEntry.RowKey(activeSub.SourceEntry) : null;
 
         _settings.App.SubscriptionUrl = string.Empty;
         _settings.App.SubscriptionServers = new();

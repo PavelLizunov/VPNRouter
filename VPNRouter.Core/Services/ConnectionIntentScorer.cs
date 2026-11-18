@@ -16,7 +16,7 @@ public static class ConnectionIntentScorer
 
         var normalized = ConnectionIntent.Normalize(intent);
         var chosen = list
-            .OrderByDescending(s => Score(s, normalized, activeName))
+            .OrderByDescending(s => Score(s, normalized, string.Equals(s.Name, activeName, StringComparison.Ordinal)))
             .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
             .First();
 
@@ -26,24 +26,33 @@ public static class ConnectionIntentScorer
     public static VlessServerEntry? PickServer(
         IEnumerable<ServerLiveness> results,
         string? intent,
-        string? activeName)
+        string? activeName) =>
+        PickLiveServer(results, intent, row => string.Equals(row.Name, activeName, StringComparison.Ordinal) &&
+            (!string.IsNullOrEmpty(activeName) || ConnectionIntent.Normalize(intent) != ConnectionIntent.General));
+
+    internal static VlessServerEntry? PickRegisteredServer(IEnumerable<ServerLiveness> results,
+        string? intent, VlessServerEntry selected) =>
+        PickLiveServer(results, intent, row => ReferenceEquals(row, selected));
+
+    private static VlessServerEntry? PickLiveServer(IEnumerable<ServerLiveness> results, string? intent,
+        Func<VlessServerEntry, bool> isSelected)
     {
         var alive = results?.Where(r => r.Alive).ToList() ?? new List<ServerLiveness>();
         if (alive.Count == 0) return null;
 
         if (ConnectionIntent.Normalize(intent) == ConnectionIntent.General)
-            return ServerHealthProbe.PickForConnect(alive, activeName);
+            return alive.FirstOrDefault(r => isSelected(r.Server))?.Server ?? ServerHealthProbe.PickBest(alive);
 
         return alive
-            .OrderByDescending(r => Score(r.Server, intent, activeName))
+            .OrderByDescending(r => Score(r.Server, intent, isSelected(r.Server)))
             .ThenBy(r => r.LatencyMs)
             .Select(r => r.Server)
             .FirstOrDefault();
     }
 
-    private static int Score(VlessServerEntry s, string? intent, string? activeName)
+    private static int Score(VlessServerEntry s, string? intent, bool selected)
     {
-        var score = string.Equals(s.Name, activeName, StringComparison.Ordinal) ? 10 : 0;
+        var score = selected ? 10 : 0;
         var proto = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
 
         return ConnectionIntent.Normalize(intent) switch
