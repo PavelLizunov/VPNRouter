@@ -192,3 +192,11 @@ Independent source review accepted Android pending-route ownership for null and 
 Integrate the desktop and Headless required-hop refresh fix. Exercise rotated IDs, upstream port changes, ambiguous routes, explicit direct selection and saved-settings recovery. Preserve the Headless protocol response and exact-URL eviction on a definitive unsupported native subscription. Verify the new Desktop/Core fixtures in the compiled Business matrix.
 
 The Ubuntu Business policy job at 2c1e21bd failed three Simple status cases during configuration generation. The Business fixtures now choose a uniquely named direct VLESS row for the portal. They still exercise two generated group members and two protocols sharing an endpoint. The default build retains duplicate-name and Hysteria2 selection coverage.
+
+## Android 14 ARM64 device acceptance for #689
+
+The installed APK matched artifact `14454675371` at commit `2c1e21bd731f79443bb7d4f83c3fa7b031cbbaf8`. Its SHA-256 was `2264e9b15ef56ee1ed08859d633f59b5acb984e6f97f62d024ec33e0fcc4348f`. [Android build and artifact](https://github.com/PavelLizunov/VPNRouter/actions/runs/44360060907/artifacts/14454675371)
+
+- Switching from a subscription to Custom JSON used the custom TUN on the first Connect and after reopening. The subscription remained enabled. Selecting manual C and then re-entering A started A on both attempts.
+- Off, Include and Exclude each completed Stop, Connect and Stop in the same process. Android reported a new VPN network with the original UID ranges. Home and Apps showed the complete Next connection label after Stop.
+- Refreshing an unchanged native detour feed preserved the selected target and the established VPN network. Reconnecting and reopening selected the same target. Hosted tests cover the generated detour and invalidation after an upstream change. External exit IP and payload transit through the hop remain unmeasured.
