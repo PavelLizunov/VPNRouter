@@ -4,7 +4,7 @@
 
 ## Сборка из исходников
 
-Установите .NET SDK из [`global.json`](../../../global.json) (10.0.301, с разрешённым переходом на новые патчи). Стандартная сборка solution не собирает Android-приложение. Для Android также нужны workload, Android SDK, JDK и локальные нативные библиотеки; см. [инструкцию сборки Android](../../../VPNRouter.Android/AGENTS.md).
+Установите .NET SDK из [`global.json`](../../../global.json). Стандартная сборка solution не собирает Android-приложение. Для Android также нужны workload, Android SDK, JDK и локальные нативные библиотеки; см. [инструкцию сборки Android](../../../VPNRouter.Android/AGENTS.md).
 
 ```bash
 git clone https://github.com/PavelLizunov/VPNRouter.git

@@ -4,7 +4,7 @@ Part of the [VPNRouter README](../../README.md).
 
 ## Build from source
 
-Install the .NET SDK specified by [`global.json`](../../global.json) (10.0.301, with patch roll-forward). The solution's default build excludes the Android app. Android packaging also requires the Android workload, SDK, JDK and local native libraries; see [Android build instructions](../../VPNRouter.Android/AGENTS.md).
+Install the .NET SDK specified by [`global.json`](../../global.json). The solution's default build excludes the Android app. Android packaging also requires the Android workload, SDK, JDK and local native libraries; see [Android build instructions](../../VPNRouter.Android/AGENTS.md).
 
 ```bash
 git clone https://github.com/PavelLizunov/VPNRouter.git
