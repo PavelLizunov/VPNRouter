@@ -39,6 +39,12 @@ public class WindowsStandardUpdateTests
     [InlineData("https://github.com/PavelLizunov/VPNRouter/releases/download/v1.2.3/VPNRouter-update-v1.2.3-win.zip", true)]
     [InlineData("https://example.test/releases/download/v1.2.3/VPNRouter-v1.2.3-win.zip", false)]
     [InlineData("https://github.com/PavelLizunov/VPNRouter/releases/download/v1.2.2/VPNRouter-v1.2.3-win.zip", false)]
-    public void OnlyRequestedOfficialReleaseIsEligible(string url, bool expected) =>
+    [InlineData("https://github.com/PavelLizunov/VPNRouter/releases/download/v1.2.3/VPNRouter-install-v1.2.3.zip", true)]
+    [InlineData("https://github.com/PavelLizunov/VPNRouter/releases/download/v1.2.3/VPNRouter-install-v1.2.2.zip", false)]
+    public void OnlyRequestedOfficialReleaseIsEligible(string url, bool expected)
+    {
         Assert.Equal(expected, UpdateChecker.IsOfficialWindowsRelease(new Uri(url), "1.2.3"));
+        Assert.Equal(expected, UpdateChecker.IsOfficialWindowsRelease(new Uri(url + ".sha256"), "1.2.3", checksum: true));
+        Assert.False(UpdateChecker.IsOfficialWindowsRelease(new Uri(url), "1.2.3", checksum: true));
+    }
 }

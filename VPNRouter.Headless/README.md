@@ -114,12 +114,13 @@ the direct outbound. DNS interception and physical LAN destinations are preserve
 
 ## Subscription refresh failures
 
-`subscriptions.refresh` returns an error with code `subscription_refresh_failed`
-and a fixed safe message if a fetch fails or yields no usable servers. Cached
-servers, configuration revision and the active connection remain unchanged.
-Refreshing multiple subscriptions commits only when all requested refreshes
-succeed. Cancellation returns `cancelled` instead. URLs, HTTP bodies and raw
-exception text are not returned to the client.
+`subscriptions.refresh` returns `subscription_refresh_failed` for a transient fetch
+failure or an ordinary empty result. The saved settings and revision stay intact.
+When the subscription explicitly requires an unsupported proxy chain and yields no
+usable servers, refresh persists the removal of that feed's cache and matching
+copies, reconciles the selection, and returns `subscription_chain_unsupported`.
+A failed batch discards earlier successful refresh candidates. The active connection
+continues running. Cancellation returns `cancelled`. Error messages use fixed text.
 
 ## Offline application and server metadata
 

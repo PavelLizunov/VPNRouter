@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using VPNRouter.Core.Models;
@@ -124,18 +123,8 @@ public partial class AndroidApp
         var subs = AndroidStorage.GetSubscriptions();
         _subs = subs;
 
-        var existing = subs.FirstOrDefault(s =>
-            string.Equals(s.Url, url, StringComparison.OrdinalIgnoreCase));
-
-        SubscriptionEntry entry;
-        bool isNew;
-        if (existing is not null)
-        {
-            entry = existing;
-            entry.Enabled = true;
-            isNew = false;
-        }
-        else
+        var entry = subs.FirstOrDefault(s => string.Equals(s.Url, url, StringComparison.Ordinal));
+        if (entry is null)
         {
             var name = ExtractDisplayNameFromUrl(url, fallback: $"Sub {subs.Count + 1}");
             entry = new SubscriptionEntry
@@ -145,50 +134,42 @@ public partial class AndroidApp
                 Enabled = true,
             };
             subs.Add(entry);
-            AndroidStorage.SetSubscriptions(subs);
-            isNew = true;
+            if (!AndroidStorage.SetSubscriptions(subs))
+            {
+                _subs = AndroidStorage.GetSubscriptions();
+                ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
+                return;
+            }
+            RebuildSubsList();
         }
 
         ShowMenuFeedback(Localization.SmpQrSubscriptionFetching);
         int fetchedCount;
         try
         {
-            fetchedCount = await Task.Run(() =>
-                SubscriptionFetcher.RefreshEntryAsync(entry, logger: null, ct: CancellationToken.None));
+            fetchedCount = await RefreshStoredSubscriptionAsync(entry, selectOnSuccess: true);
         }
-        catch (Exception ex)
+        catch (UnsupportedSubscriptionChainException ex)
+        {
+            ShowMenuFeedback(ex.Message);
+            return;
+        }
+        catch (Exception)
         {
             global::Android.Util.Log.Warn("VpnRouter.QrScan",
-                $"ApplyScannedSubscriptionUrlAsync: refresh failed — {ex.GetType().Name}: {ex.Message}");
+                "Subscription refresh or save failed");
             ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
             return;
         }
 
-        AndroidStorage.SetSubscriptions(subs);
-        RebuildSubsList();
-
-        if (fetchedCount == 0 || entry.Servers == null || entry.Servers.Count == 0)
+        if (fetchedCount == 0)
         {
             ShowMenuFeedback(Localization.SmpQrSubscriptionEmpty);
             return;
         }
 
-        VlessServerEntry firstServer;
-        try
-        {
-            firstServer = entry.Servers[0];
-            AndroidStorage.SetSelectedServerName(firstServer.Name);
-            AndroidStorage.SetSubscriptionUrl(url);
-            AndroidStorage.SetVlessUri(null);
-        }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Warn("VpnRouter.QrScan",
-                $"ApplyScannedSubscriptionUrlAsync: persist failed — {ex.GetType().Name}: {ex.Message}");
-            ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
-            return;
-        }
-
+        _ccMode = "subscribe";
+        ApplyCcModeVisuals();
         ShowMenuFeedback(Localization.SmpQrConnecting);
         CloseAdvancedShell();
         UpdateConfigSummary();

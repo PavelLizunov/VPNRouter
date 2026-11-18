@@ -1004,6 +1004,32 @@ public partial class AndroidApp
         await RefreshOneAsync(entry);
     }
 
+    private Task<int> RefreshStoredSubscriptionAsync(SubscriptionEntry entry, bool selectOnSuccess = false)
+    {
+        return AndroidSubscriptionRefresh.RefreshAsync(entry, (refreshed, rejected) =>
+        {
+            AndroidStorage.SaveSubscriptionRefresh(refreshed, rejected, selectOnSuccess);
+            var current = _subs.Find(s => s.Id == refreshed.Id && s.Url == refreshed.Url);
+            if (current != null)
+            {
+                AndroidSubscriptionRefresh.CopyCache(refreshed, current);
+                if (selectOnSuccess && !rejected) current.Enabled = true;
+            }
+            if (rejected)
+            {
+                _cachedServers = AndroidStorage.GetServers();
+                UpdateServerListView();
+            }
+            if (_srvCurrentSub is { } open && open.Id == refreshed.Id && open.Url == refreshed.Url)
+            {
+                _srvCurrentSub = current ?? refreshed;
+                RebuildServerList();
+            }
+            // Single and bulk page refreshes redraw once in their completion handlers.
+            if (selectOnSuccess) RebuildSubsList();
+        });
+    }
+
     private async Task RefreshOneAsync(SubscriptionEntry sub)
     {
         if (sub is null || string.IsNullOrWhiteSpace(sub.Url)) return;
@@ -1013,25 +1039,26 @@ public partial class AndroidApp
         RebuildSubsList();
         try
         {
-            var count = await Task.Run(() =>
-                SubscriptionFetcher.RefreshEntryAsync(sub, logger: null, ct: CancellationToken.None));
-            sub.LastServerCount = count;
+            await RefreshStoredSubscriptionAsync(sub);
         }
-        catch (Exception ex)
+        catch (UnsupportedSubscriptionChainException ex)
         {
             ShowSubsRefreshAllStatus(string.Format(Localization.SubsRefreshFailed, ex.Message));
+        }
+        catch (Exception)
+        {
+            ShowSubsRefreshAllStatus(Localization.SmpQrSubscriptionFailed);
         }
         finally
         {
             _refreshingIds.Remove(sub.Id);
-            AndroidStorage.SetSubscriptions(_subs);
             RebuildSubsList();
         }
     }
 
     private async void OnSubsRefreshAllClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var enabled = _subs.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
+        var enabled = _subs.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url) && !_refreshingIds.Contains(s.Id)).ToList();
         if (enabled.Count == 0) return;
 
         foreach (var s in enabled) _refreshingIds.Add(s.Id);
@@ -1039,28 +1066,31 @@ public partial class AndroidApp
         ShowSubsRefreshAllStatus(Localization.SubsRefreshing);
 
         var totalServers = 0;
+        string? failure = null;
         try
         {
             await Task.WhenAll(enabled.Select(async s =>
             {
                 try
                 {
-                    var count = await Task.Run(() =>
-                        SubscriptionFetcher.RefreshEntryAsync(s, logger: null, ct: CancellationToken.None));
-                    s.LastServerCount = count;
-                    Interlocked.Add(ref totalServers, count);
+                    var count = await RefreshStoredSubscriptionAsync(s);
+                    totalServers += count;
                 }
-                catch
+                catch (UnsupportedSubscriptionChainException ex)
                 {
+                    failure = ex.Message;
+                }
+                catch (Exception)
+                {
+                    failure ??= Localization.SmpQrSubscriptionFailed;
                 }
             }));
         }
         finally
         {
             foreach (var s in enabled) _refreshingIds.Remove(s.Id);
-            AndroidStorage.SetSubscriptions(_subs);
             RebuildSubsList();
-            ShowSubsRefreshAllStatus(string.Format(Localization.SubsRefreshAllDone, totalServers));
+            ShowSubsRefreshAllStatus(failure ?? string.Format(Localization.SubsRefreshAllDone, totalServers));
         }
     }
 

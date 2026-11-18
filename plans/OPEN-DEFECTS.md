@@ -16,6 +16,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Android subscription cleanup logs the selected server name on clearing a stale preference. Preference repair also logs exception messages and raw recovery notices. Limit Logcat messages to event names and error types.
+- [ ] **P1** - The Windows ownership review found that migration and automatic strategy testing can stop existing helpers before checking for a conflicting driver. GUI shutdown can also lose a live handle when termination fails. Verify SCM, process lifetime and settings preservation at each entry point in #661.
+- [ ] **P1** - Standard automatic launcher repair can execute a script in user Temp during an elevated relaunch. Its DPI folder action and main-service controls also need trusted executable and service identity checks. See #661.
+- [ ] **P2** - First installation into the protected Windows directory omits legacy filter data. Business must offer an accessible path for pending service migration. Incomplete PE images can pass package validation, and Standard staging omits the historical install ZIP accepted by discovery. Cover the transition from the privacy parent in #661.
+
 - [ ] **P1** - Runtime PRs #698/#699 flag an archive entry reaching a file operation without an explicit canonical path containment check in ZapretUpdater.ExtractPackage. Check every destination against the protected staging root before creating directories or files. Confirm with CodeQL on each PR.
 
 - [x] **P1** - The first Business branch CodeQL analysis (2195530999) reports alert 13 in SlipstreamManager. Both editions persist DNS tunnel arguments and raw native output. Emit fixed transport events, export only the new event files and verify the final commit with CodeQL. RESOLVED in #696 and #697. Both post-merge CodeQL analyses (2195680746 and 2195678537) reported zero findings.

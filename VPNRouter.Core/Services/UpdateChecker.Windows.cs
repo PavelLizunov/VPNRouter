@@ -15,9 +15,11 @@ public partial class UpdateChecker
     internal static bool IsOfficialWindowsRelease(Uri uri, string version, bool checksum = false)
     {
         var prefix = $"https://github.com/PavelLizunov/VPNRouter/releases/download/v{version}/VPNRouter-";
-        var suffix = $"v{version}-win.zip" + (checksum ? ".sha256" : "");
-        return uri.AbsoluteUri.Equals(prefix + suffix, StringComparison.OrdinalIgnoreCase) ||
-               uri.AbsoluteUri.Equals(prefix + "update-" + suffix, StringComparison.OrdinalIgnoreCase);
+        var extension = checksum ? ".zip.sha256" : ".zip";
+        var current = $"v{version}-win{extension}";
+        return uri.AbsoluteUri.Equals(prefix + current, StringComparison.OrdinalIgnoreCase) ||
+               uri.AbsoluteUri.Equals(prefix + "update-" + current, StringComparison.OrdinalIgnoreCase) ||
+               uri.AbsoluteUri.Equals(prefix + $"install-v{version}{extension}", StringComparison.OrdinalIgnoreCase);
     }
 
     private void PrepareStagingDirectory()

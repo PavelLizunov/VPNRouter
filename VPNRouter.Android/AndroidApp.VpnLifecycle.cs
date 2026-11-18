@@ -21,31 +21,27 @@ public partial class AndroidApp
         }
         else
         {
-            var previousSubscriptionUrl = AndroidStorage.GetSubscriptionUrl();
-
-            if (!string.IsNullOrWhiteSpace(_serverInput?.Text))
+            var input = (_serverInput?.Text ?? string.Empty).Trim();
+            var savedUrl = AndroidStorage.GetSubscriptionUrl();
+            var typedSubscription = input.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                || input.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+            var subscriptionUrl = typedSubscription ? input : input.Length == 0 ? savedUrl : null;
+            if (!string.IsNullOrEmpty(subscriptionUrl))
             {
-                OnSaveClicked(sender, e);
-                if (_serverInputError is not null && _serverInputError.IsVisible)
+                var hasCurrentCache = savedUrl == subscriptionUrl && AndroidStorage.GetSubscriptions().Exists(s =>
+                    s.Enabled && s.Url == subscriptionUrl && s.Servers is { Count: > 0 });
+                if (!hasCurrentCache)
                 {
+                    if (_serverInputError != null) _serverInputError.IsVisible = false;
+                    await ApplyScannedSubscriptionUrlAsync(subscriptionUrl);
                     return;
                 }
             }
 
-            var subscriptionUrl = AndroidStorage.GetSubscriptionUrl();
-            if (!string.IsNullOrEmpty(subscriptionUrl))
+            if (input.Length > 0)
             {
-                var cachedSubscription = AndroidStorage.GetSubscriptions().Find(s =>
-                    s.Enabled &&
-                    string.Equals(s.Url, subscriptionUrl, StringComparison.OrdinalIgnoreCase) &&
-                    s.Servers is { Count: > 0 });
-
-                if (cachedSubscription is null ||
-                    !string.Equals(previousSubscriptionUrl, subscriptionUrl, StringComparison.OrdinalIgnoreCase))
-                {
-                    await ApplyScannedSubscriptionUrlAsync(subscriptionUrl);
-                    return;
-                }
+                OnSaveClicked(sender, e);
+                if (_serverInputError is { IsVisible: true }) return;
             }
 
             if (_statusCard is not null)
