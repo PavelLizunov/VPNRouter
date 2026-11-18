@@ -15,6 +15,8 @@ public class VPNRouterService : BackgroundService
     private ZapretManager? _zapret;
     private TgProxyManager? _tgProxy;
 
+    private readonly SemaphoreSlim _reloadGate = new(1, 1);
+    private readonly CancellationTokenSource _reloadLifetime = new();
     private AppSettings? _currentSettings;
 
     private readonly TaskCompletionSource _startupComplete = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -36,7 +38,10 @@ public class VPNRouterService : BackgroundService
 
         try
         {
-            _currentSettings = _store.Load();
+            var rejected = ReadPreviouslyRejectedSettings();
+            _currentSettings = rejected == null
+                ? _store.Load()
+                : SettingsLoader.ParseLiveCandidate(rejected) ?? new AppSettings().EnsureSane();
             var settings = _currentSettings;
             _logger.LogInformation("[Service] Config loaded");
 
@@ -47,7 +52,7 @@ public class VPNRouterService : BackgroundService
                 WriteEventLog(recoveryStatus, EventLogEntryType.Warning);
             }
 
-            _store.StartWatching(onReload: OnConfigChanged);
+            _store.WatchRevisions((candidate, revision) => _ = ApplyWatchedSettingsAsync(candidate, revision));
 
             TryMigrateDependencies();
 
@@ -55,7 +60,7 @@ public class VPNRouterService : BackgroundService
 
             if (settings.App.AutostartVpn)
             {
-                await AutostartVpnAsync(settings, stoppingToken);
+                await AutostartVpnAsync(settings, stoppingToken, retryRejected: rejected != null);
             }
             else
             {
@@ -89,6 +94,14 @@ public class VPNRouterService : BackgroundService
         {
             _startupComplete.TrySetResult();
         }
+    }
+
+    private static string? ReadPreviouslyRejectedSettings()
+    {
+        if (!Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService()) return null;
+        var receipt = ServiceSettingsReceipt.Read(ServiceInstaller.ServiceName);
+        return ServiceSettingsReceipt.ReadRejectedCandidate(receipt, () =>
+            File.Exists(VPNRouter.Core.AppPaths.ConfigYamlPath) ? File.ReadAllText(VPNRouter.Core.AppPaths.ConfigYamlPath) : "");
     }
 
     private void TryMigrateDependencies()
@@ -140,10 +153,11 @@ public class VPNRouterService : BackgroundService
             _logger.LogWarning("[Service] Network still unavailable after timeout, proceeding anyway");
     }
 
-    private async Task AutostartVpnAsync(AppSettings settings, CancellationToken ct)
+    private async Task AutostartVpnAsync(AppSettings settings, CancellationToken ct, bool retryRejected)
     {
         _engine = VPNRouter.Core.Platform.PlatformServices
             .CreateVpnEngine(Serilog.Log.Logger);
+        _engine.RequireCompleteRuleSetsOnStart = retryRejected;
 
         _engine.StatusChanged += msg =>
             _logger.LogInformation("[Service] {Status}", msg);
@@ -331,34 +345,44 @@ public class VPNRouterService : BackgroundService
         }
     }
 
-    private void OnConfigChanged(AppSettings newSettings)
+    private async Task ApplyWatchedSettingsAsync(AppSettings? newSettings, string revision)
     {
+        var ct = _reloadLifetime.Token;
         try
         {
-            _currentSettings = newSettings;
-            _logger.LogInformation("[Service] config.yaml changed → settings reconciled");
-
-            if (_engine != null && _engine.IsRunning)
+            await _startupComplete.Task.WaitAsync(ct);
+            await _reloadGate.WaitAsync(ct);
+            try
             {
-                _ = Task.Run(async () =>
+                var engine = _engine;
+                if (engine?.HasActiveTunnel != true) return;
+                // A previous timer may have delivered an older snapshot after this file changed.
+                var latest = File.ReadAllText(VPNRouter.Core.AppPaths.ConfigYamlPath);
+                if (SettingsLoader.GetRevision(latest) != revision) return;
+
+                var applied = false;
+                try
                 {
-                    try
+                    applied = newSettings != null && await engine.ApplyAsync(newSettings, ct);
+                }
+                finally
+                {
+                    if (!ct.IsCancellationRequested && engine == _engine)
                     {
-                        var ok = await _engine.ApplyAsync(newSettings);
-                        _logger.LogInformation(
-                            "[Service] Hot-reload {Result} after config change",
-                            ok ? "succeeded" : "failed (kept previous config)");
+                        applied = applied && engine.HasActiveTunnel;
+                        if (applied) _currentSettings = newSettings;
+                        if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+                            ServiceSettingsReceipt.Publish(ServiceInstaller.ServiceName, revision, applied);
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "[Service] ApplyAsync raised");
-                    }
-                });
+                }
+                _logger.LogInformation("[Service] Live settings apply {Result}", applied ? "succeeded" : "rejected");
             }
+            finally { _reloadGate.Release(); }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[Service] OnConfigChanged error (non-fatal)");
+            _logger.LogWarning("[Service] Live settings apply failed ({ErrorType})", ex.GetType().Name);
         }
     }
 
@@ -367,6 +391,7 @@ public class VPNRouterService : BackgroundService
         _logger.LogInformation("[Service] Stopping...");
         WriteEventLog("VPN Router service stopping", EventLogEntryType.Information);
 
+        _reloadLifetime.Cancel();
         try { _store.StopWatching(); } catch { }
 
         try

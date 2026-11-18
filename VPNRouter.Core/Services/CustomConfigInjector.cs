@@ -19,7 +19,8 @@ public static partial class CustomConfigInjector
         Inject(rawJson, processNames, settings, onMissingRuleSet: null);
 
     internal static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings,
-        Action<string>? onMissingRuleSet, Func<string, CancellationToken, Task<bool>>? checkGeoContents = null)
+        Action<string>? onMissingRuleSet, Func<string, CancellationToken, Task<bool>>? checkGeoContents = null,
+        Func<string, string, string?>? resolveRuleSet = null)
     {
         var config = JsonNode.Parse(rawJson) as JsonObject
             ?? throw new JsonException("Custom sing-box config root is not an object");
@@ -44,6 +45,7 @@ public static partial class CustomConfigInjector
 
         RemoveLegacyGeoDns(config);
 
+        checkGeoContents ??= RuleSetFile.ForRuntime(settings.SingBox);
         var hasGeoBypass = GeoDataDownloader.UseGeoBypass(settings.App.BypassRussianTraffic, onMissingRuleSet, checkGeoContents);
         if (hasGeoBypass)
             _ = EnsureGeoProxyDns(config, proxyTag);
@@ -79,9 +81,57 @@ public static partial class CustomConfigInjector
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
         EnsureUrltest(config);
+        if (settings.App.BlockAds)
+        {
+            resolveRuleSet ??= (url, name) => RuleSetCacheManager.EnsureLocal(url, name, checkGeoContents);
+            var path = ConfigGenerator.ResolveAdBlock(resolveRuleSet, onMissingRuleSet);
+            if (path != null) InjectAdBlock(config, path);
+        }
         EnsureTunSelfRouteGuard(config);
 
         return config.ToJsonString(InjectorOutputOptions);
+    }
+
+    private static void InjectAdBlock(JsonObject config, string path)
+    {
+        var route = (config["route"] ??= new JsonObject()).AsObject();
+        var dns = (config["dns"] ??= new JsonObject()).AsObject();
+        var sets = (route["rule_set"] ??= new JsonArray()).AsArray();
+        var declared = sets.OfType<JsonObject>().ToLookup(set => StjNodeHelpers.AsString(set["tag"]));
+        const string baseTag = ConfigGenerator.AdBlockRuleSetTag;
+        var tag = baseTag;
+        var local = new JsonObject { ["type"] = "local", ["format"] = "binary", ["path"] = path, ["tag"] = tag };
+        // A native import can already use the preferred tag for an unrelated source.
+        for (int suffix = 2; declared.Contains(tag) && !declared[tag].Any(set => JsonNode.DeepEquals(set, local)); suffix++)
+        {
+            tag = $"{baseTag}-{suffix}";
+            local["tag"] = tag;
+        }
+        if (!declared.Contains(tag)) sets.Add(local);
+
+        var routeRules = (route["rules"] ??= new JsonArray()).AsArray();
+        var dnsRules = (dns["rules"] ??= new JsonArray()).AsArray();
+        var reject = new JsonObject { ["rule_set"] = new JsonArray(JsonValue.Create(tag)), ["action"] = "reject" };
+        foreach (var rules in new[] { routeRules, dnsRules })
+        {
+            for (int i = rules.Count - 1; i >= 0; i--)
+                if (JsonNode.DeepEquals(rules[i], reject)) rules.RemoveAt(i);
+        }
+
+        // A native import can sniff after a conditional route. Check newly discovered domains
+        // before the next forwarding rule, including the implicit route.final.
+        bool needsCheck = true;
+        for (int i = 0; i < routeRules.Count; i++)
+        {
+            var action = StjNodeHelpers.AsString(routeRules[i]?["action"]);
+            if (action == "sniff") needsCheck = true;
+            if (!needsCheck || action is "sniff" or "hijack-dns" or "reject" or "route-options") continue;
+            routeRules.Insert(i, reject.DeepClone());
+            i++;
+            needsCheck = false;
+        }
+        if (needsCheck) routeRules.Add(reject.DeepClone());
+        dnsRules.Insert(0, reject);
     }
 
     private static void ThrowIfPlaceholderProxy(JsonObject config)

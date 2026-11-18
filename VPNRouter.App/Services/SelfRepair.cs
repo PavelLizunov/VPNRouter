@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Serilog;
 
 namespace VPNRouter.App.Services;
@@ -9,8 +10,6 @@ public static class SelfRepair
 {
     private const string MarkerFileName = "self-repair-marker";
     private const int LoopWindowMinutes = 10;
-
-    private const string InstallScriptUrl = "https://vpn.ninitux.com/install.ps1";
 
     public sealed record Decision(bool ShouldRun, string Reason);
 
@@ -56,68 +55,40 @@ public static class SelfRepair
 
         var compiledVersion = VPNRouter.Core.AppVersion.Version;
         var isPrerelease = compiledVersion.Contains("-r", StringComparison.Ordinal);
-        var prereleaseFlag = isPrerelease ? " -Prerelease" : string.Empty;
-        logger?.Information("[SelfRepair] running install.ps1{Flag} (current build = {Version})",
-            prereleaseFlag, compiledVersion);
-
-        var bootstrapScript =
-            "$ErrorActionPreference = 'Stop'\r\n" +
-            "$ProgressPreference = 'SilentlyContinue'\r\n" +
-            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\r\n" +
-            "$tmp = Join-Path $env:TEMP 'vpnr-repair.ps1'\r\n" +
-            $"Invoke-WebRequest -Uri '{InstallScriptUrl}' -OutFile $tmp -UseBasicParsing\r\n" +
-            $"& $tmp{prereleaseFlag}\r\n";
-
-        var bootstrapPath = Path.Combine(
-            Path.GetTempPath(),
-            $"vpnr-self-repair-{DateTime.UtcNow:yyyyMMddHHmmss}.ps1");
-        try
-        {
-            File.WriteAllText(bootstrapPath, bootstrapScript);
-        }
-        catch (Exception ex)
-        {
-            logger?.Error(ex, "[SelfRepair] failed to write bootstrap helper to {Path}", bootstrapPath);
-            throw;
-        }
-
-        var psi = BuildProcessStartInfo(bootstrapPath);
-
-        try
-        {
-            Process.Start(psi);
-            logger?.Information("[SelfRepair] launched install.ps1 web one-liner — current process will exit so installer can replace files");
-        }
-        catch (Exception ex)
-        {
-            logger?.Error(ex, "[SelfRepair] failed to spawn repair helper — install must be repaired manually");
-            throw;
-        }
+        using var helper = Process.Start(BuildProcessStartInfo(AppContext.BaseDirectory, isPrerelease, Environment.SystemDirectory))
+            ?? throw new IOException("Cannot start the Windows repair helper.");
+        logger?.Information("[SelfRepair] Started verified-release repair for {Version}", compiledVersion);
     }
 
-    internal static ProcessStartInfo BuildProcessStartInfo(string bootstrapPath)
+    internal static ProcessStartInfo BuildProcessStartInfo(string applicationDir, bool prerelease, string system)
     {
-        if (string.IsNullOrWhiteSpace(bootstrapPath))
-            throw new ArgumentException("Bootstrap path cannot be null or empty", nameof(bootstrapPath));
+        ArgumentException.ThrowIfNullOrWhiteSpace(applicationDir);
+        if (!Path.IsPathFullyQualified(applicationDir) || applicationDir.Any(c => c == '"' || char.IsControl(c)) || !Path.IsPathFullyQualified(system))
+            throw new ArgumentException("Invalid Windows repair path.");
 
-        // Reject genuinely invalid path characters and delimiters like newlines and quotes
-        if (bootstrapPath.IndexOfAny(new[] { '\0', '\r', '\n', '"' }) >= 0)
-            throw new ArgumentException("Bootstrap path contains disallowed characters", nameof(bootstrapPath));
-
-        var psi = new ProcessStartInfo
+        using var resource = typeof(SelfRepair).Assembly.GetManifestResourceStream("VPNRouter.Windows.RepairBootstrap")
+            ?? throw new IOException("Missing Windows repair helper.");
+        using var reader = new StreamReader(resource);
+        var script = reader.ReadToEnd()
+            .Replace("__APPLICATION_DIR__", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(applicationDir)))
+            .Replace("__PRERELEASE__", prerelease ? "$true" : "$false");
+        var shellDir = Path.Combine(system, "WindowsPowerShell", "v1.0");
+        var psi = new ProcessStartInfo(Path.Combine(shellDir, "powershell.exe"))
         {
-            FileName = "powershell.exe",
+            WorkingDirectory = system,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
         };
-        psi.ArgumentList.Add("-NoProfile");
-        psi.ArgumentList.Add("-WindowStyle");
-        psi.ArgumentList.Add("Hidden");
-        psi.ArgumentList.Add("-ExecutionPolicy");
-        psi.ArgumentList.Add("Bypass");
-        psi.ArgumentList.Add("-File");
-        psi.ArgumentList.Add(bootstrapPath);
+        psi.Environment.Clear();
+        psi.Environment["SystemRoot"] = psi.Environment["WINDIR"] = Directory.GetParent(system)!.FullName;
+        psi.Environment["PATH"] = system + ";" + shellDir;
+        psi.Environment["PSModulePath"] = Path.Combine(shellDir, "Modules");
+        psi.Environment["ComSpec"] = Path.Combine(system, "cmd.exe");
+        psi.Environment["PATHEXT"] = ".COM;.EXE;.BAT;.CMD";
+        psi.Environment["SystemDrive"] = Path.GetPathRoot(system)!.TrimEnd(Path.DirectorySeparatorChar);
+        foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand",
+                     Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script)) })
+            psi.ArgumentList.Add(arg);
         return psi;
     }
 }

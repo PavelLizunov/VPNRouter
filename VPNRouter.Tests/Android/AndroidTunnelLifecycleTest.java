@@ -35,6 +35,9 @@ public final class AndroidTunnelLifecycleTest {
                 "BuildConfigJsonFromCustom(rawJson, singboxLogPath, OnMissingRuleSet)",
                 "DispatchTunnelStart(configJson, coldStartOnly);", "BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet)",
                 "DispatchTunnelStart(configJson, coldStartOnly, entry);", ".PutExtra(ExtraColdStartOnly, coldStartOnly)");
+        String imported = builder.substring(builder.indexOf("internal static string BuildConfigJsonFromCustom("));
+        requireOrdered(imported, "settings.App.BlockAds = AndroidStorage.GetBlockAds();",
+                "CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet)");
         require(builder.contains("resolveRuleSet: null, onMissingRuleSet: onMissingRuleSet)")
                 && builder.contains("CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet)"),
                 "Android builder did not propagate rule-set availability");

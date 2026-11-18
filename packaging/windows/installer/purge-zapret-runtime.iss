@@ -19,7 +19,7 @@ begin
     ExpandConstant('{app}\app'), SW_HIDE, ewWaitUntilTerminated, Code) or ((Code <> 0) and (Code <> 2)) then
     RaiseException('Could not migrate the Zapret service. Run VPNRouter.App.exe --migrate-zapret as administrator before restarting.');
   if Code = 2 then
-    Log('Zapret choice retained. Download Zapret in the DPI Bypass tab to finish migration.');
+    Log('Zapret choice retained. Run VPNRouter.App.exe --migrate-zapret as administrator to retry verified package acquisition and restore the service.');
 end;
 
 procedure PurgeZapretData(const Edition, Operation: string);

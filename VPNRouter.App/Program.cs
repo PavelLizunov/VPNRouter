@@ -60,7 +60,7 @@ sealed class Program
         }
         if (args is ["--migrate-zapret"] or ["--migrate-zapret", _])
         {
-            var result = ZapretLegacyServices.RetryAsync(Log.Logger, selection: args.Length == 2 ? args[1] : null).GetAwaiter().GetResult();
+            var result = ZapretLegacyServices.RepairAsync(Log.Logger, args.Length == 2 ? args[1] : null).GetAwaiter().GetResult();
             if (result.Message != null) Console.Error.WriteLine(result.Message);
             Environment.ExitCode = result.SafeForReboot ? (result.Message == null ? 0 : 2) : 1;
             return;

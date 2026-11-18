@@ -28,7 +28,7 @@ public sealed class ZapretServiceMigrationTests
     public void MissingPackageParksServiceAndVerifiedSelectionRestoresOnlyItsNativeArguments(int mode, bool active)
     {
         var old = Old("general (ALT3)", (uint)mode, active);
-        Assert.Contains("Download Zapret", Migrate().Message);
+        Assert.True(Migrate().NeedsPackage);
         Assert.Equal(4u, old.Config.Start);
         Assert.False(old.IsActive);
         Assert.DoesNotContain("previous", old.Config.Image);
@@ -86,11 +86,104 @@ public sealed class ZapretServiceMigrationTests
         Assert.Contains("conflict", Migrate().Message);
         Assert.True(other.IsActive);
         Assert.Equal(0, other.Changes);
-        Assert.Equal(4u, old.Config.Start);
+        Assert.Equal(2u, old.Config.Start);
+        Assert.True(old.IsActive);
+        Assert.Equal(0, old.Changes);
+        Assert.False(old.Values.ContainsKey("VPNRouterMigrationV1"));
         _services["zapret"] = new FakeRegistration(new("foreign.exe", 16, 2)) { IsActive = true };
         Migrate();
         Assert.True(_services["zapret"].IsActive);
         Assert.Equal(0, _services["zapret"].Changes);
+    }
+
+    [Fact]
+    public async Task ExplicitRepairDownloadsOnceOutsideMigrationAndRestoresTheSavedSelection()
+    {
+        var old = Old("general", 3, true);
+        int downloads = 0;
+        Task Acquire()
+        {
+            downloads++;
+            Assert.Equal(4u, old.Config.Start);
+            _catalogue = [new("general", () => ["--wf-tcp=443"])];
+            return Task.CompletedTask;
+        }
+        var result = await ZapretLegacyServices.RepairAsync(() => Task.FromResult(Migrate()), Acquire, Serilog.Log.Logger);
+        Assert.Null(result.Message);
+        Assert.True(old.IsActive);
+        Assert.Equal(3u, old.Config.Start);
+        Assert.Contains("--wf-tcp=443", old.Config.Image);
+        Assert.DoesNotContain("previous-option", old.Config.Image);
+        await ZapretLegacyServices.RepairAsync(() => Task.FromResult(Migrate()), Acquire, Serilog.Log.Logger);
+        Assert.Equal(1, downloads);
+    }
+
+    [Fact]
+    public async Task FailedAcquisitionRetainsChoiceAndTheNextExplicitRepairRestoresIt()
+    {
+        var service = Old("general (ALT3)", 3, true);
+        var result = await ZapretLegacyServices.RepairAsync(() => Task.FromResult(Migrate()),
+            () => Task.FromException(new IOException("offline")), Serilog.Log.Logger);
+        Assert.True(result.SafeForReboot);
+        Assert.True(result.NeedsPackage);
+        Assert.Contains("--migrate-zapret", result.Message);
+        Assert.Equal(4u, service.Config.Start);
+        Assert.False(service.IsActive);
+        var choice = Assert.IsType<string[]>(service.Values["VPNRouterMigrationV1"]);
+        Assert.Equal(new[] { "3", "1", "general (ALT3)" }, choice[..3]);
+        Assert.DoesNotContain("--previous-option", choice);
+
+        result = await ZapretLegacyServices.RepairAsync(() => Task.FromResult(Migrate()), () =>
+        {
+            _catalogue = [new("general (ALT3)", () => ["--wf-tcp=80"])];
+            return Task.CompletedTask;
+        }, Serilog.Log.Logger);
+        Assert.Null(result.Message);
+        Assert.Equal(3u, service.Config.Start);
+        Assert.True(service.IsActive);
+        Assert.Contains("--wf-tcp=80", service.Config.Image);
+        Assert.DoesNotContain("previous-option", service.Config.Image);
+        Assert.False(service.Values.ContainsKey("VPNRouterMigrationV1"));
+    }
+
+    [Fact]
+    public async Task LaterForeignDriverBlocksEveryWriteAndAcquisitionIncludingPreviouslySavedChoice()
+    {
+        var service = Old("general");
+        string[] choice = ["2", "1", "general", "saved fingerprint"];
+        service.Values["VPNRouterMigrationV1"] = choice;
+        var driver = new FakeRegistration(new(Path.Combine(_paths.LegacyBin, "WinDivert64.sys"), 1, 2)) { IsActive = true };
+        _services["WinDivert"] = driver;
+        var foreign = new FakeRegistration(new("other-edition.sys", 1, 3)) { IsActive = true };
+        _services["WinDivert15"] = foreign;
+        Task<ZapretLegacyServices.Result> Attempt() => Task.FromResult(ZapretLegacyServices.Migrate(_paths, (name, writable) =>
+        {
+            Assert.False(writable);
+            return Open(name, writable);
+        }, () => throw new InvalidOperationException("package lookup during conflict")));
+        var result = await ZapretLegacyServices.RepairAsync(Attempt,
+            () => throw new InvalidOperationException("acquisition during conflict"), Serilog.Log.Logger);
+        Assert.False(result.SafeForReboot);
+        Assert.False(result.NeedsPackage);
+        Assert.Same(choice, service.Values["VPNRouterMigrationV1"]);
+        foreach (var registration in new[] { service, driver, foreign })
+        {
+            Assert.True(registration.IsActive);
+            Assert.Equal(0, registration.Changes);
+        }
+    }
+
+    [Fact]
+    public void ConflictingProcessBlocksMigrationBeforeAnyServiceMutation()
+    {
+        var old = Old("general");
+        var result = ZapretLegacyServices.Migrate(_paths, Open, () => _catalogue, processConflict: _ => true);
+        Assert.False(result.SafeForReboot);
+        Assert.False(result.NeedsPackage);
+        Assert.Equal(0, old.Changes);
+        Assert.Equal(2u, old.Config.Start);
+        Assert.True(old.IsActive);
+        Assert.False(old.Values.ContainsKey("VPNRouterMigrationV1"));
     }
 
     [Fact]

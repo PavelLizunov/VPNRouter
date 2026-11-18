@@ -57,10 +57,14 @@ public static class RuleSetFile
         return inflated > 0 && checksum == expected;
     }
 
+    internal static Func<string, CancellationToken, Task<bool>> ForRuntime(Models.SingBoxSettings settings) =>
+        (path, ct) => CheckContentsAsync(path, ct, new ProcessRunner(), settings);
+
     internal static Task<bool> CheckContentsAsync(string path, CancellationToken ct) =>
         CheckContentsAsync(path, ct, new ProcessRunner());
 
-    internal static async Task<bool> CheckContentsAsync(string path, CancellationToken ct, IProcessRunner runner)
+    internal static async Task<bool> CheckContentsAsync(string path, CancellationToken ct, IProcessRunner runner,
+        Models.SingBoxSettings? settings = null)
     {
         // Constructing this config loads the local rule-set with the runtime parser.
         // There are no inbounds, remote rule-sets, or running services in a config check.
@@ -92,9 +96,10 @@ public static class RuleSetFile
 #else
             var policy = SingBoxRuntimePolicy.Current;
             policy?.Authorize(SingBoxRuntimeOperation.Verify);
-            var executable = policy?.SelectedExecutablePath ?? Path.Combine(AppContext.BaseDirectory,
-                OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
-            var request = new ProcessRequest(executable, ["check", "-c", "stdin"], StdinInput: config,
+            var executable = policy?.SelectedExecutablePath ?? AppPaths.SingBoxDeploymentSource(
+                AppPaths.BundledSingBoxExePath, AppPaths.DeployedSingBoxExePath(settings));
+            // Pin relative configured deployments to the file startup checks, without searching PATH.
+            var request = new ProcessRequest(Path.GetFullPath(executable), ["check", "-c", "stdin"], StdinInput: config,
                 Timeout: RuleSetCacheManager.FetchTimeout);
             var result = await runner.RunAsync(request, ct).ConfigureAwait(false);
             return result.ExitCode == 0 && !result.TimedOut;

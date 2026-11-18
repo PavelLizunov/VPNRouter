@@ -50,6 +50,7 @@ public partial class VpnEngine : IDisposable
     public string ActiveProfileName => _activeProfile?.Name ?? string.Empty;
     public int? SingBoxPid => _singBox?.Pid;
     // Unix readiness uses Clash, which can be unavailable while the owned process is alive.
+    internal bool RequireCompleteRuleSetsOnStart { get; set; }
     public bool HasActiveTunnel => _singBox?.HasActiveTunnel ?? false;
     public List<string> MonitoredProcesses => _scanResult?.ProcessNames ?? new();
 
@@ -246,7 +247,7 @@ public partial class VpnEngine : IDisposable
             await PrepareRuntimeAsync().ConfigureAwait(false);
 
         var result = await pipeline.ExecuteAsync(
-            new StartupContext(settings, mode, skipVpnConflictCheck), ct,
+            new StartupContext(settings, mode, skipVpnConflictCheck) { RequireCompleteRuleSets = RequireCompleteRuleSetsOnStart }, ct,
             retireAfterValidation: mode == StartupMode.AutoFailover ? PrepareRuntimeAsync : null);
 
         if (result.EarlyReturn)

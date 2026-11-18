@@ -819,7 +819,7 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
-    /// <returns>True when the engine applied the settings or they were submitted to the running service.</returns>
+    /// <returns>True when the active tunnel manager confirmed the settings.</returns>
     private async Task<bool> ApplyPendingChangesInternalAsync(bool forceRestart)
     {
         if (!CanApplyAppChanges) return false;
@@ -827,43 +827,49 @@ public partial class MainWindowViewModel
         var appliedRevision = Volatile.Read(ref _routingSettingsRevision);
         try
         {
-            SaveSettings();
-            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-
             if (IsServiceManagedVpn)
             {
-                if (ServiceVm.IsAvailable)
+#if PLATFORM_WINDOWS
+                var service = await Task.Run(Services.WindowsServiceHelper.GetState);
+                var serviceName = Services.WindowsServiceHelper.ServiceName;
+                var previous = ServiceSettingsReceipt.Read(serviceName)?.FirstOrDefault();
+                SaveSettings();
+                var revision = SettingsLoader.GetSubmittedRevision(_settings);
+                if (service.Running && service.Pid is int managerPid)
                 {
-                    // The service watches config.yaml and validates before replacing its tunnel.
-                    // Let that apply finish in place when the new policy depends on local sets.
-                    if (!string.Equals(_settings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase))
+                    var elapsed = Stopwatch.StartNew();
+                    while (elapsed.Elapsed < TimeSpan.FromSeconds(60))
                     {
-                        var required = _settings.App.CustomRules.Where(ConfigGenerator.RequiresLocalRuleSets).ToList();
-                        if (required.Count > 0)
+                        await Task.Delay(250);
+                        if (_disposed) return false;
+                        var result = ServiceSettingsReceipt.Match(
+                            ServiceSettingsReceipt.Read(serviceName), previous, managerPid, revision);
+                        if (result == null) continue;
+                        var current = await Task.Run(Services.WindowsServiceHelper.GetState);
+                        if (!current.Running || current.Pid != managerPid) break;
+                        if (SettingsLoader.GetRevision(File.ReadAllText(AppPaths.ConfigYamlPath)) != revision) break;
+                        if (!result.Value)
                         {
-                            await Task.Run(() => ConfigGenerator.ApplyCustomRules(new SingBoxConfig(), required));
-                            ClearPendingIfRevisionUnchanged(appliedRevision);
-                            StatusText = IsRussian
-                                ? "Настройки маршрутизации переданы работающей службе."
-                                : "Routing settings submitted to the running service.";
-                            return true;
+                            StatusText = Strings.ApplyFailed;
+                            return false;
                         }
+                        if (Volatile.Read(ref _routingSettingsRevision) != appliedRevision) return false;
+                        ClearPendingIfRevisionUnchanged(appliedRevision);
+                        RestoreConnectedStatus();
+                        return true;
                     }
-                    StatusText = IsRussian
-                        ? "Перезапускаю службу с новыми настройками..."
-                        : "Restarting service with new settings...";
-                    await ServiceVm.RestartServiceCommand.ExecuteAsync(null);
-                    ClearPendingIfRevisionUnchanged(appliedRevision);
-                    return true;
                 }
-
-                ClearPendingIfRevisionUnchanged(appliedRevision);
+#else
+                SaveSettings();
+#endif
                 StatusText = IsRussian
-                    ? "Настройки сохранены. Остановите и запустите VPN, чтобы они применились (служба перечитает config.yaml при старте)."
-                    : "Settings saved. Stop and Start VPN to apply — the service re-reads config.yaml on start.";
+                    ? "Настройки сохранены. Служба не подтвердила их применение."
+                    : "Settings saved. The service has not confirmed the change.";
                 return false;
             }
 
+            SaveSettings();
+            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
             var ok = await Task.Run(() => _engine.ApplyAsync(_settings, CancellationToken.None, forceRestart));
             if (ok)
             {
@@ -878,8 +884,8 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] ApplyPendingChanges failed");
-            StatusText = $"{(IsRussian ? "Не удалось применить" : "Apply failed")}: {ex.Message}";
+            _logger.Error("[VM] ApplyPendingChanges failed ({ErrorType})", ex.GetType().Name);
+            StatusText = Strings.ApplyFailed;
             return false;
         }
         finally { IsApplying = false; }

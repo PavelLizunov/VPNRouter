@@ -75,6 +75,9 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [InlineData("verified-free-invalid-native")]
     [InlineData("damaged-built-in")]
     [InlineData("missing-custom-config")]
+    [InlineData("imported-unreadable-srs")]
+    [InlineData("failover-imported-missing-srs")]
+    [InlineData("imported-valid-srs")]
     public async Task ApplyAsync_FailedGenerationOrReload_PreservesActiveTunnel(string scenario)
     {
         var priorDataDir = GetAppPathsDataDir();
@@ -135,7 +138,9 @@ public sealed class VpnEngineApplyStructuralChangeTests
         using var sessionCts = new CancellationTokenSource();
         SetField(engine, "_sessionCts", sessionCts);
 
-        bool invalidCandidate = scenario != "unconfirmed-reload";
+        bool importedSet = scenario is "imported-unreadable-srs" or "failover-imported-missing-srs" or "imported-valid-srs";
+        bool failover = scenario.StartsWith("failover-", StringComparison.Ordinal);
+        bool invalidCandidate = scenario is not ("unconfirmed-reload" or "imported-valid-srs");
         var fakeHttp = new FakeHttpClient().Setup("/configs", "{}", statusCode: invalidCandidate ? 503 : 200);
         var runner = new FakeProcessRunner();
         var singBox = new SingBoxManager(
@@ -225,13 +230,43 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 settings.App.ConfigMode = "custom";
                 settings.App.CustomConfig = Path.Combine(tempDir, "fixture-private-selection.json");
             }
+            var srs = Path.Combine(tempDir, "imported.srs");
+            if (importedSet)
+            {
+                settings.App.ConfigMode = "custom";
+                settings.App.CustomConfig = Path.Combine(tempDir, "fixture-import.json");
+                var native = new
+                {
+                    outbounds = new object[]
+                    {
+                        new { type = "socks", tag = "proxy", server = "10.0.0.2", server_port = 1080 },
+                        new { type = "direct", tag = "direct" }
+                    },
+                    route = new { rule_set = new[] { new { type = "local", format = "binary", tag = "imported", path = srs } } }
+                };
+                File.WriteAllText(settings.App.CustomConfig, System.Text.Json.JsonSerializer.Serialize(native));
+                if (!failover)
+                    File.WriteAllBytes(srs, invalidCandidate ? RuleSetSamples.IntactEnvelope() : RuleSetSamples.KeywordRule());
+                runner.OnRun(r => r.Arguments.SequenceEqual(["check", "-c", "stdin"]), async r =>
+                {
+                    var runtime = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
+                    if (runtime != null)
+                        return await new ProcessRunner().RunAsync(r with { ExecutablePath = Path.GetFullPath(runtime) },
+                            TestContext.Current.CancellationToken);
+                    var json = System.Text.Json.Nodes.JsonNode.Parse(r.StdinInput!)!;
+                    var selected = json["route"]!["rule_set"]![0]!["path"]!.GetValue<string>();
+                    bool readable = File.Exists(selected) && await RuleSetSamples.CheckFixtureContentsAsync(
+                        selected, TestContext.Current.CancellationToken);
+                    return new ProcessResult(readable ? 0 : 1, "", "", TimeSpan.Zero, false);
+                });
+            }
             if (invalidCandidate)
             {
                 expectedFailure = "Apply failed: check the selected configuration and required rule sets, then retry.";
             }
 
             bool result;
-            if (scenario == "failover-missing-ad-filter")
+            if (failover)
             {
                 var activeProfile = new Profile { Name = "Original profile" };
                 SetField(engine, "_activeProfile", activeProfile);
@@ -277,7 +312,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
             Assert.Contains(expectedFailure, statuses);
             Assert.Contains(sink.Events, e => e.Properties.ContainsKey("Status") && e.RenderMessage().Contains(expectedFailure));
-            if (invalidCandidate && scenario != "failover-missing-ad-filter")
+            if (invalidCandidate && !failover)
                 Assert.Contains(sink.Events, e => e.Properties.ContainsKey("ExceptionType") && e.Exception is null);
             sink.AssertExcludes("user-geosite-example", "fixture-private-selection", "TestProfile", "10.0.0.1");
             Assert.DoesNotContain(statuses, s => s.StartsWith("Applied"));
@@ -296,11 +331,18 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 Assert.DoesNotContain(fakeHttp.SentRequests, r => r.Method != HttpMethod.Get);
             }
             Assert.Empty(runner.StartCalls);
-            if (scenario == "verified-free-invalid-native")
+            if (importedSet || scenario == "verified-free-invalid-native")
             {
                 var check = Assert.Single(runner.RunCalls);
                 Assert.Equal(new[] { "check", "-c", "stdin" }, check.Arguments);
                 Assert.Contains("outbounds", check.StdinInput);
+                if (importedSet)
+                {
+                    var checkedJson = System.Text.Json.Nodes.JsonNode.Parse(check.StdinInput!)!;
+                    Assert.Equal(srs, checkedJson["route"]!["rule_set"]![0]!["path"]!.GetValue<string>());
+                    Assert.NotNull(checkedJson["experimental"]?["clash_api"]);
+                    Assert.DoesNotContain("Stopping...", statuses);
+                }
             }
             else
             {

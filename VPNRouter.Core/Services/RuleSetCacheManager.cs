@@ -154,7 +154,12 @@ public static class RuleSetCacheManager
         string filename,
         ILogger? logger = null,
         HttpClient? httpClient = null,
-        string? cacheDir = null)
+        string? cacheDir = null) =>
+        EnsureLocal(url, filename, RuleSetFile.CheckContentsAsync, logger, httpClient, cacheDir);
+
+    internal static string? EnsureLocal(
+        string url, string filename, Func<string, CancellationToken, Task<bool>> checkContents,
+        ILogger? logger = null, HttpClient? httpClient = null, string? cacheDir = null)
     {
         if (string.IsNullOrWhiteSpace(url))
             throw new ArgumentException("URL must be non-empty", nameof(url));
@@ -169,7 +174,7 @@ public static class RuleSetCacheManager
         {
             using var cts = new CancellationTokenSource(deadline);
             return Task.Run(
-                () => EnsureLocalAsync(url, filename, logger, httpClient, cacheDir, cts.Token),
+                () => EnsureLocalAsync(url, filename, checkContents, logger, httpClient, cacheDir, cts.Token),
                 cts.Token).GetAwaiter().GetResult();
         }
         catch (ArgumentException)

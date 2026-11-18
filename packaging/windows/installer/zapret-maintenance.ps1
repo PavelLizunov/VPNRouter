@@ -14,11 +14,11 @@ $known = @('zapret', 'WinDivert', 'WinDivert14', 'WinDivert15')
 $sc = Join-Path ([Environment]::SystemDirectory) 'sc.exe'
 $options = [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
 
-function Test-LegacyImage($name, $image, $type) {
+function Test-LegacyImage($name, $image, $type, $bin = $legacyBin) {
     if (!$image -or $image -match '[\r\n]') { return $false }
     if ($name -eq 'zapret') {
         if ($type -ne 16) { return $false }
-        $exe = Join-Path $legacyBin 'winws.exe'
+        $exe = Join-Path $bin 'winws.exe'
         $quoted = '^"' + [regex]::Escape($exe) + '"(?:[ \t]|$)'
         return ($image -match $quoted -or ($exe -notmatch '\s' -and $image -match ('^' + [regex]::Escape($exe) + '(?:[ \t]|$)')))
     }
@@ -28,7 +28,23 @@ function Test-LegacyImage($name, $image, $type) {
         $driver = $driver.Substring(1, $driver.Length - 2)
     }
     if ($driver.StartsWith('\??\') -or $driver.StartsWith('\\?\')) { $driver = $driver.Substring(4) }
-    return ($driver -in @((Join-Path $legacyBin 'WinDivert64.sys'), (Join-Path $legacyBin 'WinDivert32.sys')))
+    return ($driver -in @((Join-Path $bin 'WinDivert64.sys'), (Join-Path $bin 'WinDivert32.sys')))
+}
+
+function Assert-PrepareOwnership($registrations, $processes) {
+    $protectedBin = Join-Path $runtime 'zapret\bin'
+    foreach ($reg in $registrations) {
+        if (!(Test-LegacyImage $reg.Name $reg.Image $reg.Type) -and
+            !(Test-LegacyImage $reg.Name $reg.Image $reg.Type $protectedBin)) {
+            throw "Zapret migration blocked by service $($reg.Name). Resolve its ownership before upgrading."
+        }
+    }
+    $images = @((Join-Path $legacyBin 'winws.exe'), (Join-Path $protectedBin 'winws.exe'))
+    foreach ($process in $processes) {
+        if (!$process.ExecutablePath -or $process.ExecutablePath -notin $images) {
+            throw 'Zapret migration blocked by an unrelated or unverifiable winws process.'
+        }
+    }
 }
 
 function Test-ReferencesRoot($name, $image, $root) {
@@ -53,44 +69,62 @@ function Test-ReferencesRoot($name, $image, $root) {
     return $true
 }
 
+function Invoke-Prepare {
+    $registrations = @(foreach ($name in $known) {
+        $key = $services.OpenSubKey($name)
+        if ($key) {
+            try {
+                [pscustomobject]@{ Name = $name; Type = $key.GetValue('Type'); Image = $key.GetValue('ImagePath', $null, $options) }
+            } finally { $key.Dispose() }
+        }
+    })
+    if (!($registrations | Where-Object { Test-LegacyImage $_.Name $_.Image $_.Type })) { return }
+    Assert-PrepareOwnership $registrations @(Get-CimInstance Win32_Process -Filter "Name='winws.exe'" -ErrorAction Stop)
+    Add-Type -AssemblyName System.ServiceProcess
+    foreach ($candidate in $registrations) {
+        if (!(Test-LegacyImage $candidate.Name $candidate.Image $candidate.Type)) { continue }
+        $name = $candidate.Name
+        $image = $candidate.Image
+        $key = $services.OpenSubKey($name)
+        if (!$key) { throw 'Legacy service registration changed.' }
+        $controller = $null
+        try {
+            if ($key.GetValue('Type') -ne $candidate.Type -or $key.GetValue('ImagePath', $null, $options) -ne $image) {
+                throw 'Legacy service registration changed.'
+            }
+            $controller = New-Object System.ServiceProcess.ServiceController($name)
+            $null = $controller.ServiceHandle
+            if ($key.GetValue('Type') -ne $candidate.Type -or $key.GetValue('ImagePath', $null, $options) -ne $image) { throw 'Legacy service registration changed.' }
+            $start = $key.GetValue('Start')
+            if ($start -notin @(0,1,2,3,4)) { throw 'Unreadable legacy service start mode.' }
+            if ($name -ne 'zapret' -and $start -ge 3) { continue }
+            if ($null -eq $key.GetValue('VPNRouterPreUpgradeState')) {
+                $active = $controller.Status -ne 'Stopped'
+                $saved = [int]$start
+                if ($active) { $saved += 16 }
+                $writeKey = $services.OpenSubKey($name, $true)
+                try {
+                    if ($writeKey.GetValue('Type') -ne $candidate.Type -or $writeKey.GetValue('ImagePath', $null, $options) -ne $image) { throw 'Legacy service owner changed.' }
+                    $writeKey.SetValue('VPNRouterPreUpgradeState', $saved, [Microsoft.Win32.RegistryValueKind]::DWord)
+                    $writeKey.Flush()
+                } finally { $writeKey.Dispose() }
+            }
+            if ($start -ne 4) {
+                if ($key.GetValue('Type') -ne $candidate.Type -or $key.GetValue('ImagePath', $null, $options) -ne $image) { throw 'Legacy service owner changed.' }
+                & $sc config $name 'start=' disabled | Out-Null
+                if ($LASTEXITCODE -ne 0 -or $key.GetValue('Start') -ne 4) { throw 'Could not disable verified legacy service.' }
+            }
+        } finally {
+            if ($controller) { $controller.Dispose() }
+            $key.Dispose()
+        }
+    }
+}
+
 try {
     if (!$services) { throw 'Cannot inspect Windows service registrations.' }
     if ($Operation -eq 'Prepare') {
-        Add-Type -AssemblyName System.ServiceProcess
-        foreach ($name in $known) {
-            $key = $services.OpenSubKey($name)
-            if (!$key) { continue }
-            $controller = $null
-            try {
-                $image = $key.GetValue('ImagePath', $null, $options)
-                if (!(Test-LegacyImage $name $image $key.GetValue('Type'))) { continue }
-                $controller = New-Object System.ServiceProcess.ServiceController($name)
-                $null = $controller.ServiceHandle
-                if ($key.GetValue('ImagePath', $null, $options) -ne $image) { throw 'Legacy service registration changed.' }
-                $start = $key.GetValue('Start')
-                if ($start -notin @(0,1,2,3,4)) { throw 'Unreadable legacy service start mode.' }
-                if ($name -ne 'zapret' -and $start -ge 3) { continue }
-                if ($null -eq $key.GetValue('VPNRouterPreUpgradeState')) {
-                    $active = $controller.Status -ne 'Stopped'
-                    $saved = [int]$start
-                    if ($active) { $saved += 16 }
-                    $writeKey = $services.OpenSubKey($name, $true)
-                    try {
-                        if ($writeKey.GetValue('ImagePath', $null, $options) -ne $image) { throw 'Legacy service owner changed.' }
-                        $writeKey.SetValue('VPNRouterPreUpgradeState', $saved, [Microsoft.Win32.RegistryValueKind]::DWord)
-                        $writeKey.Flush()
-                    } finally { $writeKey.Dispose() }
-                }
-                if ($start -ne 4) {
-                    if ($key.GetValue('ImagePath', $null, $options) -ne $image) { throw 'Legacy service owner changed.' }
-                    & $sc config $name 'start=' disabled | Out-Null
-                    if ($LASTEXITCODE -ne 0 -or $key.GetValue('Start') -ne 4) { throw 'Could not disable verified legacy service.' }
-                }
-            } finally {
-                if ($controller) { $controller.Dispose() }
-                $key.Dispose()
-            }
-        }
+        Invoke-Prepare
         exit 0
     }
     $target = if ($Operation -eq 'PurgeRuntime') { $runtime } else { $data }

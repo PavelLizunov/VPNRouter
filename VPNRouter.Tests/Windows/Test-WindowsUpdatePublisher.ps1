@@ -39,8 +39,16 @@ function Copy-Fixture {
     $global:LASTEXITCODE = 0
     '1 File(s) copied'
 }
+function Set-RepairEnvironment([string]$applicationDir) {
+    if ($applicationDir -ne $destination) { throw 'Unexpected repair destination.' }
+    $events.Add('environment')
+}
 function Start-Process {
     param($FilePath, $ArgumentList, $WorkingDirectory, [switch]$Wait, [switch]$PassThru)
+    if (!$ArgumentList -and $FilePath -eq (Join-Path $destination 'VPNRouter.GUI.exe') -and $WorkingDirectory -eq $destination) {
+        $events.Add('gui')
+        return
+    }
     if ($ArgumentList -ne '--migrate-zapret' -or $FilePath -ne (Join-Path $destination 'VPNRouter.App.exe')) {
         throw 'Unexpected publisher child.'
     }
@@ -63,13 +71,15 @@ try {
     $events.Clear()
     $prepareResult = 0
     Invoke-WindowsPublication
-    if (($events -join ',') -ne 'prepare,stop,copy,restore,restart' -or
+    if (($events -join ',') -ne 'prepare,stop,copy,environment,restore,restart' -or
         [IO.File]::ReadAllText((Join-Path $destination 'payload.dll')) -ne 'release') { throw 'Upgrade order or content is incorrect.' }
     $events.Clear()
+    $SkipRelaunch = $false
     [IO.File]::Delete((Join-Path $Source 'zapret-maintenance.ps1'))
     Invoke-WindowsPublication
-    if (($events -join ',') -ne 'prepare,stop,copy,restart') { throw 'Older release was passed an unsupported migration switch.' }
+    if (($events -join ',') -ne 'prepare,stop,copy,environment,restart,gui') { throw 'Older release was passed an unsupported migration switch.' }
     $events.Clear()
+    $SkipRelaunch = $true
     $Fixture = $true
     Invoke-WindowsPublication
     if (($events -join ',') -ne 'copy') { throw 'CI fixture accessed a system operation.' }

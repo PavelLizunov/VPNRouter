@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
+. (Join-Path $PSScriptRoot 'repair-environment.ps1')
 $destination = $ApplicationDir
 $log = Join-Path $InstallDir 'update.log'
 $systemShell = [IO.Path]::Combine([Environment]::SystemDirectory, 'WindowsPowerShell\v1.0\powershell.exe')
@@ -34,6 +35,7 @@ function Invoke-WindowsPublication {
     $result = $LASTEXITCODE
     [IO.File]::AppendAllText($log, ($lines -join [Environment]::NewLine) + [Environment]::NewLine + "xcopy exit=$result" + [Environment]::NewLine)
     if ($result -ne 0) { throw "Unable to publish the release (xcopy exit $result)." }
+    if (!$Fixture) { Set-RepairEnvironment $destination }
     if (!$Fixture -and [IO.File]::Exists((Join-Path $Source 'zapret-maintenance.ps1'))) {
         $process = Start-Process -FilePath (Join-Path $destination 'VPNRouter.App.exe') -ArgumentList '--migrate-zapret' -WorkingDirectory $destination -Wait -PassThru
         try { if ($process.ExitCode -notin @(0, 2)) { throw 'Could not restore Zapret configuration.' } }
@@ -44,7 +46,6 @@ function Invoke-WindowsPublication {
         if ($LASTEXITCODE -ne 0) { throw 'Could not restart the installed VPNRouter service.' }
     }
     if (!$SkipRelaunch) {
-        $env:TEMP = $env:TMP = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Temp'
         Start-Process -FilePath (Join-Path $destination 'VPNRouter.GUI.exe') -WorkingDirectory $destination
     }
 }

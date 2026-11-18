@@ -304,8 +304,8 @@ public sealed class ReleaseToolingContractTests
             "param($Uri, [switch]$UseBasicParsing, $ErrorAction)\n" +
             "[pscustomobject]@{ Content = @'\n" +
             "[CmdletBinding()]\n" +
-            "param([string]$Version = \"\", [switch]$Prerelease, [switch]$Service, [switch]$NoLaunch, [switch]$Repair, [switch]$Elevated)\n" +
-            "[ordered]@{ Version=$Version; Prerelease=[bool]$Prerelease; Service=[bool]$Service; NoLaunch=[bool]$NoLaunch; Repair=[bool]$Repair; Elevated=[bool]$Elevated } | ConvertTo-Json -Compress\n" +
+            "param([string]$Version = \"\", [switch]$Prerelease, [switch]$Service, [switch]$NoLaunch, [switch]$Repair, [switch]$Elevated, [string]$RepairApplicationDir)\n" +
+            "[ordered]@{ Version=$Version; Prerelease=[bool]$Prerelease; Service=[bool]$Service; NoLaunch=[bool]$NoLaunch; Repair=[bool]$Repair; Elevated=[bool]$Elevated; Directory=$RepairApplicationDir } | ConvertTo-Json -Compress\n" +
             "'@ }\n" +
             "}\n";
 
@@ -321,7 +321,9 @@ public sealed class ReleaseToolingContractTests
         })
         {
             var encodedVersion = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(testCase.Version));
+            var directory = (testCase.Flags & 8) == 0 ? "" : @"D:\Owner's VPN & Router\app";
             var bootstrap = template
+                .Replace("__REPAIR_DIRECTORY__", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(directory)), StringComparison.Ordinal)
                 .Replace("__FORWARDED_VERSION__", encodedVersion, StringComparison.Ordinal)
                 .Replace("__FORWARDED_FLAGS__", testCase.Flags.ToString(), StringComparison.Ordinal);
             var encodedCommand = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(fakeDownload + bootstrap));
@@ -347,6 +349,7 @@ public sealed class ReleaseToolingContractTests
             var json = stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Last();
             using var document = System.Text.Json.JsonDocument.Parse(json);
             var result = document.RootElement;
+            Assert.Equal(directory, result.GetProperty("Directory").GetString());
             Assert.Equal(testCase.Version, result.GetProperty("Version").GetString());
             Assert.Equal((testCase.Flags & 1) != 0, result.GetProperty("Prerelease").GetBoolean());
             Assert.Equal((testCase.Flags & 2) != 0, result.GetProperty("Service").GetBoolean());
@@ -419,14 +422,17 @@ public sealed class ReleaseToolingContractTests
         Assert.Contains("Join-Path $AppDir 'driver\\mullvad-split-tunnel.sys'", script, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void StandalonePrepareRunsPackagedAndHistoricalHelpersAndAbortsOnFailure()
+    [Theory]
+    [InlineData("Test-InstallerPrepare.ps1")]
+    [InlineData("Test-RepairEnvironment.ps1")]
+    [InlineData("Test-InstallerRepair.ps1")]
+    public void WindowsMaintenanceFixtureCompletes(string fixture)
     {
         if (!OperatingSystem.IsWindows()) return;
         var info = new System.Diagnostics.ProcessStartInfo(
             Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe")) { UseShellExecute = false };
         foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
-                     Path.Combine(FindRoot(), "VPNRouter.Tests", "Windows", "Test-InstallerPrepare.ps1") })
+                     Path.Combine(FindRoot(), "VPNRouter.Tests", "Windows", fixture) })
             info.ArgumentList.Add(arg);
         using var process = System.Diagnostics.Process.Start(info)!;
         Assert.True(process.WaitForExit(30_000));

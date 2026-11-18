@@ -16,12 +16,15 @@ $InstallDir = [IO.Path]::GetFullPath($InstallDir)
 $app = if ($ApplicationDir) { [IO.Path]::GetFullPath($ApplicationDir) } else { Join-Path $InstallDir 'app' }
 $serviceExe = Join-Path $app 'VPNRouter.Service.exe'
 
-$images = @('VPNRouter.App.exe','VPNRouter.CLI.exe','VPNRouter.GUI.exe','VPNRouter.Service.exe',
-    'sing-box.exe','slipstream-client.exe') | ForEach-Object { Join-Path $app $_ }
-if ($DataDir) {
-    $images += @('bin\sing-box.exe','slipstream\bin\slipstream-client.exe','tg-proxy\python\python.exe',
-        'zapret\bin\winws.exe') | ForEach-Object { Join-Path $DataDir $_ }
+function Get-InstallProcessImages($appDirectory, $dataDirectory) {
+    $appImages = @('VPNRouter.App.exe','VPNRouter.CLI.exe','VPNRouter.GUI.exe','VPNRouter.Service.exe',
+        'sing-box.exe','slipstream-client.exe') | ForEach-Object { Join-Path $appDirectory $_ }
+    if ($dataDirectory) {
+        $appImages += @('bin\sing-box.exe','slipstream\bin\slipstream-client.exe','tg-proxy\python\python.exe') | ForEach-Object { Join-Path $dataDirectory $_ }
+    }
+    return $appImages
 }
+$images = Get-InstallProcessImages $app $DataDir
 
 function Test-ProcessImage([string]$path) {
     return ($path -and $path -in $images)

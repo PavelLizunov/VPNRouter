@@ -93,7 +93,7 @@ public partial class SingBoxManager : IDisposable
     private const long MaxLogSizeBytes = 10 * 1024 * 1024;
 
     private string RuntimeExecutablePath => EffectivePolicy?.SelectedExecutablePath ??
-        (OperatingSystem.IsWindows() ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath) : AppPaths.SingBoxExePath);
+        AppPaths.DeployedSingBoxExePath(_settings);
 
     internal async Task<bool> CheckCandidateAsync(string json, CancellationToken ct)
     {

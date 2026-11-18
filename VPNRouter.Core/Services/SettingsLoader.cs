@@ -182,6 +182,22 @@ public static class SettingsLoader
 
     internal static AppSettings Copy(AppSettings settings) => Deserialize(Serialize(settings));
 
+    internal static string GetSubmittedRevision(AppSettings settings) => GetRevision(Serialize(settings));
+
+    internal static string GetRevision(string yaml) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(yaml)));
+
+    internal static AppSettings? ParseLiveCandidate(string yaml)
+    {
+        if (string.IsNullOrWhiteSpace(yaml)) return null;
+        try
+        {
+            var candidate = Parse(yaml, persistMigrations: false);
+            return SettingsValidator.Validate(candidate).IsValid ? candidate : null;
+        }
+        catch (Exception) { return null; }
+    }
+
     private static AppSettings Deserialize(string yaml) =>
         new StaticDeserializerBuilder(new YamlStaticContext())
             .WithNamingConvention(UnderscoredNamingConvention.Instance)
@@ -195,7 +211,9 @@ public static class SettingsLoader
             .WithTypeConverter(new DateTimeOffsetYamlConverter())
             .Build().Serialize(settings);
 
-    public static AppSettings Parse(string yaml)
+    public static AppSettings Parse(string yaml) => Parse(yaml, persistMigrations: true);
+
+    private static AppSettings Parse(string yaml, bool persistMigrations)
     {
         if (!string.IsNullOrWhiteSpace(yaml))
         {
@@ -266,8 +284,10 @@ public static class SettingsLoader
                 settings,
                 from: settings.SchemaVersion,
                 to: AppSettings.CurrentSchemaVersion);
-            try { Save(settings); }
-            catch { }
+            if (persistMigrations)
+            {
+                try { Save(settings); } catch { }
+            }
         }
 
         var pruneCount = SettingsMigrator.PruneKnownPlaceholders(settings, null);
@@ -276,8 +296,10 @@ public static class SettingsLoader
             settings.App.PlaceholderPruneCount = pruneCount;
             settings.App.PlaceholderPruneAtUtc_Str =
                 DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-            try { Save(settings); }
-            catch { }
+            if (persistMigrations)
+            {
+                try { Save(settings); } catch { }
+            }
         }
 
         return settings;
@@ -333,9 +355,12 @@ public static class SettingsLoader
 
     private static FileSystemWatcher? _watcher;
     private static System.Timers.Timer? _debounceTimer;
-    private static Action<AppSettings>? _reloadCallback;
+    private static Action<AppSettings?, string>? _reloadCallback;
 
-    public static void StartWatching(string? path = null, Action<AppSettings>? onReload = null)
+    public static void StartWatching(string? path = null, Action<AppSettings>? onReload = null) =>
+        WatchRevisions(path, (settings, _) => { if (settings != null) onReload?.Invoke(settings); });
+
+    internal static void WatchRevisions(string? path, Action<AppSettings?, string> onReload)
     {
         StopWatching();
 
@@ -383,8 +408,9 @@ public static class SettingsLoader
         {
             try
             {
-                var settings = Load(configPath);
-                _reloadCallback?.Invoke(settings);
+                var yaml = File.ReadAllText(configPath);
+                var settings = ParseLiveCandidate(yaml);
+                _reloadCallback?.Invoke(settings, GetRevision(yaml));
             }
             catch { }
         };
