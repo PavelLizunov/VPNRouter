@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text.Json.Nodes;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -178,11 +179,15 @@ public class ConfigSanityCheckTests
     [Fact]
     public void DetectsMalformedJson()
     {
-        var check = new ConfigSanityCheck();
-        var result = check.CheckBeforeStart("not json at all");
+        var sink = new CapturingSink();
+        using var logger = sink.CreateLogger();
+        var check = new ConfigSanityCheck(logger);
+        var result = check.CheckBeforeStart("{\"fixture-parser-detail\":");
 
         Assert.True(result.IsDead);
         Assert.Contains("parseable", result.Reason!, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Assert.Single(sink.Events).Properties);
+        sink.AssertExcludes("fixture-parser-detail", result.Reason!);
     }
 
     private sealed class MockHandler : HttpMessageHandler
@@ -214,19 +219,22 @@ public class ConfigSanityCheckTests
     [Fact]
     public async Task Probe_BothAttemptsHttp504_ReturnsDead()
     {
+        const string responseBody = "fixture-probe-response";
+        var sink = new CapturingSink();
+        using var logger = sink.CreateLogger();
         var handler = new MockHandler(new Func<HttpResponseMessage>[]
         {
             () => new HttpResponseMessage(HttpStatusCode.GatewayTimeout)
             {
-                Content = new StringContent("{\"message\":\"An operation was canceled.\"}"),
+                Content = new StringContent(responseBody),
             },
             () => new HttpResponseMessage(HttpStatusCode.GatewayTimeout)
             {
-                Content = new StringContent("{\"message\":\"An operation was canceled.\"}"),
+                Content = new StringContent(responseBody),
             },
         });
-        var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
-        var check = new ConfigSanityCheck(httpClient: http);
+        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var check = new ConfigSanityCheck(logger, http);
 
         using var cts = new CancellationTokenSource();
         var probeTask = check.ProbeAsync(9090, cts.Token);
@@ -234,8 +242,15 @@ public class ConfigSanityCheckTests
         var result = await probeTask;
 
         Assert.True(result.IsDead);
-        Assert.NotNull(result.Reason);
+        Assert.Contains(responseBody, result.Reason!);
         Assert.Equal(2, handler.Calls);
+        Assert.Equal(2, sink.Events.Count);
+        Assert.All(sink.Events, e =>
+        {
+            Assert.Contains("HttpStatus", e.Properties["ReasonCode"].ToString());
+            Assert.Equal("504", e.Properties["Status"].ToString());
+        });
+        sink.AssertExcludes(responseBody);
     }
 
     [Fact]

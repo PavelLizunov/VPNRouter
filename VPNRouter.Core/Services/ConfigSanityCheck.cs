@@ -69,8 +69,7 @@ public sealed class ConfigSanityCheck
                 {
                     var pubkey = StjNodeHelpers.AsString(reality?["public_key"]);
                     _logger?.Warning(
-                        "[ConfigSanityCheck] Placeholder Reality public_key detected: {Key}",
-                        pubkey);
+                        "[ConfigSanityCheck] Placeholder Reality public_key detected");
                     return new PreStartCheckResult(true,
                         $"Reality public_key matches known placeholder ({pubkey})",
                         "outbound.tls.reality.public_key");
@@ -79,8 +78,7 @@ public sealed class ConfigSanityCheck
                 {
                     var shortId = StjNodeHelpers.AsString(reality?["short_id"]);
                     _logger?.Warning(
-                        "[ConfigSanityCheck] Placeholder Reality short_id detected: {ShortId}",
-                        shortId);
+                        "[ConfigSanityCheck] Placeholder Reality short_id detected");
                     return new PreStartCheckResult(true,
                         $"Reality short_id matches known placeholder ({shortId})",
                         "outbound.tls.reality.short_id");
@@ -88,8 +86,7 @@ public sealed class ConfigSanityCheck
                 case "server":
                 {
                     _logger?.Warning(
-                        "[ConfigSanityCheck] Placeholder server IP detected: {Server}",
-                        server);
+                        "[ConfigSanityCheck] Placeholder server IP detected");
                     return new PreStartCheckResult(true,
                         $"Proxy server IP matches known placeholder ({server})",
                         "outbound.server");
@@ -128,12 +125,14 @@ public sealed class ConfigSanityCheck
         }
         catch (Exception ex)
         {
-            _logger?.Warning(ex, "[ConfigSanityCheck] Failed to parse sing-box JSON");
+            _logger?.Warning("[ConfigSanityCheck] Failed to parse sing-box JSON");
             return new PreStartCheckResult(true,
                 $"sing-box config JSON is not parseable: {ex.Message}",
                 null);
         }
     }
+
+    private enum ProbeFailure { Unreachable, InvalidResponse, HttpStatus, Timeout, RequestFailed }
 
     public async Task<ProbeResult> ProbeAsync(int clashApiPort, CancellationToken ct = default)
         => await ProbeAsync(clashApiPort, clashApiSecret: null, ct).ConfigureAwait(false);
@@ -154,6 +153,8 @@ public sealed class ConfigSanityCheck
         {
             ct.ThrowIfCancellationRequested();
 
+            ProbeFailure failure;
+            int? status = null;
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
@@ -161,6 +162,7 @@ public sealed class ConfigSanityCheck
                     req.Headers.Authorization =
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", clashApiSecret);
                 using var resp = await _http.SendAsync(req, ct);
+                status = (int)resp.StatusCode;
                 var body = await resp.Content.ReadAsStringAsync(ct);
 
                 if (resp.IsSuccessStatusCode)
@@ -177,30 +179,35 @@ public sealed class ConfigSanityCheck
                                 attempt, delay);
                             return new ProbeResult(false, null, delay);
                         }
+                        failure = ProbeFailure.Unreachable;
                         lastError = $"Clash API reported delay=0 (unreachable, attempt {attempt})";
                     }
                     catch (Exception parseEx)
                     {
+                        failure = ProbeFailure.InvalidResponse;
                         lastError = $"Clash API response not parseable (attempt {attempt}): {parseEx.Message}";
                     }
                 }
                 else
                 {
+                    failure = ProbeFailure.HttpStatus;
                     lastError = $"Clash API HTTP {(int)resp.StatusCode} (attempt {attempt}): {body}";
                 }
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
+                failure = ProbeFailure.Timeout;
                 lastError = $"Clash API call timed out (attempt {attempt})";
             }
             catch (Exception ex)
             {
+                failure = ProbeFailure.RequestFailed;
                 lastError = $"Clash API call failed (attempt {attempt}): {ex.Message}";
             }
 
             _logger?.Debug(
-                "[ConfigSanityCheck] Probe attempt {Attempt} failed: {Reason}",
-                attempt, lastError);
+                "[ConfigSanityCheck] Probe attempt {Attempt} failed ({ReasonCode}, HTTP {Status})",
+                attempt, failure, status);
 
             if (attempt < 2)
             {

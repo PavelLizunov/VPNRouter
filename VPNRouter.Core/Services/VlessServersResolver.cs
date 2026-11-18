@@ -47,10 +47,7 @@ public static class VlessServersResolver
                 {
                     var newActive = subscriptionAggregated[0].Name;
                     logger?.Warning(
-                        "[VlessServersResolver] Active server '{Old}' not in current scope " +
-                        "(subscription mode). Falling back to '{New}'.",
-                        oldActive,
-                        newActive);
+                        "[VlessServersResolver] Active server outside subscription scope, using first available server");
                     settings.Vless.ActiveServer = newActive;
                     settings.App.ActiveSubscriptionServer = newActive;
                 }
@@ -58,11 +55,10 @@ public static class VlessServersResolver
 
             logger?.Information(
                 "[VlessServersResolver] Aggregated {Count} server(s) from {Subs} active subscription(s) " +
-                "(mode: {Mode}, active: {Active})",
+                "(mode: {Mode})",
                 subscriptionAggregated.Count,
                 settings.App.Subscriptions?.Count(s => s != null && s.Enabled) ?? 0,
-                configMode,
-                string.IsNullOrEmpty(settings.Vless.ActiveServer) ? "first" : settings.Vless.ActiveServer);
+                isSubscribe ? "subscribe" : "generated");
 
             return subscriptionAggregated;
         }

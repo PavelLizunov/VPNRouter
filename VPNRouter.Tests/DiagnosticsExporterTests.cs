@@ -51,6 +51,11 @@ vless:
             File.WriteAllText(Path.Combine(AppPaths.LogsDir, "vpnrouter20260602.log"),
                 $"2026-06-02 00:00:00 [INF] connecting {LogSecret} ok\n");
 
+            const string legacyEndpoint = "previous-private-transport.example";
+            File.WriteAllText(Path.Combine(AppPaths.LogsDir, "slipstream.log"), legacyEndpoint);
+            File.WriteAllText(Path.Combine(AppPaths.LogsDir, "slipstream.log.prev"), legacyEndpoint);
+            File.WriteAllText(AppPaths.SlipstreamLogPath, "Transport warning");
+
             var newestBackup = Path.Combine(AppPaths.DataDir, "config.yaml.unloadable-20260815-120000");
             File.WriteAllText(newestBackup, $@"
 app:
@@ -96,6 +101,8 @@ vless:
             Assert.DoesNotContain(ShortId, bundle);
             Assert.DoesNotContain(SubToken, bundle);
             Assert.DoesNotContain(LogSecret, bundle);
+            Assert.DoesNotContain(legacyEndpoint, bundle);
+            Assert.Contains("Transport warning", bundle);
 
             Assert.Contains("README.txt", entryNames);
             Assert.Contains("summary.txt", entryNames);

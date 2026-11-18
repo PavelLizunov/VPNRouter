@@ -190,15 +190,13 @@ public partial class VpnEngine : IDisposable
                 if (!IsRunning)
                 {
                     _logger?.Warning(
-                        ex,
-                        "[VpnEngine] StartAsync failed to bring up VPN — tearing down partial state");
+                        "[VpnEngine] StartAsync failed to bring up VPN, tearing down partial state ({ExceptionType})", ex.GetType().Name);
                     try { TeardownInternal(); } catch { }
                 }
                 else
                 {
                     _logger?.Warning(
-                        ex,
-                        "[VpnEngine] StartAsync bring-up threw after sing-box came up — leaving live tunnel for Stop/Dispose");
+                        "[VpnEngine] StartAsync threw after sing-box came up, leaving live tunnel for Stop/Dispose ({ExceptionType})", ex.GetType().Name);
                 }
                 throw;
             }
@@ -425,8 +423,8 @@ public partial class VpnEngine : IDisposable
         {
             if (!configCommitted)
                 RestoreActiveBaseline();
-            _logger?.Error(ex, "[VpnEngine] Apply failed");
-            OnStatus($"Apply failed: {ex.Message}");
+            _logger?.Error("[VpnEngine] Apply failed ({ExceptionType})", ex.GetType().Name);
+            OnStatus("Apply failed: check the selected configuration and required rule sets, then retry.");
             return false;
         }
     }

@@ -91,9 +91,9 @@ public partial class VpnEngine
                         && _engine._sessionCts?.IsCancellationRequested != true)
                         _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _engine._logger?.Warning(ex,
+                    _engine._logger?.Warning(
                         "[VpnEngine] HealthMonitor-requested failover failed — leaving VPN stopped");
                 }
             });
@@ -223,8 +223,7 @@ public partial class VpnEngine
                             probe.IsDead, probeCt.IsCancellationRequested, _engine._warmupConfirmed))
                     {
                         _engine._logger?.Warning(
-                            "[VpnEngine] F-E post-start probe failed: {Reason}",
-                            probe.Reason);
+                            "[VpnEngine] F-E post-start probe failed, requesting failover");
 
                         var failover = WireFailoverWithStop(sanityCheck);
                         var outcome = await failover.HandleDeadConfigAsync(
@@ -236,16 +235,13 @@ public partial class VpnEngine
                     else if (probe.IsDead && !probeCt.IsCancellationRequested && _engine._warmupConfirmed)
                     {
                         _engine._logger?.Warning(
-                            "[VpnEngine] F-E post-start probe reported dead ({Reason}) but TUN " +
-                            "warmup already confirmed connectivity — treating as false positive, " +
-                            "NOT failing over.",
-                            probe.Reason);
+                            "[VpnEngine] F-E post-start probe failed after TUN warmup confirmed connectivity, keeping current server");
                     }
                 }
                 catch (OperationCanceledException) { }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _engine._logger?.Debug(ex,
+                    _engine._logger?.Debug(
                         "[VpnEngine] F-E probe task threw (non-fatal)");
                 }
             }, probeCt);

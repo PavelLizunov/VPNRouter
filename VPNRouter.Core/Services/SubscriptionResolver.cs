@@ -46,9 +46,9 @@ public static class SubscriptionResolver
                     var total = enabled.Sum(s => s.Servers.Count);
                     logger?.Information("[SubscriptionResolver] Subscriptions refreshed: {Total} servers", total);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    logger?.Warning(ex, "[SubscriptionResolver] Refresh failed, using cached servers");
+                    logger?.Warning("[SubscriptionResolver] Refresh failed, using cached servers");
                 }
             }
         }
@@ -63,8 +63,7 @@ public static class SubscriptionResolver
             settings.Vless.Servers = aggregated;
             settings.Vless.ActiveServer = settings.App.ActiveSubscriptionServer;
             settings.App.ConfigMode = "generated";
-            logger?.Information("[SubscriptionResolver] Aggregated {Count} servers, active: {Active}",
-                aggregated.Count, settings.App.ActiveSubscriptionServer);
+            logger?.Information("[SubscriptionResolver] Aggregated {Count} servers", aggregated.Count);
         }
 
         return aggregated.Count;

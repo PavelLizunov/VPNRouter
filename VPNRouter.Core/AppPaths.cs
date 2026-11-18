@@ -53,7 +53,7 @@ public static class AppPaths
         }
     }
     public static string SlipstreamActiveCertPath => Path.Combine(SlipstreamDir, "active-leaf.pem");
-    public static string SlipstreamLogPath => Path.Combine(LogsDir, "slipstream.log");
+    public static string SlipstreamLogPath => Path.Combine(LogsDir, "slipstream-events.log");
 
     public static void EnsureDirectories()
     {

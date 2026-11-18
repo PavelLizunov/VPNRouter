@@ -56,11 +56,11 @@ public partial class MainWindowViewModel
         {
             if (_isLoadingUI) return;
             try { ServerViewModel.RefreshUdpSiblingFlags(Servers); }
-            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto RefreshUdpSiblingFlags on Servers change failed"); }
+            catch (Exception) { _logger.Warning("[VM] Auto RefreshUdpSiblingFlags on Servers change failed"); }
             try { ServerViewModel.RefreshProviderRiskFlags(Servers); }
-            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto RefreshProviderRiskFlags on Servers change failed"); }
+            catch (Exception) { _logger.Warning("[VM] Auto RefreshProviderRiskFlags on Servers change failed"); }
             try { MarkOrphanServers(); }
-            catch (Exception ex) { _logger.Warning(ex, "[VM] Auto MarkOrphanServers on Servers change failed"); }
+            catch (Exception) { _logger.Warning("[VM] Auto MarkOrphanServers on Servers change failed"); }
         };
     }
 
@@ -81,9 +81,9 @@ public partial class MainWindowViewModel
                     addedAny = true;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.Warning(ex, "Failed to parse WireGuard / AmneziaWG config: {Error}", ex.Message);
+                _logger.Warning("[VM] Failed to import WireGuard / AmneziaWG configuration");
             }
         }
         else
@@ -102,9 +102,9 @@ public partial class MainWindowViewModel
                     Servers.Add(new ServerViewModel(entry));
                     addedAny = true;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _logger.Warning(ex, "Failed to parse server URI: {Line}", CrashReporter.ScrubSecrets(line));
+                    _logger.Warning("[VM] Failed to import server URI");
                 }
             }
         }
@@ -133,8 +133,7 @@ public partial class MainWindowViewModel
 
         SaveSettings();
         _logger.Information(
-            "[VM] RemoveServerByEntry: persisted deletion of '{Name}' ({Server}:{Port}) — {Remaining} servers remain",
-            entry.Name, entry.Server, entry.Port, Servers.Count);
+            "[VM] Removed server, {Remaining} servers remain", Servers.Count);
 
         MarkOrphanServers();
         RefreshActiveIndicator();
@@ -200,7 +199,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] AddCustomConfig failed");
+            _logger.Error("[VM] AddCustomConfig failed ({ExceptionType})", ex.GetType().Name);
             StatusText = IsRussian
                 ? $"Ошибка добавления конфига: {ex.Message}"
                 : $"Failed to add config: {ex.Message}";
@@ -240,8 +239,8 @@ public partial class MainWindowViewModel
         if (_isLoadingUI || value == null || _isReconnecting) return;
         if (value.IsActive) return;
         _logger.Information(
-            "[VM] OnSelectedSubscriptionServerChanged name={N} ip={Ip} IsConnected={C} IsSubscribeMode={S} IsConnecting={IC}",
-            value.DisplayName, value.Server, IsConnected, IsSubscribeMode, IsConnecting);
+            "[VM] Subscription server selected (connected={Connected}, subscribeMode={SubscribeMode}, connecting={Connecting})",
+            IsConnected, IsSubscribeMode, IsConnecting);
         if (IsConnected && IsSubscribeMode && !IsConnecting)
         {
             if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }
@@ -254,8 +253,8 @@ public partial class MainWindowViewModel
         if (_isLoadingUI || value == null || _isReconnecting) return;
 
         _logger.Information(
-            "[VM] OnSelectedServerChanged name={N} ip={Ip} IsConnected={C} IsVlessMode={V} IsSubscribeMode={S} IsConnecting={IC}",
-            value.DisplayName, value.Server, IsConnected, IsVlessMode, IsSubscribeMode, IsConnecting);
+            "[VM] Manual server selected (connected={Connected}, vlessMode={VlessMode}, subscribeMode={SubscribeMode}, connecting={Connecting})",
+            IsConnected, IsVlessMode, IsSubscribeMode, IsConnecting);
         if (IsConnected && IsVlessMode && !IsConnecting)
         {
             if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }

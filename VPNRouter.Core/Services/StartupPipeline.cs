@@ -306,7 +306,7 @@ internal sealed class StartupPipeline
         if (!SafeMode.Enabled)
             VpnEngine.RemoveExcludedApps(activeProfile, settings.ExcludedApps);
 
-        _host.OnStatus($"Profile: {activeProfile.Name} ({activeProfile.Processes.Count} rules)");
+        _host.OnStatus($"Profile loaded ({activeProfile.Processes.Count} rules)");
         _host.SetActiveProfile(activeProfile);
 
         ct.ThrowIfCancellationRequested();
@@ -323,13 +323,13 @@ internal sealed class StartupPipeline
             var customPath = VpnEngine.ResolveCustomConfigPath(settings);
             if (string.IsNullOrEmpty(customPath) || !File.Exists(customPath))
                 throw new InvalidOperationException(
-                    $"Custom config not found: {customPath}. Add a config in the Servers tab.");
+                    "Custom config not found. Add a config in the Servers tab.");
 
             rawCustomJson = File.ReadAllText(customPath);
             var (isValid, errors) = CustomConfigInjector.Validate(rawCustomJson);
             if (!isValid)
                 throw new InvalidOperationException(
-                    $"Custom config validation failed: {string.Join("; ", errors)}");
+                    $"Custom config validation failed ({errors.Count} errors). Check the selected JSON configuration.");
 
             try
             {
@@ -391,9 +391,7 @@ internal sealed class StartupPipeline
             VpnEngine.MergeUserCustomization(collection, settings);
 
         _host.Logger?.Information(
-            "[StartupPipeline] Loaded profile catalogue ({Count}): {Names}",
-            collection.Profiles.Count,
-            string.Join(", ", collection.Profiles.Select(p => p.Name)));
+            "[StartupPipeline] Loaded {Count} profiles", collection.Profiles.Count);
 
         return (manager, collection);
     }
@@ -424,8 +422,7 @@ internal sealed class StartupPipeline
         if (isFullTunnel)
         {
             _host.Logger?.Information(
-                "[StartupPipeline] Full-tunnel mode — ignoring ActiveProfile '{Profile}' and skipping process scan",
-                profileName ?? "(empty)");
+                "[StartupPipeline] Full-tunnel mode, skipping process scan");
             var blockOnVpnFail = !string.IsNullOrEmpty(profileName)
                 && manager.MergeProfilesTolerant(
                     profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
@@ -439,14 +436,13 @@ internal sealed class StartupPipeline
             var merged = manager.MergeProfilesTolerant(names, out var missing);
             if (merged == null)
                 throw new InvalidOperationException(
-                    $"None of the requested profiles exist: {string.Join(", ", names)}. " +
-                    $"Available: {string.Join(", ", collection.Profiles.Select(p => p.Name))}");
+                    $"None of the requested profiles exist. Choose one of the {collection.Profiles.Count} available profiles.");
 
             activeProfile = merged;
 
             if (missing.Count > 0)
             {
-                _host.OnWarning($"Skipped unknown profile(s): {string.Join(", ", missing)}");
+                _host.OnWarning($"Skipped {missing.Count} unknown profile(s)");
                 if (mode == StartupMode.ColdStart || mode == StartupMode.AutoFailover)
                     PersistSanitizedActiveProfile(settings, names, missing, profileName);
             }
@@ -513,12 +509,11 @@ internal sealed class StartupPipeline
             fresh.ActiveProfile = sanitized;
             _store.Save(fresh);
             _host.Logger?.Information(
-                "[StartupPipeline] ActiveProfile migrated: '{Old}' → '{New}'",
-                originalProfileName, sanitized);
+                "[StartupPipeline] Removed {Count} unavailable profiles from selection", missing.Count);
         }
-        catch (Exception saveEx)
+        catch (Exception)
         {
-            _host.Logger?.Warning(saveEx,
+            _host.Logger?.Warning(
                 "[StartupPipeline] Failed to persist ActiveProfile migration");
         }
     }
@@ -615,9 +610,9 @@ internal sealed class StartupPipeline
                 dead.Count, udpCandidates.Count);
             return s => !dead.Contains(s.Name ?? string.Empty);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _host.Logger?.Debug("[StartupPipeline] RB1 UDP probe failed (non-fatal): {Err}", ex.Message);
+            _host.Logger?.Debug("[StartupPipeline] RB1 UDP probe failed (non-fatal)");
             return null;
         }
     }
@@ -643,7 +638,7 @@ internal sealed class StartupPipeline
             {
                 localCopy = CustomConfigInjector.CopyToProgramData(customPath, configName);
                 _host.Logger?.Information(
-                    "[StartupPipeline] Custom config copied to {Path}", localCopy);
+                    "[StartupPipeline] Copied selected custom configuration");
             }
 
             var injectSource = (rawCustomJson != null && File.Exists(customPath))
@@ -651,7 +646,7 @@ internal sealed class StartupPipeline
                 : File.ReadAllText(localCopy);
             var configJson = CustomConfigInjector.Inject(
                 injectSource, scanResult.ProcessNames, settings);
-            _host.OnStatus($"Custom config '{configName}' injected with process routing");
+            _host.OnStatus("Applied process routing to selected custom configuration");
             return configJson;
         }
 
@@ -666,7 +661,7 @@ internal sealed class StartupPipeline
         return json;
     }
 
-    private async Task<bool> PreStartChecksPhaseAsync(
+    internal async Task<bool> PreStartChecksPhaseAsync(
         AppSettings settings,
         string configJson,
         CancellationToken ct)
@@ -677,8 +672,8 @@ internal sealed class StartupPipeline
         if (!preCheck.IsDead) return false;
 
         _host.Logger?.Warning(
-            "[StartupPipeline] F-E pre-start dead config: {Reason} (field: {Field})",
-            preCheck.Reason, preCheck.OffendingField);
+            "[StartupPipeline] F-E pre-start configuration check failed (field: {Field})",
+            preCheck.OffendingField);
 
         var failover = _host.WireFailover(sanityCheck);
         var outcome = await failover.HandleDeadConfigAsync(
@@ -690,14 +685,13 @@ internal sealed class StartupPipeline
         if (outcome.Switched)
         {
             _host.Logger?.Information(
-                "[StartupPipeline] F-E switched to {New} — abort outer StartAsync flow",
-                outcome.NewActiveServer);
+                "[StartupPipeline] F-E switched servers, ending the original start attempt");
             return true;
         }
 
-        _host.OnWarning(outcome.UserFacingMessage ?? preCheck.Reason ?? "Dead config");
-        throw new InvalidOperationException(
-            outcome.UserFacingMessage ?? preCheck.Reason ?? "Dead VPN config");
+        const string rejected = "VPN startup rejected: check the selected server or choose another (pre_start_check_failed).";
+        _host.OnWarning(rejected);
+        throw new InvalidOperationException(rejected);
     }
 
     private Task DeployAndSetupFirewallPhaseAsync(

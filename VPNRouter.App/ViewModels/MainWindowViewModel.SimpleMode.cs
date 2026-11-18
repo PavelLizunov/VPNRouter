@@ -352,7 +352,7 @@ public partial class MainWindowViewModel
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(ex, "[Simple] Subscription refresh failed");
+                    _logger.Warning("[Simple] Subscription refresh failed");
                     SmpErrorText = IsRussian
                         ? $"Не удалось получить подписку: {CrashReporter.ScrubSecrets(ex.Message)}"
                         : $"Couldn't fetch the subscription: {CrashReporter.ScrubSecrets(ex.Message)}";
@@ -384,7 +384,7 @@ public partial class MainWindowViewModel
                             var selected = candidates.First(c => string.Equals(c.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal));
                             if (SimpleConnectPolicy.CannotBeVerifiedByProbe(selected))
                             {
-                                _logger.Information("[SmartConnect] '{Name}' is {Proto} - a probe cannot verify it; keeping the selected server without one", selected.Name, selected.Protocol);
+                                _logger.Information("[SmartConnect] Keeping selection because its protocol cannot be verified by a probe");
                                 keptSelection = selected;
                                 results = new List<ServerLiveness>();
                             }
@@ -393,7 +393,7 @@ public partial class MainWindowViewModel
                                 results = await probe.ProbeAllAsync(new[] { selected }, TimeSpan.FromSeconds(2));
                                 if (SimpleConnectPolicy.KeepSelectedAfterProbe(results))
                                 {
-                                    _logger.Information("[SmartConnect] '{Name}' cannot be probed (protocol or address family) — keeping the selected server", selected.Name);
+                                    _logger.Information("[SmartConnect] Probe inconclusive, keeping selected server");
                                     keptSelection = selected;
                                 }
                                 else if (results.Count == 0 || !results[0].Alive)
@@ -418,30 +418,16 @@ public partial class MainWindowViewModel
                             return;
                         }
 
-                        if (!string.Equals(chosen.Name, _settings.App.ActiveSubscriptionServer, StringComparison.Ordinal))
-                        {
-                            _logger.Information(
-                                "[SmartConnect] active server unreachable/unset — switching to live '{Name}'", chosen.Name);
-                            var previousServer = _settings.App.ActiveSubscriptionServer;
-                            if (!string.IsNullOrWhiteSpace(previousServer))
-                                _smpChoiceNote = Strings.SmpServerSwitchedNote(previousServer);
-                            _settings.App.ActiveSubscriptionServer = chosen.Name ?? _settings.App.ActiveSubscriptionServer;
-
-                            var winnerVm = SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name);
-                            if (winnerVm is not null)
-                                SelectedSubscriptionServer = winnerVm;
-
-                            SaveSettings();
-                        }
+                        ApplySmartConnectSelection(chosen);
 
                         if (ConnectionIntent.Normalize(_settings.App.ConnectionIntent) != ConnectionIntent.General)
                         {
                             StatusText = $"{ConnectionIntentStatusText} -> {chosen.Name}";
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        _logger.Warning(ex, "[SmartConnect] probe failed — connecting without pre-flight");
+                        _logger.Warning("[SmartConnect] Probe failed, connecting without pre-flight");
                     }
                 }
             }
@@ -454,6 +440,21 @@ public partial class MainWindowViewModel
             IsConnecting = false;
             throw;
         }
+    }
+
+    internal void ApplySmartConnectSelection(VlessServerEntry chosen)
+    {
+        var previousServer = _settings.App.ActiveSubscriptionServer;
+        if (string.Equals(chosen.Name, previousServer, StringComparison.Ordinal)) return;
+
+        _logger.Information("[SmartConnect] Switching to a reachable server");
+        if (!string.IsNullOrWhiteSpace(previousServer))
+            _smpChoiceNote = Strings.SmpServerSwitchedNote(previousServer);
+        _settings.App.ActiveSubscriptionServer = chosen.Name ?? previousServer;
+        var winnerVm = SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name);
+        if (winnerVm is not null)
+            SelectedSubscriptionServer = winnerVm;
+        SaveSettings();
     }
 
     private bool TryApplyVless(string uri)
@@ -485,9 +486,9 @@ public partial class MainWindowViewModel
             IsVlessMode = true;
             return true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.Warning(ex, "[Simple] Server URI parse failed");
+            _logger.Warning("[Simple] Server URI parse failed");
             SmpErrorText = IsRussian
                 ? "Некорректная ссылка. Поддерживаются vless:// / hysteria2:// / tuic:// / ss:// / naive://, должна заканчиваться '#имя'."
                 : "Invalid server link. Supported: vless:// / hysteria2:// / tuic:// / ss:// / naive://, must end with '#name'.";

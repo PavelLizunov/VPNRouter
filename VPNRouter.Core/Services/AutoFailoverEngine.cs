@@ -45,7 +45,7 @@ public sealed class AutoFailoverEngine
         string reason,
         CancellationToken ct = default)
     {
-        _logger?.Warning("[AutoFailover] Dead config: {Reason}", reason);
+        _logger?.Warning("[AutoFailover] Dead config reported");
 
         var rejected = TryRejectBeforeSwitch(reason, out var pool);
         if (rejected != null)
@@ -74,7 +74,7 @@ public sealed class AutoFailoverEngine
         _settings.Vless.ActiveServer = newName;
         _settings.App.ActiveSubscriptionServer = newName;
 
-        var committed = await RestartWithRollbackAsync(newName, oldActive, oldActiveSub, ct);
+        var committed = await RestartWithRollbackAsync(oldActive, oldActiveSub, ct);
 
         if (!IsIntentCurrent())
         {
@@ -90,12 +90,11 @@ public sealed class AutoFailoverEngine
             _settings.Vless.ActiveServer = oldActive;
             _settings.App.ActiveSubscriptionServer = oldActiveSub;
             _logger?.Information(
-                "[AutoFailover] Replacement start not confirmed (cancelled/failed) — reverted ActiveServer to '{Old}', selection NOT persisted",
-                oldActive);
+                "[AutoFailover] Replacement start not confirmed, restored previous selection");
             return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
         }
 
-        PersistSelection(newName, oldActive);
+        PersistSelection(newName);
 
         return new FailoverOutcome(
             Switched: true,
@@ -130,8 +129,7 @@ public sealed class AutoFailoverEngine
             && IsActiveLegitimateManual())
         {
             _logger?.Information(
-                "[AutoFailover] Skipping auto-swap in generated mode — active '{Active}' is a legitimate manual choice; surfacing error instead",
-                _settings.Vless.ActiveServer);
+                "[AutoFailover] Keeping active manual selection in generated mode");
             return new FailoverOutcome(
                 Switched: false,
                 NewActiveServer: null,
@@ -168,7 +166,7 @@ public sealed class AutoFailoverEngine
     }
 
     private async Task<bool> RestartWithRollbackAsync(
-        string newName, string oldActive, string oldActiveSub, CancellationToken ct)
+        string oldActive, string oldActiveSub, CancellationToken ct)
     {
         bool committed = true;
         if (_restart != null)
@@ -183,14 +181,14 @@ public sealed class AutoFailoverEngine
                 }
                 throw;
             }
-            catch (Exception ex) { _logger?.Warning(ex, "[AutoFailover] Restart delegate threw"); committed = false; }
+            catch (Exception) { _logger?.Warning("[AutoFailover] Restart delegate threw"); committed = false; }
             _logger?.Information("[AutoFailover] Restart delegate returned {Ok}", committed);
         }
 
         return committed;
     }
 
-    private void PersistSelection(string newName, string oldActive)
+    private void PersistSelection(string newName)
     {
         try
         {
@@ -198,13 +196,11 @@ public sealed class AutoFailoverEngine
             onDisk.Vless.ActiveServer = newName;
             onDisk.App.ActiveSubscriptionServer = newName;
             _store.Save(onDisk);
-            _logger?.Information(
-                "[AutoFailover] Switched ActiveServer '{Old}' → '{New}' and persisted",
-                oldActive, newName);
+            _logger?.Information("[AutoFailover] Persisted replacement server selection");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger?.Warning(ex,
+            _logger?.Warning(
                 "[AutoFailover] Failed to persist ActiveServer migration — proceeding in-memory only");
         }
     }
@@ -279,8 +275,8 @@ public sealed class AutoFailoverEngine
         {
             var best = reachable[0];
             _logger?.Information(
-                "[AutoFailover] Candidate probe: {Reachable}/{Probed} answer — picked '{Name}' ({Ms} ms)",
-                reachable.Count, head.Count, head[best].Name, results[best].LatencyMs);
+                "[AutoFailover] Candidate probe: {Reachable}/{Probed} reachable, selected fastest ({Ms} ms)",
+                reachable.Count, head.Count, results[best].LatencyMs);
             return head[best];
         }
 
@@ -291,14 +287,14 @@ public sealed class AutoFailoverEngine
         if (undecided.Count > 0)
         {
             _logger?.Information(
-                "[AutoFailover] Candidate probe: none confirmed, {Count} could not be judged — picked '{Name}'",
-                undecided.Count, head[undecided[0]].Name);
+                "[AutoFailover] Candidate probe: none confirmed, selecting from {Count} unverified candidates",
+                undecided.Count);
             return head[undecided[0]];
         }
 
         _logger?.Warning(
-            "[AutoFailover] Candidate probe: all {Probed} probed candidates look unreachable — trying '{Name}' anyway",
-            head.Count, pool[0].Name);
+            "[AutoFailover] Candidate probe: all {Probed} candidates look unreachable, trying first candidate",
+            head.Count);
         return pool[0];
     }
 
