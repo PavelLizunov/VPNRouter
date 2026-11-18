@@ -84,11 +84,11 @@ public static partial class CustomConfigInjector
     public static string CopyToProgramData(string sourcePath, string configName = "custom")
     {
         var destination = GetProgramDataPath(configName);
-        WriteImportCopy(destination, ReadImport(sourcePath), overwrite: true);
+        WriteImportCopy(destination, ReadImport(sourcePath));
         return destination;
     }
 
-    internal static void WriteImportCopy(string destination, string normalizedJson, bool overwrite)
+    internal static void WriteImportCopy(string destination, string normalizedJson)
     {
         Directory.CreateDirectory(AppPaths.ConfigDir);
         var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -101,8 +101,7 @@ public static partial class CustomConfigInjector
                 writer.Flush();
                 stream.Flush(flushToDisk: true);
             }
-            try { File.Move(temporary, destination, overwrite); }
-            catch (IOException) when (!overwrite && File.Exists(destination)) { }
+            File.Move(temporary, destination, overwrite: true);
         }
         finally
         {
@@ -136,6 +135,34 @@ public static partial class CustomConfigInjector
             changed = true;
         }
         return changed ? config.ToJsonString(InjectorOutputOptions) : raw;
+    }
+
+    internal static string GetAcceptedImportPath(string registeredPath, string? configName)
+    {
+        // A service may recover the same registration with another account or working directory.
+        var path = Path.IsPathFullyQualified(registeredPath) ? Path.GetFullPath(registeredPath) :
+            "relative:" + Path.GetFullPath(registeredPath, Path.GetFullPath(AppPaths.ConfigDir));
+        if (OperatingSystem.IsWindows()) path = path.ToUpperInvariant();
+        var key = (configName == null ? "legacy" : "named:" + configName) + "\0" + path;
+        var digest = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key));
+        return Path.Combine(AppPaths.ConfigDir, $"accepted-import-{Convert.ToHexStringLower(digest)}.json");
+    }
+
+    internal static string GetRegisteredImportPath(Models.CustomConfigEntry entry) =>
+        string.IsNullOrWhiteSpace(entry.Path) ? GetProgramDataPath(entry.Name) : entry.Path;
+
+    internal static void ForgetAcceptedImport(Models.CustomConfigEntry removed, IEnumerable<Models.CustomConfigEntry> remaining)
+    {
+        var accepted = GetAcceptedImportPath(GetRegisteredImportPath(removed), removed.Name);
+        if (!File.Exists(accepted)) return;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        foreach (var entry in remaining)
+        {
+            var registered = GetRegisteredImportPath(entry);
+            var source = Path.GetFullPath(Environment.ExpandEnvironmentVariables(registered));
+            if (source.Equals(accepted, comparison) || GetAcceptedImportPath(registered, entry.Name) == accepted) return;
+        }
+        File.Delete(accepted);
     }
 
     public static string GetProgramDataPath(string configName)

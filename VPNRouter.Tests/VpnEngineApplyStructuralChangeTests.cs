@@ -333,7 +333,6 @@ public sealed class VpnEngineApplyStructuralChangeTests
                         Assert.Null(initialHandle.QueryHasExited());
                         Assert.False(engine.TryPrepareColdReconnect());
                         Assert.Equal(0, initialHandle.KillCallCount);
-                        initialHandle.ExitQueryUnavailable = false;
                     }
                     Assert.Same(sessionCts, GetField(engine, "_sessionCts"));
                     Assert.False(sessionCts.IsCancellationRequested);
@@ -419,6 +418,24 @@ public sealed class VpnEngineApplyStructuralChangeTests
             }
             Assert.Equal(0, fakeDriver.EngageCount);
             Assert.Equal(0, fakeDriver.DisengageCount);
+
+            if (unknownExit)
+            {
+                Assert.Throws<InvalidOperationException>(engine.Stop);
+                Assert.Throws<InvalidOperationException>(engine.Dispose);
+                Assert.DoesNotContain("Stopped", statuses);
+                Assert.Same(singBox, GetField(engine, "_singBox"));
+                Assert.Same(initialHandle, singBox.OwnedProcessHandle);
+                Assert.Same(firewall, GetField(engine, "_firewall"));
+                Assert.True(lease!.HasOwnership);
+                Assert.Equal(0, initialHandle.KillCallCount);
+                initialHandle.ExitQueryUnavailable = false;
+                initialHandle.SignalExit(0);
+                engine.Stop();
+                Assert.Null(GetField(engine, "_singBox"));
+                Assert.Contains("Stopped", statuses);
+                Assert.False(lease.HasOwnership);
+            }
 
             Assert.DoesNotContain(statuses, s => s.StartsWith("Apply failed:") && s != expectedFailure);
         }

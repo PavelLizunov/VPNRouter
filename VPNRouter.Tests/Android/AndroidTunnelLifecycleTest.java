@@ -25,7 +25,7 @@ public final class AndroidTunnelLifecycleTest {
     private static void serviceChecksSwitchAndRestoreBeforePublishing() throws IOException {
         Path root = Path.of(System.getenv().getOrDefault("GITHUB_WORKSPACE", "."));
         String source = Files.readString(root.resolve("VPNRouter.Android/VpnRouterService.java"));
-        String dispatch = source.substring(source.indexOf("public int onStartCommand("),
+        String dispatch = source.substring(source.indexOf("int onStartCommand("),
                 source.indexOf("public IBinder onBind("));
         String activity = Files.readString(root.resolve("VPNRouter.Android/MainActivity.cs"));
         String builder = Files.readString(root.resolve("VPNRouter.Android/AndroidConfigBuilder.cs"));
@@ -83,7 +83,15 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(source, "RESTART_FLAGS = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE",
                 "RESTART_FLAGS | PendingIntent.FLAG_UPDATE_CURRENT", "private void cancelScheduledRestart()", "remove(RESTART_TICKET)",
                 "RESTART_FLAGS | PendingIntent.FLAG_NO_CREATE");
-        requireOrdered(activity, "case ActionTunnelError:", "if (!AndroidStorage.IsCurrentStateEvent(", "PresentTunnelError(");
+        requireOrdered(activity, "intent?.GetStringExtra(AndroidStorage.UiCommandKey) != AndroidStorage.CurrentUiCommand",
+                "!AndroidStorage.IsCurrentStateEvent(", "case ActionTunnelError:", "PresentTunnelError(");
+        require(source.contains("synchronized void onTaskRemoved(") && source.contains("synchronized void onRevoke(")
+                && source.contains("synchronized int onStartCommand("), "swipe scheduling must serialize with revoke and stop");
+        String external = Files.readString(root.resolve("VPNRouter.Android/VpnControlReceiver.cs"));
+        require(external.contains("SvcActionStart = \"com.ninitux.vpnrouter.TILE_START\""), "external restore requires an unticketed action");
+        String qr = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.QrScanApply.cs"));
+        requireOrdered(qr, "var command = reserved ?? AndroidStorage.BeginUiCommand();", "await RefreshStoredSubscriptionAsync(",
+                "if (!AndroidStorage.IsCurrentUiCommand(command)) return;", "RequestConnect(command);");
         String app = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.axaml.cs"));
         String summary = app.substring(app.indexOf("private void UpdatePerAppSummary("),
                 app.indexOf("private void OnSaveClicked("));

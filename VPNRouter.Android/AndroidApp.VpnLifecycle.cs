@@ -57,7 +57,18 @@ public partial class AndroidApp
 
     private void OnIntentChanged(bool connected)
     {
-        Dispatcher.UIThread.Post(() => UpdateConnectionState(connected));
+        PaintCurrentTunnelState(() => UpdateConnectionState(connected));
+    }
+
+    private static void PaintCurrentTunnelState(Action paint)
+    {
+        var command = AndroidStorage.CurrentUiCommand;
+        var stateEvent = AndroidStorage.CurrentStateEvent;
+        if (Dispatcher.UIThread.CheckAccess()) { paint(); return; }
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (command == AndroidStorage.CurrentUiCommand && stateEvent == AndroidStorage.CurrentStateEvent) paint();
+        });
     }
 
     private void AttachLifecycleEvents()
@@ -148,6 +159,12 @@ public partial class AndroidApp
             _statusCard.IsOn = false;
             _statusCard.IsWarn = false;
             _statusCard.IsOff = true;
+            if (AndroidStorage.ResolveVpnState().State == VPNRouter.Core.Services.VpnConnectionState.Disconnected)
+            {
+                _lastError = null;
+                _statusCard.IsError = false;
+                if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
+            }
             _statusCard.Title = Localization.SimpleStatusTitleOff;
             _statusCard.Subtitle = Localization.SimpleStatusDescOff;
             if (_ctaConnect is not null) _ctaConnect.IsVisible = true;
@@ -306,7 +323,7 @@ public partial class AndroidApp
 
     private void OnTunnelErrorReported(string message)
     {
-        Dispatcher.UIThread.Post(() =>
+        PaintCurrentTunnelState(() =>
         {
             if (string.IsNullOrWhiteSpace(message)) return;
             _lastError = message.Trim();

@@ -257,40 +257,56 @@ public partial class MainWindowViewModel
         => OnPropertyChanged(nameof(ResetConfigMenuHeader));
 
     [RelayCommand]
-    private void RestartInSafeMode()
+    private void RestartInSafeMode() => RestartFromMenu(safeMode: true);
+
+    internal Action<ProcessStartInfo> LaunchRestart { get; set; } = info =>
     {
+        using var child = Process.Start(info) ?? throw new InvalidOperationException("Could not restart VPNRouter.");
+    };
+
+    internal Action<int> ExitAfterMenuRestart { get; set; } = Environment.Exit;
+
+    private void RestartFromMenu(bool safeMode)
+    {
+        Action<bool>? finish = null;
+        var launched = false;
         try
         {
-            var exe = Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exe)) return;
-            ProcessStartInfo psi;
-            if (OperatingSystem.IsLinux())
+            var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Could not locate VPNRouter.");
+            var linux = OperatingSystem.IsLinux();
+            var info = new ProcessStartInfo(linux ? "/usr/bin/setsid" : exe) { UseShellExecute = false, CreateNoWindow = true };
+            if (linux)
             {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/setsid",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                psi.ArgumentList.Add("--fork");
-                psi.ArgumentList.Add(exe);
-                psi.ArgumentList.Add("--safe");
+                info.ArgumentList.Add("--fork");
+                info.ArgumentList.Add(exe);
             }
-            else
+            if (safeMode) info.ArgumentList.Add("--safe");
+
+            finish = ReserveRestart();
+            if (!safeMode)
             {
-                psi = new ProcessStartInfo
-                {
-                    FileName = exe,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                psi.ArgumentList.Add("--safe");
+                var backup = _settingsStore.ResetToDefaults();
+                _logger.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
             }
-            System.Diagnostics.Process.Start(psi);
+            LaunchRestart(info);
+            launched = true;
             try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
-            Environment.Exit(0);
+            ExitAfterMenuRestart(0);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[VM] Restart did not finish");
+            StatusText = ex.Message;
+        }
+        finally
+        {
+            try { finish?.Invoke(launched); }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[VM] Could not restore the Zapret strategy");
+                StatusText = ZapretStatus = ex.Message;
+            }
+        }
     }
 
     private System.Threading.CancellationTokenSource? _resetDisarmCts;
@@ -322,47 +338,7 @@ public partial class MainWindowViewModel
         _resetDisarmCts?.Dispose();
         _resetDisarmCts = null;
 
-        try
-        {
-            var backup = VPNRouter.Core.Services.SettingsLoader.ResetToDefaults();
-            _logger.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "[ViewModel] Config reset failed");
-            return;
-        }
-
-        try
-        {
-            var exe = Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exe)) return;
-            ProcessStartInfo psi;
-            if (OperatingSystem.IsLinux())
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/setsid",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                psi.ArgumentList.Add("--fork");
-                psi.ArgumentList.Add(exe);
-            }
-            else
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = exe,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-            }
-            System.Diagnostics.Process.Start(psi);
-            try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
-            Environment.Exit(0);
-        }
-        catch { }
+        RestartFromMenu(safeMode: false);
     }
 
     [RelayCommand]

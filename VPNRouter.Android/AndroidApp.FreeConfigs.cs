@@ -1020,6 +1020,8 @@ public partial class AndroidApp
             return;
         }
 
+        var command = AndroidStorage.BeginUiCommand();
+        if (command == null) return;
         ShowMenuFeedback(Localization.FcUsedToast);
 
         CloseAdvancedShell();
@@ -1028,7 +1030,7 @@ public partial class AndroidApp
 
         Dispatcher.UIThread.Post(() =>
         {
-            MainActivity.Instance?.RequestConnect();
+            MainActivity.Instance?.RequestConnect(command);
         }, DispatcherPriority.Background);
     }
 

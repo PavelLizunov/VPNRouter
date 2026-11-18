@@ -641,6 +641,170 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         Assert.Equal(VPNRouter.Core.Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict), vm.ZapretStatus);
     }
 
+    [AvaloniaTheory]
+    [InlineData("lock")]
+    [InlineData("driver")]
+    [InlineData("late-driver")]
+    [InlineData("invalid-package")]
+    [InlineData("stop")]
+    [InlineData("success")]
+    public async Task UpdateCommandStopsOnlyAtVerifiedPublication(string scenario)
+    {
+        var vm = NewVm("general");
+        var conflict = false;
+        var checks = 0;
+        var manager = new ZapretManager(runner: _runner)
+        {
+            HasDriverConflict = () => conflict || scenario == "late-driver" && ++checks >= 3
+        };
+        SetField(vm, "_zapret", manager);
+        manager.Start("--wf-tcp=443");
+        vm.ZapretEnabled = true;
+        vm.ZapretWinningStrategy = "general";
+        WriteZapretFile("old", "version.txt");
+        var http = ZapretUpdaterDownloadTests.ReleaseForGuiUpdate(scenario != "invalid-package");
+        vm.CreateZapretUpdater = logger => new ZapretUpdater(logger, http);
+        conflict = scenario == "driver";
+        _handle.RefuseKill = scenario == "stop";
+        using var pin = scenario == "lock" ? ZapretRuntimeDirectory.LockInstallation(ZapretRuntimeDirectory.Root) : null;
+        try
+        {
+            await vm.UpdateZapretCommand.ExecuteAsync(null);
+            if (scenario == "success")
+            {
+                Assert.False(vm.ZapretEnabled);
+                Assert.Equal(1, _handle.DisposeCallCount);
+                Assert.Equal("candidate", ZapretUpdater.GetLocalVersion());
+            }
+            else
+            {
+                Assert.True(vm.ZapretEnabled);
+                Assert.Equal("general", vm.ZapretWinningStrategy);
+                Assert.Equal(_handle.Pid, manager.Pid);
+                Assert.Equal(0, _handle.DisposeCallCount);
+                Assert.Equal("old", ZapretUpdater.GetLocalVersion());
+                if (scenario == "driver") Assert.Empty(http.SentRequests);
+            }
+            Assert.Equal(scenario is "stop" or "success" ? 1 : 0, _handle.KillCallCount);
+        }
+        finally { _handle.RefuseKill = false; }
+    }
+
+    [AvaloniaFact]
+    public void FailedPackageReplacementRestartsThePreviouslySelectedInstalledStrategy()
+    {
+        var vm = NewVm("general");
+        var second = new FakeProcessHandle(3277);
+        var handles = new Queue<FakeProcessHandle>(new[] { _handle, second });
+        var runner = new FakeProcessRunner().OnStart(_ => true, _ => handles.Dequeue());
+        var manager = new ZapretManager(runner: runner) { HasDriverConflict = () => false };
+        SetField(vm, "_zapret", manager);
+        var bat = ZapretPath("general.bat");
+        manager.StartFromBat(bat, "unused");
+        WriteZapretFile("previous", "version.txt");
+        var staged = Directory.CreateDirectory(Path.Combine(ZapretRuntimeDirectory.Root, "staged")).FullName;
+        using var pin = ZapretRuntimeDirectory.LockInstallation(ZapretRuntimeDirectory.Root);
+        Assert.Throws<IOException>(() => ZapretUpdater.PublishVerifiedPackage(staged, () =>
+        {
+            Assert.False(manager.HasOwnedProcess);
+            Assert.False(File.Exists(bat));
+            throw new IOException("fixture publication failure");
+        }, manager));
+
+        Assert.Equal("previous", ZapretUpdater.GetLocalVersion());
+        Assert.Equal(second.Pid, manager.Pid);
+        Assert.Equal(1, _handle.DisposeCallCount);
+        Assert.Equal(runner.StartCalls[0].Arguments.ToArray(), runner.StartCalls[1].Arguments.ToArray());
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RestartMenusRefuseBeforeLaunchResetAndExitAndCanRetry(bool reset)
+    {
+        var vm = NewVm("general");
+        var manager = GetField<ZapretManager>(vm, "_zapret")!;
+        manager.Start("--wf-tcp=443");
+        var settings = _store.Load();
+        settings.App.ZapretStrategy = "keep-until-reset";
+        _store.Save(settings);
+        int launches = 0, exits = 0;
+        vm.LaunchRestart = info =>
+        {
+            Assert.Equal(!reset, info.ArgumentList.Contains("--safe"));
+            Assert.False(manager.HasOwnedProcess);
+            launches++;
+        };
+        vm.ExitAfterMenuRestart = _ => exits++;
+        void Restart()
+        {
+            if (!reset) vm.RestartInSafeModeCommand.Execute(null);
+            else
+            {
+                vm.ResetConfigCommand.Execute(null);
+                vm.ResetConfigCommand.Execute(null);
+            }
+        }
+        _handle.RefuseKill = true;
+        try
+        {
+            Restart();
+            Assert.Equal((0, 0), (launches, exits));
+            Assert.Equal("keep-until-reset", _store.Load().App.ZapretStrategy);
+            Assert.Equal(_handle.Pid, manager.Pid);
+        }
+        finally { _handle.RefuseKill = false; }
+        Restart();
+        Assert.Equal((1, 1), (launches, exits));
+        Assert.Equal(!reset, _store.Load().App.ZapretStrategy == "keep-until-reset");
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AppUpdateRequiresOwnedStopAndRestoresStrategyWhenApplyFails(bool installStarts)
+    {
+        WriteZapretFile("stub", "bin", "winws.exe");
+        var source = new FakeUpdateSource
+        {
+            CheckResult = new("99.0.0", "https://example.test/release", "app.zip", "https://example.test/app.zip",
+                42, new string('a', 64), false, "fixture"),
+            ApplyReturnValue = installStarts
+        };
+        int exits = 0;
+        var vm = new MainWindowViewModel(_store, logger: null, updateSource: source, exitApplication: _ => exits++);
+        _models.Add(vm);
+        var restored = new FakeProcessHandle(3276);
+        var handles = new Queue<FakeProcessHandle>(new[] { _handle, restored });
+        var runner = new FakeProcessRunner().OnStart(_ => true, _ => handles.Dequeue());
+        var manager = new ZapretManager(runner: runner) { HasDriverConflict = () => false };
+        SetField(vm, "_zapret", manager);
+        manager.Start("--wf-tcp=443");
+        vm.ZapretEnabled = true;
+        await vm.UpdateVm.CheckManuallyCommand.ExecuteAsync(null);
+        _handle.RefuseKill = true;
+        try
+        {
+            await vm.UpdateVm.DownloadAndApplyCommand.ExecuteAsync(null);
+            Assert.Equal(0, source.ApplyCallCount);
+            Assert.False(vm.UpdateVm.IsDownloading);
+            Assert.Equal(0, exits);
+            Assert.Equal(_handle.Pid, manager.Pid);
+        }
+        finally { _handle.RefuseKill = false; }
+
+        await vm.UpdateVm.DownloadAndApplyCommand.ExecuteAsync(null);
+        Assert.Equal(1, source.ApplyCallCount);
+        Assert.Equal(installStarts ? 1 : 0, exits);
+        Assert.Equal(1, _handle.DisposeCallCount);
+        if (installStarts) Assert.False(manager.HasOwnedProcess);
+        else
+        {
+            Assert.Equal(restored.Pid, manager.Pid);
+            Assert.Equal(runner.StartCalls[0].Arguments.ToArray(), runner.StartCalls[1].Arguments.ToArray());
+        }
+    }
+
     [AvaloniaFact]
     public async Task BusyInstallationPreservesTheRunningStrategyOnFreshProbe()
     {

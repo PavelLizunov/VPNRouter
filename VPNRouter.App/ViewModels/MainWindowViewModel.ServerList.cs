@@ -209,8 +209,9 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void RemoveCustomConfig()
     {
-        if (SelectedCustomConfig == null) return;
-        var name = SelectedCustomConfig.Name;
+        if (_isLoadingUI || SelectedCustomConfig == null) return;
+        var removed = SelectedCustomConfig.ToEntry();
+        var name = removed.Name;
         var wasActive = SelectedCustomConfig.IsActive;
         CustomConfigs.Remove(SelectedCustomConfig);
 
@@ -221,6 +222,14 @@ public partial class MainWindowViewModel
         }
 
         SaveSettings();
+        try { CustomConfigInjector.ForgetAcceptedImport(removed, _settings.App.CustomConfigs); }
+        catch (Exception ex)
+        {
+            _logger.Warning("[VM] Could not remove saved custom configuration snapshot ({ExceptionType})", ex.GetType().Name);
+            StatusText = IsRussian ? "Конфиг удалён из списка. Копию для восстановления удалить не удалось." :
+                "Configuration removed from the list. Its recovery copy could not be deleted.";
+            return;
+        }
         StatusText = IsRussian ? $"Конфиг \"{name}\" удалён" : $"Config \"{name}\" removed";
     }
 

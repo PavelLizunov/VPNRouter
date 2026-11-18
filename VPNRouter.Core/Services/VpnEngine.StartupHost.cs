@@ -80,17 +80,17 @@ public partial class VpnEngine
 
         public void OnFailoverRequested(string reason)
         {
+            // The monitor raises this event under its settings gate. Freeze the active policy
+            // here; a queued task may begin after Apply accepts a different one.
+            var token = _engine._sessionCts?.Token ?? CancellationToken.None;
+            var failover = WireFailoverWithStop(new ConfigSanityCheck(_engine._logger));
             _ = Task.Run(async () =>
             {
-                var token = _engine._sessionCts?.Token ?? CancellationToken.None;
                 try
                 {
-                    if (token.IsCancellationRequested) return;
-                    var sanity = new ConfigSanityCheck(_engine._logger);
-                    var failover = WireFailoverWithStop(sanity);
+                    if (token.IsCancellationRequested || failover.IsCurrentIntent?.Invoke() != true) return;
                     var outcome = await failover.HandleDeadConfigAsync(reason, token);
-                    if (outcome.UserFacingMessage != null
-                        && _engine._sessionCts?.IsCancellationRequested != true)
+                    if (outcome.UserFacingMessage != null && failover.IsCurrentIntent?.Invoke() == true)
                         _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
                 }
                 catch (Exception)
@@ -174,6 +174,7 @@ public partial class VpnEngine
         {
             var settings = _engine._failoverSettingsContext ?? CapturedSettings();
             var generation = _engine._failoverGeneration;
+            var session = _engine._sessionCts;
             _engine._failover ??= new AutoFailoverEngine(
                 settings,
                 sanityCheck,
@@ -187,7 +188,7 @@ public partial class VpnEngine
                 {
                     var sessionCts = _engine._sessionCts;
                     return !_engine._disposed && !_engine._confirmingFreeConfig
-                        && _engine._failoverGeneration == generation
+                        && _engine._failoverGeneration == generation && ReferenceEquals(session, sessionCts)
                         && (sessionCts == null || !sessionCts.IsCancellationRequested);
                 }
             };
@@ -200,6 +201,14 @@ public partial class VpnEngine
             _capturedSettings ?? throw new InvalidOperationException(
                 "StartupHost: CaptureSettings was not called before F-E wire-up.");
 
+        public CancellationToken BeginStartupProbes(CancellationToken ct)
+        {
+            _engine._probeCts?.Cancel();
+            _engine._probeCts?.Dispose();
+            _engine._probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            return _engine._probeCts.Token;
+        }
+
         public void SchedulePostStartProbe(
             AppSettings settings,
             ConfigSanityCheck sanityCheck,
@@ -209,37 +218,32 @@ public partial class VpnEngine
 
             _engine.TryStartConnectionHealthStream(settings);
 
-            _engine._probeCts?.Cancel();
-            _engine._probeCts?.Dispose();
-            _engine._probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var probeCt = _engine._probeCts.Token;
-
+            var pid = _startedHandle?.Pid ?? -1;
+            var port = ParseClashApiPort(settings.SingBox.ClashApi);
+            var secret = settings.SingBox.ClashApiSecret;
+            var failover = WireFailoverWithStop(sanityCheck);
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(15), probeCt);
-                    var clashPort = ParseClashApiPort(settings.SingBox.ClashApi);
-                    var probe = await sanityCheck.ProbeAsync(
-                        clashPort, settings.SingBox.ClashApiSecret, probeCt);
-                    if (ShouldAutoFailoverAfterProbe(
-                            probe.IsDead, probeCt.IsCancellationRequested, _engine._warmupConfirmed))
+                    await Task.Delay(TimeSpan.FromSeconds(15), ct);
+                    var probe = await ProbeCurrentStartAsync(
+                        () => IsCurrentStart(pid),
+                        token => sanityCheck.ProbeAsync(port, secret, token), ct);
+                    if (probe == null || ct.IsCancellationRequested) return;
+                    var warmedUp = _engine._warmupConfirmed;
+                    if (!ShouldAutoFailoverAfterProbe(probe.IsDead, ct.IsCancellationRequested, warmedUp))
                     {
-                        _engine._logger?.Warning(
-                            "[VpnEngine] F-E post-start probe failed, requesting failover");
+                        if (probe.IsDead && warmedUp)
+                            _engine._logger?.Warning(
+                                "[VpnEngine] F-E post-start probe failed after TUN warmup confirmed connectivity, keeping current server");
+                        return;
+                    }
 
-                        var failover = WireFailoverWithStop(sanityCheck);
-                        var outcome = await failover.HandleDeadConfigAsync(
-                            probe.Reason ?? "probe failed", probeCt);
-                        if (outcome.UserFacingMessage != null
-                            && _engine._sessionCts?.IsCancellationRequested != true)
-                            _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
-                    }
-                    else if (probe.IsDead && !probeCt.IsCancellationRequested && _engine._warmupConfirmed)
-                    {
-                        _engine._logger?.Warning(
-                            "[VpnEngine] F-E post-start probe failed after TUN warmup confirmed connectivity, keeping current server");
-                    }
+                    _engine._logger?.Warning("[VpnEngine] F-E post-start probe failed, requesting failover");
+                    var outcome = await failover.HandleDeadConfigAsync(probe.Reason ?? "probe failed", ct);
+                    if (outcome.UserFacingMessage != null && failover.IsCurrentIntent?.Invoke() == true)
+                        _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
                 }
                 catch (OperationCanceledException) { }
                 catch (Exception)
@@ -247,7 +251,7 @@ public partial class VpnEngine
                     _engine._logger?.Debug(
                         "[VpnEngine] F-E probe task threw (non-fatal)");
                 }
-            }, probeCt);
+            }, ct);
         }
     }
 }

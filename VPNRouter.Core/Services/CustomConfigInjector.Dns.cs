@@ -256,7 +256,7 @@ public static partial class CustomConfigInjector
         return rule;
     }
 
-    private static void EnsureDnsHijackRule(JsonObject config, bool isActionBased)
+    private static void EnsureDnsHijackRule(JsonObject config)
     {
         var route = config["route"] as JsonObject;
         if (route == null)
@@ -288,13 +288,7 @@ public static partial class CustomConfigInjector
                 }
             }
 
-            var hijackRule = new JsonObject { ["protocol"] = "dns" };
-            if (isActionBased)
-                hijackRule["action"] = "hijack-dns";
-            else
-                hijackRule["outbound"] = "dns-out";
-
-            rules.Insert(insertIndex, hijackRule);
+            rules.Insert(insertIndex, new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" });
         }
     }
 }

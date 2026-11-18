@@ -477,7 +477,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public MainWindowViewModel(ISettingsStore? settingsStore) : this(settingsStore, null) { }
 
-    internal MainWindowViewModel(ISettingsStore? settingsStore, ILogger? logger)
+    internal MainWindowViewModel(ISettingsStore? settingsStore, ILogger? logger,
+        VPNRouter.Core.Services.UpdateSources.IUpdateSource? updateSource = null, Action<int>? exitApplication = null)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
 
@@ -512,7 +513,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WireServersOrphanTracking();
         WireSimpleHomeNotifications();
 
-        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
+        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger, updateSource, exitApplication);
+        UpdateVm.ReserveRestart = ReserveUpdateRestart;
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
@@ -712,8 +714,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return true;
         if (!TryReleaseZapretForShutdown()) return false;
 
-        if (_engine.IsRunning)
-            _engine.Stop();
+        if (_engine.HasActiveTunnel)
+        {
+            try { _engine.Stop(); }
+            catch (InvalidOperationException)
+            {
+                StatusText = Strings.TunnelStopUnconfirmed;
+                return false;
+            }
+        }
 
         StopSubRefreshTimer();
 
@@ -728,8 +737,61 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return true;
     }
 
+    private bool _restartReserved;
+
+    private Action<bool> ReserveUpdateRestart()
+    {
+        var finish = ReserveRestart();
+        try
+        {
+            if (_engine.HasActiveTunnel) _engine.Stop();
+            return finish;
+        }
+        catch { finish(false); throw; }
+    }
+
+    private Action<bool> ReserveRestart()
+    {
+        if (_disposed || !IsZapretMagicButtonEnabled)
+            throw new InvalidOperationException(Core.Localization.Strings.ZapretRestartPending);
+        _restartReserved = true;
+        Action? restore = null;
+        try
+        {
+#if PLATFORM_WINDOWS
+            restore = _zapret?.SuspendOwnedStrategy();
+#endif
+            OnPropertyChanged(nameof(IsZapretMagicButtonEnabled));
+        }
+        catch
+        {
+            _restartReserved = false;
+            throw;
+        }
+        return committed =>
+        {
+            try { if (!committed) restore?.Invoke(); }
+            catch (Exception ex)
+            {
+                ZapretEnabled = IsZapretRunning();
+                ZapretStatus = ex.Message;
+                throw;
+            }
+            finally
+            {
+                _restartReserved = false;
+                OnPropertyChanged(nameof(IsZapretMagicButtonEnabled));
+            }
+        };
+    }
+
     private bool TryReleaseZapretForShutdown()
     {
+        if (_restartReserved || IsZapretDownloading)
+        {
+            StatusText = ZapretStatus = Core.Localization.Strings.ZapretRestartPending;
+            return false;
+        }
 #if PLATFORM_WINDOWS
         if (_zapretProbeCts != null)
         {

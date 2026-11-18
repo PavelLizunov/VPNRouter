@@ -140,6 +140,7 @@ public final class VpnRouterService extends VpnService {
     private volatile boolean ended;
     private volatile boolean stopRequested;
     private int executingStartId;
+    private String executingUiCommand;
     private PowerManager.WakeLock connectWakeLock;
 
     private HandlerThread netCallbackThread;
@@ -163,10 +164,11 @@ public final class VpnRouterService extends VpnService {
         lifecycleExecutor.execute(task);
     }
 
-    private void submitCommand(int startId, Runnable task) {
+    private void submitCommand(int startId, String origin, Runnable task) {
         submitLifecycle(() -> {
             if (ended) return;
             executingStartId = startId;
+            executingUiCommand = origin;
             task.run();
         });
     }
@@ -185,7 +187,8 @@ public final class VpnRouterService extends VpnService {
 
     private void broadcastTunnelEvent(Intent event) {
         String pkg = getPackageName();
-        if (ACTION_TUNNEL_ERROR.equals(event.getAction())) {
+        if (!ACTION_STATS.equals(event.getAction())) {
+            event.putExtra(UI_COMMAND, executingUiCommand);
             event.putExtra(STATE_EVENT, getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(STATE_EVENT, null));
         }
         sendBroadcast(event.setPackage(pkg), pkg + ".permission.TUNNEL_STATUS");
@@ -361,15 +364,22 @@ public final class VpnRouterService extends VpnService {
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
+    public synchronized int onStartCommand(Intent intent, int flags, int startId) {
         if (ended) return START_NOT_STICKY;
         String action = intent != null ? intent.getAction() : null;
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         String uiCommand = intent == null ? null : intent.getStringExtra(UI_COMMAND);
         String restartTicket = intent == null ? null : intent.getStringExtra(RESTART_TICKET);
         boolean scheduledRestart = ACTION_RESTART.equals(action);
+        final String origin;
+        if (uiCommand == null && (ACTION_STOP.equals(action) || ACTION_START.equals(action) || ACTION_TILE_START.equals(action))) {
+            origin = java.util.UUID.randomUUID().toString();
+            prefs.edit().putString(UI_COMMAND, origin).apply();
+        } else {
+            origin = uiCommand != null ? uiCommand : prefs.getString(UI_COMMAND, null);
+        }
         if (scheduledRestart && (restartTicket == null || !restartTicket.equals(prefs.getString(RESTART_TICKET, null)))) {
-            submitCommand(startId, () -> { if (commandServer == null) finishCommand(startId); });
+            submitCommand(startId, origin, () -> { if (commandServer == null) finishCommand(startId); });
             return START_NOT_STICKY;
         }
         if (ACTION_STOP.equals(action)) stopRequested = true;
@@ -379,7 +389,7 @@ public final class VpnRouterService extends VpnService {
             if (nText != null && !nText.isEmpty()) notifText = nText;
             String nDisc = intent.getStringExtra(EXTRA_NOTIF_DISCONNECT);
             if (nDisc != null && !nDisc.isEmpty()) notifDisconnect = nDisc;
-            if (!ensureForegroundStarted(startId)) {
+            if (!ensureForegroundStarted(startId, origin)) {
                 return START_NOT_STICKY;
             }
             final String cfg = intent.getStringExtra(EXTRA_CONFIG_JSON);
@@ -392,7 +402,7 @@ public final class VpnRouterService extends VpnService {
             final String dnsCert = intent.getStringExtra(EXTRA_DNS_TUNNEL_CERT);
             final int dnsPort = intent.getIntExtra(EXTRA_DNS_TUNNEL_PORT, 7001);
             final boolean dnsUseSystem = intent.getBooleanExtra(EXTRA_DNS_TUNNEL_USE_SYSTEM_RESOLVER, false);
-            submitCommand(startId, new Runnable() {
+            submitCommand(startId, origin, new Runnable() {
                 @Override
                 public void run() {
                     if (uiCommand != null && !uiCommand.equals(prefs.getString(UI_COMMAND, null))) {
@@ -437,10 +447,8 @@ public final class VpnRouterService extends VpnService {
                 }
             });
         } else if (ACTION_STOP.equals(action)) {
-            // A UI stop has already superseded its preparation. Notification and tile stops arrive here directly.
-            if (uiCommand == null) prefs.edit().remove(UI_COMMAND).apply();
             cancelScheduledRestart();
-            submitCommand(startId, new Runnable() {
+            submitCommand(startId, origin, new Runnable() {
                 @Override
                 public void run() {
                     stopTunnel(true);
@@ -451,10 +459,10 @@ public final class VpnRouterService extends VpnService {
         } else {
             Log.i(LOG_TAG, "AND-NETRES: system-initiated start (action=" + action
                     + ") — attempting last-good config restore");
-            if (!ensureForegroundStarted(startId)) {
+            if (!ensureForegroundStarted(startId, origin)) {
                 return START_NOT_STICKY;
             }
-            submitCommand(startId, new Runnable() {
+            submitCommand(startId, origin, new Runnable() {
                 @Override
                 public void run() {
                     if (scheduledRestart && !restartTicket.equals(prefs.getString(RESTART_TICKET, null))) {
@@ -486,7 +494,7 @@ public final class VpnRouterService extends VpnService {
         return super.onBind(intent);
     }
 
-    private boolean ensureForegroundStarted(int startId) {
+    private boolean ensureForegroundStarted(int startId, String origin) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(NOTIFICATION_ID, buildNotification(),
@@ -496,7 +504,7 @@ public final class VpnRouterService extends VpnService {
             }
             return true;
         } catch (Exception e) {
-            submitCommand(startId, () -> reportFailure("foreground-start-blocked", commandServer != null));
+            submitCommand(startId, origin, () -> reportFailure("foreground-start-blocked", commandServer != null));
             return false;
         }
     }
@@ -1028,9 +1036,11 @@ public final class VpnRouterService extends VpnService {
     public synchronized void onRevoke() {
         if (ended) return;
         ended = true;
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().remove(UI_COMMAND).apply();
+        String revoked = java.util.UUID.randomUUID().toString();
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(UI_COMMAND, revoked).apply();
         cancelScheduledRestart();
         submitLifecycle(() -> {
+            executingUiCommand = revoked;
             writeVpnState(STATE_ERROR, "no-permission");
             stopTunnel(false);
             broadcastTunnelEvent(new Intent(ACTION_TUNNEL_ERROR).putExtra(EXTRA_ERROR_MESSAGE, "no-permission"));
@@ -1051,7 +1061,7 @@ public final class VpnRouterService extends VpnService {
     }
 
     @Override
-    public void onTaskRemoved(Intent rootIntent) {
+    public synchronized void onTaskRemoved(Intent rootIntent) {
         try {
             if (!ended && !stopRequested && commandServer != null && isIgnoringBatteryOptimizations()) {
                 String ticket = java.util.UUID.randomUUID().toString();
