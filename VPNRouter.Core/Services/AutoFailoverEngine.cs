@@ -42,6 +42,20 @@ public sealed class AutoFailoverEngine
         _store = store ?? RealSettingsStore.Instance;
     }
 
+    private sealed record Selection(string ActiveServer, string SubscriptionName, string? FeedId, string? RowKey)
+    {
+        internal static Selection Read(AppSettings settings) => new(settings.Vless.ActiveServer,
+            settings.App.ActiveSubscriptionServer, settings.App.ActiveSubscriptionId, settings.App.ActiveSubscriptionRow);
+
+        internal void Apply(AppSettings settings)
+        {
+            settings.Vless.ActiveServer = ActiveServer;
+            settings.App.ActiveSubscriptionServer = SubscriptionName;
+            settings.App.ActiveSubscriptionId = FeedId;
+            settings.App.ActiveSubscriptionRow = RowKey;
+        }
+    }
+
     public Task<FailoverOutcome> HandleDeadConfigAsync(string reason, CancellationToken ct = default) =>
         HandleDeadConfigAsync(reason, ct, _restart, canReplace: null);
 
@@ -55,8 +69,8 @@ public sealed class AutoFailoverEngine
             return rejected;
         var candidate = await ChooseCandidateAsync(pool, ct).ConfigureAwait(false);
 
-        var oldActive = _settings.Vless.ActiveServer ?? "";
-        var oldActiveSub = _settings.App.ActiveSubscriptionServer;
+        var previous = Selection.Read(_settings);
+        var oldActive = ActiveAttemptName();
 
         var newName = candidate.Name;
         if (string.IsNullOrWhiteSpace(newName))
@@ -73,10 +87,14 @@ public sealed class AutoFailoverEngine
 
         bool addedOld = !string.IsNullOrWhiteSpace(oldActive) && _tried.Add(oldActive);
 
-        _settings.Vless.ActiveServer = newName;
-        _settings.App.ActiveSubscriptionServer = newName;
+        var source = _settings.App.Subscriptions?.FirstOrDefault(feed =>
+            feed is { Enabled: true, Servers: not null } && feed.Servers.Contains(candidate));
+        var selectionName = source == null ? newName : candidate.Name;
+        var replacement = new Selection(selectionName, selectionName, source?.Id,
+            source == null ? null : SubscriptionEntry.RowKey(candidate));
+        replacement.Apply(_settings);
 
-        var committed = await RestartWithRollbackAsync(oldActive, oldActiveSub, ct, restart);
+        var committed = await RestartWithRollbackAsync(previous, ct, restart);
 
         if (!IsIntentCurrent())
         {
@@ -93,14 +111,13 @@ public sealed class AutoFailoverEngine
             }
             else if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(newName))
                 _tried.Add(newName);
-            _settings.Vless.ActiveServer = oldActive;
-            _settings.App.ActiveSubscriptionServer = oldActiveSub;
+            previous.Apply(_settings);
             _logger?.Information(
                 "[AutoFailover] Replacement start not confirmed, restored previous selection");
             return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
         }
 
-        PersistSelection(newName);
+        PersistSelection(replacement);
 
         return new FailoverOutcome(
             Switched: true,
@@ -176,7 +193,7 @@ public sealed class AutoFailoverEngine
     }
 
     private async Task<bool> RestartWithRollbackAsync(
-        string oldActive, string oldActiveSub, CancellationToken ct, Func<CancellationToken, Task<bool>>? restart)
+        Selection previous, CancellationToken ct, Func<CancellationToken, Task<bool>>? restart)
     {
         bool committed = true;
         if (restart != null)
@@ -184,11 +201,7 @@ public sealed class AutoFailoverEngine
             try { committed = await restart(ct); }
             catch (OperationCanceledException)
             {
-                if (IsIntentCurrent())
-                {
-                    _settings.Vless.ActiveServer = oldActive;
-                    _settings.App.ActiveSubscriptionServer = oldActiveSub;
-                }
+                if (IsIntentCurrent()) previous.Apply(_settings);
                 throw;
             }
             catch (Exception) { _logger?.Warning("[AutoFailover] Restart delegate threw"); committed = false; }
@@ -198,13 +211,12 @@ public sealed class AutoFailoverEngine
         return committed;
     }
 
-    private void PersistSelection(string newName)
+    private void PersistSelection(Selection replacement)
     {
         try
         {
             var onDisk = _store.Load();
-            onDisk.Vless.ActiveServer = newName;
-            onDisk.App.ActiveSubscriptionServer = newName;
+            replacement.Apply(onDisk);
             _store.Save(onDisk);
             _logger?.Information("[AutoFailover] Persisted replacement server selection");
         }
@@ -230,7 +242,7 @@ public sealed class AutoFailoverEngine
 
     private List<VlessServerEntry> PickCandidates(out string poolSource)
     {
-        var oldActive = _settings.Vless.ActiveServer ?? "";
+        var oldActive = ActiveAttemptName();
 
         if (ProductEdition.IsBusiness)
         {
@@ -329,6 +341,15 @@ public sealed class AutoFailoverEngine
             return false;
 
         return true;
+    }
+
+    private string ActiveAttemptName()
+    {
+        if (!string.IsNullOrWhiteSpace(_settings.Vless.ActiveServer)) return _settings.Vless.ActiveServer;
+        var app = _settings.App;
+        var source = app.Subscriptions?.FirstOrDefault(s => s != null && s.Id == app.ActiveSubscriptionId);
+        var row = source?.FindExactRow(app.ActiveSubscriptionServer, app.ActiveSubscriptionRow);
+        return row == null ? string.Empty : $"{row.Server}:{row.Port}";
     }
 
     private bool IsAlreadyTried(VlessServerEntry entry, string oldActive)

@@ -62,6 +62,51 @@ public sealed class AutoFailoverRecoveryAndPersistTests
         Assert.True(recovered.Switched, "failover should recover after ResetCycle");
     }
 
+    [Theory]
+    [InlineData("accept", false)]
+    [InlineData("accept", true)]
+    [InlineData("refuse", false)]
+    [InlineData("cancel", false)]
+    public async Task CrossFeedFailoverCommitsTheWholeChosenRowOrRestoresThePreviousOne(string result, bool unnamed)
+    {
+        var settings = SubscribeWith("srv-a", "srv-b");
+        var first = settings.App.Subscriptions.Single();
+        var oldRow = first.Servers[0];
+        var replacement = first.Servers[1];
+        if (unnamed) replacement.Name = string.Empty;
+        first.Servers.RemoveAt(1);
+        var second = new SubscriptionEntry { Url = "https://other.invalid/sub", Servers = [replacement] };
+        settings.App.Subscriptions.Add(second);
+        settings.App.ActiveSubscriptionId = first.Id;
+        settings.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(oldRow);
+        var store = new InMemorySettingsStore();
+        store.Save(SettingsLoader.Copy(settings));
+        AppSettings? duringRestart = null;
+        var engine = new AutoFailoverEngine(settings, new ConfigSanityCheck(), _ =>
+        {
+            duringRestart = SettingsLoader.Copy(settings);
+            if (result == "cancel") throw new System.OperationCanceledException();
+            return Task.FromResult(result == "accept");
+        }, store: store);
+        if (result == "cancel")
+            await Assert.ThrowsAnyAsync<System.OperationCanceledException>(() => engine.HandleDeadConfigAsync("fixture"));
+        else
+            Assert.Equal(result == "accept", (await engine.HandleDeadConfigAsync("fixture")).Switched);
+        Assert.Equal(second.Id, duringRestart?.App.ActiveSubscriptionId);
+        Assert.Equal(SubscriptionEntry.RowKey(replacement), duringRestart?.App.ActiveSubscriptionRow);
+
+        var expectedFeed = result == "accept" ? second : first;
+        var expectedRow = expectedFeed.Servers.Single();
+        foreach (var reopened in new[] { SettingsLoader.Copy(store.Load()), SettingsLoader.Copy(settings) })
+        {
+            Assert.Equal(expectedFeed.Id, reopened.App.ActiveSubscriptionId);
+            Assert.Equal(SubscriptionEntry.RowKey(expectedRow), reopened.App.ActiveSubscriptionRow);
+            Assert.Equal(expectedRow.Name, reopened.App.ActiveSubscriptionServer);
+            VlessServersResolver.Resolve(reopened);
+            Assert.Equal(expectedRow.Server, reopened.Vless.GetActiveServers()[0].Server);
+        }
+    }
+
     [Fact]
     public async Task Persist_DoesNotLeakResolverAggregateIntoVlessServers()
     {
