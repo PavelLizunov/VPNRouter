@@ -18,7 +18,7 @@ public partial class MainWindowViewModel
             StatusText = text;
             _lastConnectionAlert = text;
             RaiseSimpleAlertProps();
-            _logger.Warning("[VM] AutoFailover surfaced to user: {Message}", message);
+            _logger.Warning("[VM] Displayed automatic failover notification");
         });
     }
 
@@ -38,7 +38,7 @@ public partial class MainWindowViewModel
             };
             IsTrueSplitActive = state is TrueSplitState.Active;
             IsTrueSplitProblem = state is TrueSplitState.DriverMissing or TrueSplitState.Fallback;
-            _logger.Information("[VM] TrueSplit state={State}: {Reason}", state, reason);
+            _logger.Information("[VM] TrueSplit state={State}", state);
         });
 
     private void MarkTrueSplitServiceManagedIfNeeded()
@@ -135,13 +135,13 @@ public partial class MainWindowViewModel
                 if (!VPNRouter.App.Services.WindowsServiceHelper.IsRunning()) return;
                 var result = VPNRouter.App.Services.WindowsServiceHelper.Stop();
                 if (result.Success)
-                    _logger.Information("[VM] TrueSplit retry stopped VPNRouter Service before re-engage: {Message}", result.Message);
+                    _logger.Information("[VM] TrueSplit retry stopped VPNRouter Service before re-engage");
                 else
-                    _logger.Warning("[VM] TrueSplit retry could not stop VPNRouter Service: {Message}", result.Message);
+                    _logger.Warning("[VM] TrueSplit retry could not stop VPNRouter Service");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logger.Debug(ex, "[VM] TrueSplit retry service-stop probe failed");
+                _logger.Debug("[VM] TrueSplit retry service-stop probe failed");
             }
         });
 #endif
@@ -286,8 +286,7 @@ public partial class MainWindowViewModel
                 _settings.Vless.Servers = aggregatedServers;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
                 _logger.Information(
-                    "[VM] ToggleConnectionAsync.Connect.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
-                    aggregatedServers.Count, _settings.Vless.ActiveServer);
+                    "[VM] Connecting with {Count} aggregated subscription servers", aggregatedServers.Count);
             }
 
             if (OperatingSystem.IsMacOS())
@@ -380,7 +379,7 @@ public partial class MainWindowViewModel
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to start VPN");
+                _logger.Error("Failed to start VPN ({ExceptionType})", ex.GetType().Name);
                 IsConnecting = false;
                 if (IsConnected && _engine.IsRunning)
                 {
@@ -661,7 +660,7 @@ public partial class MainWindowViewModel
         StatusText = IsRussian
             ? $"Выбран {newServerName}. VPN управляется службой — остановите и запустите VPN, чтобы переключиться."
             : $"Selected {newServerName}. VPN is managed by the service — Stop and Start VPN to switch.";
-        _logger.Information("[VM] Service-managed VPN: selection '{Name}' saved; user must Stop+Start to apply", newServerName);
+        _logger.Information("[VM] Service-managed VPN selection requires a restart");
     }
 
     private async Task ReconnectAsync(string configName, ReconnectIntent intent = ReconnectIntent.Follow)
@@ -674,9 +673,8 @@ public partial class MainWindowViewModel
             : $"Switching to {configName}...";
 
         _logger.Information(
-            "[VM] ReconnectAsync target={Target} intent={Intent} ConfigMode={CM} IsVlessMode={V} IsSubscribeMode={S}",
-            configName, intent,
-            _settings.App.ConfigMode, IsVlessMode, IsSubscribeMode);
+            "[VM] Reconnecting (intent={Intent}, vlessMode={VlessMode}, subscribeMode={SubscribeMode})",
+            intent, IsVlessMode, IsSubscribeMode);
 
         try
         {
@@ -706,10 +704,7 @@ public partial class MainWindowViewModel
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
             _logger.Information(
-                "[VM] ReconnectAsync after Save+Reload: ConfigMode={CM} VlessActive={VA} SubActive={SA} VlessServers={N}",
-                _settings.App.ConfigMode,
-                _settings.Vless.ActiveServer,
-                _settings.App.ActiveSubscriptionServer,
+                "[VM] Reloaded reconnect settings with {Count} configured servers",
                 _settings.Vless.Servers?.Count ?? 0);
 
             var aggregated = _settings.App.Subscriptions
@@ -723,8 +718,7 @@ public partial class MainWindowViewModel
                 _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
                 _settings.Vless.ActiveServer = configName;
                 _logger.Information(
-                    "[VM] ReconnectAsync.ManualVless: forced ConfigMode=generated, Vless.Servers={N}, ActiveServer={A}",
-                    _settings.Vless.Servers.Count, configName);
+                    "[VM] Reconnecting with {Count} manual servers", _settings.Vless.Servers.Count);
             }
             else if ((intent == ReconnectIntent.Subscription || (intent == ReconnectIntent.Follow && IsSubscribeMode))
                      && aggregated.Count > 0)
@@ -732,8 +726,7 @@ public partial class MainWindowViewModel
                 _settings.Vless.Servers = aggregated;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
                 _logger.Information(
-                    "[VM] ReconnectAsync.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
-                    aggregated.Count, _settings.Vless.ActiveServer);
+                    "[VM] Reconnecting with {Count} aggregated subscription servers", aggregated.Count);
             }
 
             if (applyInPlace)
@@ -748,7 +741,7 @@ public partial class MainWindowViewModel
                 {
                     RestoreConnectedStatus();
                     try { RefreshActiveIndicator(); }
-                    catch (Exception ex) { _logger.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
+                    catch (Exception) { _logger.Debug("[VM] Reconnect: RefreshActiveIndicator failed"); }
                     return;
                 }
 
@@ -797,7 +790,7 @@ public partial class MainWindowViewModel
             }
 
             try { RefreshActiveIndicator(); }
-            catch (Exception ex) { _logger.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
+            catch (Exception) { _logger.Debug("[VM] Reconnect: RefreshActiveIndicator failed"); }
         }
         catch (OperationCanceledException)
         {
@@ -819,7 +812,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] Reconnect failed");
+            _logger.Error("[VM] Reconnect failed ({ExceptionType})", ex.GetType().Name);
             IsConnected = false;
             StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
             ConnectButtonText = Strings.StartVPN;

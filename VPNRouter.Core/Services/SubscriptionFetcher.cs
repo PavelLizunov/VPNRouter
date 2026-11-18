@@ -39,13 +39,13 @@ public static class SubscriptionFetcher
         if (!Uri.TryCreate(url, UriKind.Absolute, out var parsedUri) ||
             (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps))
         {
-            logger?.Warning("[Subscription] Refusing non-http(s) subscription URL: {Url}", CanaryPolicy.RedactUrl(url));
+            logger?.Warning("[Subscription] Refusing non-http(s) subscription URL");
             return (result, 0, userInfo);
         }
 
         try
         {
-            logger?.Information("[Subscription] Fetching {Url}", CanaryPolicy.RedactUrl(url));
+            logger?.Information("[Subscription] Fetching server list");
 
             var httpResp = await Http.SendAsync(
                 new HttpRequest(HttpMethod.Get, parsedUri,
@@ -54,7 +54,7 @@ public static class SubscriptionFetcher
                 ct);
             if (!httpResp.IsSuccess())
             {
-                logger?.Warning("[Subscription] HTTP {Status} from {Url}", httpResp.StatusCode, CanaryPolicy.RedactUrl(url));
+                logger?.Warning("[Subscription] Fetch returned HTTP {Status}", httpResp.StatusCode);
                 return (result, 0, userInfo);
             }
             if (httpResp.Headers != null)
@@ -68,7 +68,7 @@ public static class SubscriptionFetcher
             var response = httpResp.AsString();
             if (string.IsNullOrWhiteSpace(response))
             {
-                logger?.Warning("[Subscription] Empty response from {Url}", CanaryPolicy.RedactUrl(url));
+                logger?.Warning("[Subscription] Empty response");
                 return (result, 0, userInfo);
             }
 
@@ -77,17 +77,15 @@ public static class SubscriptionFetcher
             if (droppedPlaceholders > 0)
             {
                 logger?.Warning(
-                    "[Subscription] Dropped {DroppedCount} entries with placeholder credentials from {Url} " +
-                    "(likely test/sample URLs scraped by provider). User's other servers preserved.",
-                    droppedPlaceholders, CanaryPolicy.RedactUrl(url));
+                    "[Subscription] Dropped {DroppedCount} entries with placeholder credentials",
+                    droppedPlaceholders);
             }
 
-            logger?.Information("[Subscription] Fetched {Count} servers from {Url}", result.Count, CanaryPolicy.RedactUrl(url));
+            logger?.Information("[Subscription] Fetched {Count} servers", result.Count);
         }
         catch (Exception ex)
         {
-            logger?.Error("[Subscription] Fetch failed for {Url}: {ExceptionType}",
-                CanaryPolicy.RedactUrl(url), ex.GetType().Name);
+            logger?.Error("[Subscription] Fetch failed ({ExceptionType})", ex.GetType().Name);
         }
 
         return (result, droppedPlaceholders, userInfo);
@@ -146,9 +144,9 @@ public static class SubscriptionFetcher
                     return false;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                logger?.Warning(ex, "[Subscription] Failed to parse JSON response");
+                logger?.Warning("[Subscription] Failed to parse JSON response");
                 decoded = trimmed;
             }
         }
@@ -211,10 +209,9 @@ public static class SubscriptionFetcher
             {
                 droppedPlaceholders++;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                logger?.Warning(ex, "[Subscription] Failed to parse line: {Line}",
-                    CrashReporter.ScrubSecrets(line));
+                logger?.Warning("[Subscription] Skipped invalid server URI");
             }
         }
 
@@ -250,9 +247,7 @@ public static class SubscriptionFetcher
         if (droppedPlaceholders > 0 && logger != null)
         {
             logger.Warning(
-                "[Subscription] Refresh for {Url} dropped {DroppedCount} placeholder entries " +
-                "(likely test/sample URLs scraped by provider). User's other servers preserved.",
-                CanaryPolicy.RedactUrl(entry.Url), droppedPlaceholders);
+                "[Subscription] Refresh dropped {DroppedCount} placeholder entries", droppedPlaceholders);
         }
 
         if (servers.Count > 0)
@@ -263,8 +258,8 @@ public static class SubscriptionFetcher
         }
         else
         {
-            logger?.Warning("[Subscription] Refresh returned 0 servers for {Url}, keeping {Cached} cached server(s)",
-                CanaryPolicy.RedactUrl(entry.Url), entry.Servers?.Count ?? 0);
+            logger?.Warning("[Subscription] Refresh returned 0 servers, keeping {Cached} cached server(s)",
+                entry.Servers?.Count ?? 0);
         }
 
         return servers.Count;

@@ -38,8 +38,8 @@ public partial class VpnEngine
         }
         catch (Exception ex)
         {
-            _logger?.Warning(ex,
-                "[VpnEngine] Pre-start failover restart threw inside StartAsyncInternal");
+            _logger?.Warning(
+                "[VpnEngine] Pre-start failover restart threw inside StartAsyncInternal ({ExceptionType})", ex.GetType().Name);
             if (!IsRunning)
             {
                 try { TeardownInternal(); } catch { }
@@ -91,14 +91,14 @@ public partial class VpnEngine
         {
             if (!IsRunning)
             {
-                _logger?.Warning(ex,
-                    "[VpnEngine] Failover restart failed to bring up replacement — tearing down partial state");
+                _logger?.Warning(
+                    "[VpnEngine] Failover restart failed to bring up replacement, tearing down partial state ({ExceptionType})", ex.GetType().Name);
                 try { TeardownInternal(); } catch { }
             }
             else
             {
-                _logger?.Warning(ex,
-                    "[VpnEngine] Failover restart bring-up threw after sing-box came up — leaving live tunnel for Stop/Dispose");
+                _logger?.Warning(
+                    "[VpnEngine] Failover restart threw after sing-box came up, leaving live tunnel for Stop/Dispose ({ExceptionType})", ex.GetType().Name);
             }
             throw;
         }

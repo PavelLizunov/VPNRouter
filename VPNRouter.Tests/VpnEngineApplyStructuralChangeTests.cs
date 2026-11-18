@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -65,8 +66,10 @@ public sealed class VpnEngineApplyStructuralChangeTests
         Assert.Equal(expectedAppRoutingChanged, changes.AppRoutingChanged);
     }
 
-    [Fact]
-    public async Task ApplyAsync_SingBoxReloadFails_RestoresBaselineAndReturnsFalseWithoutAppliedStatus()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ApplyAsync_FailedGenerationOrReload_ReportsFailureAndRestoresBaseline(bool missingCustomConfig)
     {
         var priorDataDir = GetAppPathsDataDir();
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-apply-reload-fail-{Guid.NewGuid():N}");
@@ -95,12 +98,17 @@ public sealed class VpnEngineApplyStructuralChangeTests
         var monitor = new StubProcessMonitor();
         var fakeDriver = new FakeSplitTunnelDriver();
         var dnsHardening = new NullWindowsDnsHardening();
+        var sink = new CapturingSink();
+        using var logger = new LoggerConfiguration()
+            .Filter.ByIncludingOnly(e => e.MessageTemplate.Text.StartsWith("[VpnEngine] Apply failed", StringComparison.Ordinal)
+                || e.MessageTemplate.Text == "[VpnEngine] {Status}")
+            .WriteTo.Sink(sink).CreateLogger();
 #pragma warning disable CS0618
         var engine = new VpnEngine(
             scanner: scanner,
             firewallFactory: () => firewall,
             monitorFactory: () => monitor,
-            logger: null,
+            logger: logger,
             dnsHardening: dnsHardening,
             splitDriver: fakeDriver);
 #pragma warning restore CS0618
@@ -182,11 +190,22 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
         try
         {
+            if (missingCustomConfig)
+            {
+                settings.App.ConfigMode = "custom";
+                settings.App.CustomConfig = Path.Combine(tempDir, "fixture-private-selection.json");
+            }
+            var expectedFailure = missingCustomConfig
+                ? "Apply failed: check the selected configuration and required rule sets, then retry."
+                : "Apply failed: sing-box reload or restart was not confirmed";
             var result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
-            Assert.False(result, "ApplyAsync must return false when sing-box reload/restart returns false.");
-
-            Assert.Contains("Apply failed: sing-box reload or restart was not confirmed", statuses);
+            Assert.False(result);
+            Assert.Contains(expectedFailure, statuses);
+            Assert.Contains(sink.Events, e => e.Properties.ContainsKey("Status") && e.RenderMessage().Contains(expectedFailure));
+            if (missingCustomConfig)
+                Assert.Contains(sink.Events, e => e.Properties.ContainsKey("ExceptionType") && e.Exception is null);
+            sink.AssertExcludes("TestProfile", "10.0.0.1", "fixture-private-selection");
             Assert.DoesNotContain(statuses, s => s.StartsWith("Applied"));
 
             Assert.Equal(baselineConfigMode, engine.ActiveConfigMode);
@@ -207,7 +226,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             Assert.Equal(0, fakeDriver.EngageCount);
             Assert.Equal(0, fakeDriver.DisengageCount);
 
-            Assert.DoesNotContain(statuses, s => s.StartsWith("Apply failed:") && !s.Contains("sing-box reload or restart was not confirmed"));
+            Assert.DoesNotContain(statuses, s => s.StartsWith("Apply failed:") && s != expectedFailure);
         }
         finally
         {

@@ -40,9 +40,9 @@ internal static class ClashYamlParser
             var de = new DeserializerBuilder().IgnoreUnmatchedProperties().Build();
             root = de.Deserialize<Dictionary<string, object>>(body);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            logger?.Warning(ex, "[Clash] YAML deserialize failed");
+            logger?.Warning("[Clash] YAML deserialize failed");
             return uris;
         }
 
@@ -60,9 +60,9 @@ internal static class ClashYamlParser
                 var uri = MapProxyToUri(proxy);
                 if (!string.IsNullOrEmpty(uri)) uris.Add(uri!);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                logger?.Warning(ex, "[Clash] skipped a proxy entry: {Name}", Str(proxy, "name"));
+                logger?.Warning("[Clash] Skipped invalid proxy entry");
             }
         }
 
