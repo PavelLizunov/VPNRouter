@@ -134,9 +134,10 @@ def export_source(repo_dir: Path, commit_sha: str, work_dir: Path) -> tuple[Path
             ):
                 required_paths.append(path_str)
 
-    for project_dir in ["VPNRouter.Core", "VPNRouter.Headless", "profiles"]:
-        if any(p == project_dir or p.startswith(project_dir + "/") for p in tracked):
-            required_paths.append(project_dir)
+    # Core embeds its updater scripts even when published for Linux.
+    for directory in ("VPNRouter.Core", "VPNRouter.Headless", "profiles", "packaging/windows/installer"):
+        if any(p == directory or p.startswith(directory + "/") for p in tracked):
+            required_paths.append(directory)
 
     source_tar = work_dir / "source.tar"
     subprocess.run(
