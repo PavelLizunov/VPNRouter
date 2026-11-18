@@ -1,11 +1,31 @@
 namespace VPNRouter.Core.Services;
 
 // Commands and state announcements can change while the same TUN continues serving its counters.
-internal readonly record struct AndroidTunnelEvent(string? Command, string? StateEvent, string? Session)
+internal readonly record struct AndroidTunnelEvent(string? Command, string? StateEvent, string? Session,
+    bool SelectionSuperseded = false)
 {
-    internal void PaintIfCurrent(Func<AndroidTunnelEvent?> readCurrent, Action paint)
+    internal bool OwnsCommand(string? command) => command != null && Command == command && !SelectionSuperseded;
+
+    internal bool NeedsReconciliation(string? feedbackCommand) =>
+        SelectionSuperseded || feedbackCommand != null && !OwnsCommand(feedbackCommand);
+
+    internal bool ReconcileIfCurrent(Func<AndroidTunnelEvent?> readCurrent, string? feedbackCommand, Action reconcile) =>
+        NeedsReconciliation(feedbackCommand) && PaintIfCurrent(readCurrent, reconcile);
+
+    // A local preparation owns a command. Service state can advance independently while it awaits.
+    internal bool CompletePreparation(Func<AndroidTunnelEvent?> readCurrent, Action<AndroidTunnelEvent> complete)
     {
-        if (readCurrent() == this) paint();
+        if (Command == null || SelectionSuperseded || readCurrent() is not { } current || !current.OwnsCommand(Command))
+            return false;
+        complete(current);
+        return true;
+    }
+
+    internal bool PaintIfCurrent(Func<AndroidTunnelEvent?> readCurrent, Action paint)
+    {
+        if (readCurrent() != this) return false;
+        paint();
+        return true;
     }
 }
 

@@ -960,7 +960,7 @@ public partial class AndroidApp : Avalonia.Application
             CornerRadius = new CornerRadius(radiusXs),
             Watermark = Localization.SmpInputWatermark,
         };
-        _serverInput.Text = AndroidStorage.SavedServerInput();
+        BindSimpleInput();
 
         var smpQrButton = new Avalonia.Controls.Button
         {
@@ -1526,8 +1526,7 @@ public partial class AndroidApp : Avalonia.Application
                     return false;
                 }
                 if (!AndroidStorage.SelectSingleServer(parsed, raw, command)) return false;
-                _ccMode = "manual";
-                ApplyCcModeVisuals();
+                RefreshConfigModeUiFromStorage();
                 _cachedServers = AndroidStorage.GetServers();
                 UpdateServerListView();
                 UpdateConfigSummary();
@@ -1554,8 +1553,7 @@ public partial class AndroidApp : Avalonia.Application
             AndroidStorage.SetSubscriptionUrl(raw);
             AndroidStorage.SetVlessUri(null);
             AndroidStorage.SetConfigMode("subscribe");
-            _ccMode = "subscribe";
-            ApplyCcModeVisuals();
+            RefreshConfigModeUiFromStorage();
             UpdateConfigSummary();
             return true;
         }

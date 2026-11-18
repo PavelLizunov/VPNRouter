@@ -44,22 +44,12 @@ public static class AndroidStorage
     private const string KeyCustomConfigJson = AndroidSubscriptionRefresh.CustomJson;
     private const string KeyCustomConfigName = AndroidSubscriptionRefresh.CustomName;
 
-    public static string GetConfigMode()
-    {
-        var stored = GetString(KeyConfigMode);
-        if (stored == "subscribe" || stored == "manual" || stored == "custom")
-            return stored;
+    public static string GetConfigMode() => AndroidSubscriptionRefresh.ReadMode(GetString);
+    internal static string SavedServerInput() =>
+        AndroidSubscriptionRefresh.SavedServerInput(GetConfigMode(), GetString, GetSubscriptions);
 
-        if (!string.IsNullOrEmpty(GetString(KeySubscriptionUrl))) return "subscribe";
-        if (!string.IsNullOrEmpty(GetString(KeyVlessUri))) return "manual";
-        return "manual";
-    }
-    internal static string SavedServerInput() => GetConfigMode() switch
-    {
-        "subscribe" => GetSubscriptionUrl() ?? string.Empty,
-        "manual" => GetVlessUri() ?? string.Empty,
-        _ => string.Empty
-    };
+    internal static string? SubscriptionToRefresh(string input) =>
+        AndroidSubscriptionRefresh.SubscriptionToRefresh(input, GetConfigMode(), GetString, GetSubscriptions);
 
     public static bool SetConfigMode(string value) => SetString(KeyConfigMode, value);
 
@@ -123,6 +113,7 @@ public static class AndroidStorage
     public static bool SetVlessUri(string? value) => SetString(KeyVlessUri, value);
 
     public static string? GetSubscriptionUrl() => GetString(KeySubscriptionUrl);
+    internal static string? SelectedSubscriptionId => GetString(AndroidSubscriptionRefresh.SelectedFeedId);
     public static bool SetSubscriptionUrl(string? value)
     {
         if (value == GetSubscriptionUrl()) return true;
@@ -186,9 +177,12 @@ public static class AndroidStorage
     {
         try
         {
-            var list = subs is null ? new List<SubscriptionEntry>() : new List<SubscriptionEntry>(subs);
-            var json = JsonSerializer.Serialize(list, JsonOptions);
-            return SetString(KeySubscriptions, json);
+            return WithCommandPreferences(prefs =>
+            {
+                AndroidSubscriptionRefresh.SaveRegistrations(GetSubscriptions(), subs?.ToList() ?? [], GetConfigMode(),
+                    key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions);
+                return true;
+            });
         }
         catch
         {
@@ -218,9 +212,11 @@ public static class AndroidStorage
         if (!editor.Commit()) throw new InvalidOperationException("VPN settings could not be saved.");
     }
 
-    internal static bool SaveSubscriptionRefresh(SubscriptionEntry entry, bool rejected, string? selectingCommand) =>
+    internal static string? SubscriptionImportRevision => GetString(AndroidSubscriptionRefresh.ImportRevision);
+
+    internal static bool SaveSubscriptionRefresh(SubscriptionEntry entry, bool rejected, string? selectingCommand, string? importRevision) =>
         WithCommandPreferences(prefs => AndroidSubscriptionRefresh.Save(entry, rejected, selectingCommand,
-            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
+            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions, importRevision));
 
     internal static void PruneSubServerDuplicatesOnce()
     {
@@ -434,20 +430,29 @@ public static class AndroidStorage
             return true;
         });
 
+    internal static void SaveCustomProfile(string raw) =>
+        WithCommandPreferences(prefs =>
+        {
+            AndroidSubscriptionRefresh.SaveCustomProfile(raw, key => prefs.GetString(key, null),
+                changes => CommitStrings(prefs, changes), JsonOptions);
+            return true;
+        });
+
     public static VlessServerEntry? GetActiveServer() =>
         WithCommandPreferences(prefs => AndroidSubscriptionRefresh.ResolveActiveServer(GetServers(), GetSubscriptions(),
             GetConfigMode(), key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
-    internal static string? SelectedNameForFeed(SubscriptionEntry? source)
-    {
-        if (source == null || GetConfigMode() != "subscribe") return null;
-        var feedId = GetString(AndroidSubscriptionRefresh.SelectedFeedId);
-        var url = GetSubscriptionUrl();
-        if (feedId != null && feedId != source.Id || url != null && url != source.Url) return null;
-        return GetSelectedServerName();
-    }
+    internal static AndroidSubscriptionRefresh.FeedRow? SelectedSubscriptionRow() =>
+        GetConfigMode() == "subscribe" && AndroidSubscriptionRefresh.ReadRetainedManual(GetString) == null
+            ? AndroidSubscriptionRefresh.FindFeedRow(GetSubscriptions(), GetString) : null;
 
-    internal static string? SelectedFeedRow => GetString(AndroidSubscriptionRefresh.SelectedFeedRow);
+    internal static void PrepareServerPool(VlessConfig config, VlessServerEntry selected) =>
+        WithCommandPreferences(prefs =>
+        {
+            AndroidSubscriptionRefresh.PreparePool(config, selected, GetServers(), GetSubscriptions(), GetConfigMode(),
+                key => prefs.GetString(key, null), JsonOptions);
+            return true;
+        });
 
     public static string? GetLanguage() => GetString(KeyLanguage);
     public static bool SetLanguage(string? value) => SetString(KeyLanguage, value);
@@ -1005,6 +1010,7 @@ public static class AndroidStorage
             {
                 KeyVlessUri, KeySubscriptionUrl, KeyServersJson, AndroidSubscriptionRefresh.LegacyManualOwner,
                 KeySelectedServerName, AndroidSubscriptionRefresh.SelectedFeedId, AndroidSubscriptionRefresh.SelectedFeedRow,
+                AndroidSubscriptionRefresh.ImportRevision,
                 AndroidSubscriptionRefresh.SupersededSelection, KeyLanguage, KeyTheme,
                 KeySubscriptions, KeyPerAppMode, KeyPerAppPackages,
                 KeyPerAppLastMode, KeyRoutingMode, KeyBypassRussianTraffic,

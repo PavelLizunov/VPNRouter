@@ -391,6 +391,7 @@ public partial class AndroidApp
         StopFreeConfigsBackgroundWork();
 
         ReloadServerList();
+        BindSimpleInput(preserveEdit: true);
 
         var routing = AndroidStorage.GetRoutingMode();
         if (_splitRadio is not null) _splitRadio.IsChecked = routing == "split";

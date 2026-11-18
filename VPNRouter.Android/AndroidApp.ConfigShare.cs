@@ -583,7 +583,18 @@ public partial class AndroidApp
         _cfgImportStatus.IsVisible = !string.IsNullOrEmpty(text);
     }
 
-    private void RefreshConfigModeUiFromStorage()
+    private string? _boundServerInput;
+
+    private void BindSimpleInput(bool preserveEdit = false)
+    {
+        if (_serverInput == null) return;
+        var saved = AndroidStorage.SavedServerInput();
+        var text = AndroidSubscriptionRefresh.RebindSimpleInput(_serverInput.Text, preserveEdit ? _boundServerInput : null, saved);
+        if (_serverInput.Text != text) _serverInput.Text = text;
+        _boundServerInput = saved;
+    }
+
+    private void RefreshConfigModeUiFromStorage(bool preserveInputEdit = false)
     {
         var mode = AndroidStorage.GetConfigMode();
         _ccMode = mode;
@@ -595,7 +606,7 @@ public partial class AndroidApp
             _ccCustomInput.Text = AndroidStorage.GetCustomConfigJson() ?? string.Empty;
         }
 
-        if (_serverInput is not null) _serverInput.Text = AndroidStorage.SavedServerInput();
+        BindSimpleInput(preserveInputEdit);
         if (_serverInputError is not null) _serverInputError.IsVisible = false;
 
         if (_ccModeSubBtn is not null) StyleSegmentButton(_ccModeSubBtn, mode == "subscribe");

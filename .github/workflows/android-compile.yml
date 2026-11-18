@@ -74,7 +74,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/tunnel-lifecycle"
           javac -d "$RUNNER_TEMP/tunnel-lifecycle" \
-            VPNRouter.Android/AndroidTunnelSession.java VPNRouter.Android/AndroidStatsSubscription.java \
+            VPNRouter.Android/AndroidTunnelSession.java VPNRouter.Android/AndroidTunnelStart.java VPNRouter.Android/AndroidStatsSubscription.java \
             VPNRouter.Tests/Android/AndroidTunnelLifecycleTest.java
           java -cp "$RUNNER_TEMP/tunnel-lifecycle" com.ninitux.vpnrouter.AndroidTunnelLifecycleTest
 

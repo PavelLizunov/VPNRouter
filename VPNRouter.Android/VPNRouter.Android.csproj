@@ -198,6 +198,7 @@
   <ItemGroup>
     <AndroidJavaSource Include="VpnRouterService.java" />
     <AndroidJavaSource Include="AndroidTunnelSession.java" />
+    <AndroidJavaSource Include="AndroidTunnelStart.java" />
     <AndroidJavaSource Include="AndroidStatsSubscription.java" />
     <AndroidJavaSource Include="AndroidTunnelPolicy.java" />
     <!-- AndroidFreeConfigDeepVerifier starts and closes each embedded engine through this bridge. -->
