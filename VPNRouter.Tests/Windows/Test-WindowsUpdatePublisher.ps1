@@ -34,6 +34,13 @@ function Invoke-FixtureShell {
     }
 }
 function Copy-Fixture {
+    if ($verifyLock) {
+        if (![IO.File]::Exists((Join-Path $InstallDir '.update-backup.lock'))) { throw 'No lock at the installation root.' }
+        $probe = $null
+        try { $probe = [IO.File]::Open((Join-Path $InstallDir '.update-backup.lock'), 'Open', 'ReadWrite', 'None') }
+        catch [IO.IOException] { }
+        if ($probe) { $probe.Dispose(); throw 'Live copy ran outside the snapshot lock.' }
+    }
     $events.Add('copy')
     [IO.File]::Copy((Join-Path $Source 'payload.dll'), (Join-Path $destination 'payload.dll'), $true)
     $global:LASTEXITCODE = 0
@@ -63,6 +70,16 @@ try {
     [IO.File]::WriteAllText((Join-Path $Source 'payload.dll'), 'release')
     [IO.File]::WriteAllText((Join-Path $Source 'zapret-maintenance.ps1'), '')
     [IO.File]::WriteAllText((Join-Path $destination 'payload.dll'), 'previous')
+    # Exercise the actual script entry in another process; contended publishers must
+    # exit before the parent wait, log, service preparation, failure marker or copy.
+    $file = Join-Path $repo 'packaging/windows/installer/publish-windows-update.ps1'
+    $shell = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $held = [IO.File]::Open((Join-Path $InstallDir '.update-backup.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+    try {
+        & $shell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $file -Source $Source -InstallDir $InstallDir -ApplicationDir $destination -DataDir $DataDir -ParentId 2147483647 -ParentStarted 0 -Fixture -SkipRelaunch
+        if ($LASTEXITCODE -ne 1 -or [IO.File]::Exists($log) -or [IO.File]::Exists((Join-Path $destination '.update-failed')) -or
+            [IO.File]::ReadAllText((Join-Path $destination 'payload.dll')) -ne 'previous') { throw 'Contended publisher touched live state.' }
+    } finally { $held.Dispose() }
     $prepareResult = 1
     $failed = $false
     try { Invoke-WindowsPublication } catch { $failed = $true }
@@ -83,7 +100,15 @@ try {
     $Fixture = $true
     Invoke-WindowsPublication
     if (($events -join ',') -ne 'copy') { throw 'CI fixture accessed a system operation.' }
-    'Windows publisher: 4 offline cases passed.'
+    $verifyLock = $true
+    $ParentId = [int]::MaxValue
+    $ParentStarted = 0
+    $events.Clear()
+    & ([scriptblock]::Create($ast.EndBlock.Statements[-1].Extent.Text))
+    if (($events -join ',') -ne 'copy') { throw 'Did not exercise publication under lock.' }
+    $probe = [IO.File]::Open((Join-Path $InstallDir '.update-backup.lock'), 'Open', 'ReadWrite', 'None')
+    $probe.Dispose()
+    'Windows publisher: 4 publication cases, cross-process contention, and lock held during copy then released passed.'
 } finally {
     [IO.Directory]::Delete($InstallDir, $true)
 }

@@ -1,5 +1,7 @@
 #if PLATFORM_WINDOWS
 using System.Diagnostics;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Runtime.Versioning;
 using System.Text;
 using VPNRouter.Core.Services;
@@ -9,18 +11,28 @@ namespace VPNRouter.App.Services;
 [SupportedOSPlatform("windows")]
 internal static class WindowsRollbackRelaunch
 {
-    internal static UpdateBackup.RestoreResult RestoreAndStart(string installDir)
+    internal static UpdateBackup.RestoreResult RestoreAndStart(string applicationDir)
     {
-        try { VerifyInstallDirectory(installDir); }
+        var installDir = UpdateBackup.SnapshotInstallDirectory(applicationDir);
+        try { UpdateBackup.VerifyWindowsInstallDirectory(installDir ?? applicationDir); }
         catch (Exception ex) { return new(false, ex.Message) { RelaunchRejected = true }; }
+        if (installDir == null) return UpdateBackup.CheckFlatInstall(applicationDir);
 
         return UpdateBackup.RestoreSnapshot(installDir, Directory.Move,
-            candidate => RunHelper(VerifyApplicationTree(installDir, candidate), validateOnly: true),
-            () => RunHelper(VerifyRestoredApplication(installDir), validateOnly: false));
+            candidate => RunHelper(UpdateBackup.VerifyWindowsApplicationTree(installDir, candidate), validateOnly: true),
+            () => RunHelper(VerifyRestoredApplication(installDir), validateOnly: false),
+            displaced => UpdateBackup.VerifyWindowsApplicationTree(installDir, displaced));
     }
 
     private static void RunHelper(string app, bool validateOnly)
     {
+        var gui = Path.Combine(app, "VPNRouter.GUI.exe");
+        bool trampoline = File.Exists(gui) && !IsStandaloneGui(app);
+        // The normal stub exits only after CreateProcess(App) succeeds. Its bootstrap
+        // and integrity-repair branches can replace files or exit without that handoff.
+        if (trampoline && (Directory.Exists(Path.Combine(app, "_bootstrap")) ||
+            !InstallHealthCheck.CheckApplicationFiles(app).IsHealthy))
+            throw new IOException("The rollback snapshot requires bootstrap or repair before it can launch.");
         using var environment = typeof(UpdateBackup).Assembly.GetManifestResourceStream("VPNRouter.Update.repair-environment.ps1")
             ?? throw new IOException("Missing the trusted repair environment helper.");
         using var launcher = typeof(WindowsRollbackRelaunch).Assembly.GetManifestResourceStream("VPNRouter.Windows.RollbackRelaunch")
@@ -34,6 +46,7 @@ internal static class WindowsRollbackRelaunch
         var start = new ProcessStartInfo(shell) { UseShellExecute = false, WorkingDirectory = system, CreateNoWindow = true };
         start.Environment.Clear();
         start.Environment["VPNROUTER_ROLLBACK_APP"] = app;
+        if (trampoline) start.Environment["VPNROUTER_ROLLBACK_TRAMPOLINE"] = "1";
         if (validateOnly) start.Environment["VPNROUTER_ROLLBACK_PREFLIGHT"] = "1";
         start.Environment["SystemRoot"] = start.Environment["WINDIR"] = Directory.GetParent(system)!.FullName;
         start.Environment["SystemDrive"] = Path.GetPathRoot(system)!.TrimEnd('\\');
@@ -49,26 +62,36 @@ internal static class WindowsRollbackRelaunch
     }
 
     internal static string VerifyRestoredApplication(string installDir) =>
-        VerifyApplicationTree(installDir, Path.Combine(installDir, "app"));
+        UpdateBackup.VerifyWindowsApplicationTree(installDir, Path.Combine(installDir, "app"));
 
-    private static string VerifyApplicationTree(string installDir, string tree)
+    // The historical WinForms GUI was a managed apphost. A native trampoline can
+    // coexist with leftover GUI sidecars after an in-place update.
+    private static bool IsStandaloneGui(string app)
     {
-        VerifyInstallDirectory(installDir);
-        var app = new DirectoryInfo(tree);
-        ZapretRuntimeDirectory.CheckWindowsTree(app, allowCreatorOwnerTemplate: true);
-        return app.FullName;
-    }
-
-    private static void VerifyInstallDirectory(string installDir)
-    {
-        var drive = Path.GetPathRoot(installDir);
-        if (!Path.IsPathFullyQualified(installDir) || drive == null || drive.Length != 3 ||
-            !char.IsAsciiLetter(drive[0]) || drive[1] != ':' || drive[2] != '\\' ||
-            new DriveInfo(drive).DriveType is not (DriveType.Fixed or DriveType.Removable or DriveType.Ram))
-            throw new IOException("Rollback requires a protected local installation.");
-        var install = new DirectoryInfo(installDir);
-        ZapretRuntimeDirectory.CheckWindowsParents(install.FullName);
-        ZapretRuntimeDirectory.CheckWindowsDirectory(install, allowCreatorOwnerTemplate: true);
+        var gui = Path.Combine(app, "VPNRouter.GUI.exe");
+        var assembly = Path.Combine(app, "VPNRouter.GUI.dll");
+        if (!File.Exists(assembly) || !File.Exists(Path.Combine(app, "VPNRouter.GUI.runtimeconfig.json")) ||
+            !string.Equals(FileVersionInfo.GetVersionInfo(gui).OriginalFilename, "VPNRouter.GUI.dll",
+                StringComparison.OrdinalIgnoreCase)) return false;
+        // A single-file compatibility stub can have the same version resource as
+        // a WinForms apphost, but loads its embedded program instead of GUI.dll.
+        using var host = File.OpenRead(gui);
+        using var hostPe = new PEReader(host);
+        var headers = hostPe.PEHeaders;
+        long imageEnd = headers.SectionHeaders.Max(section => (long)section.PointerToRawData + section.SizeOfRawData);
+        if (host.Length != imageEnd)
+        {
+            var signature = headers.PEHeader!.CertificateTableDirectory;
+            if (signature.Size == 0 || signature.RelativeVirtualAddress < imageEnd ||
+                signature.RelativeVirtualAddress - imageEnd >= 8 ||
+                (long)signature.RelativeVirtualAddress + signature.Size != host.Length) return false;
+        }
+        using var stream = File.OpenRead(assembly);
+        using var pe = new PEReader(stream);
+        if (!pe.HasMetadata) return false;
+        var metadata = pe.GetMetadataReader();
+        return metadata.AssemblyReferences.Any(reference =>
+            metadata.StringComparer.Equals(metadata.GetAssemblyReference(reference).Name, "System.Windows.Forms"));
     }
 }
 #endif

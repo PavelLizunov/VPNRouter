@@ -690,6 +690,28 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         finally { _handle.RefuseKill = false; }
     }
 
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OneClickFirstInstallHonorsExplicitGameFilterOff(bool chooseOff)
+    {
+        var vm = NewVm();
+        File.Delete(ZapretUpdater.WinwsExePath);
+        if (chooseOff) ZapretActions.SetGameFilterMode(ZapretActions.GameFilterMode.Off);
+        vm.DiscordHostsInstalled = true;
+        vm.FlowsealHostsInstalled = true;
+        var http = ZapretUpdaterDownloadTests.ReleaseForGuiUpdate(validPackage: true);
+        vm.CreateZapretUpdater = logger => new ZapretUpdater(logger, http);
+        SweepReturns(Sweep(null));
+
+        await vm.ZapretOneClickCommand.ExecuteAsync(null);
+
+        Assert.Equal("candidate", ZapretUpdater.GetLocalVersion());
+        Assert.Equal(1, _probeCalls);
+        Assert.Equal(chooseOff ? ZapretActions.GameFilterMode.Off : ZapretActions.GameFilterMode.All,
+            ZapretActions.GetGameFilterMode());
+    }
+
     [AvaloniaFact]
     public void FailedPackageReplacementRestartsThePreviouslySelectedInstalledStrategy()
     {

@@ -47,6 +47,12 @@ public static class InstallHealthCheck
             hashes["AppVersion-check-error"] = ex.Message;
         }
 
+        return CheckApplicationFiles(appDir, hashes);
+    }
+
+    internal static Report CheckApplicationFiles(string appDir, Dictionary<string, string>? hashes = null)
+    {
+        hashes ??= new Dictionary<string, string>();
         foreach (var dll in TrackedDlls)
         {
             var path = Path.Combine(appDir, dll);
@@ -61,7 +67,7 @@ public static class InstallHealthCheck
                 var info = FileVersionInfo.GetVersionInfo(path);
                 var pv = info.ProductVersion ?? string.Empty;
                 var plusIdx = pv.IndexOf('+');
-                hashes[dll] = plusIdx >= 0 ? pv[(plusIdx + 1)..] : pv;
+                hashes[dll] = (plusIdx >= 0 && plusIdx + 1 < pv.Length ? pv[(plusIdx + 1)..] : pv).Trim();
             }
             catch
             {

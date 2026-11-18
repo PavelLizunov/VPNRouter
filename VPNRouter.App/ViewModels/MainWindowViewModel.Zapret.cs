@@ -696,18 +696,17 @@ public partial class MainWindowViewModel
             }
         }
 
-        if (!ZapretActions.IsGameFilterConfigured)
+        try
         {
-            try
+            if (ZapretActions.SetOneClickGameFilterDefault())
             {
-                ZapretActions.SetGameFilterMode(ZapretActions.GameFilterMode.All);
-                GameFilterModeIndex = (int)ZapretActions.GameFilterMode.All;
-                _logger.Information("[VM] OneTap: Game filter set to All (first-time default — covers games on UDP)");
+                // The setting was committed under the package lock. Only refresh the binding here.
+                SetProperty(ref _gameFilterModeIndex, (int)ZapretActions.GameFilterMode.All, nameof(GameFilterModeIndex));
             }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[VM] OneTap: Game filter default-set failed (non-fatal)");
-            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[VM] OneTap: Game filter default-set failed (non-fatal)");
         }
 
         await ProbeAndStartZapretAsync();
