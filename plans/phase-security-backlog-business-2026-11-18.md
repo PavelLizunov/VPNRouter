@@ -20,3 +20,7 @@ change. Rollback is a revert of the relevant repair on the owning line.
    the reported symptom resolved. Use synthetic inputs and ordinary app actions.
 6. Compare both maintained branches, existing saved settings and production
    entry points. Record unverified conditions and keep their issues open.
+
+## SDK delivery block
+
+Ship the SDK fix independently while the client trust-boundary fixes undergo review on the runtime branch. Both a review of the Microsoft advisory and the published SDK manifests confirmed affected VSTest 18.6.0 in SDK 10.0.303 and fixed 18.7.1-hotfix-26529-119 in 10.0.404. Root and Android SDK selection, signing, packaging provenance and the hosted test jobs now agree. The Linux and Windows jobs report the actual commit and bundled runner; the Android compile job checks workload compatibility. The Arch reporting unit test and synthetic SDK inventory parser passed locally. The private Mac has only SDK 8.0.125, and the Windows and Linux workers were powered down during the inventory. Hosted exact-commit results remain the merge gate.

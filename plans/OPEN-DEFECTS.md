@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - The 10.0.303 SDK selected by CI includes affected VSTest 18.6.0 (CVE-2026-105544). Move test and build entry points to the fixed servicing line and verify bundled versions on both hosted platforms. #673. PR #695.
+
 - [ ] **P2 CONFIRMED OWNER DELETION GAP** - BUSINESS-DIAGNOSTICS-REPORT-DELETE: the authenticated Corp inbox has list/detail/retry only; receiver.py exposes no deletion route. Owner requests removing reports and reclaiming archive storage. Add service-scoped locked JSON/ZIP deletion, preserve foreign reports/credentials, and verify late analysis cannot resurrect deleted data. Recorded before implementation, 2026-11-16.
 
 - [x] **P2 CONFIRMED FINAL-ANSWER INSTRUCTION GAP** - BUSINESS-DIAGNOSTICS-FLASH-FINAL-SCHEMA: the exact d117b48d nonpublishing Flash reply cites packet collector as a container and returns public_analysis pending without a message. The publisher correctly rejects both shapes, but the instruction describes receiver lifecycle states as final model choices and does not spell out collector scalar paths. Require ready with a short message and explicit allowed packet references; keep validators unchanged. Original reply retained privately before correction, 2026-11-16. Two earlier automatic attempts were rejected; their exact failure reasons are unavailable and are not inferred from this probe. RESOLVED in the instruction: final ready message and allowed scalar paths are explicit. The unchanged real probe validates in 11 seconds; automatic activation remains a separate gate.

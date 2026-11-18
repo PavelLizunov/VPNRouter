@@ -28,6 +28,8 @@ jobs:
           global-json-file: global.json
       - name: Exact source
         run: git rev-parse HEAD
+      - name: Record selected SDK and bundled VSTest
+        run: python .github/scripts/report-test-sdk.py
       - name: Business compiled policy contracts
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true --filter "FullyQualifiedName~BusinessPolicy|FullyQualifiedName~BusinessDefaults" --logger "console;verbosity=normal"
       - name: Upload synthetic policy screenshots
@@ -54,11 +56,13 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Record selected SDK and bundled VSTest
+        run: python .github/scripts/report-test-sdk.py
       - name: Restore
-        run: dotnet restore VPNRouter.Tests/VPNRouter.Tests.csproj
+        run: dotnet restore VPNRouter.sln
 
       - name: Build
-        run: dotnet build VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-restore
+        run: dotnet build VPNRouter.sln -c Release --no-restore
 
       - name: Test
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"
@@ -136,6 +140,8 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
         with:
           global-json-file: global.json
+      - name: Record selected SDK and bundled VSTest
+        run: python .github/scripts/report-test-sdk.py
       - name: Publish CLI (Windows)
         run: dotnet publish VPNRouter.CLI/VPNRouter.CLI.csproj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\vpnrouter-cli"
       - name: Characterization and release-gate contracts (Windows)
