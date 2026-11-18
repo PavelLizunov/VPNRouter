@@ -14,6 +14,7 @@ $entry = $ast.Find({ param($node)
 
 $fixture = [IO.Path]::Combine([IO.Path]::GetTempPath(), [Guid]::NewGuid().ToString('N'))
 $system = [IO.Path]::Combine($fixture, 'Windows', 'System32')
+if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { $system = [Environment]::SystemDirectory }
 $root = [IO.Path]::Combine($fixture, "Owner's VPN [moved] & 100%")
 $app = [IO.Path]::Combine($root, 'app')
 $entryPoint = [scriptblock]::Create($ast.EndBlock.Statements[-1].Extent.Text)
@@ -41,6 +42,7 @@ function Start-RestoredApplication([Diagnostics.ProcessStartInfo]$info) {
         $env:TEMP -ne $env:TMP -or [IO.Directory]::GetFileSystemEntries($env:TEMP).Length -ne 0) {
         throw 'A rollback child inherited an unsafe path or environment.'
     }
+    if ($refuse -eq 'creation') { throw 'Fixture child creation failure.' }
     $record.Add([pscustomobject]@{ Exe = $info.FileName; Scratch = $env:TEMP })
 }
 try {
@@ -61,7 +63,7 @@ try {
     if ($record.Count -ne 2 -or $record[1].Exe -cne $fallback -or $record[0].Scratch -eq $record[1].Scratch -or [IO.File]::Exists($marker)) {
         throw 'App fallback, fresh scratch or marker handling failed.'
     }
-    foreach ($refuse in 'restored','session','missing-launcher') {
+    foreach ($refuse in 'restored','session','creation','missing-launcher') {
         [IO.File]::WriteAllText($marker, 'diagnostic')
         if ($refuse -eq 'missing-launcher') { [IO.File]::Delete($fallback) }
         $failed = $false
@@ -73,4 +75,4 @@ try {
     foreach ($key in $oldEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key, $oldEnvironment[$key], 'Process') }
     if ([IO.Directory]::Exists($fixture)) { [IO.Directory]::Delete($fixture, $true) }
 }
-'Rollback relaunch: legacy GUI, App fallback and three pre-launch refusals passed.'
+'Rollback relaunch: legacy GUI, App fallback and four refusal scenarios passed.'

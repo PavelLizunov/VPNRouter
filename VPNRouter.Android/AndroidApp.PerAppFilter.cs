@@ -124,9 +124,7 @@ public partial class AndroidApp
 
     private void OnAppPickerSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        AndroidStorage.SetPerAppPackages(_appPickerSelected);
-        AndroidStorage.SetPerAppMode(_appPickerMode);
-        AndroidStorage.SetPerAppLastMode(_appPickerMode);
+        AndroidStorage.SavePerAppSelection(_appPickerMode, _appPickerSelected, rememberPickerMode: true);
         UpdatePerAppSummary();
     }
 

@@ -150,6 +150,12 @@ public sealed class ZapretUpdaterDownloadTests : IDisposable
         return (updater, http, status);
     }
 
+    internal static FakeHttpClient ReleaseForGuiUpdate(bool validPackage)
+    {
+        var zip = validPackage ? Package() : Zip(("notes.txt", "fixture without a package"));
+        return new FakeHttpClient().Setup("releases/latest", ReleaseJson("candidate", ZipUrl, zip)).SetupStream("release.zip", zip);
+    }
+
     // ---- installation ----
 
     [Fact]
@@ -481,34 +487,127 @@ public sealed class ZapretUpdaterDownloadTests : IDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task FirstInstallImportsOnlyTheLegacySettingsMissingAProtectedSubdirectory(bool hasProtectedUtils)
+    public async Task FirstInstallHonorsOnlyTheFlagDisabledThroughItsSetter(bool disableGame)
     {
         WriteLegacy("utils/game_filter.enabled", " MODE = ALL \r\n UDP = 5000-5010 \r\n TCP = 443, 8443 \r\n");
         WriteLegacy("utils/check_updates.enabled", "ENABLED");
-        WriteLegacy("lists/list-general-user.txt", "legacy.example");
-        WriteLegacy("lists/ipset-all.txt", "198.51.100.0/24");
-        if (hasProtectedUtils) ZapretActions.SetAutoUpdateCheck(false);
-        else ZapretActions.SetIpSetMode(ZapretActions.IpSetMode.Any);
-
-        await InstallFixture("v1");
-
-        var lists = ZapretUpdater.ListsDir;
-        var userList = File.ReadAllText(Path.Combine(lists, "list-general-user.txt")).Trim();
-        Assert.Equal(!hasProtectedUtils, ZapretActions.IsAutoUpdateCheckEnabled());
-        if (hasProtectedUtils)
+        if (disableGame)
         {
+            ZapretActions.SetGameFilterMode(ZapretActions.GameFilterMode.UdpOnly);
+            ZapretActions.SetGameFilterMode(ZapretActions.GameFilterMode.Off);
             Assert.False(ZapretActions.IsGameFilterConfigured);
-            Assert.Equal("legacy.example", userList);
-            Assert.Equal("198.51.100.0/24", File.ReadAllText(Path.Combine(lists, "ipset-all.txt")).Trim());
         }
         else
         {
-            Assert.Equal("domain.example.abc", userList);
-            Assert.Equal(ZapretActions.IpSetMode.Any, ZapretActions.GetIpSetMode());
-            Assert.Equal((ZapretActions.GameFilterMode.All, "443,8443", "5000-5010"), ZapretActions.ReadGameFilter());
-            var flag = Path.Combine(ZapretUpdater.ZapretDir, "utils", "game_filter.enabled");
-            Assert.Equal("mode=all\ntcp=443,8443\nudp=5000-5010\n", File.ReadAllText(flag));
+            ZapretActions.SetAutoUpdateCheck(true);
+            ZapretActions.SetAutoUpdateCheck(false);
+            Assert.False(ZapretActions.IsAutoUpdateCheckEnabled());
         }
+
+        await InstallFixture("v1");
+
+        Assert.Equal(disableGame, ZapretActions.IsAutoUpdateCheckEnabled());
+        Assert.Equal(!disableGame, ZapretActions.IsGameFilterConfigured);
+        if (!disableGame)
+            Assert.Equal((ZapretActions.GameFilterMode.All, "443,8443", "5000-5010"), ZapretActions.ReadGameFilter());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FirstInstallKeepsReenabledFlagWithTheOtherLegacyFlagOff(bool enableGame)
+    {
+        WriteLegacy("version.txt", "old");
+        if (enableGame)
+        {
+            ZapretActions.SetGameFilterMode(ZapretActions.GameFilterMode.Off);
+            ZapretActions.SetGameFilterMode(ZapretActions.GameFilterMode.TcpOnly);
+        }
+        else
+        {
+            ZapretActions.SetAutoUpdateCheck(false);
+            ZapretActions.SetAutoUpdateCheck(true);
+        }
+
+        await InstallFixture("v1");
+
+        Assert.Equal(!enableGame, ZapretActions.IsAutoUpdateCheckEnabled());
+        Assert.Equal(enableGame ? ZapretActions.GameFilterMode.TcpOnly : ZapretActions.GameFilterMode.Off, ZapretActions.GetGameFilterMode());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FirstInstallMergesUserListsAndIpSetBackupByFile(bool protectInclude)
+    {
+        WriteLegacy("lists/list-general-user.txt", "old-include.example");
+        WriteLegacy("lists/list-exclude-user.txt", "old-exclude.example");
+        WriteLegacy("lists/ipset-exclude-user.txt", "192.0.2.1");
+        WriteLegacy("lists/ipset-all.txt", "198.51.100.1");
+        WriteLegacy("lists/ipset-all.txt.backup", "198.51.100.2");
+        WriteLegacy("utils/game_filter.enabled", "tcp");
+        var lists = Directory.CreateDirectory(ZapretUpdater.ListsDir).FullName;
+        File.WriteAllText(Path.Combine(lists, protectInclude ? "list-general-user.txt" : "list-exclude-user.txt"),
+            protectInclude ? "" : "new-exclude.example");
+        if (protectInclude) File.WriteAllText(Path.Combine(lists, "ipset-exclude-user.txt"), "192.0.2.2");
+        else File.WriteAllText(Path.Combine(lists, "ipset-all.txt.backup"), "192.0.2.3");
+        ZapretActions.SetAutoUpdateCheck(true); // Both protected subdirectories now exist.
+
+        await InstallFixture("v1");
+
+        string Read(string name) => File.ReadAllText(Path.Combine(lists, name)).Trim();
+        Assert.Equal(protectInclude ? "" : "old-include.example", Read("list-general-user.txt"));
+        Assert.Equal(protectInclude ? "old-exclude.example" : "new-exclude.example", Read("list-exclude-user.txt"));
+        Assert.Equal(protectInclude ? "192.0.2.2" : "192.0.2.1", Read("ipset-exclude-user.txt"));
+        Assert.Equal("198.51.100.1", Read("ipset-all.txt"));
+        Assert.Equal(protectInclude ? "198.51.100.2" : "192.0.2.3", Read("ipset-all.txt.backup"));
+        Assert.True(ZapretActions.IsAutoUpdateCheckEnabled());
+        Assert.Equal(ZapretActions.GameFilterMode.TcpOnly, ZapretActions.GetGameFilterMode());
+    }
+
+    [Theory]
+    [InlineData(ZapretActions.IpSetMode.Any, true)]
+    [InlineData(ZapretActions.IpSetMode.Any, false)]
+    [InlineData(ZapretActions.IpSetMode.None, true)]
+    [InlineData(ZapretActions.IpSetMode.None, false)]
+    public async Task ExplicitIpSetModeKeepsTheLegacyRestoreList(ZapretActions.IpSetMode mode, bool hasBackup)
+    {
+        WriteLegacy("lists/list-general-user.txt", "legacy.example");
+        WriteLegacy("lists/ipset-all.txt", "192.0.2.1");
+        if (hasBackup) WriteLegacy("lists/ipset-all.txt.backup", "192.0.2.2");
+        ZapretActions.SetIpSetMode(ZapretActions.IpSetMode.Loaded);
+        ZapretActions.SetIpSetMode(mode);
+
+        await InstallFixture("v1");
+
+        var list = Path.Combine(ZapretUpdater.ListsDir, "ipset-all.txt");
+        Assert.Equal(mode, ZapretActions.GetIpSetMode());
+        Assert.Equal("legacy.example", File.ReadAllText(Path.Combine(ZapretUpdater.ListsDir, "list-general-user.txt")).Trim());
+        var expected = hasBackup ? "192.0.2.2" : "192.0.2.1";
+        Assert.Equal(expected, File.ReadAllText(list + ".backup").Trim());
+        ZapretActions.SetIpSetMode(ZapretActions.IpSetMode.Loaded);
+        Assert.Equal(expected, File.ReadAllText(list).Trim());
+    }
+
+    [Theory]
+    [InlineData("192.0.2.1", "192.0.2.2", false, "192.0.2.1")]
+    [InlineData("192.0.2.1", "192.0.2.2", true, "192.0.2.3")]
+    [InlineData("203.0.113.113/32", "192.0.2.2", false, "192.0.2.2")]
+    [InlineData("", null, false, "203.0.113.0/24")]
+    public async Task LoadedSelectedBeforeDownloadUsesAvailableList(string active, string? backup, bool protectedBackup, string expected)
+    {
+        WriteLegacy("lists/ipset-all.txt", active);
+        if (backup != null) WriteLegacy("lists/ipset-all.txt.backup", backup);
+        ZapretActions.SetIpSetMode(ZapretActions.IpSetMode.None);
+        ZapretActions.SetIpSetMode(ZapretActions.IpSetMode.Loaded);
+        var list = Path.Combine(ZapretUpdater.ListsDir, "ipset-all.txt");
+        if (protectedBackup) File.WriteAllText(list + ".backup", "192.0.2.3");
+
+        await InstallFixture("v1");
+
+        Assert.Equal(ZapretActions.IpSetMode.Loaded, ZapretActions.GetIpSetMode());
+        Assert.Equal(expected, File.ReadAllText(list).Trim());
+        if (backup != null) Assert.Equal(protectedBackup ? "192.0.2.3" : backup, File.ReadAllText(list + ".backup").Trim());
     }
 
     [Theory]

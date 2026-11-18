@@ -79,7 +79,7 @@ public class ZapretUpdater
         try
         {
             if (!Directory.Exists(ZapretRuntimeDirectory.Root)) return false;
-            return ZapretRuntimeDirectory.WithPackage(package => File.Exists(Path.Combine(package, "bin", "winws.exe")));
+            return ZapretRuntimeDirectory.WithPackage(HasInstalledPackage);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { return false; }
     }
@@ -612,6 +612,8 @@ public class ZapretUpdater
 
     private static void SeedUserLists(string staged, string package)
     {
+        var installed = HasInstalledPackage(package);
+        using var legacy = installed ? null : OpenLegacyDirectory(package);
         var lists = Directory.CreateDirectory(Path.Combine(staged, "lists")).FullName;
         var oldLists = Path.Combine(package, "lists");
         foreach (var (name, fallback) in new[]
@@ -624,86 +626,100 @@ public class ZapretUpdater
             var source = Path.Combine(oldLists, name);
             var target = Path.Combine(lists, name);
             if (File.Exists(source)) File.Copy(source, target, overwrite: true);
+            else if (ReadLegacyList(legacy, name) is { } list) File.WriteAllText(target, list);
             else if (!File.Exists(target)) File.WriteAllText(target, fallback + Environment.NewLine);
         }
-        var installed = File.Exists(Path.Combine(package, "bin", "winws.exe"));
-        var protectedUtils = Path.Combine(package, "utils");
-        bool hasFlags = Directory.Exists(protectedUtils);
-        bool hasLists = Directory.Exists(oldLists);
+        SeedIpSet(package, lists, installed, legacy);
         foreach (var name in new[] { "game_filter.enabled", "check_updates.enabled" })
         {
-            var source = Path.Combine(protectedUtils, name);
+            var source = Path.Combine(package, "utils", name);
+            var target = Path.Combine(staged, "utils", name);
             if (File.Exists(source))
             {
-                var utils = Directory.CreateDirectory(Path.Combine(staged, "utils")).FullName;
-                File.Copy(source, Path.Combine(utils, name), overwrite: true);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(source, target, overwrite: true);
             }
-            else if ((installed || hasFlags) && File.Exists(Path.Combine(staged, "utils", name)))
+            else if (installed || File.Exists(source + ZapretActions.PreinstallDisabledSuffix))
             {
-                File.Delete(Path.Combine(staged, "utils", name));
+                if (File.Exists(target)) File.Delete(target);
+            }
+            else if (legacy != null)
+            {
+                var text = legacy.ReadText(Path.Combine("utils", name), 4096, out var missing);
+                if (missing && File.Exists(target)) File.Delete(target);
+                if (text == null) continue;
+                // The update flag encodes presence alone. Never carry its bytes into the package.
+                var setting = name == "check_updates.enabled" ? "ENABLED" : ZapretActions.NormalizeLegacyGameFilter(text);
+                if (setting == null) continue;
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.WriteAllText(target, setting);
             }
         }
-        const string list = "ipset-all.txt";
-        var oldList = Path.Combine(oldLists, list);
-        if (File.Exists(oldList))
-        {
-            if (!installed || !File.Exists(Path.Combine(lists, list)) || ZapretActions.GetIpSetMode(package) is ZapretActions.IpSetMode.Any or ZapretActions.IpSetMode.None)
-                File.Copy(oldList, Path.Combine(lists, list), overwrite: true);
-        }
-        else if (installed || hasLists)
-        {
-            // A missing active list is Any, including settings saved before the first download.
-            File.WriteAllText(Path.Combine(lists, list), "");
-        }
-        if (File.Exists(oldList + ".backup"))
-            File.Copy(oldList + ".backup", Path.Combine(lists, list + ".backup"), overwrite: true);
+    }
 
-        if (installed || (hasFlags && hasLists)) return;
-        var legacyPath = Path.Combine(AppPaths.DataDir, "zapret");
-        if (Path.GetFullPath(legacyPath).Equals(Path.GetFullPath(package),
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
-        using var legacy = ZapretLegacyFilterDirectory.Open(legacyPath);
-        if (legacy == null) return;
-        // A preinstall setter can already own one of the two settings directories.
-        if (!hasLists) SeedLegacyLists(legacy, lists);
-        if (!hasFlags) SeedLegacyFlags(legacy, staged);
+    internal static bool HasInstalledPackage(string package) => File.Exists(Path.Combine(package, "bin", "winws.exe"));
+
+    private static ZapretLegacyFilterDirectory? OpenLegacyDirectory(string package)
+    {
+        var path = Path.Combine(AppPaths.DataDir, "zapret");
+        return Path.GetFullPath(path).Equals(Path.GetFullPath(package),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+            ? null : ZapretLegacyFilterDirectory.Open(path);
     }
 
     private const int MaxLegacyListBytes = 4 * 1024 * 1024;
     private static readonly IdnMapping LegacyDomainNames = new() { UseStd3AsciiRules = true };
 
-    private static void SeedLegacyLists(ZapretLegacyFilterDirectory legacy, string lists)
+    private static string? ReadLegacyList(ZapretLegacyFilterDirectory? legacy, string name)
     {
-        foreach (string name in new[] { "list-general-user.txt", "list-exclude-user.txt", "ipset-exclude-user.txt",
-            "ipset-all.txt", "ipset-all.txt.backup" })
-        {
-            var text = legacy.ReadText(Path.Combine("lists", name), MaxLegacyListBytes, out var missing);
-            if (missing && name == "ipset-all.txt") text = ""; // Any in the privacy parent
-            if (text == null) continue;
-            var list = NormalizeLegacyList(text, domains: name.StartsWith("list-", StringComparison.Ordinal));
-            if (list != null) File.WriteAllText(Path.Combine(lists, name), list);
-        }
+        if (legacy == null) return null;
+        var text = legacy.ReadText(Path.Combine("lists", name), MaxLegacyListBytes, out var missing);
+        if (missing && name == "ipset-all.txt") return ""; // Any in the privacy parent
+        return text == null ? null : NormalizeLegacyList(text, domains: name.StartsWith("list-", StringComparison.Ordinal));
     }
 
-    private static void SeedLegacyFlags(ZapretLegacyFilterDirectory legacy, string staged)
+    private static void SeedIpSet(string package, string lists, bool installed, ZapretLegacyFilterDirectory? legacy)
     {
-        foreach (string name in new[] { "game_filter.enabled", "check_updates.enabled" })
-        {
-            var text = legacy.ReadText(Path.Combine("utils", name), 4096, out var missing);
-            var flag = Path.Combine(staged, "utils", name);
-            if (missing)
-            {
-                if (File.Exists(flag)) File.Delete(flag);
-                continue;
-            }
-            if (text == null) continue;
+        const string name = "ipset-all.txt";
+        var source = Path.Combine(package, "lists", name);
+        var target = Path.Combine(lists, name);
+        var backup = target + ".backup";
+        var hasProtectedBackup = File.Exists(source + ".backup");
+        if (hasProtectedBackup) File.Copy(source + ".backup", backup, overwrite: true);
+        else if (ReadLegacyList(legacy, name + ".backup") is { } saved) File.WriteAllText(backup, saved);
 
-            // The update flag encodes presence alone. Never carry its bytes into the package.
-            var setting = name == "check_updates.enabled" ? "ENABLED" : ZapretActions.NormalizeLegacyGameFilter(text);
-            if (setting == null) continue;
-            Directory.CreateDirectory(Path.GetDirectoryName(flag)!);
-            File.WriteAllText(flag, setting);
+        var hasActive = File.Exists(source);
+        var mode = ZapretActions.GetIpSetMode(package);
+        if (installed)
+        {
+            if (!hasActive) File.WriteAllText(target, "");
+            else if (mode != ZapretActions.IpSetMode.Loaded || !File.Exists(target)) File.Copy(source, target, overwrite: true);
+            return;
         }
+
+        var loadOnInstall = File.Exists(source + ZapretActions.PreinstallLoadedSuffix);
+        if (hasActive && (!loadOnInstall || mode == ZapretActions.IpSetMode.Loaded))
+        {
+            File.Copy(source, target, overwrite: true);
+            // A new Any/None choice can mask the only old copy of the loaded list.
+            if (mode != ZapretActions.IpSetMode.Loaded && !File.Exists(backup) &&
+                ReadLegacyList(legacy, name) is { } previous && ZapretActions.ClassifyIpSet(previous) == ZapretActions.IpSetMode.Loaded)
+                File.WriteAllText(backup, previous);
+            return;
+        }
+
+        if (loadOnInstall && hasProtectedBackup && ZapretActions.ClassifyIpSet(File.ReadAllText(backup)) == ZapretActions.IpSetMode.Loaded)
+        {
+            File.Copy(backup, target, overwrite: true);
+            return;
+        }
+
+        var active = ReadLegacyList(legacy, name);
+        if (active != null && (!loadOnInstall || ZapretActions.ClassifyIpSet(active) == ZapretActions.IpSetMode.Loaded))
+            File.WriteAllText(target, active);
+        else if (loadOnInstall && File.Exists(backup) && ZapretActions.ClassifyIpSet(File.ReadAllText(backup)) == ZapretActions.IpSetMode.Loaded)
+            File.Copy(backup, target, overwrite: true);
+        // A pending Loaded choice without saved data uses the verified package's list.
     }
 
     private static string? NormalizeLegacyList(string text, bool domains)

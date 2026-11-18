@@ -16,6 +16,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - Validate rollback before promoting the snapshot and retain the previous live tree and marker on relaunch failure (#661).
+- [ ] **P1** - Complete monitored startup before service acceptance, preserve native DNS rule fall-through, isolate the accepted import from edits, and retain explicit Stop ownership on refusal (#664).
+- [ ] **P2** - A stale Android alarm or prepared switch can reconnect after Disconnect, and a concurrent settings save can yield the wrong restore policy. Verify terminal status delivery after stops and rejected switches (#689).
 - [ ] **P2** - Invalid imported JSON escapes the established validation error before startup. Both full suites failed StartAsync_CustomMode_InvalidJson_Throws (#664).
 - [ ] **P2** - The recovery fixture assumes a single VLESS outbound in Business, which also emits a business-portal outbound. Check recovery for every VLESS row and the primary proxy tag (#664).
 

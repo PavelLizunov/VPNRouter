@@ -275,21 +275,19 @@ sealed class Program
                 Console.Error.WriteLine($"[health] {trigger} — attempting local rollback first");
 
                 var rollback = !string.IsNullOrEmpty(installDir)
-                    ? VPNRouter.Core.Services.UpdateBackup.RestoreSnapshot(installDir)
+                    ? Services.WindowsRollbackRelaunch.RestoreAndStart(installDir)
                     : new VPNRouter.Core.Services.UpdateBackup.RestoreResult(false, "no installDir");
 
                 if (rollback.Restored)
                 {
-                    try
-                    {
-                        Services.WindowsRollbackRelaunch.Start(installDir);
-                    }
-                    catch (Exception ex)
-                    {
-                        Environment.ExitCode = 1;
-                        try { Log.Error(ex, "[health] Could not securely relaunch the restored application"); } catch { }
-                        try { Console.Error.WriteLine($"[health] post-rollback relaunch failed: {ex.Message}"); } catch { }
-                    }
+                    return false;
+                }
+
+                if (rollback.RelaunchRejected)
+                {
+                    Environment.ExitCode = 1;
+                    try { Log.Error("[health] Rollback refused: {Reason}", rollback.Reason); } catch { }
+                    try { Console.Error.WriteLine($"[health] {rollback.Reason}"); } catch { }
                     return false;
                 }
 
