@@ -1,5 +1,7 @@
 # Exercise the actual targeted copy and post-repair branches against an ordinary directory tree.
 $ErrorActionPreference = 'Stop'
+# The production installer loads Windows PowerShell modules from its own runtime.
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 $repo = (Get-Item -LiteralPath $PSScriptRoot).Parent.Parent.FullName
 $installer = Join-Path $repo 'packaging/windows/install.ps1'
 $errors = $null
