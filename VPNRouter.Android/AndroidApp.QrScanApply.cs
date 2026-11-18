@@ -1,9 +1,7 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using VPNRouter.Core.Models;
@@ -13,9 +11,9 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
-    private async Task ApplyScannedTextAsync(string? scanned)
+    private async Task ApplyScannedTextAsync(string? scanned, string command)
     {
-        if (string.IsNullOrWhiteSpace(scanned)) return;
+        if (!AndroidStorage.IsCurrentUiCommand(command) || string.IsNullOrWhiteSpace(scanned)) return;
         var trimmed = scanned.Trim();
         var lowered = trimmed.ToLowerInvariant();
 
@@ -33,20 +31,20 @@ public partial class AndroidApp
             lowered.StartsWith("tuic://") ||
             lowered.StartsWith("ss://"))
         {
-            ApplyScannedServerUri(trimmed);
+            ApplyScannedServerUri(trimmed, command);
             return;
         }
 
         if (lowered.StartsWith("http://") || lowered.StartsWith("https://"))
         {
-            await ApplyScannedSubscriptionUrlAsync(trimmed);
+            await ApplyScannedSubscriptionUrlAsync(trimmed, command);
             return;
         }
 
         ShowMenuFeedback(Localization.SmpQrUnsupportedScheme);
     }
 
-    private void ApplyScannedServerUri(string uri)
+    private void ApplyScannedServerUri(string uri, string command)
     {
         VlessServerEntry parsed;
         try
@@ -70,132 +68,90 @@ public partial class AndroidApp
 
         try
         {
-            var servers = AndroidStorage.GetServers() ?? new List<VlessServerEntry>();
-            var existing = servers.FirstOrDefault(s =>
-                string.Equals(s.Server, parsed.Server, StringComparison.OrdinalIgnoreCase) &&
-                s.Port == parsed.Port &&
-                string.Equals(s.Uuid, parsed.Uuid, StringComparison.OrdinalIgnoreCase));
-
-            string activeName;
-            if (existing is not null)
-            {
-                activeName = existing.Name ?? parsed.Server ?? string.Empty;
-            }
-            else
-            {
-                var baseName = string.IsNullOrWhiteSpace(parsed.Name) ? "QR" : parsed.Name!;
-                var displayName = baseName;
-                int suffix = 2;
-                while (servers.Any(s => string.Equals(s.Name, displayName, StringComparison.OrdinalIgnoreCase)))
-                    displayName = $"{baseName} #{suffix++}";
-                parsed.Name = displayName;
-                servers.Add(parsed);
-                AndroidStorage.SetServers(servers);
-                activeName = displayName;
-            }
-            AndroidStorage.SetSelectedServerName(activeName);
-            AndroidStorage.SetVlessUri(uri);
-            AndroidStorage.SetSubscriptionUrl(null);
+            if (!AndroidStorage.SelectSingleServer(parsed, uri, command)) return;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            global::Android.Util.Log.Warn("VpnRouter.QrScan",
-                $"ApplyScannedServerUri: persist failed — {ex.GetType().Name}: {ex.Message}");
-            try
-            {
-                AndroidStorage.SetVlessUri(uri);
-                AndroidStorage.SetSubscriptionUrl(null);
-            }
-            catch { }
+            ShowMenuFeedback(Localization.FcApplyFailed);
+            return;
         }
 
+        RefreshConfigModeUiFromStorage();
         ShowMenuFeedback(Localization.SmpQrConnecting);
         CloseAdvancedShell();
         UpdateConfigSummary();
 
         Dispatcher.UIThread.Post(() =>
         {
-            MainActivity.Instance?.RequestConnect();
+            MainActivity.Instance?.RequestConnect(command);
         }, DispatcherPriority.Background);
     }
 
-    private async Task ApplyScannedSubscriptionUrlAsync(string url)
+    private async Task ApplyScannedSubscriptionUrlAsync(string url, string? reserved = null)
     {
+        var command = reserved ?? ReserveConnectCommand();
+        if (command == null || !AndroidStorage.IsCurrentUiCommand(command)) return;
         var subs = AndroidStorage.GetSubscriptions();
         _subs = subs;
 
-        var existing = subs.FirstOrDefault(s =>
-            string.Equals(s.Url, url, StringComparison.OrdinalIgnoreCase));
-
-        SubscriptionEntry entry;
-        bool isNew;
-        if (existing is not null)
-        {
-            entry = existing;
-            entry.Enabled = true;
-            isNew = false;
-        }
-        else
+        var selectedId = AndroidStorage.SelectedSubscriptionId;
+        var entry = subs.FirstOrDefault(s => s != null && s.Url == url && s.Id == selectedId)
+            ?? subs.FirstOrDefault(s => s != null && s.Url == url);
+        if (entry is null)
         {
             var name = ExtractDisplayNameFromUrl(url, fallback: $"Sub {subs.Count + 1}");
             entry = new SubscriptionEntry
             {
                 Name = name,
                 Url = url,
-                Enabled = true,
+                Enabled = false,
             };
             subs.Add(entry);
-            AndroidStorage.SetSubscriptions(subs);
-            isNew = true;
+            if (!AndroidStorage.SetSubscriptions(subs))
+            {
+                _subs = AndroidStorage.GetSubscriptions();
+                ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
+                return;
+            }
+            RebuildSubsList();
         }
 
         ShowMenuFeedback(Localization.SmpQrSubscriptionFetching);
         int fetchedCount;
         try
         {
-            fetchedCount = await Task.Run(() =>
-                SubscriptionFetcher.RefreshEntryAsync(entry, logger: null, ct: CancellationToken.None));
+            fetchedCount = await RefreshStoredSubscriptionAsync(entry, command);
         }
-        catch (Exception ex)
+        catch (UnsupportedSubscriptionChainException ex)
+        {
+            if (AndroidStorage.IsCurrentUiCommand(command)) ShowMenuFeedback(ex.Message);
+            return;
+        }
+        catch (Exception)
         {
             global::Android.Util.Log.Warn("VpnRouter.QrScan",
-                $"ApplyScannedSubscriptionUrlAsync: refresh failed — {ex.GetType().Name}: {ex.Message}");
-            ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
+                "Subscription refresh or save failed");
+            if (AndroidStorage.IsCurrentUiCommand(command)) ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
             return;
         }
 
-        AndroidStorage.SetSubscriptions(subs);
-        RebuildSubsList();
-
-        if (fetchedCount == 0 || entry.Servers == null || entry.Servers.Count == 0)
+        if (!AndroidStorage.IsCurrentUiCommand(command)) return;
+        if (fetchedCount == 0)
         {
             ShowMenuFeedback(Localization.SmpQrSubscriptionEmpty);
             return;
         }
 
-        VlessServerEntry firstServer;
-        try
-        {
-            firstServer = entry.Servers[0];
-            AndroidStorage.SetSelectedServerName(firstServer.Name);
-            AndroidStorage.SetSubscriptionUrl(url);
-            AndroidStorage.SetVlessUri(null);
-        }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Warn("VpnRouter.QrScan",
-                $"ApplyScannedSubscriptionUrlAsync: persist failed — {ex.GetType().Name}: {ex.Message}");
-            ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
-            return;
-        }
-
+        _ccMode = "subscribe";
+        ApplyCcModeVisuals();
+        RefreshConfigModeUiFromStorage();
         ShowMenuFeedback(Localization.SmpQrConnecting);
         CloseAdvancedShell();
         UpdateConfigSummary();
 
         Dispatcher.UIThread.Post(() =>
         {
-            MainActivity.Instance?.RequestConnect();
+            MainActivity.Instance?.RequestConnect(command);
         }, DispatcherPriority.Background);
     }
 

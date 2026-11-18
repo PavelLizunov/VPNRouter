@@ -19,7 +19,7 @@ public class VpnControlReceiver : BroadcastReceiver
     public const string ActExtStop = "com.ninitux.vpnrouter.EXT_STOP";
     public const string ActExtToggle = "com.ninitux.vpnrouter.EXT_TOGGLE";
 
-    private const string SvcActionStart = "com.ninitux.vpnrouter.RESTART";
+    private const string SvcActionStart = "com.ninitux.vpnrouter.TILE_START";
     private const string SvcActionStop = "com.ninitux.vpnrouter.STOP";
     private const string SvcClass = "com.ninitux.vpnrouter.VpnRouterService";
 

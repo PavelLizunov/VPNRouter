@@ -101,6 +101,7 @@ public static partial class Strings
     }
 
     public static string Starting => Ru ? "Запуск..." : "Starting...";
+    public static string TunnelStopUnconfirmed => Ru ? "Не удалось подтвердить остановку VPN. Повторите отключение." : "VPN stop could not be confirmed. Retry disconnect.";
     public static string Stopping => Ru ? "Остановка..." : "Stopping...";
 
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
@@ -1375,6 +1376,38 @@ public static partial class Strings
     public static string PerAppModeInclude => Ru ? "Только выбранные" : "Selected only";
 
     public static string PerAppModeExclude => Ru ? "Кроме выбранных" : "Exclude selected";
+
+    private static string AppSelection(string mode, int count) => mode switch
+    {
+        "include" => $"{PerAppModeInclude} ({count})",
+        "exclude" => $"{PerAppModeExclude} ({count})",
+        _ => Ru ? "Фильтр приложений выключен" : "App filter off",
+    };
+
+    public static string PerAppPolicySummary(VPNRouter.Core.Models.AndroidPerAppPolicy? active,
+        string savedMode, IEnumerable<string> packageNames)
+    {
+        var savedPackages = new HashSet<string>(packageNames, StringComparer.Ordinal);
+        var saved = AppSelection(savedMode, savedPackages.Count);
+        if (active is null) return Ru ? $"При подключении · {saved}" : $"Next connection · {saved}";
+        var current = AppSelection(active.ActiveMode, active.ActivePackages.Length);
+        var text = Ru ? $"Сейчас · {current}" : $"Active · {current}";
+        if (!active.HasSavedChanges(savedMode, savedPackages)) return text;
+        if (active.ActiveMode == savedMode && active.ActivePackages.Length == savedPackages.Count)
+        {
+            var added = savedPackages.Except(active.ActivePackages, StringComparer.Ordinal).ToArray();
+            var removed = active.ActivePackages.Except(savedPackages, StringComparer.Ordinal).ToArray();
+            if (added.Length == 1 && removed.Length == 1)
+                saved += $"\n+ {added[0]}   − {removed[0]}";
+            else if (added.Length + removed.Length > 0)
+                saved += $" (+{added.Length}, −{removed.Length})";
+        }
+        return text + (Ru ? $"\nПосле переподключения · {saved}" : $"\nAfter reconnect · {saved}");
+    }
+
+    public static string PerAppSaveModeHint => Ru
+        ? "Нажмите «Готово», чтобы сохранить режим для следующего подключения."
+        : "Tap Done to save this mode for the next connection.";
 
     public static string PerAppPickButton => Ru ? "Выбрать приложения…" : "Choose apps…";
 

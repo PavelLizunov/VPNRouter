@@ -59,6 +59,59 @@ public class SettingsLoaderRobustnessTests : IDisposable
     }
 
     [Fact]
+    public void Store_LoadAndRecover_KeepPrivateDetailsOutOfDiagnostics()
+    {
+        const string marker = "private-settings-fixture";
+        var path = PathFor(marker + ".yaml");
+        var store = RealSettingsStore.Instance;
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "custom";
+        settings.App.CustomConfigs.Add(new CustomConfigEntry { Name = marker, Path = PathFor(marker + ".json") });
+        settings.App.Subscriptions.Add(new SubscriptionEntry { Name = marker, Url = $"https://{marker}.invalid/feed" });
+        settings.App.ActiveSubscriptionServer = marker + "-subscription";
+        settings.Vless.ActiveServer = marker + "-manual";
+        settings.Vless.Servers.Add(new VlessServerEntry { Name = settings.Vless.ActiveServer, Server = marker + ".invalid" });
+
+        var sink = new CapturingSink();
+        using var logger = sink.CreateLogger();
+        using var errors = new StringWriter();
+        var oldLogger = Serilog.Log.Logger;
+        var oldError = Console.Error;
+        try
+        {
+            Serilog.Log.Logger = logger;
+            Console.SetError(errors);
+            store.Save(settings, path);
+            var loaded = store.Load(path);
+
+            Assert.Equal(settings.App.ActiveSubscriptionServer, loaded.App.ActiveSubscriptionServer);
+            Assert.Equal(settings.Vless.ActiveServer, loaded.Vless.ActiveServer);
+            Assert.Contains("config_mode=custom", errors.ToString());
+            Assert.Contains("Warnings:", errors.ToString());
+
+            settings.App.ConfigMode = marker + "-invalid";
+            store.Save(settings, path);
+            store.Load(path);
+            Assert.Contains(path + ".invalid-", store.ConsumeRecoveryNotice());
+
+            File.WriteAllText(path, "app: [" + marker);
+            store.Load(path);
+            Assert.Contains(path + ".unloadable-", store.ConsumeRecoveryNotice());
+
+            Assert.Contains("Settings rejected", errors.ToString());
+            Assert.Contains("Settings parse failed", errors.ToString());
+            Assert.DoesNotContain(marker, errors.ToString());
+            sink.AssertExcludes(marker);
+        }
+        finally
+        {
+            Console.SetError(oldError);
+            Serilog.Log.Logger = oldLogger;
+            store.ConsumeRecoveryNotice();
+        }
+    }
+
+    [Fact]
     public void Load_MissingFile_ReturnsDefaults()
     {
         var path = PathFor("missing.yaml");

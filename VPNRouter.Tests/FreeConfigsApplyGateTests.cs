@@ -1,5 +1,7 @@
 using System.Threading.Tasks;
 using Serilog;
+using Avalonia.Headless.XUnit;
+using VPNRouter.Core;
 using VPNRouter.App.ViewModels.FreeConfigs;
 using VPNRouter.Core.Services.FreeConfigs;
 using VPNRouter.Tests.Fakes;
@@ -44,6 +46,50 @@ public class FreeConfigsApplyGateTests
 
         Assert.False(applyCalled[0]);
         Assert.Equal(VPNRouter.App.Localization.Strings.FcConnectNeedsVerify, vm.StatusText);
+    }
+
+    [AvaloniaFact]
+    public async Task LegacySavedList_RetainsRecheckableProfilesAcrossSaveAndRejectsApply()
+    {
+        var original = AppPaths.DataDir;
+        var dir = Directory.CreateTempSubdirectory("vpnrouter-test-");
+        try
+        {
+            AppPaths.OverrideDataDir(dir.FullName);
+            var raw = $"vless://{Guid.Empty:D}@saved.example.com:443?security=tls";
+            var recent = DateTime.UtcNow.AddDays(-2);
+            var expired = recent.AddDays(-30);
+            File.WriteAllText(Path.Combine(dir.FullName, "free_configs_saved.json"), $$"""
+                {"schema_version":1,"Configs":[
+                  {"Id":"keep","RawUri":"{{raw}}","Status":8,"LastTestedAt":"{{recent:O}}"},
+                  {"Id":"remove","RawUri":"{{raw}}","Status":8,"LastTestedAt":"{{recent:O}}"},
+                  {"Id":"expired","RawUri":"{{raw}}","Status":8,"LastTestedAt":"{{expired:O}}"},
+                  {"Id":"untested","RawUri":"{{raw}}","Status":0}]}
+                """);
+            using (var vm = MakeVm(out var applyCalled))
+            {
+                vm.EnsureCacheLoaded();
+                Assert.Equal(2, vm.DisplayedSavedConfigs.Count);
+                var keep = Assert.Single(vm.DisplayedSavedConfigs, row => row.Id == "keep");
+                Assert.True(vm.HasStaleSaved);
+                Assert.True(vm.RecheckOneCommand.CanExecute(keep));
+                vm.SelectedItem = keep;
+                await vm.ApplySelectedCommand.ExecuteAsync(null);
+                Assert.False(applyCalled[0]);
+                vm.RemoveFromSavedCommand.Execute(Assert.Single(vm.DisplayedSavedConfigs, row => row.Id == "remove"));
+            }
+            using var reopened = MakeVm(out _);
+            reopened.EnsureCacheLoaded();
+            var remaining = Assert.Single(reopened.DisplayedSavedConfigs);
+            Assert.Equal(raw, remaining.Entry.RawUri);
+            Assert.Equal(FreeConfigStatus.Unknown, remaining.Entry.Status);
+            Assert.Equal(1, reopened.StaleSavedCount);
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(original);
+            dir.Delete(recursive: true);
+        }
     }
 
     [Fact]

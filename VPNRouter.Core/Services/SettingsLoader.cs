@@ -29,9 +29,7 @@ public static class SettingsLoader
         {
             try
             {
-                Console.Error.WriteLine(
-                    $"[SettingsLoader] FATAL: Load(\"{path ?? DefaultConfigPath}\") threw " +
-                    $"{ex.GetType().Name}: {ex.Message}. Returning defaults.");
+                Console.Error.WriteLine($"[SettingsLoader] Load failed ({ex.GetType().Name}). Using defaults.");
             }
             catch { }
             return CreateDefaults().EnsureSane();
@@ -62,15 +60,13 @@ public static class SettingsLoader
         }
 
         var validation = SettingsValidator.Validate(parsed);
-        foreach (var w in validation.Warnings)
-        {
-            Console.Error.WriteLine($"[SettingsValidator] warning: {w}");
-        }
+        if (validation.Warnings.Count > 0)
+            Console.Error.WriteLine($"[SettingsValidator] Warnings: {validation.Warnings.Count}");
         if (!validation.IsValid)
             return RecoverFromInvalidConfig(configPath, validation);
 
         PersistClashApiSecretIfMissing(parsed, yaml, configPath);
-        LogLoadedSummary(parsed, configPath);
+        LogLoadedSummary(parsed);
 
         return parsed;
     }
@@ -84,8 +80,7 @@ public static class SettingsLoader
             try
             {
                 Console.Error.WriteLine(
-                    $"[SettingsLoader] could not write example config to {configPath} " +
-                    $"({writeEx.GetType().Name}: {writeEx.Message}); using in-memory defaults.");
+                    $"[SettingsLoader] Could not write example settings ({writeEx.GetType().Name}). Using in-memory defaults.");
             }
             catch { }
         }
@@ -103,9 +98,7 @@ public static class SettingsLoader
             try
             {
                 Console.Error.WriteLine(
-                    $"[SettingsLoader] could not read {configPath} " +
-                    $"({readEx.GetType().Name}: {readEx.Message}); " +
-                    "using defaults for this session, original file untouched.");
+                    $"[SettingsLoader] Could not read settings ({readEx.GetType().Name}). Using session defaults.");
             }
             catch { }
             yaml = string.Empty;
@@ -122,8 +115,7 @@ public static class SettingsLoader
             var backup = $"{configPath}.unloadable-{stamp}";
             File.Move(configPath, backup, overwrite: false);
             Console.Error.WriteLine(
-                $"[SettingsLoader] config.yaml unloadable ({parseEx.GetType().Name}: {parseEx.Message}). " +
-                $"Renamed to {backup}; using defaults for this session.");
+                $"[SettingsLoader] Settings parse failed ({parseEx.GetType().Name}). Backup saved. Using session defaults.");
             LastRecoveryNotice =
                 $"config.yaml parse failed ({parseEx.GetType().Name}); restored defaults. Backup: {backup}";
         }
@@ -154,10 +146,8 @@ public static class SettingsLoader
         try { Save(defaults, configPath); }
         catch { }
 
-        var noticeLine = backup != null
-            ? $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; backup at {backup}; reset to defaults"
-            : $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; reset to defaults (backup failed)";
-        Console.Error.WriteLine(noticeLine);
+        Console.Error.WriteLine(
+            $"[SettingsValidation] Settings rejected. Errors: {validation.Reasons.Count}, backup saved: {backup != null}. Using defaults.");
         LastRecoveryNotice = backup != null
             ? $"config.yaml was invalid ({reasonsJoined}); restored defaults. Backup: {backup}"
             : $"config.yaml was invalid ({reasonsJoined}); restored defaults.";
@@ -177,33 +167,53 @@ public static class SettingsLoader
         catch { }
     }
 
-    private static void LogLoadedSummary(AppSettings parsed, string configPath)
+    private static void LogLoadedSummary(AppSettings parsed)
     {
         try
         {
-            var subSummary = parsed.App?.Subscriptions == null || parsed.App.Subscriptions.Count == 0
-                ? "none"
-                : string.Join(",", parsed.App.Subscriptions.Select(s =>
-                    $"{(s == null ? "?" : (s.Enabled ? "+" : "-"))}{(s?.Servers?.Count ?? 0)}"));
-            var legacyVless = string.IsNullOrWhiteSpace(parsed.Vless?.Server) ? "empty" : "set";
-            var line =
-                $"[SettingsLoader] Loaded {configPath}: schema={parsed.SchemaVersion}, " +
-                $"config_mode={parsed.App?.ConfigMode ?? "(null)"}, " +
-                $"subs={parsed.App?.Subscriptions?.Count ?? 0}[{subSummary}], " +
-                $"vless.servers={parsed.Vless?.Servers?.Count ?? 0}, " +
-                $"vless.server={legacyVless}, " +
-                $"active_sub='{parsed.App?.ActiveSubscriptionServer ?? string.Empty}', " +
-                $"active_vless='{parsed.Vless?.ActiveServer ?? string.Empty}'";
-            Console.Error.WriteLine(line);
-            try { Serilog.Log.Logger?.Information(line); }
-            catch { }
+            var mode = parsed.App.ConfigMode.Trim().ToLowerInvariant();
+            var summary = $"[SettingsLoader] Loaded schema={parsed.SchemaVersion}, config_mode={mode}, " +
+                $"subscriptions={parsed.App.Subscriptions.Count}, vless.servers={parsed.Vless.Servers.Count}";
+            Console.Error.WriteLine(summary);
+            Serilog.Log.Information("{SettingsSummary:l}", summary);
         }
-        catch
-        {
-        }
+        catch { }
     }
 
-    public static AppSettings Parse(string yaml)
+    internal static AppSettings Copy(AppSettings settings) => Deserialize(Serialize(settings));
+
+    internal static string GetSubmittedRevision(AppSettings settings) => GetRevision(Serialize(settings));
+
+    internal static string GetRevision(string yaml) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(yaml)));
+
+    internal static AppSettings? ParseLiveCandidate(string yaml)
+    {
+        if (string.IsNullOrWhiteSpace(yaml)) return null;
+        try
+        {
+            var candidate = Parse(yaml, persistMigrations: false);
+            return SettingsValidator.Validate(candidate).IsValid ? candidate : null;
+        }
+        catch (Exception) { return null; }
+    }
+
+    private static AppSettings Deserialize(string yaml) =>
+        new StaticDeserializerBuilder(new YamlStaticContext())
+            .WithNamingConvention(UnderscoredNamingConvention.Instance)
+            .WithTypeConverter(new DateTimeOffsetYamlConverter())
+            .IgnoreUnmatchedProperties()
+            .Build().Deserialize<AppSettings>(yaml);
+
+    private static string Serialize(AppSettings settings) =>
+        new StaticSerializerBuilder(new YamlStaticContext())
+            .WithNamingConvention(UnderscoredNamingConvention.Instance)
+            .WithTypeConverter(new DateTimeOffsetYamlConverter())
+            .Build().Serialize(settings);
+
+    public static AppSettings Parse(string yaml) => Parse(yaml, persistMigrations: true);
+
+    private static AppSettings Parse(string yaml, bool persistMigrations)
     {
         if (!string.IsNullOrWhiteSpace(yaml))
         {
@@ -242,14 +252,7 @@ public static class SettingsLoader
             }
         }
 
-        var deserializer = new StaticDeserializerBuilder(new YamlStaticContext())
-            .WithNamingConvention(UnderscoredNamingConvention.Instance)
-            .WithTypeConverter(new DateTimeOffsetYamlConverter())
-            .IgnoreUnmatchedProperties()
-            .Build();
-
-        var settings = deserializer.Deserialize<AppSettings>(yaml);
-
+        var settings = Deserialize(yaml);
         settings = settings.EnsureSane();
 
         if (string.Equals(settings.Vless.Server, "your.server.com", StringComparison.OrdinalIgnoreCase))
@@ -281,8 +284,10 @@ public static class SettingsLoader
                 settings,
                 from: settings.SchemaVersion,
                 to: AppSettings.CurrentSchemaVersion);
-            try { Save(settings); }
-            catch { }
+            if (persistMigrations)
+            {
+                try { Save(settings); } catch { }
+            }
         }
 
         var pruneCount = SettingsMigrator.PruneKnownPlaceholders(settings, null);
@@ -291,8 +296,10 @@ public static class SettingsLoader
             settings.App.PlaceholderPruneCount = pruneCount;
             settings.App.PlaceholderPruneAtUtc_Str =
                 DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-            try { Save(settings); }
-            catch { }
+            if (persistMigrations)
+            {
+                try { Save(settings); } catch { }
+            }
         }
 
         return settings;
@@ -324,12 +331,7 @@ public static class SettingsLoader
             Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
         }
 
-        var serializer = new StaticSerializerBuilder(new YamlStaticContext())
-            .WithNamingConvention(UnderscoredNamingConvention.Instance)
-            .WithTypeConverter(new DateTimeOffsetYamlConverter())
-            .Build();
-
-        var yaml = serializer.Serialize(settings);
+        var yaml = Serialize(settings);
 
         // Temp file, fsync, atomic rename: a crash mid-write must not truncate config.yaml.
         var tmp = configPath + ".tmp";
@@ -353,9 +355,12 @@ public static class SettingsLoader
 
     private static FileSystemWatcher? _watcher;
     private static System.Timers.Timer? _debounceTimer;
-    private static Action<AppSettings>? _reloadCallback;
+    private static Action<AppSettings?, string>? _reloadCallback;
 
-    public static void StartWatching(string? path = null, Action<AppSettings>? onReload = null)
+    public static void StartWatching(string? path = null, Action<AppSettings>? onReload = null) =>
+        WatchRevisions(path, (settings, _) => { if (settings != null) onReload?.Invoke(settings); });
+
+    internal static void WatchRevisions(string? path, Action<AppSettings?, string> onReload)
     {
         StopWatching();
 
@@ -403,8 +408,9 @@ public static class SettingsLoader
         {
             try
             {
-                var settings = Load(configPath);
-                _reloadCallback?.Invoke(settings);
+                var yaml = File.ReadAllText(configPath);
+                var settings = ParseLiveCandidate(yaml);
+                _reloadCallback?.Invoke(settings, GetRevision(yaml));
             }
             catch { }
         };

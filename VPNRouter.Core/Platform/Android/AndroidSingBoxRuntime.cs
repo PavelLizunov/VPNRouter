@@ -1,14 +1,14 @@
 #if PLATFORM_ANDROID
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.OS;
-using Android.Runtime;
+using Java.Interop;
 using Serilog;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.Core.Platform.Android;
 
@@ -18,12 +18,6 @@ public sealed class AndroidSingBoxRuntime
     private const string ActionStop = "com.ninitux.vpnrouter.STOP";
     private const string ExtraConfigJson = "config_json";
     private const string ExtraAllowedPackages = "allowed_packages";
-
-    private const string ClashApiUrl = "http://127.0.0.1:9090/configs";
-
-    public static string? ClashApiSecret { get; set; }
-
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(2) };
 
     private static Type? _serviceType;
 
@@ -96,35 +90,57 @@ public sealed class AndroidSingBoxRuntime
         _logger.Information("[AndroidSingBoxRuntime] Stop dispatched");
     }
 
-    public async Task<bool> IsRunningAsync(CancellationToken ct = default)
+    public static VpnStateSnapshot ResolveVpnState()
+    {
+        VpnStateSnapshot? stored = null;
+        try
+        {
+            var prefs = Application.Context?.GetSharedPreferences("vpnrouter_settings", FileCreationMode.Private);
+            if (prefs is not null)
+            {
+                stored = VpnStateCodec.TryParse(
+                    prefs.GetString("vpn_state", null),
+                    prefs.GetString("vpn_state_reason", null),
+                    prefs.GetInt("vpn_state_pid", 0),
+                    prefs.GetLong("vpn_state_at_ms", 0));
+            }
+        }
+        catch
+        {
+            stored = null;
+        }
+        return VpnStateResolver.Resolve(stored, global::Android.OS.Process.MyPid(), DateTimeOffset.UtcNow);
+    }
+
+    public Task<bool> IsRunningAsync(CancellationToken ct = default) =>
+        Task.FromResult(!ct.IsCancellationRequested && IsRunning());
+
+    public bool IsRunning() => HasLiveTunnel();
+
+    public bool IsHealthy() => HasRecentTunnelStatus();
+
+    public static bool HasLiveTunnel() => QueryService("hasLiveTunnel");
+    public static bool HasRecentTunnelStatus() => QueryService("hasRecentTunnelStatus");
+
+    private static JniType? _serviceClass;
+
+    // JNI owns this global class reference for the process. Both the command monitor and
+    // status queries need it across Stop, even when Android destroys the service instance.
+    internal static JniObjectReference ServiceClassReference =>
+        JniType.GetCachedJniType(ref _serviceClass, "com/ninitux/vpnrouter/VpnRouterService").PeerReference;
+
+    private static bool QueryService(string methodName)
     {
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, ClashApiUrl);
-            if (!string.IsNullOrEmpty(ClashApiSecret))
-                req.Headers.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ClashApiSecret);
-            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
-            return resp.IsSuccessStatusCode;
+            var service = ServiceClassReference;
+            var method = JniEnvironment.StaticMethods.GetStaticMethodID(service, methodName, "()Z");
+            return JniEnvironment.StaticMethods.CallStaticBooleanMethod(service, method);
         }
-        catch
+        catch (Exception)
         {
             return false;
         }
     }
-
-    public bool IsRunning()
-    {
-        try
-        {
-            return IsRunningAsync(CancellationToken.None).GetAwaiter().GetResult();
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public bool IsHealthy() => IsRunning();
 }
 #endif

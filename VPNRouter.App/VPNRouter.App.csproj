@@ -25,6 +25,16 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <EmbeddedResource Include="../packaging/windows/installer/repair-environment.ps1" LogicalName="VPNRouter.Windows.RollbackEnvironment" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <EmbeddedResource Include="Services/rollback-worker.ps1" LogicalName="VPNRouter.Windows.RollbackWorker" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <EmbeddedResource Include="../packaging/windows/installer/repair-target.ps1" LogicalName="VPNRouter.Windows.RepairTarget" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <EmbeddedResource Include="Services/relaunch-rollback.ps1" LogicalName="VPNRouter.Windows.RollbackRelaunch"
+                      Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <EmbeddedResource Include="../VPNRouter.GUI/repair-bootstrap.ps1" LogicalName="VPNRouter.Windows.RepairBootstrap" />
+    <None Include="..\packaging\windows\installer\stop-vpnrouter.ps1" Link="stop-vpnrouter.ps1"
+          Condition="$([MSBuild]::IsOSPlatform('Windows'))" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\packaging\windows\installer\zapret-maintenance.ps1" Link="zapret-maintenance.ps1"
+          Condition="$([MSBuild]::IsOSPlatform('Windows'))" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

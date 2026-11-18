@@ -17,6 +17,7 @@ on:
   pull_request:
     paths:
       - "VPNRouter.Core/Services/UpdateChecker*.cs"
+      - "packaging/windows/installer/*-*.ps1"
       - "VPNRouter.CLI/Commands/TestUpdateCommand.cs"
       - "VPNRouter.CLI/Program.cs"
       - "VPNRouter.Core/AppVersion.cs"
@@ -34,11 +35,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
         with:
           global-json-file: global.json
+
+      - name: Record Windows update worker and SDK
+        run: python .github/scripts/report-test-sdk.py
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
@@ -70,9 +76,14 @@ jobs:
           Write-Host "Resolved AppVersion: $v"
           "version=$v" >> $env:GITHUB_OUTPUT
 
+      - name: Verify native Windows repair scratch and child environment
+        shell: powershell
+        run: ./VPNRouter.Tests/Windows/Test-RepairEnvironment.ps1
+
       - name: Build Windows install + update ZIPs
         shell: pwsh
         run: |
+          ./VPNRouter.Tests/Windows/Test-WindowsUpdatePublisher.ps1
           ./build.ps1 -Version "${{ steps.ver.outputs.version }}"
 
       - name: Validate libcronet.dll and sing-box naive check
@@ -198,15 +209,17 @@ jobs:
           Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $negDir   -ErrorAction SilentlyContinue
 
-      - name: Lay out TEST install (not Program Files)
+      - name: Lay out dedicated protected test installation
         id: layout
         shell: pwsh
         run: |
-          $installRoot = "C:\TestVPNRouter\install"
+          $installRoot = Join-Path $env:ProgramFiles 'VPNRouter Update Test'
           $stagedDir   = "C:\TestVPNRouter\staged"
           Remove-Item -Recurse -Force $installRoot -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $stagedDir   -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+          $acl = [System.Security.AccessControl.DirectorySecurity]::new()
+          $acl.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FRFX;;;BU)(A;OICI;RC;;;OW)')
+          [IO.FileSystemAclExtensions]::Create([IO.DirectoryInfo]::new($installRoot), $acl)
           New-Item -ItemType Directory -Force -Path $stagedDir   | Out-Null
 
           $ver = "${{ steps.ver.outputs.version }}"
@@ -220,10 +233,9 @@ jobs:
             Get-ChildItem $installRoot -Recurse | Select-Object FullName | Format-Table -AutoSize
             throw "VPNRouter.CLI.exe not found at $cliExe"
           }
-          Set-Content -LiteralPath (Join-Path $appDir 'update-copy-probe.txt') -Value 'old' -Encoding ascii
-          Set-Content -LiteralPath (Join-Path $stagedDir '_bootstrap\update-copy-probe.txt') -Value 'new' -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $appDir 'stop-vpnrouter.ps1') -Value '# old fixture' -Encoding ascii
           $expectedHashes = @{}
-          foreach ($name in @('VPNRouter.Core.dll', 'VPNRouter.GUI.exe', 'update-copy-probe.txt')) {
+          foreach ($name in @('VPNRouter.Core.dll', 'VPNRouter.GUI.exe', 'stop-vpnrouter.ps1')) {
               $source = if ($name -eq 'VPNRouter.GUI.exe') { Join-Path $stagedDir $name } else { Join-Path (Join-Path $stagedDir '_bootstrap') $name }
               $expectedHashes[$name] = (Get-FileHash -Algorithm SHA256 $source).Hash
           }
@@ -237,100 +249,56 @@ jobs:
           Write-Host "Staged update: $stagedDir"
           "appDir=$appDir"   >> $env:GITHUB_OUTPUT
           "cliExe=$cliExe"   >> $env:GITHUB_OUTPUT
-          "stagedDir=$stagedDir" >> $env:GITHUB_OUTPUT
+          $archive = (Resolve-Path "VPNRouter-update-v$ver-win.zip").Path
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "sha256=$((Get-Content -LiteralPath ($archive + '.sha256') -Raw).Trim().Split(' ')[0])" >> $env:GITHUB_OUTPUT
 
       - name: Reset receipt + update.log (so we see only this run's output)
         shell: pwsh
         run: |
-          Remove-Item "$env:ProgramData\VPNRouter\.update-installed-version" -Force -ErrorAction SilentlyContinue
-          Remove-Item "$env:ProgramData\VPNRouter\logs\update.log"           -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $env:ProgramFiles 'VPNRouter Update Test/.update-installed-version') -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $env:ProgramFiles 'VPNRouter Update Test/update.log')           -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path "$env:ProgramData\VPNRouter\logs" | Out-Null
 
           $coreDll = Join-Path "${{ steps.layout.outputs.appDir }}" "VPNRouter.Core.dll"
           if (-not (Test-Path $coreDll)) { throw "Pre-update Core.dll missing at $coreDll" }
 
-      - name: Trigger update (CLI test-update with --staged-dir)
+      - name: Trigger update with the release ZIP and its sidecar
         shell: pwsh
         env:
           VPNROUTER_CI: "1"
         run: |
           $cli = "${{ steps.layout.outputs.cliExe }}"
-          $staged = "${{ steps.layout.outputs.stagedDir }}"
+          $archive = "${{ steps.layout.outputs.archive }}"
           $target = "${{ steps.ver.outputs.version }}"
 
-          & $cli test-update --target $target --staged-dir $staged
+          & $cli test-update --target $target --archive $archive --sha256 "${{ steps.layout.outputs.sha256 }}"
           $rc = $LASTEXITCODE
           Write-Host "test-update exit code: $rc"
           if ($rc -ne 0) {
             throw "test-update CLI returned $rc (expected 0). See above output."
           }
 
-      - name: Wait for helper.cmd to complete
-        id: wait
+      - name: Wait for the update publisher
         shell: pwsh
         run: |
-          $updateLog = "$env:ProgramData\VPNRouter\logs\update.log"
-          $stderrLog = "$env:ProgramData\VPNRouter\logs\helper-stderr.log"
+          $updateLog = Join-Path $env:ProgramFiles 'VPNRouter Update Test/update.log'
           $deadline = (Get-Date).AddMinutes(5)
-          $sawDone = $false
-
-          $failPattern = 'was unexpected at this time|syntax of the command is incorrect'
-
-          function Check-FailPatterns {
-            foreach ($p in @($updateLog, $stderrLog)) {
-              if (Test-Path $p) {
-                $c = Get-Content $p -Raw -ErrorAction SilentlyContinue
-                if ($c -and $c -match $failPattern) {
-                  Write-Host "::error::CMD parser failure detected in $p"
-                  Write-Host "::group::$p"
-                  Write-Host $c
-                  Write-Host "::endgroup::"
-                  return $true
-                }
-              }
-            }
-            return $false
-          }
-
           while ((Get-Date) -lt $deadline) {
-            if (Check-FailPatterns) {
-              throw "helper.cmd CMD parser bug — likely missing EnableDelayedExpansion / wrong %VAR% vs !VAR! usage in a parenthesized block. See log dump above."
-            }
-            if (Test-Path $updateLog) {
-              $c = Get-Content $updateLog -Raw -ErrorAction SilentlyContinue
-              if ($c -and $c -match 'helper done') {
-                $sawDone = $true
-                break
-              }
-            }
-            Start-Sleep -Seconds 3
+            if ((Test-Path $updateLog) -and ((Get-Content -Raw $updateLog) -match 'helper done')) { break }
+            Start-Sleep -Seconds 2
           }
-
-          foreach ($p in @($updateLog, $stderrLog)) {
-            if (Test-Path $p) {
-              Write-Host "::group::Final $p"
-              Get-Content $p
-              Write-Host "::endgroup::"
-            } else {
-              Write-Host "::warning::$p was not created"
-            }
+          if (!(Test-Path $updateLog) -or (Get-Content -Raw $updateLog) -notmatch 'helper done') {
+            throw 'The Windows update publisher did not finish.'
           }
-
-          if (-not (Test-Path $updateLog)) {
-            throw "update.log never appeared at $updateLog after 5 min — helper.cmd may not have launched, or aborted before its first echo. Check helper-stderr.log dump above."
-          }
-          if (-not $sawDone) {
-            throw "helper.cmd did not log 'helper done' within 5 min — see update.log dump above"
-          }
-          Write-Host "OK: helper.cmd completed cleanly"
 
       - name: Assert files were replaced
         shell: pwsh
         run: |
-          $log = "$env:ProgramData\VPNRouter\logs\update.log"
+          $log = (Join-Path $env:ProgramFiles 'VPNRouter Update Test/update.log')
           $content = Get-Content $log -Raw
           if ($content -notmatch 'xcopy exit=(\d+)') {
-            throw "update.log has no 'xcopy exit=N' line — helper.cmd never reached the copy step"
+            throw "update.log has no 'xcopy exit=N' line — the publisher never reached the copy step"
           }
           $xcopyExit = [int]$Matches[1]
           if ($xcopyExit -ne 0) {
@@ -343,7 +311,7 @@ jobs:
           }
           $copiedCount = [int]$Matches[1]
           if ($copiedCount -lt 50) {
-            throw "Only $copiedCount files copied — expected 90+. helper.cmd may be skipping content."
+            throw "Only $copiedCount files copied — expected 90+. the publisher may be skipping content."
           }
           Write-Host "OK: $copiedCount files copied"
 
@@ -375,7 +343,7 @@ jobs:
       - name: Assert install receipt was written
         shell: pwsh
         run: |
-          $receipt = "$env:ProgramData\VPNRouter\.update-installed-version"
+          $receipt = (Join-Path $env:ProgramFiles 'VPNRouter Update Test/.update-installed-version')
           if (-not (Test-Path $receipt)) {
             throw "Install receipt missing at $receipt — TryWriteInstallReceipt did not run"
           }
@@ -397,8 +365,8 @@ jobs:
           name: test-update-logs-${{ github.run_id }}
           path: |
             C:\ProgramData\VPNRouter\logs\*.log
-            C:\ProgramData\VPNRouter\.update-installed-version
-            C:\TestVPNRouter\install\app\VPNRouter.Core.dll
+            C:\Program Files\VPNRouter Update Test\.update-installed-version
+            C:\Program Files\VPNRouter Update Test\update.log
           retention-days: 14
           if-no-files-found: warn
 
@@ -406,10 +374,5 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Get-Process -Name VPNRouter.App, VPNRouter.GUI, VPNRouter.CLI, sing-box `
-            -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 1
-          Remove-Item -Recurse -Force "C:\TestVPNRouter"             -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "$env:ProgramData\VPNRouter"   -ErrorAction SilentlyContinue
-          Get-ChildItem $env:TEMP -Filter "vpnrouter-update-*.cmd" -ErrorAction SilentlyContinue |
-            Remove-Item -Force -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force (Join-Path $env:ProgramFiles 'VPNRouter Update Test') -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force 'C:\TestVPNRouter' -ErrorAction SilentlyContinue

@@ -173,6 +173,19 @@ public sealed class CustomConfigStorage
         }
     }
 
+    internal void DeleteRegistrationFiles(VPNRouter.Core.Models.CustomConfigEntry removed,
+        IReadOnlyCollection<VPNRouter.Core.Models.CustomConfigEntry> remaining)
+    {
+        AssertNoSymlinksInPath(AppPaths.ConfigDir);
+        CustomConfigInjector.ForgetAcceptedImport(removed, remaining);
+        var editable = CustomConfigInjector.GetProgramDataPath(removed.Name);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!remaining.Any(entry =>
+            string.Equals(CustomConfigInjector.GetProgramDataPath(entry.Name), editable, comparison) ||
+            string.Equals(Path.GetFullPath(Environment.ExpandEnvironmentVariables(CustomConfigInjector.GetRegisteredImportPath(entry))), editable, comparison)))
+            DeleteCustomConfig(removed.Name);
+    }
+
     private static void AssertNoSymlinksInPath(string path)
     {
         var fullPath = Path.GetFullPath(path);

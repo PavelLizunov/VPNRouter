@@ -67,6 +67,7 @@ public sealed class SubscriptionUrlRedactionTests
             var result = await RuleSetCacheManager.EnsureLocalAsync(
                 sensitiveUrl,
                 "cached-rules.srs",
+                checkContents: RuleSetSamples.CheckFixtureContentsAsync,
                 logger: logger,
                 httpClient: client,
                 cacheDir: tmp,

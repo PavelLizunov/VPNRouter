@@ -25,7 +25,7 @@ public class RevealInFileManagerTests
         Assert.False(psi.UseShellExecute);
         if (OperatingSystem.IsWindows())
         {
-            Assert.Equal("explorer.exe", psi.FileName);
+            Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"), psi.FileName);
             Assert.Single(psi.ArgumentList);
             Assert.Equal($"/select,{malPath}", psi.ArgumentList[0]);
         }
@@ -55,7 +55,7 @@ public class RevealInFileManagerTests
         Assert.Empty(psi.Arguments);
         Assert.False(psi.UseShellExecute);
         var expectedExe = OperatingSystem.IsWindows()
-            ? "explorer.exe"
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe")
             : (OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open");
         Assert.Equal(expectedExe, psi.FileName);
         Assert.Single(psi.ArgumentList);

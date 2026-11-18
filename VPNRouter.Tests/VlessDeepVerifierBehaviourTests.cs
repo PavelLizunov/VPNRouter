@@ -145,10 +145,8 @@ public sealed class VlessDeepVerifierBehaviourTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var result = await verifier.VerifyAsync(entry, measureBandwidth: false, cts.Token);
-
-        Assert.False(result.Ok);
-        Assert.NotNull(result.Error);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            verifier.VerifyAsync(entry, measureBandwidth: false, cts.Token));
     }
 
     private static VlessServerEntry DnsTunnelEntry() => new()

@@ -1,6 +1,7 @@
 #nullable enable
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -25,7 +26,12 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         HttpClient? httpClient = null,
         string baseUrl = "http://127.0.0.1:9090",
         ILogger? logger = null,
-        string? secret = null)
+        string? secret = null) : this(httpClient, baseUrl, logger, secret, localBind: false) { }
+
+    internal static ClashSingBoxApi ForController(Uri endpoint, string? secret, ILogger? logger) =>
+        new(null, endpoint.AbsoluteUri, logger, secret, localBind: true);
+
+    private ClashSingBoxApi(HttpClient? httpClient, string baseUrl, ILogger? logger, string? secret, bool localBind)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentException("Clash API base URL cannot be empty.", nameof(baseUrl));
@@ -39,7 +45,7 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
                 nameof(baseUrl));
         }
 
-        if (!IsLoopbackHost(uri.Host))
+        if (!localBind && !IsLoopbackHost(uri.Host))
         {
             throw new ArgumentException(
                 $"Clash API base URL must point at a loopback host; '{uri.Host}' is not loopback. " +
@@ -57,7 +63,8 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         }
         else
         {
-            _http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+            _http = localBind ? new HttpClient(CreateControllerHandler()) : new HttpClient();
+            _http.Timeout = Timeout.InfiniteTimeSpan;
             _ownsHttpClient = true;
         }
 
@@ -65,6 +72,15 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
             _http.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", secret);
     }
+
+    internal static SocketsHttpHandler CreateControllerHandler() => new()
+    {
+        UseProxy = false,
+        AllowAutoRedirect = false,
+        UseCookies = false,
+        ConnectCallback = async (context, ct) => new NetworkStream(
+            await OpenControlSocketAsync(context.InitialRequestMessage.RequestUri!, ct).ConfigureAwait(false), ownsSocket: true)
+    };
 
     public async Task<bool> ReloadConfigAsync(string configPath, CancellationToken ct = default)
     {
@@ -373,6 +389,97 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
             _http.Dispose();
     }
 
+    internal static Uri LocalController(string? bindAddress)
+    {
+        var address = string.IsNullOrWhiteSpace(bindAddress) ? "127.0.0.1:9090" : bindAddress.Trim();
+        if (address.StartsWith(':')) address = "127.0.0.1" + address;
+        if (!Uri.TryCreate("http://" + address, UriKind.Absolute, out var uri) ||
+            uri.UserInfo.Length != 0 || uri.AbsolutePath != "/" || uri.Query.Length != 0 || uri.Fragment.Length != 0)
+            throw new InvalidDataException("The VPN control endpoint is invalid.");
+
+        var host = uri.IdnHost.Trim('[', ']');
+        if (host == "0.0.0.0") host = "127.0.0.1";
+        else if (host == "::") host = "::1";
+        return new UriBuilder(Uri.UriSchemeHttp, host, uri.Port).Uri;
+    }
+
+    internal static async Task<IPAddress[]> ResolveControlTargetsAsync(Uri endpoint, CancellationToken ct)
+    {
+        var host = endpoint.IdnHost.Trim('[', ']');
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+            return Socket.OSSupportsIPv6
+                ? (Socket.OSSupportsIPv4 ? [IPAddress.IPv6Loopback, IPAddress.Loopback] : [IPAddress.IPv6Loopback])
+                : [IPAddress.Loopback];
+        if (IPAddress.TryParse(host, out var literal) && IPAddress.IsLoopback(literal))
+            return [literal];
+
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(3));
+        var resolved = literal != null ? new[] { literal } :
+            await Dns.GetHostAddressesAsync(host, deadline.Token).ConfigureAwait(false);
+        var local = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .SelectMany(n => n.GetIPProperties().UnicastAddresses).Select(a => a.Address).ToHashSet();
+        var targets = resolved.Where(a => IPAddress.IsLoopback(a) || local.Contains(a)).ToArray();
+        return targets.Length > 0 ? targets : throw new InvalidDataException("A local VPN control endpoint is required.");
+    }
+
+    internal static async Task<Socket> OpenControlSocketAsync(Uri endpoint, CancellationToken ct)
+    {
+        var targets = await ResolveControlTargetsAsync(endpoint, ct).ConfigureAwait(false);
+        // Windows can spend the entire health-ping budget refusing the first address family.
+        // Race local candidates so an IPv4-only or IPv6-only listener gets the full HTTP deadline.
+        using var race = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var pending = targets.Select(ip => ConnectLocalAsync(ip, endpoint.Port, race.Token)).ToList();
+        try
+        {
+            while (pending.Count > 0)
+            {
+                var attempt = await Task.WhenAny(pending).ConfigureAwait(false);
+                pending.Remove(attempt);
+                try { return await attempt.ConfigureAwait(false); }
+                catch (SocketException) { }
+            }
+            ct.ThrowIfCancellationRequested();
+            throw new IOException("The local VPN control endpoint is unavailable.");
+        }
+        finally
+        {
+            race.Cancel();
+            foreach (var attempt in pending)
+            {
+                try { (await attempt.ConfigureAwait(false)).Dispose(); }
+                catch (SocketException) { }
+                catch (OperationCanceledException) { }
+            }
+        }
+    }
+
+    private static async Task<Socket> ConnectLocalAsync(IPAddress ip, int port, CancellationToken ct)
+    {
+        var socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        try
+        {
+            // A removed local address must never become a remote control peer.
+            socket.Bind(new IPEndPoint(ip, 0));
+            await socket.ConnectAsync(new IPEndPoint(ip, port), ct).ConfigureAwait(false);
+            return socket;
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    internal static (Uri Endpoint, string? Secret) ReadLocalController(string configJson)
+    {
+        using var config = JsonDocument.Parse(configJson);
+        var clash = config.RootElement.GetProperty("experimental").GetProperty("clash_api");
+        var bind = clash.GetProperty("external_controller").GetString();
+        var secret = clash.TryGetProperty("secret", out var property) ? property.GetString() : null;
+        return (LocalController(bind), secret);
+    }
+
     internal static bool IsLoopbackHost(string host)
     {
         if (string.IsNullOrWhiteSpace(host)) return false;
@@ -380,7 +487,7 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (IPAddress.TryParse(host, out var ip))
+        if (IPAddress.TryParse(host.Trim('[', ']'), out var ip))
             return IPAddress.IsLoopback(ip);
 
         return false;

@@ -12,7 +12,7 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests.Fakes;
 
-public sealed class FakeHttpClient : IHttpClient
+public sealed class FakeHttpClient : IDirectHttpClient
 {
     private readonly object _lock = new();
     private readonly List<RouteRule> _routes = new();

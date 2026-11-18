@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Text.Json.Nodes;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -13,26 +12,15 @@ public static class AndroidConfigBuilder
         return BuildConfigJson(entry, logOutputPath);
     }
 
-    private static void ApplyClashApiSecret(AppSettings settings)
-    {
-        try
-        {
-            var secret = AndroidStorage.GetClashApiSecret();
-            settings.SingBox.ClashApiSecret = secret;
-            VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ClashApiSecret = secret;
-        }
-        catch
-        {
-        }
-    }
+    public static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath = null) =>
+        BuildConfigJson(entry, logOutputPath, onMissingRuleSet: null);
 
-    public static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath = null)
+    internal static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath, Action<string>? onMissingRuleSet)
     {
         var settings = new AppSettings();
         settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "generated";
-        ApplyClashApiSecret(settings);
         settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
         settings.App.BlockAds = AndroidStorage.GetBlockAds();
         settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
@@ -41,21 +29,8 @@ public static class AndroidConfigBuilder
             "prefer_ipv4" => false,
             _ => true,
         };
-        if (AndroidStorage.GetAutoSelectBestServer())
-        {
-            var pool = GetAllCandidateServers();
-            if (pool.Count > 1)
-            {
-                foreach (var s in pool)
-                    settings.Vless.Servers.Add(s);
-                settings.Vless.ActiveServer = entry.Name ?? string.Empty;
-                settings.Vless.AutoSelectBestServer = true;
-            }
-            else
-            {
-                settings.Vless.Servers.Add(entry);
-            }
-        }
+        if (!string.IsNullOrEmpty(entry.DetourVia) || (!entry.UseAsSingleOutbound && AndroidStorage.GetAutoSelectBestServer()))
+            AndroidStorage.PrepareServerPool(settings.Vless, entry);
         else
         {
             settings.Vless.Servers.Add(entry);
@@ -69,7 +44,8 @@ public static class AndroidConfigBuilder
         };
 
         var processNames = System.Array.Empty<string>();
-        var sbConfig = ConfigGenerator.Generate(profile, processNames, settings);
+        var sbConfig = ConfigGenerator.Generate(profile, processNames, settings, strictDnsOverride: null,
+            isServerAlive: null, resolveRuleSet: null, onMissingRuleSet: onMissingRuleSet);
 
         try
         {
@@ -93,13 +69,15 @@ public static class AndroidConfigBuilder
         return InjectDpiBypass(patched, AndroidStorage.GetDpiBypassMode());
     }
 
-    public static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath = null)
+    public static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath = null) =>
+        BuildConfigJsonFromCustom(rawJson, logOutputPath, onMissingRuleSet: null);
+
+    internal static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath, Action<string>? onMissingRuleSet)
     {
         var settings = new AppSettings();
         settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "custom";
-        ApplyClashApiSecret(settings);
         settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
         settings.App.BlockAds = AndroidStorage.GetBlockAds();
         settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
@@ -111,7 +89,7 @@ public static class AndroidConfigBuilder
 
         var processNames = System.Array.Empty<string>();
 
-        var injectedJson = CustomConfigInjector.Inject(rawJson, processNames, settings);
+        var injectedJson = CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet);
 
         var patched = PatchLogPathForAndroid(injectedJson, logOutputPath);
 
@@ -120,17 +98,6 @@ public static class AndroidConfigBuilder
 
     public static string InjectDpiBypass(string json, string mode)
         => AndroidDpiBypassInjector.Inject(json, mode);
-
-    private static System.Collections.Generic.List<VlessServerEntry> GetAllCandidateServers()
-    {
-        var all = new System.Collections.Generic.List<VlessServerEntry>(AndroidStorage.GetServers());
-        foreach (var sub in AndroidStorage.GetSubscriptions())
-        {
-            if (sub is { Enabled: true, Servers: not null })
-                all.AddRange(sub.Servers);
-        }
-        return all;
-    }
 
     private static string PatchLogPathForAndroid(string json, string? logOutputPath)
     {

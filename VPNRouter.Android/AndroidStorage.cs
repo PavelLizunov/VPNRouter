@@ -27,61 +27,81 @@ public static class AndroidStorage
             new DefaultJsonTypeInfoResolver()),
     };
 
-    private const string KeyVlessUri = "vless_uri";
-    private const string KeySubscriptionUrl = "subscription_url";
-    private const string KeyServersJson = "servers_json";
-    private const string KeySelectedServerName = "selected_server_name";
+    private const string KeyVlessUri = AndroidSubscriptionRefresh.ManualUri;
+    private const string KeySubscriptionUrl = AndroidSubscriptionRefresh.SubscriptionUrl;
+    private const string KeyServersJson = AndroidSubscriptionRefresh.StandaloneServers;
+    private const string KeySelectedServerName = AndroidSubscriptionRefresh.SelectedName;
     private const string KeyLanguage = "language";
     private const string KeyTheme = "theme";
-    private const string KeySubscriptions = "subscriptions_json";
+    private const string KeySubscriptions = AndroidSubscriptionRefresh.Subscriptions;
 
     private const string KeyV4SubServersPruneDone = "v4_sub_servers_prune_done";
 
     private const string KeyV4PlaceholderPruneDone = "v4_placeholder_prune_done";
     private const string KeyPlaceholderPruneCount = "v4_placeholder_prune_count";
 
-    private const string KeyConfigMode = "config_mode";
-    private const string KeyCustomConfigJson = "custom_config_json";
-    private const string KeyCustomConfigName = "custom_config_name";
+    private const string KeyConfigMode = AndroidSubscriptionRefresh.ConfigMode;
+    private const string KeyCustomConfigJson = AndroidSubscriptionRefresh.CustomJson;
+    private const string KeyCustomConfigName = AndroidSubscriptionRefresh.CustomName;
 
-    public static string GetConfigMode()
-    {
-        var stored = GetString(KeyConfigMode);
-        if (stored == "subscribe" || stored == "manual" || stored == "custom")
-            return stored;
+    public static string GetConfigMode() => AndroidSubscriptionRefresh.ReadMode(GetString);
+    internal static string SavedServerInput() =>
+        AndroidSubscriptionRefresh.SavedServerInput(GetConfigMode(), GetString, GetSubscriptions);
 
-        if (!string.IsNullOrEmpty(GetString(KeySubscriptionUrl))) return "subscribe";
-        if (!string.IsNullOrEmpty(GetString(KeyVlessUri))) return "manual";
-        return "manual";
-    }
+    internal static string? SubscriptionToRefresh(string input) =>
+        AndroidSubscriptionRefresh.SubscriptionToRefresh(input, GetConfigMode(), GetString, GetSubscriptions);
+
     public static bool SetConfigMode(string value) => SetString(KeyConfigMode, value);
 
     private const string KeyTunnelLive = "tunnel_live";
 
     public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
 
-    /// <summary>The connection-state record of <c>VpnRouterService</c>, resolved for this process (see <see cref="VpnStateResolver"/>).</summary>
-    public static VpnStateSnapshot ResolveVpnState()
+    internal const string UiCommandKey = AndroidSubscriptionRefresh.UiCommand;
+    internal const string StateEventKey = "vpn_state_event";
+
+    internal static string? BeginUiCommand()
     {
-        VpnStateSnapshot? stored = null;
         try
         {
-            var prefs = Application.Context?.GetSharedPreferences(PrefsName, FileCreationMode.Private);
-            if (prefs is not null)
+            return WithCommandPreferences(prefs =>
             {
-                stored = VpnStateCodec.TryParse(
-                    prefs.GetString("vpn_state", null),
-                    prefs.GetString("vpn_state_reason", null),
-                    prefs.GetInt("vpn_state_pid", 0),
-                    prefs.GetLong("vpn_state_at_ms", 0));
-            }
+                string id = Guid.NewGuid().ToString("N");
+                using var editor = prefs.Edit() ?? throw new InvalidOperationException("Preferences unavailable.");
+                editor.PutString(UiCommandKey, id);
+                editor.Apply();
+                return id;
+            });
         }
-        catch
+        catch (Exception ex)
         {
-            stored = null;
+            global::Android.Util.Log.Warn("VpnRouter", $"VPN command reservation failed ({ex.GetType().Name})");
+            return null;
         }
-        return VpnStateResolver.Resolve(stored, global::Android.OS.Process.MyPid(), DateTimeOffset.UtcNow);
     }
+
+    internal static bool IsCurrentUiCommand(string? id) => AndroidSubscriptionRefresh.IsCurrentSelection(id, GetString);
+
+    internal static bool HasConfirmedTunnel() => TunnelStateResync.IsConfirmedConnected(
+        ResolveVpnState(), VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
+
+    public static AndroidPerAppPolicy? GetActivePerAppPolicy()
+    {
+        if (!HasConfirmedTunnel()) return null;
+        var json = GetString("vpn_active_per_app_policy");
+        if (json is null) return null;
+        try
+        {
+            var policy = JsonSerializer.Deserialize(json, AndroidJsonContext.Default.AndroidPerAppPolicy);
+            return policy is { ActiveMode: not null, ActivePackages: not null, RequestedMode: not null, RequestedPackages: not null }
+                ? policy : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    /// <summary>The connection-state record of <c>VpnRouterService</c>, resolved for this process (see <see cref="VpnStateResolver"/>).</summary>
+    public static VpnStateSnapshot ResolveVpnState() =>
+        VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ResolveVpnState();
 
     public static string? GetCustomConfigJson() => GetString(KeyCustomConfigJson);
     public static bool SetCustomConfigJson(string? value) => SetString(KeyCustomConfigJson, value);
@@ -93,7 +113,30 @@ public static class AndroidStorage
     public static bool SetVlessUri(string? value) => SetString(KeyVlessUri, value);
 
     public static string? GetSubscriptionUrl() => GetString(KeySubscriptionUrl);
-    public static bool SetSubscriptionUrl(string? value) => SetString(KeySubscriptionUrl, value);
+    internal static string? SelectedSubscriptionId => GetString(AndroidSubscriptionRefresh.SelectedFeedId);
+    public static bool SetSubscriptionUrl(string? value)
+    {
+        if (value == GetSubscriptionUrl()) return true;
+
+        try
+        {
+            // Materialize the old layout before changing the URL that identifies its cache.
+            var previous = GetString(KeySubscriptions) == null ? GetSubscriptions() : null;
+            var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+            using var editor = prefs?.Edit();
+            if (editor == null) return false;
+            if (previous != null) editor.PutString(KeySubscriptions, JsonSerializer.Serialize(previous, JsonOptions));
+            editor.Remove(AndroidSubscriptionRefresh.SelectedFeedId);
+            editor.Remove(AndroidSubscriptionRefresh.SelectedFeedRow);
+            if (string.IsNullOrWhiteSpace(value)) editor.Remove(KeySubscriptionUrl);
+            else editor.PutString(KeySubscriptionUrl, value);
+            return editor.Commit();
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     public static List<SubscriptionEntry> GetSubscriptions()
     {
@@ -115,16 +158,7 @@ public static class AndroidStorage
         var legacy = GetString(KeySubscriptionUrl);
         if (!string.IsNullOrWhiteSpace(legacy))
         {
-            return new List<SubscriptionEntry>
-            {
-                new SubscriptionEntry
-                {
-                    Name = "Default",
-                    Url = legacy,
-                    Enabled = true,
-                    Servers = GetServers(),
-                }
-            };
+            return [AndroidSubscriptionRefresh.LegacyFeed(legacy, GetServers())];
         }
         return new List<SubscriptionEntry>();
     }
@@ -133,15 +167,46 @@ public static class AndroidStorage
     {
         try
         {
-            var list = subs is null ? new List<SubscriptionEntry>() : new List<SubscriptionEntry>(subs);
-            var json = JsonSerializer.Serialize(list, JsonOptions);
-            return SetString(KeySubscriptions, json);
+            return WithCommandPreferences(prefs =>
+            {
+                AndroidSubscriptionRefresh.SaveRegistrations(GetSubscriptions(), subs?.ToList() ?? [], GetConfigMode(),
+                    key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions);
+                return true;
+            });
         }
         catch
         {
             return false;
         }
     }
+
+    private static T WithCommandPreferences<T>(Func<ISharedPreferences, T> action)
+    {
+        var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private)
+            ?? throw new InvalidOperationException("Preferences unavailable.");
+        // The service takes the same Java monitor when a tile, stop or revoke supersedes the UI.
+        var reference = VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ServiceClassReference;
+        Java.Interop.JniEnvironment.Monitors.MonitorEnter(reference);
+        try { return action(prefs); }
+        finally { Java.Interop.JniEnvironment.Monitors.MonitorExit(reference); }
+    }
+
+    private static void CommitStrings(ISharedPreferences prefs, IReadOnlyDictionary<string, string?> changes)
+    {
+        using var editor = prefs.Edit() ?? throw new InvalidOperationException("Preferences unavailable.");
+        foreach (var (key, value) in changes)
+        {
+            if (value == null) editor.Remove(key);
+            else editor.PutString(key, value);
+        }
+        if (!editor.Commit()) throw new InvalidOperationException("VPN settings could not be saved.");
+    }
+
+    internal static string? SubscriptionImportRevision => GetString(AndroidSubscriptionRefresh.ImportRevision);
+
+    internal static bool SaveSubscriptionRefresh(SubscriptionEntry entry, bool rejected, string? selectingCommand, string? importRevision) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.Save(entry, rejected, selectingCommand,
+            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions, importRevision));
 
     internal static void PruneSubServerDuplicatesOnce()
     {
@@ -203,7 +268,7 @@ public static class AndroidStorage
         catch (System.Exception ex)
         {
             global::Android.Util.Log.Warn("VpnRouter.Storage",
-                $"PruneSubServerDuplicatesOnce threw: {ex.GetType().Name}: {ex.Message}");
+                $"PruneSubServerDuplicatesOnce threw: {ex.GetType().Name}");
         }
     }
 
@@ -279,7 +344,7 @@ public static class AndroidStorage
                 {
                     SetSelectedServerName(null);
                     global::Android.Util.Log.Info("VpnRouter.Storage",
-                        $"PruneKnownPlaceholdersOnce: cleared dangling KeySelectedServerName='{selectedName}' (entry no longer in storage)");
+                        "Cleared a stale server selection");
                 }
             }
 
@@ -293,7 +358,7 @@ public static class AndroidStorage
         catch (System.Exception ex)
         {
             global::Android.Util.Log.Warn("VpnRouter.Storage",
-                $"PruneKnownPlaceholdersOnce threw: {ex.GetType().Name}: {ex.Message}");
+                $"PruneKnownPlaceholdersOnce threw: {ex.GetType().Name}");
         }
     }
 
@@ -339,81 +404,53 @@ public static class AndroidStorage
     public static string? GetSelectedServerName() => GetString(KeySelectedServerName);
     public static bool SetSelectedServerName(string? value) => SetString(KeySelectedServerName, value);
 
-    public static VlessServerEntry? GetActiveServer()
-    {
-        var selectedName = GetSelectedServerName();
-        var servers = GetServers();
+    internal static bool SelectSingleServer(VlessServerEntry server, string uri, string command) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveSingleServer(server, uri, command,
+            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
-        if (!string.IsNullOrEmpty(selectedName))
-        {
-            foreach (var s in servers)
-            {
-                if (string.Equals(s.Name, selectedName, System.StringComparison.OrdinalIgnoreCase))
-                    return s;
-            }
-        }
+    internal static bool SelectSubscriptionServer(SubscriptionEntry source, VlessServerEntry row, string? command) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveFeedSelection(source, row, command, GetSubscriptions(),
+            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
-        var subscriptions = GetSubscriptionsBare();
-        if (!string.IsNullOrEmpty(selectedName))
+    internal static void ImportProfile(ConfigShareDocument doc) =>
+        WithCommandPreferences(prefs =>
         {
-            foreach (var sub in subscriptions)
-            {
-                if (sub == null || !sub.Enabled || sub.Servers == null) continue;
-                foreach (var srv in sub.Servers)
-                {
-                    if (srv == null) continue;
-                    if (string.Equals(srv.Name, selectedName, System.StringComparison.OrdinalIgnoreCase))
-                        return srv;
-                }
-            }
-        }
+            AndroidSubscriptionRefresh.ImportProfile(doc, key => prefs.GetString(key, null),
+                changes => CommitStrings(prefs, changes), JsonOptions);
+            return true;
+        });
 
-        if (servers.Count > 0)
+    internal static void SaveCustomProfile(string raw) =>
+        WithCommandPreferences(prefs =>
         {
-            var first = servers[0];
-            if (!string.IsNullOrEmpty(first.Name))
-                SetSelectedServerName(first.Name);
-            return first;
-        }
+            AndroidSubscriptionRefresh.SaveCustomProfile(raw, key => prefs.GetString(key, null),
+                changes => CommitStrings(prefs, changes), JsonOptions);
+            return true;
+        });
 
-        foreach (var sub in subscriptions)
-        {
-            if (sub == null || !sub.Enabled || sub.Servers == null || sub.Servers.Count == 0) continue;
-            var first = sub.Servers[0];
-            if (first == null) continue;
-            if (!string.IsNullOrEmpty(first.Name))
-                SetSelectedServerName(first.Name);
-            return first;
-        }
+    public static VlessServerEntry? GetActiveServer() =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.ResolveActiveServer(GetServers(), GetSubscriptions(),
+            GetConfigMode(), key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
-        var manualUri = GetVlessUri();
-        if (!string.IsNullOrWhiteSpace(manualUri))
-        {
-            try
-            {
-                return VPNRouter.Core.Services.ServerUriParser.Parse(manualUri);
-            }
-            catch
-            {
-            }
-        }
+    internal static VlessServerEntry? GetActiveServer(string command) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.ResolveForConnect(command, GetServers(), GetSubscriptions(),
+            GetConfigMode(), key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
-        return null;
-    }
+    internal static AndroidSubscriptionRefresh.FeedRow? SelectedSubscriptionRow() =>
+        WithCommandPreferences(prefs =>
+        {
+            string? Read(string key) => prefs.GetString(key, null);
+            return AndroidSubscriptionRefresh.ReadMode(Read) == "subscribe" && AndroidSubscriptionRefresh.ReadRetainedManual(Read) == null
+                ? AndroidSubscriptionRefresh.FindFeedRow(GetSubscriptions(), Read) : null;
+        });
 
-    private static List<SubscriptionEntry> GetSubscriptionsBare()
-    {
-        var json = GetString(KeySubscriptions);
-        if (string.IsNullOrWhiteSpace(json)) return new List<SubscriptionEntry>();
-        try
+    internal static void PrepareServerPool(VlessConfig config, VlessServerEntry selected) =>
+        WithCommandPreferences(prefs =>
         {
-            return JsonSerializer.Deserialize<List<SubscriptionEntry>>(json, JsonOptions) ?? new List<SubscriptionEntry>();
-        }
-        catch
-        {
-            return new List<SubscriptionEntry>();
-        }
-    }
+            AndroidSubscriptionRefresh.PreparePool(config, selected, GetServers(), GetSubscriptions(), GetConfigMode(),
+                key => prefs.GetString(key, null), JsonOptions);
+            return true;
+        });
 
     public static string? GetLanguage() => GetString(KeyLanguage);
     public static bool SetLanguage(string? value) => SetString(KeyLanguage, value);
@@ -465,6 +502,18 @@ public static class AndroidStorage
         return new List<string>();
     }
 
+    public static bool SavePerAppSelection(string mode, IEnumerable<string> packages, bool rememberPickerMode = false)
+    {
+        var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+        using var editor = prefs?.Edit();
+        if (editor is null) return false;
+        editor.PutString(KeyPerAppPackages, JsonSerializer.Serialize(new List<string>(packages), JsonOptions));
+        editor.PutString(KeyPerAppMode, mode);
+        if (rememberPickerMode) editor.PutString(KeyPerAppLastMode, mode);
+        editor.Apply();
+        return true;
+    }
+
     public static bool SetPerAppPackages(IEnumerable<string>? packages)
     {
         try
@@ -489,7 +538,6 @@ public static class AndroidStorage
     private const string KeyPostNotifPrompt = "post_notif_prompt_shown";
     private const string KeyAlwaysOnPrompt = "alwayson_lockdown_prompt_shown";
     private const string KeyExternalControl = "external_control_enabled";
-    private const string KeyClashApiSecret = "clash_api_secret";
     private const string KeyUpdateChannel = "update_channel";
     private const string KeyAutostartVpn = "autostart_vpn";
     private const string KeyAutostartZapret = "autostart_zapret";
@@ -543,15 +591,6 @@ public static class AndroidStorage
 
     public static bool GetExternalControlEnabled() => GetBool(KeyExternalControl, defaultValue: false);
     public static bool SetExternalControlEnabled(bool value) => SetBool(KeyExternalControl, value);
-
-    public static string GetClashApiSecret()
-    {
-        var existing = GetString(KeyClashApiSecret);
-        if (!string.IsNullOrEmpty(existing)) return existing;
-        var fresh = VPNRouter.Core.Models.AppSettingsSane.GenerateClashApiSecret();
-        SetString(KeyClashApiSecret, fresh);
-        return fresh;
-    }
 
     public static string GetUpdateChannel() =>
         ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");
@@ -854,7 +893,7 @@ public static class AndroidStorage
         if (string.IsNullOrWhiteSpace(message)) return;
         try
         {
-            global::Android.Util.Log.Warn("VpnRouter.SelfRepair", message);
+            global::Android.Util.Log.Warn("VpnRouter.SelfRepair", "Recovered an invalid preference");
         }
         catch { }
 
@@ -895,7 +934,7 @@ public static class AndroidStorage
             try
             {
                 global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
-                    $"quarantine of '{key}' failed: {ex.GetType().Name}: {ex.Message}");
+                    $"quarantine of '{key}' failed: {ex.GetType().Name}");
             }
             catch { }
         }
@@ -930,7 +969,7 @@ public static class AndroidStorage
             try
             {
                 global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
-                    $"RepairAllOnLoad failed: {ex.GetType().Name}: {ex.Message}");
+                    $"RepairAllOnLoad failed: {ex.GetType().Name}");
             }
             catch { }
             return 0;
@@ -967,8 +1006,10 @@ public static class AndroidStorage
 
             var liveKeys = new[]
             {
-                KeyVlessUri, KeySubscriptionUrl, KeyServersJson,
-                KeySelectedServerName, KeyLanguage, KeyTheme,
+                KeyVlessUri, KeySubscriptionUrl, KeyServersJson, AndroidSubscriptionRefresh.LegacyManualOwner,
+                KeySelectedServerName, AndroidSubscriptionRefresh.SelectedFeedId, AndroidSubscriptionRefresh.SelectedFeedRow,
+                AndroidSubscriptionRefresh.ImportRevision,
+                AndroidSubscriptionRefresh.SupersededSelection, KeyLanguage, KeyTheme,
                 KeySubscriptions, KeyPerAppMode, KeyPerAppPackages,
                 KeyPerAppLastMode, KeyRoutingMode, KeyBypassRussianTraffic,
                 KeyBlockOnVpnFail, KeyDnsStrategy, KeyBlockAds, KeyUpdateChannel,

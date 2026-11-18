@@ -59,6 +59,12 @@ public class AppConfig
     [YamlMember(Alias = "active_subscription_server")]
     public string ActiveSubscriptionServer { get; set; } = string.Empty;
 
+    [YamlMember(Alias = "active_subscription_id", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? ActiveSubscriptionId { get; set; }
+
+    [YamlMember(Alias = "active_subscription_row", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? ActiveSubscriptionRow { get; set; }
+
     [YamlMember(Alias = "subscriptions")]
     public List<SubscriptionEntry> Subscriptions { get; set; } = new();
 

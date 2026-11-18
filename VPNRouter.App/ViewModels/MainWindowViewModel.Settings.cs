@@ -257,40 +257,56 @@ public partial class MainWindowViewModel
         => OnPropertyChanged(nameof(ResetConfigMenuHeader));
 
     [RelayCommand]
-    private void RestartInSafeMode()
+    private void RestartInSafeMode() => RestartFromMenu(safeMode: true);
+
+    internal Action<ProcessStartInfo> LaunchRestart { get; set; } = info =>
     {
+        using var child = Process.Start(info) ?? throw new InvalidOperationException("Could not restart VPNRouter.");
+    };
+
+    internal Action<int> ExitAfterMenuRestart { get; set; } = Environment.Exit;
+
+    private void RestartFromMenu(bool safeMode)
+    {
+        Action<bool>? finish = null;
+        var launched = false;
         try
         {
-            var exe = Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exe)) return;
-            ProcessStartInfo psi;
-            if (OperatingSystem.IsLinux())
+            var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Could not locate VPNRouter.");
+            var linux = OperatingSystem.IsLinux();
+            var info = new ProcessStartInfo(linux ? "/usr/bin/setsid" : exe) { UseShellExecute = false, CreateNoWindow = true };
+            if (linux)
             {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/setsid",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                psi.ArgumentList.Add("--fork");
-                psi.ArgumentList.Add(exe);
-                psi.ArgumentList.Add("--safe");
+                info.ArgumentList.Add("--fork");
+                info.ArgumentList.Add(exe);
             }
-            else
+            if (safeMode) info.ArgumentList.Add("--safe");
+
+            finish = ReserveRestart();
+            if (!safeMode)
             {
-                psi = new ProcessStartInfo
-                {
-                    FileName = exe,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                psi.ArgumentList.Add("--safe");
+                var backup = _settingsStore.ResetToDefaults();
+                _logger.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
             }
-            System.Diagnostics.Process.Start(psi);
+            LaunchRestart(info);
+            launched = true;
             try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
-            Environment.Exit(0);
+            ExitAfterMenuRestart(0);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[VM] Restart did not finish");
+            StatusText = ex.Message;
+        }
+        finally
+        {
+            try { finish?.Invoke(launched); }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[VM] Could not restore the Zapret strategy");
+                StatusText = ZapretStatus = ex.Message;
+            }
+        }
     }
 
     private System.Threading.CancellationTokenSource? _resetDisarmCts;
@@ -322,47 +338,7 @@ public partial class MainWindowViewModel
         _resetDisarmCts?.Dispose();
         _resetDisarmCts = null;
 
-        try
-        {
-            var backup = VPNRouter.Core.Services.SettingsLoader.ResetToDefaults();
-            _logger.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "[ViewModel] Config reset failed");
-            return;
-        }
-
-        try
-        {
-            var exe = Environment.ProcessPath;
-            if (string.IsNullOrEmpty(exe)) return;
-            ProcessStartInfo psi;
-            if (OperatingSystem.IsLinux())
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/setsid",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                psi.ArgumentList.Add("--fork");
-                psi.ArgumentList.Add(exe);
-            }
-            else
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = exe,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-            }
-            System.Diagnostics.Process.Start(psi);
-            try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
-            Environment.Exit(0);
-        }
-        catch { }
+        RestartFromMenu(safeMode: false);
     }
 
     [RelayCommand]
@@ -628,13 +604,11 @@ public partial class MainWindowViewModel
     {
         IsSimpleMode = true;
 
-        var firstEnabledSub = _settings.App.Subscriptions
-            .FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
-        if (firstEnabledSub != null)
-            SmpInput = firstEnabledSub.Url;
-
         var configMode = _settings.App.ConfigMode ?? "generated";
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
+        SmpInput = IsSubscribeMode
+            ? _settings.App.Subscriptions.FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url))?.Url ?? string.Empty
+            : string.Empty;
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
         SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
         SelectedTabIndex = IsSubscribeMode ? 1 : 0;
@@ -709,9 +683,9 @@ public partial class MainWindowViewModel
             catch (Exception ex) { _logger.Warning(ex, "[VM] Discord/Flowseal hosts reconcile failed (non-fatal)"); }
         }
 
+        GameFilterModeIndex = (int?)VPNRouter.Core.Services.ZapretActions.GetConfiguredGameFilterMode() ?? -1;
         if (VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
-            GameFilterModeIndex = (int)VPNRouter.Core.Services.ZapretActions.GetGameFilterMode();
             IpSetModeIndex = (int)VPNRouter.Core.Services.ZapretActions.GetIpSetMode();
             ZapretAutoUpdateCheck = VPNRouter.Core.Services.ZapretActions.IsAutoUpdateCheckEnabled();
         }
@@ -777,6 +751,8 @@ public partial class MainWindowViewModel
             Subscriptions.Add(new SubscriptionViewModel(entry));
 
         RebuildSubscriptionPool();
+        if (IsSubscribeMode && SelectedSubscriptionServer?.SubscriptionId is { } id)
+            SmpInput = Subscriptions.First(s => s.Id == id).Url;
     }
 
     private void LoadCustomConfigsIntoUI()
@@ -819,7 +795,7 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
-    /// <returns>True when the running tunnel picked up the settings (or the service was asked to restart).</returns>
+    /// <returns>True when the active tunnel manager confirmed the settings.</returns>
     private async Task<bool> ApplyPendingChangesInternalAsync(bool forceRestart)
     {
         if (!CanApplyAppChanges) return false;
@@ -827,29 +803,51 @@ public partial class MainWindowViewModel
         var appliedRevision = Volatile.Read(ref _routingSettingsRevision);
         try
         {
-            SaveSettings();
-            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-
             if (IsServiceManagedVpn)
             {
-                if (ServiceVm.IsAvailable)
+#if PLATFORM_WINDOWS
+                var service = await Task.Run(Services.WindowsServiceHelper.GetState);
+                var serviceName = Services.WindowsServiceHelper.ServiceName;
+                var previous = ServiceSettingsReceipt.Read(serviceName)?.FirstOrDefault();
+                SaveSettings();
+                var revision = SettingsLoader.GetSubmittedRevision(_settings);
+                if (service.Running && service.Pid is int managerPid)
                 {
-                    StatusText = IsRussian
-                        ? "Перезапускаю службу с новыми настройками..."
-                        : "Restarting service with new settings...";
-                    await ServiceVm.RestartServiceCommand.ExecuteAsync(null);
-                    ClearPendingIfRevisionUnchanged(appliedRevision);
-                    return true;
+                    var elapsed = Stopwatch.StartNew();
+                    while (elapsed.Elapsed < TimeSpan.FromSeconds(60))
+                    {
+                        await Task.Delay(250);
+                        if (_disposed) return false;
+                        var result = ServiceSettingsReceipt.Match(
+                            ServiceSettingsReceipt.Read(serviceName), previous, managerPid, revision);
+                        if (result == null) continue;
+                        var current = await Task.Run(Services.WindowsServiceHelper.GetState);
+                        if (!current.Running || current.Pid != managerPid) break;
+                        if (SettingsLoader.GetRevision(File.ReadAllText(AppPaths.ConfigYamlPath)) != revision) break;
+                        if (!result.Value)
+                        {
+                            StatusText = Strings.ApplyFailed;
+                            return false;
+                        }
+                        if (Volatile.Read(ref _routingSettingsRevision) != appliedRevision) return false;
+                        ClearPendingIfRevisionUnchanged(appliedRevision);
+                        RestoreConnectedStatus();
+                        return true;
+                    }
                 }
-
-                ClearPendingIfRevisionUnchanged(appliedRevision);
+#else
+                SaveSettings();
+#endif
                 StatusText = IsRussian
-                    ? "Настройки сохранены. Остановите и запустите VPN, чтобы они применились (служба перечитает config.yaml при старте)."
-                    : "Settings saved. Stop and Start VPN to apply — the service re-reads config.yaml on start.";
+                    ? "Настройки сохранены. Служба не подтвердила их применение."
+                    : "Settings saved. The service has not confirmed the change.";
                 return false;
             }
 
-            var ok = await Task.Run(() => _engine.ApplyAsync(_settings, CancellationToken.None, forceRestart));
+            SaveSettings();
+            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+            var capturedSettings = CaptureConnectionSettings();
+            var ok = await Task.Run(() => _engine.ApplyAsync(capturedSettings, CancellationToken.None, forceRestart));
             if (ok)
             {
                 ClearPendingIfRevisionUnchanged(appliedRevision);
@@ -863,8 +861,8 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] ApplyPendingChanges failed");
-            StatusText = $"{(IsRussian ? "Не удалось применить" : "Apply failed")}: {ex.Message}";
+            _logger.Error("[VM] ApplyPendingChanges failed ({ErrorType})", ex.GetType().Name);
+            StatusText = Strings.ApplyFailed;
             return false;
         }
         finally { IsApplying = false; }
@@ -875,6 +873,12 @@ public partial class MainWindowViewModel
         if (_isLoadingUI) return;
 
         BackupConfigFile();
+        ReadSettingsFromControls();
+        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
+    }
+
+    private void ReadSettingsFromControls()
+    {
         ApplyConfigModeToSettings();
         ApplySubscriptionsToSettings();
         ApplyRoutingToSettings();
@@ -882,8 +886,6 @@ public partial class MainWindowViewModel
         ApplyServersToSettings();
         ApplyCustomConfigsToSettings();
         ApplyAppSelectionToSettings();
-
-        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
     private void BackupConfigFile()
@@ -901,7 +903,7 @@ public partial class MainWindowViewModel
     {
         // On the home screen IsVlessMode/IsSubscribeMode are leftovers of the last Advanced tab, not a choice: saving a routing change
         // from there turned a subscription into "server link" (tester log 01:03:31). The home screen changes the mode only by
-        // setting it itself (TryApplyVless / TryApplySubscriptionUrl).
+        // setting it itself (TryApplyVless / ApplySimpleSubscriptionInput).
         if (IsSimpleMode && !string.IsNullOrWhiteSpace(_settings.App.ConfigMode))
             return;
 
@@ -937,6 +939,8 @@ public partial class MainWindowViewModel
 
         var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
         _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
+        _settings.App.ActiveSubscriptionId = activeSub?.SubscriptionId;
+        _settings.App.ActiveSubscriptionRow = activeSub?.SubscriptionId != null ? SubscriptionEntry.RowKey(activeSub.SourceEntry) : null;
 
         _settings.App.SubscriptionUrl = string.Empty;
         _settings.App.SubscriptionServers = new();
@@ -954,7 +958,8 @@ public partial class MainWindowViewModel
         {
             var parsed = VPNRouter.Core.Services.CustomRulesParser
                 .ParseFromText(CustomRulesText);
-            _settings.App.CustomRules = parsed.Rules;
+            if (parsed.Errors.Count == 0)
+                _settings.App.CustomRules = parsed.Rules;
             CustomRulesErrorText = parsed.Errors.Count == 0
                 ? string.Empty
                 : string.Join("\n", parsed.Errors.Select(e =>

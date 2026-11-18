@@ -28,6 +28,9 @@ Routes application traffic through a proxy using [sing-box](https://github.com/S
 These are thin wrappers around upstream projects — they aren't part of the core router and don't work on macOS / Linux. Skip them unless you specifically need DPI bypass or Telegram-only routing.
 
 - **DPI bypass (Zapret)** — integrates [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube). Downloaded on demand from the Tools tab. Useful when your ISP blocks a site by DPI and a full proxy isn't wanted.
+
+  - **Test HTTPS connectivity** checks eight Discord and YouTube endpoints using the current connection. **Re-probe strategy** tests installed strategies against those same endpoints. Stop an existing bypass in its owning app before running the probe.
+  - **Advanced → Zapret maintenance** lets you download the package again or apply an installed strategy to the Windows service named `zapret`. A new service uses automatic startup. Applying a strategy preserves an existing service's startup mode and restarts an active, enabled service owned by this edition. Manage another installation's service in its owning application.
 - **Telegram proxy** — embedded MTProto proxy ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) for Telegram-only bypass.
 
 ### Bonus: Free Configs tab

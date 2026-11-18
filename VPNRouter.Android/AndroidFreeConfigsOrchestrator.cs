@@ -19,7 +19,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
     private List<FreeConfigEntry> _saved = new();
 
     private CancellationTokenSource? _cts;
-    private bool _busy;
+    private Task? _loadSaved;
 
     public AndroidFreeConfigsOrchestrator(ILogger logger)
     {
@@ -33,7 +33,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
         _deepVerifier = new AndroidFreeConfigDeepVerifier(logger);
     }
 
-    public bool IsBusy => _busy;
+    public bool IsBusy => _cts != null;
 
     public IReadOnlyList<FreeConfigEntry> Saved => _saved;
 
@@ -45,26 +45,21 @@ internal sealed class AndroidFreeConfigsOrchestrator
 
     public event Action<FreeConfigEntry>? OnEntryUpgraded;
 
-    public Task EnsureCacheLoadedAsync()
+    public Task EnsureCacheLoadedAsync() => _loadSaved ??= LoadSavedAsync();
+
+    private async Task LoadSavedAsync()
     {
-        if (_saved.Count > 0) return Task.CompletedTask;
-        return Task.Run(() =>
+        try
         {
-            try
-            {
-                var file = _cache.Load();
-                var now = DateTime.UtcNow;
-                _saved = file.Configs?
-                    .Where(c => FreeConfigKeepPolicy.ShouldRetainInSavedList(c, now))
-                    .ToList() ?? new List<FreeConfigEntry>();
-                _logger.Information("[Android.FreeConfigs] cache loaded: {n} saved entries", _saved.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[Android.FreeConfigs] cache load failed");
-                _saved = new List<FreeConfigEntry>();
-            }
-        });
+            var file = await _cache.LoadAsync();
+            var now = DateTime.UtcNow;
+            _saved = file.Configs.Where(c => FreeConfigKeepPolicy.ShouldRetainInSavedList(c, now)).ToList();
+            _logger.Information("[Android.FreeConfigs] cache loaded: {n} saved entries", _saved.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[Android.FreeConfigs] cache load failed");
+        }
     }
 
     public async Task FindAsync(
@@ -73,14 +68,15 @@ internal sealed class AndroidFreeConfigsOrchestrator
         bool excludeRu,
         int batchSize = 200)
     {
-        if (_busy) return;
-        _busy = true;
+        if (IsBusy) return;
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         var verifiedThisRun = new List<FreeConfigEntry>();
 
         try
         {
+            await EnsureCacheLoadedAsync();
+            ct.ThrowIfCancellationRequested();
             OnStatus?.Invoke(Localization.FcStatusFetchingPool);
 
             List<FreeConfigEntry>? pool = null;
@@ -174,8 +170,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex)
                     {
-                        _logger.Warning(ex, "[Android.FreeConfigs] deep verify threw for {host}:{port}",
-                            cand.Host, cand.Port);
+                        _logger.Warning("[Android.FreeConfigs] Verification failed ({Type})", ex.GetType().Name);
                     }
 
                     if (cand.Status == FreeConfigStatus.Verified)
@@ -194,17 +189,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
             _logger.Information("[Android.FreeConfigs] find complete: {n}/{target} verified",
                 verifiedThisRun.Count, target);
 
-            try
-            {
-                var file = _cache.Load();
-                file.Configs = _saved;
-                file.LastAggregatedAt = DateTime.UtcNow;
-                _cache.Save(file);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[Android.FreeConfigs] cache save failed (non-fatal)");
-            }
+            SaveSaved();
 
             OnStatus?.Invoke(verifiedThisRun.Count >= target
                 ? string.Format(Localization.FcStatusDoneOk, verifiedThisRun.Count)
@@ -214,14 +199,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
         }
         catch (OperationCanceledException)
         {
-            try
-            {
-                var file = _cache.Load();
-                file.Configs = _saved;
-                file.LastAggregatedAt = DateTime.UtcNow;
-                _cache.Save(file);
-            }
-            catch { }
+            SaveSaved();
 
             OnStatus?.Invoke(Localization.FcStatusCancelled);
             OnFinished?.Invoke(verifiedThisRun.Count);
@@ -234,8 +212,36 @@ internal sealed class AndroidFreeConfigsOrchestrator
         }
         finally
         {
-            _busy = false;
             _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    public async Task RecheckSavedAsync(FreeConfigEntry entry)
+    {
+        if (IsBusy || !_saved.Contains(entry)) return;
+        using var operation = new CancellationTokenSource();
+        _cts = operation;
+        var prior = FreeConfigFreshness.RecheckSnapshot.Capture(entry);
+        try
+        {
+            OnStatus?.Invoke(Localization.FcStatusRecheckOne(entry.Host, entry.Port, entry.CountryCode ?? "??"));
+            OnProgress?.Invoke(0, 1);
+            await _deepVerifier.VerifyOneAsync(entry, operation.Token);
+            operation.Token.ThrowIfCancellationRequested();
+            FreeConfigFreshness.MergeRecheckResult(entry, prior, DateTime.UtcNow);
+            SaveSaved();
+            var passed = entry.Status == FreeConfigStatus.Verified;
+            OnProgress?.Invoke(1, 1);
+            OnStatus?.Invoke(Localization.FcStatusRecheckAllDone(passed ? 1 : 0, passed ? 0 : 1));
+        }
+        catch (OperationCanceledException) when (operation.IsCancellationRequested)
+        {
+            FreeConfigFreshness.RestorePriorState(entry, prior);
+            OnStatus?.Invoke(Localization.FcStatusCancelled);
+        }
+        finally
+        {
             _cts = null;
         }
     }
@@ -248,40 +254,22 @@ internal sealed class AndroidFreeConfigsOrchestrator
 
     public void RemoveSaved(FreeConfigEntry entry)
     {
-        if (entry == null || string.IsNullOrEmpty(entry.Id)) return;
-        var removed = _saved.RemoveAll(c =>
-            string.Equals(c.Id, entry.Id, StringComparison.OrdinalIgnoreCase));
-        if (removed == 0) return;
-
-        try
-        {
-            var file = _cache.Load();
-            file.Configs = _saved;
-            file.LastAggregatedAt = DateTime.UtcNow;
-            _cache.Save(file);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[Android.FreeConfigs] cache save (RemoveSaved) failed");
-        }
+        if (IsBusy || !_saved.Remove(entry)) return;
+        SaveSaved();
     }
 
     public void ClearSaved()
     {
-        if (_saved.Count == 0) return;
-        _saved = new List<FreeConfigEntry>();
-        try
-        {
-            var file = _cache.Load();
-            file.Configs = _saved;
-            file.LastAggregatedAt = DateTime.UtcNow;
-            _cache.Save(file);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[Android.FreeConfigs] cache save (ClearSaved) failed");
-        }
+        if (IsBusy || _saved.Count == 0) return;
+        _saved.Clear();
+        SaveSaved();
     }
+
+    private void SaveSaved() => _cache.Save(new FreeConfigCache.CacheFile
+    {
+        Configs = _saved,
+        LastAggregatedAt = DateTime.UtcNow,
+    });
 
     private void UpsertSaved(FreeConfigEntry entry)
     {

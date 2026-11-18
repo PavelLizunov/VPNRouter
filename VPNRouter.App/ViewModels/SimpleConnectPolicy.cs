@@ -27,14 +27,21 @@ internal static class SimpleConnectPolicy
         foreach (var sub in existing)
         {
             if (sub is null || !sub.Enabled) continue;
-            if (!string.Equals(Normalize(sub.Url), url, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(Normalize(sub.Url), url, StringComparison.Ordinal)) continue;
             return sub.Servers is { Count: > 0 } ? SubscriptionInputAction.KeepCached : SubscriptionInputAction.KeepAndRefresh;
         }
 
         return SubscriptionInputAction.Replace;
     }
 
-    private static string Normalize(string? url) => (url ?? string.Empty).Trim().TrimEnd('/');
+    internal static bool SameUrl(string? left, string? right) => Normalize(left) == Normalize(right);
+
+    private static string Normalize(string? url)
+    {
+        var text = url?.Trim() ?? string.Empty;
+        if (!Uri.TryCreate(text, UriKind.Absolute, out var uri)) return text;
+        return uri.Query.Length == 0 && uri.Fragment.Length == 0 ? uri.AbsoluteUri.TrimEnd('/') : uri.AbsoluteUri;
+    }
 
     // UDP based protocols answer a blind datagram never (QUIC) and the probe waits its whole timeout for nothing; AmneziaWG is not probed at all.
     // Probing such a selected server only costs the wait (2 s) and then a pointless probe of the whole list: keep it, connecting tells.
@@ -48,8 +55,8 @@ internal static class SimpleConnectPolicy
 
     // The pre-flight of Connect: a server that is already selected and answers does not need the other twelve probed (a silent UDP port costs
     // two seconds each). Only when the selected server is missing, not answering, or the intent asks for a specific kind is the whole list probed.
-    internal static bool ShouldProbeSelectedFirst(string? activeName, IEnumerable<VlessServerEntry> candidates, bool generalIntent)
-        => generalIntent
-           && !string.IsNullOrEmpty(activeName)
-           && candidates.Any(c => string.Equals(c.Name, activeName, StringComparison.Ordinal));
+    internal static bool ShouldProbeSelectedFirst(string? activeName, IEnumerable<VlessServerEntry> candidates,
+        bool generalIntent, VlessServerEntry? selected = null) =>
+        generalIntent && (selected != null ? candidates.Contains(selected) :
+            !string.IsNullOrEmpty(activeName) && candidates.Any(c => c.Name == activeName));
 }

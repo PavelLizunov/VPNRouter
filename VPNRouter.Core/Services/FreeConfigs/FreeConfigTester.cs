@@ -44,6 +44,8 @@ public sealed class FreeConfigTester
         cfg.LastTestedAt = DateTime.UtcNow;
         cfg.LastError = null;
 
+        ct.ThrowIfCancellationRequested();
+        if (!AllowDirectEndpoint(cfg)) return;
         var sni = !string.IsNullOrWhiteSpace(cfg.Sni) ? cfg.Sni : cfg.Host;
 
         var result = await TcpTlsProbe.ProbeAsync(
@@ -96,9 +98,21 @@ public sealed class FreeConfigTester
         }
     }
 
+    internal static bool AllowDirectEndpoint(FreeConfigEntry cfg)
+    {
+        if (string.IsNullOrEmpty(cfg.RawUri)) return true;
+        var entry = ServerUriParser.TryParse(cfg.RawUri);
+        if (entry != null && string.IsNullOrEmpty(entry.DetourVia)) return true;
+        cfg.Status = FreeConfigStatus.Unknown;
+        cfg.LatencyMs = 0;
+        cfg.LastError = entry == null ? "invalid server entry" : DeepVerifyConstants.DetourNote;
+        return false;
+    }
+
     public async Task TcpPingOnlyAsync(FreeConfigEntry cfg, CancellationToken ct = default)
     {
-        if (cfg == null) return;
+        ct.ThrowIfCancellationRequested();
+        if (cfg == null || !AllowDirectEndpoint(cfg)) return;
         var (ok, latency, _) = await TcpTlsProbe.ProbeTcpAsync(
             cfg.Host, cfg.Port, TcpConnectTimeout, ct);
         if (ok && latency >= TcpTlsProbe.ImplausibleThresholdMs)

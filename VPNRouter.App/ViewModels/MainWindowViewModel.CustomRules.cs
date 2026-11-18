@@ -2,6 +2,7 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
+using VPNRouter.Core.Models;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -136,6 +137,10 @@ public partial class MainWindowViewModel
             try { _ = new System.Text.RegularExpressions.Regex(val); ok = true; }
             catch { ok = false; }
         }
+        else if (NewRuleType is "port_range" or "network" or "geosite" or "geoip")
+        {
+            ok = VPNRouter.Core.Services.CustomRulesParser.ParseFromText($"{NewRuleAction} {NewRuleType} {val}").Errors.Count == 0;
+        }
         else if (_typeValidatorMap.TryGetValue(NewRuleType, out var regex))
         {
             ok = regex.IsMatch(val.Trim());
@@ -254,56 +259,9 @@ public partial class MainWindowViewModel
         var text = EditedCustomRulesText ?? string.Empty;
         var lines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
 
-        var validActions = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
-        {
-            "direct", "proxy", "block"
-        };
-        var validTypes = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
-        {
-            "domain", "domain_suffix", "domain_keyword", "domain_regex",
-            "ip_cidr", "port", "port_range", "network",
-            "process_name", "process_path", "geosite", "geoip"
-        };
-
-        int active = 0;
-        var errors = new System.Collections.Generic.List<(int Line, string Msg)>();
-
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var raw = lines[i];
-            var ln = raw.Trim();
-            if (string.IsNullOrEmpty(ln)) continue;
-            if (ln.StartsWith("#", System.StringComparison.Ordinal) ||
-                ln.StartsWith("!", System.StringComparison.Ordinal)) continue;
-
-            var hashIdx = ln.IndexOf('#');
-            if (hashIdx >= 0) ln = ln.Substring(0, hashIdx).Trim();
-            if (string.IsNullOrWhiteSpace(ln)) continue;
-
-            var tokens = ln.Split(new[] { ' ', '\t' },
-                System.StringSplitOptions.RemoveEmptyEntries);
-
-            var firstTok = tokens.Length > 0 ? tokens[0] : string.Empty;
-            if (!validActions.Contains(firstTok))
-            {
-                errors.Add((i + 1, IsRussian
-                    ? $"неизвестный action «{firstTok}»"
-                    : $"unknown action «{firstTok}»"));
-                continue;
-            }
-            var secondTok = tokens.Length > 1 ? tokens[1] : string.Empty;
-            if (!validTypes.Contains(secondTok))
-            {
-                errors.Add((i + 1, Strings.RuleParserUnknownType(secondTok)));
-                continue;
-            }
-            if (tokens.Length < 3)
-            {
-                errors.Add((i + 1, Strings.RuleParserMissingValue));
-                continue;
-            }
-            active++;
-        }
+        var parsed = VPNRouter.Core.Services.CustomRulesParser.ParseFromText(text);
+        var errors = parsed.Errors.Select(e => (Line: e.LineNumber, Msg: e.Reason)).ToList();
+        var active = parsed.Rules.Count(r => r.Enabled);
 
         RulesEditorActiveCount = active;
         RulesEditorHasErrors = errors.Count > 0;
@@ -532,7 +490,16 @@ public partial class MainWindowViewModel
         _isSyncingCustomRules = true;
         try
         {
-            _settings.App.CustomRules = CustomRulesList.Select(vm => vm.ToModel()).ToList();
+            var rows = CustomRulesList.Select(vm => vm.ToModel()).ToList();
+            foreach (var rule in rows)
+            {
+                if (VPNRouter.Core.Services.CustomRulesParser.Normalize(rule) is { } error)
+                {
+                    CustomRulesErrorText = error;
+                    return;
+                }
+            }
+            _settings.App.CustomRules = rows;
             CustomRulesText = VPNRouter.Core.Services.CustomRulesParser
                 .SerializeToText(_settings.App.CustomRules);
             var conflicts = VPNRouter.Core.Services.CustomRulesParser
@@ -583,37 +550,45 @@ public partial class MainWindowViewModel
             if (string.IsNullOrEmpty(path)) return;
 
             var text = await File.ReadAllTextAsync(path);
-            var result = VPNRouter.Core.Services.CustomRulesImportExport.ImportFromText(text);
-
-            if (result.Rules.Count == 0)
-            {
-                NewRuleValidationError = result.Warnings.Count > 0
-                    ? Strings.RulesImportFailed(result.Warnings[0])
-                    : Strings.RulesImportNoRules;
-                return;
-            }
-
-            foreach (var rule in result.Rules)
-            {
-                CustomRulesList.Add(new CustomRuleViewModel(
-                    rule,
-                    onChanged: OnCustomRuleRowChanged,
-                    onRemoveRequested: OnCustomRuleRowRemoveRequested));
-            }
-            FlushCustomRulesListToSettings();
-
-            var msg = Strings.RulesImported(result.Rules.Count, result.DetectedFormat.ToString());
-            if (result.Warnings.Count > 0)
-                msg += Strings.RulesImportWithWarnings(result.Warnings.Count);
-            NewRuleValidationError = msg;
-            foreach (var w in result.Warnings)
-                _logger.Information("[CustomRules import] {Warning}", w);
+            AppendImportedCustomRules(text);
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] ImportCustomRules failed");
             NewRuleValidationError = Strings.RulesImportError(ex.Message);
         }
+    }
+
+    internal bool AppendImportedCustomRules(string text)
+    {
+        var result = VPNRouter.Core.Services.CustomRulesImportExport.ImportFromText(text);
+
+        if (result.Warnings.Count != 0 || result.Rules.Count == 0)
+        {
+            NewRuleValidationError = result.Warnings.Count > 0
+                ? Strings.RulesImportFailed(result.Warnings[0])
+                : Strings.RulesImportNoRules;
+            return false;
+        }
+
+        if (CustomRulesList.Any(row => VPNRouter.Core.Services.CustomRulesParser.Normalize(row.ToModel()) != null))
+        {
+            NewRuleValidationError = Strings.RulesImportFailed(CustomRulesErrorText);
+            return false;
+        }
+
+        foreach (var rule in result.Rules)
+        {
+            CustomRulesList.Add(new CustomRuleViewModel(
+                rule,
+                onChanged: OnCustomRuleRowChanged,
+                onRemoveRequested: OnCustomRuleRowRemoveRequested));
+        }
+        FlushCustomRulesListToSettings();
+
+        var msg = Strings.RulesImported(result.Rules.Count, result.DetectedFormat.ToString());
+        NewRuleValidationError = msg;
+        return true;
     }
 
     [RelayCommand]
@@ -694,23 +669,17 @@ public partial class MainWindowViewModel
                 : $"Value doesn't match type \"{NewRuleType}\"";
             return;
         }
-        var commentSuffix = string.IsNullOrWhiteSpace(NewRuleComment)
-            ? string.Empty
-            : $"  # {NewRuleComment.Trim()}";
-        var line = $"{NewRuleAction} {NewRuleType} {NewRuleValue.Trim()}{commentSuffix}";
-        var parsed = VPNRouter.Core.Services.CustomRulesParser.ParseFromText(line);
-        if (parsed.Errors.Count > 0)
+        var rule = new CustomRule
         {
-            NewRuleValidationError = parsed.Errors[0].Reason;
-            return;
-        }
-        if (parsed.Rules.Count == 0)
+            Action = NewRuleAction, Type = NewRuleType, Value = NewRuleValue, Comment = NewRuleComment
+        };
+        if (VPNRouter.Core.Services.CustomRulesParser.Normalize(rule) is { } error)
         {
-            NewRuleValidationError = "Failed to parse";
+            NewRuleValidationError = error;
             return;
         }
         CustomRulesList.Add(new CustomRuleViewModel(
-            parsed.Rules[0],
+            rule,
             onChanged: OnCustomRuleRowChanged,
             onRemoveRequested: OnCustomRuleRowRemoveRequested));
         NewRuleValue = string.Empty;

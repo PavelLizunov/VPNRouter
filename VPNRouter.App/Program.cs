@@ -41,6 +41,31 @@ sealed class Program
             return;
         }
 
+#if PLATFORM_WINDOWS
+        if (args is ["--remove-zapret-service"])
+        {
+            if (!OperatingSystem.IsWindows() || ZapretRuntimeDirectory.TestRoot != null) return;
+            try
+            {
+                var paths = ZapretServiceOwnership.Current();
+                foreach (var name in SystemCleanup.ZapretServices)
+                {
+                    var action = paths.Remove(name, WindowsServiceRegistration.Open, dryRun: false);
+                    Console.WriteLine($"{name}: {action.Outcome} {action.Detail}");
+                    if (action.Outcome == CleanupOutcome.Skipped) Environment.ExitCode = 2;
+                }
+            }
+            catch (Exception) { Environment.ExitCode = 1; }
+            return;
+        }
+        if (args is ["--migrate-zapret"] or ["--migrate-zapret", _])
+        {
+            var result = ZapretLegacyServices.RepairAsync(Log.Logger, args.Length == 2 ? args[1] : null).GetAwaiter().GetResult();
+            if (result.Message != null) Console.Error.WriteLine(result.Message);
+            Environment.ExitCode = result.SafeForReboot ? (result.Message == null ? 0 : 2) : 1;
+            return;
+        }
+#endif
         VPNRouter.Core.Services.CrashReporter.Install();
 
         StartMinimized = args.Contains("--minimized");
@@ -61,15 +86,15 @@ sealed class Program
             RelaunchElevated(args);
             return;
         }
+        if (!RunInstallHealthCheck(AppContext.BaseDirectory, () => Services.SelfRepair.Run())) return;
 #endif
 
         InitializeLogging();
         RecordLaunchAttempt();
 
 #if PLATFORM_WINDOWS
+        PendingUpdateWarning = ZapretLegacyServices.RetryAsync(Log.Logger).GetAwaiter().GetResult().Message;
         HealServiceBinPath();
-        if (!RunInstallHealthCheck())
-            return;
 
         if (!HandleRouteAppArguments(args))
             return;
@@ -230,49 +255,34 @@ sealed class Program
         catch { }
     }
 
-    private static bool RunInstallHealthCheck()
+    internal static bool RunInstallHealthCheck(string applicationDir, Action startRepair)
     {
         try
         {
-            var health = VPNRouter.App.Services.InstallHealthCheck.Check();
-            var appDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
-            var installDir = System.IO.Path.GetDirectoryName(appDir) ?? string.Empty;
-            var failureMarkerPresent =
-                !string.IsNullOrEmpty(installDir) &&
-                VPNRouter.Core.Services.UpdateBackup.HasFailureMarker(installDir);
+            var appDir = System.IO.Path.TrimEndingDirectorySeparator(applicationDir);
+            var health = Services.InstallHealthCheck.Check(appDir);
+            var installDir = UpdateBackup.SnapshotInstallDirectory(appDir);
+            var failureMarkerPresent = UpdateBackup.HasApplicationFailureMarker(appDir);
 
             if (!health.IsHealthy || failureMarkerPresent)
             {
                 var trigger = failureMarkerPresent
-                    ? $"helper.cmd .update-failed marker present ({VPNRouter.Core.Services.UpdateBackup.ReadFailureMarker(installDir)})"
+                    ? $"Update helper .update-failed marker present ({UpdateBackup.ReadApplicationFailureMarker(appDir)})"
                     : health.Diagnostic;
-                Console.Error.WriteLine($"[health] {trigger} — attempting local rollback first");
+                try { Console.Error.WriteLine($"[health] {trigger} — attempting local rollback first"); } catch { }
 
-                var rollback = !string.IsNullOrEmpty(installDir)
-                    ? VPNRouter.Core.Services.UpdateBackup.RestoreSnapshot(installDir)
-                    : new VPNRouter.Core.Services.UpdateBackup.RestoreResult(false, "no installDir");
+                var rollback = Services.WindowsRollbackRelaunch.BeginAfterExit(appDir, out var handedOff);
 
-                if (rollback.Restored)
+                if (handedOff || rollback.Restored)
                 {
-                    Console.Error.WriteLine($"[health] rollback ok: {rollback.Reason} — relaunching with restored binaries");
-                    VPNRouter.Core.Services.UpdateBackup.ClearFailureMarker(installDir);
-                    try
-                    {
-                        var guiExe = System.IO.Path.Combine(appDir, "VPNRouter.GUI.exe");
-                        var exeToLaunch = System.IO.File.Exists(guiExe)
-                            ? guiExe
-                            : System.IO.Path.Combine(appDir, "VPNRouter.App.exe");
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = exeToLaunch,
-                            UseShellExecute = true,
-                            WorkingDirectory = appDir,
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.Error.WriteLine($"[health] post-rollback relaunch failed: {ex.Message}");
-                    }
+                    return false;
+                }
+
+                if (rollback.RelaunchRejected)
+                {
+                    Environment.ExitCode = 1;
+                    try { Log.Error("[health] Rollback refused: {Reason}", rollback.Reason); } catch { }
+                    try { Console.Error.WriteLine($"[health] {rollback.Reason}"); } catch { }
                     return false;
                 }
 
@@ -286,16 +296,29 @@ sealed class Program
                 var plan = VPNRouter.App.Services.SelfRepair.Plan();
                 if (plan.ShouldRun)
                 {
-                    VPNRouter.App.Services.SelfRepair.Run();
-                    return false;
+                    try
+                    {
+                        startRepair();
+                        return false;
+                    }
+                    catch (Exception ex) when (rollback.SnapshotExhausted)
+                    {
+                        Console.Error.WriteLine($"[health] Could not start repair: {ex.Message}");
+                        Environment.ExitCode = 1;
+                        return false;
+                    }
                 }
                 Console.Error.WriteLine($"[health] self-repair declined: {plan.Reason}");
+                if (rollback.SnapshotExhausted)
+                {
+                    Environment.ExitCode = 1;
+                    return false;
+                }
             }
             else
             {
-                if (!string.IsNullOrEmpty(installDir))
+                if (installDir != null)
                 {
-                    VPNRouter.Core.Services.UpdateBackup.ClearFailureMarker(installDir);
                     var cleanupGeneration =
                         VPNRouter.Core.Services.UpdateBackup.GetSnapshotGeneration(installDir);
                     if (cleanupGeneration is not null)

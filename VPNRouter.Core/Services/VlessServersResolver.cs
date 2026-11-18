@@ -28,6 +28,8 @@ public static class VlessServersResolver
         if (hasActiveSubscriptionServers
             && (isSubscribe || (isGenerated && !activeIsLegitimateManual)))
         {
+            if (isSubscribe || string.IsNullOrEmpty(settings.Vless.ActiveServer))
+                PrioritizeSelectedRow(settings, subscriptionAggregated);
             settings.Vless.Servers = subscriptionAggregated;
 
             if (!string.IsNullOrEmpty(settings.App.ActiveSubscriptionServer)
@@ -85,6 +87,25 @@ public static class VlessServersResolver
         }
 
         return manual;
+    }
+
+    // Older consumers resolve names (or an unnamed selection) from the flattened list.
+    // Only move the chosen row in that projection. The registered feeds keep their own order and detour data.
+    internal static void PrioritizeSelectedRow(AppSettings settings, List<VlessServerEntry> pool)
+    {
+        var app = settings.App;
+        if (app.ActiveSubscriptionId == null || app.ActiveSubscriptionRow == null) return;
+        var feed = app.Subscriptions.FirstOrDefault(s => s.Enabled && s.Id == app.ActiveSubscriptionId);
+        var row = feed?.FindExactRow(app.ActiveSubscriptionServer, app.ActiveSubscriptionRow);
+        if (row == null || !pool.Contains(row)) return;
+        settings.Vless.ActiveServer = row.Name;
+        var preceding = pool.TakeWhile(other => !ReferenceEquals(other, row));
+        if (preceding.Any(other => string.IsNullOrEmpty(row.Name) || settings.Vless.AutoSelectBestServer ||
+                string.Equals(other.Name, row.Name, StringComparison.OrdinalIgnoreCase) || other.Server == row.Server))
+        {
+            pool.Remove(row);
+            pool.Insert(0, row);
+        }
     }
 
     internal static bool IsPlaceholderEntry(VlessServerEntry entry) =>

@@ -2,7 +2,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using VPNRouter.Core.Services;
 using Xunit;
@@ -31,29 +30,11 @@ public class DeepVerifyProbeScopeTests
     }
 
     [Fact]
-    public void DiagnosticBuffer_RedactsAndCapsConcurrentProcessOutput()
+    public void NativeFailureReportsOnlyAStableCategory()
     {
-        const string uuid = "11111111-2222-3333-4444-555555555555";
-        const string token = "never-log-this-token";
-        const string shortId = "0123456789abcdef";
-        const string plainToken = "deadbeef00112233445566778899aabbcc";
-        var key = new string('A', 48);
-        var line = $"vless://{uuid}@secret.example:443?token={token} uuid={uuid} " +
-                   $"key={key} short_id={shortId} token={plainToken}";
-        var buffer = new StringBuilder();
-
-        Parallel.For(0, 100, _ =>
-            DeepVerifyProbe.AppendSanitizedLine(buffer, line, maxChars: 512));
-
-        var snippet = DeepVerifyProbe.ReadSanitizedSnippet(buffer, 512);
-        Assert.True(buffer.Length <= 512);
-        Assert.DoesNotContain(uuid, snippet);
-        Assert.DoesNotContain(token, snippet);
-        Assert.DoesNotContain(shortId, snippet);
-        Assert.DoesNotContain(plainToken, snippet);
-        Assert.DoesNotContain(key, snippet);
-        Assert.DoesNotContain("secret.example", snippet);
-        Assert.Contains("[redacted]", snippet);
+        var proxy = new VerificationProxy(18080);
+        proxy.ObserveChildOutput("FATAL: bind: address already in use (fixture.example)");
+        Assert.Equal("sing-box: bind failed", proxy.StartupError);
     }
 
     [Fact]

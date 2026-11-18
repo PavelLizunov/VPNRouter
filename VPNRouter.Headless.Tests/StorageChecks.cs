@@ -5,6 +5,11 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
+using Serilog.Formatting.Json;
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Headless;
 using VPNRouter.Headless.Storage;
@@ -36,6 +41,8 @@ public static class StorageChecks
             await CheckSymlinkRejectionAsync(tempDir);
             Console.WriteLine("  ✓ CheckSymlinkRejection passed");
 
+            CheckSettingsLogPrivacy(tempDir);
+
             await CheckRevisionConflictDetectionAsync(tempDir);
             Console.WriteLine("  ✓ CheckRevisionConflictDetection passed");
 
@@ -65,6 +72,47 @@ public static class StorageChecks
                 // Best-effort temp dir cleanup
             }
         }
+    }
+
+    private static void CheckSettingsLogPrivacy(string baseDir)
+    {
+        const string directoryMarker = "private-storage-log-fixture";
+        var originalDataDir = AppPaths.DataDir;
+        try
+        {
+            using var log = new StringWriter();
+            using var logger = new LoggerConfiguration().MinimumLevel.Verbose()
+                .WriteTo.Sink(new StorageLogSink(log)).CreateLogger();
+            var dir = Path.Combine(baseDir, directoryMarker);
+            var storage = new ConfigStorage(dir, logger);
+            var settings = storage.GetSettings();
+            settings.App.RoutingMode = "full";
+            log.GetStringBuilder().Clear();
+            storage.SaveSettings(settings, storage.CurrentRevision);
+            var revision = Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(storage.ConfigPath)));
+            var saveEvents = log.ToString();
+
+            log.GetStringBuilder().Clear();
+            var reopened = new ConfigStorage(dir, logger);
+            AssertEqual("full", reopened.GetSettings().App.RoutingMode, "Persisted routing mode should load");
+            AssertEqual(revision, reopened.CurrentRevision, "Cold read should retain the stored revision");
+            foreach (var events in new[] { saveEvents, log.ToString() })
+            {
+                Assert(events.Length > 0, "Storage operation should emit diagnostics");
+                Assert(!events.Contains(directoryMarker, StringComparison.OrdinalIgnoreCase), "Storage log exposed the private directory");
+                Assert(!events.Contains(revision, StringComparison.OrdinalIgnoreCase), "Storage log exposed the configuration revision");
+            }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(originalDataDir);
+        }
+    }
+
+    private sealed class StorageLogSink(TextWriter output) : ILogEventSink
+    {
+        private readonly JsonFormatter _formatter = new(renderMessage: true);
+        public void Emit(LogEvent logEvent) => _formatter.Format(logEvent, output);
     }
 
     private static async Task CheckCancelledMutationDoesNotPersistAsync(string baseDir)

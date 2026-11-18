@@ -15,11 +15,20 @@ public sealed class ZapretFlowsealParserTests
     }
 
     [Fact]
+    public void BestStrategyByScore_RejectsCandidatesBelowTheWarmStartThreshold()
+    {
+        var scores = new Dictionary<string, ZapretStrategyTestResult> { ["general"] = new() { Passed = 2, Total = 8 } };
+        Assert.Null(ZapretAutoStrategy.BestStrategyByScore(scores));
+        scores["general"].Passed = 3;
+        Assert.Equal("general", ZapretAutoStrategy.BestStrategyByScore(scores));
+    }
+
+    [Fact]
     public void BestStrategyByScore_EqualPasses_TieBreaksByRatio()
     {
         var table = new Dictionary<string, ZapretStrategyTestResult>
         {
-            ["lowratio"] = new() { Passed = 5, Total = 20 },
+            ["lowratio"] = new() { Passed = 5, Total = 15 },
             ["highratio"] = new() { Passed = 5, Total = 8 },
         };
         Assert.Equal("highratio", ZapretAutoStrategy.BestStrategyByScore(table));

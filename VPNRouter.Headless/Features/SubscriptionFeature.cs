@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
+using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Headless.Storage;
@@ -209,8 +210,8 @@ public sealed class SubscriptionFeature
         }
 
         var settings = _storage.GetSettings();
-        var subs = settings.App?.Subscriptions ?? new List<SubscriptionEntry>();
-
+        var app = settings.App;
+        var subs = app.Subscriptions;
         List<SubscriptionEntry> targets;
         if (!string.IsNullOrWhiteSpace(targetId))
         {
@@ -221,16 +222,37 @@ public sealed class SubscriptionFeature
         }
         else
         {
+            if (subs.Count == 0 && !string.IsNullOrWhiteSpace(app.SubscriptionUrl))
+            {
+                // Stage the legacy feed in the candidate; a transient failure keeps the original file.
+                subs.Add(new SubscriptionEntry
+                {
+                    Name = "Default", Url = app.SubscriptionUrl, Servers = app.SubscriptionServers
+                });
+                app.SubscriptionServers = new();
+            }
             targets = subs.Where(s => s.Enabled).ToList();
         }
 
+        var chain = SubscriptionChainSelection.Capture(app);
+        var previousRows = targets.SelectMany(s => s.Servers).ToList();
         int done = 0;
         int total = targets.Count;
         foreach (var sub in targets)
         {
             ct.ThrowIfCancellationRequested();
             progress?.Invoke(new { stage = "refresh_subscription", completed = done, total });
-            var count = await SubscriptionFetcher.RefreshEntryAsync(sub, _logger, ct);
+            int count;
+            try
+            {
+                count = await SubscriptionFetcher.RefreshEntryAsync(sub, _logger, ct);
+            }
+            catch (UnsupportedSubscriptionChainException)
+            {
+                PersistRejectedSubscription(sub, revision);
+                ct.ThrowIfCancellationRequested();
+                throw new RouterException("subscription_chain_unsupported");
+            }
             ct.ThrowIfCancellationRequested();
             if (count == 0)
                 throw new RouterException("subscription_refresh_failed");
@@ -238,10 +260,127 @@ public sealed class SubscriptionFeature
             progress?.Invoke(new { stage = "refresh_subscription", completed = done, total });
         }
 
+        VlessServerEntry? successor = null;
+        if (chain != null)
+        {
+            successor = chain.Match(subs.FirstOrDefault(s => s.Id == chain.FeedId),
+                subs.Where(s => s.Enabled).SelectMany(s => s.Servers));
+            if (successor == null) throw new RouterException("subscription_refresh_failed");
+        }
+        RemoveRetiredCopies(settings, previousRows, targets.Any(s => s.Url == app.SubscriptionUrl));
         ReconcileActiveSubscriptionServer(settings);
+        if (successor != null)
+        {
+            app.ActiveSubscriptionServer = settings.Vless.ActiveServer = successor.Name;
+            app.ActiveSubscriptionId = chain!.FeedId;
+            app.ActiveSubscriptionRow = SubscriptionEntry.RowKey(successor);
+        }
 
         _storage.SaveSettings(settings, revision);
         _logger.Information("[SubscriptionFeature] Refreshed {Count} subscriptions", targets.Count);
+    }
+
+    private void PersistRejectedSubscription(SubscriptionEntry rejected, string revision)
+    {
+        // A failed batch must not commit successful candidates from earlier in the loop.
+        var settings = _storage.GetSettings();
+        var app = settings.App;
+        if (app.Subscriptions.Count == 0 && app.SubscriptionUrl == rejected.Url)
+            app.Subscriptions.Add(rejected);
+        var registrations = app.Subscriptions.Where(s => s.Url == rejected.Url).ToList();
+        var fetched = registrations.FirstOrDefault(s => s.Id == rejected.Id);
+        if (fetched == null) throw new RouterException("conflict");
+
+        var selectedRegistration = registrations.FirstOrDefault(s => s.Id == app.ActiveSubscriptionId &&
+            s.FindExactRow(app.ActiveSubscriptionServer, app.ActiveSubscriptionRow) != null);
+        if (selectedRegistration != null)
+        {
+            app.ActiveSubscriptionId = null;
+            app.ActiveSubscriptionRow = null;
+        }
+        var evicted = registrations.SelectMany(s => s.Servers).ToList();
+        foreach (var registration in registrations)
+        {
+            registration.Servers.Clear();
+            registration.LastServerCount = 0;
+        }
+        fetched.LastRefreshedAt = rejected.LastRefreshedAt;
+        fetched.UserInfo = rejected.UserInfo;
+
+        RemoveRetiredCopies(settings, evicted, app.SubscriptionUrl == rejected.Url);
+        ReconcileActiveSubscriptionServer(settings, activateSubscription: false);
+        _storage.SaveSettings(settings, revision);
+    }
+
+    private static void RemoveRetiredCopies(AppSettings settings, List<VlessServerEntry> evicted, bool refreshedLegacyUrl)
+    {
+        var app = settings.App;
+        if (refreshedLegacyUrl && app.SubscriptionServers.Count > 0)
+        {
+            evicted.AddRange(app.SubscriptionServers);
+            var sourceKeys = app.Subscriptions.Where(s => s.Url == app.SubscriptionUrl)
+                .SelectMany(s => s.Servers).Select(SavedRowKey).ToHashSet(StringComparer.Ordinal);
+            app.SubscriptionServers.RemoveAll(row => !sourceKeys.Contains(SavedRowKey(row)));
+        }
+        if (evicted.Count == 0) return;
+
+        // Only retire a detached copy once no registration or separately owned legacy feed retains it.
+        var retained = app.Subscriptions.SelectMany(s => s.Servers);
+        if (!string.IsNullOrEmpty(app.SubscriptionUrl))
+            retained = retained.Concat(app.SubscriptionServers);
+        var retainedKeys = retained.Select(SavedRowKey).ToHashSet(StringComparer.Ordinal);
+        evicted.RemoveAll(row => retainedKeys.Contains(SavedRowKey(row)));
+        if (evicted.Count == 0) return;
+        var evictedKeys = evicted.Select(SavedRowKey).ToHashSet(StringComparer.Ordinal);
+        if (string.IsNullOrEmpty(app.SubscriptionUrl))
+            app.SubscriptionServers.RemoveAll(row => evictedKeys.Contains(SavedRowKey(row)));
+
+        var vless = settings.Vless;
+        var selected = vless.Servers.FirstOrDefault(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase));
+        // Older desktop saves copied only the selected row's basic fields and Reality to the scalar fallback.
+        var selectedScalarCopy = selected != null && evictedKeys.Contains(SavedRowKey(selected))
+            && MatchesLegacyVless(vless, selected, desktopProjection: true);
+        if (selected == null && string.Equals(app.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase))
+            selectedScalarCopy = evicted.Any(row => string.Equals(row.Name, app.ActiveSubscriptionServer,
+                StringComparison.OrdinalIgnoreCase) && MatchesLegacyVless(vless, row, desktopProjection: true));
+        var removedManualCopy = vless.Servers.RemoveAll(row => evictedKeys.Contains(SavedRowKey(row))) > 0;
+        bool OwnsDirectScalar(VlessServerEntry row) =>
+            string.Equals(row.Protocol, "vless", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(row.DetourVia) && !row.IsDnsTunnel && MatchesLegacyVless(vless, row);
+        var removeScalar = (selectedScalarCopy || evicted.Any(row => MatchesLegacyVless(vless, row)))
+            && !vless.Servers.Any(OwnsDirectScalar) && !retained.Any(OwnsDirectScalar);
+        if (removeScalar)
+        {
+            vless.Server = string.Empty;
+            vless.Uuid = string.Empty;
+            vless.Port = 443;
+            vless.Flow = string.Empty;
+            vless.Security = "reality";
+            vless.Tls = new();
+            vless.Reality = new();
+            vless.Transport = new();
+        }
+        if ((removedManualCopy || removeScalar) && evicted.Any(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase))
+            && !vless.Servers.Any(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase)))
+            vless.ActiveServer = vless.Servers.FirstOrDefault()?.Name ?? string.Empty;
+    }
+
+    // Historical settings can contain a detached copy of a subscription row among
+    // manual servers. Compare the full saved profile, including its name and route.
+    private static string SavedRowKey(VlessServerEntry row) =>
+        JsonSerializer.Serialize(row, AppJsonContext.Default.VlessServerEntry);
+
+    private static bool MatchesLegacyVless(VlessConfig vless, VlessServerEntry row, bool desktopProjection = false)
+    {
+        if (string.IsNullOrEmpty(vless.Server) || vless.Server != row.Server ||
+            vless.Port != row.Port || vless.Uuid != row.Uuid || vless.Flow != row.Flow ||
+            vless.Security != row.Security) return false;
+        var json = AppJsonContext.Default;
+        if (JsonSerializer.Serialize(vless.Reality, json.VlessRealityConfig) !=
+            JsonSerializer.Serialize(row.Reality, json.VlessRealityConfig)) return false;
+        return desktopProjection ||
+            (JsonSerializer.Serialize(vless.Tls, json.VlessTlsConfig) == JsonSerializer.Serialize(row.Tls, json.VlessTlsConfig) &&
+             JsonSerializer.Serialize(vless.Transport, json.VlessTransportConfig) == JsonSerializer.Serialize(row.Transport, json.VlessTransportConfig));
     }
 
     private static bool HasUsableManualServer(AppSettings settings)
@@ -253,7 +392,7 @@ public sealed class SubscriptionFeature
                 && !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com");
     }
 
-    private static void ReconcileActiveSubscriptionServer(AppSettings settings)
+    private static void ReconcileActiveSubscriptionServer(AppSettings settings, bool activateSubscription = true)
     {
         var subs = settings.App?.Subscriptions ?? new List<SubscriptionEntry>();
         var remainingServers = subs
@@ -291,7 +430,7 @@ public sealed class SubscriptionFeature
                 }
             }
         }
-        else if (remainingServers.Count > 0 && !HasUsableManualServer(settings)
+        else if (activateSubscription && remainingServers.Count > 0 && !HasUsableManualServer(settings)
                  && !string.Equals(settings.App?.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase))
         {
             // Nothing else to connect with: start using the

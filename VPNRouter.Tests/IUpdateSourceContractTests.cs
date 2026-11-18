@@ -187,7 +187,8 @@ public sealed class IUpdateSourceContractTests
     public async Task GitHubReleaseSource_DownloadAsync_ShaMismatch_ThrowsBeforeApply()
     {
         var zip = MinimalUpdateZip();
-        const string assetUrl = "https://example.com/VPNRouter-v2.32.1-win.zip";
+        const string releaseUrl = "https://github.com/" + TestRepo + "/releases";
+        const string assetUrl = releaseUrl + "/download/v2.32.1/VPNRouter-v2.32.1-win.zip";
         var http = new FakeHttpClient().SetupStream(assetUrl, zip);
         var source = new GitHubReleaseSource(
             new UpdateSettings { GitHubRepo = TestRepo },
@@ -197,7 +198,7 @@ public sealed class IUpdateSourceContractTests
 
         var info = new UpdateSourceInfo(
             Version: "2.32.1",
-            ReleaseUrl: "https://github.com/foo/bar/releases/tag/v2.32.1",
+            ReleaseUrl: releaseUrl + "/tag/v2.32.1",
             AssetName: "VPNRouter-v2.32.1-win.zip",
             DownloadUrl: assetUrl,
             AssetSize: zip.LongLength,

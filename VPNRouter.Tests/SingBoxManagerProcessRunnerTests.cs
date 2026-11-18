@@ -187,6 +187,46 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WindowsStopRetainsTheExactHandleUntilExitIsObservable(bool unknownBeforeSignal)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Exercises the Windows stop path.");
+        var runner = new FakeProcessRunner();
+        var loseStatusAfterWait = !unknownBeforeSignal;
+        FakeProcessHandle? handle = null;
+        handle = new FakeProcessHandle(5555) { OnWaitForExit = () =>
+        {
+            if (loseStatusAfterWait) handle!.ExitQueryUnavailable = true;
+        } };
+        runner.OnStart(_ => true, _ => handle);
+        var exe = CreateStubExe();
+        try
+        {
+            using var manager = BuildManager(runner, exe);
+            manager.StartWithJson("{}");
+            try
+            {
+                handle.ExitQueryUnavailable = unknownBeforeSignal;
+                manager.Stop();
+                Assert.True(manager.ExactStopUnconfirmed);
+                Assert.Same(handle, manager.OwnedProcessHandle);
+                Assert.Equal(unknownBeforeSignal ? 0 : 1, handle.KillCallCount);
+                Assert.Equal(0, handle.DisposeCallCount);
+            }
+            finally
+            {
+                loseStatusAfterWait = false;
+                handle.ExitQueryUnavailable = false;
+                manager.Stop();
+            }
+            Assert.Null(manager.OwnedProcessHandle);
+            Assert.False(manager.ExactStopUnconfirmed);
+        }
+        finally { File.Delete(exe); }
+    }
+
     [Fact]
     public void Stop_IsIdempotent_AcrossLifecycle()
     {

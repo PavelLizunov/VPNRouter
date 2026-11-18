@@ -25,7 +25,7 @@ public class DeepVerifyProbeCancellationTests
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                DeepVerifyProbe.ProbeViaSocksAsync(port, TimeSpan.FromSeconds(10), cts.Token));
+                DeepVerifyProbe.ProbeViaProxyAsync(new VerificationProxy(port), TimeSpan.FromSeconds(10), cts.Token));
         }
         finally
         {

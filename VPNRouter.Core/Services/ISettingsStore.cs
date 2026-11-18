@@ -19,6 +19,9 @@ public interface ISettingsStore
 
     void StartWatching(string? path = null, Action<AppSettings>? onReload = null);
 
+    void WatchRevisions(Action<AppSettings?, string> onReload) =>
+        StartWatching(onReload: settings => onReload(settings, SettingsLoader.GetSubmittedRevision(settings)));
+
     void StopWatching();
 }
 
@@ -44,6 +47,8 @@ public sealed class RealSettingsStore : ISettingsStore
 
     public void StartWatching(string? path = null, Action<AppSettings>? onReload = null) =>
         SettingsLoader.StartWatching(path, onReload);
+
+    public void WatchRevisions(Action<AppSettings?, string> onReload) => SettingsLoader.WatchRevisions(null, onReload);
 
     public void StopWatching() => SettingsLoader.StopWatching();
 }

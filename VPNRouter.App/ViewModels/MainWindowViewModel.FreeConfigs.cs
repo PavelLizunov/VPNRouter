@@ -5,6 +5,8 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using VPNRouter.App.Localization;
 using VPNRouter.Core;
+using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
@@ -13,182 +15,83 @@ public partial class MainWindowViewModel
 {
     private async Task<bool> ApplyFreeConfigAsync(FreeConfigEntry entry)
     {
+        if (entry.Status != FreeConfigStatus.Verified || IsConnecting || _isReconnecting || IsServiceManagedVpn)
+            return false;
+
+        var previousPid = _engine.SingBoxPid;
+        bool previousConnected = IsConnected;
+        IsConnecting = true;
         try
         {
-            if (entry.Status != FreeConfigStatus.Verified)
+            if (!_settings.App.FreeConfigSecurityWarningAcked && !await ShowFreeConfigSecurityWarningAsync())
+                return false;
+
+            var candidate = SnapshotFreeConfigSettings();
+            var index = FreeConfigSelection.SelectOrAdd(candidate.Vless.Servers, entry.ToVlessServerEntry());
+            var target = candidate.Vless.Servers[index];
+            candidate.Vless.ActiveServer = target.Name;
+            candidate.App.ConfigMode = "generated";
+            candidate.App.FreeConfigSecurityWarningAcked = true;
+
+            using var cts = new CancellationTokenSource(Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget +
+                Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget);
+            var applied = await Task.Run(() => _engine.ConnectVerifiedFreeConfigAsync(candidate,
+                () => _settingsStore.Save(candidate, AppPaths.ConfigYamlPath), _skipVpnConflictThisSession, cts.Token));
+            if (!applied)
             {
-                _logger.Warning("[VM] ApplyFreeConfig rejected: entry not Verified (status={Status}, {Host}:{Port})",
-                    entry.Status, entry.Host, entry.Port);
+                StatusText = Strings.ApplyFailed;
                 return false;
             }
 
-            if (!_settings.App.FreeConfigSecurityWarningAcked)
+            _settings = candidate;
+            _isLoadingUI = true;
+            try
             {
-                var proceed = await ShowFreeConfigSecurityWarningAsync();
-                if (!proceed) return false;
-                _settings.App.FreeConfigSecurityWarningAcked = true;
-                SaveSettings();
+                LoadServersIntoUI();
+                IsSubscribeMode = false;
+                IsVlessMode = true;
+                SelectedServerModeIndex = 0;
             }
+            finally { _isLoadingUI = false; }
 
-            var newEntry = entry.ToVlessServerEntry();
-
-            var prevSelectedServer = SelectedServer;
-            var prevIsConnected = IsConnected || _engine.IsRunning;
-            var prevIsSubscribeMode = IsSubscribeMode;
-            var prevIsVlessMode = IsVlessMode;
-            var prevSelectedModeIndex = SelectedServerModeIndex;
-
-            var existingVm = Servers.FirstOrDefault(s =>
-                string.Equals(s.Server, newEntry.Server, StringComparison.OrdinalIgnoreCase) &&
-                s.Port == newEntry.Port &&
-                string.Equals(s.Uuid, newEntry.Uuid, StringComparison.OrdinalIgnoreCase));
-
-            var oldEphemeral = Servers
-                .Where(s => s != existingVm && s.Name.StartsWith("⚡ free", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            foreach (var old in oldEphemeral)
-            {
-                Servers.Remove(old);
-            }
-
-            ServerViewModel target;
-            if (existingVm != null)
-            {
-                target = existingVm;
-            }
-            else
-            {
-                var displayName = string.IsNullOrWhiteSpace(newEntry.Name) ? "⚡ free" : newEntry.Name;
-                newEntry.Name = displayName;
-                target = new ServerViewModel(newEntry);
-                Servers.Add(target);
-            }
-
-            IsConnecting = true;
-            SelectedServer = target;
-            IsSubscribeMode = false;
-            IsVlessMode = true;
-            SelectedServerModeIndex = 0;
-
-            SaveSettings();
-            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-
-            if (IsConnected || _engine.IsRunning)
-            {
-                try { await Task.Run(() => _engine.Stop()); } catch { }
-                IsConnected = false;
-            }
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
-                Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
-                Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-            var startTask = Task.Run(
-                () => _engine.StartAsync(_settings, cts.Token, _skipVpnConflictThisSession),
-                cts.Token);
-
-            var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
-                startTask: startTask,
-                subscribeStarted: handler =>
-                {
-                    void Wrapper(int pid) => handler(pid);
-                    _engine.SingBoxStarted += Wrapper;
-                    return () => _engine.SingBoxStarted -= Wrapper;
-                },
-                subscribeConnected: handler =>
-                {
-                    void Wrapper(int pid) => handler(pid);
-                    _engine.Connected += Wrapper;
-                    return () => _engine.Connected -= Wrapper;
-                },
-                cancellationToken: cts.Token);
-
-            if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout || outcome == Internals.TwoPhaseStartOutcome.PhaseBTimeout)
-            {
-                var isPhaseA = outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout;
-                _logger.Warning("[VM] ApplyFreeConfig: Phase {Phase} timed out", isPhaseA ? "A" : "B");
-                try { await Task.Run(() => _engine.Stop()); } catch { }
-                StatusText = isPhaseA ? Strings.StartTimeoutPhaseA : Strings.StartTimeoutPhaseB;
-
-                if (existingVm == null)
-                {
-                    Servers.Remove(target);
-                }
-
-                if (prevIsConnected && prevSelectedServer != null)
-                {
-                    SelectedServer = prevSelectedServer;
-                    IsSubscribeMode = prevIsSubscribeMode;
-                    IsVlessMode = prevIsVlessMode;
-                    SelectedServerModeIndex = prevSelectedModeIndex;
-                    SaveSettings();
-                    _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-
-                    try
-                    {
-                        using var rollbackCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                        await Task.Run(() => _engine.StartAsync(_settings, rollbackCts.Token, _skipVpnConflictThisSession));
-                        IsConnected = true;
-                        ConnectButtonText = Strings.StopVPN;
-                        StartSubRefreshTimer();
-                        RefreshActiveIndicator();
-                        RestoreConnectedStatus();
-                    }
-                    catch (Exception rollbackEx)
-                    {
-                        _logger.Warning(rollbackEx, "[VM] ApplyFreeConfig: rollback start failed");
-                        IsConnected = false;
-                        ConnectButtonText = Strings.StartVPN;
-                        RefreshActiveIndicator();
-                    }
-                }
-                else
-                {
-                    IsConnected = false;
-                    ConnectButtonText = Strings.StartVPN;
-                    RefreshActiveIndicator();
-                }
-
-                IsConnecting = false;
-                return false;
-            }
-
-            if (outcome != Internals.TwoPhaseStartOutcome.Connected)
-            {
-                try { await startTask; }
-                catch (Exception ex)
-                {
-                    _logger.Warning(ex, "[VM] ApplyFreeConfig: start task did not reach Connected");
-                }
-
-                if (outcome == Internals.TwoPhaseStartOutcome.Cancelled)
-                {
-                    try { await Task.Run(() => _engine.Stop()); } catch { }
-                }
-
-                IsConnecting = false;
-                IsConnected = false;
-                ConnectButtonText = Strings.StartVPN;
-                RefreshActiveIndicator();
-                return false;
-            }
-
-            try { await startTask; } catch { }
+            _displayExternalTunnel = false;
             IsConnected = true;
-            IsConnecting = false;
             _lastSuccessfulConnectAt = DateTime.UtcNow;
             ConnectButtonText = Strings.StopVPN;
             StartSubRefreshTimer();
-            RefreshActiveIndicator();
             RestoreConnectedStatus();
             ConflictingVpnWarningText = string.Empty;
             return true;
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "ApplyFreeConfig failed");
-            IsConnecting = false;
+            _logger.Warning("ApplyFreeConfig failed ({Type})", ex.GetType().Name);
+            StatusText = Strings.ApplyFailed;
             return false;
         }
+        finally
+        {
+            IsConnecting = false;
+            var currentPid = _engine.SingBoxPid;
+            IsConnected = currentPid.HasValue &&
+                ((previousConnected && currentPid == previousPid) || _engine.DescribeReadiness(currentPid.Value) == null);
+            ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
+        }
+    }
+
+    private AppSettings SnapshotFreeConfigSettings()
+    {
+        var current = _settings;
+        try
+        {
+            _settings = SettingsLoader.Copy(current);
+            ReadSettingsFromControls();
+            if (!string.IsNullOrEmpty(CustomRulesErrorText))
+                throw new InvalidOperationException("Invalid custom routing rules");
+            // The controls return their backing server objects. Detach those before choosing the candidate.
+            return SettingsLoader.Copy(_settings);
+        }
+        finally { _settings = current; }
     }
 
     private async Task<bool> ShowFreeConfigSecurityWarningAsync()

@@ -25,7 +25,9 @@ public static class TunnelStateResync
     public static bool TryPromoteOnResume(
         bool intendedConnected, VpnStateSnapshot resolved, bool serviceTunnelLive, bool vpnTransportActive) =>
         !intendedConnected
-        && resolved.State == VpnConnectionState.Connected
-        && serviceTunnelLive
+        && IsConfirmedConnected(resolved, serviceTunnelLive)
         && vpnTransportActive;
+
+    public static bool IsConfirmedConnected(VpnStateSnapshot resolved, bool serviceTunnelLive) =>
+        serviceTunnelLive && resolved.State == VpnConnectionState.Connected;
 }

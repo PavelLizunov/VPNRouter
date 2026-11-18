@@ -29,6 +29,7 @@ public class HealthMonitorStrictDnsFailoverTests
             App = new AppConfig
             {
                 StrictDns = strictDns,
+                BypassRussianTraffic = false,
                 ConfigMode = "generated",
                 RoutingMode = routingMode,
                 RoutingAppsMode = appsMode,
@@ -97,6 +98,30 @@ public class HealthMonitorStrictDnsFailoverTests
             Assert.True(GetFailedOver(hm));
         }
         finally { hm.Stop(); hm.Dispose(); }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DnsFailoverWithUnavailableAdFilterReloadsOnlyWhenFilteringIsDisabled(bool blockAds)
+    {
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
+        {
+            Directory.CreateDirectory(VPNRouter.Core.AppPaths.CacheDir);
+            // A file at the cache directory path prevents any fetch.
+            File.WriteAllText(Path.Combine(VPNRouter.Core.AppPaths.CacheDir, RuleSetCacheManager.CacheSubdir), "fixture");
+            var settings = Settings(strictDns: true);
+            settings.App.BlockAds = blockAds;
+            using var hm = Started(new FakeSingBoxApi { ProxyDelayMs = null }, settings);
+            var reloads = 0;
+            hm.HotReloadHookForTests = _ => { reloads++; return true; };
+
+            Reconcile(hm);
+            Reconcile(hm);
+
+            Assert.Equal(blockAds ? 0 : 1, reloads);
+            Assert.Equal(!blockAds, GetFailedOver(hm));
+        });
     }
 
     [Fact]

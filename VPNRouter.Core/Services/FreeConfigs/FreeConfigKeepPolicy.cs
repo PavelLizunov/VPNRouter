@@ -15,7 +15,7 @@ public static class FreeConfigKeepPolicy
     public static bool ShouldRetainInSavedList(FreeConfigEntry entry, DateTime nowUtc)
     {
         if (entry == null) return false;
-        if (entry.Status != FreeConfigStatus.Verified) return false;
+        if (entry.Status != FreeConfigStatus.Verified && !entry.RequiresSavedRecheck) return false;
         if (!entry.LastTestedAt.HasValue) return true;
         return (nowUtc - entry.LastTestedAt.Value).TotalDays <= SavedListRetentionDays;
     }

@@ -131,7 +131,9 @@ public sealed class FreeConfigAggregator
 
             foreach (var cfg in fresh)
             {
-                if (existingById.TryGetValue(cfg.Id, out var prev))
+                if (existingById.TryGetValue(cfg.Id, out var prev) &&
+                    !string.IsNullOrEmpty(cfg.RawUri) &&
+                    string.Equals(cfg.RawUri, prev.RawUri, StringComparison.Ordinal))
                 {
                     cfg.FirstSeenAt = prev.FirstSeenAt;
                     cfg.CountryCode = prev.CountryCode;

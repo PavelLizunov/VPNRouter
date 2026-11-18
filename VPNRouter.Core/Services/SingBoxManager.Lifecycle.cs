@@ -47,6 +47,7 @@ public partial class SingBoxManager
             Stop();
         }
 
+        var exePath = RuntimeExecutablePath;
         if (!TryAcquireTunOwnership())
         {
             throw new TunOwnershipException(
@@ -54,27 +55,19 @@ public partial class SingBoxManager
                 "Stop the other instance (e.g. disable Windows Service autostart) and try again.");
         }
 
-        var exePath = EffectivePolicy?.SelectedExecutablePath
-            ?? (OperatingSystem.IsWindows()
-                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-                : AppPaths.SingBoxExePath);
-
-        ProcessOwnership.ConfiguredExePath = exePath;
-
         if (!File.Exists(exePath))
         {
             ReleaseTunOwnership();
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
         }
 
-        RotateSingBoxLog();
-        _currentConfigPath = WriteJsonToDisk(configJson);
-
-        _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
-
         State = SingBoxState.Starting;
         try
         {
+            ProcessOwnership.ConfiguredExePath = exePath;
+            RotateSingBoxLog();
+            _currentConfigPath = WriteJsonToDisk(configJson);
+            _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
             LaunchProcess(exePath);
             if (_handle is null)
             {
@@ -203,13 +196,13 @@ public partial class SingBoxManager
         {
             if (targetHandle != null)
             {
-                if (!targetHandle.HasExited)
+                if (targetHandle.QueryHasExited() == false)
                 {
                     targetHandle.SuppressExitedEvent();
                     // SIGTERM first: sing-box removes its auto_route ip rules only on a
                     // graceful exit; SIGKILL leaves them behind after every disconnect.
                     targetHandle.Terminate();
-                    if (!WaitForHandleExit(targetHandle, TimeSpan.FromSeconds(5)))
+                    if (WaitForHandleExit(targetHandle, TimeSpan.FromSeconds(5)) == false)
                     {
                         _logger.Warning("[SingBoxManager] sing-box ignored SIGTERM; killing");
                         targetHandle.Kill(entireProcessTree: false);
@@ -217,7 +210,7 @@ public partial class SingBoxManager
                     }
                 }
 
-                capabilityStopped = targetHandle.HasExited;
+                capabilityStopped = targetHandle.QueryHasExited() == true;
             }
         }
         catch (Exception ex)
@@ -246,7 +239,7 @@ public partial class SingBoxManager
         }
     }
 
-    private static bool WaitForHandleExit(IProcessHandle handle, TimeSpan timeout)
+    private static bool? WaitForHandleExit(IProcessHandle handle, TimeSpan timeout)
     {
         try
         {
@@ -256,11 +249,12 @@ public partial class SingBoxManager
         catch (OperationCanceledException)
         {
         }
-        return handle.HasExited;
+        return handle.QueryHasExited();
     }
 
     private void StopUnixEscalated(bool releaseLock)
     {
+        var targetHandle = _handle;
         var unixStopped = false;
         try
         {
@@ -272,8 +266,13 @@ public partial class SingBoxManager
         }
         finally
         {
-            _handle?.Dispose();
-            _handle = null;
+            if (!ReferenceEquals(_handle, targetHandle))
+                unixStopped = false;
+            if (unixStopped)
+            {
+                targetHandle?.Dispose();
+                _handle = null;
+            }
             _exactStopUnconfirmed = !unixStopped;
             State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed;
             if (releaseLock && unixStopped) ReleaseTunOwnership();
@@ -295,19 +294,17 @@ public partial class SingBoxManager
             return;
         }
 
-        var alreadyExited = false;
-        var probeFailed = false;
+        bool? alreadyExited = null;
         try
         {
-            alreadyExited = winTargetHandle.HasExited;
+            alreadyExited = winTargetHandle.QueryHasExited();
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[SingBoxManager] Error probing sing-box process exit state");
-            probeFailed = true;
         }
 
-        if (probeFailed)
+        if (!alreadyExited.HasValue)
         {
             _exactStopUnconfirmed = true;
             State = SingBoxState.Failed;
@@ -316,7 +313,7 @@ public partial class SingBoxManager
             return;
         }
 
-        if (alreadyExited)
+        if (alreadyExited == true)
         {
             _logger.Information(
                 "[SingBoxManager] Stop called but sing-box already exited (process=HasExited) — running cleanup-only path");
@@ -376,7 +373,7 @@ public partial class SingBoxManager
 
             try
             {
-                winStopped = winTargetHandle.HasExited;
+                winStopped = winTargetHandle.QueryHasExited() == true;
             }
             catch (Exception ex)
             {
@@ -504,7 +501,26 @@ public partial class SingBoxManager
             RestartCore();
     }
 
-    private bool RestartCore()
+    private bool RestartWithConfig(string json)
+    {
+        var current = AppPaths.CurrentConfigPath;
+        var staged = Path.Combine(AppPaths.ConfigDir, $"current-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            WriteConfigFile(staged, json);
+            return RestartCore(() =>
+            {
+                File.Move(staged, current, overwrite: true);
+                _currentConfigPath = current;
+            });
+        }
+        finally
+        {
+            File.Delete(staged);
+        }
+    }
+
+    private bool RestartCore(Action? publishAfterStop = null)
     {
         // A stale HealthMonitor restart continuation can arrive after Dispose: never relaunch a disposed manager.
         if (Volatile.Read(ref _disposed) != 0)
@@ -533,6 +549,7 @@ public partial class SingBoxManager
                     State);
                 return false;
             }
+            publishAfterStop?.Invoke();
             State = SingBoxState.Restarting;
 
             if (OperatingSystem.IsWindows())
@@ -540,10 +557,7 @@ public partial class SingBoxManager
                 try { Thread.Sleep(750); } catch { }
             }
 
-            var exePath = EffectivePolicy?.SelectedExecutablePath
-                ?? (OperatingSystem.IsWindows()
-                    ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-                    : AppPaths.SingBoxExePath);
+            var exePath = RuntimeExecutablePath;
             LaunchProcess(exePath);
             if (_handle is null)
             {
@@ -737,7 +751,7 @@ public partial class SingBoxManager
                 }
             }
         };
-        startedHandle.Exited += (_, code) => OnProcessExited(code);
+        startedHandle.Exited += (_, code) => OnProcessExited(startedHandle, code);
 
         State = SingBoxState.Running;
         _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", startedHandle.Pid);
@@ -745,6 +759,13 @@ public partial class SingBoxManager
     }
 
     private static string WriteJsonToDisk(string json)
+    {
+        var path = AppPaths.CurrentConfigPath;
+        WriteConfigFile(path, json);
+        return path;
+    }
+
+    private static void WriteConfigFile(string path, string json)
     {
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
@@ -754,9 +775,7 @@ public partial class SingBoxManager
         else
             Directory.CreateDirectory(AppPaths.ConfigDir);
 
-        var path = AppPaths.CurrentConfigPath;
         AppPaths.WritePrivateText(path, json);
-        return path;
     }
 
 }

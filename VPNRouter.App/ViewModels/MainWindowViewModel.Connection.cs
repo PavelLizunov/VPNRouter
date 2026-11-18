@@ -2,12 +2,15 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
 using VPNRouter.Core;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    internal AppSettings CaptureConnectionSettings() => VpnEngine.CopySessionSettings(_settings);
+
     private void OnAutoFailoverMessage(string message)
     {
         if (string.IsNullOrWhiteSpace(message)) return;
@@ -71,8 +74,7 @@ public partial class MainWindowViewModel
 
                 ConnectButtonText = Strings.StopVPN;
                 StartSubRefreshTimer();
-                OnIsConnectedChanged(true);
-                RefreshActiveIndicator();
+                OnConnectedForProblems(true);
                 RestoreConnectedStatus();
             }
             else if (status == "Stopped")
@@ -91,7 +93,9 @@ public partial class MainWindowViewModel
             {
                 if (IsConnected && status.StartsWith("Applied (", StringComparison.Ordinal))
                 {
-                    OnIsConnectedChanged(true);
+                    OnConnectedForProblems(true);
+                    RestoreConnectedStatus();
+                    return;
                 }
                 StatusText = status;
             }
@@ -109,10 +113,10 @@ public partial class MainWindowViewModel
             if (!readinessGuard()) return;
             if (IsConnecting || _isReconnecting) return;
 
+            _displayExternalTunnel = false;
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
             StartSubRefreshTimer();
-            RefreshActiveIndicator();
             RestoreConnectedStatus();
         });
     }
@@ -121,6 +125,9 @@ public partial class MainWindowViewModel
     private async Task RestartTrueSplitAsync()
     {
         if (!IsConnected || !_engine.IsRunning) return;
+        SaveSettings();
+        _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+        var capturedSettings = CaptureConnectionSettings();
 #if PLATFORM_WINDOWS
         await Task.Run(() =>
         {
@@ -139,9 +146,7 @@ public partial class MainWindowViewModel
             }
         });
 #endif
-        SaveSettings();
-        _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-        await Task.Run(() => _engine.RestartTrueSplitAsync(_settings, CancellationToken.None));
+        await Task.Run(() => _engine.RestartTrueSplitAsync(capturedSettings, CancellationToken.None));
     }
 
     // The window lost track of a tunnel that is running (a routing change restarts sing-box). Show the truth instead of
@@ -149,20 +154,22 @@ public partial class MainWindowViewModel
     private void AdoptRunningEngine()
     {
         _logger.Information("[VM] Engine is running while the window showed Not connected - showing Connected");
+        _displayExternalTunnel = false;
         IsConnected = true;
         ConnectButtonText = Strings.StopVPN;
         StartSubRefreshTimer();
-        RefreshActiveIndicator();
         RestoreConnectedStatus();
     }
 
     [RelayCommand]
-    private async Task ToggleConnectionAsync()
+    private Task ToggleConnectionAsync() => ToggleConnectionCoreAsync(null);
+
+    private async Task ToggleConnectionCoreAsync(AppSettings? submitted)
     {
         var toggle = ConnectionSyncPolicy.DecideToggle(
             IsConnected,
             inTransition: IsConnecting || IsApplying || _isReconnecting,
-            inProcessEngineRunning: _engine.IsRunning);
+            inProcessEngineRunning: _engine.HasActiveTunnel);
         if (toggle == ToggleAction.AdoptRunningEngine)
         {
             AdoptRunningEngine();
@@ -181,14 +188,14 @@ public partial class MainWindowViewModel
 
         if (toggle == ToggleAction.Stop)
         {
+            if (submitted != null) return;
             IsConnecting = true;
             StatusText = Strings.Stopping;
             try
             {
                 await Task.Run(() =>
                 {
-                    try { _engine.Stop(); }
-                    catch (Exception ex) { _logger.Debug(ex, "[VM] _engine.Stop"); }
+                    _engine.Stop();
 
                     try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); }
                     catch (Exception ex) { _logger.Debug(ex, "[VM] OrphanCleanup on stop"); }
@@ -202,20 +209,23 @@ public partial class MainWindowViewModel
             catch (Exception ex)
             {
                 _logger.Error(ex, "[VM] Error during Stop");
-            }
-            finally
-            {
-                IsConnected = false;
                 IsConnecting = false;
-                ConnectButtonText = Strings.StartVPN;
-                StatusText = Strings.NotConnected;
-                _lastSuccessfulConnectAt = DateTime.MinValue;
+                IsConnected = _engine.HasActiveTunnel;
+                ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
+                StatusText = Strings.TunnelStopUnconfirmed;
+                return;
             }
+            IsConnected = false;
+            IsConnecting = false;
+            ConnectButtonText = Strings.StartVPN;
+            StatusText = Strings.NotConnected;
+            _lastSuccessfulConnectAt = DateTime.MinValue;
             return;
         }
 
+        var startOverride = submitted == null ? null : SimpleTunnelStart;
 #if PLATFORM_WINDOWS
-        if (VPNRouter.App.Services.WindowsServiceHelper.IsRunning()
+        if (startOverride == null && VPNRouter.App.Services.WindowsServiceHelper.IsRunning()
             && TunOwnershipLock.IsOwnedByAnyone())
         {
             DetectServiceManagedVpn();
@@ -232,63 +242,47 @@ public partial class MainWindowViewModel
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
 
-            await Task.Run(() =>
+            if (submitted == null)
             {
-                try
+                SaveSettings();
+                _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+
+                var aggregatedServers = _settings.App.Subscriptions
+                    .Where(s => s.Enabled)
+                    .SelectMany(s => s.Servers)
+                    .ToList();
+                if (IsSubscribeMode && aggregatedServers.Count > 0)
                 {
-                    if (_engine.IsRunning)
-                        _engine.Stop();
+                    _settings.Vless.Servers = aggregatedServers;
+                    _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
+                    _logger.Information(
+                        "[VM] Connecting with {Count} aggregated subscription servers", aggregatedServers.Count);
                 }
-                catch (Exception ex)
-                {
-                    _logger.Debug(ex, "[VM] Pre-start engine stop");
-                }
-
-                try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
-
-#if PLATFORM_WINDOWS
-                try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
-                catch { }
-#endif
-            });
-
-            SaveSettings();
-            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-
-            var aggregatedServers = _settings.App.Subscriptions
-                .Where(s => s.Enabled)
-                .SelectMany(s => s.Servers)
-                .ToList();
-            if (IsSubscribeMode && aggregatedServers.Count > 0)
-            {
-                _settings.Vless.Servers = aggregatedServers;
-                _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                _logger.Information(
-                    "[VM] Connecting with {Count} aggregated subscription servers", aggregatedServers.Count);
             }
-
-            if (OperatingSystem.IsMacOS())
-                await Task.Run(EnsureMacSudoAccess);
 
             try
             {
+                var capturedSettings = submitted ?? CaptureConnectionSettings();
+                var skipConflictCheck = _skipVpnConflictThisSession;
+                if (startOverride == null)
+                    await PrepareColdStartAsync();
+
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                var skipConflictCheck = _skipVpnConflictThisSession;
-
-                var (startTask, outcome) = await RunTwoPhaseStartAsync(cts.Token, () => skipConflictCheck);
+                var start = startOverride ?? RunTwoPhaseStartAsync;
+                var (startTask, outcome) = await start(capturedSettings, cts.Token, skipConflictCheck);
 
                 if (outcome == Internals.TwoPhaseStartOutcome.Connected)
                 {
                     try { await startTask; } catch {
  }
+                    _displayExternalTunnel = false;
                     IsConnected = true;
                     IsConnecting = false;
                     _lastSuccessfulConnectAt = DateTime.UtcNow;
                     ConnectButtonText = Strings.StopVPN;
                     StartSubRefreshTimer();
-                    RefreshActiveIndicator();
                     RestoreConnectedStatus();
                     ConflictingVpnWarningText = string.Empty;
                 }
@@ -380,26 +374,31 @@ public partial class MainWindowViewModel
 #if PLATFORM_WINDOWS
     private static bool TryStopVpnRouterService()
     {
-        var psi = new System.Diagnostics.ProcessStartInfo(WindowsServiceCommand.GetSystemScPath())
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        psi.ArgumentList.Add("stop");
-        psi.ArgumentList.Add("VPNRouter");
-        using var proc = System.Diagnostics.Process.Start(psi);
-        proc?.WaitForExit(5000);
-        return proc is { HasExited: true, ExitCode: 0 };
+        return Services.WindowsServiceHelper.IsRunning() && Services.WindowsServiceHelper.Stop().Success;
     }
 #endif
 
+    private async Task PrepareColdStartAsync()
+    {
+#if PLATFORM_WINDOWS
+        await Task.Run(() =>
+        {
+            // A cold start may clean up processes only while the TUN is unclaimed.
+            if (TunOwnershipLock.ProbeOwnership() != TunOwnershipStatus.Free) return;
+            try { OrphanCleanup.KillOrphans(); } catch { }
+            try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
+            catch { }
+        });
+#endif
+        if (OperatingSystem.IsMacOS())
+            await Task.Run(EnsureMacSudoAccess);
+    }
+
     private async Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)> RunTwoPhaseStartAsync(
-        CancellationToken ct, Func<bool> skipConflictCheck)
+        AppSettings capturedSettings, CancellationToken ct, bool skipConflictCheck)
     {
         var startTask = Task.Run(
-            () => _engine.StartAsync(_settings, ct, skipConflictCheck()),
+            () => _engine.StartAsync(capturedSettings, ct, skipConflictCheck),
             ct);
 
         var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
@@ -516,56 +515,10 @@ public partial class MainWindowViewModel
 
     private void RefreshActiveIndicator()
     {
-        var activeIp = _engine?.ActiveServerAddress;
-
-        var configMode = _settings?.App?.ConfigMode ?? "generated";
-        var isManualMode = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
-        var isSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
-
-        var manualActiveName = _settings?.Vless?.ActiveServer;
-        var subscriptionActiveName = _settings?.App?.ActiveSubscriptionServer;
-
-        ServerViewModel? active = null;
-
-        foreach (var s in Servers)
-        {
-            var isActive = isManualMode
-                && IsConnected
-                && !string.IsNullOrEmpty(activeIp)
-                && IsRowActive(s, activeIp, manualActiveName);
-            s.IsActive = isActive;
-            if (isActive) active = s;
-        }
-
-        var autoSelect = isSubscribeMode && AutoSelectBestServer;
-        foreach (var s in SubscriptionServers)
-        {
-            bool isActive;
-            if (autoSelect)
-                isActive = IsConnected
-                    && _autoSelectedServer is not null
-                    && ReferenceEquals(s, _autoSelectedServer);
-            else
-                isActive = isSubscribeMode
-                    && IsConnected
-                    && !string.IsNullOrEmpty(activeIp)
-                    && IsRowActive(s, activeIp, subscriptionActiveName);
-            s.IsActive = isActive;
-            if (isActive) active = s;
-        }
-
+        var active = IsConnected ? SmpConfigServer : null;
+        foreach (var row in Servers) row.IsActive = ReferenceEquals(row, active);
+        foreach (var row in SubscriptionServers) row.IsActive = ReferenceEquals(row, active);
         ActiveServerChanged?.Invoke(active);
-    }
-
-    private static bool IsRowActive(ServerViewModel row, string activeIp, string? activeName)
-    {
-        if (row.Server != activeIp)
-            return false;
-
-        if (string.IsNullOrWhiteSpace(activeName))
-            return true;
-
-        return string.Equals(row.Name, activeName, StringComparison.OrdinalIgnoreCase);
     }
 
     private void DetectServiceManagedVpn()
@@ -581,20 +534,8 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            IsConnected = true;
-            ConnectButtonText = Strings.StopVPN;
-            var configuredMode = _settings.App.ConfigMode ?? "generated";
-            var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-                ? "subscribe"
-                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase) ? "manual" : "custom";
-            var tunnelLabel = IsSplitTunnel ? "split" : "full";
-            var mode = $"{configLabel}/{tunnelLabel}";
-            StatusText = IsRussian
-                ? $"Подключено через службу [{mode}]"
-                : $"Connected via service [{mode}]";
-            MarkTrueSplitServiceManagedIfNeeded();
-            StartSubRefreshTimer();
-            _logger.Information("[VM] Detected VPN running via service (sing-box alive + TUN owned)");
+            MarkConnectedViaService();
+            _logger.Information("[VM] Detected a running VPN outside the desktop engine (sing-box alive + TUN owned)");
         }
         catch (Exception ex)
         {
@@ -602,21 +543,28 @@ public partial class MainWindowViewModel
         }
     }
 
-    private bool IsServiceManagedVpn => IsConnected && !(_engine?.IsRunning ?? false);
+    private bool IsServiceManagedVpn => IsConnected && !(_engine?.HasActiveTunnel ?? false);
 
     private void RestoreConnectedStatus()
     {
         if (!IsConnected) return;
-        var (serverName, serverIp) = DeriveConnectedServerLabel();
+        SyncStatsTunnel();
+        RefreshActiveIndicator();
+        OnPropertyChanged(nameof(SimpleStatusDescription));
+        OnPropertyChanged(nameof(SmpActiveServerLine));
+        OnPropertyChanged(nameof(SimpleActiveOutboundLine));
+        OnPropertyChanged(nameof(SimpleActiveOutboundIsSuspect));
+        OnPropertyChanged(nameof(SimpleActiveOutboundNormalVisible));
+        OnPropertyChanged(nameof(SimpleActiveOutboundSuspectVisible));
 
-        var configuredMode = _settings.App.ConfigMode ?? "generated";
-        var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-            ? "subscribe"
-            : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase) ? "manual" : "custom";
-        var tunnelLabel = IsSplitTunnel ? "split" : "full";
-        var modeLabel = $"{configLabel}/{tunnelLabel}";
-
-        StatusText = Strings.Connected(modeLabel, serverName, serverIp);
+        if (DisplayedTunnel is not { } tunnel)
+        {
+            StatusText = Strings.SmpStatusConnectedNoDetails;
+            return;
+        }
+        var configLabel = tunnel.ConfigMode switch { "subscribe" => "subscribe", "generated" => "manual", _ => "custom" };
+        var (serverName, serverIp) = AcceptedServerLabel(tunnel);
+        StatusText = Strings.Connected($"{configLabel}/{tunnel.RoutingMode}", serverName, serverIp);
     }
 
     private bool _isReconnecting;
@@ -631,16 +579,27 @@ public partial class MainWindowViewModel
 
     private void WarnServiceManagedReconnect(string newServerName)
     {
-        try { SaveSettings(); } catch { }
+        MarkRoutingSettingsChanged();
+        try { SaveSettings(); }
+        catch (Exception ex)
+        {
+            _logger.Warning("[VM] Service-managed selection save failed ({ErrorType})", ex.GetType().Name);
+            StatusText = Strings.ApplyFailed;
+            return;
+        }
         StatusText = IsRussian
-            ? $"Выбран {newServerName}. VPN управляется службой — остановите и запустите VPN, чтобы переключиться."
-            : $"Selected {newServerName}. VPN is managed by the service — Stop and Start VPN to switch.";
-        _logger.Information("[VM] Service-managed VPN selection requires a restart");
+            ? $"Выбран {newServerName}. Нажмите «Применить», чтобы подтвердить переключение в службе."
+            : $"Selected {newServerName}. Click Apply to confirm the switch with the service.";
     }
 
     private async Task ReconnectAsync(string configName, ReconnectIntent intent = ReconnectIntent.Follow)
     {
         if (_isReconnecting) return;
+        if (IsServiceManagedVpn)
+        {
+            WarnServiceManagedReconnect(configName);
+            return;
+        }
         _isReconnecting = true;
         IsConnecting = true;
         StatusText = IsRussian
@@ -651,14 +610,9 @@ public partial class MainWindowViewModel
             "[VM] Reconnecting (intent={Intent}, vlessMode={VlessMode}, subscribeMode={SubscribeMode})",
             intent, IsVlessMode, IsSubscribeMode);
 
+        bool startingCold = false;
         try
         {
-            var applyInPlace = _engine.IsRunning;
-            if (!applyInPlace)
-            {
-                await Task.Run(() => _engine.Stop());
-            }
-
             if (intent == ReconnectIntent.ManualVless)
             {
                 IsSubscribeMode = false;
@@ -704,25 +658,36 @@ public partial class MainWindowViewModel
                     "[VM] Reconnecting with {Count} aggregated subscription servers", aggregated.Count);
             }
 
-            if (applyInPlace)
+            var capturedSettings = CaptureConnectionSettings();
+            var skipConflictCheck = _skipVpnConflictThisSession;
+            if (_engine.HasActiveTunnel)
             {
                 _logger.Information("[VM] ReconnectAsync applying new config via ApplyAsync(forceRestart=true)");
                 var applied = await Task.Run(() => _engine.ApplyAsync(
-                    _settings,
+                    capturedSettings,
                     CancellationToken.None,
                     forceRestart: true));
                 if (applied)
                 {
                     RestoreConnectedStatus();
-                    try { RefreshActiveIndicator(); }
-                    catch (Exception) { _logger.Debug("[VM] Reconnect: RefreshActiveIndicator failed"); }
                     return;
                 }
 
-                _logger.Warning("[VM] ReconnectAsync ApplyAsync returned false; falling back to Stop+Start");
-                await Task.Run(() => _engine.Stop());
+                if (_engine.HasActiveTunnel)
+                {
+                    // Generation can reject new routing rules while the previous tunnel is healthy.
+                    StatusText = Strings.ApplyFailed;
+                    return;
+                }
+                _logger.Warning("[VM] ReconnectAsync ApplyAsync returned false and sing-box stopped; retrying startup");
             }
 
+            if (!await Task.Run(_engine.TryPrepareColdReconnect))
+            {
+                StatusText = Strings.ApplyFailed;
+                return;
+            }
+            startingCold = true;
             const int maxRetries = 3;
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
@@ -731,7 +696,7 @@ public partial class MainWindowViewModel
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                    var (startTask, outcome) = await RunTwoPhaseStartAsync(cts.Token, () => _skipVpnConflictThisSession);
+                    var (startTask, outcome) = await RunTwoPhaseStartAsync(capturedSettings, cts.Token, skipConflictCheck);
 
                     if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout)
                     {
@@ -768,6 +733,11 @@ public partial class MainWindowViewModel
         }
         catch (OperationCanceledException)
         {
+            if (!startingCold && _engine.HasActiveTunnel)
+            {
+                StatusText = Strings.ApplyFailed;
+                return;
+            }
             _logger.Error("[VM] Reconnect timed out");
             try { await Task.Run(() => _engine.Stop()); } catch { }
             IsConnected = false;
@@ -787,7 +757,7 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             _logger.Error("[VM] Reconnect failed ({ExceptionType})", ex.GetType().Name);
-            IsConnected = false;
+            IsConnected = _engine.HasActiveTunnel;
             StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
             ConnectButtonText = Strings.StartVPN;
         }

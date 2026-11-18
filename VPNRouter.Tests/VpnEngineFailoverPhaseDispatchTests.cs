@@ -9,6 +9,7 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class VpnEngineFailoverPhaseDispatchTests
 {
     private sealed class StubProcessScanner : IProcessScanner
@@ -114,6 +115,90 @@ public sealed class VpnEngineFailoverPhaseDispatchTests
 
         Assert.False(result, "pre-start failover restart must be rejected when captured settings do not match active context");
         Assert.False(engine.IsRunning);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task QueuedStartupFailover_DiscardsReplacedChildOrCancelledProbe(bool cancelProbe, bool selecting)
+    {
+        const System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var dns = new NullWindowsDnsHardening();
+        using var engine = BuildEngine(dns);
+        var settings = BuildEmptyServersSettings();
+        settings.Vless.ActiveServer = "active";
+        settings.App.ActiveSubscriptionServer = "active";
+        settings.Vless.Servers = [
+            new VlessServerEntry { Name = "active", Server = "active.invalid", Port = 443 },
+            new VlessServerEntry { Name = "standby", Server = "standby.invalid", Port = 443 },
+            new VlessServerEntry { Name = "other", Server = "other.invalid", Port = 443 }
+        ];
+        engine.ResetFailoverContext(settings);
+        var choosing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var verdict = new TaskCompletionSource<ServerProbeResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var failover = new AutoFailoverEngine(settings, new ConfigSanityCheck(), store: new InMemorySettingsStore())
+        {
+            IsCurrentIntent = () => true,
+            ProbeCandidate = (_, _) =>
+            {
+                choosing.TrySetResult();
+                return verdict.Task;
+            }
+        };
+        var generation = Assert.IsType<long>(typeof(VpnEngine).GetField("_failoverGeneration", flags)!.GetValue(engine));
+        var gate = Assert.IsType<SemaphoreSlim>(typeof(VpnEngine).GetField("_lifecycleGate", flags)!.GetValue(engine));
+        var runner = new FakeProcessRunner().OnRun(_ => true, new ProcessResult(0, "", "", TimeSpan.Zero, false));
+        var manager = new SingBoxManager(settings.SingBox, http: new FakeHttpClient(), runner: runner);
+        using var original = new FakeProcessHandle(401);
+        using var rollback = new FakeProcessHandle(original.Pid);
+        var child = typeof(SingBoxManager).GetField("_handle", flags)!;
+        var managerField = typeof(VpnEngine).GetField("_singBox", flags)!;
+        child.SetValue(manager, original);
+        managerField.SetValue(engine, manager);
+        using var probe = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var previousDiagnostics = TunAdapterDiagnostics.Runner;
+        TunAdapterDiagnostics.Runner = runner;
+        try
+        {
+            // Exercise both an outstanding Apply and a process change during asynchronous candidate selection.
+            if (!selecting) await gate.WaitAsync(probe.Token);
+            Task<FailoverOutcome?> pending;
+            try
+            {
+                pending = engine.HandlePostStartFailureAsync(failover, "fixture", settings, generation, original, probe.Token);
+                if (selecting) await choosing.Task.WaitAsync(TimeSpan.FromSeconds(5), probe.Token);
+                Assert.False(pending.IsCompleted);
+                if (cancelProbe) probe.Cancel();
+                else child.SetValue(manager, rollback);
+            }
+            finally
+            {
+                verdict.TrySetResult(new ServerProbeResult(ServerProbeStatus.Ok, 1, null));
+                if (!selecting) gate.Release();
+            }
+
+            var outcome = await pending.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            if (selecting) Assert.False(Assert.IsType<FailoverOutcome>(outcome).Switched);
+            else Assert.Null(outcome);
+            Assert.Same(cancelProbe ? original : rollback, manager.OwnedProcessHandle);
+            Assert.Equal(0, original.KillCallCount);
+            Assert.Equal(0, rollback.KillCallCount);
+            Assert.Equal(0, dns.RestoreCount);
+            Assert.Empty(runner.StartCalls);
+            Assert.Empty(failover.TriedServers);
+            Assert.Equal("active", settings.Vless.ActiveServer);
+            Assert.Equal("active", settings.App.ActiveSubscriptionServer);
+        }
+        finally
+        {
+            child.SetValue(manager, null);
+            managerField.SetValue(engine, null);
+            try { manager.Dispose(); }
+            finally { TunAdapterDiagnostics.Runner = previousDiagnostics; }
+        }
     }
 
     private static string StripComments(string source)

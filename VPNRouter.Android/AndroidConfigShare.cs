@@ -93,30 +93,12 @@ public static class AndroidConfigShare
 
         try
         {
-            AndroidStorage.SetConfigMode(doc.ConfigMode ?? "subscribe");
-
-            AndroidStorage.SetSubscriptions(doc.Subscriptions ?? new List<SubscriptionEntry>());
-
-            if (string.Equals(doc.ConfigMode, "manual", StringComparison.OrdinalIgnoreCase))
-            {
-                AndroidStorage.SetVlessUri(doc.ManualVlessUri);
-            }
-            else
-            {
-            }
-
-            if (string.Equals(doc.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase) &&
-                doc.CustomConfig is not null)
-            {
-                AndroidStorage.SetCustomConfigJson(doc.CustomConfig.SingBoxJson);
-                AndroidStorage.SetCustomConfigName(doc.CustomConfig.Name);
-            }
+            AndroidStorage.ImportProfile(doc);
         }
         catch (Exception ex)
         {
-            return ApplyResult.Failure(
-                $"applying config_mode/payload failed: {ex.GetType().Name}: {ex.Message}",
-                backupPath);
+            global::Android.Util.Log.Warn("VpnRouter.ConfigShare", $"Profile import failed ({ex.GetType().Name})");
+            return ApplyResult.Failure(Localization.TunnelError("config-invalid"), backupPath);
         }
 
         if (applySettings && doc.Settings is not null)
@@ -146,8 +128,8 @@ public static class AndroidConfigShare
         {
             try
             {
-                AndroidStorage.SetPerAppMode(doc.PerAppFilter.Mode);
-                AndroidStorage.SetPerAppPackages(doc.PerAppFilter.Packages ?? new List<string>());
+                if (!AndroidStorage.SavePerAppSelection(doc.PerAppFilter.Mode, doc.PerAppFilter.Packages ?? new List<string>()))
+                    return ApplyResult.PartialSuccess("Could not save per-app filter settings.", backupPath);
             }
             catch (Exception ex)
             {

@@ -1560,9 +1560,13 @@ $udp.Dispose()
                 $cli = Join-Path $appDir 'VPNRouter.CLI.exe'
                 $gui = Join-Path $appDir 'VPNRouter.GUI.exe'
                 $dataDir = 'C:\ProgramData\VPNRouter'
-                $log = Join-Path $dataDir 'logs\update.log'
+                $legacyLog = Join-Path $dataDir 'logs\update.log'
+                $publishedLog = Join-Path (Split-Path $appDir -Parent) 'update.log'
+                $log = $legacyLog
                 $stderr = Join-Path $dataDir 'logs\helper-stderr.log'
-                $receipt = Join-Path $dataDir '.update-installed-version'
+                $legacyReceipt = Join-Path $dataDir '.update-installed-version'
+                $publishedReceipt = Join-Path (Split-Path $appDir -Parent) '.update-installed-version'
+                $receipt = $legacyReceipt
                 if (-not (Test-Path -LiteralPath $cli) -or -not (Test-Path -LiteralPath $gui)) {
                     return @{ Status = 'BLOCKED'; Lifecycle = 'InstalledCliMissing' }
                 }
@@ -1590,7 +1594,7 @@ $udp.Dispose()
                 }
 
                 New-Item -ItemType Directory -Path (Split-Path $log -Parent) -Force | Out-Null
-                Remove-Item -LiteralPath $log, $stderr, $receipt -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $log, $publishedLog, $stderr, $receipt, $publishedReceipt -Force -ErrorAction SilentlyContinue
 
                 $psi = [System.Diagnostics.ProcessStartInfo]::new()
                 $psi.FileName = $cli
@@ -1611,6 +1615,7 @@ $udp.Dispose()
                 $helperDone = $false
                 $parserFailure = $false
                 while ([DateTime]::UtcNow -lt $deadline) {
+                    if (Test-Path -LiteralPath $publishedLog) { $log = $publishedLog }
                     $combined = ''
                     foreach ($path in @($log, $stderr)) {
                         if (Test-Path -LiteralPath $path) {
@@ -1636,6 +1641,7 @@ $udp.Dispose()
                 if ($content -match '(\d+) File\(s\) copied') {
                     $copiedCountSane = [int]$Matches[1] -ge 50
                 }
+                if (Test-Path -LiteralPath $publishedReceipt) { $receipt = $publishedReceipt }
                 $receiptPresent = Test-Path -LiteralPath $receipt
                 $failedMarkerAbsent = -not (Test-Path -LiteralPath (Join-Path $appDir '.update-failed'))
 

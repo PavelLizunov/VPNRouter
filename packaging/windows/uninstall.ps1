@@ -8,11 +8,12 @@ param(
     [switch]$Elevated
 )
 
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, "Modules")
 $ErrorActionPreference = "Continue"   # don't abort on individual cleanup failures
 
-$InstallRoot   = Join-Path $env:ProgramFiles "VPNRouter"
-$DataRoot      = Join-Path $env:ProgramData "VPNRouter"
-$StartMenuDir  = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs"
+$InstallRoot   = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) "VPNRouter"
+$DataRoot      = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) "VPNRouter"
+$StartMenuDir  = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) "Microsoft\Windows\Start Menu\Programs"
 $UninstallKey  = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\VPNRouter"
 
 function Say  ($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
@@ -32,25 +33,24 @@ if (-not $isAdmin) {
     Say "Uninstaller requires admin rights - triggering UAC prompt..."
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    $passThrough = @("-Elevated")
-    if ($Purge) { $passThrough += "-Purge" }
-    if ($Yes)   { $passThrough += "-Yes" }
-    $flagsString = ($passThrough -join ' ')
-
-    $bootstrap = @"
-`$ErrorActionPreference='Stop'
+    $flags = 0
+    if ($Purge) { $flags += 1 }
+    if ($Yes) { $flags += 2 }
+    $bootstrap = @'
+$ErrorActionPreference = 'Stop'
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-`$tmp = Join-Path `$env:TEMP 'vpnrouter-uninstall.ps1'
-Invoke-WebRequest -Uri 'https://vpn.ninitux.com/uninstall.ps1' -OutFile `$tmp -UseBasicParsing -ErrorAction Stop
-& `$tmp $flagsString
-pause
-"@
-
-    Start-Process powershell.exe -Verb RunAs -ArgumentList @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-Command", $bootstrap
-    )
+$params = @{ Elevated = $true }
+if (__FLAGS__ -band 1) { $params.Purge = $true }
+if (__FLAGS__ -band 2) { $params.Yes = $true }
+$response = Invoke-WebRequest -Uri 'https://vpn.ninitux.com/uninstall.ps1' -UseBasicParsing
+$body = $response.Content
+if ($body -is [byte[]]) { $body = [Text.Encoding]::UTF8.GetString($body) }
+& ([ScriptBlock]::Create([string]$body)) @params
+'@
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap.Replace('__FLAGS__', [string]$flags)))
+    $shell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+    Start-Process -FilePath $shell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded"
     exit 0
 }
 
@@ -78,34 +78,58 @@ if (-not $Yes) {
     }
 }
 
-Say "Stopping any running VPNRouter / sing-box..."
-foreach ($name in @("VPNRouter.App", "VPNRouter.CLI", "VPNRouter.Service", "VPNRouter.GUI", "sing-box")) {
-    Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
-        try { $_ | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+$app = Join-Path $InstallRoot 'app'
+$stop = Join-Path $app 'stop-vpnrouter.ps1'
+$maintenance = Join-Path $app 'zapret-maintenance.ps1'
+$ps = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+$sc = Join-Path ([Environment]::SystemDirectory) 'sc.exe'
+if ([IO.File]::Exists($stop) -and [IO.File]::Exists($maintenance)) {
+    & $ps -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $stop -InstallDir $InstallRoot -DataDir $DataRoot -RemoveService
+    if ($LASTEXITCODE -notin @(0, 10)) { throw 'Could not stop the installed edition safely.' }
+    & (Join-Path $app 'VPNRouter.CLI.exe') cleanup
+    if ($LASTEXITCODE -ne 0) { Warn 'System cleanup reported errors.' }
+} else {
+    # Older installations did not ship the ownership helper.
+    $svc = Get-CimInstance Win32_Service -Filter "Name='VPNRouter'" -ErrorAction Stop
+    $exe = Join-Path $app 'VPNRouter.Service.exe'
+    if ($svc -and $svc.PathName -in @(('"' + $exe + '" --service'), ('"' + $exe + '"'))) {
+        if ($svc.State -ne 'Stopped') { Stop-Service -Name VPNRouter -ErrorAction Stop }
+        & $sc delete VPNRouter
+    }
+    foreach ($p in Get-Process) {
+        try {
+            $null = $p.Handle
+            $image = $p.MainModule.FileName
+            if (($image -and [IO.Path]::GetDirectoryName($image) -eq $app -and
+                $p.ProcessName -in @('VPNRouter.App','VPNRouter.CLI','VPNRouter.GUI','VPNRouter.Service','sing-box')) -or
+                $image -eq (Join-Path $DataRoot 'bin\sing-box.exe')) { $p.Kill() }
+        } catch {} finally { $p.Dispose() }
+    }
+    $driver = Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'" -ErrorAction Stop
+    if ($driver -and (($driver.PathName -replace '^\\\?\?\\','').Trim('"') -eq (Join-Path $app 'driver\mullvad-split-tunnel.sys'))) {
+        if ($driver.State -ne 'Stopped') { Stop-Service -Name 'mullvad-split-tunnel' -ErrorAction Stop }
+        & $sc delete mullvad-split-tunnel
     }
 }
-Start-Sleep -Milliseconds 500
-
-$svc = Get-Service -Name VPNRouter -ErrorAction SilentlyContinue
-if ($svc) {
-    Say "Uninstalling Windows Service..."
-    if ($svc.Status -eq 'Running') {
-        Stop-Service -Name VPNRouter -Force -ErrorAction SilentlyContinue
+if ($Purge) {
+    # Web publication embeds the release's own guard for installations predating the helper.
+    $embedded = '__VPNROUTER_MAINTENANCE_BASE64__'
+    if (!$embedded.StartsWith('__')) {
+        $embeddedSource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($embedded)).TrimStart([char]0xFEFF)
     }
-    $cli = Join-Path $InstallRoot "app\VPNRouter.CLI.exe"
-    if (Test-Path $cli) {
-        & $cli service uninstall 2>&1 | ForEach-Object { Write-Host "    $_" }
-    } else {
-        & sc.exe delete VPNRouter 2>&1 | ForEach-Object { Write-Host "    $_" }
+    foreach ($operation in @('PurgeRuntime', 'PurgeData')) {
+        if ($embeddedSource) {
+            $source = "& {`n" + $embeddedSource + "`n} -Edition VPNRouter -Operation " + $operation
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($source))
+            & $ps -NoProfile -NonInteractive -EncodedCommand $encoded
+        } elseif ([IO.File]::Exists($maintenance)) {
+            & $ps -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $maintenance -Edition VPNRouter -Operation $operation
+        } else {
+            Warn "Retained $DataRoot and the Zapret runtime. Run the current published uninstaller with -Purge to check ownership."
+            break
+        }
+        if ($LASTEXITCODE -ne 0) { Warn "Retained files for $operation. See the preceding ownership diagnostic." }
     }
-}
-
-$stSvc = Get-Service -Name "mullvad-split-tunnel" -ErrorAction SilentlyContinue
-if ($stSvc) {
-    Say "Removing split-tunnel driver service (mullvad-split-tunnel)..."
-    & sc.exe stop mullvad-split-tunnel 2>&1 | ForEach-Object { Write-Host "    $_" }
-    Start-Sleep -Milliseconds 500
-    & sc.exe delete mullvad-split-tunnel 2>&1 | ForEach-Object { Write-Host "    $_" }
 }
 
 if (Test-Path $InstallRoot) {
@@ -157,22 +181,7 @@ try {
     Warn "Could not remove context-menu entry: $_"
 }
 
-if ($Purge) {
-    if (Test-Path $DataRoot) {
-        Say "Purging $DataRoot..."
-        try {
-            Remove-Item $DataRoot -Recurse -Force -ErrorAction Stop
-            Ok "Removed $DataRoot"
-        } catch {
-            Warn "Could not remove $DataRoot cleanly: $_"
-        }
-    }
-} else {
-    if (Test-Path $DataRoot) {
-        Say "Preserved user data at $DataRoot"
-        Say "(pass -Purge to also remove it)"
-    }
-}
+if (!$Purge -and (Test-Path -LiteralPath $DataRoot)) { Say "Preserved user data at $DataRoot" }
 
 Write-Host ""
 Ok "VPNRouter uninstalled"

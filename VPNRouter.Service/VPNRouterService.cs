@@ -12,9 +12,13 @@ public class VPNRouterService : BackgroundService
     private readonly ILogger<VPNRouterService> _logger;
     private readonly ISettingsStore _store;
     private VpnEngine? _engine;
-    private ZapretManager? _zapret;
+    private readonly ZapretManager _zapret;
+    private readonly Action<string, EventLogEntryType> _writeStopEvent;
+    private readonly CancellationTokenRegistration _stoppingRegistration;
     private TgProxyManager? _tgProxy;
 
+    private readonly SemaphoreSlim _reloadGate = new(1, 1);
+    private readonly CancellationTokenSource _reloadLifetime = new();
     private AppSettings? _currentSettings;
 
     private readonly TaskCompletionSource _startupComplete = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -22,31 +26,47 @@ public class VPNRouterService : BackgroundService
     private const string EventSourceName = "VPNRouter";
     private const string EventLogName = "Application";
 
-    public VPNRouterService(ILogger<VPNRouterService> logger, ISettingsStore? store = null)
+    public VPNRouterService(ILogger<VPNRouterService> logger, ISettingsStore? store = null,
+        IHostApplicationLifetime? lifetime = null)
+        : this(logger, store, lifetime?.ApplicationStopping ?? default, new ZapretManager(Serilog.Log.Logger), WriteEventLog)
     {
+        EnsureEventSource();
+    }
+
+    internal VPNRouterService(ILogger<VPNRouterService> logger, ISettingsStore? store, CancellationToken stopping,
+        ZapretManager zapret, Action<string, EventLogEntryType> writeStopEvent)
+    {
+        _zapret = zapret;
+        _writeStopEvent = writeStopEvent;
         _logger = logger;
         _store = store ?? RealSettingsStore.Instance;
-        EnsureEventSource();
+        // WindowsServiceLifetime signals ApplicationStopping synchronously in its SCM stop handler.
+        // Keep that handler pending while this service still owns a live helper.
+        _stoppingRegistration = stopping.Register(WaitForZapretShutdown);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("[Service] ExecuteAsync started");
+        await ZapretLegacyServices.RetireAsync(Serilog.Log.Logger, stoppingToken);
 
         try
         {
-            _currentSettings = _store.Load();
+            var rejected = ReadPreviouslyRejectedSettings();
+            _currentSettings = rejected == null
+                ? _store.Load()
+                : SettingsLoader.ParseLiveCandidate(rejected) ?? new AppSettings().EnsureSane();
             var settings = _currentSettings;
-            _logger.LogInformation("[Service] Config loaded, mode: {Mode}", settings.App.ConfigMode);
+            _logger.LogInformation("[Service] Config loaded");
 
-            var recovery = _store.ConsumeRecoveryNotice();
-            if (!string.IsNullOrWhiteSpace(recovery))
+            if (!string.IsNullOrWhiteSpace(_store.ConsumeRecoveryNotice()))
             {
-                _logger.LogWarning("[Service] {Notice}", recovery);
-                WriteEventLog(recovery, EventLogEntryType.Warning);
+                const string recoveryStatus = "[Service] Settings recovery used defaults";
+                _logger.LogWarning(recoveryStatus);
+                WriteEventLog(recoveryStatus, EventLogEntryType.Warning);
             }
 
-            _store.StartWatching(onReload: OnConfigChanged);
+            _store.WatchRevisions((candidate, revision) => _ = ApplyWatchedSettingsAsync(candidate, revision));
 
             TryMigrateDependencies();
 
@@ -54,7 +74,7 @@ public class VPNRouterService : BackgroundService
 
             if (settings.App.AutostartVpn)
             {
-                await AutostartVpnAsync(settings, stoppingToken);
+                await AutostartVpnAsync(settings, stoppingToken, retryRejected: rejected != null);
             }
             else
             {
@@ -88,6 +108,14 @@ public class VPNRouterService : BackgroundService
         {
             _startupComplete.TrySetResult();
         }
+    }
+
+    private static string? ReadPreviouslyRejectedSettings()
+    {
+        if (!Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService()) return null;
+        var receipt = ServiceSettingsReceipt.Read(ServiceInstaller.ServiceName);
+        return ServiceSettingsReceipt.ReadRejectedCandidate(receipt, () =>
+            File.Exists(VPNRouter.Core.AppPaths.ConfigYamlPath) ? File.ReadAllText(VPNRouter.Core.AppPaths.ConfigYamlPath) : "");
     }
 
     private void TryMigrateDependencies()
@@ -139,10 +167,12 @@ public class VPNRouterService : BackgroundService
             _logger.LogWarning("[Service] Network still unavailable after timeout, proceeding anyway");
     }
 
-    private async Task AutostartVpnAsync(AppSettings settings, CancellationToken ct)
+    private async Task AutostartVpnAsync(AppSettings settings, CancellationToken ct, bool retryRejected)
     {
         _engine = VPNRouter.Core.Platform.PlatformServices
             .CreateVpnEngine(Serilog.Log.Logger);
+        _engine.RequireCompleteRuleSetsOnStart = retryRejected;
+        _engine.ConfirmServiceReplacement = ServiceTunnelReadiness.WaitAsync;
 
         _engine.StatusChanged += msg =>
             _logger.LogInformation("[Service] {Status}", msg);
@@ -171,7 +201,7 @@ public class VPNRouterService : BackgroundService
         {
             vpnStarted = await ResilientStarter.StartWithBackoffAsync(
                 componentName: "VPN",
-                startFn: innerCt => _engine.StartAsync(settings, innerCt),
+                startFn: innerCt => _engine.StartAsync(settings, innerCt, skipVpnConflictCheck: false, restoreAcceptedImport: true),
                 logger: Serilog.Log.Logger,
                 ct: ct);
 
@@ -204,8 +234,11 @@ public class VPNRouterService : BackgroundService
 
     private async Task AutostartZapretAsync(AppSettings settings, CancellationToken ct)
     {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct, _reloadLifetime.Token);
+        ct = lifetime.Token;
         try
         {
+            ct.ThrowIfCancellationRequested();
             if (!ZapretUpdater.IsInstalled())
             {
                 _logger.LogWarning("[Service] Zapret not installed, skipping autostart");
@@ -213,6 +246,7 @@ public class VPNRouterService : BackgroundService
             }
 
             var strategyName = settings.App.ZapretStrategy ?? "multisplit";
+            ZapretStrategy? installedStrategy = null;
             string args;
 
             if (strategyName == "custom")
@@ -226,15 +260,17 @@ public class VPNRouterService : BackgroundService
             else
             {
                 var strategies = ZapretUpdater.ParseStrategies();
-                var parsed = strategies.FirstOrDefault(s => s.Name == strategyName);
-                args = parsed?.Arguments ?? ZapretManager.BuildLegacyArgs("multisplit");
+                installedStrategy = strategies.FirstOrDefault(s => s.Name == strategyName);
+                args = installedStrategy?.Arguments ?? ZapretManager.BuildLegacyArgs("multisplit");
             }
-
-            _zapret = new ZapretManager(Serilog.Log.Logger);
 
             var started = await ResilientStarter.StartWithBackoffAsync(
                 componentName: "Zapret",
-                startFn: () => _zapret.Start(args),
+                startFn: () =>
+                {
+                    if (installedStrategy?.BatPath is string path) _zapret.StartFromBat(path, args);
+                    else _zapret.Start(args);
+                },
                 logger: Serilog.Log.Logger,
                 ct: ct);
 
@@ -325,42 +361,53 @@ public class VPNRouterService : BackgroundService
         }
     }
 
-    private void OnConfigChanged(AppSettings newSettings)
+    private async Task ApplyWatchedSettingsAsync(AppSettings? newSettings, string revision)
     {
+        var ct = _reloadLifetime.Token;
         try
         {
-            _currentSettings = newSettings;
-            _logger.LogInformation("[Service] config.yaml changed → settings reconciled");
-
-            if (_engine != null && _engine.IsRunning)
+            await _startupComplete.Task.WaitAsync(ct);
+            await _reloadGate.WaitAsync(ct);
+            try
             {
-                _ = Task.Run(async () =>
+                var engine = _engine;
+                if (engine?.HasActiveTunnel != true) return;
+                // A previous timer may have delivered an older snapshot after this file changed.
+                var latest = File.ReadAllText(VPNRouter.Core.AppPaths.ConfigYamlPath);
+                if (SettingsLoader.GetRevision(latest) != revision) return;
+
+                var applied = false;
+                try
                 {
-                    try
+                    applied = newSettings != null && await engine.ApplyAsync(newSettings, ct);
+                }
+                finally
+                {
+                    if (!ct.IsCancellationRequested && engine == _engine)
                     {
-                        var ok = await _engine.ApplyAsync(newSettings);
-                        _logger.LogInformation(
-                            "[Service] Hot-reload {Result} after config change",
-                            ok ? "succeeded" : "failed (kept previous config)");
+                        if (applied) _currentSettings = newSettings;
+                        if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+                            ServiceSettingsReceipt.Publish(ServiceInstaller.ServiceName, revision, applied);
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "[Service] ApplyAsync raised");
-                    }
-                });
+                }
+                _logger.LogInformation("[Service] Live settings apply {Result}", applied ? "succeeded" : "rejected");
             }
+            finally { _reloadGate.Release(); }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[Service] OnConfigChanged error (non-fatal)");
+            _logger.LogWarning("[Service] Live settings apply failed ({ErrorType})", ex.GetType().Name);
         }
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("[Service] Stopping...");
-        WriteEventLog("VPN Router service stopping", EventLogEntryType.Information);
+        _writeStopEvent("VPN Router service stopping", EventLogEntryType.Information);
 
+        _reloadLifetime.Cancel();
+        var zapretStopped = _zapret.StopForServiceAsync();
         try { _store.StopWatching(); } catch { }
 
         try
@@ -373,10 +420,7 @@ public class VPNRouterService : BackgroundService
         catch (Exception ex) { _logger.LogWarning(ex, "[Service] _engine.Stop failed (non-fatal)"); }
         try { _engine?.Dispose(); }
         catch (Exception ex) { _logger.LogWarning(ex, "[Service] _engine.Dispose failed (non-fatal)"); }
-        try { _zapret?.Stop(); }
-        catch (Exception ex) { _logger.LogWarning(ex, "[Service] _zapret.Stop failed (non-fatal)"); }
-        try { _zapret?.Dispose(); }
-        catch (Exception ex) { _logger.LogWarning(ex, "[Service] _zapret.Dispose failed (non-fatal)"); }
+        await zapretStopped;
         try { _tgProxy?.Stop(); }
         catch (Exception ex) { _logger.LogWarning(ex, "[Service] _tgProxy.Stop failed (non-fatal)"); }
         try { _tgProxy?.Dispose(); }
@@ -384,7 +428,16 @@ public class VPNRouterService : BackgroundService
 
         await base.StopAsync(cancellationToken);
         _logger.LogInformation("[Service] Stopped");
-        WriteEventLog("VPN Router service stopped", EventLogEntryType.Information);
+        _writeStopEvent("VPN Router service stopped", EventLogEntryType.Information);
+    }
+
+    private void WaitForZapretShutdown() => _zapret.StopForServiceAsync().GetAwaiter().GetResult();
+
+    public override void Dispose()
+    {
+        WaitForZapretShutdown();
+        _stoppingRegistration.Dispose();
+        base.Dispose();
     }
 
     private static void EnsureEventSource()

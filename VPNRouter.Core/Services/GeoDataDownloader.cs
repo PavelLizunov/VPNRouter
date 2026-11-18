@@ -15,6 +15,7 @@ public class GeoDataDownloader
 
     private readonly IHttpClient _http;
     private readonly ILogger _logger;
+    private readonly Func<string, CancellationToken, Task<bool>> _checkContents;
 
     public GeoDataDownloader(ILogger? logger = null)
         : this(PolicyHttpClient.Shared, logger)
@@ -22,7 +23,11 @@ public class GeoDataDownloader
     }
 
     public GeoDataDownloader(IHttpClient http, ILogger? logger = null)
+        : this(http, logger, RuleSetFile.CheckContentsAsync) { }
+
+    internal GeoDataDownloader(IHttpClient http, ILogger? logger, Func<string, CancellationToken, Task<bool>> checkContents)
     {
+        _checkContents = checkContents;
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? Log.Logger;
     }
@@ -37,102 +42,82 @@ public class GeoDataDownloader
         return geoIpOk && geoSiteOk;
     }
 
-    public static bool AreGeoFilesAvailable()
+    public static bool AreGeoFilesAvailable() => AreGeoFilesAvailable(RuleSetFile.CheckContentsAsync);
+
+    internal static bool AreGeoFilesAvailable(Func<string, CancellationToken, Task<bool>> checkContents)
     {
         try
         {
-            return IsUsable(AppPaths.GeoIpRuPath, MinGeoIpSize)
-                && IsUsable(AppPaths.GeoSiteRuPath, MinGeoSiteSize);
+            return IsUsableAsync(AppPaths.GeoIpRuPath, MinGeoIpSize, checkContents, CancellationToken.None).GetAwaiter().GetResult()
+                && IsUsableAsync(AppPaths.GeoSiteRuPath, MinGeoSiteSize, checkContents, CancellationToken.None).GetAwaiter().GetResult();
         }
-        catch
-        {
-            return false;
-        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
-    private static bool IsUsable(string path, long minSize) =>
-        File.Exists(path)
-        && new FileInfo(path).Length >= minSize
-        && RuleSetFile.IsValidBinary(path);
+    internal static bool UseGeoBypass(bool enabled, Action<string>? onMissingRuleSet,
+        Func<string, CancellationToken, Task<bool>>? checkContents)
+    {
+        if (!enabled) return false;
+        if (AreGeoFilesAvailable(checkContents ?? RuleSetFile.CheckContentsAsync)) return true;
+        onMissingRuleSet?.Invoke("The enabled RU bypass requires readable geoip and geosite rule-sets.");
+        return false;
+    }
+
+    private static async Task<bool> IsUsableAsync(string path, long minSize,
+        Func<string, CancellationToken, Task<bool>> checkContents, CancellationToken ct) =>
+        File.Exists(path) && new FileInfo(path).Length >= minSize && RuleSetFile.IsValidBinary(path)
+        && await checkContents(path, ct).ConfigureAwait(false);
 
     internal async Task<bool> EnsureFileAsync(string url, string destPath, long minSize, string label, CancellationToken ct)
     {
+        bool usable = false;
         try
         {
-            if (File.Exists(destPath))
-            {
-                var fi = new FileInfo(destPath);
-                var existing = fi.Length;
-                if (existing < minSize)
-                {
-                    _logger.Warning("[GeoData] {Label} exists but too small ({Size} bytes) — re-downloading", label, existing);
-                    File.Delete(destPath);
-                }
-                else if (!RuleSetFile.IsValidBinary(destPath))
-                {
-                    _logger.Warning("[GeoData] {Label} is damaged ({Size} bytes, not a readable rule-set) — re-downloading", label, existing);
-                    File.Delete(destPath);
-                }
-                else
-                {
-                    var age = DateTime.UtcNow - fi.LastWriteTimeUtc;
-                    if (age < RefreshAfter)
-                    {
-                        _logger.Debug("[GeoData] {Label} fresh ({Size} bytes, {AgeHours:F1}h old)", label, existing, age.TotalHours);
-                        return true;
-                    }
-                    _logger.Information(
-                        "[GeoData] {Label} stale ({AgeDays:F1} days old, threshold {ThreshDays:F0}) — refreshing",
-                        label, age.TotalDays, RefreshAfter.TotalDays);
-                }
-            }
+            usable = await IsUsableAsync(destPath, minSize, _checkContents, ct).ConfigureAwait(false);
+            if (usable && DateTime.UtcNow - File.GetLastWriteTimeUtc(destPath) < RefreshAfter)
+                return true;
 
             _logger.Information("[GeoData] Downloading {Label} from {Url}", label, CanaryPolicy.RedactUrl(url));
-
-            // Download to .tmp and rename so a partial download never replaces a working file.
-            var tmpPath = destPath + ".tmp";
-            try
-            {
-                await using (var response = await _http.SendStreamingAsync(
-                    new HttpRequest(HttpMethod.Get, new Uri(url)),
-                    ct).ConfigureAwait(false))
-                {
-                    if (!response.IsSuccess())
-                        throw new HttpRequestException(
-                            $"HTTP {response.StatusCode} downloading {label}");
-
-                    await using var fs = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                    await response.Body.CopyToAsync(fs, ct);
-                }
-
-                var size = new FileInfo(tmpPath).Length;
-                if (size < minSize || !RuleSetFile.IsValidBinary(tmpPath))
-                {
-                    _logger.Warning("[GeoData] {Label} download rejected ({Size} bytes, too small or not a readable rule-set)", label, size);
-                    try { File.Delete(tmpPath); } catch { }
-                    return IsUsable(destPath, minSize);
-                }
-
-                File.Move(tmpPath, destPath, overwrite: true);
-
-                _logger.Information("[GeoData] {Label} downloaded ({Size} bytes)", label, size);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
-                if (IsUsable(destPath, minSize))
-                {
-                    _logger.Warning(ex, "[GeoData] Failed to refresh {Label} — keeping existing stale copy", label);
-                    return true;
-                }
-                throw;
-            }
+            await using var response = await _http.SendStreamingAsync(
+                new HttpRequest(HttpMethod.Get, new Uri(url)), ct).ConfigureAwait(false);
+            if (!response.IsSuccess())
+                throw new HttpRequestException($"HTTP {response.StatusCode} downloading {label}");
+            await InstallCandidateAsync(response.Body, destPath, minSize, _checkContents, ct).ConfigureAwait(false);
+            _logger.Information("[GeoData] Updated {Label}", label);
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[GeoData] Failed to download {Label}", label);
-            return false;
+            _logger.Warning(ex, "[GeoData] Could not update {Label}. Existing file usable: {Usable}", label, usable);
+            return usable;
+        }
+    }
+
+    private static async Task InstallCandidateAsync(Stream source, string destPath, long minSize,
+        Func<string, CancellationToken, Task<bool>> checkContents, CancellationToken ct)
+    {
+        var tmpPath = destPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var fs = new FileStream(tmpPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                var buffer = new byte[64 * 1024];
+                int count;
+                while ((count = await source.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                {
+                    if (fs.Position + count > RuleSetFile.MaxFileBytes)
+                        throw new InvalidDataException("Geo rule-set exceeds the size limit");
+                    await fs.WriteAsync(buffer.AsMemory(0, count), ct).ConfigureAwait(false);
+                }
+            }
+            if (!await IsUsableAsync(tmpPath, minSize, checkContents, ct).ConfigureAwait(false))
+                throw new InvalidDataException("Cannot load the candidate geo rule-set");
+            File.Move(tmpPath, destPath, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(tmpPath);
         }
     }
 }

@@ -7,11 +7,12 @@ public sealed class ReleaseToolingContractTests
     {
         var cmd = Read("packaging", "windows", "repair.cmd");
 
-        Assert.Contains("$asset.name + '.sha256'", cmd);
-        Assert.Contains("^[0-9a-f]{64}$", cmd);
-        Assert.Contains("fail closed", cmd, StringComparison.OrdinalIgnoreCase);
-        Assert.True(cmd.IndexOf("Get-FileHash", StringComparison.Ordinal) <
-                    cmd.IndexOf("Expand-Archive", StringComparison.Ordinal));
+        var installer = Read("packaging", "windows", "install.ps1");
+        Assert.Contains("https://vpn.ninitux.com/install.ps1", cmd);
+        Assert.Contains("-Repair", cmd);
+        Assert.DoesNotContain("%TEMP%", cmd, StringComparison.OrdinalIgnoreCase);
+        AssertOrder(installer, "$actualSha -ne $expectedSha", "Expand-Archive", "Copy-Item -Destination $InstallRoot",
+            "--migrate-zapret", "if ($Repair) {", "'VPNRouter.CLI.exe') doctor", "Add-MpPreference");
     }
 
     [Fact]
@@ -303,8 +304,8 @@ public sealed class ReleaseToolingContractTests
             "param($Uri, [switch]$UseBasicParsing, $ErrorAction)\n" +
             "[pscustomobject]@{ Content = @'\n" +
             "[CmdletBinding()]\n" +
-            "param([string]$Version = \"\", [switch]$Prerelease, [switch]$Service, [switch]$NoLaunch, [switch]$Elevated)\n" +
-            "[ordered]@{ Version=$Version; Prerelease=[bool]$Prerelease; Service=[bool]$Service; NoLaunch=[bool]$NoLaunch; Elevated=[bool]$Elevated } | ConvertTo-Json -Compress\n" +
+            "param([string]$Version = \"\", [switch]$Prerelease, [switch]$Service, [switch]$NoLaunch, [switch]$Repair, [switch]$Elevated, [string]$RepairApplicationDir)\n" +
+            "[ordered]@{ Version=$Version; Prerelease=[bool]$Prerelease; Service=[bool]$Service; NoLaunch=[bool]$NoLaunch; Repair=[bool]$Repair; Elevated=[bool]$Elevated; Directory=$RepairApplicationDir } | ConvertTo-Json -Compress\n" +
             "'@ }\n" +
             "}\n";
 
@@ -316,10 +317,13 @@ public sealed class ReleaseToolingContractTests
             (Version: "", Flags: 2),
             (Version: "", Flags: 4),
             (Version: "2.49.0-r7", Flags: 7),
+            (Version: "", Flags: 8),
         })
         {
             var encodedVersion = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(testCase.Version));
+            var directory = (testCase.Flags & 8) == 0 ? "" : @"D:\Owner's VPN & Router\app";
             var bootstrap = template
+                .Replace("__REPAIR_DIRECTORY__", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(directory)), StringComparison.Ordinal)
                 .Replace("__FORWARDED_VERSION__", encodedVersion, StringComparison.Ordinal)
                 .Replace("__FORWARDED_FLAGS__", testCase.Flags.ToString(), StringComparison.Ordinal);
             var encodedCommand = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(fakeDownload + bootstrap));
@@ -345,10 +349,12 @@ public sealed class ReleaseToolingContractTests
             var json = stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Last();
             using var document = System.Text.Json.JsonDocument.Parse(json);
             var result = document.RootElement;
+            Assert.Equal(directory, result.GetProperty("Directory").GetString());
             Assert.Equal(testCase.Version, result.GetProperty("Version").GetString());
             Assert.Equal((testCase.Flags & 1) != 0, result.GetProperty("Prerelease").GetBoolean());
             Assert.Equal((testCase.Flags & 2) != 0, result.GetProperty("Service").GetBoolean());
             Assert.Equal((testCase.Flags & 4) != 0, result.GetProperty("NoLaunch").GetBoolean());
+            Assert.Equal((testCase.Flags & 8) != 0, result.GetProperty("Repair").GetBoolean());
             Assert.True(result.GetProperty("Elevated").GetBoolean());
         }
     }
@@ -368,7 +374,8 @@ public sealed class ReleaseToolingContractTests
             "$zipAssets.Count -ne 1",
             "$shaAssets.Count -ne 1",
             "$stagingDir = Join-Path $ProgramFilesRoot",
-            "/inheritance:r /grant:r",
+            "$acl.SetSecurityDescriptorSddlForm(",
+            "$stage.Create($acl)",
             "Invoke-WebRequest -Uri $zipAsset.browser_download_url",
             "Invoke-WebRequest -Uri $shaAsset.browser_download_url",
             "^[0-9a-f]{64}$",
@@ -377,10 +384,13 @@ public sealed class ReleaseToolingContractTests
         Assert.Contains("$ProgramFilesRoot = [Environment]::GetFolderPath", script);
         Assert.Contains("$ProgramDataRoot  = [Environment]::GetFolderPath", script);
         Assert.Contains("$SystemDirectory  = [Environment]::SystemDirectory", script);
-        Assert.Contains("*S-1-5-32-544:(OI)(CI)F", verification);
-        Assert.Contains("*S-1-5-18:(OI)(CI)F", verification);
-        Assert.Contains("} finally {", script[assetStart..]);
-        Assert.Contains("Remove-Item $stagingDir -Recurse -Force", script[assetStart..]);
+        Assert.Contains("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;RC;;;OW)", verification);
+        Assert.Contains("[IO.FileSystemAclExtensions]::Create($stage, $acl)", verification);
+        var cleanupStart = script.LastIndexOf("} finally {", StringComparison.Ordinal);
+        Assert.True(cleanupStart > extractEnd);
+        AssertOrder(script[cleanupStart..],
+            "$repairLock.Dispose()",
+            "if (-not $keepStaging) { Remove-Item -LiteralPath $stagingDir -Recurse -Force");
         Assert.DoesNotContain("$env:TEMP", verification);
         Assert.DoesNotContain("$env:ProgramFiles", script);
         Assert.DoesNotContain("$env:ProgramData", script);
@@ -388,7 +398,7 @@ public sealed class ReleaseToolingContractTests
         Assert.DoesNotContain("skipping hash verification", script, StringComparison.OrdinalIgnoreCase);
         AssertFailClosedBranch(script, "$zipAssets.Count -ne 1");
         AssertFailClosedBranch(script, "$shaAssets.Count -ne 1");
-        AssertFailClosedBranch(script, "$LASTEXITCODE -ne 0");
+        Assert.Contains("if ($stage.Exists -or [IO.File]::Exists($stagingDir)) { throw", verification);
         AssertFailClosedBranch(script, "$expectedSha -notmatch '^[0-9a-f]{64}$'");
         AssertFailClosedBranch(script, "$actualSha -ne $expectedSha");
     }
@@ -402,14 +412,45 @@ public sealed class ReleaseToolingContractTests
         var script = Read("packaging", "windows", "install.ps1");
         AssertOrder(
             script,
-            "Get-CimInstance Win32_SystemDriver -Filter \"Name='mullvad-split-tunnel'\"",
-            "Stop-Service -Name 'mullvad-split-tunnel' -Force",
             "Expand-Archive -Path $zipPath -DestinationPath $payloadDir",
             "app\\VPNRouter.App.exe\"))) {",
-            "Get-ChildItem $InstallRoot -Force | ForEach-Object",
-            "Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop");
+            "-File $prepare -Edition VPNRouter -Operation Prepare",
+            "if ($LASTEXITCODE -ne 0) { throw",
+            "Get-CimInstance Win32_SystemDriver -Filter \"Name='mullvad-split-tunnel'\"",
+            "Stop-Service -Name 'mullvad-split-tunnel' -ErrorAction Stop",
+            "Get-ChildItem -LiteralPath $InstallRoot -Force | ForEach-Object",
+            "Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop",
+            "-ArgumentList '--migrate-zapret'");
         Assert.DoesNotContain("-DestinationPath $InstallRoot", script, StringComparison.Ordinal);
-        Assert.Contains("StartsWith(($InstallRoot.TrimEnd('\\') + '\\')", script, StringComparison.Ordinal);
+        Assert.Contains("Join-Path $AppDir 'driver\\mullvad-split-tunnel.sys'", script, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Test-InstallerPrepare.ps1")]
+    [InlineData("Test-RepairEnvironment.ps1")]
+    [InlineData("Test-InstallerRepair.ps1")]
+    [InlineData("Test-RollbackRelaunch.ps1")]
+    [InlineData("Test-DeferredRollback.ps1")]
+    public async Task WindowsMaintenanceFixtureCompletes(string fixture)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var info = new System.Diagnostics.ProcessStartInfo(
+            Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"))
+        {
+            UseShellExecute = false,
+            RedirectStandardError = true,
+        };
+        foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+                     Path.Combine(FindRoot(), "VPNRouter.Tests", "Windows", fixture) })
+            info.ArgumentList.Add(arg);
+        using var process = System.Diagnostics.Process.Start(info)!;
+        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        if (!process.WaitForExit(fixture == "Test-DeferredRollback.ps1" ? 90_000 : 30_000))
+        {
+            process.Kill();
+            Assert.Fail($"{fixture} timed out.");
+        }
+        Assert.True(process.ExitCode == 0, await stderr);
     }
 
     private static void AssertFailClosedBranch(string text, string condition)

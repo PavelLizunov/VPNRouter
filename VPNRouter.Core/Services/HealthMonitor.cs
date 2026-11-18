@@ -6,15 +6,20 @@ namespace VPNRouter.Core.Services;
 
 public class HealthMonitor : IDisposable
 {
+    // A removed registration must not change recovery for a tunnel which is still running.
+    internal string? AcceptedImportJson { get; set; }
     private readonly SingBoxManager _singBox;
     private readonly IProcessScanner _scanner;
     private readonly IFirewallManager _firewall;
-    private readonly MonitoringSettings _settings;
+    private MonitoringSettings _settings;
+    // Drain old timer, process and crash work before swapping the settings used for recovery.
+    private readonly object _settingsWork = new();
+    private long _settingsGeneration;
     private readonly ILogger _logger;
 
-    private readonly ISingBoxApi _api;
+    private ISingBoxApi _api;
 
-    private readonly IDisposable? _ownedApi;
+    private IDisposable? _ownedApi;
 
     private readonly IWindowsDnsHardening _dnsHardening;
 
@@ -51,9 +56,6 @@ public class HealthMonitor : IDisposable
     private volatile bool _failoverRequested;
 
     private CancellationTokenSource? _restartCts;
-
-    // Re-entry guard: timer callbacks can overlap while a slow tick (Clash API / process probe) is still running.
-    private int _onHealthTickInProgress;
 
     // Serialises AttemptRestart, which is invoked from both the health tick and the Crashed callback on different threads.
     private readonly object _attemptRestartLock = new();
@@ -97,15 +99,12 @@ public class HealthMonitor : IDisposable
         }
         else
         {
-            var baseUrl = string.IsNullOrWhiteSpace(clashApiBase)
-                ? "http://127.0.0.1:9090"
-                : $"http://{clashApiBase}";
-            var concrete = new ClashSingBoxApi(baseUrl: baseUrl, logger: _logger, secret: clashApiSecret);
+            var concrete = ClashSingBoxApi.ForController(ClashSingBoxApi.LocalController(clashApiBase), clashApiSecret, _logger);
             _api = concrete;
             _ownedApi = concrete;
         }
 
-        _singBox.Crashed += OnSingBoxCrashed;
+        _singBox.Crashed += QueueCrashedProcess;
     }
 
     public void Start(Profile profile, AppSettings appSettings, ScanResult? initialScan = null)
@@ -140,14 +139,86 @@ public class HealthMonitor : IDisposable
             intervalSeconds, _settings.MaxRestartAttempts, appSettings.App.StrictMode);
     }
 
+    internal void ResumeAfterApply(Profile profile, AppSettings settings, ScanResult? scan,
+        (Uri Endpoint, string? Secret)? controller = null, Action? commit = null)
+    {
+        lock (_settingsWork)
+        {
+            // Rollback reuses the previously accepted API client, including an import's control address.
+            var candidateApi = _ownedApi != null && controller is { } target
+                ? ClashSingBoxApi.ForController(target.Endpoint, target.Secret, _logger)
+                : null;
+            try
+            {
+                _settings = settings.Monitoring;
+                Start(profile, settings, scan);
+                commit?.Invoke();
+            }
+            catch
+            {
+                candidateApi?.Dispose();
+                StopCore(preserveFirewallRelease: true);
+                throw;
+            }
+
+            if (controller is { } accepted) _singBox.SetClashController(accepted);
+            if (candidateApi != null)
+            {
+                var oldApi = _ownedApi;
+                _api = candidateApi;
+                _ownedApi = candidateApi;
+                oldApi?.Dispose();
+            }
+            _strictDnsFailedOver = false;
+            _strictDnsUnhealthyStreak = _strictDnsHealthyStreak = 0;
+        }
+    }
+
+    internal bool IsMonitoring(SingBoxManager manager)
+    {
+        lock (_settingsWork)
+            return ReferenceEquals(manager, _singBox) && _healthTimer != null && !_disposed &&
+                !_isStopping && _shouldBeRunning;
+    }
+
+    internal void PauseForApply()
+    {
+        lock (_settingsWork) StopCore(preserveFirewallRelease: true);
+    }
+
+    internal bool TryRetireForFailover(Func<bool> retire)
+    {
+        lock (_settingsWork)
+        {
+            if (!retire()) return false;
+            Stop();
+            return true;
+        }
+    }
+
+    private void RunForActiveSettings(Action work)
+    {
+        lock (_settingsWork)
+            if (!_isStopping && !_disposed) work();
+    }
+
     public void Stop()
     {
+        lock (_settingsWork) StopCore(preserveFirewallRelease: false);
+    }
+
+    private void StopCore(bool preserveFirewallRelease)
+    {
+        Interlocked.Increment(ref _settingsGeneration);
         _isStopping = true;
         _shouldBeRunning = false;
         _unhealthyHealthProbeStreak = 0;
 
-        System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
-        _lastFullRestart = DateTime.MinValue;
+        if (!preserveFirewallRelease)
+        {
+            Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
+            _lastFullRestart = DateTime.MinValue;
+        }
         var cts = _restartCts;
         _restartCts = null;
         if (cts != null)
@@ -174,6 +245,7 @@ public class HealthMonitor : IDisposable
 
     public void OnNewProcessDetected(string processName)
     {
+        if (_isStopping || _disposed) return;
         if (_lastScan?.ProcessNames != null &&
             _lastScan.ProcessNames.Contains(processName, StringComparer.OrdinalIgnoreCase))
         {
@@ -194,7 +266,7 @@ public class HealthMonitor : IDisposable
 
     private void OnHealthTick(object? state)
     {
-        if (System.Threading.Interlocked.CompareExchange(ref _onHealthTickInProgress, 1, 0) != 0)
+        if (!Monitor.TryEnter(_settingsWork))
         {
             _logger.Debug("[HealthMonitor] OnHealthTick skipped — previous tick still in progress");
             return;
@@ -202,6 +274,7 @@ public class HealthMonitor : IDisposable
 
         try
         {
+            if (_isStopping || _disposed) return;
             var isHealthy = _singBox.IsHealthy();
 
             bool? _servingThisTick = null;
@@ -282,7 +355,7 @@ public class HealthMonitor : IDisposable
         }
         finally
         {
-            System.Threading.Interlocked.Exchange(ref _onHealthTickInProgress, 0);
+            Monitor.Exit(_settingsWork);
         }
     }
 
@@ -370,7 +443,30 @@ public class HealthMonitor : IDisposable
         }
     }
 
-    private void OnSingBoxCrashed(object? sender, EventArgs e)
+    private void QueueCrashedProcess(object? sender, EventArgs e)
+    {
+        if (e is SingBoxManager.ChildExit exit)
+            _ = QueueCrashRecoveryAsync(exit.Child);
+    }
+
+    internal Task QueueCrashRecoveryAsync(IProcessHandle child)
+    {
+        var generation = Volatile.Read(ref _settingsGeneration);
+        // Process disposal may wait for Exited subscribers. Never take the monitor lock on that callback.
+        return Task.Run(() =>
+        {
+            lock (_settingsWork)
+            {
+                if (_disposed || _isStopping || _healthTimer == null || generation != _settingsGeneration ||
+                    !ReferenceEquals(child, _singBox.OwnedProcessHandle)) return;
+                RecoverCrashedProcess();
+            }
+        });
+    }
+
+    private void OnSingBoxCrashed(object? sender, EventArgs e) => RunForActiveSettings(RecoverCrashedProcess);
+
+    private void RecoverCrashedProcess()
     {
         if (_isStopping)
             return;
@@ -475,7 +571,7 @@ public class HealthMonitor : IDisposable
         _logger.Warning("[HealthMonitor] Restarting sing-box (attempt {N}/{Max}) in {Delay}ms",
             attempt, _settings.MaxRestartAttempts, delayMs);
 
-        Task.Delay(delayMs, ct).ContinueWith(_ =>
+        Task.Delay(delayMs, ct).ContinueWith(_ => RunForActiveSettings(() =>
         {
             if (ct.IsCancellationRequested || _isStopping) return;
 
@@ -521,7 +617,7 @@ public class HealthMonitor : IDisposable
                         scan = freshScan;
                         _singBox.ReloadConfigJson(configJson, forceRestart: true);
                     }
-                    catch (Exception)
+                    catch (Exception) when (!_singBox.HasActiveTunnel)
                     {
                         _logger.Warning(
                             "[HealthMonitor] Config regen before full restart failed — " +
@@ -551,7 +647,7 @@ public class HealthMonitor : IDisposable
             {
                 _logger.Error("[HealthMonitor] Restart attempt {N} failed ({ExceptionType})", _restartAttempts, ex.GetType().Name);
             }
-        }, CancellationToken.None);
+        }), CancellationToken.None);
     }
 
     internal bool RunTunOrphanRecoveryCleanup(CancellationToken ct)
@@ -613,7 +709,9 @@ public class HealthMonitor : IDisposable
         }
     }
 
-    private void OnDebounceElapsed(object? state)
+    private void OnDebounceElapsed(object? state) => RunForActiveSettings(RescanProcesses);
+
+    private void RescanProcesses()
     {
         if (_isStopping) return;
 
@@ -682,33 +780,21 @@ public class HealthMonitor : IDisposable
         var isCustom = (_appSettings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
 
-        if (isCustom)
+        if (AcceptedImportJson != null || isCustom)
         {
-            var configName = _appSettings.App.ActiveCustomConfig;
-            if (!string.IsNullOrEmpty(configName))
+            string CheckImport(string raw)
             {
-                var namedPath = CustomConfigInjector.GetProgramDataPath(configName);
-                if (File.Exists(namedPath))
-                {
-                    var rawJson = File.ReadAllText(namedPath);
-                    return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
-                }
+                var json = CustomConfigInjector.Inject(raw, processNames, _appSettings,
+                    ConfigGenerator.RejectMissingRuleSet, _singBox.CheckRuleSetAsync);
+                if (!_singBox.CheckCandidateAsync(json, CancellationToken.None).GetAwaiter().GetResult())
+                    throw new InvalidOperationException("The imported VPN configuration failed native validation.");
+                return json;
             }
 
-            var legacyPath = Environment.ExpandEnvironmentVariables(
-                @"%ProgramData%\VPNRouter\config\custom.json");
-            if (File.Exists(legacyPath))
-            {
-                var rawJson = File.ReadAllText(legacyPath);
-                return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
-            }
-
-            if (!string.IsNullOrEmpty(_appSettings.App.CustomConfig))
-            {
-                var customPath = Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig);
-                var fallbackJson = File.ReadAllText(customPath);
-                return CustomConfigInjector.Inject(fallbackJson, processNames, _appSettings);
-            }
+            if (AcceptedImportJson is { } accepted) return CheckImport(accepted);
+            var (selectedPath, _) = VpnEngine.ResolveCustomConfigFiles(_appSettings, preferAccepted: true);
+            if (File.Exists(selectedPath)) return CheckImport(CustomConfigInjector.ReadImport(selectedPath));
+            throw new InvalidOperationException("The selected custom VPN configuration is missing.");
         }
 
         return ConfigPipeline.Generate(
@@ -718,7 +804,9 @@ public class HealthMonitor : IDisposable
             ConfigPipeline.ValidationMode.Advisory,
             warningSink: null,
             logger: _logger,
-            strictDnsOverride: (strictDnsFailedOverOverride ?? _strictDnsFailedOver) ? false : (bool?)null);
+            strictDnsOverride: (strictDnsFailedOverOverride ?? _strictDnsFailedOver) ? false : (bool?)null,
+            onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet,
+            checkRuleSet: _singBox.CheckRuleSetAsync);
     }
 
     private static List<string> FilterForSingBox(IEnumerable<string> names) =>
@@ -733,7 +821,7 @@ public class HealthMonitor : IDisposable
         Stop();
 
         // Unsubscribe in Dispose, not Stop: the subscription is made once in the constructor.
-        try { _singBox.Crashed -= OnSingBoxCrashed; } catch { }
+        try { _singBox.Crashed -= QueueCrashedProcess; } catch { }
 
         _ownedApi?.Dispose();
     }

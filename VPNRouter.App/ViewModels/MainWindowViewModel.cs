@@ -248,12 +248,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ["domain_keyword"] = new(@"^[a-z0-9.\-]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
         ["ip_cidr"]        = new(@"^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$|^[0-9a-f:]+/\d{1,3}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
         ["port"]           = new(@"^\d{1,5}(\s*,\s*\d{1,5})*$", System.Text.RegularExpressions.RegexOptions.Compiled),
-        ["port_range"]     = new(@"^\d{1,5}-\d{1,5}$", System.Text.RegularExpressions.RegexOptions.Compiled),
-        ["network"]        = new(@"^(tcp|udp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
         ["process_name"]   = new(@"^[\w.\-]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
         ["process_path"]   = new(@"^([A-Z]:\\|/).+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
-        ["geosite"]        = new(@"^[a-z][a-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
-        ["geoip"]          = new(@"^[a-z][a-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
     };
 
     private string ResolveValuePlaceholder(string type) => type switch
@@ -481,7 +477,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public MainWindowViewModel(ISettingsStore? settingsStore) : this(settingsStore, null) { }
 
-    internal MainWindowViewModel(ISettingsStore? settingsStore, ILogger? logger)
+    internal MainWindowViewModel(ISettingsStore? settingsStore, ILogger? logger,
+        VPNRouter.Core.Services.UpdateSources.IUpdateSource? updateSource = null, Action<int>? exitApplication = null)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
 
@@ -516,7 +513,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WireServersOrphanTracking();
         WireSimpleHomeNotifications();
 
-        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
+        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger, updateSource, exitApplication);
+        UpdateVm.ReserveRestart = ReserveRestart;
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
@@ -573,31 +571,36 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public event Action<ServerViewModel?>? ActiveServerChanged;
 
+    private bool _displayExternalTunnel;
+    private AcceptedTunnelInfo? DisplayedTunnel => IsConnected && !_displayExternalTunnel ? _engine.AcceptedTunnel : null;
+
+    private TunnelServerLabel? DisplayedServer(AcceptedTunnelInfo tunnel)
+    {
+        if (!tunnel.UsesAutoGroup) return tunnel.Server;
+        return ReferenceEquals(_statsTunnel, tunnel) ? tunnel.FindMember(_observedMemberTag) : null;
+    }
+
     private (string? name, string? ip) DeriveConnectedServerLabel()
     {
-        var serverIp = _engine.ActiveServerAddress;
-        var configuredMode = _settings.App.ConfigMode ?? "generated";
-        if (IsConnected && !configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
-        {
-            var viaSubscription = ActiveServerMatcher.FindName(
-                serverIp, SubscriptionServers.Select(s => (s.DisplayName, s.Server)));
-            if (viaSubscription is not null) return (viaSubscription, serverIp);
-        }
-        if (configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
-        {
-            return AutoSelectStatus.ResolveSubscribeLabel(
-                AutoSelectBestServer,
-                _autoSelectedServer is not null,
-                _autoSelectedServer?.DisplayName,
-                _autoSelectedServer?.Server,
-                Strings.AutoSelectStatusLabel,
-                (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName,
-                serverIp);
-        }
-        if (configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase))
-            return ((SelectedServer ?? Servers.FirstOrDefault())?.DisplayName, serverIp);
-        var c = CustomConfigs.FirstOrDefault(x => x.IsActive) ?? SelectedCustomConfig ?? CustomConfigs.FirstOrDefault();
-        return (c?.Name, serverIp);
+        if (DisplayedTunnel is { } tunnel) return AcceptedServerLabel(tunnel);
+        return IsConnected ? (null, null) : EditorServerLabel();
+    }
+
+    private (string? name, string? ip) AcceptedServerLabel(AcceptedTunnelInfo tunnel)
+    {
+        var server = DisplayedServer(tunnel);
+        return server == null ? (Strings.AutoSelectStatusLabel, null) : (server.Name, server.Address);
+    }
+
+    private (string? name, string? ip) EditorServerLabel()
+    {
+        var mode = _settings.App.ConfigMode ?? "generated";
+        if (mode.Equals("custom", StringComparison.OrdinalIgnoreCase))
+            return ((CustomConfigs.FirstOrDefault(c => c.IsActive) ?? SelectedCustomConfig ?? CustomConfigs.FirstOrDefault())?.Name, null);
+        var row = mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
+            ? SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault()
+            : SelectedServer ?? Servers.FirstOrDefault();
+        return (row?.DisplayName, row?.Server);
     }
 
     private string FormatRelativeTime(DateTime utcWhen)
@@ -622,15 +625,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return Strings.RelativeTimeLongAgo;
     }
 
-    private static void OpenFolderInExplorer(string path)
+    internal Action<ProcessStartInfo> LaunchFolder { get; set; } = info =>
+    {
+        using var process = Process.Start(info);
+    };
+
+    private void OpenFolderInExplorer(string path)
     {
         try
         {
             if (Directory.Exists(path))
-            {
-                var psi = VPNRouter.App.Services.FileManagerHelper.BuildOpenDirectoryStartInfo(path);
-                Process.Start(psi);
-            }
+                LaunchFolder(Services.FileManagerHelper.BuildOpenDirectoryStartInfo(path));
         }
         catch (Exception ex)
         {
@@ -695,15 +700,33 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return sb.ToString();
     }
 
+    internal Action RequestDesktopShutdown { get; set; } = () =>
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.Shutdown();
+    };
+
     [RelayCommand]
     private void Quit()
     {
-        if (_engine.IsRunning)
-            _engine.Stop();
+        if (TryPrepareQuit()) RequestDesktopShutdown();
+    }
+
+    internal bool IsShutdownPrepared => _disposed;
+
+    internal bool TryPrepareQuit()
+    {
+        if (_disposed) return true;
+        if (!TryReleaseZapretForShutdown()) return false;
+
+        try { _engine.StopOwnedSession(); }
+        catch (InvalidOperationException)
+        {
+            StatusText = Strings.TunnelStopUnconfirmed;
+            return false;
+        }
 
         StopSubRefreshTimer();
-
-        KillAllZapret();
 
 #if PLATFORM_WINDOWS
         try { _tgProxy?.Stop(); }
@@ -713,14 +736,82 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SaveSettings();
 
         Dispose();
+        return true;
+    }
 
+    private bool _restartReserved;
+
+    private Action<bool> ReserveRestart()
+    {
+        if (_disposed || !IsZapretMagicButtonEnabled)
+            throw new InvalidOperationException(Core.Localization.Strings.ZapretRestartPending);
+        _restartReserved = true;
+        Action? restore = null;
+        try
+        {
+#if PLATFORM_WINDOWS
+            restore = _zapret?.SuspendOwnedStrategy();
+#endif
+            _engine.StopOwnedSession();
+            OnPropertyChanged(nameof(IsZapretMagicButtonEnabled));
+        }
+        catch
+        {
+            try { restore?.Invoke(); }
+            finally { _restartReserved = false; }
+            throw;
+        }
+        return committed =>
+        {
+            try { if (!committed) restore?.Invoke(); }
+            catch (Exception ex)
+            {
+                ZapretEnabled = IsZapretRunning();
+                ZapretStatus = ex.Message;
+                throw;
+            }
+            finally
+            {
+                _restartReserved = false;
+                OnPropertyChanged(nameof(IsZapretMagicButtonEnabled));
+            }
+        };
+    }
+
+    private bool TryReleaseZapretForShutdown()
+    {
+        if (_restartReserved || IsZapretDownloading)
+        {
+            StatusText = ZapretStatus = Core.Localization.Strings.ZapretRestartPending;
+            return false;
+        }
+#if PLATFORM_WINDOWS
+        if (_zapretProbeCts != null)
+        {
+            _zapretProbeCts.Cancel();
+        }
+        else if (_zapret == null || _zapret.TryDispose())
+        {
+            if (_zapret != null) _zapret.ImmediateExitDetected -= OnZapretImmediateExit;
+            _zapret = null;
+            return true;
+        }
+
+        ZapretStatus = StatusText = Core.Localization.Strings.ZapretQuitPending;
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-            desktop.Shutdown();
+            Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
+        return false;
+#else
+        return true;
+#endif
     }
 
     public void Dispose()
     {
         if (_disposed) return;
+        if (!TryReleaseZapretForShutdown())
+            throw new InvalidOperationException(Core.Localization.Strings.ZapretQuitPending);
+        _engine.StopOwnedSession();
         _disposed = true;
 
 #if PLATFORM_WINDOWS
@@ -792,17 +883,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _tgProxy cleanup failed"); }
-
-        try
-        {
-            if (_zapret != null)
-            {
-                _zapret.ImmediateExitDetected -= OnZapretImmediateExit;
-                _zapret.Dispose();
-                _zapret = null;
-            }
-        }
-        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _zapret cleanup failed"); }
 #endif
 
         try { StopZapretProbeElapsedTimer(); }

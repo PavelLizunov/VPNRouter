@@ -10,6 +10,8 @@ namespace VPNRouter.App.ViewModels;
 public partial class ServerViewModel : ViewModelBase
 {
     private VlessServerEntry _originalEntry;
+    internal VlessServerEntry SourceEntry => _originalEntry;
+    internal string? SubscriptionId { get; init; }
 
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty]

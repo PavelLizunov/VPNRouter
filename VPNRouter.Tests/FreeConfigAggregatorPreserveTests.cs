@@ -16,6 +16,7 @@ public class FreeConfigAggregatorPreserveTests
         return new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
         {
             Id = id,
+            RawUri = $"vless://{Guid.Empty:D}@host-{id}.example.com:443?security=tls",
             Host = $"host-{id}.example.com",
             Port = 443,
             Uuid = $"uuid-{id}",
@@ -254,6 +255,37 @@ public class FreeConfigAggregatorPreserveTests
         finally
         {
             try { tempDir.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void MergeWithCache_ChangedUriWithSameIdRequiresVerificationAfterRefresh()
+    {
+        var dir = Directory.CreateTempSubdirectory("vpnrouter-test-");
+        try
+        {
+            using var logger = new LoggerConfiguration().CreateLogger();
+            var cache = new FreeConfigCache(logger, Path.Combine(dir.FullName, "free_configs.json"));
+            var cached = MakeEntry("same", FreeConfigStatus.Verified, _now);
+            cached.LastDeepVerifyAt = _now;
+            cached.MeasuredBandwidthMbps = 20;
+            cache.Save(new FreeConfigCache.CacheFile { Configs = { cached } });
+
+            var updated = MakeEntry("same", FreeConfigStatus.Unknown);
+            updated.RawUri += "&sni=changed.example.com";
+            var configs = new FreeConfigAggregator(logger, cache).MergeWithCache([updated]);
+            cache.Save(new FreeConfigCache.CacheFile { Configs = configs });
+
+            var loaded = Assert.Single(cache.Load().Configs);
+            Assert.Equal(updated.RawUri, loaded.RawUri);
+            Assert.Equal(FreeConfigStatus.Unknown, loaded.Status);
+            Assert.Null(loaded.LastDeepVerifyAt);
+            Assert.Null(loaded.LastTestedAt);
+            Assert.Null(loaded.MeasuredBandwidthMbps);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
         }
     }
 

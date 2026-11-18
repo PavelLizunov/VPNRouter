@@ -16,7 +16,6 @@ public partial class SingBoxManager : IDisposable
     private readonly IProcessRunner _runner;
     private IProcessHandle? _handle;
     private string _currentConfigPath = string.Empty;
-    // int, not bool: Dispose uses Interlocked.CompareExchange for single execution.
     private int _disposed;
     private TunOwnershipLock _tunLock;
 
@@ -49,8 +48,13 @@ public partial class SingBoxManager : IDisposable
     private readonly IHttpClient _http;
 
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
-    public int? Pid => _handle != null && !_handle.HasExited ? _handle.Pid : null;
+    public int? Pid => _handle is { HasExited: false } handle ? handle.Pid : null;
+    internal bool HasActiveTunnel => Pid.HasValue ||
+        (_ownsTunLock && (OperatingSystem.IsMacOS() || _linuxUsedPkexec) &&
+            ProcessOwnership.FindOwnedSingBox(ProcessOwnership.ConfiguredExePath) != null) ||
+        IsRunning();
     internal IProcessHandle? OwnedProcessHandle => _handle;
+    internal bool ExactStopUnconfirmed => _exactStopUnconfirmed;
     public event EventHandler? Crashed;
     public event Action<int>? Started;
 
@@ -67,11 +71,20 @@ public partial class SingBoxManager : IDisposable
 
     internal bool LastCrashWasLinuxTunPermissionFailure { get; private set; }
 
+    internal SingBoxManager(SingBoxSettings settings, (Uri Endpoint, string? Secret) controller,
+        ILogger? logger = null, IHttpClient? http = null) : this(settings, logger, http) =>
+        SetClashController(controller);
+
     public SingBoxManager(SingBoxSettings settings, ILogger? logger = null, IHttpClient? http = null, IProcessRunner? runner = null)
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
-        _http = http ?? PolicyHttpClient.Shared;
+        _http = http switch
+        {
+            null or PolicyHttpClient => LocalControllerHttp,
+            IDirectHttpClient direct => direct,
+            _ => throw new ArgumentException("The controller requires a direct HTTP transport.", nameof(http))
+        };
         _runner = runner ?? Runner;
         _tunLock = TunOwnershipLock.Instance(_logger);
         _policy = SingBoxRuntimePolicy.Current;
@@ -86,6 +99,24 @@ public partial class SingBoxManager : IDisposable
     }
 
     private const long MaxLogSizeBytes = 10 * 1024 * 1024;
+
+    private string RuntimeExecutablePath => Path.GetFullPath(
+        EffectivePolicy?.SelectedExecutablePath ?? AppPaths.DeployedSingBoxExePath(_settings));
+
+    internal Task<bool> CheckRuleSetAsync(string path, CancellationToken ct) =>
+        CheckCandidateAsync(RuleSetFile.BuildCheckConfig(path), ct);
+
+    internal async Task<bool> CheckCandidateAsync(string json, CancellationToken ct, SingBoxSettings? nextDeployment = null)
+    {
+        EffectivePolicy?.Authorize(SingBoxRuntimeOperation.Verify);
+        var executable = nextDeployment == null ? RuntimeExecutablePath :
+            EffectivePolicy?.SelectedExecutablePath ?? AppPaths.SingBoxDeploymentSource(
+                AppPaths.BundledSingBoxExePath, AppPaths.DeployedSingBoxExePath(nextDeployment));
+        var check = new ProcessRequest(Path.GetFullPath(executable), ["check", "-c", "stdin"], StdinInput: json,
+            Timeout: TimeSpan.FromSeconds(15));
+        var result = await _runner.RunAsync(check, ct).ConfigureAwait(false);
+        return result.ExitCode == 0 && !result.TimedOut;
+    }
 
     public void ReloadConfigJson(string configJson, bool forceRestart = false) =>
         ReloadConfigJsonWithResult(configJson, forceRestart);
@@ -116,14 +147,12 @@ public partial class SingBoxManager : IDisposable
 
             _logger.Information("[SingBoxManager] Reloading config{Mode}",
                 forceRestart ? " (force restart, no hot-reload attempt)" : "");
+            if (forceRestart) return RestartWithConfig(configJson);
+
             _currentConfigPath = WriteJsonToDisk(configJson);
+            if (TryHotReload()) return true;
 
-            if (!forceRestart && TryHotReload())
-                return true;
-
-            if (!forceRestart)
-                _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
-
+            _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
             return RestartCore();
         }
     }
@@ -151,22 +180,36 @@ public partial class SingBoxManager : IDisposable
 
     private const string DefaultTunInterfaceName = "VPNRouter-TUN";
 
-    public void Dispose()
+    public void Dispose() => DisposeCore(requireConfirmedStop: false);
+
+    internal bool TryRetireForReplacement() => DisposeCore(requireConfirmedStop: true);
+
+    internal bool TryRetireForReplacement(IProcessHandle? expectedChild, CancellationToken ct) =>
+        DisposeCore(requireConfirmedStop: true, expectedChild, ct);
+
+    private bool DisposeCore(bool requireConfirmedStop, IProcessHandle? expectedChild = null, CancellationToken ct = default)
     {
-        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
-        AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit;
-        LastCrashWasTunOrphan = false;
-        LastCrashWasLinuxTunPermissionFailure = false;
-        Stop();
-        if (!_ownsTunLock)
-            _handle?.Dispose();
-        if (_ownsTunLock)
+        lock (_lifecycleGate)
         {
-            _logger.Warning(
-                "[SingBoxManager] Dispose preserved TUN ownership because exact stop was not confirmed (state={State})",
-                State);
-            AppDomain.CurrentDomain.ProcessExit += OnAppDomainProcessExit;
-            Volatile.Write(ref _disposed, 0);
+            if (ct.IsCancellationRequested || (expectedChild != null &&
+                (!ReferenceEquals(expectedChild, _handle) || expectedChild.QueryHasExited() != false))) return false;
+            if (Volatile.Read(ref _disposed) != 0) return true;
+
+            StopInternal(releaseLock: true);
+            if (_ownsTunLock || (requireConfirmedStop && (_exactStopUnconfirmed ||
+                (_handle is { } handle && handle.QueryHasExited() != true))))
+            {
+                _logger.Warning("[SingBoxManager] Retaining manager because exact stop was not confirmed (state={State})", State);
+                return false;
+            }
+
+            Volatile.Write(ref _disposed, 1);
+            AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit;
+            LastCrashWasTunOrphan = false;
+            LastCrashWasLinuxTunPermissionFailure = false;
+            _handle?.Dispose();
+            _handle = null;
+            return true;
         }
     }
 }
