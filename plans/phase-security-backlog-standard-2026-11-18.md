@@ -78,3 +78,5 @@ Silent Prepare and native migration check service, process and driver ownership 
 The PowerShell maintenance, installer preparation, automatic repair, protected environment, publisher and relocated repair fixtures passed offline. Release template resource bytes, Go formatting, Roslyn syntax and Git whitespace checks passed. Native Windows ACL/UAC behavior, xUnit, Go tests and build are worker checks. The fixtures used fake operating-system boundaries.
 
 Live Apply checks imported rule sets with the selected sing-box before replacement and retains the enabled ad filter in DNS and route policy. Desktop Connect preserves an owned Unix session if the control API is unavailable. The Windows service acknowledges the saved revision after applying it, keeps its last accepted settings on failure, and uses strict validation for a previously rejected revision on restart.
+
+`VPNRouter.Core/Services/UpdateBackup.cs` excludes private repair scratch from rollback payloads. `VPNRouter.Tests/UpdateBackupTests.cs` covers that boundary.

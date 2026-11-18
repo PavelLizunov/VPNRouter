@@ -61,6 +61,22 @@ public sealed class UpdateBackupTests
     }
 
     [Fact]
+    public void SnapshotLeavesPrivateRepairScratchInPlace()
+    {
+        var root = CreateFakeInstall();
+        try
+        {
+            var scratch = Directory.CreateDirectory(Path.Combine(root, "app", ".repair-temp")).FullName;
+            File.WriteAllText(Path.Combine(scratch, "transient.txt"), "fixture");
+            var result = UpdateBackup.CreateSnapshot(root);
+            Assert.True(result.Success, result.Diagnostic);
+            Assert.False(Directory.Exists(Path.Combine(result.SnapshotPath, ".repair-temp")));
+            Assert.True(File.Exists(Path.Combine(scratch, "transient.txt")));
+        }
+        finally { CleanUp(root); }
+    }
+
+    [Fact]
     public void DeleteSnapshot_StaleGenerationCannotDeleteReplacement()
     {
         var root = CreateFakeInstall();
