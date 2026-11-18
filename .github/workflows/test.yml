@@ -30,8 +30,29 @@ jobs:
         run: git rev-parse HEAD
       - name: Record selected SDK and bundled VSTest
         run: python .github/scripts/report-test-sdk.py
+      - name: Provision the pinned core for loopback verification
+        if: runner.os == 'Linux'
+        working-directory: packaging/arch
+        shell: python
+        run: &provision_linux_verifier |
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, str(Path.cwd()))
+          import build_package as package
+          work = Path(os.environ["RUNNER_TEMP"]) / "vpnrouter-verifier"
+          work.mkdir()
+          archive = package.acquire_archive(package.RUNTIME_URL, package.RUNTIME_SHA256, "runtime.tar.gz", work, None)
+          package.staging_tools.safe_extract(archive, work / "core", package.RUNTIME_SHA256)
+          core = package.find_file(work / "core", "sing-box")
+          core.chmod(0o700)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"VPNROUTER_TEST_VERIFIER_RUNTIME={core}\n")
+      - name: Build the Business Windows service
+        if: runner.os == 'Windows'
+        run: dotnet build VPNRouter.Service/VPNRouter.Service.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true
       - name: Business compiled policy contracts
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true --filter "FullyQualifiedName~BusinessPolicy|FullyQualifiedName~BusinessDefaults" --logger "console;verbosity=normal"
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release -p:VPNRouterEdition=Business -p:BusinessSharedUpdate=true --filter "FullyQualifiedName~BusinessPolicy|FullyQualifiedName~BusinessDefaults|FullyQualifiedName~ConfigGeneratorRemoteRuleSetGuardTests|FullyQualifiedName~RuleSetFileTests|FullyQualifiedName~ServiceSettingsReceiptTests|FullyQualifiedName~ServiceFlyoutOwnershipTests|FullyQualifiedName~MainServiceRegistrationTests" --logger "console;verbosity=normal"
       - name: Upload synthetic policy screenshots
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -67,20 +88,7 @@ jobs:
       - name: Provision the pinned core for loopback verification
         working-directory: packaging/arch
         shell: python
-        run: |
-          import os
-          from pathlib import Path
-          import sys
-          sys.path.insert(0, str(Path.cwd()))
-          import build_package as package
-          work = Path(os.environ["RUNNER_TEMP"]) / "vpnrouter-verifier"
-          work.mkdir()
-          archive = package.acquire_archive(package.RUNTIME_URL, package.RUNTIME_SHA256, "runtime.tar.gz", work, None)
-          package.staging_tools.safe_extract(archive, work / "core", package.RUNTIME_SHA256)
-          core = package.find_file(work / "core", "sing-box")
-          core.chmod(0o700)
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              env.write(f"VPNROUTER_TEST_VERIFIER_RUNTIME={core}\n")
+        run: *provision_linux_verifier
 
       - name: Test
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"

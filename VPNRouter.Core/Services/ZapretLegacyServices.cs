@@ -8,13 +8,35 @@ public static class ZapretLegacyServices
 {
     private const string ChoiceKey = "VPNRouterMigrationV1";
     private const string StrategyKey = "zapret-discord-youtube";
-    private const string Pending = "Zapret service migration is pending. Download Zapret from the DPI Bypass tab. " +
-        "If the previous strategy is unavailable, select an installed strategy with VPNRouter.App.exe --migrate-zapret \"strategy name\".";
-    internal sealed record Result(bool SafeForReboot, string? Message = null);
+    private const string Pending = "Zapret service choice retained. Run VPNRouter.App.exe --migrate-zapret as administrator to acquire the verified package and retry.";
+    private const string Conflict = "Zapret migration is blocked by a conflicting service, driver or winws process. Resolve its ownership and run VPNRouter.App.exe --migrate-zapret.";
+    internal sealed record Result(bool SafeForReboot, string? Message = null, bool NeedsPackage = false);
     internal sealed record Strategy(string Name, Func<string[]> ResolveArguments);
 
     public static Task RetireAsync(ILogger logger, CancellationToken cancellationToken = default) =>
         RetryAsync(logger, cancellationToken);
+
+    // Only the explicit installer/repair command may download a package on behalf of the owner.
+    internal static Task<Result> RepairAsync(ILogger logger, string? selection, CancellationToken ct = default) =>
+        RepairAsync(() => RetryAsync(logger, ct, selection),
+            () => new ZapretUpdater(logger).DownloadAndExtractAsync(ct), logger);
+
+    internal static async Task<Result> RepairAsync(Func<Task<Result>> migrate, Func<Task> acquire, ILogger logger)
+    {
+        var result = await migrate().ConfigureAwait(false);
+        if (!result.NeedsPackage) return result;
+        try
+        {
+            // RetryAsync has released the installation lock. The downloader owns it during publication.
+            await acquire().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.Warning(ex, "[Zapret] Verified package acquisition failed during migration");
+            return result with { Message = "Verified Zapret package download failed. " + Pending };
+        }
+        return await migrate().ConfigureAwait(false);
+    }
 
     internal static Task<Result> RetryAsync(ILogger logger, CancellationToken ct = default, string? selection = null) =>
         Task.Run(() =>
@@ -58,8 +80,10 @@ public static class ZapretLegacyServices
                 {
                     _ = process.Handle;
                     if (process.HasExited) continue;
-                    if (!string.Equals(ProcessOwnership.ImagePathOf(process), Path.Combine(paths.ProtectedBin, "winws.exe"),
-                            StringComparison.OrdinalIgnoreCase)) return true;
+                    var image = ProcessOwnership.ImagePathOf(process);
+                    if (!string.Equals(image, Path.Combine(paths.ProtectedBin, "winws.exe"), StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(image, Path.Combine(paths.LegacyBin, "winws.exe"), StringComparison.OrdinalIgnoreCase))
+                        return true;
                 }
                 catch (InvalidOperationException) { /* exited during inspection */ }
                 catch (System.ComponentModel.Win32Exception) { return true; }
@@ -82,7 +106,13 @@ public static class ZapretLegacyServices
     {
         const string service = ZapretServiceOwnership.Service;
         using var lookup = open(service, false);
-        using var registration = lookup != null && paths.Owns(service, lookup.Config) ? open(service, true) : null;
+        var initial = lookup?.Config;
+        if ((initial != null && !paths.Owns(service, initial)) ||
+            ZapretActions.HasDriverConflict(paths, open, allowLegacy: true) || processConflict?.Invoke(paths) == true)
+            return new(false, Conflict);
+
+        using var registration = lookup == null ? null : open(service, true);
+        if (registration?.Config != initial) return new(false, Conflict);
         string[]? choice = null;
         string exe = Path.Combine(paths.ProtectedBin, "winws.exe");
         string parked = "\"" + exe + "\"";
@@ -116,7 +146,6 @@ public static class ZapretLegacyServices
             }
         }
 
-        bool driverConflict = false;
         foreach (var name in ZapretServiceOwnership.DriverNames)
         {
             using var driver = open(name, false);
@@ -136,21 +165,27 @@ public static class ZapretLegacyServices
                 writable.WriteChoice("VPNRouterPreUpgradeState", null);
             }
             else if (!paths.Owns(name, config))
-                driverConflict = true;
+                return new(false, Conflict);
         }
 
         if (choice == null || registration == null) return new(true);
-        if (driverConflict || processConflict?.Invoke(paths) == true) return new(true, "Zapret migration is pending. Resolve the shared WinDivert service conflict and run VPNRouter.App.exe --migrate-zapret.");
+        if (ZapretActions.HasDriverConflict(paths, open) || processConflict?.Invoke(paths) == true) return new(false, Conflict);
         if (choice.Length != 4 || choice[0] is not ("2" or "3" or "4") || choice[1] is not ("0" or "1"))
             return new(true, Pending);
         string image;
         try
         {
             string preferred = selection ?? choice[2];
-            var match = installed().Where(s => ValidName(s.Name) && (preferred.Length != 0
+            var strategies = installed();
+            if (strategies.Count == 0) return new(true, Pending, NeedsPackage: true);
+            var match = strategies.Where(s => ValidName(s.Name) && (preferred.Length != 0
                 ? string.Equals(s.Name, preferred, StringComparison.OrdinalIgnoreCase)
                 : ArgumentHash(s.ResolveArguments(), paths.ProtectedBin) == choice[3])).Take(2).ToList();
-            if (match.Count != 1) return new(true, Pending);
+            if (match.Count != 1)
+            {
+                var names = string.Join(", ", strategies.Select(s => s.Name).Where(ValidName));
+                return new(true, "Run VPNRouter.App.exe --migrate-zapret \"strategy name\" as administrator. Installed strategies: " + names);
+            }
             var verified = match[0].ResolveArguments();
             if (verified.Length == 0) return new(true, Pending);
             image = ZapretActions.ServiceImage(exe, verified);

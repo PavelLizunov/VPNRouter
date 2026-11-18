@@ -60,18 +60,23 @@ public partial class UpdateChecker
         }
         var source = Path.Combine(Path.GetFullPath(extractedDirectory), "app");
         var destination = Path.GetFullPath(AppContext.BaseDirectory);
+        if (OperatingSystem.IsWindows() && launchHelper == null)
+        {
+            ZapretRuntimeDirectory.CheckWindowsParents(destination);
+            ZapretRuntimeDirectory.CheckWindowsTree(new DirectoryInfo(destination), allowCreatorOwnerTemplate: true);
+        }
         var manifestPath = Path.Combine(extractedDirectory, "business-update-files-" + Guid.NewGuid().ToString("N") + ".json");
-        File.WriteAllBytes(manifestPath, manifest);
+        using var maintenance = typeof(UpdateChecker).Assembly.GetManifestResourceStream("VPNRouter.Update.zapret-maintenance.ps1")
+            ?? throw new InvalidOperationException("The installed update maintenance resource is missing.");
+        var prepareBytes = new byte[checked((int)maintenance.Length)];
+        maintenance.ReadExactly(prepareBytes);
+        var applyManifest = CreateBusinessApplyManifest(manifest, prepareBytes);
+        File.WriteAllBytes(manifestPath, applyManifest);
         try
         {
             using var current = Process.GetCurrentProcess();
-            // Downgrades may target an older package without the helper. Authenticate the installed
-            // copy against the identical resource in the running first-party Core assembly.
-            using var maintenance = typeof(UpdateChecker).Assembly.GetManifestResourceStream("VPNRouter.Update.zapret-maintenance.ps1")
-                ?? throw new InvalidOperationException("The installed update maintenance resource is missing.");
-            var installedPrepareHash = Convert.ToHexString(SHA256.HashData(maintenance));
             var script = BuildBusinessApplyScript(source, destination, manifestPath,
-                Convert.ToHexString(SHA256.HashData(manifest)), installedPrepareHash,
+                Convert.ToHexString(SHA256.HashData(applyManifest)),
                 Path.Combine(AppPaths.LogsDir, "business-update.log"), current.Id,
                 current.StartTime.ToUniversalTime().Ticks, 45_000,
                 string.Equals(Environment.GetEnvironmentVariable("VPNROUTER_CI"), "1", StringComparison.Ordinal));
@@ -108,6 +113,21 @@ public partial class UpdateChecker
         return JsonSerializer.SerializeToUtf8Bytes(entries);
     }
 
+    // The digest passed to the helper binds both the release manifest and this updater's Prepare policy.
+    internal static byte[] CreateBusinessApplyManifest(byte[] fileManifest, byte[] prepare)
+    {
+        using var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject();
+            json.WritePropertyName("Files");
+            json.WriteRawValue(fileManifest);
+            json.WriteBase64String("Prepare", prepare);
+            json.WriteEndObject();
+        }
+        return buffer.ToArray();
+    }
+
     private static bool NeedsBusinessUpdateElevation(string destination)
     {
         var probe = Path.Combine(destination, ".business-write-check-" + Guid.NewGuid().ToString("N"));
@@ -129,6 +149,7 @@ public partial class UpdateChecker
         {
             UseShellExecute = true,
             Verb = elevate ? "runas" : string.Empty,
+            WorkingDirectory = system,
             WindowStyle = ProcessWindowStyle.Hidden,
         };
         info.ArgumentList.Add("-NoLogo");
@@ -140,17 +161,20 @@ public partial class UpdateChecker
     }
 
     internal static string BuildBusinessApplyScript(string sourceDirectory, string destinationDirectory,
-        string manifestPath, string manifestSha256, string installedPrepareHash, string logPath, int parentPid,
+        string manifestPath, string manifestSha256, string logPath, int parentPid,
         long parentStartedTicks, int waitMilliseconds, bool suppressRelaunch)
     {
         if (parentPid <= 0 || parentStartedTicks < 0 || waitMilliseconds < 0 ||
-            waitMilliseconds > 45_000 || manifestSha256.Length != 64 || !manifestSha256.All(Uri.IsHexDigit) ||
-            installedPrepareHash.Length != 64 || !installedPrepareHash.All(Uri.IsHexDigit))
+            waitMilliseconds > 45_000 || manifestSha256.Length != 64 || !manifestSha256.All(Uri.IsHexDigit))
             throw new ArgumentException("Invalid Business helper parameters.");
         static string Literal(string value) => "'" + value.Replace("'", "''") + "'";
         var source = Literal(Path.GetFullPath(sourceDirectory).TrimEnd(Path.DirectorySeparatorChar));
         var destination = Literal(Path.GetFullPath(destinationDirectory).TrimEnd(Path.DirectorySeparatorChar));
+        using var environmentResource = typeof(UpdateChecker).Assembly.GetManifestResourceStream("VPNRouter.Update.repair-environment.ps1")
+            ?? throw new InvalidOperationException("The installed repair environment resource is missing.");
+        using var environmentReader = new StreamReader(environmentResource);
         return $$"""
+            {{environmentReader.ReadToEnd()}}
             $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
             $ErrorActionPreference = 'Stop'
             $source = {{source}}
@@ -196,8 +220,9 @@ public partial class UpdateChecker
                     throw 'MANIFEST_CHANGED'
                 }
                 $phase = 'PARSE_MANIFEST'
-                $files = ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString($manifestBytes))
-                if ($files.Count -eq 0) { throw 'EMPTY_MANIFEST' }
+                $manifest = ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString($manifestBytes))
+                $files = $manifest.Files
+                if ([string]::IsNullOrWhiteSpace($manifest.Prepare) -or !$files.Count) { throw 'EMPTY_MANIFEST' }
                 $phase = 'VERIFY_SOURCE'
                 foreach ($file in $files) {
                     $relative = [string]$file.Path
@@ -216,18 +241,7 @@ public partial class UpdateChecker
                 }
                 $phase = 'PREPARE_ZAPRET'
                 $prepareFile = $files | Where-Object { $_.Path -eq 'zapret-maintenance.ps1' }
-                if ($prepareFile) {
-                    $preparePath = Join-Path $source 'zapret-maintenance.ps1'
-                    $prepareHash = $prepareFile.Sha256
-                } else {
-                    $preparePath = Join-Path $destination 'zapret-maintenance.ps1'
-                    $prepareHash = '{{installedPrepareHash}}'
-                }
-                $prepareBytes = [IO.File]::ReadAllBytes($preparePath)
-                $hasher = [Security.Cryptography.SHA256]::Create()
-                try { $actual = [BitConverter]::ToString($hasher.ComputeHash($prepareBytes)).Replace('-', '') }
-                finally { $hasher.Dispose() }
-                if ($actual -ne $prepareHash) { throw 'SOURCE_CHANGED' }
+                $prepareBytes = [Convert]::FromBase64String($manifest.Prepare)
                 # Execute exactly the authenticated bytes in a separate scope/process: Prepare exits on completion.
                 $prepareSource = [Text.Encoding]::UTF8.GetString($prepareBytes).TrimStart([char]0xFEFF)
                 $command = "& {`n" + $prepareSource + "`n} -Edition VPNRouterBusiness -Operation Prepare"
@@ -255,6 +269,7 @@ public partial class UpdateChecker
                     }
                     $temporary = $null
                 }
+                Set-RepairEnvironment $destination
                 if ($prepareFile) {
                     $phase = 'MIGRATE_ZAPRET'
                     $maintenance = Start-Process -FilePath (Join-Path $destination 'VPNRouter.App.exe') -WorkingDirectory $destination -ArgumentList '--migrate-zapret' -Wait -PassThru

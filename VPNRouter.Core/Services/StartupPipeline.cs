@@ -9,7 +9,11 @@ namespace VPNRouter.Core.Services;
 public sealed record StartupContext(
     AppSettings Settings,
     StartupMode Mode,
-    bool SkipVpnConflictCheck = false);
+    bool SkipVpnConflictCheck = false)
+{
+    internal bool RequireCompleteRuleSets { get; init; }
+    internal bool ValidateRequiredRuleSets => Mode != StartupMode.ColdStart || RequireCompleteRuleSets;
+}
 
 public sealed record StartupResult(
     bool Success,
@@ -146,10 +150,18 @@ internal sealed class StartupPipeline
             settings,
             isCustomConfig,
             customConfigJson,
-            context.Mode,
+            context.ValidateRequiredRuleSets,
             isServerAlive);
 
         ct.ThrowIfCancellationRequested();
+
+        if (isCustomConfig && (context.Mode == StartupMode.HotReload || retireAfterValidation != null))
+        {
+            var current = (_host as StartupHostInternal)?.SingBox;
+            if (current == null || !await current.CheckCandidateAsync(configJson, ct).ConfigureAwait(false))
+                throw new InvalidOperationException("The imported VPN configuration failed native validation.");
+            ct.ThrowIfCancellationRequested();
+        }
 
         if (retireAfterValidation != null)
         {
@@ -279,12 +291,13 @@ internal sealed class StartupPipeline
 
     private async Task PreflightGeoDataAsync(AppSettings settings, CancellationToken ct)
     {
-        if (settings.App.BypassRussianTraffic && !GeoDataDownloader.AreGeoFilesAvailable())
+        var checkContents = RuleSetFile.ForRuntime(settings.SingBox);
+        if (settings.App.BypassRussianTraffic && !GeoDataDownloader.AreGeoFilesAvailable(checkContents))
         {
             _host.OnStatus("Downloading geo data...");
             try
             {
-                var downloader = new GeoDataDownloader(_host.Logger);
+                var downloader = new GeoDataDownloader(PolicyHttpClient.Shared, _host.Logger, checkContents);
                 var ok = await downloader.EnsureGeoFilesAsync(ct);
                 if (!ok)
                     _host.Logger?.Warning(
@@ -633,10 +646,10 @@ internal sealed class StartupPipeline
         AppSettings settings,
         bool isCustomConfig,
         string? rawCustomJson,
-        StartupMode mode,
+        bool validateRequiredRuleSets,
         Func<VlessServerEntry, bool>? isServerAlive = null)
     {
-        Action<string>? onMissingRuleSet = mode == StartupMode.ColdStart ? null : ConfigGenerator.RejectMissingRuleSet;
+        Action<string>? onMissingRuleSet = validateRequiredRuleSets ? ConfigGenerator.RejectMissingRuleSet : null;
         if (isCustomConfig)
         {
             var customPath = VpnEngine.ResolveCustomConfigPath(settings);
@@ -736,28 +749,14 @@ internal sealed class StartupPipeline
         if (EffectivePolicy != null)
             return;
 
-        var exePath = OperatingSystem.IsWindows()
-            ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
-            : AppPaths.SingBoxExePath;
-        var bundledPath = Path.Combine(AppContext.BaseDirectory,
-            OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
-
-        if (File.Exists(bundledPath))
+        var exePath = AppPaths.DeployedSingBoxExePath(settings.SingBox);
+        var source = AppPaths.SingBoxDeploymentSource(AppPaths.BundledSingBoxExePath, exePath);
+        if (source != exePath)
         {
-            bool needDeploy = !File.Exists(exePath);
-            if (!needDeploy)
-            {
-                var installedSize = new FileInfo(exePath).Length;
-                var bundledSize = new FileInfo(bundledPath).Length;
-                needDeploy = installedSize != bundledSize;
-            }
-            if (needDeploy)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(exePath)!);
-                File.Copy(bundledPath, exePath, overwrite: true);
-                _host.Logger?.Information(
-                    "[StartupPipeline] Deployed sing-box from bundle to {Path}", exePath);
-            }
+            Directory.CreateDirectory(Path.GetDirectoryName(exePath)!);
+            File.Copy(source, exePath, overwrite: true);
+            _host.Logger?.Information(
+                "[StartupPipeline] Deployed sing-box from bundle to {Path}", exePath);
         }
         else if (!File.Exists(exePath))
         {

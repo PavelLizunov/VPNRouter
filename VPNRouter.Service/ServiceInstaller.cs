@@ -39,24 +39,27 @@ public static class ServiceInstaller
         return InstallResult.Ok($"Service '{ServiceName}' installed successfully.\nPath: {exePath}");
     }
 
-    public static InstallResult UpdateDependencies()
-    {
-        if (!IsInstalled())
-            return InstallResult.Fail($"Service '{ServiceName}' is not installed.");
+    public static InstallResult UpdateDependencies() => IsInstalled()
+        ? UpdateDependencies(ServiceName)
+        : InstallResult.Fail($"Service '{ServiceName}' is not installed.");
 
+    internal static InstallResult UpdateDependencies(string serviceName)
+    {
         var (code, output) = RunSc(
-            "config", ServiceName, "depend=", ServiceDependencies);
+            "config", serviceName, "depend=", ServiceDependencies);
 
         return code == 0
             ? InstallResult.Ok($"Dependencies updated: {ServiceDependencies.Replace('/', ',')}")
             : InstallResult.Fail($"sc config failed (exit {code}): {output}");
     }
 
-    public static string[]? GetDependencies()
+    public static string[]? GetDependencies() => GetDependencies(ServiceName);
+
+    internal static string[]? GetDependencies(string serviceName)
     {
         try
         {
-            using var sc = new ServiceController(ServiceName);
+            using var sc = new ServiceController(serviceName);
             return sc.ServicesDependedOn.Select(s => s.ServiceName).ToArray();
         }
         catch

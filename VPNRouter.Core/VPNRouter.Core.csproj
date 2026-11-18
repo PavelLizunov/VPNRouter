@@ -84,6 +84,7 @@
   <ItemGroup>
     <EmbeddedResource Include="../packaging/windows/installer/publish-windows-update.ps1" LogicalName="VPNRouter.Update.publish-windows-update.ps1" />
     <EmbeddedResource Include="../packaging/windows/installer/zapret-maintenance.ps1" LogicalName="VPNRouter.Update.zapret-maintenance.ps1" />
+    <EmbeddedResource Include="../packaging/windows/installer/repair-environment.ps1" LogicalName="VPNRouter.Update.repair-environment.ps1" />
     <EmbeddedResource Include="../packaging/windows/installer/stop-vpnrouter.ps1" LogicalName="VPNRouter.Update.stop-vpnrouter.ps1" />
   </ItemGroup>
 

@@ -4,14 +4,14 @@ namespace VPNRouter.Core.Services;
 
 public static partial class ConfigGenerator
 {
-    private const string AdBlockRuleSetTag = "vpnrouter-adblock";
+    internal const string AdBlockRuleSetTag = "vpnrouter-adblock";
     private const string AdBlockRuleSetUrl =
         "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs";
     private const string AdBlockRuleSetFilename = "adblock_reject.srs";
 
     internal static void RejectMissingRuleSet(string reason) => throw new InvalidOperationException(reason);
 
-    private static void ApplyAdBlock(SingBoxConfig config, Func<string, string, string?> resolveRuleSet,
+    internal static string? ResolveAdBlock(Func<string, string, string?> resolveRuleSet,
         Action<string>? onMissingRuleSet)
     {
         var localPath = resolveRuleSet(AdBlockRuleSetUrl, AdBlockRuleSetFilename);
@@ -20,8 +20,16 @@ public static partial class ConfigGenerator
             onMissingRuleSet?.Invoke("Ad filtering requires a readable ad-block rule-set.");
             Serilog.Log.Logger.Warning(
                 "[ConfigGenerator] AdBlock rule-set unavailable (offline + no cache); generating config WITHOUT ad blocking");
-            return;
+            return null;
         }
+        return localPath;
+    }
+
+    private static void ApplyAdBlock(SingBoxConfig config, Func<string, string, string?> resolveRuleSet,
+        Action<string>? onMissingRuleSet)
+    {
+        var localPath = ResolveAdBlock(resolveRuleSet, onMissingRuleSet);
+        if (localPath == null) return;
 
         config.Route.RuleSet ??= new List<RuleSetEntry>();
         config.Route.RuleSet.Add(new RuleSetEntry

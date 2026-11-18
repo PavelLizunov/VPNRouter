@@ -6,6 +6,8 @@ internal sealed class FakeRegistration(ServiceConfig config) : IWindowsRegistrat
 {
     public ServiceConfig Config { get; private set; } = config;
     public bool IsActive { get; set; }
+    public int Pid { get; set; }
+    public (uint State, int Pid) ProcessStatus => IsActive ? (4u, Pid) : (1u, 0);
     public Dictionary<string, object> Values { get; } = [];
     public Action? OnStop { get; init; }
     public Action? OnDelete { get; init; }

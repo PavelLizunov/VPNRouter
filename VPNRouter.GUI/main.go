@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,9 +14,9 @@ import (
 
 const (
 	bootstrapWaitParentMaxSeconds = 30
-	bootstrapPostParentDelayMs = 750
-	copyAttempts    = 5
-	copyAttemptWait = 500 * time.Millisecond
+	bootstrapPostParentDelayMs    = 750
+	copyAttempts                  = 5
+	copyAttemptWait               = 500 * time.Millisecond
 )
 
 const trampolineRepairDeadline = 5 * time.Minute
@@ -55,19 +56,22 @@ func main() {
 
 	if rep.Mismatched {
 		if recentRepair() {
-			logf("mismatch detected but repair marker recent (<%v); falling through", RepairCooldown)
+			logf("integrity mismatch remains during repair cooldown (%v); stopping", RepairCooldown)
+			os.Exit(4)
 		} else {
 			logf("mismatch confirmed; running repair (prerelease=%v)", IsPrerelease())
 			touchMarker()
-			elapsed, runErr := RunRepair(IsPrerelease(), trampolineRepairDeadline)
+			elapsed, runErr := RunRepair(dir, IsPrerelease(), trampolineRepairDeadline)
 			if runErr != nil {
 				logf("repair returned error after %v: %v", elapsed, runErr)
 			} else {
 				logf("repair returned ok in %v", elapsed)
 			}
-			postRep := CheckIntegrity(dir)
-			logf("post-repair hashes=%v mismatched=%v",
-				postRep.Hashes, postRep.Mismatched)
+			// The repair installer replaces this launcher and starts the repaired application.
+			if runErr != nil {
+				os.Exit(4)
+			}
+			return
 		}
 	}
 
@@ -198,7 +202,11 @@ func copyFile(src, dst string) error {
 }
 
 func isProcessRunning(name string) bool {
-	cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq "+name, "/NH", "/FO", "CSV")
+	system, err := systemDirectory()
+	if err != nil {
+		return false
+	}
+	cmd := windowsSystemCommand(context.Background(), system, "tasklist.exe", "/FI", "IMAGENAME eq "+name, "/NH", "/FO", "CSV")
 	out, err := cmd.Output()
 	if err != nil {
 		return false

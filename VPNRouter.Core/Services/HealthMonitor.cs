@@ -695,31 +695,27 @@ public class HealthMonitor : IDisposable
 
         if (isCustom)
         {
+            string CheckImport(string path)
+            {
+                var json = CustomConfigInjector.Inject(File.ReadAllText(path), processNames, _appSettings,
+                    ConfigGenerator.RejectMissingRuleSet);
+                if (!_singBox.CheckCandidateAsync(json, CancellationToken.None).GetAwaiter().GetResult())
+                    throw new InvalidOperationException("The imported VPN configuration failed native validation.");
+                return json;
+            }
+
             var configName = _appSettings.App.ActiveCustomConfig;
             if (!string.IsNullOrEmpty(configName))
             {
                 var namedPath = CustomConfigInjector.GetProgramDataPath(configName);
-                if (File.Exists(namedPath))
-                {
-                    var rawJson = File.ReadAllText(namedPath);
-                    return CustomConfigInjector.Inject(rawJson, processNames, _appSettings, ConfigGenerator.RejectMissingRuleSet);
-                }
+                if (File.Exists(namedPath)) return CheckImport(namedPath);
             }
 
-            var legacyPath = Environment.ExpandEnvironmentVariables(
-                @"%ProgramData%\VPNRouter\config\custom.json");
-            if (File.Exists(legacyPath))
-            {
-                var rawJson = File.ReadAllText(legacyPath);
-                return CustomConfigInjector.Inject(rawJson, processNames, _appSettings, ConfigGenerator.RejectMissingRuleSet);
-            }
-
+            var legacyPath = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config\custom.json");
+            if (File.Exists(legacyPath)) return CheckImport(legacyPath);
             if (!string.IsNullOrEmpty(_appSettings.App.CustomConfig))
-            {
-                var customPath = Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig);
-                var fallbackJson = File.ReadAllText(customPath);
-                return CustomConfigInjector.Inject(fallbackJson, processNames, _appSettings, ConfigGenerator.RejectMissingRuleSet);
-            }
+                return CheckImport(Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig));
+            throw new InvalidOperationException("The selected custom VPN configuration is missing.");
         }
 
         return ConfigPipeline.Generate(

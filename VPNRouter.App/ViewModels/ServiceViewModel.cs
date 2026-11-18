@@ -155,13 +155,7 @@ public partial class ServiceViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var remove = await Task.Run(WindowsServiceHelper.Uninstall);
-            if (!remove.Success)
-            {
-                StatusMessage = remove.Message;
-                return;
-            }
-            var installResult = await Task.Run(() => WindowsServiceHelper.Install());
+            var installResult = await Task.Run(WindowsServiceHelper.Reinstall);
             if (installResult.Success)
             {
                 var startResult = await Task.Run(() => WindowsServiceHelper.Start());

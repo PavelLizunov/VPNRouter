@@ -153,7 +153,9 @@ try
     {
         builder.Services.AddWindowsService(options =>
         {
-            options.ServiceName = ServiceInstaller.ServiceName;
+            var exe = Environment.ProcessPath ?? throw new IOException("Could not identify the service executable.");
+            options.ServiceName = VPNRouter.Core.Services.MainServiceRegistration.Resolve(exe, VPNRouter.Core.ProductEdition.IsBusiness,
+                VPNRouter.Core.Services.WindowsServiceRegistration.OpenWithAccess) ?? ServiceInstaller.ServiceName;
         });
     }
 

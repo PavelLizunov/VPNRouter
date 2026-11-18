@@ -5,6 +5,8 @@ param(
     [Parameter(Mandatory)][string]$InstallDir,
     [string]$DataDir = '',
     [string]$ApplicationDir = '',
+    [switch]$Business,
+    [ValidateSet('VPNRouter','VPNRouterBusiness')][string]$MainServiceName,
     [switch]$RestartService,
     [switch]$InstallService,
     [switch]$RemoveService
@@ -16,12 +18,15 @@ $InstallDir = [IO.Path]::GetFullPath($InstallDir)
 $app = if ($ApplicationDir) { [IO.Path]::GetFullPath($ApplicationDir) } else { Join-Path $InstallDir 'app' }
 $serviceExe = Join-Path $app 'VPNRouter.Service.exe'
 
-$images = @('VPNRouter.App.exe','VPNRouter.CLI.exe','VPNRouter.GUI.exe','VPNRouter.Service.exe',
-    'sing-box.exe','slipstream-client.exe') | ForEach-Object { Join-Path $app $_ }
-if ($DataDir) {
-    $images += @('bin\sing-box.exe','slipstream\bin\slipstream-client.exe','tg-proxy\python\python.exe',
-        'zapret\bin\winws.exe') | ForEach-Object { Join-Path $DataDir $_ }
+function Get-InstallProcessImages($appDirectory, $dataDirectory) {
+    $appImages = @('VPNRouter.App.exe','VPNRouter.CLI.exe','VPNRouter.GUI.exe','VPNRouter.Service.exe',
+        'sing-box.exe','slipstream-client.exe') | ForEach-Object { Join-Path $appDirectory $_ }
+    if ($dataDirectory) {
+        $appImages += @('bin\sing-box.exe','slipstream\bin\slipstream-client.exe','tg-proxy\python\python.exe') | ForEach-Object { Join-Path $dataDirectory $_ }
+    }
+    return $appImages
 }
+$images = Get-InstallProcessImages $app $DataDir
 
 function Test-ProcessImage([string]$path) {
     return ($path -and $path -in $images)
@@ -34,15 +39,26 @@ function Test-ServiceImage([string]$image, [string]$exe) {
 }
 
 function Get-OwnMainService {
-    $svc = Get-CimInstance Win32_Service -Filter "Name='VPNRouter'"
-    if (!$svc -or !(Test-ServiceImage $svc.PathName $serviceExe)) { return }
-    $controller = Get-Service -Name VPNRouter
+    $names = if ($MainServiceName) { $MainServiceName } elseif ($Business) { 'VPNRouterBusiness','VPNRouter' } else { 'VPNRouter' }
+    $selected = $null
     try {
-        $null = $controller.ServiceHandle
-        $current = Get-CimInstance Win32_Service -Filter "Name='VPNRouter'"
-        if ($current -and (Test-ServiceImage $current.PathName $serviceExe)) { return $controller }
-    } catch { $controller.Dispose(); throw }
-    $controller.Dispose()
+        foreach ($name in $names) {
+            $svc = Get-CimInstance Win32_Service -Filter "Name='$name'"
+            if (!$svc -or !(Test-ServiceImage $svc.PathName $serviceExe)) { continue }
+            $controller = Get-Service -Name $name
+            try {
+                $null = $controller.ServiceHandle
+                $current = Get-CimInstance Win32_Service -Filter "Name='$name'"
+                if (!$current -or [int]$controller.ServiceType -ne 16 -or !(Test-ServiceImage $current.PathName $serviceExe)) {
+                    throw 'The VPNRouter service owner changed.'
+                }
+                if ($selected) { throw 'Multiple services point to this VPNRouter installation.' }
+                $selected = $controller
+                $controller = $null
+            } finally { if ($controller) { $controller.Dispose() } }
+        }
+        return $selected
+    } catch { if ($selected) { $selected.Dispose() }; throw }
 }
 
 $serviceStopped = $false
@@ -68,11 +84,13 @@ if ($DataDir) {
                 Stop-Service -InputObject $owned
                 $owned.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(10))
                 $serviceStopped = $true
+                $stoppedName = $owned.ServiceName
             }
             if ($RemoveService) {
-                $current = Get-CimInstance Win32_Service -Filter "Name='VPNRouter'"
+                $name = $owned.ServiceName
+                $current = Get-CimInstance Win32_Service -Filter "Name='$name'"
                 if ($current -and (Test-ServiceImage $current.PathName $serviceExe)) {
-                    & (Join-Path ([Environment]::SystemDirectory) 'sc.exe') delete VPNRouter | Out-Null
+                    & (Join-Path ([Environment]::SystemDirectory) 'sc.exe') delete $name | Out-Null
                     if ($LASTEXITCODE -notin @(0,1072)) { throw 'Could not delete the verified VPNRouter service.' }
                 }
             }
@@ -113,5 +131,6 @@ if ($DataDir -and $driver -and $driver.State -ne 'Stopped' -and ((([string]$driv
     }
 }
 
+if ($serviceStopped -and $stoppedName -eq 'VPNRouterBusiness') { exit 11 }
 if ($serviceStopped) { exit 10 }
 exit 0

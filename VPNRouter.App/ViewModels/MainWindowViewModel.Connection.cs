@@ -184,7 +184,7 @@ public partial class MainWindowViewModel
         var toggle = ConnectionSyncPolicy.DecideToggle(
             IsConnected,
             inTransition: IsConnecting || IsApplying || _isReconnecting,
-            inProcessEngineRunning: _engine.IsRunning);
+            inProcessEngineRunning: _engine.HasActiveTunnel);
         if (toggle == ToggleAction.AdoptRunningEngine)
         {
             AdoptRunningEngine();
@@ -254,25 +254,16 @@ public partial class MainWindowViewModel
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
 
+#if PLATFORM_WINDOWS
             await Task.Run(() =>
             {
-                try
-                {
-                    if (_engine.IsRunning)
-                        _engine.Stop();
-                }
-                catch (Exception ex)
-                {
-                    _logger.Debug(ex, "[VM] Pre-start engine stop");
-                }
-
-                try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
-
-#if PLATFORM_WINDOWS
+                // A cold start may clean up processes only while the TUN is unclaimed.
+                if (TunOwnershipLock.ProbeOwnership() != TunOwnershipStatus.Free) return;
+                try { OrphanCleanup.KillOrphans(); } catch { }
                 try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
                 catch { }
-#endif
             });
+#endif
 
             SaveSettings();
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
@@ -645,11 +636,17 @@ public partial class MainWindowViewModel
 
     private void WarnServiceManagedReconnect(string newServerName)
     {
-        try { SaveSettings(); } catch { }
+        MarkRoutingSettingsChanged();
+        try { SaveSettings(); }
+        catch (Exception ex)
+        {
+            _logger.Warning("[VM] Service-managed selection save failed ({ErrorType})", ex.GetType().Name);
+            StatusText = Strings.ApplyFailed;
+            return;
+        }
         StatusText = IsRussian
-            ? $"Выбран {newServerName}. VPN управляется службой — остановите и запустите VPN, чтобы переключиться."
-            : $"Selected {newServerName}. VPN is managed by the service — Stop and Start VPN to switch.";
-        _logger.Information("[VM] Service-managed VPN selection requires a restart");
+            ? $"Выбран {newServerName}. Нажмите «Применить», чтобы подтвердить переключение в службе."
+            : $"Selected {newServerName}. Click Apply to confirm the switch with the service.";
     }
 
     private async Task ReconnectAsync(string configName, ReconnectIntent intent = ReconnectIntent.Follow)

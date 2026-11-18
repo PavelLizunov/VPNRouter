@@ -80,7 +80,8 @@ public static partial class ConfigGenerator
         Func<string, string, string?>? resolveRuleSet, Action<string>? onMissingRuleSet = null,
         Func<string, CancellationToken, Task<bool>>? checkGeoContents = null)
     {
-        resolveRuleSet ??= (url, filename) => RuleSetCacheManager.EnsureLocal(url, filename);
+        checkGeoContents ??= RuleSetFile.ForRuntime(settings.SingBox);
+        resolveRuleSet ??= (url, filename) => RuleSetCacheManager.EnsureLocal(url, filename, checkGeoContents);
         var useGeoBypass = GeoDataDownloader.UseGeoBypass(settings.App.BypassRussianTraffic, onMissingRuleSet, checkGeoContents);
         var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
             .ToLowerInvariant();

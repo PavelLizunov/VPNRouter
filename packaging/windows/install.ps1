@@ -12,6 +12,8 @@ param(
 
     [switch]$Repair,
 
+    [string]$RepairApplicationDir,
+
     [switch]$Elevated
 )
 
@@ -50,6 +52,7 @@ if (-not $isAdmin) {
 
     Say "Installation requires admin rights - triggering UAC prompt..."
 
+    $encodedRepairDir = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$RepairApplicationDir))
     $encodedVersion = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Version))
     $forwardFlags = 0
     if ($Prerelease) { $forwardFlags = $forwardFlags -bor 1 }
@@ -63,6 +66,10 @@ $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 $version = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__FORWARDED_VERSION__'))
 $flags = __FORWARDED_FLAGS__
 $installParams = @{ Elevated = $true }
+$repairDir = '__REPAIR_DIRECTORY__'
+if ($repairDir) {
+    $installParams.RepairApplicationDir = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($repairDir))
+}
 if ($version) { $installParams.Version = $version }
 if ($flags -band 1) { $installParams.Prerelease = $true }
 if ($flags -band 2) { $installParams.Service = $true }
@@ -74,7 +81,7 @@ if ($content -is [byte[]]) { $content = [Text.Encoding]::UTF8.GetString($content
 & ([ScriptBlock]::Create([string]$content)) @installParams
 pause
 '@
-    $bootstrap = $bootstrapTemplate.Replace('__FORWARDED_VERSION__', $encodedVersion).Replace('__FORWARDED_FLAGS__', [string]$forwardFlags)
+    $bootstrap = $bootstrapTemplate.Replace('__REPAIR_DIRECTORY__', $encodedRepairDir).Replace('__FORWARDED_VERSION__', $encodedVersion).Replace('__FORWARDED_FLAGS__', [string]$forwardFlags)
     $encodedBootstrap = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($bootstrap))
     if (-not [IO.File]::Exists($WindowsPowerShell)) {
         Err "Trusted Windows PowerShell executable not found: $WindowsPowerShell"
@@ -85,7 +92,73 @@ pause
 }
 
 
+function Assert-RepairObject($entry, [bool]$ancestor) {
+    if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Repair target is redirected.' }
+    $acl = Get-Acl -LiteralPath $entry.FullName -ErrorAction Stop
+    $trusted = @('S-1-5-18','S-1-5-32-544','S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
+    $denied = [Security.AccessControl.FileSystemRights]'Delete, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership'
+    if (!$ancestor) { $denied = $denied -bor [Security.AccessControl.FileSystemRights]::Write }
+    $ownerLimited = $false
+    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        $sid = $rule.IdentityReference.Value
+        $inheritOnly = $rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly
+        if (!$inheritOnly -and $sid -eq 'S-1-3-4') { $ownerLimited = $true }
+        if ($inheritOnly -and ($ancestor -or ($entry -is [IO.DirectoryInfo] -and $sid -eq 'S-1-3-0'))) { continue }
+        if ($rule.AccessControlType -eq 'Allow' -and $sid -notin $trusted -and ($rule.FileSystemRights -band $denied)) {
+            throw 'Repair requires an administrator-protected installation.'
+        }
+    }
+    if (!$ownerLimited -and $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin $trusted) {
+        throw 'Repair target owner cannot be verified.'
+    }
+}
+
+function Resolve-RepairApplication([string]$path) {
+    if ($path -notmatch '^[a-zA-Z]:\\' -or $path.Substring(2).Contains(':')) { throw 'Expected a local installation directory.' }
+    $dir = Get-Item -LiteralPath ([IO.Path]::GetFullPath($path)) -Force -ErrorAction Stop
+    if ($dir -isnot [IO.DirectoryInfo] -or !$dir.Parent) { throw 'Expected an installed VPNRouter directory.' }
+    for ($parent = $dir.Parent; $parent; $parent = $parent.Parent) { Assert-RepairObject $parent $true }
+    $pending = New-Object 'Collections.Generic.Stack[IO.FileSystemInfo]'
+    $pending.Push($dir)
+    while ($pending.Count) {
+        $item = $pending.Pop()
+        Assert-RepairObject $item $false
+        if ($item -is [IO.DirectoryInfo]) {
+            foreach ($child in $item.EnumerateFileSystemInfos()) { $pending.Push($child) }
+        }
+    }
+    if ([IO.File]::Exists((Join-Path $dir.FullName 'vpnrouter-business-update.json')) -or
+        [IO.File]::Exists((Join-Path $dir.FullName 'business-provisioning.json'))) {
+        throw 'Use the Business updater to repair a Business installation.'
+    }
+    if (!([IO.File]::Exists((Join-Path $dir.FullName 'VPNRouter.GUI.exe')) -or
+          [IO.File]::Exists((Join-Path $dir.FullName 'VPNRouter.App.exe')))) { throw 'The repair target is not a VPNRouter installation.' }
+    return $dir.FullName
+}
+
+if ($RepairApplicationDir) {
+    if (!$Repair) { throw 'RepairApplicationDir requires repair mode.' }
+    $AppDir = Resolve-RepairApplication $RepairApplicationDir
+}
+
 Say "VPNRouter installer running as Administrator"
+
+# The Pages version embeds these helpers. A raw checkout can also supply the exact current source bytes.
+function Get-InstallerHelper([string]$embedded, [string]$name, [string]$digest) {
+    if ($embedded -and !$embedded.StartsWith('__')) { return ,([Convert]::FromBase64String($embedded)) }
+    if (!$installerHelpers) { throw 'Use the published self-contained installer at https://vpn.ninitux.com/install.ps1.' }
+    $path = [IO.Path]::Combine($installerHelpers, $name)
+    $source = [IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n")
+    $bytes = [Text.Encoding]::UTF8.GetBytes($source)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try { $actual = [BitConverter]::ToString($hasher.ComputeHash($bytes)).Replace('-', '') }
+    finally { $hasher.Dispose() }
+    if ($actual -ne $digest) { throw 'Installer helper checksum mismatch. Use https://vpn.ninitux.com/install.ps1.' }
+    return ,$bytes
+}
+$installerHelpers = if ($PSScriptRoot) { [IO.Path]::Combine($PSScriptRoot, 'installer') }
+$environmentBytes = Get-InstallerHelper '__VPNROUTER_REPAIR_ENVIRONMENT__' 'repair-environment.ps1' 'b25bc6d2ea24bec4c29b0210a92a248c351c5cd3d6ec5878945ef12ac46aae7a'
+. ([scriptblock]::Create([Text.Encoding]::UTF8.GetString($environmentBytes)))
 
 Say "Querying GitHub for target release..."
 
@@ -183,17 +256,11 @@ if (-not (Test-Path (Join-Path $payloadDir "app\VPNRouter.App.exe"))) {
 }
 
 # Capture the old service's start mode and running state before stopping the old app.
-$prepare = Join-Path $payloadDir 'app\zapret-maintenance.ps1'
-$canRestoreZapret = [IO.File]::Exists($prepare)
-if (!$canRestoreZapret) {
-    # Published installers carry their own helper for explicitly selected historical releases.
-    $embeddedMaintenance = '__VPNROUTER_MAINTENANCE_BASE64__'
-    if ($embeddedMaintenance.StartsWith('__')) {
-        throw 'This historical ZIP needs the self-contained installer from https://vpn.ninitux.com/install.ps1.'
-    }
-    $prepare = Join-Path $stagingDir 'zapret-maintenance.ps1'
-    [IO.File]::WriteAllBytes($prepare, [Convert]::FromBase64String($embeddedMaintenance))
-}
+$canRestoreZapret = [IO.File]::Exists((Join-Path $payloadDir 'app\zapret-maintenance.ps1'))
+# Prepare belongs to the running installer even if the selected release contains an older helper.
+$maintenanceBytes = Get-InstallerHelper '__VPNROUTER_MAINTENANCE_BASE64__' 'zapret-maintenance.ps1' '87a7e58202b3a050e634abf8d8bf9cfebc5a03bc893b1972b39feb2f94ff8e6f'
+$prepare = Join-Path $stagingDir 'zapret-maintenance.ps1'
+[IO.File]::WriteAllBytes($prepare, $maintenanceBytes)
 & $WindowsPowerShell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $prepare -Edition VPNRouter -Operation Prepare
 if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the verified legacy Zapret service. Installation stopped before file replacement.' }
 
@@ -268,18 +335,22 @@ if ($driver -and $driver.State -ne 'Stopped') {
 }
 
 Say "Installing to $InstallRoot"
-if ((Test-Path $InstallRoot) -and !$Repair) {
+if (!$RepairApplicationDir -and (Test-Path $InstallRoot) -and !$Repair) {
     Get-ChildItem $InstallRoot -Force | ForEach-Object {
         try { Remove-Item $_.FullName -Recurse -Force -ErrorAction Stop } catch {
             Warn "Could not remove $($_.FullName): $_"
         }
     }
-} else {
+} elseif (!$RepairApplicationDir) {
     New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
 }
 
 try {
-    Get-ChildItem $payloadDir -Force | Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop
+    if ($RepairApplicationDir) {
+        Get-ChildItem -LiteralPath (Join-Path $payloadDir 'app') -Force | Copy-Item -Destination $AppDir -Recurse -Force -ErrorAction Stop
+    } else {
+        Get-ChildItem $payloadDir -Force | Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop
+    }
 } catch {
     Err "Copying the new files failed: $_"
     Err "The unpacked payload is kept in $payloadDir; run the installer again once the file named above is no longer in use."
@@ -287,7 +358,7 @@ try {
     exit 1
 }
 
-if (-not (Test-Path (Join-Path $AppDir "VPNRouter.App.exe"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $AppDir "VPNRouter.App.exe"))) {
     Err "Expected VPNRouter.App.exe not found after extraction. ZIP layout may have changed."
     exit 1
 }
@@ -297,17 +368,23 @@ if (-not (Test-Path (Join-Path $AppDir "VPNRouter.App.exe"))) {
 
 Ok "Installed $resolvedVersion to $InstallRoot"
 
+# Historical App/GUI versions may run their own automatic repair using inherited TEMP and PATH.
+Set-RepairEnvironment (Resolve-RepairApplication $AppDir)
+
 if ($canRestoreZapret) {
     $migration = Start-Process -FilePath (Join-Path $AppDir 'VPNRouter.App.exe') -ArgumentList '--migrate-zapret' -WorkingDirectory $AppDir -Wait -PassThru
     if ($migration.ExitCode -notin @(0, 2)) { throw 'Zapret service migration failed. Rerun VPNRouter.App.exe --migrate-zapret as administrator before restarting Windows.' }
-    if ($migration.ExitCode -eq 2) { Warn 'Zapret service choice saved. Download Zapret in the DPI Bypass tab to finish migration.' }
+    if ($migration.ExitCode -eq 2) { Warn 'Zapret service choice saved. Run VPNRouter.App.exe --migrate-zapret as administrator to retry the verified download and restore the service.' }
 } elseif ($null -ne (Get-ItemPropertyValue -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\zapret' -Name VPNRouterPreUpgradeState -ErrorAction SilentlyContinue)) {
-    Warn 'The previous Zapret service choice is saved. Install a migration-capable version and download Zapret in the DPI Bypass tab to restore it.'
+    Warn 'The previous Zapret service choice is saved. Install a migration-capable version and run VPNRouter.App.exe --migrate-zapret as administrator.'
 }
 
 if ($Repair) {
     if ($svcWasRunning -and (Test-OwnService)) { Start-OwnService }
     & (Join-Path $AppDir 'VPNRouter.CLI.exe') doctor
+    if ($RepairApplicationDir -and !$NoLaunch) {
+        Start-Process -FilePath (Join-Path $AppDir 'VPNRouter.App.exe') -WorkingDirectory $AppDir
+    }
     return
 }
 

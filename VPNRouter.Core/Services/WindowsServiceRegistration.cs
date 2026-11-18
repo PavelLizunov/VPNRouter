@@ -12,6 +12,7 @@ internal interface IWindowsRegistration : IDisposable
 {
     ServiceConfig Config { get; }
     bool IsActive { get; }
+    (uint State, int Pid) ProcessStatus { get; }
     object? ReadValue(string name);
     void WriteChoice(string name, string[]? value);
     void Configure(string image, uint start);
@@ -69,6 +70,27 @@ internal sealed class WindowsServiceRegistration(string name, IntPtr handle) : I
             return status.dwCurrentState != Native.SERVICE_STOPPED;
         }
     }
+
+    public (uint State, int Pid) ProcessStatus
+    {
+        get
+        {
+            if (!QueryServiceStatusEx(handle, 0, out var status, Marshal.SizeOf<ServiceStatusProcess>(), out _))
+                throw new Win32Exception();
+            return (status.Status.dwCurrentState, status.ProcessId);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ServiceStatusProcess
+    {
+        internal Native.SERVICE_STATUS Status;
+        internal int ProcessId;
+        internal uint Flags;
+    }
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool QueryServiceStatusEx(IntPtr service, int level, out ServiceStatusProcess status, int size, out int needed);
 
     private RegistryKey OpenKey(bool writable) =>
         Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + name, writable)

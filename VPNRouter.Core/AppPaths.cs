@@ -39,6 +39,22 @@ public static class AppPaths
     public static string SingBoxExePath => Path.Combine(BinDir,
         OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
 
+    internal static string BundledSingBoxExePath => Path.Combine(AppContext.BaseDirectory,
+        OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
+
+    internal static string DeployedSingBoxExePath(Models.SingBoxSettings? settings) =>
+        OperatingSystem.IsWindows() && settings != null
+            ? Environment.ExpandEnvironmentVariables(settings.ExecutablePath)
+            : SingBoxExePath;
+
+    // Startup keeps a same-size deployment and copies the bundle when the deployment is absent or differs.
+    internal static string SingBoxDeploymentSource(string bundled, string deployed)
+    {
+        var bundle = new FileInfo(bundled);
+        var installed = new FileInfo(deployed);
+        return bundle.Exists && (!installed.Exists || installed.Length != bundle.Length) ? bundled : deployed;
+    }
+
     public static string SlipstreamDir => Path.Combine(DataDir, "slipstream");
     public static string SlipstreamBinDir => Path.Combine(SlipstreamDir, "bin");
     public static string SlipstreamExePath => Path.Combine(SlipstreamBinDir,

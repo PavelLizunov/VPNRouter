@@ -99,7 +99,7 @@ public partial class UpdateChecker
         var work = Path.Combine(_stagingDir, Guid.NewGuid().ToString("N"));
         ZapretRuntimeDirectory.PrepareWindowsRoot(work);
         var payload = ExtractVerifiedWindowsArchive(stage.Archive, stage.Sha256, Path.Combine(work, "release"));
-        foreach (var name in new[] { "publish-windows-update.ps1", "zapret-maintenance.ps1", "stop-vpnrouter.ps1" })
+        foreach (var name in new[] { "publish-windows-update.ps1", "repair-environment.ps1", "zapret-maintenance.ps1", "stop-vpnrouter.ps1" })
         {
             using var resource = typeof(UpdateChecker).Assembly.GetManifestResourceStream("VPNRouter.Update." + name)
                 ?? throw new InvalidOperationException("Missing packaged Windows update helper: " + name);

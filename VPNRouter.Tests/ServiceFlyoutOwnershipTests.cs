@@ -16,25 +16,20 @@ public sealed class ServiceFlyoutOwnershipTests : IDisposable
     private readonly string _expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
         WindowsServiceHelper.ServiceName, "app", "VPNRouter.Service.exe");
     private FakeRegistration? _current;
+    private string _name = WindowsServiceHelper.ServiceName;
     private int _stops;
     private int _deletes;
 
     public ServiceFlyoutOwnershipTests()
     {
-        WindowsServiceHelper.OpenRegistration = (name, _) =>
-        {
-            Assert.Equal(WindowsServiceHelper.ServiceName, name);
-            return _current;
-        };
+        WindowsServiceHelper.OpenRegistration = (name, _) => name == _name ? _current : null;
         WindowsServiceHelper.ServiceExeExists = path => path == _expected;
         WindowsServiceHelper.SystemSc = args =>
         {
             _commands.Add(args);
-            Assert.Equal(WindowsServiceHelper.ServiceName, args[1]);
+            Assert.Equal(_name, args[1]);
             switch (args[0])
             {
-                case "queryex":
-                    return (0, _current?.IsActive == true ? "STATE : 4 RUNNING\r\nPID : 4521" : "STATE : 1 STOPPED");
                 case "create":
                     Assert.Null(_current);
                     Assert.Contains(WindowsServiceCommand.FormatImagePath(_expected), args);
@@ -61,6 +56,7 @@ public sealed class ServiceFlyoutOwnershipTests : IDisposable
         new(new(WindowsServiceCommand.FormatImagePath(path), 0x10, 2))
         {
             IsActive = true,
+            Pid = 4521,
             OnStop = () => _stops++,
             OnDelete = () => { _deletes++; _current = null; }
         };
@@ -144,6 +140,22 @@ public sealed class ServiceFlyoutOwnershipTests : IDisposable
         Assert.True(_current.IsActive);
         Assert.Equal(0, _current.Changes);
         Assert.Empty(_commands);
+    }
+
+    [Fact]
+    public void HistoricalBusinessRegistrationKeepsItsNameAcrossLiveApplyAndReinstall()
+    {
+        if (!VPNRouter.Core.ProductEdition.IsBusiness) return;
+        _name = "VPNRouter";
+        _current = Registration(_expected);
+        var service = WindowsServiceHelper.GetState();
+        Assert.Equal(_name, service.Name);
+        Assert.True(service.Running);
+        Assert.Equal(4521, service.Pid);
+        Assert.True(WindowsServiceHelper.Reinstall().Success);
+        Assert.Single(_commands, args => args[0] == "create" && args[1] == _name);
+        Assert.True(WindowsServiceHelper.Start().Success);
+        Assert.Equal(_name, WindowsServiceHelper.GetState().Name);
     }
 
     [Fact]

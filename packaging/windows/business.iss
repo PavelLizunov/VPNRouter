@@ -53,11 +53,26 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\app\VPNRouter.App.exe"; Description: "{cm:LaunchProgram,VPNRouter Business}"; WorkingDir: "{app}\app"; Flags: nowait postinstall skipifsilent runascurrentuser
 [Code]
+var StoppedMainService: String;
+
 #include "installer\purge-zapret-runtime.iss"
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var Code: Integer;
 begin
-  if CurStep = ssPostInstall then FinishZapretUpgrade;
+  if CurStep = ssPostInstall then begin
+    try
+      FinishZapretUpgrade;
+    finally
+      if StoppedMainService <> '' then begin
+        if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+            '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\installer\stop-vpnrouter.ps1') +
+            '" -InstallDir "' + ExpandConstant('{app}') + '" -RestartService -MainServiceName ' + StoppedMainService,
+            '', SW_HIDE, ewWaitUntilTerminated, Code) or (Code <> 0) then
+          RaiseException('Could not restart the previously running Business service.');
+      end;
+    end;
+  end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -79,9 +94,11 @@ begin
   ExtractTemporaryFile('stop-vpnrouter.ps1');
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\stop-vpnrouter.ps1') +
-    '" -InstallDir "' + ExpandConstant('{app}') + '" -DataDir "' +
+    '" -InstallDir "' + ExpandConstant('{app}') + '" -Business -DataDir "' +
     ExpandConstant('{commonappdata}\VPNRouterBusiness') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Result := Result and ((Code = 0) or (Code = 10));
+  if Result and (Code = 10) then StoppedMainService := 'VPNRouter';
+  if Result and (Code = 11) then StoppedMainService := 'VPNRouterBusiness';
+  Result := Result and ((Code = 0) or (Code = 10) or (Code = 11));
 end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
@@ -94,7 +111,7 @@ var Code: Integer;
 begin
   Result := Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\installer\stop-vpnrouter.ps1') +
-    '" -InstallDir "' + ExpandConstant('{app}') + '" -DataDir "' +
+    '" -InstallDir "' + ExpandConstant('{app}') + '" -Business -DataDir "' +
     ExpandConstant('{commonappdata}\VPNRouterBusiness') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Result := Result and ((Code = 0) or (Code = 10));
+  Result := Result and ((Code = 0) or (Code = 10) or (Code = 11));
 end;

@@ -96,7 +96,8 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
     [AvaloniaTheory]
     [InlineData("Subscription")]
     [InlineData("ManualVless")]
-    public async Task Reconnect_ActiveOwnedProcessSurvivesUnavailableClashAndFailedApply(string intent)
+    [InlineData("Connect")]
+    public async Task ConnectAndReconnect_PreserveOwnedProcessWhenClashIsUnavailable(string intent)
     {
         var store = new InMemorySettingsStore();
         using var vm = new MainWindowViewModel(store, null, null, null, businessBootstrap: (_, _) => null);
@@ -113,16 +114,23 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
         try
         {
             // Seed desktop status without starting the live connection statistics timer.
-            typeof(MainWindowViewModel).GetField("_isConnected", fields)!.SetValue(vm, true);
+            typeof(MainWindowViewModel).GetField("_isConnected", fields)!.SetValue(vm, intent != "Connect");
             Assert.False(engine.IsRunning);
             Assert.True(engine.HasActiveTunnel);
             Assert.False(engine.TryPrepareColdReconnect());
             var managed = typeof(MainWindowViewModel).GetProperty("IsServiceManagedVpn", fields)!;
             Assert.Equal(false, managed.GetValue(vm));
-            var reconnect = typeof(MainWindowViewModel).GetMethod("ReconnectAsync", fields)!;
-            var reason = Enum.Parse(reconnect.GetParameters()[1].ParameterType, intent);
-            // No session token: ApplyAsync rejects the candidate without contacting a real service.
-            await (Task)reconnect.Invoke(vm, new object[] { "sample", reason })!;
+            if (intent == "Connect")
+            {
+                await vm.ToggleConnectionCommand.ExecuteAsync(null);
+            }
+            else
+            {
+                var reconnect = typeof(MainWindowViewModel).GetMethod("ReconnectAsync", fields)!;
+                var reason = Enum.Parse(reconnect.GetParameters()[1].ParameterType, intent);
+                // No session token: ApplyAsync rejects the candidate without contacting a real service.
+                await (Task)reconnect.Invoke(vm, new object[] { "sample", reason })!;
+            }
             Assert.False(handle.HasExited);
             Assert.Equal(0, handle.DisposeCallCount);
             Assert.True(vm.IsConnected);

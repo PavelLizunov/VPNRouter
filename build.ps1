@@ -134,7 +134,9 @@ $stubExe = Join-Path $DistDir "VPNRouter.GUI.exe"
 $env:GOOS = "windows"
 $env:GOARCH = "amd64"
 if ($Version -match '-r\d+$') { $stubChannel = "prerelease" } else { $stubChannel = "stable" }
-$stubLdflags = "-s -w -H windowsgui -X main.ChannelHint=$stubChannel"
+$stubEdition = if (!$env:VPNRouterEdition -or $env:VPNRouterEdition -eq 'Standard') { 'Standard' }
+               elseif ($env:VPNRouterEdition -eq 'Business') { 'Business' } else { 'Unknown' }
+$stubLdflags = "-s -w -H windowsgui -X main.ChannelHint=$stubChannel -X main.RepairEdition=$stubEdition"
 Push-Location "$Root\VPNRouter.GUI"
 go build -ldflags="$stubLdflags" -o $stubExe . 2>&1 | Out-Null
 $stubExitCode = $LASTEXITCODE
