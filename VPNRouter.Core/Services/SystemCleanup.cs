@@ -84,6 +84,10 @@ public sealed class SystemCleanup
     private readonly ICleanupRegistry _registry;
     private readonly ILogger _logger;
     private readonly string _scPath;
+    internal Func<ZapretServiceOwnership> ZapretPaths { get; init; } = ZapretServiceOwnership.Current;
+    internal Func<string, bool, IWindowsRegistration?> OpenService { get; init; } = (name, writable) =>
+        OperatingSystem.IsWindows() ? WindowsServiceRegistration.Open(name, writable) : null;
+    internal string SplitTunnelImage { get; init; } = Path.Combine(AppContext.BaseDirectory, "driver", "mullvad-split-tunnel.sys");
 
     public SystemCleanup(IProcessRunner runner, ICleanupRegistry registry, ILogger? logger = null, string? scPath = null)
     {
@@ -100,9 +104,9 @@ public sealed class SystemCleanup
         // The firewall goes first so DNS is reachable again before the DNS settings are restored.
         Step(actions, "firewall", () => CleanFirewall(dryRun, actions));
         Step(actions, "dns", () => CleanDns(dryRun, actions));
-        Step(actions, "driver", () => CleanService("driver", SplitTunnelService, dryRun, actions, "split-tunnel driver", requireOwnDriverPath: true));
+        Step(actions, "driver", () => CleanSplitDriver(dryRun, actions));
         foreach (var name in ZapretServices)
-            Step(actions, "zapret", () => CleanService("zapret", name, dryRun, actions, "Zapret/WinDivert driver", requireOwnDriverPath: false));
+            Step(actions, "zapret", () => actions.Add(ZapretPaths().Remove(name, OpenService, dryRun)));
         Step(actions, "autostart", () => CleanAutostart(dryRun, actions));
 
         return new CleanupReport(dryRun, actions);
@@ -181,22 +185,37 @@ public sealed class SystemCleanup
             : new CleanupAction("autostart", "current user's Run value", CleanupOutcome.Removed));
     }
 
-    private void CleanService(string area, string name, bool dryRun, List<CleanupAction> actions, string what, bool requireOwnDriverPath)
+    private void CleanSplitDriver(bool dryRun, List<CleanupAction> actions)
     {
+        const string name = SplitTunnelService, area = "driver", what = "split-tunnel driver";
+        using var pinned = OpenService(name, false);
+        if (pinned == null)
+        {
+            actions.Add(new(area, name, CleanupOutcome.NotPresent));
+            return;
+        }
         var query = RunSc("query", name);
         if (!ServiceExists(query))
         {
-            actions.Add(new CleanupAction(area, name, CleanupOutcome.NotPresent));
+            actions.Add(new CleanupAction(area, name, CleanupOutcome.Skipped, "cannot read the service status"));
             return;
         }
 
         // Another program can ship a service with the same name (Mullvad's split-tunnel driver, other WinDivert users):
         // only a service whose binary lives in a VPNRouter folder is ours to remove.
-        var binPath = ParseBinaryPath(RunSc("qc", name).Stdout);
-        if (!IsOwnBinaryPath(binPath, requireOwnDriverPath))
+        string? ReadImage()
+        {
+            var qc = RunSc("qc", name);
+            var native = pinned.Config;
+            return !qc.TimedOut && qc.ExitCode == 0 && native.Type == 1 &&
+                   string.Equals(native.Image, ParseBinaryPath(qc.Stdout), StringComparison.OrdinalIgnoreCase)
+                ? native.Image : null;
+        }
+        var binPath = ReadImage();
+        if (!ZapretServiceOwnership.IsImage(binPath, SplitTunnelImage, false))
         {
             actions.Add(new CleanupAction(area, name, CleanupOutcome.Skipped,
-                string.IsNullOrEmpty(binPath) ? "cannot read its binary path, left alone" : $"{what} belongs to another program: {binPath}"));
+                string.IsNullOrEmpty(binPath) ? "cannot read its binary path, left alone" : $"{what} belongs to another program"));
             return;
         }
 
@@ -206,7 +225,17 @@ public sealed class SystemCleanup
             return;
         }
 
-        RunSc("stop", name);
+        var stop = RunSc("stop", name);
+        if (stop.TimedOut || stop.ExitCode is not (0 or 1062))
+        {
+            actions.Add(new(area, name, CleanupOutcome.Failed, $"sc stop exit {stop.ExitCode}"));
+            return;
+        }
+        if (!ZapretServiceOwnership.IsImage(ReadImage(), SplitTunnelImage, false))
+        {
+            actions.Add(new(area, name, CleanupOutcome.Skipped, "service ownership changed"));
+            return;
+        }
         var delete = RunSc("delete", name);
         if (delete.ExitCode == 0)
             actions.Add(new CleanupAction(area, name, CleanupOutcome.Removed));
@@ -221,7 +250,7 @@ public sealed class SystemCleanup
 
     internal static bool ServiceExists(ProcessResult query) =>
         !query.TimedOut
-        && query.ExitCode != 1060
+        && query.ExitCode == 0
         && (query.Stdout.Contains("SERVICE_NAME", StringComparison.OrdinalIgnoreCase)
             || query.Stdout.Contains("STATE", StringComparison.OrdinalIgnoreCase));
 
@@ -239,15 +268,7 @@ public sealed class SystemCleanup
         return null;
     }
 
-    internal static bool IsOwnBinaryPath(string? binPath, bool requireOwnDriverPath)
-    {
-        if (string.IsNullOrWhiteSpace(binPath)) return false;
-        if (requireOwnDriverPath)
-            return SplitTunnelPolicy.ClassifyServiceBinPath(binPath, string.Empty)
-                   == SplitTunnelDriverProtocol.ServiceCollisionAction.AdoptMovedInstall;
-        var normalized = binPath.Replace('/', '\\').Trim('"', ' ').ToLowerInvariant();
-        return normalized.Contains(@"\vpnrouter\", StringComparison.Ordinal);
-    }
+
 }
 
 public sealed class WindowsCleanupRegistry : ICleanupRegistry

@@ -6,7 +6,8 @@ namespace VPNRouter.Core.Services.FreeConfigs;
 
 public sealed class FreeConfigCache
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
+    private const int MinimumReadableSchemaVersion = 1;
 
     private readonly string _path;
     private readonly ILogger _logger;
@@ -27,7 +28,7 @@ public sealed class FreeConfigCache
 
     public sealed class CacheFile
     {
-        [JsonPropertyName("schema_version")]
+        [JsonRequired, JsonPropertyName("schema_version")]
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
         public DateTime LastAggregatedAt { get; set; } = DateTime.MinValue;
@@ -70,9 +71,9 @@ public sealed class FreeConfigCache
                     VPNRouter.Core.Json.AppJsonContext.Default.CacheFile,
                     ct).ConfigureAwait(false);
 
-                if (file != null && file.Configs != null)
+                if (file?.Configs != null && file.SchemaVersion >= MinimumReadableSchemaVersion)
                 {
-                    HealCorruptedSubThresholdLatencies(file);
+                    NormalizeCachedResults(file);
                     return file;
                 }
             }
@@ -93,25 +94,47 @@ public sealed class FreeConfigCache
     {
         var result = CacheRecovery.LoadOrRecover<CacheFile>(
             _path,
-            CurrentSchemaVersion,
+            MinimumReadableSchemaVersion,
             json => JsonSerializer.Deserialize(json, VPNRouter.Core.Json.AppJsonContext.Default.CacheFile),
             cf => cf.Configs is not null,
             _logger);
 
         if (result.Loaded)
         {
-            HealCorruptedSubThresholdLatencies(result.Value!);
+            NormalizeCachedResults(result.Value!);
             return result.Value!;
         }
 
         return new CacheFile();
     }
 
-    private static void HealCorruptedSubThresholdLatencies(CacheFile file)
+    private static void NormalizeCachedResults(CacheFile file)
     {
         const int ImplausibleThresholdMs = 5;
         foreach (var entry in file.Configs)
         {
+            // Version 1 could copy a verdict between different URIs sharing a pool ID.
+            if (file.SchemaVersion == 1 && (entry.Status == FreeConfigStatus.Verified || entry.LastDeepVerifyAt.HasValue))
+            {
+                entry.RequiresSavedRecheck = entry.Status == FreeConfigStatus.Verified &&
+                    !string.IsNullOrWhiteSpace(entry.RawUri) && FreeConfigTester.AllowDirectEndpoint(entry);
+                entry.Status = FreeConfigStatus.Unknown;
+                // Keep the original saved-list retention date across failed or cancelled rechecks.
+                if (!entry.RequiresSavedRecheck) entry.LastTestedAt = null;
+                entry.LastDeepVerifyAt = null;
+                entry.LastVerifyFailedAt = null;
+                entry.LatencyMs = 0;
+                entry.MeasuredBandwidthMbps = null;
+                entry.BandwidthTestedAt = null;
+                entry.LastError = null;
+            }
+            if (entry.Status == FreeConfigStatus.Verified)
+            {
+                if (FreeConfigFreshness.HasFailedLastCheck(entry))
+                    entry.Status = FreeConfigStatus.Unknown;
+                else if (FreeConfigTester.AllowDirectEndpoint(entry))
+                    entry.RequiresSavedRecheck = false;
+            }
             if (entry.LatencyMs > 0 && entry.LatencyMs < ImplausibleThresholdMs)
             {
                 entry.LatencyMs = 0;

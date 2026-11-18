@@ -135,7 +135,7 @@ public sealed class FreeConfigFeature
             throw new RouterException("not_found", "Free config not found in cache");
 
         // Keep historical verification for apply, but report this probe's outcome.
-        if (entry.Status == FreeConfigStatus.Verified)
+        if (entry.Status == FreeConfigStatus.Verified && FreeConfigTester.AllowDirectEndpoint(entry))
         {
             var (ok, latency, _) = await TcpTlsProbe.ProbeTcpAsync(
                 entry.Host, entry.Port, TimeSpan.FromMilliseconds(1500), ct);
@@ -231,23 +231,11 @@ public sealed class FreeConfigFeature
         settings.Vless ??= new VlessConfig();
         settings.Vless.Servers ??= new List<VlessServerEntry>();
 
-        var existing = settings.Vless.Servers.FirstOrDefault(s =>
-            string.Equals(s.Server, newEntry.Server, StringComparison.OrdinalIgnoreCase) &&
-            s.Port == newEntry.Port &&
-            string.Equals(s.Uuid, newEntry.Uuid, StringComparison.OrdinalIgnoreCase));
-
-        if (existing != null)
-        {
-            settings.Vless.ActiveServer = existing.Name;
-        }
-        else
-        {
-            settings.Vless.Servers.Add(newEntry);
-            settings.Vless.ActiveServer = newEntry.Name;
-        }
+        var index = FreeConfigSelection.SelectOrAdd(settings.Vless.Servers, newEntry);
+        settings.Vless.ActiveServer = settings.Vless.Servers[index].Name;
 
         settings.App.ConfigMode = "generated";
         _storage.SaveSettings(settings, revision);
-        _logger.Information("[FreeConfigFeature] Applied verified free config {Name}", newEntry.Name);
+        _logger.Information("[FreeConfigFeature] Applied verified free config");
     }
 }

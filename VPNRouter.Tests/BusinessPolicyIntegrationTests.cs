@@ -188,7 +188,7 @@ public sealed class BusinessPolicyIntegrationTests
         {
             Directory.CreateDirectory(Path.Combine(_root, "bundle", "geo"));
             Directory.CreateDirectory(Path.Combine(_root, "geo"));
-            File.WriteAllBytes(Path.Combine(_root, "bundle", "geo", "geoip-ru.srs"), RuleSetSamples.IntactEnvelope());
+            File.WriteAllBytes(Path.Combine(_root, "bundle", "geo", "geoip-ru.srs"), RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(Path.Combine(_root, "bundle", "geo", "geosite-ru.srs"), RuleSetSamples.UpstreamGeositeTldRu());
             _bundle = "{\"config\":" + JsonSerializer.Serialize(Convert.ToBase64String(Encoding.UTF8.GetBytes(BusinessClientConfigurationTests.Three))) +
                 ",\"business\":{\"policy\":" + BusinessPolicyConfigurationTests.PolicyJson(_key) + "}}";
@@ -220,7 +220,8 @@ public sealed class BusinessPolicyIntegrationTests
         }
 
         internal BusinessPolicyCoordinator? Bootstrap(AppSettings settings, ISettingsStore store) =>
-            BusinessBootstrap.Apply(settings, store, _bundle, Path.Combine(_root, "bundle"), Path.Combine(_root, "geo"), SettingsPath);
+            BusinessBootstrap.Apply(settings, store, _bundle, Path.Combine(_root, "bundle"), Path.Combine(_root, "geo"), SettingsPath,
+                RuleSetSamples.CheckFixtureContentsAsync);
         internal MainWindowViewModel ViewModel(Func<AppSettings, ISettingsStore, BusinessPolicyCoordinator?>? bootstrap = null) =>
             new(Settings, null, null, null, bootstrap ?? Bootstrap);
         public void Dispose() { _key.Dispose(); Directory.Delete(_root, recursive: true); }

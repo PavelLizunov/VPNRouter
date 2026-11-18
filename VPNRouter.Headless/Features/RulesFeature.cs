@@ -95,13 +95,8 @@ public sealed class RulesFeature
         _storage.ValidateRevision(revision);
 
         var result = CustomRulesImportExport.ImportFromText(text, format);
-        if (result.Rules == null || (result.Rules.Count == 0 && !string.IsNullOrWhiteSpace(text)))
-        {
-            var err = result.Warnings != null && result.Warnings.Count > 0
-                ? string.Join("; ", result.Warnings)
-                : "No valid rules could be imported";
-            throw new RouterException("invalid_argument", err);
-        }
+        if (result.Warnings.Count != 0 || result.Rules.Count == 0)
+            throw new RouterException("invalid_argument", result.Warnings.Count > 0 ? result.Warnings[0] : "No rules to import");
 
         var settings = _storage.GetSettings();
         settings.App.CustomRules = result.Rules;

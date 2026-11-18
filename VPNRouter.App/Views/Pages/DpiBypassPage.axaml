@@ -174,7 +174,7 @@
                                         </ComboBox>
                                     <Button Grid.Column="1" Classes="hk-soft"
                                         Command="{Binding StartZapretWithSelectedStrategyCommand}"
-                                        IsEnabled="{Binding !IsZapretProbing}"
+                                        IsEnabled="{Binding IsZapretMagicButtonEnabled}"
                                         ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"
                                         AutomationProperties.Name="{Binding LblZapretRunSelected}">
                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
@@ -226,7 +226,7 @@
                         <Button Grid.Column="1"
                                 Content="{Binding L_ZapretReverifyButton}"
                                 Command="{Binding ForceFreshProbeCommand}"
-                                IsEnabled="{Binding !IsZapretProbing}"
+                                IsEnabled="{Binding IsZapretMagicButtonEnabled}"
                                 ToolTip.Tip="{Binding L_ZapretReverifyHint}"
                                 FontSize="10" Padding="8,3"
                                 CornerRadius="{StaticResource RadiusSm}"
@@ -294,7 +294,7 @@
                                     <Button Grid.Column="1" Classes="hk-soft"
                                             Content="{Binding LblUpdateZapret}"
                                             Command="{Binding UpdateZapretCommand}"
-                                            IsEnabled="{Binding !IsZapretDownloading}"/>
+                                            IsEnabled="{Binding IsZapretMagicButtonEnabled}"/>
                                 </Grid>
                                 <TextBox Text="{Binding ZapretCustomArgs}"
                                          IsVisible="{Binding IsCustomStrategy}"
@@ -436,13 +436,14 @@
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <Button Content="{Binding L_RunTestsLabel}"
                                         Command="{Binding RunZapretTestsCommand}"
+                                        IsEnabled="{Binding IsZapretMagicButtonEnabled}"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <Button Content="{Binding L_RemoveServiceLabel}"
                                         Command="{Binding RemoveZapretServiceCommand}"
-                                        IsEnabled="{Binding !IsZapretActionRunning}"
+                                        IsEnabled="{Binding IsZapretMagicButtonEnabled}"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
@@ -456,12 +457,24 @@
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"/>
                                 <Button Content="{Binding L_OpenServiceMenu}"
-                                        Command="{Binding OpenZapretServiceMenuCommand}"
                                         ToolTip.Tip="{Binding L_TipOpenServiceMenu}"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Center"
                                         FontSize="10" Padding="8,4"
-                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                        CornerRadius="{StaticResource RadiusSm}">
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuItem Header="{Binding LblUpdateZapret}" Command="{Binding UpdateZapretCommand}"
+                                                      IsEnabled="{Binding IsZapretMagicButtonEnabled}"/>
+                                            <MenuItem Header="{Binding L_ZapretSecStrategy}" Command="{Binding SetZapretTabCommand}" CommandParameter="0"/>
+                                            <MenuItem Header="{Binding L_ZapretApplyServiceStrategy}"
+                                                      Command="{Binding ApplyZapretServiceStrategyCommand}" IsEnabled="{Binding IsZapretMagicButtonEnabled}"/>
+                                            <MenuItem Header="{Binding L_RemoveServiceLabel}" Command="{Binding RemoveZapretServiceCommand}"
+                                                      IsEnabled="{Binding IsZapretMagicButtonEnabled}"/>
+                                            <MenuItem Header="{Binding LblAutostartSection}" Command="{Binding OpenAutostartSettingsCommand}"/>
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
                                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
                                     <Button Content="{Binding L_OpenFolder}"
                                             Command="{Binding OpenZapretFolderCommand}"
@@ -484,7 +497,7 @@
                                         <WrapPanel ItemSpacing="6" LineSpacing="6">
                                             <Button Content="{Binding L_ZapretForceFreshProbeButton}"
                                                     Command="{Binding ForceFreshProbeCommand}"
-                                                    IsEnabled="{Binding !IsZapretProbing}"
+                                                    IsEnabled="{Binding IsZapretMagicButtonEnabled}"
                                                     FontSize="10" Padding="8,4"
                                                     CornerRadius="{StaticResource RadiusSm}"/>
                                             <Button Content="{Binding L_ZapretClearCacheButton}"

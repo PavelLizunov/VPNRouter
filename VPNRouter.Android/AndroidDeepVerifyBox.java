@@ -3,13 +3,6 @@ package com.ninitux.vpnrouter;
 import android.content.Context;
 import android.util.Log;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.net.Socket;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -27,165 +20,22 @@ public final class AndroidDeepVerifyBox {
 
     private static final String LOG_TAG = "VpnRouter.DV";
 
-    private AndroidDeepVerifyBox() { }
+    private final NativeEngineSlot.Session<CommandServer> session;
 
-    public static String verifyConfigSync(
-            Context ctx,
-            String configJson,
-            int socksPort,
-            int timeoutMs,
-            String probeUrl) {
-        long start = System.currentTimeMillis();
-        CommandServer server = null;
-        try {
-            LibboxRuntime.ensureSetup(ctx);
-
-            server = LibboxRuntime.start(configJson, new VerifyPlatformInterface(ctx));
-
-            if (!waitForPortBound(socksPort, 2000)) {
-                return jsonError(0, "sing-box didn't bind");
-            }
-
-            long httpStart = System.currentTimeMillis();
-            ProbeResult probe = probeViaSocks(socksPort, probeUrl, timeoutMs);
-            int latencyMs = (int) (System.currentTimeMillis() - httpStart);
-
-            if (probe.ok) {
-                return jsonOk(latencyMs);
-            } else {
-                return jsonError(0, probe.err != null ? probe.err : "http failed");
-            }
-        } catch (Throwable t) {
-            Log.w(LOG_TAG, "verifyConfigSync threw after "
-                    + (System.currentTimeMillis() - start) + " ms: "
-                    + t.getClass().getSimpleName() + ": " + t.getMessage());
-            return jsonError(0, t.getClass().getSimpleName() + ": "
-                    + (t.getMessage() != null ? t.getMessage() : "(no message)"));
-        } finally {
-            LibboxRuntime.stop(server);
-        }
+    private AndroidDeepVerifyBox(NativeEngineSlot.Session<CommandServer> session) {
+        this.session = session;
     }
 
-    private static String jsonOk(int latencyMs) {
-        return "{\"ok\":true,\"latencyMs\":" + latencyMs + ",\"err\":null}";
+    public static AndroidDeepVerifyBox begin(Context ctx, String configJson) {
+        return new AndroidDeepVerifyBox(LibboxRuntime.beginVerification(ctx, configJson, new VerifyPlatformInterface(ctx)));
     }
 
-    private static String jsonError(int latencyMs, String err) {
-        return "{\"ok\":false,\"latencyMs\":" + latencyMs
-                + ",\"err\":\"" + escapeJsonString(err) + "\"}";
-    }
+    public void awaitReady() throws Exception { session.awaitReady(8_000L); }
 
-    private static String escapeJsonString(String s) {
-        if (s == null) return "";
-        StringBuilder sb = new StringBuilder(s.length() + 8);
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"': sb.append("\\\""); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
-                default:
-                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
-                    else sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
+    public void cancel() { session.cancel(); }
 
-    private static boolean waitForPortBound(int port, int maxWaitMs) {
-        long deadline = System.currentTimeMillis() + maxWaitMs;
-        while (System.currentTimeMillis() < deadline) {
-            try (Socket s = new Socket()) {
-                s.connect(new InetSocketAddress("127.0.0.1", port), 200);
-                return true;
-            } catch (Exception ignored) {
-            }
-            try { Thread.sleep(100); } catch (InterruptedException ignored) { return false; }
-        }
-        return false;
-    }
-
-    private static final class ProbeResult {
-        final boolean ok;
-        final String err;
-        ProbeResult(boolean ok, String err) { this.ok = ok; this.err = err; }
-    }
-
-    private static ProbeResult probeViaSocks(int socksPort, String probeUrl, int timeoutMs) {
-        HttpURLConnection conn = null;
-        try {
-            Proxy proxy = new Proxy(Proxy.Type.SOCKS,
-                    new InetSocketAddress("127.0.0.1", socksPort));
-            URL url = new URL(probeUrl);
-            conn = (HttpURLConnection) url.openConnection(proxy);
-            conn.setConnectTimeout(Math.min(timeoutMs, 5000));
-            conn.setReadTimeout(Math.min(timeoutMs, 8000));
-            conn.setUseCaches(false);
-            conn.setInstanceFollowRedirects(false);
-            conn.setRequestProperty("User-Agent", "VPNRouter-Android/DeepVerify");
-
-            int code = conn.getResponseCode();
-            if (code < 200 || code >= 300) {
-                return new ProbeResult(false, "http " + code);
-            }
-
-            String body;
-            try (InputStream is = conn.getInputStream()) {
-                byte[] buf = new byte[4096];
-                int n, total = 0;
-                StringBuilder sb = new StringBuilder(2048);
-                while ((n = is.read(buf)) > 0 && total < 8192) {
-                    sb.append(new String(buf, 0, n, java.nio.charset.StandardCharsets.UTF_8));
-                    total += n;
-                }
-                body = sb.toString();
-            }
-
-            if (!body.contains("ip=")) {
-                return new ProbeResult(false, "bad response");
-            }
-
-            for (String line : body.split("\n")) {
-                if (line.startsWith("ip=")) {
-                    String ip = line.substring(3).trim();
-                    if (isPrivateOrLoopback(ip)) {
-                        return new ProbeResult(false, "local ip in response");
-                    }
-                    break;
-                }
-            }
-            return new ProbeResult(true, null);
-        } catch (java.net.SocketTimeoutException ste) {
-            return new ProbeResult(false, "http timeout");
-        } catch (java.io.IOException ioe) {
-            String m = ioe.getMessage();
-            if (m == null) m = ioe.getClass().getSimpleName();
-            if (m.length() > 60) m = m.substring(0, 60);
-            return new ProbeResult(false, "http: " + m);
-        } catch (Exception e) {
-            return new ProbeResult(false, e.getClass().getSimpleName());
-        } finally {
-            if (conn != null) conn.disconnect();
-        }
-    }
-
-    private static boolean isPrivateOrLoopback(String ipStr) {
-        try {
-            java.net.InetAddress ip = java.net.InetAddress.getByName(ipStr);
-            if (ip.isLoopbackAddress() || ip.isAnyLocalAddress()) return true;
-            byte[] b = ip.getAddress();
-            if (b.length != 4) return false;
-            int b0 = b[0] & 0xFF, b1 = b[1] & 0xFF;
-            if (b0 == 10) return true;
-            if (b0 == 172 && b1 >= 16 && b1 <= 31) return true;
-            if (b0 == 192 && b1 == 168) return true;
-            if (b0 == 100 && b1 >= 64 && b1 <= 127) return true;
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
+    public void close() {
+        if (!session.close(4_000L)) throw new IllegalStateException("Native engine cleanup pending");
     }
 
     private static final class VerifyPlatformInterface extends LibboxRuntime.PlatformDefaults {
@@ -292,7 +142,7 @@ public final class AndroidDeepVerifyBox {
                 }
                 return new SimpleInterfaceIterator(list);
             } catch (Exception e) {
-                Log.w(LOG_TAG, "getInterfaces failed: " + e.getMessage());
+                Log.w(LOG_TAG, "Network interfaces unavailable");
                 return null;
             }
         }
@@ -321,7 +171,7 @@ public final class AndroidDeepVerifyBox {
                 } catch (Exception ignored) {}
                 listener.updateDefaultInterface(name, index, false, false);
             } catch (Exception e) {
-                Log.w(LOG_TAG, "startDefaultInterfaceMonitor (verify) threw: " + e.getMessage());
+                Log.w(LOG_TAG, "Default interface monitor unavailable");
             }
         }
 

@@ -411,6 +411,9 @@ public static class TcpTlsProbe
         if (server is null)
             return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "server is null");
 
+        if (!string.IsNullOrEmpty(server.DetourVia))
+            return new ServerProbeResult(ServerProbeStatus.SkippedNotApplicable, 0, DeepVerifyConstants.DetourNote);
+
         var protocol = (server.Protocol ?? "vless").Trim().ToLowerInvariant();
         var host = server.Server ?? string.Empty;
         var port = server.Port;

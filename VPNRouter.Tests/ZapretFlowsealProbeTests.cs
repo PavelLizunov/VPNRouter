@@ -1,243 +1,179 @@
 #nullable enable
 
+using System.Net;
 using VPNRouter.Core;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
-/// <summary>
-/// Characterization tests for <see cref="ZapretAutoStrategy.RunFlowsealProbeAsync"/>, the sweep that runs Flowseal's
-/// own <c>utils\test zapret.ps1</c> and turns its console output into a winning strategy. The tests replace that
-/// script with a small fake that prints Flowseal-style lines, so the real parsing, scoring, early-winner kill,
-/// cancellation and probe-log code runs without starting winws. The method needs Windows and an elevated process,
-/// so the tests skip anywhere else.
-/// </summary>
+internal sealed class ZapretTestHandler(Func<HttpRequestMessage, HttpStatusCode> respond) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(new HttpResponseMessage(respond(request)));
+    }
+}
+
 public sealed class ZapretFlowsealProbeTests : IDisposable
 {
-    private readonly string _originalDataDir;
-    private readonly string _tempDataDir;
+    private readonly string _previousRoot = AppPaths.DataDir;
+    private readonly string _root = Directory.CreateTempSubdirectory("vpnrouter-probe-").FullName;
+    private readonly Func<bool> _previousAnyWinws = ZapretAutoStrategy.AnyWinwsRunning;
+    private readonly Func<HttpMessageHandler> _previousHandler = ZapretAutoStrategy.CreateHandler;
+    private readonly List<FakeProcessHandle> _children = new();
+    private readonly FakeProcessRunner _runner = new();
+    private readonly ZapretManager _manager;
 
     public ZapretFlowsealProbeTests()
     {
-        _originalDataDir = AppPaths.DataDir;
-        _tempDataDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-zapret-probe-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_tempDataDir);
-        AppPaths.OverrideDataDir(_tempDataDir);
+        AppPaths.OverrideDataDir(_root);
+        ZapretAutoStrategy.AnyWinwsRunning = () => false;
+        ZapretAutoStrategy.CreateHandler = () => new ZapretTestHandler(_ => HttpStatusCode.ServiceUnavailable);
+        _runner.OnStart(_ => true, _ =>
+        {
+            var child = new FakeProcessHandle(1000 + _children.Count);
+            _children.Add(child);
+            return child;
+        });
+        _manager = new ZapretManager(runner: _runner);
     }
 
     public void Dispose()
     {
-        AppPaths.OverrideDataDir(_originalDataDir);
-        try { Directory.Delete(_tempDataDir, recursive: true); }
-        catch { }
+        _manager.Dispose();
+        ZapretAutoStrategy.CreateHandler = _previousHandler;
+        ZapretAutoStrategy.AnyWinwsRunning = _previousAnyWinws;
+        AppPaths.OverrideDataDir(_previousRoot);
+        Directory.Delete(_root, recursive: true);
     }
 
-    private static void RequireWindowsAdmin() =>
-        Assert.SkipUnless(
-            OperatingSystem.IsWindows() && ZapretAutoStrategy.IsRunningAsAdmin(),
-            "the Flowseal sweep needs Windows and an elevated process");
-
-    private static string[] Echo(params string[] lines) =>
-        lines.Select(l => "Write-Output '" + l.Replace("'", "''") + "'").ToArray();
-
-    private static void WriteScript(params string[] powershellLines)
+    private void Install(params string[] names)
     {
-        var path = Path.Combine(ZapretUpdater.ZapretDir, "utils", "test zapret.ps1");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllLines(path, powershellLines);
+        Directory.CreateDirectory(ZapretUpdater.BinDir);
+        File.WriteAllText(ZapretUpdater.WinwsExePath, "fixture for the fake runner");
+        foreach (var name in names)
+            File.WriteAllText(Path.Combine(ZapretUpdater.ZapretDir, name + ".bat"),
+                """start "" "%BIN%winws.exe" --wf-tcp=443 --dpi-desync=multisplit""");
     }
 
-    private static Task<ZapretAutoStrategy.FlowsealSweepResult> Run(
-        ProgressLog? progress = null, CancellationToken ct = default) =>
-        ZapretAutoStrategy.RunFlowsealProbeAsync(ZapretUpdater.ZapretDir, progress, logger: null, ct);
+    private Task<ZapretAutoStrategy.StrategySweepResult> Sweep(CancellationToken ct = default) =>
+        ZapretAutoStrategy.ProbeInstalledStrategiesAsync(_manager, null, null, TimeSpan.Zero, ct);
 
-    private sealed class ProgressLog : IProgress<ZapretAutoStrategy.FlowsealProgress>
+    [Fact]
+    public async Task Sweep_UsesFreshConnectionsForEachInstalledCandidate_AndClosesEveryChild()
     {
-        public List<ZapretAutoStrategy.FlowsealProgress> Items { get; } = new();
-        public Action? OnFirstReport { get; init; }
-        public void Report(ZapretAutoStrategy.FlowsealProgress value)
+        Install("general", "general (ALT4)", "general (ALT5)");
+        int clients = 0;
+        ZapretAutoStrategy.CreateHandler = () =>
         {
-            bool first;
-            lock (Items) { first = Items.Count == 0; Items.Add(value); }
-            if (first) OnFirstReport?.Invoke();
-        }
-    }
+            int attempt = ++clients;
+            return new ZapretTestHandler(_ => attempt == 2 ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable);
+        };
 
-    private static readonly string[] TwoStrategyOutput =
-    {
-        "[1/2] general.bat",
-        "  [Discord][HTTP] https://discord.com status=OK",
-        "  [Discord][TLS1.2] https://discord.com status=OK",
-        "  [YouTube][HTTP] https://youtube.com status=FAIL",
-        "[2/2] general (ALT).bat",
-        "  [Discord][HTTP] https://discord.com status=OK",
-        "  [Discord][TLS1.3] https://discord.com status=UNSUPPORTED",
-    };
+        var result = await Sweep();
 
-    [Fact]
-    public async Task Sweep_WithABestConfigLine_ReturnsThatWinnerScoresAndProgress()
-    {
-        RequireWindowsAdmin();
-        WriteScript(Echo(TwoStrategyOutput.Append("Best config: general (ALT).bat").ToArray()));
-        var progress = new ProgressLog();
-
-        var result = await Run(progress, TestContext.Current.CancellationToken);
-
-        Assert.Equal("general (ALT)", result.Winner);
-        Assert.Equal(2, result.TestedCount);
-        Assert.Equal(2, result.TotalCount);
-        Assert.False(result.EarlyWinner);
-        Assert.Null(result.Diagnostic);
-        Assert.Empty(result.ErrorLines!);
-        Assert.Contains("Best config: general (ALT).bat", result.FullOutput);
-        var perStrategy = result.PerStrategyResults!;
-        Assert.Equal(2, perStrategy.Count);
-        Assert.Equal((2, 3), (perStrategy["general"].Passed, perStrategy["general"].Total));
-        Assert.Equal((2, 2), (perStrategy["general (ALT)"].Passed, perStrategy["general (ALT)"].Total));
-        Assert.Equal(
-            new[]
-            {
-                new ZapretAutoStrategy.FlowsealProgress(1, 2, "general", 0, 0),
-                new ZapretAutoStrategy.FlowsealProgress(1, 2, "", 1, 1),
-                new ZapretAutoStrategy.FlowsealProgress(1, 2, "", 2, 2),
-                new ZapretAutoStrategy.FlowsealProgress(1, 2, "", 2, 3),
-                new ZapretAutoStrategy.FlowsealProgress(2, 2, "general (ALT)", 0, 0),
-                new ZapretAutoStrategy.FlowsealProgress(2, 2, "", 1, 1),
-                new ZapretAutoStrategy.FlowsealProgress(2, 2, "", 2, 2),
-            },
-            progress.Items);
-    }
-
-    [Fact]
-    public async Task Sweep_WithoutABestConfigLine_PromotesTheBestScoringStrategy()
-    {
-        RequireWindowsAdmin();
-        WriteScript(Echo(TwoStrategyOutput));
-
-        var result = await Run(ct: TestContext.Current.CancellationToken);
-
-        Assert.Equal("general (ALT)", result.Winner);
-        Assert.False(result.EarlyWinner);
-    }
-
-    [Fact]
-    public async Task Sweep_WhereEveryCheckFails_HasNoWinner()
-    {
-        RequireWindowsAdmin();
-        WriteScript(Echo(
-            "[1/1] general.bat",
-            "  [Discord][HTTP] https://discord.com status=FAIL",
-            "  [YouTube][HTTP] https://youtube.com status=ERROR"));
-
-        var result = await Run(ct: TestContext.Current.CancellationToken);
-
-        Assert.Null(result.Winner);
-        Assert.Null(result.Diagnostic);
-        Assert.Equal((0, 2), (result.PerStrategyResults!["general"].Passed, result.PerStrategyResults["general"].Total));
-    }
-
-    [Fact]
-    public async Task Sweep_StrategyThatPassesSixteenChecksInARow_WinsEarlyAndTheScriptIsKilled()
-    {
-        RequireWindowsAdmin();
-        var lines = Echo("[1/5] general (ALT9).bat")
-            .Concat(Enumerable.Range(1, 16).SelectMany(i => Echo($"  [Site{i}][HTTP] https://site{i}.example status=OK")))
-            .Concat(new[] { "Start-Sleep -Seconds 120", "Write-Output 'Best config: never printed.bat'" })
-            .ToArray();
-        WriteScript(lines);
-        var progress = new ProgressLog();
-
-        var started = DateTime.UtcNow;
-        var result = await Run(progress, TestContext.Current.CancellationToken);
-
-        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(60), "the sweep must not wait for the sleeping script");
-        Assert.Equal("general (ALT9)", result.Winner);
+        Assert.Equal("general (ALT4)", result.Winner);
+        Assert.Equal((2, 3), (result.TestedCount, result.TotalCount));
         Assert.True(result.EarlyWinner);
-        Assert.Equal(1, result.TestedCount);
-        Assert.Equal(5, result.TotalCount);
-        Assert.DoesNotContain("never printed", result.FullOutput);
-        Assert.Equal((16, 16), (result.PerStrategyResults!["general (ALT9)"].Passed, result.PerStrategyResults["general (ALT9)"].Total));
-        Assert.Equal(new ZapretAutoStrategy.FlowsealProgress(1, 5, "general (ALT9)", 16, 16), progress.Items[^1]);
+        Assert.Equal(0, result.PerStrategyResults!["general"].Passed);
+        Assert.Equal(8, result.PerStrategyResults[result.Winner!].Passed);
+        Assert.Equal(2, clients);
+        Assert.Equal(2, _children.Count);
+        Assert.All(_children, child => Assert.Equal((1, 1), (child.KillCallCount, child.DisposeCallCount)));
+        Assert.All(_runner.StartCalls, call =>
+        {
+            Assert.Equal(ZapretUpdater.WinwsExePath, call.ExecutablePath);
+            Assert.Equal(new[] { "--wf-tcp=443", "--dpi-desync=multisplit" }, call.Arguments);
+        });
+        Assert.Contains("general (ALT4): 8/8", File.ReadAllText(result.ProbeLogPath!));
     }
 
     [Fact]
-    public async Task Sweep_KeepsOnlyTheLastEightErrorLines_Trimmed()
+    public async Task CanceledDuringChecks_ClosesCandidateAndDoesNotSelectAWinner()
     {
-        RequireWindowsAdmin();
-        WriteScript(Echo(Enumerable.Range(1, 10).Select(i => $"   [ERROR] problem {i}")
-            .Append("  [WARN] a warning").Append("not an error line").ToArray()));
+        Install("general", "general (ALT)");
+        using var cancel = new CancellationTokenSource();
+        ZapretAutoStrategy.CreateHandler = () => new ZapretTestHandler(_ =>
+        {
+            cancel.Cancel();
+            return HttpStatusCode.OK;
+        });
 
-        var result = await Run(ct: TestContext.Current.CancellationToken);
+        var result = await Sweep(cancel.Token);
 
-        Assert.Equal(
-            new[]
-            {
-                "[ERROR] problem 4", "[ERROR] problem 5", "[ERROR] problem 6", "[ERROR] problem 7",
-                "[ERROR] problem 8", "[ERROR] problem 9", "[ERROR] problem 10", "[WARN] a warning",
-            },
-            result.ErrorLines);
-        Assert.Contains("not an error line", result.FullOutput);
-    }
-
-    [Fact]
-    public async Task Sweep_AnswersTheScriptsMenuWithTwoThenOne()
-    {
-        RequireWindowsAdmin();
-        WriteScript(
-            "$a = [Console]::In.ReadLine()",
-            "$b = [Console]::In.ReadLine()",
-            "Write-Output \"answers=$a,$b\"");
-
-        var result = await Run(ct: TestContext.Current.CancellationToken);
-
-        Assert.Contains("answers=2,1", result.FullOutput);
-    }
-
-    [Fact]
-    public async Task Sweep_CancelledWhileTheScriptRuns_ReportsCanceledWithoutAWinner()
-    {
-        RequireWindowsAdmin();
-        WriteScript(Echo("[1/3] general.bat").Append("Start-Sleep -Seconds 120").ToArray());
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(90));
-        var progress = new ProgressLog { OnFirstReport = () => cts.Cancel() };
-
-        var result = await Run(progress, cts.Token);
-
+        Assert.Null(result.Winner);
         Assert.Equal("canceled", result.Diagnostic);
-        Assert.Null(result.Winner);
-        Assert.Equal(1, result.TestedCount);
-        Assert.Equal(3, result.TotalCount);
+        Assert.Equal(1, Assert.Single(_children).KillCallCount);
     }
 
     [Fact]
-    public async Task Sweep_MissingScript_ReportsMissingScriptWithoutStartingAnything()
+    public async Task CandidateExitingDuringChecks_CannotClaimSuccessfulResponses()
     {
-        RequireWindowsAdmin();
-        Directory.CreateDirectory(ZapretUpdater.ZapretDir);
+        Install("general");
+        ZapretAutoStrategy.CreateHandler = () => new ZapretTestHandler(_ =>
+        {
+            _children[0].SignalExit(1);
+            return HttpStatusCode.OK;
+        });
 
-        var result = await Run(ct: TestContext.Current.CancellationToken);
+        var result = await Sweep();
 
-        Assert.Equal("missing_script", result.Diagnostic);
         Assert.Null(result.Winner);
-        Assert.StartsWith("missing:", result.FullOutput);
+        Assert.Equal(0, result.PerStrategyResults!["general"].Passed);
+        Assert.Equal(1, Assert.Single(_children).DisposeCallCount);
     }
 
     [Fact]
-    public async Task Sweep_WritesAProbeLogWithHeaderTimestampedLinesAndOutcome()
+    public async Task RunningHelperAfterCleanup_AbortsBeforeStartingAnotherCandidate()
     {
-        RequireWindowsAdmin();
-        WriteScript(Echo(TwoStrategyOutput.Append("Best config: general (ALT).bat").ToArray()));
+        Install("general", "general (ALT)");
+        ZapretAutoStrategy.AnyWinwsRunning = () => _children.Count > 0;
+        var result = await Sweep();
 
-        var result = await Run(ct: TestContext.Current.CancellationToken);
+        Assert.Null(result.Winner);
+        Assert.Equal("helper_active", result.Diagnostic);
+        Assert.Single(_runner.StartCalls);
+    }
 
-        Assert.NotNull(result.ProbeLogPath);
-        Assert.StartsWith(AppPaths.LogsDir, result.ProbeLogPath!);
-        var log = File.ReadAllLines(result.ProbeLogPath!);
-        Assert.StartsWith("# Zapret probe log started at", log[0]);
-        Assert.Contains(log, l => l.StartsWith("# zapretInstallDir = ", StringComparison.Ordinal));
-        Assert.Contains(log, l => l.EndsWith(" [1/2] general.bat", StringComparison.Ordinal));
-        Assert.StartsWith("# Probe finished at", log[^1]);
-        Assert.EndsWith("outcome=winner, winner=general (ALT)", log[^1]);
+    [Fact]
+    public async Task MissingPackage_RequiresRepairAndNeverStartsAProcess()
+    {
+        var result = await Sweep();
+
+        Assert.Equal("missing_package", result.Diagnostic);
+        Assert.Null(result.Winner);
+        Assert.Empty(_runner.StartCalls);
+    }
+
+    [Fact]
+    public async Task RunTests_UsesOnlyBuiltInHttpsTargets_AndNeedsNoInstalledRuntime()
+    {
+        var requests = new List<(HttpMethod Method, Uri Uri)>();
+        ZapretAutoStrategy.CreateHandler = () => new ZapretTestHandler(req =>
+        {
+            requests.Add((req.Method, req.RequestUri!));
+            return req.RequestUri!.Host == "discord.com" ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable;
+        });
+
+        var lines = new List<string>();
+        await foreach (var line in ZapretActions.RunTestsAsync(TestContext.Current.CancellationToken)) lines.Add(line);
+
+        Assert.Equal(ZapretAutoStrategy.DefaultProbeTargets.Count, lines.Count);
+        Assert.Equal(ZapretAutoStrategy.DefaultProbeTargets, requests.Select(r => r.Uri.GetLeftPart(UriPartial.Authority)));
+        Assert.All(requests, r => Assert.Equal((HttpMethod.Head, "https"), (r.Method, r.Uri.Scheme)));
+        Assert.Equal($"discord.com — {VPNRouter.Core.Localization.Strings.ZapretHttpsResult(true)}", lines[0]);
+        Assert.All(lines.Skip(1), line => Assert.EndsWith(VPNRouter.Core.Localization.Strings.ZapretHttpsResult(false), line));
+        Assert.Empty(_runner.StartCalls);
+    }
+
+    [Fact]
+    public void HttpsProbesUseDirectTransportWithoutRedirectsOrCookies()
+    {
+        using var handler = ZapretAutoStrategy.CreateDirectHandler();
+        Assert.False(handler.UseProxy);
+        Assert.False(handler.UseCookies);
+        Assert.False(handler.AllowAutoRedirect);
     }
 }

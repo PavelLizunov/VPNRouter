@@ -10,24 +10,36 @@ public class ZapretManager : IDisposable
 {
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
+    private readonly object _processGate = new();
     private IProcessHandle? _handle;
     private bool _disposed;
 
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
 
-    public bool IsRunning => _handle != null && !_handle.HasExited;
-    public int? Pid => IsRunning ? _handle?.Pid : null;
+    internal Func<bool> HasDriverConflict { get; init; } = ZapretActions.HasDriverConflict;
 
-    public static bool IsWinwsRunning() => ProcessQuery.AnyAlive("winws");
+    public bool IsRunning => Pid.HasValue;
+    public int? Pid
+    {
+        get { lock (_processGate) return _handle is { HasExited: false } handle ? handle.Pid : null; }
+    }
+
+    public static bool IsWinwsRunning() => WinwsPid.HasValue;
 
     public static int? WinwsPid
     {
         get
         {
-            var procs = Process.GetProcessesByName("winws");
-            if (procs.Length == 0) return null;
-            try { return procs[0].Id; }
-            finally { foreach (var p in procs) p.Dispose(); }
+            if (!OperatingSystem.IsWindows() || !ZapretUpdater.IsInstalled()) return null;
+            var expected = Path.Combine(ZapretUpdater.PackageDisplayPath, "bin", "winws.exe");
+            var processes = Process.GetProcessesByName("winws");
+            try
+            {
+                foreach (var process in processes)
+                    if (ProcessOwnership.IsSamePath(ProcessOwnership.ImagePathOf(process), expected)) return process.Id;
+                return null;
+            }
+            finally { foreach (var process in processes) process.Dispose(); }
         }
     }
 
@@ -41,99 +53,75 @@ public class ZapretManager : IDisposable
         _runner = runner ?? Runner;
     }
 
-    public void StartFromBat(string batPath, string parsedArgs)
+    public void StartFromBat(string batPath, string parsedArgs) => StartWinws(ResolveInstalledStrategyArguments(batPath));
+
+    public static string[] ResolveInstalledStrategyArguments(string batPath)
     {
-        if (!File.Exists(batPath))
-            throw new FileNotFoundException($"Strategy .bat not found: {batPath}");
+        // Read the strategy from the installed package even when the caller has cached its arguments.
+        var fullPath = Path.GetFullPath(batPath);
+        var installed = ZapretUpdater.ParseStrategies().FirstOrDefault(strategy =>
+            string.Equals(strategy.BatPath, fullPath, StringComparison.OrdinalIgnoreCase));
+        if (installed is null)
+            throw new ArgumentException("Select a strategy from the installed Zapret package.", nameof(batPath));
 
-        if (IsRunning)
-        {
-            _logger.Warning("[Zapret] Already running (PID {Pid}), stopping first", Pid);
-            Stop();
-        }
-
-        var zapretDir = Path.GetDirectoryName(batPath)!;
-        var binDir = Path.Combine(zapretDir, "bin");
-        var listsDir = Path.Combine(zapretDir, "lists");
-
-        var wrapperPath = Path.Combine(zapretDir, "_vpnrouter_silent.bat");
-        var wrapper = "@echo off\r\n" +
-            "chcp 65001 > nul\r\n" +
-            $"cd /d \"{zapretDir}\"\r\n" +
-            "call service.bat status_zapret >nul 2>&1\r\n" +
-            "call service.bat check_updates >nul 2>&1\r\n" +
-            "call service.bat load_game_filter >nul 2>&1\r\n" +
-            "call service.bat load_user_lists >nul 2>&1\r\n" +
-            $"set \"BIN={binDir}{Path.DirectorySeparatorChar}\"\r\n" +
-            $"set \"LISTS={listsDir}{Path.DirectorySeparatorChar}\"\r\n" +
-            "cd /d \"%BIN%\"\r\n" +
-            $"\"%BIN%winws.exe\" {parsedArgs}\r\n";
-        File.WriteAllText(wrapperPath, wrapper);
-
-        _logger.Information("[Zapret] Launching silent wrapper: {Path}", wrapperPath);
-
-        _handle = StartCmdBat(wrapperPath, zapretDir);
-
-        var startedAt = DateTime.UtcNow;
-        var startedHandle = _handle;
-        startedHandle.Exited += (_, code) =>
-        {
-            var runtime = DateTime.UtcNow - startedAt;
-            _logger.Warning("[Zapret] Wrapper exited (exit code: {Code})", code);
-            DetectImmediateExit(runtime, code);
-        };
-
-        _logger.Information("[Zapret] Silent wrapper started (PID {Pid})", startedHandle.Pid);
+        return ExpandArguments(installed.Arguments, fromPackage: true);
     }
 
-    public void Start(string args)
+    public void Start(string args) => StartWinws(ExpandArguments(args, fromPackage: false));
+
+    internal static string[] ExpandArguments(string args, bool fromPackage)
     {
-        if (IsRunning)
+        var tokens = FirewallManager.SplitShellArgs(args);
+        if (tokens.Length == 0) throw new ArgumentException("Select a Zapret strategy or enter its options.", nameof(args));
+        var root = ZapretUpdater.ZapretDir;
+        var bin = Path.Combine(root, "bin") + Path.DirectorySeparatorChar;
+        var lists = Path.Combine(root, "lists") + Path.DirectorySeparatorChar;
+        for (var index = 0; index < tokens.Length; index++)
         {
-            _logger.Warning("[Zapret] Already running (PID {Pid}), stopping first", Pid);
-            Stop();
+            var token = tokens[index];
+            var split = token.IndexOf('=');
+            var option = split < 0 ? token : token[..split];
+            var value = split < 0 ? string.Empty : token[(split + 1)..];
+            if (!fromPackage)
+            {
+                bool supported = option is "--new" or "--wf-tcp" or "--wf-udp" or "--wf-l3"
+                    or "--filter-tcp" or "--filter-udp" or "--filter-l3" or "--filter-l7"
+                    or "--hostlist" or "--hostlist-exclude" or "--hostlist-domains" or "--hostlist-exclude-domains"
+                    or "--ip-id" or "--ipset" or "--ipset-exclude"
+                    or "--dpi-desync" || option.StartsWith("--dpi-desync-", StringComparison.Ordinal);
+                var file = value.StartsWith("%BIN%", StringComparison.OrdinalIgnoreCase) ? value[5..]
+                    : value.StartsWith("%LISTS%", StringComparison.OrdinalIgnoreCase) ? value[7..] : value;
+                if (!supported || file is "." or ".." || !file.All(c =>
+                        char.IsAsciiLetterOrDigit(c) || c is ',' or '.' or '-' or '_' or '+' or '='))
+                    throw new ArgumentException("This custom winws option or file path is unsupported. Select an installed strategy or use a file from BIN or LISTS.", nameof(args));
+            }
+            tokens[index] = token
+                .Replace("%BIN%", bin, StringComparison.OrdinalIgnoreCase)
+                .Replace("%LISTS%", lists, StringComparison.OrdinalIgnoreCase);
         }
-
-        var binDir = ZapretUpdater.BinDir;
-        var exePath = ZapretUpdater.WinwsExePath;
-
-        if (!File.Exists(exePath))
-        {
-            _logger.Error("[Zapret] winws.exe not found at {Path}", exePath);
-            throw new FileNotFoundException($"winws.exe not found. Download zapret first.");
-        }
-
-        _logger.Information("[Zapret] WorkingDir: {Dir}", binDir);
-        _logger.Information("[Zapret] Args: {Args}", args);
-
-        var batPath = Path.Combine(binDir, "_vpnrouter_launch.bat");
-        var batContent = BuildCygwinLaunchBat(binDir, ZapretUpdater.ListsDir, args);
-        File.WriteAllText(batPath, batContent);
-
-        _handle = StartCmdBat(batPath, workingDir: null);
-
-        var startedAt = DateTime.UtcNow;
-        var startedHandle = _handle;
-        startedHandle.Exited += (_, code) =>
-        {
-            var runtime = DateTime.UtcNow - startedAt;
-            _logger.Warning("[Zapret] Process exited (exit code: {Code})", code);
-            DetectImmediateExit(runtime, code);
-        };
-
-        _logger.Information("[Zapret] Started (PID {Pid})", startedHandle.Pid);
+        return tokens;
     }
 
-    private IProcessHandle StartCmdBat(string batPath, string? workingDir)
+    private void StartWinws(string[] arguments)
     {
-        var request = new ProcessRequest(
-            ExecutablePath: "cmd.exe",
-            Arguments: new List<string> { "/c", batPath },
-            WorkingDirectory: workingDir,
-            CaptureStdout: false,
-            CaptureStderr: false);
+        var exe = ZapretUpdater.WinwsExePath;
+        if (!File.Exists(exe))
+            throw new FileNotFoundException("Download Zapret in VPNRouter to install the protected runtime.", exe);
+        lock (_processGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (HasDriverConflict())
+                throw new InvalidOperationException(Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict));
+            if (!StopOwnedProcess())
+                throw new InvalidOperationException(Localization.Strings.ZapretStopPending);
 
-        return _runner.Start(request);
+            _handle = _runner.Start(new ProcessRequest(exe, arguments, ZapretUpdater.BinDir,
+                EnvironmentOverrides: OperatingSystem.IsWindows() ? ZapretRuntimeDirectory.ProcessEnvironment() : null,
+                CaptureStdout: false, CaptureStderr: false) { ClearInheritedEnvironment = OperatingSystem.IsWindows() });
+            var startedAt = DateTime.UtcNow;
+            _handle.Exited += (_, code) => DetectImmediateExit(DateTime.UtcNow - startedAt, code);
+            _logger.Information("[Zapret] Started winws (PID {Pid})", _handle.Pid);
+        }
     }
 
     private void DetectImmediateExit(TimeSpan runtime, int? exitCode)
@@ -149,18 +137,6 @@ public class ZapretManager : IDisposable
         {
             _logger.Debug(ex, "[Zapret] ImmediateExitDetected handler threw");
         }
-    }
-
-    internal static string BuildCygwinLaunchBat(string binDir, string listsDir, string args)
-    {
-        if (args.Any(c => c is '\r' or '\n' or '&' or '|' or '^' or '<' or '>' or '%'))
-            throw new ArgumentException("Zapret arguments contain disallowed shell metacharacters", nameof(args));
-
-        return "@echo off\r\n" +
-            $"set \"BIN={binDir}{Path.DirectorySeparatorChar}\"\r\n" +
-            $"set \"LISTS={listsDir}{Path.DirectorySeparatorChar}\"\r\n" +
-            "cd /d \"%BIN%\"\r\n" +
-            $"\"%BIN%winws.exe\" {args}\r\n";
     }
 
     public static string BuildLegacyArgs(string strategy, int targetPort = 443)
@@ -183,47 +159,42 @@ public class ZapretManager : IDisposable
 
     public void Stop()
     {
-        if (_handle == null || _handle.HasExited)
-        {
-            _handle?.Dispose();
-            _handle = null;
-            return;
-        }
+        lock (_processGate) StopOwnedProcess();
+    }
 
+    private bool StopOwnedProcess()
+    {
         var handle = _handle;
-        _logger.Information("[Zapret] Stopping (PID {Pid})", handle.Pid);
-
-        try
+        if (handle == null) return true;
+        if (!handle.HasExited)
         {
-            handle.SuppressExitedEvent();
-            handle.Kill(entireProcessTree: true);
-
-            using var stopCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(3000));
             try
             {
-                handle.WaitForExitAsync(stopCts.Token).GetAwaiter().GetResult();
+                handle.SuppressExitedEvent();
+                handle.Kill(entireProcessTree: false);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                handle.WaitForExitAsync(timeout.Token).GetAwaiter().GetResult();
             }
-            catch (OperationCanceledException)
+            catch (Exception ex)
             {
-                _logger.Debug("[Zapret] WaitForExitAsync timeout (3s) — proceeding to dispose");
+                _logger.Debug(ex, "[Zapret] Could not confirm winws exit");
+            }
+            if (!handle.HasExited)
+            {
+                _logger.Warning("[Zapret] winws is still running (PID {Pid})", handle.Pid);
+                return false;
             }
         }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[Zapret] Error stopping");
-        }
-        finally
-        {
-            try { handle.Dispose(); } catch { }
-            _handle = null;
-            _logger.Information("[Zapret] Stopped");
-        }
+        handle.Dispose();
+        _handle = null;
+        return true;
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        Stop();
+        lock (_processGate)
+        {
+            if (!_disposed) _disposed = StopOwnedProcess();
+        }
     }
 }

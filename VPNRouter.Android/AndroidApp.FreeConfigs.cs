@@ -47,6 +47,7 @@ public partial class AndroidApp
     private ListBox? _fcSavedList;
     private TextBlock? _fcSavedEmptyHint;
     private Avalonia.Controls.Button? _fcClearAllButton;
+    private Avalonia.Controls.Button? _fcRecheckButton;
 
     private TextBlock? _fcStatusText;
     private Avalonia.Controls.ProgressBar? _fcProgress;
@@ -54,7 +55,8 @@ public partial class AndroidApp
     private Avalonia.Controls.Button? _fcUseButton;
     private TextBlock? _fcConnectHint;
 
-    private FreeConfigEntry? _fcSelectedEntry;
+    private FreeConfigEntry? _fcSelectedEntry =>
+        (_fcSelectedTab == 1 ? _fcSavedList : _fcSearchList)?.SelectedItem as FreeConfigEntry;
 
     private readonly ObservableCollection<FreeConfigEntry> _fcSearchResults = new();
     private readonly ObservableCollection<FreeConfigEntry> _fcSavedResults = new();
@@ -281,6 +283,16 @@ public partial class AndroidApp
         };
         _fcClearAllButton.Click += OnFreeConfigsClearAllClicked;
 
+        _fcRecheckButton = new Avalonia.Controls.Button
+        {
+            Content = IconText(UiIcons.RefreshCw, global::VPNRouter.Core.Localization.Strings.ServerDeepVerify, 14),
+            MinHeight = 44,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            IsEnabled = false,
+        };
+        ToolTip.SetTip(_fcRecheckButton, Localization.FcSavedRecheckOneTooltip);
+        _fcRecheckButton.Click += OnFreeConfigsRecheckClicked;
+
         var savedToolbar = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -288,6 +300,7 @@ public partial class AndroidApp
             Margin = new Thickness(2, 0, 2, 8),
         };
         Grid.SetColumn(_fcClearAllButton, 1);
+        savedToolbar.Children.Add(_fcRecheckButton);
         savedToolbar.Children.Add(_fcClearAllButton);
 
         var savedHeaderRow = BuildFcListHeader(textM, sunken);
@@ -299,7 +312,7 @@ public partial class AndroidApp
             ItemsSource = _fcSavedResults,
             ItemTemplate = new FuncDataTemplate<FreeConfigEntry>(
                 (entry, _) => BuildFcRow(entry, isSavedTab: true),
-                supportsRecycling: true),
+                supportsRecycling: false),
         };
         _fcSavedList.SelectionChanged += OnFreeConfigsSelectionChanged;
 
@@ -819,6 +832,7 @@ public partial class AndroidApp
         }
 
         await _fcOrchestrator.EnsureCacheLoadedAsync();
+        SetFcBusy(_fcOrchestrator.IsBusy);
         ReloadFreeConfigsLists();
 
         var persistedSaved = AndroidStorage.GetPublicActiveSubTabIsSaved();
@@ -850,8 +864,7 @@ public partial class AndroidApp
             _fcTabSaved.Content = SavedTabHeaderText();
         }
 
-        _fcSelectedEntry = null;
-        if (_fcUseButton is not null) _fcUseButton.IsEnabled = false;
+        ApplyFcConnectGate();
     }
 
     private string SavedTabHeaderText()
@@ -878,8 +891,6 @@ public partial class AndroidApp
         var excludeRu = _fcExcludeRu?.IsChecked == true;
 
         _fcSearchResults.Clear();
-        if (_fcUseButton is not null) _fcUseButton.IsEnabled = false;
-        _fcSelectedEntry = null;
         SetFcBusy(true);
 
         try
@@ -890,6 +901,27 @@ public partial class AndroidApp
         {
             SetFcBusy(false);
             ReloadFreeConfigsLists();
+        }
+    }
+
+    private async void OnFreeConfigsRecheckClicked(object? sender, RoutedEventArgs e)
+    {
+        if (_fcOrchestrator is null) return;
+        if (_fcOrchestrator.IsBusy)
+        {
+            _fcOrchestrator.Cancel();
+            return;
+        }
+        if (_fcSelectedTab != 1 || _fcSelectedEntry is not { } entry) return;
+        SetFcBusy(true);
+        try
+        {
+            await _fcOrchestrator.RecheckSavedAsync(entry);
+        }
+        finally
+        {
+            ReloadFreeConfigsLists();
+            SetFcBusy(false);
         }
     }
 
@@ -904,6 +936,13 @@ public partial class AndroidApp
         if (_fcStopButton is not null) _fcStopButton.IsVisible = busy;
         if (_fcProgress is not null) _fcProgress.IsVisible = busy;
         if (_fcProgressLabel is not null) _fcProgressLabel.IsVisible = busy;
+        if (_fcSavedList is not null) _fcSavedList.IsEnabled = !busy;
+        if (_fcClearAllButton is not null) _fcClearAllButton.IsEnabled = !busy;
+        if (_fcRecheckButton is not null)
+            _fcRecheckButton.Content = busy
+                ? IconText(UiIcons.Square, Localization.FcStopButton, 14)
+                : IconText(UiIcons.RefreshCw, global::VPNRouter.Core.Localization.Strings.ServerDeepVerify, 14);
+        ApplyFcConnectGate(busy);
     }
 
     private void OnFreeConfigsAdvancedToggle(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -920,26 +959,26 @@ public partial class AndroidApp
             _fcAdvancedToggleText.Text = _fcAdvancedExpanded ? Localization.SectionHide : Localization.SectionShow;
     }
 
-    private bool ApplyFcConnectGate()
+    private void ApplyFcConnectGate(bool? operationBusy = null)
     {
-        var verified = _fcSelectedEntry is { } e &&
-                       e.Status == FreeConfigStatus.Verified;
-        if (_fcUseButton is not null) _fcUseButton.IsEnabled = verified;
-        return verified;
+        var busy = operationBusy ?? (_fcOrchestrator?.IsBusy == true);
+        var selected = _fcSelectedEntry;
+        if (_fcUseButton is not null)
+            _fcUseButton.IsEnabled = !busy && selected?.Status == FreeConfigStatus.Verified;
+        if (_fcRecheckButton is not null)
+            _fcRecheckButton.IsEnabled = busy || (_fcSelectedTab == 1 && selected != null);
     }
 
     private void OnFreeConfigsSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is ListBox box && box.SelectedItem is FreeConfigEntry entry)
+        if (sender is ListBox { SelectedItem: FreeConfigEntry } box)
         {
-            _fcSelectedEntry = entry;
-            ApplyFcConnectGate();
-
             if (ReferenceEquals(box, _fcSearchList) && _fcSavedList is not null)
                 _fcSavedList.SelectedItem = null;
             else if (ReferenceEquals(box, _fcSavedList) && _fcSearchList is not null)
                 _fcSearchList.SelectedItem = null;
         }
+        ApplyFcConnectGate();
     }
 
     private static DateTime _fcUseClickedAt = DateTime.MinValue;
@@ -967,38 +1006,19 @@ public partial class AndroidApp
         try
         {
             var vless = VPNRouter.Core.Services.ServerUriParser.Parse(entry.RawUri);
-            var servers = AndroidStorage.GetServers() ?? new System.Collections.Generic.List<VPNRouter.Core.Models.VlessServerEntry>();
-            var existing = servers.FirstOrDefault(s =>
-                string.Equals(s.Server, vless.Server, System.StringComparison.OrdinalIgnoreCase) &&
-                s.Port == vless.Port &&
-                string.Equals(s.Uuid, vless.Uuid, System.StringComparison.OrdinalIgnoreCase));
-            if (existing is not null)
-            {
-                AndroidStorage.SetSelectedServerName(existing.Name);
-            }
-            else
-            {
-                var baseName = string.IsNullOrWhiteSpace(vless.Name) ? "⚡ free" : vless.Name!;
-                var displayName = baseName;
-                int suffix = 2;
-                while (servers.Any(s => string.Equals(s.Name, displayName, System.StringComparison.OrdinalIgnoreCase)))
-                    displayName = $"{baseName} #{suffix++}";
-                vless.Name = displayName;
-                servers.Add(vless);
-                AndroidStorage.SetServers(servers);
-                AndroidStorage.SetSelectedServerName(displayName);
-            }
+            if (string.IsNullOrWhiteSpace(vless.Name)) vless.Name = "⚡ free";
+            var servers = AndroidStorage.GetServers();
+            var index = FreeConfigSelection.SelectOrAdd(servers, vless);
+            AndroidStorage.ApplyFreeConfig(servers, servers[index].Name, entry.RawUri);
         }
         catch (System.Exception ex)
         {
             // Never wipe the user's server list on a parse or persist failure: keep prior settings, surface the error and abort the apply.
             global::Android.Util.Log.Warn("VpnRouter.FC",
-                $"Apply public config failed — {ex.GetType().Name}: {ex.Message}; servers left unchanged");
+                $"Apply public config failed ({ex.GetType().Name})");
             ShowMenuFeedback(Localization.FcApplyFailed);
             return;
         }
-        AndroidStorage.SetVlessUri(entry.RawUri);
-        AndroidStorage.SetSubscriptionUrl(null);
 
         ShowMenuFeedback(Localization.FcUsedToast);
 
@@ -1052,7 +1072,7 @@ public partial class AndroidApp
                     return;
             }
             _fcSearchResults.Add(entry);
-            if (_fcSelectedEntry is null && _fcSearchList is not null)
+            if (_fcSelectedTab == 0 && _fcSearchList is { SelectedItem: null })
             {
                 _fcSearchList.SelectedItem = entry;
             }
@@ -1076,11 +1096,10 @@ public partial class AndroidApp
             {
                 if (string.Equals(_fcSearchResults[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
                 {
-                    var wasSelected = ReferenceEquals(_fcSelectedEntry, _fcSearchResults[i]);
+                    var wasSelected = _fcSelectedTab == 0 && ReferenceEquals(_fcSearchList?.SelectedItem, _fcSearchResults[i]);
                     _fcSearchResults[i] = entry;
                     if (wasSelected)
                     {
-                        _fcSelectedEntry = entry;
                         if (_fcSearchList is not null)
                             _fcSearchList.SelectedItem = entry;
                     }
@@ -1091,11 +1110,10 @@ public partial class AndroidApp
             {
                 if (string.Equals(_fcSavedResults[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
                 {
-                    var wasSelected = ReferenceEquals(_fcSelectedEntry, _fcSavedResults[i]);
+                    var wasSelected = _fcSelectedTab == 1 && ReferenceEquals(_fcSavedList?.SelectedItem, _fcSavedResults[i]);
                     _fcSavedResults[i] = entry;
                     if (wasSelected)
                     {
-                        _fcSelectedEntry = entry;
                         if (_fcSavedList is not null)
                             _fcSavedList.SelectedItem = entry;
                     }
@@ -1105,7 +1123,7 @@ public partial class AndroidApp
 
             var selectedIsConnectable = _fcSelectedEntry is { } sel &&
                                         sel.Status == FreeConfigStatus.Verified;
-            if (!selectedIsConnectable && _fcSearchList is not null &&
+            if (_fcSelectedTab == 0 && !selectedIsConnectable && _fcSearchList is not null &&
                 _fcSearchResults.Contains(entry))
                 _fcSearchList.SelectedItem = entry;
             else
@@ -1126,6 +1144,7 @@ public partial class AndroidApp
     {
         if (_fcOrchestrator is null) return;
         var saved = _fcOrchestrator.Saved;
+        var selected = _fcSavedList?.SelectedItem as FreeConfigEntry;
 
         _fcSavedResults.Clear();
         var ordered = saved
@@ -1144,7 +1163,11 @@ public partial class AndroidApp
         if (_fcSavedEmptyHint is not null)
             _fcSavedEmptyHint.IsVisible = _fcSavedResults.Count == 0;
         if (_fcSavedList is not null)
+        {
             _fcSavedList.IsVisible = _fcSavedResults.Count > 0;
+            if (_fcSelectedTab == 1 && selected != null && _fcSavedResults.Contains(selected))
+                _fcSavedList.SelectedItem = selected;
+        }
         if (_fcClearAllButton is not null)
             _fcClearAllButton.IsVisible = _fcSavedResults.Count > 0;
 
@@ -1153,13 +1176,8 @@ public partial class AndroidApp
         if (_fcSearchList is not null)
             _fcSearchList.IsVisible = _fcSearchResults.Count > 0;
 
-        if (_fcTabSaved is not null && _fcSelectedTab != 1)
-        {
+        if (_fcTabSaved is not null)
             _fcTabSaved.Content = SavedTabHeaderText();
-        }
-        else if (_fcTabSaved is not null)
-        {
-            _fcTabSaved.Content = SavedTabHeaderText();
-        }
+        ApplyFcConnectGate();
     }
 }

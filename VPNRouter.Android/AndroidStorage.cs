@@ -61,27 +61,8 @@ public static class AndroidStorage
     public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
 
     /// <summary>The connection-state record of <c>VpnRouterService</c>, resolved for this process (see <see cref="VpnStateResolver"/>).</summary>
-    public static VpnStateSnapshot ResolveVpnState()
-    {
-        VpnStateSnapshot? stored = null;
-        try
-        {
-            var prefs = Application.Context?.GetSharedPreferences(PrefsName, FileCreationMode.Private);
-            if (prefs is not null)
-            {
-                stored = VpnStateCodec.TryParse(
-                    prefs.GetString("vpn_state", null),
-                    prefs.GetString("vpn_state_reason", null),
-                    prefs.GetInt("vpn_state_pid", 0),
-                    prefs.GetLong("vpn_state_at_ms", 0));
-            }
-        }
-        catch
-        {
-            stored = null;
-        }
-        return VpnStateResolver.Resolve(stored, global::Android.OS.Process.MyPid(), DateTimeOffset.UtcNow);
-    }
+    public static VpnStateSnapshot ResolveVpnState() =>
+        VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.ResolveVpnState();
 
     public static string? GetCustomConfigJson() => GetString(KeyCustomConfigJson);
     public static bool SetCustomConfigJson(string? value) => SetString(KeyCustomConfigJson, value);
@@ -339,6 +320,19 @@ public static class AndroidStorage
     public static string? GetSelectedServerName() => GetString(KeySelectedServerName);
     public static bool SetSelectedServerName(string? value) => SetString(KeySelectedServerName, value);
 
+    internal static void ApplyFreeConfig(List<VlessServerEntry> servers, string selectedName, string uri)
+    {
+        var json = JsonSerializer.Serialize(servers, JsonOptions);
+        var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+        using var editor = prefs?.Edit() ?? throw new InvalidOperationException("Preferences unavailable");
+        editor.PutString(KeyServersJson, json);
+        editor.PutString(KeySelectedServerName, selectedName);
+        editor.PutString(KeyVlessUri, uri);
+        editor.Remove(KeySubscriptionUrl);
+        editor.PutString(KeyConfigMode, "manual");
+        editor.Apply();
+    }
+
     public static VlessServerEntry? GetActiveServer()
     {
         var selectedName = GetSelectedServerName();
@@ -489,7 +483,6 @@ public static class AndroidStorage
     private const string KeyPostNotifPrompt = "post_notif_prompt_shown";
     private const string KeyAlwaysOnPrompt = "alwayson_lockdown_prompt_shown";
     private const string KeyExternalControl = "external_control_enabled";
-    private const string KeyClashApiSecret = "clash_api_secret";
     private const string KeyUpdateChannel = "update_channel";
     private const string KeyAutostartVpn = "autostart_vpn";
     private const string KeyAutostartZapret = "autostart_zapret";
@@ -543,15 +536,6 @@ public static class AndroidStorage
 
     public static bool GetExternalControlEnabled() => GetBool(KeyExternalControl, defaultValue: false);
     public static bool SetExternalControlEnabled(bool value) => SetBool(KeyExternalControl, value);
-
-    public static string GetClashApiSecret()
-    {
-        var existing = GetString(KeyClashApiSecret);
-        if (!string.IsNullOrEmpty(existing)) return existing;
-        var fresh = VPNRouter.Core.Models.AppSettingsSane.GenerateClashApiSecret();
-        SetString(KeyClashApiSecret, fresh);
-        return fresh;
-    }
 
     public static string GetUpdateChannel() =>
         ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");

@@ -18,6 +18,7 @@ public class FreeConfigRecheckMergeTests
             LastTestedAt = Now.AddDays(-2),
             LastDeepVerifyAt = Now.AddDays(-2),
             LastVerifyFailedAt = Now.AddDays(-1),
+            RequiresSavedRecheck = true,
         };
         var prior = VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RecheckSnapshot.Capture(entry);
 
@@ -31,13 +32,14 @@ public class FreeConfigRecheckMergeTests
 
         Assert.Equal(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, entry.Status);
         Assert.Null(entry.LastVerifyFailedAt);
+        Assert.False(entry.RequiresSavedRecheck);
         Assert.Equal(30, entry.LatencyMs);
         Assert.Equal(60, entry.MeasuredBandwidthMbps);
         Assert.Equal(Now, entry.LastTestedAt);
     }
 
     [Fact]
-    public void Failure_RestoresPriorValues_SetsFailureMarker_KeepsVerifiedStatus()
+    public void Failure_RetainsPriorMeasurements_AndClearsVerifiedStatus()
     {
         var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
         {
@@ -55,11 +57,12 @@ public class FreeConfigRecheckMergeTests
 
         VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.MergeRecheckResult(entry, prior, Now);
 
-        Assert.Equal(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, entry.Status);
+        Assert.Equal(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Unknown, entry.Status);
         Assert.Equal(50, entry.LatencyMs);
         Assert.Equal(25, entry.MeasuredBandwidthMbps);
         Assert.Equal(Now.AddDays(-1), entry.LastTestedAt);
         Assert.Equal(Now, entry.LastVerifyFailedAt);
+        Assert.True(entry.RequiresSavedRecheck);
     }
 
     [Fact]
@@ -136,11 +139,14 @@ public class FreeConfigRecheckMergeTests
         };
         var prior = VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RecheckSnapshot.Capture(entry);
 
+        entry.LastVerifyFailedAt = null;
+        entry.LastError = "interrupted attempt";
         entry.Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Timeout;
 
         VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RestorePriorState(entry, prior);
 
         Assert.Equal(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, entry.Status);
         Assert.Equal(Now.AddDays(-1), entry.LastVerifyFailedAt);
+        Assert.Null(entry.LastError);
     }
 }

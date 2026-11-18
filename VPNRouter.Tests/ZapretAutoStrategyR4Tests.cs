@@ -14,46 +14,8 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-public sealed class ZapretAutoStrategyR4Tests : IDisposable
+public sealed class ZapretAutoStrategyR4Tests
 {
-    private readonly string _tempRoot;
-
-    public ZapretAutoStrategyR4Tests()
-    {
-        _tempRoot = Path.Combine(Path.GetTempPath(),
-            $"vpnrouter-r4-test-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_tempRoot);
-        Directory.CreateDirectory(Path.Combine(_tempRoot, "lists"));
-    }
-
-    public void Dispose()
-    {
-        try { Directory.Delete(_tempRoot, recursive: true); }
-        catch { }
-    }
-
-    [Fact]
-    public void HasOrphanedIpsetFlag_NoFlag_ReturnsFalse()
-    {
-        Assert.False(ZapretAutoStrategy.HasOrphanedIpsetFlag(_tempRoot));
-    }
-
-    [Fact]
-    public void HasOrphanedIpsetFlag_FlagPresent_ReturnsTrue()
-    {
-        File.WriteAllText(Path.Combine(_tempRoot, "ipset_switched.flag"), "");
-        Assert.True(ZapretAutoStrategy.HasOrphanedIpsetFlag(_tempRoot));
-    }
-
-    [Fact]
-    public void RestoreIpsetAfterKill_NoFlag_NoOp()
-    {
-        ZapretAutoStrategy.RestoreIpsetAfterKill(_tempRoot, logger: null);
-
-        Assert.False(File.Exists(Path.Combine(_tempRoot, "ipset_switched.flag")));
-        Assert.False(File.Exists(Path.Combine(_tempRoot, "lists", "ipset-all.txt")));
-    }
-
     [Fact]
     public void IsRunningAsAdmin_NonWindows_ReturnsFalse()
     {
@@ -67,36 +29,13 @@ public sealed class ZapretAutoStrategyR4Tests : IDisposable
         }
     }
 
-    [Theory]
-    [InlineData("script with spaces.ps1")]
-    [InlineData("script&with%characters^.ps1")]
-    [InlineData("script\"quoted.ps1")]
-    [InlineData("script\r\nline.ps1")]
-    public void BuildFlowsealProbeStartInfo_KeepsScriptAsOneArgument(string scriptPath)
-    {
-        var psi = ZapretAutoStrategy.BuildFlowsealProbeStartInfo("install directory", scriptPath);
-
-        Assert.Equal("powershell.exe", psi.FileName);
-        Assert.Equal("install directory", psi.WorkingDirectory);
-        Assert.Equal(new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath }, psi.ArgumentList);
-        Assert.Empty(psi.Arguments);
-        Assert.False(psi.UseShellExecute);
-        Assert.True(psi.CreateNoWindow);
-        Assert.True(psi.RedirectStandardInput);
-        Assert.True(psi.RedirectStandardOutput);
-        Assert.True(psi.RedirectStandardError);
-        Assert.Equal(System.Text.Encoding.UTF8, psi.StandardOutputEncoding);
-        Assert.Equal(System.Text.Encoding.UTF8, psi.StandardErrorEncoding);
-        Assert.Equal(System.Diagnostics.ProcessWindowStyle.Hidden, psi.WindowStyle);
-    }
-
     [Fact]
-    public async Task RunFlowsealProbeAsync_NonWindowsPreservesDiagnostic()
+    public async Task InstalledProbe_NonWindowsPreservesDiagnostic()
     {
         if (OperatingSystem.IsWindows()) return;
 
-        var result = await ZapretAutoStrategy.RunFlowsealProbeAsync(
-            "directory&with%shell^characters", null, null, CancellationToken.None);
+        using var manager = new ZapretManager();
+        var result = await ZapretAutoStrategy.RunInstalledProbeAsync(manager, null, null, CancellationToken.None);
 
         Assert.Equal("not_windows", result.Diagnostic);
     }

@@ -9,8 +9,10 @@ public sealed class HostsManagerProcessRunnerWireShapeTests
 {
     private const string FakeHostsPath = @"C:\Test\Windows\System32\drivers\etc\hosts";
 
+    private static readonly string SystemDirectory = Path.Combine(Path.GetTempPath(), "hosts-fixture", "System32");
+
     private static HostsManager NewManager(InMemoryFileSystem fs, FakeProcessRunner runner)
-        => new(fs, FakeHostsPath, http: null, runner: runner);
+        => new(fs, FakeHostsPath, http: null, runner: runner) { SystemDirectory = SystemDirectory };
 
     private static ProcessResult Ok() =>
         new(ExitCode: 0, Stdout: "Windows IP Configuration\r\nSuccessfully flushed the DNS Resolver Cache.\r\n",
@@ -29,7 +31,7 @@ public sealed class HostsManagerProcessRunnerWireShapeTests
         Assert.True(ok);
         Assert.Single(fake.RunCalls);
         var call = fake.RunCalls[0];
-        Assert.Equal("ipconfig", call.ExecutablePath);
+        Assert.Equal(Path.Combine(SystemDirectory, "ipconfig.exe"), call.ExecutablePath);
         Assert.Equal(new[] { "/flushdns" }, call.Arguments.ToArray());
         Assert.Equal(TimeSpan.FromMilliseconds(5000), call.Timeout);
     }
@@ -50,7 +52,7 @@ public sealed class HostsManagerProcessRunnerWireShapeTests
         Assert.Equal(2, fake.RunCalls.Count);
         foreach (var call in fake.RunCalls)
         {
-            Assert.Equal("ipconfig", call.ExecutablePath);
+            Assert.Equal(Path.Combine(SystemDirectory, "ipconfig.exe"), call.ExecutablePath);
             Assert.Equal(new[] { "/flushdns" }, call.Arguments.ToArray());
         }
     }

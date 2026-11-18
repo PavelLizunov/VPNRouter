@@ -647,7 +647,7 @@ internal sealed class StartupPipeline
                 ? rawCustomJson
                 : File.ReadAllText(localCopy);
             var configJson = CustomConfigInjector.Inject(
-                injectSource, scanResult.ProcessNames, settings);
+                injectSource, scanResult.ProcessNames, settings, requireGeo: mode == StartupMode.HotReload);
             _host.OnStatus("Applied process routing to selected custom configuration");
             return configJson;
         }
@@ -659,7 +659,8 @@ internal sealed class StartupPipeline
             ConfigPipeline.ValidationMode.Strict,
             warningSink: msg => _host.OnWarning(msg),
             logger: _host.Logger,
-            isServerAlive: isServerAlive);
+            isServerAlive: isServerAlive,
+            requireGeo: mode == StartupMode.HotReload);
         return json;
     }
 

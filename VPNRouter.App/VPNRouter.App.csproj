@@ -42,6 +42,10 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <None Include="..\packaging\windows\installer\stop-vpnrouter.ps1" Link="stop-vpnrouter.ps1"
+          Condition="$([MSBuild]::IsOSPlatform('Windows'))" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\packaging\windows\installer\zapret-maintenance.ps1" Link="zapret-maintenance.ps1"
+          Condition="$([MSBuild]::IsOSPlatform('Windows'))" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

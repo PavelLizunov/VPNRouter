@@ -18,12 +18,18 @@ public static class RuleSetCacheManager
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> FileLocks =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public static async Task<string?> EnsureLocalAsync(
+    public static Task<string?> EnsureLocalAsync(
         string url,
         string filename,
         ILogger? logger = null,
         HttpClient? httpClient = null,
         string? cacheDir = null,
+        CancellationToken cancellationToken = default) =>
+        EnsureLocalAsync(url, filename, RuleSetFile.CheckContentsAsync, logger, httpClient, cacheDir, cancellationToken);
+
+    internal static async Task<string?> EnsureLocalAsync(
+        string url, string filename, Func<string, CancellationToken, Task<bool>> checkContents,
+        ILogger? logger = null, HttpClient? httpClient = null, string? cacheDir = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -47,7 +53,8 @@ public static class RuleSetCacheManager
         try
         {
             var fi = new FileInfo(localPath);
-            var existsLocally = fi.Exists && fi.Length > 0;
+            var existsLocally = fi.Exists && RuleSetFile.IsValidBinary(localPath) &&
+                await checkContents(localPath, cancellationToken).ConfigureAwait(false);
             var ageOk = existsLocally && (DateTime.UtcNow - fi.LastWriteTimeUtc) < MaxAgeForUseAsIs;
 
             if (ageOk)
@@ -65,26 +72,38 @@ public static class RuleSetCacheManager
             }
             try
             {
-                httpClient.Timeout = FetchTimeout;
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 cts.CancelAfter(FetchTimeout);
 
                 logger.Information("[RuleSetCache] fetching {Url} (timeout {Timeout})", CanaryPolicy.RedactUrl(url), FetchTimeout);
-                var response = await httpClient.GetAsync(url, cts.Token).ConfigureAwait(false);
+                using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
                 response.EnsureSuccessStatusCode();
 
                 var mediaType = response.Content.Headers.ContentType?.MediaType;
                 if (mediaType != null && mediaType.Contains("html", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException($"Invalid Content-Type: {mediaType}");
 
-                var bytes = await response.Content.ReadAsByteArrayAsync(cts.Token).ConfigureAwait(false);
-                if (bytes.Length == 0 || bytes[0] == (byte)'<')
-                    throw new InvalidDataException("Downloaded rule-set is corrupt, truncated, or HTML");
+                if (response.Content.Headers.ContentLength > RuleSetFile.MaxFileBytes)
+                    throw new InvalidDataException("Rule-set exceeds the size limit");
 
-                var tmp = localPath + ".tmp";
+                var tmp = localPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                long size = 0;
                 try
                 {
-                    await File.WriteAllBytesAsync(tmp, bytes, cts.Token).ConfigureAwait(false);
+                    using var input = await response.Content.ReadAsStreamAsync(cts.Token).ConfigureAwait(false);
+                    await using (var output = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    {
+                        var buffer = new byte[64 * 1024];
+                        int count;
+                        while ((count = await input.ReadAsync(buffer, cts.Token).ConfigureAwait(false)) > 0)
+                        {
+                            size += count;
+                            if (size > RuleSetFile.MaxFileBytes) throw new InvalidDataException("Rule-set exceeds the size limit");
+                            await output.WriteAsync(buffer.AsMemory(0, count), cts.Token).ConfigureAwait(false);
+                        }
+                    }
+                    if (!RuleSetFile.IsValidBinary(tmp) || !await checkContents(tmp, cts.Token).ConfigureAwait(false))
+                        throw new InvalidDataException("Cannot load the downloaded binary rule-set");
                     File.Move(tmp, localPath, overwrite: true);
                 }
                 finally
@@ -93,7 +112,7 @@ public static class RuleSetCacheManager
                         try { File.Delete(tmp); } catch { }
                 }
 
-                logger.Information("[RuleSetCache] cached {Path} ({Bytes} bytes)", localPath, bytes.Length);
+                logger.Information("[RuleSetCache] cached {Path} ({Bytes} bytes)", localPath, size);
                 return localPath;
             }
             catch (Exception ex)
@@ -106,7 +125,7 @@ public static class RuleSetCacheManager
                     return localPath;
                 }
                 logger.Warning(
-                    "[RuleSetCache] fetch failed ({Err}) and no cached copy at {Path}; rule-set will be omitted from config",
+                    "[RuleSetCache] fetch failed ({Err}) and no usable cached copy at {Path}",
                     ex.Message, localPath);
                 return null;
             }

@@ -10,10 +10,13 @@ param(
 
     [switch]$NoLaunch,
 
+    [switch]$Repair,
+
     [switch]$Elevated
 )
 
 $ErrorActionPreference = "Stop"
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $ProgressPreference = 'SilentlyContinue'
@@ -52,8 +55,10 @@ if (-not $isAdmin) {
     if ($Prerelease) { $forwardFlags = $forwardFlags -bor 1 }
     if ($Service)    { $forwardFlags = $forwardFlags -bor 2 }
     if ($NoLaunch)   { $forwardFlags = $forwardFlags -bor 4 }
+    if ($Repair)     { $forwardFlags = $forwardFlags -bor 8 }
     $bootstrapTemplate = @'
 $ErrorActionPreference = 'Stop'
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $version = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__FORWARDED_VERSION__'))
 $flags = __FORWARDED_FLAGS__
@@ -62,6 +67,7 @@ if ($version) { $installParams.Version = $version }
 if ($flags -band 1) { $installParams.Prerelease = $true }
 if ($flags -band 2) { $installParams.Service = $true }
 if ($flags -band 4) { $installParams.NoLaunch = $true }
+if ($flags -band 8) { $installParams.Repair = $true }
 $response = Invoke-WebRequest -Uri 'https://vpn.ninitux.com/install.ps1' -UseBasicParsing -ErrorAction Stop
 $content = $response.Content
 if ($content -is [byte[]]) { $content = [Text.Encoding]::UTF8.GetString($content) }
@@ -129,14 +135,17 @@ $shaAsset = $shaAssets[0]
 
 $keepStaging = $false
 $stagingDir = Join-Path $ProgramFilesRoot ("VPNRouter-Installer-" + [Guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Path $stagingDir -ErrorAction Stop | Out-Null
-try {
-& (Join-Path $SystemDirectory "icacls.exe") $stagingDir /inheritance:r /grant:r `
-    '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Err "Could not secure installer staging directory"
-    exit 1
+# Keep the creating user's filtered token from changing the ACL of downloaded files.
+$acl = New-Object Security.AccessControl.DirectorySecurity
+$acl.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;RC;;;OW)')
+$stage = New-Object IO.DirectoryInfo($stagingDir)
+if ($stage.Exists -or [IO.File]::Exists($stagingDir)) { throw 'Installer staging already exists.' }
+if ($PSVersionTable.PSEdition -eq 'Core') {
+    [IO.FileSystemAclExtensions]::Create($stage, $acl)
+} else {
+    $stage.Create($acl)
 }
+try {
 $zipPath = Join-Path $stagingDir $expectedZipName
 $shaTmp = Join-Path $stagingDir $expectedShaName
 
@@ -158,52 +167,6 @@ if ($actualSha -ne $expectedSha) {
 }
 Ok "SHA256 verified: $actualSha"
 
-$svc = Get-Service -Name VPNRouter -ErrorAction SilentlyContinue
-$svcWasRunning = ($svc -and $svc.Status -eq 'Running')
-
-if ($svcWasRunning) {
-    Say "Stopping VPNRouter service (was running) before file replacement..."
-    Stop-Service -Name VPNRouter -Force -ErrorAction SilentlyContinue
-    $tries = 0
-    while ($tries -lt 20) {
-        $svc.Refresh()
-        if ($svc.Status -eq 'Stopped') { break }
-        Start-Sleep -Milliseconds 500
-        $tries++
-    }
-}
-
-$stopped = @()
-foreach ($name in @("VPNRouter.App", "VPNRouter.CLI", "VPNRouter.Service", "VPNRouter.GUI", "sing-box")) {
-    $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
-    foreach ($p in $procs) {
-        try {
-            $p | Stop-Process -Force -ErrorAction SilentlyContinue
-            $stopped += "$name (PID $($p.Id))"
-        } catch {}
-    }
-}
-if ($stopped.Count -gt 0) { Say "Stopped running: $($stopped -join ', ')" }
-
-Start-Sleep -Milliseconds 500
-
-# The split-tunnel kernel driver that VPNRouter loads from <InstallRoot>\app\driver stays loaded after the app is killed and locks
-# its .sys file. Without stopping it, the folder wipe below leaves that file behind and the extraction then fails on it, which
-# used to leave a half-deleted installation behind (the shortcut said "the item has been moved or deleted"). Stop it only when its
-# image lives inside this install folder: a Mullvad client or another copy keeps its own driver.
-$driver = Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'" -ErrorAction SilentlyContinue
-if ($driver -and $driver.State -ne 'Stopped') {
-    $driverImage = ([string]$driver.PathName) -replace '^\\\?\?\\', ''
-    if ($driverImage.StartsWith(($InstallRoot.TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) {
-        Say "Stopping the split-tunnel driver (it locks its file inside $InstallRoot)"
-        Stop-Service -Name 'mullvad-split-tunnel' -Force -ErrorAction SilentlyContinue
-        for ($i = 0; $i -lt 20; $i++) {
-            if ((Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'").State -eq 'Stopped') { break }
-            Start-Sleep -Milliseconds 500
-        }
-    }
-}
-
 # Unpack and check the new payload BEFORE touching the existing installation, so that a failed extraction cannot leave it gutted.
 $payloadDir = Join-Path $stagingDir "payload"
 Say "Unpacking $expectedZipName"
@@ -219,8 +182,93 @@ if (-not (Test-Path (Join-Path $payloadDir "app\VPNRouter.App.exe"))) {
     exit 1
 }
 
+# Capture the old service's start mode and running state before stopping the old app.
+$prepare = Join-Path $payloadDir 'app\zapret-maintenance.ps1'
+$canRestoreZapret = [IO.File]::Exists($prepare)
+if (!$canRestoreZapret) {
+    # Published installers carry their own helper for explicitly selected historical releases.
+    $embeddedMaintenance = '__VPNROUTER_MAINTENANCE_BASE64__'
+    if ($embeddedMaintenance.StartsWith('__')) {
+        throw 'This historical ZIP needs the self-contained installer from https://vpn.ninitux.com/install.ps1.'
+    }
+    $prepare = Join-Path $stagingDir 'zapret-maintenance.ps1'
+    [IO.File]::WriteAllBytes($prepare, [Convert]::FromBase64String($embeddedMaintenance))
+}
+& $WindowsPowerShell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $prepare -Edition VPNRouter -Operation Prepare
+if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the verified legacy Zapret service. Installation stopped before file replacement.' }
+
+$svc = Get-Service -Name VPNRouter -ErrorAction SilentlyContinue
+$expectedService = Join-Path $AppDir 'VPNRouter.Service.exe'
+function Test-OwnService {
+    $registered = Get-CimInstance Win32_Service -Filter "Name='VPNRouter'" -ErrorAction Stop
+    if (!$registered) { return $false }
+    $image = ([string]$registered.PathName).Trim()
+    $quoted = '"' + $expectedService + '"'
+    return ($image -in @($quoted, ($quoted + ' --service')) -or
+        ($expectedService -notmatch '\s' -and $image -in @($expectedService, ($expectedService + ' --service'))))
+}
+function Start-OwnService {
+    $controller = Get-Service -Name VPNRouter -ErrorAction Stop
+    try {
+        $null = $controller.ServiceHandle
+        if (!(Test-OwnService)) { throw 'The VPNRouter service owner changed.' }
+        Start-Service -InputObject $controller -ErrorAction Stop
+    } finally { $controller.Dispose() }
+}
+$svcWasRunning = ($svc -and $svc.Status -eq 'Running' -and (Test-OwnService))
+
+if ($svcWasRunning) {
+    Say "Stopping VPNRouter service (was running) before file replacement..."
+    $null = $svc.ServiceHandle
+    if (!(Test-OwnService)) { throw 'The VPNRouter service owner changed before upgrade.' }
+    Stop-Service -InputObject $svc -ErrorAction Stop
+    $tries = 0
+    while ($tries -lt 20) {
+        $svc.Refresh()
+        if ($svc.Status -eq 'Stopped') { break }
+        Start-Sleep -Milliseconds 500
+        $tries++
+    }
+}
+
+$stopped = @()
+foreach ($name in @("VPNRouter.App", "VPNRouter.CLI", "VPNRouter.Service", "VPNRouter.GUI", "sing-box")) {
+    $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
+    foreach ($p in $procs) {
+        try {
+            $null = $p.Handle
+            $image = $p.MainModule.FileName
+            $expected = Join-Path $AppDir ($name + '.exe')
+            $dataEngine = Join-Path $DataRoot 'bin\sing-box.exe'
+            if ($image -ne $expected -and ($name -ne 'sing-box' -or $image -ne $dataEngine)) { continue }
+            $p.Kill()
+            $stopped += "$name (PID $($p.Id))"
+        } catch {} finally { $p.Dispose() }
+    }
+}
+if ($stopped.Count -gt 0) { Say "Stopped running: $($stopped -join ', ')" }
+
+Start-Sleep -Milliseconds 500
+
+# The split-tunnel kernel driver that VPNRouter loads from <InstallRoot>\app\driver stays loaded after the app is killed and locks
+# its .sys file. Without stopping it, the folder wipe below leaves that file behind and the extraction then fails on it, which
+# used to leave a half-deleted installation behind (the shortcut said "the item has been moved or deleted"). Stop it only when its
+# image lives inside this install folder: a Mullvad client or another copy keeps its own driver.
+$driver = Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'" -ErrorAction SilentlyContinue
+if ($driver -and $driver.State -ne 'Stopped') {
+    $driverImage = ([string]$driver.PathName) -replace '^\\\?\?\\', ''
+    if ($driverImage.Trim('"') -eq (Join-Path $AppDir 'driver\mullvad-split-tunnel.sys')) {
+        Say "Stopping the split-tunnel driver (it locks its file inside $InstallRoot)"
+        Stop-Service -Name 'mullvad-split-tunnel' -ErrorAction Stop
+        for ($i = 0; $i -lt 20; $i++) {
+            if ((Get-CimInstance Win32_SystemDriver -Filter "Name='mullvad-split-tunnel'").State -eq 'Stopped') { break }
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
+
 Say "Installing to $InstallRoot"
-if (Test-Path $InstallRoot) {
+if ((Test-Path $InstallRoot) -and !$Repair) {
     Get-ChildItem $InstallRoot -Force | ForEach-Object {
         try { Remove-Item $_.FullName -Recurse -Force -ErrorAction Stop } catch {
             Warn "Could not remove $($_.FullName): $_"
@@ -248,6 +296,20 @@ if (-not (Test-Path (Join-Path $AppDir "VPNRouter.App.exe"))) {
 }
 
 Ok "Installed $resolvedVersion to $InstallRoot"
+
+if ($canRestoreZapret) {
+    $migration = Start-Process -FilePath (Join-Path $AppDir 'VPNRouter.App.exe') -ArgumentList '--migrate-zapret' -WorkingDirectory $AppDir -Wait -PassThru
+    if ($migration.ExitCode -notin @(0, 2)) { throw 'Zapret service migration failed. Rerun VPNRouter.App.exe --migrate-zapret as administrator before restarting Windows.' }
+    if ($migration.ExitCode -eq 2) { Warn 'Zapret service choice saved. Download Zapret in the DPI Bypass tab to finish migration.' }
+} elseif ($null -ne (Get-ItemPropertyValue -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\zapret' -Name VPNRouterPreUpgradeState -ErrorAction SilentlyContinue)) {
+    Warn 'The previous Zapret service choice is saved. Install a migration-capable version and download Zapret in the DPI Bypass tab to restore it.'
+}
+
+if ($Repair) {
+    if ($svcWasRunning -and (Test-OwnService)) { Start-OwnService }
+    & (Join-Path $AppDir 'VPNRouter.CLI.exe') doctor
+    return
+}
 
 $exclOk = $false
 try {
@@ -348,25 +410,27 @@ Set-ItemProperty -Path $UninstallKey -Name EstimatedSize     -Value $sizeKb -Typ
 Set-ItemProperty -Path $UninstallKey -Name NoModify          -Value 1       -Type DWord
 Set-ItemProperty -Path $UninstallKey -Name NoRepair          -Value 1       -Type DWord
 
-$uninstallCmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command `"iwr -useb $RemoteUninstall | iex`""
+$uninstallCmd = ('"' + $WindowsPowerShell + '"') + " -NoProfile -ExecutionPolicy Bypass -Command `"iwr -useb $RemoteUninstall | iex`""
 Set-ItemProperty -Path $UninstallKey -Name UninstallString -Value $uninstallCmd
 Set-ItemProperty -Path $UninstallKey -Name QuietUninstallString -Value $uninstallCmd
 
 Ok "Registered in Add/Remove Programs"
 
 if ($Service) {
-    Say "Installing Windows Service..."
-    $cli = Join-Path $AppDir "VPNRouter.CLI.exe"
-    & $cli service install 2>&1 | ForEach-Object { Write-Host "    $_" }
-    if ($LASTEXITCODE -eq 0) {
-        & $cli service start 2>&1 | ForEach-Object { Write-Host "    $_" }
-        Ok "Windows Service installed + started"
-    } else {
-        Warn "Service install exited with code $LASTEXITCODE"
+    $registered = Get-CimInstance Win32_Service -Filter "Name='VPNRouter'" -ErrorAction Stop
+    if (!$registered) {
+        $cli = Join-Path $AppDir "VPNRouter.CLI.exe"
+        & $cli service install
+        if ($LASTEXITCODE -ne 0) { Warn "Service install exited with code $LASTEXITCODE" }
     }
-} elseif ($svcWasRunning) {
-    Say "Restarting VPNRouter service (was running pre-upgrade)..."
-    Start-Service -Name VPNRouter -ErrorAction SilentlyContinue
+    if (Test-OwnService) {
+        Start-OwnService
+        Ok "Windows Service installed and started"
+    } else {
+        Warn 'Could not verify a VPNRouter service from this installation. Check its registration before starting it.'
+    }
+} elseif ($svcWasRunning -and (Test-OwnService)) {
+    Start-OwnService
 }
 
 if (-not $NoLaunch) {

@@ -81,6 +81,16 @@ public sealed class FakeProcessRunner : IProcessRunner
         return factory(request);
     }
 
+    public Action<ProcessRequest, FakeProcessHandle>? AfterObserversAttached { get; set; }
+
+    public IProcessHandle Start(ProcessRequest request, Action<IProcessHandle> observe)
+    {
+        var handle = (FakeProcessHandle)Start(request);
+        observe(handle);
+        AfterObserversAttached?.Invoke(request, handle);
+        return handle;
+    }
+
     private sealed record RunMatcher(
         Func<ProcessRequest, bool> Predicate,
         Func<ProcessRequest, Task<ProcessResult>> Handler);
@@ -105,6 +115,8 @@ public sealed class FakeProcessHandle : IProcessHandle
     public bool HasExited => _exit.Task.IsCompleted;
 
     public int KillCallCount { get; private set; }
+    public bool RefuseKill { get; set; }
+    public bool? LastKillIncludedChildren { get; private set; }
     public int DisposeCallCount { get; private set; }
 
     public event EventHandler<string>? OutputLine;
@@ -119,6 +131,8 @@ public sealed class FakeProcessHandle : IProcessHandle
     public void Kill(bool entireProcessTree = true)
     {
         KillCallCount++;
+        LastKillIncludedChildren = entireProcessTree;
+        if (RefuseKill) throw new InvalidOperationException("The fixture refused to stop.");
         SignalExit(exitCode: -1);
     }
 

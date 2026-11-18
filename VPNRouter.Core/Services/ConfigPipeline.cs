@@ -13,7 +13,8 @@ internal static class ConfigPipeline
         Action<string>? warningSink = null,
         ILogger? logger = null,
         bool? strictDnsOverride = null,
-        Func<VlessServerEntry, bool>? isServerAlive = null)
+        Func<VlessServerEntry, bool>? isServerAlive = null,
+        bool requireGeo = false)
     {
         var resolved = VlessServersResolver.Resolve(settings, logger);
 
@@ -24,7 +25,8 @@ internal static class ConfigPipeline
             throw new InvalidOperationException(why);
         }
 
-        var sbConfig = ConfigGenerator.Generate(profile, resolvedProcessNames, settings, strictDnsOverride, isServerAlive);
+        var sbConfig = ConfigGenerator.Generate(profile, resolvedProcessNames, settings, strictDnsOverride, isServerAlive,
+            resolveRuleSet: null, requireGeo: requireGeo);
         ValidateGeneratedConfig(sbConfig, settings, validationMode, warningSink, logger);
         return ConfigGenerator.Serialize(sbConfig);
     }

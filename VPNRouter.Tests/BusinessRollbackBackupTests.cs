@@ -28,7 +28,7 @@ public sealed class BusinessRollbackBackupTests
                 Assert.Equal(AppPaths.PrivateUnixFileMode, File.GetUnixFileMode(backup));
             Assert.False(File.Exists(fixture.InstallReceipt));
             fixture.AssertProfileUnchanged();
-            Assert.Equal("powershell.exe", startInfo.FileName);
+            Assert.Equal(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"), startInfo.FileName);
         });
 
         Assert.Equal(1, launched);

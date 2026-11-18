@@ -51,6 +51,7 @@ public sealed class StartupPipelineTests : IDisposable
             App = new AppConfig
             {
                 LogLevel = "info",
+                BypassRussianTraffic = false,
                 ConfigMode = configMode,
                 RoutingMode = "split",
                 Subscriptions = new List<SubscriptionEntry>()

@@ -77,16 +77,14 @@ public partial class FreeConfigsPageViewModel
         get
         {
             var now = DateTime.UtcNow;
-            return _savedConfigs.Count(c =>
-                (c.LastVerifyFailedAt.HasValue &&
-                    (!c.LastTestedAt.HasValue ||
-                        c.LastVerifyFailedAt.Value >= c.LastTestedAt.Value)) ||
-                (c.LastTestedAt.HasValue &&
-                    (now - c.LastTestedAt.Value).TotalHours > 24) ||
-                (c.Status == VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified
-                    && c.LatencyMs <= 0));
+            return _savedConfigs.Count(c => NeedsSavedRecheck(c, now));
         }
     }
+
+    private static bool NeedsSavedRecheck(FreeConfigEntry entry, DateTime now) =>
+        entry.RequiresSavedRecheck || FreeConfigFreshness.HasFailedLastCheck(entry) ||
+        (entry.LastTestedAt.HasValue && now - entry.LastTestedAt.Value > TimeSpan.FromHours(FreeConfigFreshness.StaleAfterHours)) ||
+        (entry.Status == FreeConfigStatus.Verified && entry.LatencyMs <= 0);
 
     public string SavedRecheckStaleButtonText => Strings.FcSavedRecheckStaleBtn(StaleSavedCount);
 
@@ -189,10 +187,7 @@ public partial class FreeConfigsPageViewModel
                 await _deepVerifier.VerifyOneAsync(entry, ct);
                 ct.ThrowIfCancellationRequested();
                 FreeConfigFreshness.MergeRecheckResult(entry, prior, DateTime.UtcNow);
-                _logger.Information("[Recheck] {host}:{port} → {result} ({ping} ms)",
-                    entry.Host, entry.Port,
-                    entry.LastVerifyFailedAt.HasValue ? "failed; last-good preserved" : "Verified",
-                    entry.LatencyMs);
+                _logger.Information("[Recheck] Verification passed={Passed}", !entry.LastVerifyFailedAt.HasValue);
             }
             catch (OperationCanceledException)
             {
@@ -215,8 +210,7 @@ public partial class FreeConfigsPageViewModel
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[FreeConfigs] RecheckOne failed for {host}:{port}",
-                entry.Host, entry.Port);
+            _logger.Warning("[FreeConfigs] Recheck failed ({Type})", ex.GetType().Name);
             StatusText = Strings.FcStatusFailed(ex.Message);
         }
         finally
@@ -230,16 +224,8 @@ public partial class FreeConfigsPageViewModel
     private async Task RecheckAllStaleAsync()
     {
         if (IsBusy) return;
-        var stale = _savedConfigs
-            .Where(c =>
-                (c.LastVerifyFailedAt.HasValue &&
-                    (!c.LastTestedAt.HasValue ||
-                        c.LastVerifyFailedAt.Value >= c.LastTestedAt.Value)) ||
-                (c.LastTestedAt.HasValue &&
-                    (DateTime.UtcNow - c.LastTestedAt.Value).TotalHours > 24) ||
-                (c.Status == VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified
-                    && c.LatencyMs <= 0))
-            .ToList();
+        var now = DateTime.UtcNow;
+        var stale = _savedConfigs.Where(c => NeedsSavedRecheck(c, now)).ToList();
         if (stale.Count == 0) return;
 
         IsBusy = true;
@@ -287,8 +273,7 @@ public partial class FreeConfigsPageViewModel
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning(ex, "[Recheck-bulk] failed for {host}:{port}",
-                        cfg.Host, cfg.Port);
+                    _logger.Warning("[Recheck-bulk] Verification failed ({Type})", ex.GetType().Name);
                 }
                 finally
                 {
@@ -318,7 +303,7 @@ public partial class FreeConfigsPageViewModel
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[FreeConfigs] RecheckAllStale failed");
+            _logger.Warning("[FreeConfigs] Bulk recheck failed ({Type})", ex.GetType().Name);
             StatusText = Strings.FcStatusFailed(ex.Message);
         }
         finally

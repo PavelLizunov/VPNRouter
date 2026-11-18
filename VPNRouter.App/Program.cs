@@ -41,6 +41,30 @@ sealed class Program
             return;
         }
 
+#if PLATFORM_WINDOWS
+        if (args is ["--remove-zapret-service"])
+        {
+            if (!OperatingSystem.IsWindows() || ZapretRuntimeDirectory.TestRoot != null) return;
+            try
+            {
+                var paths = ZapretServiceOwnership.Current();
+                foreach (var name in SystemCleanup.ZapretServices)
+                {
+                    var action = paths.Remove(name, WindowsServiceRegistration.Open, dryRun: false);
+                    Console.WriteLine($"{name}: {action.Outcome} {action.Detail}");
+                }
+            }
+            catch (Exception) { Environment.ExitCode = 1; }
+            return;
+        }
+        if (args is ["--migrate-zapret"] or ["--migrate-zapret", _])
+        {
+            var result = ZapretLegacyServices.RetryAsync(Log.Logger, selection: args.Length == 2 ? args[1] : null).GetAwaiter().GetResult();
+            if (result.Message != null) Console.Error.WriteLine(result.Message);
+            Environment.ExitCode = result.SafeForReboot ? (result.Message == null ? 0 : 2) : 1;
+            return;
+        }
+#endif
         VPNRouter.Core.Services.CrashReporter.Install();
 
         StartMinimized = args.Contains("--minimized");
@@ -67,6 +91,7 @@ sealed class Program
         RecordLaunchAttempt();
 
 #if PLATFORM_WINDOWS
+        PendingUpdateWarning = ZapretLegacyServices.RetryAsync(Log.Logger).GetAwaiter().GetResult().Message;
         HealServiceBinPath();
         if (!RunInstallHealthCheck())
             return;
@@ -244,7 +269,7 @@ sealed class Program
             if (!health.IsHealthy || failureMarkerPresent)
             {
                 var trigger = failureMarkerPresent
-                    ? $"helper.cmd .update-failed marker present ({VPNRouter.Core.Services.UpdateBackup.ReadFailureMarker(installDir)})"
+                    ? $"Update helper .update-failed marker present ({VPNRouter.Core.Services.UpdateBackup.ReadFailureMarker(installDir)})"
                     : health.Diagnostic;
                 Console.Error.WriteLine($"[health] {trigger} — attempting local rollback first");
 

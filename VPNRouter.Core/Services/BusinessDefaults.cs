@@ -121,32 +121,41 @@ internal static class BusinessDefaults
         servers.Where(s => s.Protocol == "vless" && string.IsNullOrEmpty(s.DetourVia))
             .DistinctBy(s => s.Server, StringComparer.OrdinalIgnoreCase).ToList();
 
-    internal static void ApplyDns(SingBoxConfig config, IEnumerable<CustomRule> rules)
+    internal static void ApplyDns(SingBoxConfig config, IEnumerable<CustomRule> rules, bool customFirst = true)
     {
-        // Explicit DNS destinations take precedence over app matching (Windows DNS may
-        // belong to svchost). Direct sites must never inherit a proxy app's resolver.
         var domains = new List<DnsRule>();
         var processes = new List<DnsRule>();
-        foreach (var rule in rules.Where(r => r.Enabled && r.Action is "direct" or "proxy"))
+        var existing = config.Dns.Rules.Where(d => d.CustomRule != null).ToLookup(d => d.CustomRule!);
+        var tags = (config.Route.RuleSet ?? []).Select(entry => entry.Tag).ToHashSet(StringComparer.Ordinal);
+        foreach (var rule in rules.Where(r => r.Enabled))
         {
-            var route = ConfigGenerator.BuildCustomRouteRule(rule);
-            if (route == null || (route.Domain == null && route.DomainSuffix == null && route.ProcessName == null))
-                continue;
-            (route.ProcessName == null ? domains : processes).Add(new DnsRule
+            var dns = existing[rule].FirstOrDefault();
+            if (dns == null)
             {
-                Domain = route.Domain, DomainSuffix = route.DomainSuffix, ProcessName = route.ProcessName,
-                Server = rule.Action == "direct" ? "local-dns" : "vpn-dns"
-            });
+                var route = ConfigGenerator.BuildCustomRouteRule(rule);
+                if (route?.Outbound is not ("direct" or "proxy")) continue;
+                var sites = route.RuleSet?.Where(t => t.StartsWith("user-geosite-", StringComparison.Ordinal) && tags.Contains(t)).ToList();
+                if (route.Domain == null && route.DomainSuffix == null && route.DomainKeyword == null &&
+                    route.ProcessName == null && sites is not { Count: > 0 }) continue;
+                dns = new DnsRule
+                {
+                    CustomRule = rule, Domain = route.Domain, DomainSuffix = route.DomainSuffix,
+                    DomainKeyword = route.DomainKeyword, ProcessName = route.ProcessName, RuleSet = sites,
+                    Server = route.Outbound == "direct" ? "local-dns" : "vpn-dns"
+                };
+            }
+            (dns.ProcessName == null ? domains : processes).Add(dns);
         }
-        // RU resources use both direct routing and a direct resolver in Business.
-        var geo = config.Dns.Rules.Where(r => r.RuleSet?.Contains("vpnrouter-geosite-ru") == true).ToList();
-        foreach (var rule in geo)
-            rule.Server = "local-dns";
-        var infrastructure = config.Dns.Rules.Where(r => r.QueryType != null).ToList();
-        var rest = config.Dns.Rules.Except(geo).Except(infrastructure).ToList();
-        // Both explicit directions must win over geographic defaults. Keep the
-        // same domain order as routing; process-owned DNS remains lower priority.
-        config.Dns.Rules = infrastructure.Concat(domains).Concat(geo).Concat(processes).Concat(rest).ToList();
+        var baseRules = config.Dns.Rules.Where(d => d.CustomRule == null).ToList();
+        var infrastructure = baseRules.Where(d => d.QueryType != null);
+        var toggles = baseRules.Where(d => d.RuleSet?.Any(t => t is "vpnrouter-geosite-ru" or "vpnrouter-adblock") == true).ToList();
+        foreach (var dns in toggles.Where(d => d.RuleSet!.Contains("vpnrouter-geosite-ru")))
+            dns.Server = "local-dns";
+
+        // Query guards stay first. Destination policies precede process DNS, in route priority order.
+        var destinations = customFirst ? domains.Concat(toggles) : toggles.Concat(domains);
+        config.Dns.Rules = infrastructure.Concat(destinations).Concat(processes)
+            .Concat(baseRules.Except(infrastructure).Except(toggles)).ToList();
     }
 
     internal static void ApplyDomainTransports(SingBoxConfig config, bool hasUdpProxy,

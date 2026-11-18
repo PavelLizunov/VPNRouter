@@ -4,18 +4,13 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Core.Services;
 
 internal static class DeepVerifyProbe
 {
-    public const int MaxDiagnosticBufferChars = 2048;
-
     private static int _probesInFlight;
 
     public static bool AnyProbeInFlight => Volatile.Read(ref _probesInFlight) > 0;
@@ -38,48 +33,26 @@ internal static class DeepVerifyProbe
         }
     }
 
-    public static async Task<bool> WaitForPortBoundAsync(int port, TimeSpan maxWait, CancellationToken ct)
-    {
-        var deadline = DateTime.UtcNow + maxWait;
-        while (DateTime.UtcNow < deadline)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                using var c = new TcpClient();
-                var connectTask = c.ConnectAsync(IPAddress.Loopback, port);
-                var completed = await Task.WhenAny(connectTask, Task.Delay(200, ct));
-                if (completed == connectTask && c.Connected) return true;
-            }
-            catch { }
-            await Task.Delay(100, ct);
-        }
-        return false;
-    }
-
     public static IPAddress? KnownHostPublicIp { get; set; }
 
-    public static async Task<(bool ok, int latencyMs, string? err)> ProbeViaSocksAsync(
-        int socksPort, TimeSpan httpTimeout, CancellationToken ct, IPAddress? hostPublicIp = null)
+    public static async Task<(bool ok, int latencyMs, string? err)> ProbeViaProxyAsync(
+        VerificationProxy proxy, TimeSpan httpTimeout, CancellationToken ct,
+        string probeUrl = DeepVerifyConstants.ProbeUrl)
     {
-        var handler = new SocketsHttpHandler
-        {
-            Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
-            UseProxy = true,
-            ConnectTimeout = TimeSpan.FromSeconds(5),
-        };
-        using var http = new HttpClient(handler) { Timeout = httpTimeout };
+        var handler = proxy.CreateHttpHandler(TimeSpan.FromSeconds(5));
+        handler.AllowAutoRedirect = false;
+        using var http = new HttpClient(handler) { Timeout = httpTimeout, MaxResponseContentBufferSize = 8192 };
 
         var sw = Stopwatch.StartNew();
         try
         {
-            using var resp = await http.GetAsync(DeepVerifyConstants.ProbeUrl, ct);
+            using var resp = await http.GetAsync(probeUrl, ct);
             if (!resp.IsSuccessStatusCode)
                 return (false, 0, $"http {(int)resp.StatusCode}");
 
             var body = await resp.Content.ReadAsStringAsync(ct);
 
-            var (valid, evalErr) = EvaluateProbeResponse(body, hostPublicIp);
+            var (valid, evalErr) = EvaluateProbeResponse(body);
             if (!valid)
                 return (false, 0, evalErr);
 
@@ -94,9 +67,9 @@ internal static class DeepVerifyProbe
         {
             return (false, 0, "http timeout");
         }
-        catch (HttpRequestException hx)
+        catch (HttpRequestException)
         {
-            return (false, 0, $"http: {Short(hx.Message)}");
+            return (false, 0, "HTTP verification failed");
         }
         catch (Exception ex)
         {
@@ -104,15 +77,10 @@ internal static class DeepVerifyProbe
         }
     }
 
-    public static async Task<(bool ok, double mbps, string? err)> MeasureBandwidthViaSocksAsync(
-        int socksPort, CancellationToken ct)
+    public static async Task<(bool ok, double mbps, string? err)> MeasureBandwidthViaProxyAsync(
+        VerificationProxy proxy, CancellationToken ct)
     {
-        var handler = new SocketsHttpHandler
-        {
-            Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
-            UseProxy = true,
-            ConnectTimeout = TimeSpan.FromSeconds(5),
-        };
+        var handler = proxy.CreateHttpHandler(TimeSpan.FromSeconds(5));
         using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
 
         var urls = new[]
@@ -156,69 +124,33 @@ internal static class DeepVerifyProbe
 
     internal static (bool ok, string? err) EvaluateProbeResponse(string body, IPAddress? hostPublicIp = null)
     {
-        if (!body.Contains("ip=", StringComparison.Ordinal))
+        var ipLine = body.Split('\n').FirstOrDefault(line => line.StartsWith("ip=", StringComparison.Ordinal));
+        if (ipLine is null || !IPAddress.TryParse(ipLine[3..].Trim(), out var ip))
             return (false, "bad response");
 
-        var ipLine = body.Split('\n').FirstOrDefault(l => l.StartsWith("ip=", StringComparison.Ordinal));
-        if (ipLine != null)
-        {
-            var ipStr = ipLine[3..].Trim();
-            if (!IPAddress.TryParse(ipStr, out var ip))
-                return (false, "bad response");
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        if (IsPrivateOrLoopback(ip))
+            return (false, "local ip in response");
 
-            if (IsPrivateOrLoopback(ip))
-                return (false, "local ip in response");
+        var hostIp = hostPublicIp ?? KnownHostPublicIp;
+        if (hostIp?.IsIPv4MappedToIPv6 == true) hostIp = hostIp.MapToIPv4();
+        if (hostIp != null && ip.Equals(hostIp))
+            return (false, "proxy reflects host public ip");
 
-            var hostIp = hostPublicIp ?? KnownHostPublicIp;
-            if (hostIp != null && ip.Equals(hostIp))
-                return (false, "proxy reflects host public ip");
-        }
         return (true, null);
     }
 
     public static bool IsPrivateOrLoopback(IPAddress ip)
     {
-        if (IPAddress.IsLoopback(ip)) return true;
+        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
+        if (IPAddress.IsLoopback(ip) || ip.Equals(IPAddress.Any) || ip.Equals(IPAddress.IPv6Any)) return true;
         var bytes = ip.GetAddressBytes();
-        if (bytes.Length != 4) return false;
-        if (bytes[0] == 10) return true;
+        if (bytes.Length != 4)
+            return ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || (bytes[0] & 0xfe) == 0xfc;
+        if (bytes[0] == 10 || (bytes[0] == 169 && bytes[1] == 254)) return true;
         if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
         if (bytes[0] == 192 && bytes[1] == 168) return true;
         if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) return true;
         return false;
     }
-
-    public static void AppendSanitizedLine(StringBuilder destination, string? line, int maxChars)
-    {
-        ArgumentNullException.ThrowIfNull(destination);
-        if (line is null || maxChars <= 0) return;
-
-        var sanitized = DiagnosticsRedactor.RedactLogText(line);
-        lock (destination)
-        {
-            var remaining = maxChars - destination.Length;
-            if (remaining <= 0) return;
-
-            var take = Math.Min(sanitized.Length, remaining);
-            destination.Append(sanitized.AsSpan(0, take));
-            if (take < remaining) destination.Append('\n');
-        }
-    }
-
-    public static string ReadSanitizedSnippet(StringBuilder source, int max)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        lock (source)
-        {
-            return TrimSnippet(source.ToString(), max);
-        }
-    }
-
-    public static string TrimSnippet(string s, int max)
-    {
-        s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
-        return s.Length > max ? s[..max] + "…" : s;
-    }
-
-    private static string Short(string s) => s.Length > 60 ? s[..60] : s;
 }

@@ -32,6 +32,7 @@ public class VPNRouterService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("[Service] ExecuteAsync started");
+        await ZapretLegacyServices.RetireAsync(Serilog.Log.Logger, stoppingToken);
 
         try
         {
@@ -213,6 +214,7 @@ public class VPNRouterService : BackgroundService
             }
 
             var strategyName = settings.App.ZapretStrategy ?? "multisplit";
+            ZapretStrategy? installedStrategy = null;
             string args;
 
             if (strategyName == "custom")
@@ -226,15 +228,19 @@ public class VPNRouterService : BackgroundService
             else
             {
                 var strategies = ZapretUpdater.ParseStrategies();
-                var parsed = strategies.FirstOrDefault(s => s.Name == strategyName);
-                args = parsed?.Arguments ?? ZapretManager.BuildLegacyArgs("multisplit");
+                installedStrategy = strategies.FirstOrDefault(s => s.Name == strategyName);
+                args = installedStrategy?.Arguments ?? ZapretManager.BuildLegacyArgs("multisplit");
             }
 
             _zapret = new ZapretManager(Serilog.Log.Logger);
 
             var started = await ResilientStarter.StartWithBackoffAsync(
                 componentName: "Zapret",
-                startFn: () => _zapret.Start(args),
+                startFn: () =>
+                {
+                    if (installedStrategy?.BatPath is string path) _zapret.StartFromBat(path, args);
+                    else _zapret.Start(args);
+                },
                 logger: Serilog.Log.Logger,
                 ct: ct);
 

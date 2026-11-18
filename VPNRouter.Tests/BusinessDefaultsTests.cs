@@ -169,6 +169,33 @@ public sealed class BusinessDefaultsTests
         Assert.True(config.Dns.Rules.FindIndex(r => r.ProcessName?.Contains("Telegram.exe") == true) > ru);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GeographicDns_FollowsCustomPriorityAndUsesOnlyRegisteredTags(bool customFirst)
+    {
+        var config = new SingBoxConfig();
+        config.Dns.Rules = [new DnsRule { RuleSet = ["vpnrouter-geosite-ru"], Server = "vpn-dns" }];
+        List<CustomRule> rules =
+        [
+            new() { Action = "block", Type = "domain_suffix", Value = "sample.ru" },
+            new() { Action = "proxy", Type = "geosite", Value = "corp" },
+            new() { Action = "direct", Type = "geosite", Value = "known, missing" }
+        ];
+        ConfigGenerator.ApplyCustomRules(config, rules, (_, file) => file.Contains("missing") ? null : file);
+        BusinessDefaults.ApplyDns(config, rules, customFirst);
+
+        var geo = config.Dns.Rules.FindIndex(d => d.RuleSet?.Contains("vpnrouter-geosite-ru") == true);
+        var block = config.Dns.Rules.FindIndex(d => d.Action == "reject" && d.DomainSuffix?.Contains("sample.ru") == true);
+        Assert.Equal(customFirst ? 3 : 0, geo);
+        Assert.Equal(customFirst ? 0 : 1, block);
+        Assert.Equal("local-dns", config.Dns.Rules[geo].Server);
+        var proxy = config.Dns.Rules[block + 1];
+        Assert.Equal("vpn-dns", proxy.Server);
+        Assert.Equal(new[] { "user-geosite-corp" }, proxy.RuleSet);
+        Assert.Equal(new[] { "user-geosite-known" }, config.Dns.Rules[block + 2].RuleSet);
+    }
+
     [Fact]
     public void Preset_DefaultsToDirectAndEnablesExistingRecovery()
     {

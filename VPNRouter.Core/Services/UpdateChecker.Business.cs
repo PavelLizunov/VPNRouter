@@ -65,8 +65,13 @@ public partial class UpdateChecker
         try
         {
             using var current = Process.GetCurrentProcess();
+            // Downgrades may target an older package without the helper. Authenticate the installed
+            // copy against the identical resource in the running first-party Core assembly.
+            using var maintenance = typeof(UpdateChecker).Assembly.GetManifestResourceStream("VPNRouter.Update.zapret-maintenance.ps1")
+                ?? throw new InvalidOperationException("The installed update maintenance resource is missing.");
+            var installedPrepareHash = Convert.ToHexString(SHA256.HashData(maintenance));
             var script = BuildBusinessApplyScript(source, destination, manifestPath,
-                Convert.ToHexString(SHA256.HashData(manifest)),
+                Convert.ToHexString(SHA256.HashData(manifest)), installedPrepareHash,
                 Path.Combine(AppPaths.LogsDir, "business-update.log"), current.Id,
                 current.StartTime.ToUniversalTime().Ticks, 45_000,
                 string.Equals(Environment.GetEnvironmentVariable("VPNROUTER_CI"), "1", StringComparison.Ordinal));
@@ -117,7 +122,10 @@ public partial class UpdateChecker
 
     internal static ProcessStartInfo CreateBusinessHelperStartInfo(string script, bool elevate)
     {
-        var info = new ProcessStartInfo("powershell.exe")
+        var system = Environment.SystemDirectory;
+        if (OperatingSystem.IsWindows() && !Path.IsPathFullyQualified(system))
+            throw new InvalidOperationException("Could not locate the Windows system directory.");
+        var info = new ProcessStartInfo(Path.Combine(system, "WindowsPowerShell", "v1.0", "powershell.exe"))
         {
             UseShellExecute = true,
             Verb = elevate ? "runas" : string.Empty,
@@ -132,11 +140,12 @@ public partial class UpdateChecker
     }
 
     internal static string BuildBusinessApplyScript(string sourceDirectory, string destinationDirectory,
-        string manifestPath, string manifestSha256, string logPath, int parentPid,
+        string manifestPath, string manifestSha256, string installedPrepareHash, string logPath, int parentPid,
         long parentStartedTicks, int waitMilliseconds, bool suppressRelaunch)
     {
         if (parentPid <= 0 || parentStartedTicks < 0 || waitMilliseconds < 0 ||
-            waitMilliseconds > 45_000 || manifestSha256.Length != 64 || !manifestSha256.All(Uri.IsHexDigit))
+            waitMilliseconds > 45_000 || manifestSha256.Length != 64 || !manifestSha256.All(Uri.IsHexDigit) ||
+            installedPrepareHash.Length != 64 || !installedPrepareHash.All(Uri.IsHexDigit))
             throw new ArgumentException("Invalid Business helper parameters.");
         static string Literal(string value) => "'" + value.Replace("'", "''") + "'";
         var source = Literal(Path.GetFullPath(sourceDirectory).TrimEnd(Path.DirectorySeparatorChar));
@@ -205,6 +214,26 @@ public partial class UpdateChecker
                     Assert-OrdinaryPath $to
                     if ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -ne $file.Sha256) { throw 'SOURCE_CHANGED' }
                 }
+                $phase = 'PREPARE_ZAPRET'
+                $prepareFile = $files | Where-Object { $_.Path -eq 'zapret-maintenance.ps1' }
+                if ($prepareFile) {
+                    $preparePath = Join-Path $source 'zapret-maintenance.ps1'
+                    $prepareHash = $prepareFile.Sha256
+                } else {
+                    $preparePath = Join-Path $destination 'zapret-maintenance.ps1'
+                    $prepareHash = '{{installedPrepareHash}}'
+                }
+                $prepareBytes = [IO.File]::ReadAllBytes($preparePath)
+                $hasher = [Security.Cryptography.SHA256]::Create()
+                try { $actual = [BitConverter]::ToString($hasher.ComputeHash($prepareBytes)).Replace('-', '') }
+                finally { $hasher.Dispose() }
+                if ($actual -ne $prepareHash) { throw 'SOURCE_CHANGED' }
+                # Execute exactly the authenticated bytes in a separate scope/process: Prepare exits on completion.
+                $prepareSource = [Text.Encoding]::UTF8.GetString($prepareBytes).TrimStart([char]0xFEFF)
+                $command = "& {`n" + $prepareSource + "`n} -Edition VPNRouterBusiness -Operation Prepare"
+                $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+                & (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -EncodedCommand $encoded
+                if ($LASTEXITCODE -ne 0) { throw 'ZAPRET_PREPARE_FAILED' }
                 $phase = 'COPY'
                 foreach ($file in $files) {
                     $from = Join-Path $source $file.Path
@@ -226,13 +255,18 @@ public partial class UpdateChecker
                     }
                     $temporary = $null
                 }
+                if ($prepareFile) {
+                    $phase = 'MIGRATE_ZAPRET'
+                    $maintenance = Start-Process -FilePath (Join-Path $destination 'VPNRouter.App.exe') -WorkingDirectory $destination -ArgumentList '--migrate-zapret' -Wait -PassThru
+                    if ($maintenance.ExitCode -notin @(0, 2)) { throw 'ZAPRET_MIGRATION_FAILED' }
+                }
                 $phase = 'RELAUNCH'
                 {{(suppressRelaunch ? "# Relaunch suppressed for isolated verification." : "Start-Process -FilePath (Join-Path $destination 'VPNRouter.App.exe') -WorkingDirectory $destination | Out-Null")}}
                 exit 0
             } catch {
                 $exceptionType = $_.Exception.GetType().Name
                 $hresult = $_.Exception.HResult.ToString('X8')
-                $reason = if ($_.Exception.Message -in @('APP_EXIT_TIMEOUT','MANIFEST_CHANGED','SOURCE_CHANGED','COPY_CHANGED','REPARSE_POINT_REFUSED','INVALID_MANIFEST_PATH','EMPTY_MANIFEST')) {
+                $reason = if ($_.Exception.Message -in @('APP_EXIT_TIMEOUT','MANIFEST_CHANGED','SOURCE_CHANGED','COPY_CHANGED','REPARSE_POINT_REFUSED','INVALID_MANIFEST_PATH','EMPTY_MANIFEST','ZAPRET_PREPARE_FAILED','ZAPRET_MIGRATION_FAILED')) {
                     $_.Exception.Message
                 } else { 'FILE_COPY_FAILED' }
                 try {

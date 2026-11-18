@@ -66,6 +66,8 @@ public partial class UpdateChecker
             ApplyBusinessUpdate(stagedPath, info);
             return Task.FromResult(true);
         }
+        if (OperatingSystem.IsWindows())
+            RequireWindowsStage(stagedPath, info.Version, info.AssetSha256);
         var isDowngrade = IsVersionDowngrade(_currentVersion, info.Version);
         if (isDowngrade)
         {
@@ -118,10 +120,17 @@ public partial class UpdateChecker
 
         StatusChanged?.Invoke($"Downloading {label}...");
 
+        if (!business && OperatingSystem.IsWindows())
+        {
+            if (!TryParseSemVer(info.LatestVersion, out _) || info.LatestVersion.Length > 64 ||
+                !IsOfficialWindowsRelease(downloadUri, info.LatestVersion) || (checksumUri != null &&
+                !IsOfficialWindowsRelease(checksumUri, info.LatestVersion, checksum: true)))
+                throw new InvalidOperationException("The Windows update must come from an official HTTPS release.");
+        }
+        PrepareStagingDirectory();
         TrySweepStaleStagingDirs();
-        Directory.CreateDirectory(_stagingDir);
         var stagingDir = Path.Combine(
-            _stagingDir, Guid.NewGuid().ToString("N").Substring(0, 8));
+            _stagingDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stagingDir);
 
         try
@@ -145,7 +154,7 @@ public partial class UpdateChecker
             if (business && response.ContentLength is { } length && length != expectedSize)
                 throw new InvalidOperationException("Business update length does not match its manifest.");
 
-            using var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920);
+            using var fileStream = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920);
 
             var buffer = new byte[81920];
             long totalRead = 0;
@@ -249,6 +258,8 @@ public partial class UpdateChecker
         }
 
         if (!business) ValidateExtractedContent(extractDir);
+        if (!business && OperatingSystem.IsWindows())
+            _windowsStages[Path.GetFullPath(extractDir)] = new(zipPath, expectedSha, info.LatestVersion);
 
         StatusChanged?.Invoke("Update ready to apply.");
         return extractDir;
@@ -283,6 +294,9 @@ public partial class UpdateChecker
         try
         {
             if (!Directory.Exists(_stagingDir)) return;
+            PrepareStagingDirectory();
+            foreach (var directory in _windowsStages.Keys)
+                if (!Directory.Exists(directory)) _windowsStages.TryRemove(directory, out _);
             var cutoff = DateTime.UtcNow - TimeSpan.FromHours(2);
             foreach (var dir in Directory.GetDirectories(_stagingDir))
             {

@@ -8,6 +8,11 @@ public class VlessServerEntry
     [YamlMember(Alias = "name")]
     public string Name { get; set; } = string.Empty;
 
+    // A Free Configs verification covers one outbound, independent of other saved profiles.
+    [YamlMember(Alias = "use_as_single_outbound", DefaultValuesHandling = DefaultValuesHandling.OmitDefaults)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UseAsSingleOutbound { get; set; }
+
     [YamlMember(Alias = "protocol")]
     public string Protocol { get; set; } = "vless";
 

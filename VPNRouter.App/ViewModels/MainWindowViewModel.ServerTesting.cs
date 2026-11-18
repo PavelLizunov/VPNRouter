@@ -292,6 +292,7 @@ public partial class MainWindowViewModel
         }
 
         var total = entries.Count;
+        var verified = 0;
 
         try
         {
@@ -299,6 +300,7 @@ public partial class MainWindowViewModel
                 entries,
                 onOneDone: (entry, result) =>
                 {
+                    if (result.Ok) Interlocked.Increment(ref verified);
                     if (entryToVm.TryGetValue(entry, out var vm))
                     {
                         Dispatcher.UIThread.Post(() =>
@@ -317,7 +319,6 @@ public partial class MainWindowViewModel
                 }),
                 ct: ct);
 
-            var verified = servers.Count(s => s.IsDeepVerified);
             setProgress(IsRussian
                 ? $"Готово. Verified: {verified} / {total}"
                 : $"Done. Verified: {verified} / {total}");

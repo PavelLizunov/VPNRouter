@@ -47,11 +47,6 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
                     File.Delete(_winwsPath);
                 }
             }
-            var batPath = Path.Combine(ZapretUpdater.BinDir, "_vpnrouter_launch.bat");
-            if (File.Exists(batPath))
-            {
-                try { File.Delete(batPath); } catch { }
-            }
         }
         catch { }
     }
@@ -60,7 +55,7 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
         _seededStub || File.Exists(_winwsPath);
 
     [Fact]
-    public void Start_RoutesThroughCmdBat_DoesNotRedirectStreams()
+    public void Start_LaunchesWinwsWithSeparateArgumentsAndInheritsConsoleStreams()
     {
         if (!SeededOrRealExe()) return;
 
@@ -76,12 +71,10 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
             Assert.Single(fake.StartCalls);
             var call = fake.StartCalls[0];
 
-            Assert.Equal("cmd.exe", call.ExecutablePath);
-
-            Assert.Equal(2, call.Arguments.Count);
-            Assert.Equal("/c", call.Arguments[0]);
-            Assert.EndsWith("_vpnrouter_launch.bat", call.Arguments[1]);
-            Assert.Contains(ZapretUpdater.BinDir, call.Arguments[1]);
+            Assert.Equal(ZapretUpdater.WinwsExePath, call.ExecutablePath);
+            Assert.Equal(new[] { "--wf-tcp=443", "--dpi-desync=fake,multisplit" }, call.Arguments);
+            Assert.Equal(ZapretUpdater.BinDir, call.WorkingDirectory);
+            Assert.Equal(OperatingSystem.IsWindows(), call.ClearInheritedEnvironment);
 
             Assert.False(call.CaptureStdout,
                 "Cygwin winws.exe needs a real console; pipe-redirected stdout breaks it.");
@@ -92,6 +85,38 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
         {
             sut.Dispose();
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DriverConflictPreservesRunningHandleOnManualOrInstalledStrategyRestart(bool installed)
+    {
+        var runner = new FakeProcessRunner();
+        var handle = new FakeProcessHandle(pid: 88006);
+        runner.OnStart(_ => true, _ => handle);
+        bool conflict = false;
+        using var manager = new ZapretManager(runner: runner) { HasDriverConflict = () => conflict };
+        manager.Start("--wf-tcp=443");
+        conflict = true;
+
+        string bat = Path.Combine(ZapretUpdater.ZapretDir, $"general (test-{Guid.NewGuid():N}).bat");
+        try
+        {
+            if (installed)
+            {
+                File.WriteAllText(bat, "start \"\" \"%BIN%winws.exe\" --wf-tcp=443");
+                Assert.Throws<InvalidOperationException>(() => manager.StartFromBat(bat, "ignored"));
+            }
+            else
+            {
+                Assert.Throws<InvalidOperationException>(() => manager.Start("--wf-tcp=80"));
+            }
+            Assert.Single(runner.StartCalls);
+            Assert.Equal(0, handle.KillCallCount);
+            Assert.Equal(handle.Pid, manager.Pid);
+        }
+        finally { if (installed) File.Delete(bat); }
     }
 
     [Fact]
@@ -124,6 +149,27 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
     }
 
     [Fact]
+    public void FailedStopKeepsOwnershipAndBlocksReplacementUntilRetrySucceeds()
+    {
+        var runner = new FakeProcessRunner();
+        var handle = new FakeProcessHandle { RefuseKill = true };
+        runner.OnStart(_ => true, _ => handle);
+        using var manager = new ZapretManager(runner: runner) { HasDriverConflict = () => false };
+        manager.Start("--wf-tcp=443");
+
+        manager.Stop();
+        Assert.Equal(handle.Pid, manager.Pid);
+        Assert.Throws<InvalidOperationException>(() => manager.Start("--wf-tcp=80"));
+        Assert.Single(runner.StartCalls);
+        Assert.Equal(0, handle.DisposeCallCount);
+
+        handle.RefuseKill = false;
+        manager.Stop();
+        Assert.False(manager.IsRunning);
+        Assert.Equal(1, handle.DisposeCallCount);
+    }
+
+    [Fact]
     public void Stop_OnRunningManager_KillsHandleAndDisposes()
     {
         if (!SeededOrRealExe()) return;
@@ -146,6 +192,7 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
             Assert.Null(sut.Pid);
             Assert.True(handle.HasExited);
             Assert.Equal(1, handle.KillCallCount);
+            Assert.False(handle.LastKillIncludedChildren);
         }
         finally
         {

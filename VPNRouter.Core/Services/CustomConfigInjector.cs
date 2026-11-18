@@ -15,7 +15,11 @@ public static partial class CustomConfigInjector
             Json.AppJsonContext.Default,
             new DefaultJsonTypeInfoResolver()),
     };
-    public static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings)
+    public static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings) =>
+        Inject(rawJson, processNames, settings, requireGeo: false);
+
+    internal static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings,
+        bool requireGeo, Func<string, CancellationToken, Task<bool>>? checkGeoContents = null)
     {
         var config = JsonNode.Parse(rawJson) as JsonObject
             ?? throw new JsonException("Custom sing-box config root is not an object");
@@ -40,8 +44,7 @@ public static partial class CustomConfigInjector
 
         RemoveLegacyGeoDns(config);
 
-        var hasGeoBypass = settings.App.BypassRussianTraffic
-            && GeoDataDownloader.AreGeoFilesAvailable();
+        var hasGeoBypass = GeoDataDownloader.UseGeoBypass(settings.App.BypassRussianTraffic, requireGeo, checkGeoContents);
         if (hasGeoBypass)
             _ = EnsureGeoProxyDns(config, proxyTag);
 

@@ -48,10 +48,7 @@ public partial class AndroidApp : Avalonia.Application
     private DateTime _lastErrorAt;
     private static readonly TimeSpan ErrorDisplayWindow = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan HealthProbeInterval = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan HealthStaleThreshold = TimeSpan.FromSeconds(60);
     private DateTime _lastHealthProbeAt;
-    private long _lastHealthLogSize = -1;
-    private DateTime _lastHealthLogMTime;
     private bool _lastHealthOk;
     private bool _firstProbePending;
     private string? _lastFormattedUptimeTitle;

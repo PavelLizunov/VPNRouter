@@ -105,38 +105,29 @@ public partial class MainWindowViewModel
     private void OpenProbeLog()
     {
         var path = LastProbeLogPath;
-        if (string.IsNullOrEmpty(path) || !File.Exists(path))
-        {
-            _logger.Information("[VM] OpenProbeLog: no log path or file missing ({Path})", path);
-            return;
-        }
+        if (!OperatingSystem.IsWindows() || string.IsNullOrEmpty(path)) return;
         try
         {
-            ProcessStartInfo psi;
-            if (OperatingSystem.IsWindows())
+            var root = ZapretRuntimeDirectory.PrepareRoot();
+            if (!string.Equals(Path.GetDirectoryName(path), root, StringComparison.OrdinalIgnoreCase) ||
+                !Path.GetFileName(path).StartsWith("zapret-probe-", StringComparison.Ordinal) ||
+                !path.EndsWith(".log", StringComparison.OrdinalIgnoreCase) ||
+                (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException(Core.Localization.Strings.ZapretRepairPackage);
+
+            var psi = new ProcessStartInfo(ZapretRuntimeDirectory.SystemFile("notepad.exe"))
             {
-                psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "notepad.exe",
-                    UseShellExecute = false,
-                    CreateNoWindow = false,
-                };
-            }
-            else
-            {
-                psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
-                    UseShellExecute = false,
-                    CreateNoWindow = false,
-                };
-            }
+                WorkingDirectory = Environment.SystemDirectory,
+                UseShellExecute = false,
+            };
             psi.ArgumentList.Add(path);
-            System.Diagnostics.Process.Start(psi);
+            ZapretRuntimeDirectory.SetProcessEnvironment(psi);
+            using var viewer = System.Diagnostics.Process.Start(psi);
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[VM] OpenProbeLog failed for {Path}", path);
+            ZapretStatus = ex.Message;
         }
     }
     [ObservableProperty]
@@ -181,7 +172,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task CopyZapretWhitelistPathAsync()
     {
-        var path = @"C:\ProgramData\VPNRouter\zapret\";
+        var path = ZapretUpdater.PackageDisplayPath;
         try
         {
             var window = Avalonia.Application.Current?.ApplicationLifetime
@@ -233,48 +224,24 @@ public partial class MainWindowViewModel
 
     public bool IsZapretToolSelected => SelectedToolIndex == 0;
 
-    private void KillAllZapret()
+    private bool StopZapret()
     {
 #if PLATFORM_WINDOWS
         try { _zapret?.Stop(); }
-        catch (Exception ex) { _logger.Debug(ex, "[VM] KillAllZapret: _zapret.Stop failed"); }
-
-        foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Could not stop the managed Zapret process"); }
+        if (_zapret?.IsRunning == true)
         {
-            try { proc.Kill(entireProcessTree: true); proc.WaitForExit(3000); }
-            catch (Exception ex)
-            {
-                _logger.Debug(ex, "[VM] KillAllZapret: proc.Kill failed (PID {Pid})", proc.Id);
-            }
-            finally { proc.Dispose(); }
-        }
-
-        try
-        {
-            var psi = new System.Diagnostics.ProcessStartInfo("taskkill")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            psi.ArgumentList.Add("/F");
-            psi.ArgumentList.Add("/IM");
-            psi.ArgumentList.Add("winws.exe");
-            using var p = System.Diagnostics.Process.Start(psi);
-            p?.WaitForExit(3000);
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug(ex, "[VM] KillAllZapret: taskkill fallback failed");
+            ZapretStatus = Core.Localization.Strings.ZapretStopPending;
+            return false;
         }
 #endif
+        return true;
     }
 
     private bool IsZapretRunning()
     {
 #if PLATFORM_WINDOWS
-        return VPNRouter.Core.Services.ProcessQuery.AnyAlive("winws");
+        return _zapret?.IsRunning == true;
 #else
         return false;
 #endif
@@ -339,9 +306,11 @@ public partial class MainWindowViewModel
     {
         try
         {
-            var logsDir = VPNRouter.Core.AppPaths.LogsDir;
+            var logsDir = ZapretRuntimeDirectory.Root;
             if (!Directory.Exists(logsDir)) return;
+            logsDir = ZapretRuntimeDirectory.PrepareRoot();
             var newest = Directory.GetFiles(logsDir, "zapret-probe-*.log")
+                .Where(p => (File.GetAttributes(p) & FileAttributes.ReparsePoint) == 0)
                 .OrderByDescending(p => File.GetLastWriteTimeUtc(p))
                 .FirstOrDefault();
             if (!string.IsNullOrEmpty(newest))
@@ -457,7 +426,7 @@ public partial class MainWindowViewModel
     private async Task UpdateZapretAsync()
     {
 #if PLATFORM_WINDOWS
-        if (IsZapretDownloading) return;
+        if (!IsZapretMagicButtonEnabled || _disposed) return;
         IsZapretDownloading = true;
         ZapretStatus = IsRussian ? "Загрузка zapret..." : "Downloading zapret...";
 
@@ -465,7 +434,7 @@ public partial class MainWindowViewModel
         {
             if (ZapretEnabled || IsZapretRunning())
             {
-                KillAllZapret();
+                if (!StopZapret()) return;
                 ZapretEnabled = false;
             }
 
@@ -477,9 +446,10 @@ public partial class MainWindowViewModel
 
             LoadZapretStrategies();
 
-            ZapretStatus = IsRussian
+            var migration = await ZapretLegacyServices.RetryAsync(_logger);
+            ZapretStatus = migration.Message ?? (IsRussian
                 ? $"zapret {ZapretVersionText} установлен"
-                : $"zapret {ZapretVersionText} installed";
+                : $"zapret {ZapretVersionText} installed");
         }
         catch (VPNRouter.Core.Services.ZapretDownloadException zex)
         {
@@ -537,9 +507,10 @@ public partial class MainWindowViewModel
     private async Task ToggleZapretAsync()
     {
 #if PLATFORM_WINDOWS
+        if (!IsZapretMagicButtonEnabled || _disposed) return;
         if (ZapretEnabled || IsZapretRunning())
         {
-            KillAllZapret();
+            if (!StopZapret()) return;
             ZapretEnabled = false;
             ZapretStatus = Strings.Stopped;
             SaveSettings();
@@ -585,11 +556,9 @@ public partial class MainWindowViewModel
             }
 
             await Task.Delay(1500);
-            var winwsPid = ZapretManager.WinwsPid;
-            if (_zapret.IsRunning || winwsPid != null)
+            if (_zapret.Pid is int pid)
             {
                 ZapretEnabled = true;
-                var pid = winwsPid ?? _zapret.Pid;
                 ZapretStatus = IsRussian
                     ? $"Работает [{strategyName}] (PID {pid})"
                     : $"Running [{strategyName}] (PID {pid})";
@@ -616,7 +585,7 @@ public partial class MainWindowViewModel
         ? Strings.ZapretOneTapStopButton
         : Strings.ZapretOneTapStartButton;
 
-    public bool IsZapretMagicButtonEnabled => !IsZapretDownloading && !IsZapretProbing;
+    public bool IsZapretMagicButtonEnabled => !IsZapretDownloading && !IsZapretProbing && !IsZapretActionRunning;
 
     public string L_ZapretOneTapTune => Strings.ZapretOneTapTune;
 
@@ -637,9 +606,11 @@ public partial class MainWindowViewModel
     private async Task ZapretOneClickAsync()
     {
 #if PLATFORM_WINDOWS
+        if (!IsZapretMagicButtonEnabled || _disposed) return;
+        if (ReportOtherZapretInstance()) return;
         if (ZapretEnabled || IsZapretRunning())
         {
-            KillAllZapret();
+            if (!StopZapret()) return;
             ZapretEnabled = false;
             ZapretWinningStrategy = string.Empty;
             ZapretProbePassCount = 0;
@@ -758,19 +729,7 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (IsZapretProbing)
-        {
-            _logger.Information("[VM] StartZapretWithSelectedStrategy: a probe is already running — refusing");
-            return;
-        }
-        KillAllZapret();
-        if (ZapretEnabled || IsZapretRunning())
-        {
-            ZapretEnabled = false;
-            ZapretWinningStrategy = string.Empty;
-            await Task.Delay(500);
-        }
-
+        if (!IsZapretMagicButtonEnabled || _disposed) return;
         if (_zapret == null)
         {
             _zapret = new ZapretManager(_logger);
@@ -807,15 +766,13 @@ public partial class MainWindowViewModel
             }
 
             await Task.Delay(1500);
-            var winwsPid = ZapretManager.WinwsPid;
-            if (_zapret.IsRunning || winwsPid != null)
+            if (_zapret.Pid is int pid)
             {
                 ZapretEnabled = true;
                 ZapretWinningStrategy = strategyName;
                 ZapretProbePassCount = 0;
                 ZapretProbeTotalCount = 0;
                 IsZapretFallback = false;
-                var pid = winwsPid ?? _zapret.Pid ?? 0;
                 ZapretStatus = Strings.ZapretRunningSelected(strategyName, pid);
                 VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(strategyName, _logger);
                 RefreshZapretStrategiesDisplay();
@@ -938,15 +895,7 @@ public partial class MainWindowViewModel
     private async Task ForceFreshProbeAsync()
     {
 #if PLATFORM_WINDOWS
-        if (ZapretEnabled || IsZapretRunning())
-        {
-            KillAllZapret();
-            ZapretEnabled = false;
-            ZapretWinningStrategy = string.Empty;
-            ZapretProbePassCount = 0;
-            ZapretProbeTotalCount = 0;
-            await Task.Delay(500);
-        }
+        if (!IsZapretMagicButtonEnabled || _disposed) return;
         _forceFreshProbe = true;
         try
         {
@@ -963,342 +912,225 @@ public partial class MainWindowViewModel
     }
 #if PLATFORM_WINDOWS
 
-    internal static Func<
-        string,
-        IProgress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>?,
-        Serilog.ILogger?,
-        CancellationToken,
-        Task<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealSweepResult>> FlowsealProbe { get; set; } =
-            VPNRouter.Core.Services.ZapretAutoStrategy.RunFlowsealProbeAsync;
+    private bool ReportOtherZapretInstance()
+    {
+        if (IsZapretRunning() || !ZapretAutoStrategy.AnyWinwsRunning()) return false;
+        ZapretEnabled = false;
+        ZapretStatus = Core.Localization.Strings.ZapretOtherHelper;
+        return true;
+    }
+
+    internal static Func<ZapretManager, IProgress<ZapretAutoStrategy.StrategyProgress>?, Serilog.ILogger?,
+        CancellationToken, Task<ZapretAutoStrategy.StrategySweepResult>> InstalledProbe { get; set; } =
+            ZapretAutoStrategy.RunInstalledProbeAsync;
 
     private async Task ProbeAndStartZapretAsync()
     {
+        if (!IsZapretMagicButtonEnabled || _disposed) return;
+        if (ReportOtherZapretInstance()) return;
         if (_zapret == null)
         {
             _zapret = new ZapretManager(_logger);
             _zapret.ImmediateExitDetected += OnZapretImmediateExit;
         }
 
+        using var cancellation = new CancellationTokenSource();
+        _zapretProbeCts = cancellation;
+        var ct = cancellation.Token;
         IsZapretProbing = true;
-        IsZapretFallback = false;
-        ZapretWinningStrategy = string.Empty;
         _suppressZapretAvToast = true;
         StartZapretProbeElapsedTimer();
-
         try
         {
-            var zapretDir = VPNRouter.Core.Services.ZapretUpdater.ZapretDir;
-
-            RestoreOrphanedIpsetBeforeProbe(zapretDir);
-
-            if (await TryStartFromProbeCacheAsync())
-                return;
-
-            var sweep = await RunFlowsealSweepAsync(zapretDir);
-
-            LastProbeLogPath = sweep.ProbeLogPath;
-            if (sweep.EarlyWinner)
+            if (ZapretRuntimeDirectory.TestRoot == null && !ZapretAutoStrategy.IsRunningAsAdmin())
             {
-                _logger.Information(
-                    "[VM] Probe early-exit: winner {Name} at config {N}/{T} — skipped remaining {M}",
-                    sweep.Winner, sweep.TestedCount, sweep.TotalCount,
-                    sweep.TotalCount - sweep.TestedCount);
+                ReportSweepWithoutWinner("not_admin");
+                return;
+            }
+            // Finish any interrupted installation before holding its lock across the trial and winner launch.
+            if (!ZapretUpdater.IsInstalled())
+            {
+                ReportSweepWithoutWinner("missing_package");
+                return;
+            }
+            using var installLock = ZapretRuntimeDirectory.LockInstallation(ZapretRuntimeDirectory.Root);
+            if (_zapret.HasDriverConflict())
+            {
+                ZapretStatus = Core.Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict);
+                return;
+            }
+            if (_forceFreshProbe && (ZapretEnabled || IsZapretRunning()))
+            {
+                if (!StopZapret()) return;
+                ZapretEnabled = false;
+            }
+            IsZapretFallback = false;
+            ZapretWinningStrategy = string.Empty;
+            ZapretProbePassCount = ZapretProbeTotalCount = 0;
+            var cached = _forceFreshProbe ? null : ZapretProbeCache.TryLoad(_logger);
+            if (cached?.IsRecentAndReliable() == true)
+            {
+                if (await TryApplyCachedWinnerAsync(cached.Strategy, ct))
+                {
+                    ZapretProbeCache.RecordSuccess(cached.Strategy, ZapretProbePassCount, ZapretProbeTotalCount, _logger);
+                    return;
+                }
+                ZapretProbeCache.RecordFailure(cached.Strategy, _logger);
             }
 
+            var progress = new Progress<ZapretAutoStrategy.StrategyProgress>(p =>
+            {
+                if (_zapretProbeCts != cancellation) return;
+                ZapretProbeIndex = p.CurrentIndex - 1;
+                ZapretProbeTotal = p.TotalCount;
+                if (!string.IsNullOrEmpty(p.StrategyName)) ZapretProbeStrategy = p.StrategyName;
+                ZapretProbePassCount = p.OkCount;
+                ZapretProbeTotalCount = p.TotalChecks;
+            });
+            var sweep = await InstalledProbe(_zapret, progress, _logger, ct);
+            LastProbeLogPath = sweep.ProbeLogPath;
+            ct.ThrowIfCancellationRequested();
             if (sweep.Winner != null)
-                await StartSweepWinnerAsync(sweep);
+                await StartSweepWinnerAsync(sweep, ct);
             else
-                ReportSweepWithoutWinner(sweep);
+                ReportSweepWithoutWinner(sweep.Diagnostic);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _zapret?.Stop();
+            ReportSweepWithoutWinner("canceled");
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] ZapretOneTap probe orchestrator failed");
+            _zapret?.Stop();
+            _logger.Error(ex, "[VM] Zapret strategy probe failed");
             ZapretEnabled = false;
             IsZapretFallback = true;
             ZapretStatus = $"Error: {ex.Message}";
         }
         finally
         {
-            try
-            {
-                var zd = VPNRouter.Core.Services.ZapretUpdater.ZapretDir;
-                VPNRouter.Core.Services.ZapretAutoStrategy.RestoreIpsetAfterKill(zd, _logger);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[VM] Post-probe ipset cleanup failed");
-            }
-
+            _zapretProbeCts = null;
             IsZapretProbing = false;
             _suppressZapretAvToast = false;
-            ZapretProbeIndex = 0;
-            ZapretProbeTotal = 0;
+            ZapretProbeIndex = ZapretProbeTotal = 0;
             ZapretProbeStrategy = string.Empty;
             StopZapretProbeElapsedTimer();
         }
     }
 
-
-    private void RestoreOrphanedIpsetBeforeProbe(string zapretDir)
+    private async Task StartSweepWinnerAsync(ZapretAutoStrategy.StrategySweepResult sweep, CancellationToken ct)
     {
-    try
-    {
-        if (VPNRouter.Core.Services.ZapretAutoStrategy.HasOrphanedIpsetFlag(zapretDir))
+        if (ReportOtherZapretInstance()) return;
+        var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == sweep.Winner);
+        if (parsed?.BatPath is not string path)
         {
-            VPNRouter.Core.Services.ZapretAutoStrategy.RestoreIpsetAfterKill(zapretDir, _logger);
+            ReportSweepWithoutWinner("missing_package");
+            return;
         }
-    }
-    catch (Exception ex)
-    {
-        _logger.Warning(ex, "[VM] Pre-probe ipset cleanup failed (continuing anyway)");
-    }
-    }
-
-    private async Task<bool> TryStartFromProbeCacheAsync()
-    {
-    var cached = _forceFreshProbe
-        ? null
-        : VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
-    if (cached != null && cached.IsRecentAndReliable())
-    {
-        _logger.Information(
-            "[VM] ZapretOneTap cache hit: trying {Strategy} (success count {N})",
-            cached.Strategy, cached.SuccessRunCount);
-
-        ZapretProbeStrategy = cached.Strategy;
-        ZapretProbeIndex = 0;
-        ZapretProbeTotal = 1;
-        var hit = await TryApplyCachedWinnerAsync(cached.Strategy);
-        if (hit)
-        {
-            VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(
-                cached.Strategy, cached.TargetsPassed, cached.TargetsTotal, _logger);
-            return true;
-        }
-        else
-        {
-            VPNRouter.Core.Services.ZapretProbeCache.RecordFailure(cached.Strategy, _logger);
-            _logger.Information("[VM] Cache miss path — running full sweep");
-        }
-    }
-    else if (cached != null)
-    {
-        _logger.Information(
-            "[VM] Cache entry stale or unreliable (last sweep {LastSweep}, fails {Fails}) — running full sweep",
-            cached.LastSweepAt, cached.LastFailureCount);
-    }
-
-        return false;
-    }
-
-    private async Task<ZapretAutoStrategy.FlowsealSweepResult> RunFlowsealSweepAsync(string zapretDir)
-    {
-    var flowsealProgress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>(p =>
-    {
-        if (!string.IsNullOrEmpty(p.StrategyName))
-        {
-            ZapretProbeIndex = p.CurrentIndex - 1;
-            ZapretProbeTotal = p.TotalCount;
-            ZapretProbeStrategy = p.StrategyName;
-            ZapretProbePassCount = 0;
-            ZapretProbeTotalCount = 0;
-            _logger.Information("[VM] ZapretOneTap Flowseal probe: {Index}/{Total} {Name}",
-                p.CurrentIndex, p.TotalCount, p.StrategyName);
-        }
-        else if (p.TotalChecks > 0)
-        {
-            ZapretProbePassCount = p.OkCount;
-            ZapretProbeTotalCount = p.TotalChecks;
-            if (p.TotalChecks % 6 == 0)
-            {
-                _logger.Information(
-                    "[VM] ZapretOneTap Flowseal score: {Ok}/{Total} on {Strategy}",
-                    p.OkCount, p.TotalChecks, ZapretProbeStrategy);
-            }
-        }
-    });
-
-    _zapretProbeCts?.Dispose();
-    _zapretProbeCts = new CancellationTokenSource();
-    ZapretAutoStrategy.FlowsealSweepResult sweep;
-    try
-    {
-        sweep = await FlowsealProbe(
-            zapretDir, flowsealProgress, _logger, _zapretProbeCts.Token);
-    }
-    finally
-    {
-        _zapretProbeCts.Dispose();
-        _zapretProbeCts = null;
-    }
-
-        return sweep;
-    }
-
-    private async Task StartSweepWinnerAsync(ZapretAutoStrategy.FlowsealSweepResult sweep)
-    {
-    static string NormStrategy(string? s) =>
-        (s ?? string.Empty).Trim().TrimEnd().Replace(".bat", "",
-            StringComparison.OrdinalIgnoreCase).Trim();
-    var winnerNorm = NormStrategy(sweep.Winner);
-    var parsed = _parsedStrategies.FirstOrDefault(s =>
-            string.Equals(NormStrategy(s.Name), winnerNorm, StringComparison.OrdinalIgnoreCase));
-    if (parsed != null)
-    {
         try
         {
-            if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
-                _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
-            else
-                _zapret!.Start(parsed.Arguments);
+            _zapret!.StartFromBat(path, parsed.Arguments);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] Failed to start winning strategy {Name}", sweep.Winner);
-            IsZapretFallback = true;
-            ZapretEnabled = false;
-            ZapretStatus = $"Error starting {sweep.Winner}: {ex.Message}";
+            _logger.Warning(ex, "[VM] Could not start the selected installed strategy");
+            ReportSweepWithoutWinner("missing_package");
             return;
         }
 
-        await Task.Delay(1500);
-        var winwsPid = ZapretManager.WinwsPid;
-        if (_zapret.IsRunning || winwsPid != null)
-        {
-            ZapretWinningStrategy = sweep.Winner;
-            ZapretEnabled = true;
-            var pid = winwsPid ?? _zapret.Pid;
-            ZapretStatus = IsRussian
-                ? $"Работает [{sweep.Winner}] (PID {pid})"
-                : $"Running [{sweep.Winner}] (PID {pid})";
-
-            var idx = ZapretStrategies.IndexOf(sweep.Winner);
-            if (idx >= 0) ZapretStrategyIndex = idx;
-            var perStrategy = sweep.PerStrategyResults != null
-                ? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(
-                    sweep.PerStrategyResults, StringComparer.Ordinal)
-                : new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(StringComparer.Ordinal);
-            VPNRouter.Core.Services.ZapretProbeCache.RecordSweepResults(
-                sweep.Winner,
-                ZapretProbePassCount,
-                ZapretProbeTotalCount,
-                perStrategy,
-                _logger);
-            RefreshZapretStrategiesDisplay();
-            NotifyZapretSummaryChanged();
-            SaveSettings();
-        }
-        else
+        await Task.Delay(1500, ct);
+        if (_zapret.Pid is not int pid)
         {
             IsZapretFallback = true;
             ZapretEnabled = false;
             ZapretStatus = IsRussian
-                ? $"Стратегия {sweep.Winner} не запустилась"
-                : $"Strategy {sweep.Winner} failed to start";
+                ? $"Стратегия {parsed.Name} не запустилась"
+                : $"Strategy {parsed.Name} failed to start";
+            return;
         }
+
+        ZapretEnabled = true;
+        ZapretWinningStrategy = parsed.Name;
+        ZapretStatus = IsRussian
+            ? $"Работает [{parsed.Name}] (PID {pid})"
+            : $"Running [{parsed.Name}] (PID {pid})";
+        ZapretStrategyIndex = ZapretStrategies.IndexOf(parsed.Name);
+        var scores = sweep.PerStrategyResults?.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal)
+            ?? new Dictionary<string, ZapretStrategyTestResult>(StringComparer.Ordinal);
+        scores.TryGetValue(parsed.Name, out var winnerScore);
+        ZapretProbePassCount = winnerScore?.Passed ?? 0;
+        ZapretProbeTotalCount = winnerScore?.Total ?? 0;
+        ZapretProbeCache.RecordSweepResults(parsed.Name, ZapretProbePassCount, ZapretProbeTotalCount, scores, _logger);
+        RefreshZapretStrategiesDisplay();
+        NotifyZapretSummaryChanged();
+        SaveSettings();
     }
-    else
+
+    private void ReportSweepWithoutWinner(string? diagnostic)
     {
-        _logger.Warning("[VM] Flowseal winner {Name} not in parsed list", sweep.Winner);
         IsZapretFallback = true;
         ZapretEnabled = false;
-        ZapretStatus = $"Winner {sweep.Winner} not found in strategy list";
-    }
-    }
-
-    private void ReportSweepWithoutWinner(ZapretAutoStrategy.FlowsealSweepResult sweep)
-    {
-    IsZapretFallback = true;
-    ZapretEnabled = false;
-    ZapretStatus = sweep.Diagnostic switch
-    {
-        "not_admin" => IsRussian
-            ? "Нужны права администратора для подбора стратегии. Перезапустите VPNRouter от админа."
-            : "Administrator rights required to probe strategies. Restart VPNRouter as admin.",
-        "sweep_timeout" => IsRussian
-            ? "Подбор стратегии превысил 10 минут. Проверьте интернет и попробуйте ещё раз."
-            : "Strategy probe exceeded 10 min cap. Check network and retry.",
-        "missing_script" => IsRussian
-            ? "Скрипт Flowseal не найден. Обнови Zapret через «Тонкую настройку»."
-            : "Flowseal script missing. Update Zapret via Advanced settings.",
-        "canceled" => IsRussian
-            ? "Подбор отменён."
-            : "Probe canceled.",
-        _ => Strings.ZapretOneTapAllFailedToast,
-    };
-
-    if (sweep.ErrorLines is { Count: > 0 })
-    {
-        foreach (var errLine in sweep.ErrorLines)
-            _logger.Warning("[VM] Flowseal script: {Line}", errLine);
-    }
+        ZapretStatus = diagnostic switch
+        {
+            "not_admin" => IsRussian
+                ? "Нужны права администратора для подбора стратегии. Перезапустите VPNRouter от админа."
+                : "Administrator rights required to probe strategies. Restart VPNRouter as admin.",
+            "sweep_timeout" => IsRussian
+                ? "Подбор стратегии превысил 10 минут. Проверьте интернет и попробуйте ещё раз."
+                : "Strategy probe exceeded 10 min cap. Check network and retry.",
+            "missing_package" => Core.Localization.Strings.ZapretRepairPackage,
+            "helper_active" => Core.Localization.Strings.ZapretOtherHelper,
+            "driver_conflict" => Core.Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict),
+            "canceled" => IsRussian ? "Подбор отменён." : "Probe canceled.",
+            _ => Strings.ZapretOneTapAllFailedToast,
+        };
     }
 
-    private async Task<bool> TryApplyCachedWinnerAsync(string strategy)
+    private async Task<bool> TryApplyCachedWinnerAsync(string strategy, CancellationToken ct)
     {
+        var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategy);
+        if (parsed?.BatPath is not string path) return false;
+
+        ZapretProbeStrategy = strategy;
+        ZapretProbeTotal = 1;
         try
         {
-            var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategy);
-            if (parsed == null)
+            _zapret!.StartFromBat(path, parsed.Arguments);
+            await Task.Delay(1500, ct);
+            if (_zapret.IsRunning)
             {
-                _logger.Warning("[VM] Cached strategy {Name} not in parsed list — bypass cache", strategy);
-                return false;
+                var results = await ZapretAutoStrategy.CheckTargetsAsync(_logger, ct);
+                ct.ThrowIfCancellationRequested();
+                var passed = results.Count(o => o == ZapretAutoStrategy.ProbeOutcome.Success);
+                if (_zapret.Pid is int pid && ZapretAutoStrategy.IsUsable(passed, results.Length))
+                {
+                    ZapretWinningStrategy = strategy;
+                    ZapretEnabled = true;
+                    ZapretProbePassCount = passed;
+                    ZapretProbeTotalCount = results.Length;
+                    ZapretStatus = IsRussian
+                        ? $"Работает [{strategy}] (PID {pid}, warm)"
+                        : $"Running [{strategy}] (PID {pid}, warm)";
+                    ZapretStrategyIndex = ZapretStrategies.IndexOf(strategy);
+                    SaveSettings();
+                    return true;
+                }
             }
-
-            ZapretProbeStrategy = strategy;
-            if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
-                _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
-            else
-                _zapret!.Start(parsed.Arguments);
-
-            await Task.Delay(1500);
-            var winwsPid = ZapretManager.WinwsPid;
-            if (!_zapret.IsRunning && winwsPid == null)
-            {
-                _logger.Warning("[VM] Cached strategy {Name} failed to spawn winws.exe", strategy);
-                return false;
-            }
-
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(7) };
-            var targets = VPNRouter.Core.Services.ZapretAutoStrategy.LoadTargets(_logger);
-            var report = await VPNRouter.Core.Services.ZapretAutoStrategy.ProbeAllTargetsAsync(
-                targets, http, _logger, CancellationToken.None);
-            var passPercent = targets.Count == 0 ? 0 : (report.PassCount * 100) / targets.Count;
-            _logger.Information(
-                "[VM] Cache warm-start probe: {Pass}/{Total} ok ({Pct}%) on {Strategy}",
-                report.PassCount, targets.Count, passPercent, strategy);
-
-            if (passPercent >= VPNRouter.Core.Services.ZapretAutoStrategy.Tier2MinPassPercent)
-            {
-                ZapretWinningStrategy = strategy;
-                ZapretEnabled = true;
-                ZapretProbePassCount = report.PassCount;
-                ZapretProbeTotalCount = targets.Count;
-                var pid = winwsPid ?? _zapret.Pid;
-                ZapretStatus = IsRussian
-                    ? $"Работает [{strategy}] (PID {pid}, warm)"
-                    : $"Running [{strategy}] (PID {pid}, warm)";
-                var idx = ZapretStrategies.IndexOf(strategy);
-                if (idx >= 0) ZapretStrategyIndex = idx;
-                SaveSettings();
-                return true;
-            }
-
-            _logger.Warning("[VM] Cache warm-start probe under threshold — stopping for fresh sweep");
-            try { _zapret?.Stop(); } catch { }
-            return false;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.Warning(ex, "[VM] TryApplyCachedWinnerAsync threw");
-            try { _zapret?.Stop(); } catch { }
-            return false;
+            _logger.Warning(ex, "[VM] Could not apply cached Zapret strategy");
         }
-    }
 
+        _zapret?.Stop();
+        return false;
+    }
 #endif
 
-    [ObservableProperty] private bool _isZapretActionRunning;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsZapretMagicButtonEnabled))]
+    private bool _isZapretActionRunning;
     [ObservableProperty] private string _zapretActionTitle = string.Empty;
     public ObservableCollection<string> ZapretActionOutput { get; } = new();
 
@@ -1326,15 +1158,6 @@ public partial class MainWindowViewModel
 #if PLATFORM_WINDOWS
         await RunZapretActionAsync(Strings.UpdateHostsFile,
             ct => ZapretActions.UpdateHostsAsync(ct));
-#endif
-    }
-
-    [RelayCommand]
-    private void OpenZapretServiceMenu()
-    {
-#if PLATFORM_WINDOWS
-        try { ZapretActions.OpenServiceMenu(); }
-        catch (Exception ex) { _logger.Error(ex, "[VM] OpenServiceMenu failed"); }
 #endif
     }
 
@@ -1397,12 +1220,30 @@ public partial class MainWindowViewModel
 #endif
     }
 
+    public string L_ZapretApplyServiceStrategy => Strings.ZapretApplyServiceStrategy;
+
     [RelayCommand]
-    private void RunZapretTests()
+    private async Task ApplyZapretServiceStrategyAsync()
     {
 #if PLATFORM_WINDOWS
-        try { ZapretActions.RunTests(); }
-        catch (Exception ex) { _logger.Error(ex, "[VM] RunTests"); }
+        if (!IsZapretMagicButtonEnabled || _disposed) return;
+        if (IsZapretRunning())
+        {
+            ZapretStatus = Core.Localization.Strings.ZapretOtherHelper;
+            return;
+        }
+        string? selection = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
+            ? ZapretStrategies[ZapretStrategyIndex] : null;
+        await RunZapretActionAsync(Strings.ZapretApplyServiceStrategy,
+            ct => ZapretActions.ApplyServiceStrategyAsync(selection, ct));
+#endif
+    }
+
+    [RelayCommand]
+    private async Task RunZapretTestsAsync()
+    {
+#if PLATFORM_WINDOWS
+        await RunZapretActionAsync(Strings.RunTestsLabel, ZapretActions.RunTestsAsync);
 #endif
     }
 
@@ -1517,7 +1358,11 @@ public partial class MainWindowViewModel
             var name = string.IsNullOrEmpty(ZapretWinningStrategy) ? "..." : ZapretWinningStrategy;
             if (ZapretProbeTotalCount > 0)
                 return Strings.ZapretOneTapAirPillScored(name, ZapretProbePassCount, ZapretProbeTotalCount);
-            var pid = ZapretManager.WinwsPid ?? 0;
+#if PLATFORM_WINDOWS
+            var pid = _zapret?.Pid ?? 0;
+#else
+            const int pid = 0;
+#endif
             return Strings.ZapretOneTapAirPill(name, pid);
         }
     }

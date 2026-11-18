@@ -125,7 +125,7 @@ public sealed class BusinessProtocolValidationTests
             var geo = Path.Combine(_root, "bundle", "geo");
             Directory.CreateDirectory(geo);
             Directory.CreateDirectory(Path.Combine(_root, "geo"));
-            File.WriteAllBytes(Path.Combine(geo, "geoip-ru.srs"), RuleSetSamples.IntactEnvelope());
+            File.WriteAllBytes(Path.Combine(geo, "geoip-ru.srs"), RuleSetSamples.GeoIpRule());
             File.WriteAllBytes(Path.Combine(geo, "geosite-ru.srs"), RuleSetSamples.UpstreamGeositeTldRu());
             Store = new(SettingsPath);
         }
@@ -144,7 +144,8 @@ public sealed class BusinessProtocolValidationTests
         internal AppSettings Bootstrap()
         {
             var loaded = Store.Load();
-            BusinessBootstrap.Apply(loaded, Store, _bundle, Path.Combine(_root, "bundle"), Path.Combine(_root, "geo"), SettingsPath);
+            BusinessBootstrap.Apply(loaded, Store, _bundle, Path.Combine(_root, "bundle"), Path.Combine(_root, "geo"), SettingsPath,
+                RuleSetSamples.CheckFixtureContentsAsync);
             return Store.Load();
         }
 

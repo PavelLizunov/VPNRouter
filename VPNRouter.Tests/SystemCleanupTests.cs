@@ -21,7 +21,6 @@ public sealed class SystemCleanupTests
 {
     private const string OwnDriver = @"\??\C:\Program Files\VPNRouter\app\driver\mullvad-split-tunnel.sys";
     private const string MullvadDriver = @"\??\C:\Program Files\Mullvad VPN\resources\driver\mullvad-split-tunnel.sys";
-    private const string OwnWinDivert = @"""C:\ProgramData\VPNRouter\zapret\bin\WinDivert64.sys""";
     private const string OtherWinDivert = @"C:\Tools\SomeOtherApp\WinDivert64.sys";
 
     private sealed class FakeRegistry : ICleanupRegistry
@@ -113,7 +112,26 @@ public sealed class SystemCleanupTests
             });
         }
 
-        public SystemCleanup Create() => new(Runner, Registry, logger: null, scPath: "sc.exe");
+        internal static readonly string ZapretBin = Path.Combine("test edition", "zapret", "bin");
+        public SystemCleanup Create() => new(Runner, Registry, logger: null, scPath: "sc.exe")
+        {
+            SplitTunnelImage = OwnDriver[4..],
+            ZapretPaths = () => new(ZapretBin, ZapretBin + "-protected"),
+            OpenService = (name, writable) =>
+            {
+                if (!Services.TryGetValue(name, out var image)) return null;
+                return new FakeRegistration(new(image, name == "zapret" ? 16u : 1u, 3))
+                {
+                    OnStop = () => Events.Add("sc-stop:" + name),
+                    OnDelete = () =>
+                    {
+                        Events.Add("sc-delete:" + name);
+                        if (DeleteExitCode != 0) throw new InvalidOperationException("Deletion failed");
+                        Services.Remove(name);
+                    }
+                };
+            }
+        };
 
         private static bool IsNetsh(ProcessRequest r) => r.ExecutablePath == "netsh.exe";
 
@@ -148,7 +166,7 @@ public sealed class SystemCleanupTests
         h.Registry.DnsState = true;
         h.Registry.RunValue = true;
         h.Services["mullvad-split-tunnel"] = OwnDriver;
-        h.Services["WinDivert"] = OwnWinDivert;
+        h.Services["zapret"] = "\"" + Path.Combine(Harness.ZapretBin + "-protected", "winws.exe") + "\" --wf-tcp=443";
         return h;
     }
 
@@ -209,7 +227,7 @@ public sealed class SystemCleanupTests
         Assert.Equal(new[]
         {
             "sc-stop:mullvad-split-tunnel", "sc-delete:mullvad-split-tunnel",
-            "sc-stop:WinDivert", "sc-delete:WinDivert",
+            "sc-stop:zapret", "sc-delete:zapret",
         }, events);
         Assert.Equal(2, report.Actions.Count(a => a.Area is "driver" or "zapret" && a.Outcome == CleanupOutcome.Removed));
     }
@@ -232,7 +250,7 @@ public sealed class SystemCleanupTests
 
     [Theory]
     [InlineData(OtherWinDivert, "another program")]
-    [InlineData("", "cannot read")]
+    [InlineData("", "could not be verified")]
     public void Run_LeavesAWinDivertServiceAloneWhenItIsNotVpnrouters(string binPath, string expectedDetail)
     {
         var h = new Harness();
@@ -357,17 +375,15 @@ public sealed class SystemCleanupTests
         Assert.Equal(expected, SystemCleanup.ServiceExists(new ProcessResult(exit, stdout, string.Empty, TimeSpan.Zero, timedOut)));
     }
 
-    [Theory]
-    [InlineData(OwnDriver, true, true)]
-    [InlineData(MullvadDriver, true, false)]
-    [InlineData(@"C:\Program Files\VPNRouter\app\driver\other.sys", true, false)]
-    [InlineData(OwnWinDivert, false, true)]
-    [InlineData(OtherWinDivert, false, false)]
-    [InlineData(null, false, false)]
-    [InlineData("   ", true, false)]
-    public void IsOwnBinaryPath_OnlyAcceptsFilesInAVpnrouterFolder(string? binPath, bool driver, bool expected)
+    [Fact]
+    public void Run_ReportsSharedDriverEvenWhenItsImageIsInTheProtectedPackage()
     {
-        Assert.Equal(expected, SystemCleanup.IsOwnBinaryPath(binPath, driver));
+        var h = new Harness();
+        h.Services["WinDivert"] = Path.Combine(Harness.ZapretBin + "-protected", "WinDivert64.sys");
+        var action = Assert.Single(h.Create().Run(false).Actions, a => a.Target == "WinDivert");
+        Assert.Equal(CleanupOutcome.Skipped, action.Outcome);
+        Assert.Contains("shared", action.Detail);
+        Assert.Empty(h.Events);
     }
 
     [Fact]

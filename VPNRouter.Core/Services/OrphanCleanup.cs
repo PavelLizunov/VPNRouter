@@ -26,10 +26,12 @@ public static class OrphanCleanup
         {
             KillByName("sing-box", null, killOnly: ProcessOwnership.IsOwnedSingBox);
 
-            KillByName("slipstream-client", null);
+            KillByName("slipstream-client", null, p => !OperatingSystem.IsWindows() ||
+                ProcessOwnership.IsSamePath(ProcessOwnership.ImagePathOf(p), AppPaths.SlipstreamExePath));
         }
 
-        KillByName("VPNRouter.GUI", null);
+        KillByName("VPNRouter.GUI", null, p => !OperatingSystem.IsWindows() ||
+            ProcessOwnership.IsSamePath(ProcessOwnership.ImagePathOf(p), Path.Combine(AppContext.BaseDirectory, "VPNRouter.GUI.exe")));
 
         if (OperatingSystem.IsWindows())
             TunAdapterDiagnostics.LogAdapterState(logger, "OrphanCleanup.after");
@@ -46,8 +48,9 @@ public static class OrphanCleanup
                 try
                 {
                     if (exceptPid.HasValue && proc.Id == exceptPid.Value) continue;
+                    if (OperatingSystem.IsWindows()) _ = proc.Handle; // Pin the PID through verification and termination.
                     if (killOnly != null && !killOnly(proc)) continue;
-                    proc.Kill(entireProcessTree: true);
+                    proc.Kill(entireProcessTree: !OperatingSystem.IsWindows());
                     proc.WaitForExit(2000);
                 }
                 catch

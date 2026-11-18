@@ -49,6 +49,8 @@ public partial class VpnEngine : IDisposable
     public bool IsRunning => _singBox?.IsRunning() ?? false;
     public string ActiveProfileName => _activeProfile?.Name ?? string.Empty;
     public int? SingBoxPid => _singBox?.Pid;
+    // Unix readiness uses Clash, which can be unavailable while the owned process is alive.
+    public bool HasActiveTunnel => _singBox?.HasActiveTunnel ?? false;
     public List<string> MonitoredProcesses => _scanResult?.ProcessNames ?? new();
 
     public string ActiveConfigMode { get; private set; } = "generated";
@@ -219,7 +221,7 @@ public partial class VpnEngine : IDisposable
         if (singBox.State is SingBoxState.Starting or SingBoxState.Restarting)
             return true;
 
-        return singBox.IsRunning();
+        return singBox.HasActiveTunnel;
     }
 
     internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck)
@@ -309,7 +311,7 @@ public partial class VpnEngine : IDisposable
         // wait; the same uncancelled, previously running session still owns intent.
         var continuingPolicySession = settings.BusinessPolicy != null &&
             _policySession is { HasRun: true } policySession && IsCurrentPolicySession(policySession);
-        if (_singBox == null || (!continuingPolicySession && !_singBox.IsRunning()))
+        if (_singBox == null || (!continuingPolicySession && !HasActiveTunnel))
         {
             _logger?.Warning("[VpnEngine] Apply called but sing-box not running");
             return false;
@@ -462,6 +464,23 @@ public partial class VpnEngine : IDisposable
         }
     }
 
+    internal bool TryPrepareColdReconnect()
+    {
+        // A concurrent start/restart may have acquired a process since the desktop checked.
+        if (!_lifecycleGate.Wait(0)) return false;
+        try
+        {
+            if (HasLiveOrStartingSingBox()) return false;
+            _sessionCts?.Cancel();
+            EndSession();
+            return true;
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
     public void Stop()
     {
         try { _sessionCts?.Cancel(); } catch { }
@@ -469,14 +488,19 @@ public partial class VpnEngine : IDisposable
         _lifecycleGate.Wait();
         try
         {
-            _failoverGeneration++;
-            _failover = null;
-            TeardownInternal();
+            EndSession();
         }
         finally
         {
             _lifecycleGate.Release();
         }
+    }
+
+    private void EndSession()
+    {
+        _failoverGeneration++;
+        _failover = null;
+        TeardownInternal();
     }
 
     private void TeardownInternal()

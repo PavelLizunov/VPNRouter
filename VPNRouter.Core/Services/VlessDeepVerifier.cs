@@ -1,8 +1,5 @@
 using System.Diagnostics;
-using System.Net;
 using System.Net.Http;
-using System.Net.Sockets;
-using System.Text;
 using System.Text.Json.Nodes;
 using Serilog;
 using VPNRouter.Core.Models;
@@ -117,6 +114,7 @@ public sealed class VlessDeepVerifier
             catch (OperationCanceledException)
             {
                 onOneDone(entry, DeepVerifyResult.Failed("cancelled", DeepVerifyFailurePhase.Cancelled));
+                throw;
             }
             catch (Exception ex)
             {
@@ -139,17 +137,15 @@ public sealed class VlessDeepVerifier
         CancellationToken ct = default)
     {
         var protocol = (entry.Protocol ?? "vless").Trim().ToLowerInvariant();
-        var label = string.IsNullOrEmpty(entry.Name) ? entry.Server : entry.Name;
-        _logger.Debug(
-            "[VlessDeepVerifier] start: name={Name} host={Host} port={Port} protocol={Protocol} measureBw={MeasureBw}",
-            label, entry.Server, entry.Port, protocol, measureBandwidth);
+        ct.ThrowIfCancellationRequested();
+        if (!string.IsNullOrEmpty(entry.DetourVia))
+            return DeepVerifyResult.Failed(DeepVerifyConstants.DetourNote, DeepVerifyFailurePhase.UnsupportedByVerifier);
 
         var placeholderField = PlaceholderDefense.Inspect(entry);
         if (placeholderField != null)
         {
             _logger.Warning(
-                "[VlessDeepVerifier] {Name}: placeholder credential detected ({Field}) — refusing to probe",
-                label, placeholderField);
+                "[VlessDeepVerifier] Placeholder credential detected ({Field})", placeholderField);
             return DeepVerifyResult.Failed($"placeholder credential: {placeholderField}",
                 DeepVerifyFailurePhase.Precondition);
         }
@@ -158,20 +154,20 @@ public sealed class VlessDeepVerifier
         var isXhttp = "xhttp".Equals(entry.Transport?.Type, StringComparison.OrdinalIgnoreCase);
         if (isAwg && !SingBoxFeatures.AwgAvailable)
         {
-            _logger.Information("[VlessDeepVerifier] {Name}: AWG deep verify unsupported (core lacks with_awg)", label);
+            _logger.Information("[VlessDeepVerifier] AWG deep verify unsupported (core lacks with_awg)");
             return DeepVerifyResult.Failed("deep verify: AmneziaWG needs the lx core (with_awg)",
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
         if (isXhttp && !SingBoxFeatures.XhttpAvailable)
         {
-            _logger.Information("[VlessDeepVerifier] {Name}: xhttp deep verify unsupported (core lacks with_xhttp)", label);
+            _logger.Information("[VlessDeepVerifier] xhttp deep verify unsupported (core lacks with_xhttp)");
             return DeepVerifyResult.Failed("deep verify: xhttp needs the lx core (with_xhttp)",
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
 
         if (entry.IsDnsTunnel)
         {
-            _logger.Information("[VlessDeepVerifier] {Name}: dns-tunnel deep verify unsupported (needs slipstream sidecar)", label);
+            _logger.Information("[VlessDeepVerifier] dns-tunnel deep verify unsupported (needs slipstream sidecar)");
             return DeepVerifyResult.Failed("deep verify: dns-tunnel needs the slipstream sidecar",
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
@@ -191,7 +187,7 @@ public sealed class VlessDeepVerifier
         }
         else if (!IsAvailable)
         {
-            _logger.Warning("[VlessDeepVerifier] {Name}: sing-box binary missing at {Path}", label, _singBoxPath);
+            _logger.Warning("[VlessDeepVerifier] sing-box binary missing");
             return DeepVerifyResult.Failed("sing-box binary missing", DeepVerifyFailurePhase.LocalSpawn);
         }
 
@@ -199,7 +195,7 @@ public sealed class VlessDeepVerifier
         {
             if (!ServerUriParser.NaiveRuntimeAvailable)
             {
-                _logger.Warning("[VlessDeepVerifier] {Name}: naive unsupported on this platform (needs libcronet)", label);
+                _logger.Warning("[VlessDeepVerifier] naive unsupported on this platform (needs libcronet)");
                 return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
                     DeepVerifyFailurePhase.UnsupportedByVerifier);
             }
@@ -209,18 +205,16 @@ public sealed class VlessDeepVerifier
 
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
 
-        var socksPort = NetPortUtil.FindFreePort();
-        var clashPort = NetPortUtil.FindFreePort();
+        var proxy = new VerificationProxy(NetPortUtil.FindFreePort());
         string? tmpConfigPath = null;
         IProcessHandle? handle = null;
-        var stderrBuffer = new StringBuilder(DeepVerifyProbe.MaxDiagnosticBufferChars);
 
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         overallCts.CancelAfter(OverallTimeout);
 
         try
         {
-            var configJson = BuildSingleOutboundConfig(entry, socksPort, clashPort);
+            var configJson = BuildSingleOutboundConfig(entry, proxy);
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-dv-{Guid.NewGuid():N}.json");
             await using (var writer = new StreamWriter(AppPaths.CreatePrivateFile(tmpConfigPath, FileMode.CreateNew)))
                 await writer.WriteAsync(configJson.AsMemory(), overallCts.Token);
@@ -230,75 +224,65 @@ public sealed class VlessDeepVerifier
                 Arguments: new[] { "run", "-c", tmpConfigPath },
                 CaptureStdout: true,
                 CaptureStderr: true);
-
             try
             {
-                handle = _runner.Start(request);
+                handle = _runner.Start(request, child =>
+                {
+                    child.OutputLine += (_, line) => proxy.ObserveChildOutput(line);
+                    child.ErrorLine += (_, line) => proxy.ObserveChildOutput(line);
+                    child.Exited += OnVerifierExit;
+                });
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "[VlessDeepVerifier] {Name}: sing-box spawn failed", label);
+                _logger.Warning("[VlessDeepVerifier] Engine start failed ({Type})", ex.GetType().Name);
                 return DeepVerifyResult.Failed("sing-box spawn failed", DeepVerifyFailurePhase.LocalSpawn);
             }
 
-            handle.ErrorLine += (_, line) =>
-                DeepVerifyProbe.AppendSanitizedLine(
-                    stderrBuffer,
-                    line,
-                    DeepVerifyProbe.MaxDiagnosticBufferChars);
+            if (handle.HasExited || !await proxy.WaitUntilBoundAsync(EffectiveSocksBindWait, overallCts.Token))
+                return DeepVerifyResult.Failed(proxy.StartupError, DeepVerifyFailurePhase.SocksBind);
 
-            _logger.Debug("[VlessDeepVerifier] {Name}: sing-box spawned pid={Pid} socks={SocksPort}", label, handle.Pid, socksPort);
-
-            if (!await DeepVerifyProbe.WaitForPortBoundAsync(socksPort, EffectiveSocksBindWait, overallCts.Token))
-            {
-                var snip = DeepVerifyProbe.ReadSanitizedSnippet(stderrBuffer, 80);
-                _logger.Warning("[VlessDeepVerifier] {Name}: SOCKS port {Port} never bound. stderr: {Stderr}", label, socksPort, snip);
-                return DeepVerifyResult.Failed(string.IsNullOrWhiteSpace(snip)
-                    ? "sing-box didn't bind"
-                    : $"sing-box: {snip}", DeepVerifyFailurePhase.SocksBind);
-            }
-
-            var (httpOk, httpLatencyMs, httpErr) = await DeepVerifyProbe.ProbeViaSocksAsync(socksPort, HttpTimeout, overallCts.Token);
+            var (httpOk, httpLatencyMs, httpErr) = await DeepVerifyProbe.ProbeViaProxyAsync(proxy, HttpTimeout, overallCts.Token);
             if (!httpOk)
             {
-                _logger.Information("[VlessDeepVerifier] {Name}: HTTP probe FAILED — {Err}", label, httpErr);
+                _logger.Information("[VlessDeepVerifier] HTTP probe failed");
                 return DeepVerifyResult.Failed(httpErr ?? "http failed", DeepVerifyFailurePhase.ProxiedHttp);
             }
 
-            var canary = await ProbeCanariesViaSocksAsync(socksPort, label, overallCts.Token);
+            var canary = await ProbeCanariesViaProxyAsync(proxy, overallCts.Token);
 
             double? mbps = null;
             if (measureBandwidth)
             {
                 try
                 {
-                    var (bwOk, measuredMbps, _) = await DeepVerifyProbe.MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
+                    var (bwOk, measuredMbps, _) = await DeepVerifyProbe.MeasureBandwidthViaProxyAsync(proxy, overallCts.Token);
                     if (bwOk) mbps = measuredMbps;
                 }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested && !handle.HasExited)
                 {
-                    _logger.Debug("[VlessDeepVerifier] {Name}: bandwidth probe hit the overall budget — reporting unmeasured", label);
+                    _logger.Debug("[VlessDeepVerifier] bandwidth probe hit the overall budget — reporting unmeasured");
                 }
             }
 
-            _logger.Information(
-                "[VlessDeepVerifier] {Name}: PASS http={HttpMs}ms bw={BwMbps} canary={Canary}",
-                label, httpLatencyMs, mbps?.ToString("F1") ?? "-", canary);
+            ct.ThrowIfCancellationRequested();
+            if (handle.HasExited)
+                return DeepVerifyResult.Failed("verification engine stopped", DeepVerifyFailurePhase.LocalSpawn);
+            _logger.Information("[VlessDeepVerifier] Verified in {LatencyMs} ms", httpLatencyMs);
             return new DeepVerifyResult(true, httpLatencyMs, mbps, null, BlockedCanary: canary);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) when (handle?.HasExited == true)
         {
-            _logger.Information("[VlessDeepVerifier] {Name}: cancelled", label);
-            return DeepVerifyResult.Failed("cancelled", DeepVerifyFailurePhase.Cancelled);
+            return DeepVerifyResult.Failed("verification engine stopped", DeepVerifyFailurePhase.LocalSpawn);
         }
         catch (OperationCanceledException)
         {
-            _logger.Information("[VlessDeepVerifier] {Name}: TIMEOUT (overall {Sec}s)", label, OverallTimeout.TotalSeconds);
             return DeepVerifyResult.Failed("timeout", DeepVerifyFailurePhase.Timeout);
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[VlessDeepVerifier] {Name}: unexpected error", label);
+            _logger.Warning("[VlessDeepVerifier] Verification failed ({Type})", ex.GetType().Name);
             return DeepVerifyResult.Failed(ex.GetType().Name);
         }
         finally
@@ -307,6 +291,7 @@ public sealed class VlessDeepVerifier
             {
                 if (handle != null)
                 {
+                    handle.Exited -= OnVerifierExit;
                     if (!handle.HasExited)
                     {
                         handle.Kill(entireProcessTree: true);
@@ -321,10 +306,17 @@ public sealed class VlessDeepVerifier
                 try { File.Delete(tmpConfigPath); } catch { }
             }
         }
+
+        void OnVerifierExit(object? sender, int exitCode)
+        {
+            try { overallCts.Cancel(); } catch (ObjectDisposedException) { }
+        }
     }
 
-    internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int? clashPort)
+    internal static string BuildSingleOutboundConfig(VlessServerEntry s, VerificationProxy proxy, bool embedded = false)
     {
+        if (!string.IsNullOrEmpty(s.DetourVia))
+            throw new InvalidOperationException(DeepVerifyConstants.DetourNote);
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
         JsonObject? outbound = null;
         JsonNode? awgEndpoint = null;
@@ -355,7 +347,7 @@ public sealed class VlessDeepVerifier
 
         var root = new JsonObject
         {
-            ["log"] = new JsonObject { ["level"] = "error" },
+            ["log"] = new JsonObject { ["level"] = embedded ? "error" : "info" },
             ["dns"] = new JsonObject
             {
                 ["servers"] = new JsonArray
@@ -364,17 +356,7 @@ public sealed class VlessDeepVerifier
                 },
                 ["final"] = "dns-google",
             },
-            ["inbounds"] = new JsonArray
-            {
-                (JsonNode?)new JsonObject
-                {
-                    ["type"] = "socks",
-                    ["tag"] = "socks-in",
-                    ["listen"] = "127.0.0.1",
-                    ["listen_port"] = socksPort,
-                    ["sniff"] = false,
-                },
-            },
+            ["inbounds"] = new JsonArray(proxy.CreateInbound()),
             ["outbounds"] = outboundsArray,
             ["route"] = new JsonObject
             {
@@ -393,21 +375,10 @@ public sealed class VlessDeepVerifier
             root["endpoints"] = new JsonArray { awgEndpoint };
         }
 
-        if (clashPort is int port)
-        {
-            root["experimental"] = new JsonObject
-            {
-                ["clash_api"] = new JsonObject
-                {
-                    ["external_controller"] = $"127.0.0.1:{port}",
-                },
-            };
-        }
-
         return root.ToJsonString();
     }
 
-    private async Task<PhaseOutcome> ProbeCanariesViaSocksAsync(int socksPort, string label, CancellationToken ct)
+    private async Task<PhaseOutcome> ProbeCanariesViaProxyAsync(VerificationProxy proxy, CancellationToken ct)
     {
         try
         {
@@ -415,12 +386,7 @@ public sealed class VlessDeepVerifier
             var now = DateTimeOffset.UtcNow;
             var results = new List<(bool Passed, bool Stale)>();
 
-            var handler = new SocketsHttpHandler
-            {
-                Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
-                UseProxy = true,
-                ConnectTimeout = TimeSpan.FromSeconds(4),
-            };
+            var handler = proxy.CreateHttpHandler(TimeSpan.FromSeconds(4));
             using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
 
             var probes = targets.Select(async t =>
@@ -434,8 +400,6 @@ public sealed class VlessDeepVerifier
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch { passed = false; }
-                _logger.Debug("[VlessDeepVerifier] {Name}: canary {Url} passed={Passed} stale={Stale}",
-                    label, CanaryPolicy.RedactUrl(t.Url), passed, stale);
                 return (passed, stale);
             }).ToList();
 
@@ -443,16 +407,13 @@ public sealed class VlessDeepVerifier
 
             var agg = CanaryPolicy.Evaluate(controlPassed: true, results);
             if (agg.BlockedTargetCanary == PhaseOutcome.Fail)
-                _logger.Information("[VlessDeepVerifier] {Name}: canary FAIL — {Reason}", label, agg.Reason);
+                _logger.Information("[VlessDeepVerifier] Canary check failed");
             return agg.BlockedTargetCanary;
         }
-        catch (OperationCanceledException)
-        {
-            return PhaseOutcome.Unknown;
-        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
-            _logger.Debug("[VlessDeepVerifier] {Name}: canary stage error {Err} — inconclusive", label, ex.GetType().Name);
+            _logger.Debug("[VlessDeepVerifier] Canary stage failed ({Type})", ex.GetType().Name);
             return PhaseOutcome.Unknown;
         }
     }

@@ -23,52 +23,179 @@ internal static class ClashYamlParser
     }
 
     internal static List<string> ParseProxiesToUris(string body, ILogger? logger = null)
+        => ParseProxiesToUris(body, out _, logger);
+
+    internal static List<string> ParseProxiesToUris(string body, out bool skippedChains, ILogger? logger = null)
     {
-        var uris = new List<string>();
+        skippedChains = false;
 
         const int MaxBodyChars = 8 * 1024 * 1024;
         if (body.Length > MaxBodyChars)
         {
             logger?.Warning("[Clash] YAML body too large ({Len} chars > {Max}) — skipping parse",
                 body.Length, MaxBodyChars);
-            return uris;
+            return [];
         }
 
-        Dictionary<string, object>? root;
+        Dictionary<object, object>? document;
         try
         {
             var de = new DeserializerBuilder().IgnoreUnmatchedProperties().Build();
-            root = de.Deserialize<Dictionary<string, object>>(body);
+            document = de.Deserialize<Dictionary<object, object>>(body);
         }
         catch (Exception)
         {
             logger?.Warning("[Clash] YAML deserialize failed");
-            return uris;
+            return [];
         }
 
+        var mergeBudget = 100_000;
+        var root = ReadRoutingMap(document, ref mergeBudget, out var rootResolved);
         if (root is null || !root.TryGetValue("proxies", out var proxiesObj)
             || proxiesObj is not IEnumerable<object> proxies)
         {
-            return uris;
+            return [];
+        }
+
+        var rows = new NativeSubscriptionRows();
+        var allowChains = rootResolved || root.ContainsKey("proxy-groups");
+        // Clash groups and built-ins are routing choices, never concrete upstream proxies.
+        foreach (var name in new[] { "DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE", "GLOBAL" })
+            rows.Add(name, null, false, null);
+        if (root.TryGetValue("proxy-groups", out var groupsObj) && groupsObj is IEnumerable<object> groups)
+        {
+            foreach (var group in groups)
+            {
+                if (ReadRoutingMap(group, ref mergeBudget, out var resolved) is not { } groupMap) continue;
+                var groupName = Str(groupMap, "name");
+                allowChains &= resolved || groupName != null;
+                rows.Add(groupName, null, false, null);
+            }
         }
 
         foreach (var p in proxies)
         {
-            if (ToStringMap(p) is not { } proxy) continue;
+            if (ReadRoutingMap(p, ref mergeBudget, out var resolved) is not { } proxy) continue;
+            var name = Str(proxy, "name");
+            if (!resolved)
+            {
+                allowChains &= name != null;
+                rows.Add(name, string.Empty, false, null);
+                continue;
+            }
+            string? via = null;
+            if (proxy.TryGetValue("dialer-proxy", out var dialer) && dialer is not "")
+                via = dialer as string ?? string.Empty;
+            string? uri = null;
             try
             {
-                var uri = MapProxyToUri(proxy);
-                if (!string.IsNullOrEmpty(uri)) uris.Add(uri!);
+                uri = MapProxyToUri(proxy);
             }
             catch (Exception)
             {
                 logger?.Warning("[Clash] Skipped invalid proxy entry");
             }
+            rows.Add(name, via, uri != null && CanChain(proxy), uri);
         }
 
+        var uris = rows.ToShareUris(out skippedChains, allowChains);
         logger?.Debug("[Clash] mapped {Count}/{Total} proxies to share URIs", uris.Count, proxies.Count());
         return uris;
     }
+
+    // The document-wide YamlDotNet merge parser rejects inline merge maps. Resolve
+    // only root, proxy and group fields so an unsupported merge does not discard other rows.
+    private static Dictionary<string, object>? ReadRoutingMap(object? value, ref int budget, out bool resolved)
+    {
+        resolved = true;
+        if (value is not Dictionary<object, object> local) return null;
+        string? dialerSpelling = null;
+        if (!local.ContainsKey("<<"))
+        {
+            resolved = HasConsistentDialerKey(local, ref dialerSpelling);
+            return ToStringMap(local);
+        }
+
+        var fields = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<object>();
+        pending.Push(local);
+        while (pending.TryPop(out var node))
+        {
+            if (node is Dictionary<object, object> source && source.Count < budget)
+            {
+                budget -= 1 + source.Count;
+                if (!HasConsistentDialerKey(source, ref dialerSpelling)) break;
+                // Explicit keys win, even if the merge appears after them.
+                foreach (var pair in source)
+                    if (pair.Key is string key && key != "<<") fields.TryAdd(key, pair.Value);
+                if (source.TryGetValue("<<", out var merge)) pending.Push(merge);
+            }
+            else if (node is List<object> sources && sources.Count < budget)
+            {
+                budget -= 1 + sources.Count;
+                if (!sources.All(item => item is Dictionary<object, object>)) break;
+                for (int i = sources.Count - 1; i >= 0; i--) pending.Push(sources[i]);
+            }
+            else
+            {
+                break;
+            }
+            if (pending.Count == 0)
+                return fields.Where(pair => pair.Value != null)
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        }
+        resolved = false;
+        return ToStringMap(local);
+    }
+
+    private static bool HasConsistentDialerKey(Dictionary<object, object> map, ref string? spelling)
+    {
+        foreach (var key in map.Keys)
+        {
+            if (key is not string text || !text.Equals("dialer-proxy", StringComparison.OrdinalIgnoreCase)) continue;
+            if (spelling != null && text != spelling) return false;
+            spelling = text;
+        }
+        return true;
+    }
+
+    // A stand-alone URI can use the existing best-effort importer. Both hops of a
+    // chain must retain all their effective transport, TLS and dialing options.
+    private static bool CanChain(Dictionary<string, object> proxy)
+    {
+        var network = Str(proxy, "network") ?? "tcp";
+        if (Str(proxy, "type") != "vless" || network is not ("tcp" or "ws" or "grpc")
+            || !NativeSubscriptionRows.IsValidHost(Str(proxy, "server"))
+            || !ushort.TryParse(Str(proxy, "port"), NumberStyles.None, CultureInfo.InvariantCulture, out var port)
+            || port == 0)
+            return false;
+
+        return proxy.All(pair => pair.Key switch
+        {
+            "name" or "type" or "server" or "uuid" or "flow" or "network" or "dialer-proxy"
+                or "sni" or "servername" or "client-fingerprint" => pair.Value is string,
+            "port" => true,
+            "tls" => bool.TryParse(pair.Value.ToString(), out _),
+            "udp" => Bool(proxy, "udp"),
+            "skip-cert-verify" => bool.TryParse(pair.Value.ToString(), out var skip) && !skip,
+            "alpn" => Bool(proxy, "tls") && !proxy.ContainsKey("reality-opts")
+                && (CanMapAlpn(pair.Value) || (pair.Value is IEnumerable<object> alpn && alpn.All(CanMapAlpn))),
+            "reality-opts" => ToStringMap(pair.Value) is { } reality && reality.All(option =>
+                option.Value is string s && (option.Key == "public-key"
+                    || (option.Key == "short-id" && VlessUriParser.IsValidRealityShortId(s)))),
+            "grpc-opts" => network == "grpc" && ToStringMap(pair.Value) is { } grpc
+                && grpc.All(option => option.Key == "grpc-service-name" && option.Value is string),
+            "ws-opts" => network == "ws" && ToStringMap(pair.Value) is { } ws && ws.All(option =>
+                (option.Key == "path" && option.Value is string)
+                || (option.Key == "headers" && ToStringMap(option.Value) is { } headers
+                    && headers.All(header => header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase)
+                        && header.Value is string))),
+            _ => false,
+        });
+    }
+
+    private static bool CanMapAlpn(object value) =>
+        value is string { Length: > 0 } s && !s.Contains(',') && s.Trim() == s;
 
     private static string? MapProxyToUri(Dictionary<string, object> p)
     {
@@ -131,6 +258,8 @@ internal static class ClashYamlParser
             if (grpc is not null) q.Add(("serviceName", Str(grpc, "grpc-service-name")));
         }
 
+        if (!server.StartsWith('[') && Uri.CheckHostName(server) == UriHostNameType.IPv6)
+            server = $"[{server}]";
         return $"vless://{Enc(uuid)}@{server}:{port}?{Query(q)}#{Enc(name)}";
     }
 

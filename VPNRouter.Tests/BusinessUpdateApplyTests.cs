@@ -62,10 +62,43 @@ public sealed class BusinessUpdateApplyTests
         var script = fixture.PrepareScript(int.MaxValue, 0, 100);
         var exit = RunHelper(script);
         Assert.True(exit == 0, "Helper exit=" + exit + "; safe log=" + (File.Exists(fixture.Log) ? File.ReadAllText(fixture.Log) : "absent"));
+        Assert.Equal("VPNRouterBusiness:Prepare:old bits", File.ReadAllText(fixture.PrepareMarker));
+        Assert.Equal("new bits", File.ReadAllText(fixture.MigrationMarker));
         Assert.Equal("new bits", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
         Assert.Equal("second file", File.ReadAllText(Path.Combine(fixture.Destination, "nested", "other.dll")));
         Assert.Equal("retained private fixture", File.ReadAllText(provisioning));
         Assert.Equal("VPNRouter.App.exe", File.ReadAllText(fixture.LaunchMarker));
+    }
+
+    [Fact]
+    public void WindowsHelperPreparesFromTheAuthenticatedInstalledHelperForHistoricalPackages()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new HelperFixture();
+        File.Move(Path.Combine(fixture.Source, "zapret-maintenance.ps1"), Path.Combine(fixture.Destination, "zapret-maintenance.ps1"));
+        File.WriteAllText(Path.Combine(fixture.Source, "payload.dll"), "old release");
+        File.WriteAllText(Path.Combine(fixture.Destination, "payload.dll"), "current release");
+
+        Assert.Equal(0, RunHelper(fixture.PrepareScript(int.MaxValue, 0, 100)));
+        Assert.Equal("VPNRouterBusiness:Prepare:current release", File.ReadAllText(fixture.PrepareMarker));
+        Assert.Equal("old release", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
+        Assert.False(File.Exists(fixture.MigrationMarker));
+    }
+
+    [Fact]
+    public void WindowsHelperPreparationFailurePreservesTheInstalledPayload()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new HelperFixture();
+        File.WriteAllText(Path.Combine(fixture.Source, "zapret-maintenance.ps1"), "param($Edition,$Operation); exit 9");
+        File.WriteAllText(Path.Combine(fixture.Source, "payload.dll"), "new bits");
+        File.WriteAllText(Path.Combine(fixture.Destination, "payload.dll"), "old bits");
+
+        Assert.Equal(1, RunHelper(fixture.PrepareScript(int.MaxValue, 0, 100)));
+        Assert.Equal("old bits", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
+        Assert.False(File.Exists(fixture.MigrationMarker));
+        Assert.False(File.Exists(fixture.LaunchMarker));
+        Assert.Contains("ZAPRET_PREPARE_FAILED", File.ReadAllText(fixture.Log));
     }
 
     [Fact]
@@ -138,6 +171,7 @@ public sealed class BusinessUpdateApplyTests
     {
         const string script = "throw 'quoted $(text)'; # fixture";
         var info = UpdateChecker.CreateBusinessHelperStartInfo(script, true);
+        Assert.Equal(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"), info.FileName);
         Assert.True(info.UseShellExecute);
         Assert.Equal("runas", info.Verb);
         Assert.Equal(script, Encoding.Unicode.GetString(Convert.FromBase64String(info.ArgumentList[^1])));
@@ -171,11 +205,20 @@ public sealed class BusinessUpdateApplyTests
         internal string Source => Path.Combine(Root, "source' ; throw 'INJECTED");
         internal string Destination => Path.Combine(Root, "destination' ; throw 'INJECTED");
         internal string Log => Path.Combine(Root, "helper.log");
+        internal string MigrationMarker => Path.Combine(Root, "migrated.txt");
+        private string InstalledPrepareHash { get; }
+        internal string PrepareMarker => Path.Combine(Root, "prepared.txt");
         internal string LaunchMarker => Path.Combine(Root, "launch.txt");
         internal HelperFixture()
         {
             Directory.CreateDirectory(Source);
             Directory.CreateDirectory(Destination);
+            var payload = Path.Combine(Destination, "payload.dll").Replace("'", "''");
+            var marker = PrepareMarker.Replace("'", "''");
+            File.WriteAllText(Path.Combine(Source, "zapret-maintenance.ps1"),
+                $"param($Edition,$Operation)\n$old = if ([IO.File]::Exists('{payload}')) {{ [IO.File]::ReadAllText('{payload}') }}\n" +
+                $"[IO.File]::WriteAllText('{marker}', $Edition + ':' + $Operation + ':' + $old)\nexit 0");
+            InstalledPrepareHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(Source, "zapret-maintenance.ps1"))));
         }
         internal string PrepareScript(int parent, long started, int timeout)
         {
@@ -183,9 +226,13 @@ public sealed class BusinessUpdateApplyTests
             var path = Path.Combine(Root, "files.json");
             File.WriteAllBytes(path, manifest);
             var script = UpdateChecker.BuildBusinessApplyScript(Source, Destination, path,
-                Convert.ToHexString(SHA256.HashData(manifest)), Log, parent, started, timeout, false);
+                Convert.ToHexString(SHA256.HashData(manifest)), InstalledPrepareHash, Log, parent, started, timeout, false);
             var marker = LaunchMarker.Replace("'", "''");
-            return "function Start-Process { param($FilePath, $WorkingDirectory) [IO.File]::WriteAllText('" + marker +
+            var migration = MigrationMarker.Replace("'", "''");
+            var payload = Path.Combine(Destination, "payload.dll").Replace("'", "''");
+            return "function Start-Process { param($FilePath, $WorkingDirectory, $ArgumentList, [switch]$Wait, [switch]$PassThru) " +
+                   $"if ($ArgumentList -eq '--migrate-zapret') {{ if ([IO.File]::Exists('{payload}')) {{ [IO.File]::Copy('{payload}','{migration}') }}; " +
+                   "return [pscustomobject]@{ ExitCode=0 } }; [IO.File]::WriteAllText('" + marker +
                    "', [IO.Path]::GetFileName($FilePath)) }\n" + script;
         }
         public void Dispose() { try { Directory.Delete(Root, true); } catch { } }

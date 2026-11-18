@@ -433,6 +433,7 @@ public static class Strings
     public static string RunDiagnostics => global::VPNRouter.Core.Localization.Strings.RunDiagnostics;
     public static string ClearDiscordCache => global::VPNRouter.Core.Localization.Strings.ClearDiscordCache;
     public static string UpdateHostsFile => global::VPNRouter.Core.Localization.Strings.UpdateHostsFile;
+    public static string ZapretApplyServiceStrategy => global::VPNRouter.Core.Localization.Strings.ZapretApplyServiceStrategy;
     public static string OpenServiceMenu => global::VPNRouter.Core.Localization.Strings.OpenServiceMenu;
     public static string TipOpenServiceMenu => global::VPNRouter.Core.Localization.Strings.TipOpenServiceMenu;
 

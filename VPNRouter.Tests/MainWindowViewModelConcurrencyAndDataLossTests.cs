@@ -57,6 +57,84 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
         Assert.Contains("special_browser.exe", saved.CustomGroupApps["Browsers"]);
     }
 
+    [AvaloniaFact]
+    public void InvalidCustomEditsAndNativeImportPreserveSavedProtection()
+    {
+        var store = new InMemorySettingsStore();
+        var settings = new AppSettings();
+        settings.App.CustomRules = [new() { Action = "block", Type = "geosite", Value = "keep" }];
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store, null, null, null, businessBootstrap: (_, _) => null);
+        typeof(MainWindowViewModel).GetField("_businessRules", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(vm, null); // Exercise the editable rows independently of the managed Business preset.
+        void AssertProtected()
+        {
+            var saved = Assert.Single(store.Load(AppPaths.ConfigYamlPath).App.CustomRules);
+            Assert.Equal(("block", "geosite", "keep"), (saved.Action, saved.Type, saved.Value));
+        }
+
+        vm.EditedCustomRulesText = "direct domain new.example\nblock geosite bad.name";
+        Assert.True(vm.RulesEditorHasErrors);
+        vm.ApplyEditedRulesCommand.Execute(null);
+        AssertProtected();
+        vm.CustomRulesText = vm.EditedCustomRulesText;
+        AssertProtected();
+
+        const string native = """[{"outbound":"direct","port":80},{"action":"sniff","network":"tcp"}]""";
+        Assert.False(vm.AppendImportedCustomRules(native));
+        Assert.Single(vm.CustomRulesList);
+        AssertProtected();
+
+        vm.CustomRulesList[0].Value = "bad.name";
+        Assert.False(string.IsNullOrEmpty(vm.CustomRulesErrorText));
+        AssertProtected();
+        vm.CustomRulesList[0].Value = "NEWS";
+        var updated = Assert.Single(store.Load(AppPaths.ConfigYamlPath).App.CustomRules);
+        Assert.Equal(("block", "geosite", "news"), (updated.Action, updated.Type, updated.Value));
+    }
+
+    [AvaloniaTheory]
+    [InlineData("Subscription")]
+    [InlineData("ManualVless")]
+    public async Task Reconnect_ActiveOwnedProcessSurvivesUnavailableClashAndFailedApply(string intent)
+    {
+        var store = new InMemorySettingsStore();
+        using var vm = new MainWindowViewModel(store, null, null, null, businessBootstrap: (_, _) => null);
+        const BindingFlags fields = BindingFlags.NonPublic | BindingFlags.Instance;
+        var engine = (VPNRouter.Core.Services.VpnEngine)typeof(MainWindowViewModel).GetField("_engine", fields)!.GetValue(vm)!;
+        var managerField = engine.GetType().GetField("_singBox", fields)!;
+        var runner = new FakeProcessRunner();
+        using var manager = new VPNRouter.Core.Services.SingBoxManager(new SingBoxSettings(), null,
+            new FakeHttpClient().Setup("/configs", "", statusCode: 503), runner);
+        using var handle = new FakeProcessHandle(142);
+        var handleField = manager.GetType().GetField("_handle", fields)!;
+        handleField.SetValue(manager, handle);
+        managerField.SetValue(engine, manager);
+        try
+        {
+            // Seed desktop status without starting the live connection statistics timer.
+            typeof(MainWindowViewModel).GetField("_isConnected", fields)!.SetValue(vm, true);
+            Assert.False(engine.IsRunning);
+            Assert.True(engine.HasActiveTunnel);
+            Assert.False(engine.TryPrepareColdReconnect());
+            var managed = typeof(MainWindowViewModel).GetProperty("IsServiceManagedVpn", fields)!;
+            Assert.Equal(false, managed.GetValue(vm));
+            var reconnect = typeof(MainWindowViewModel).GetMethod("ReconnectAsync", fields)!;
+            var reason = Enum.Parse(reconnect.GetParameters()[1].ParameterType, intent);
+            // No session token: ApplyAsync rejects the candidate without contacting a real service.
+            await (Task)reconnect.Invoke(vm, new object[] { "sample", reason })!;
+            Assert.False(handle.HasExited);
+            Assert.Equal(0, handle.DisposeCallCount);
+            Assert.True(vm.IsConnected);
+            Assert.Empty(runner.StartCalls);
+        }
+        finally
+        {
+            managerField.SetValue(engine, null);
+            handleField.SetValue(manager, null);
+        }
+    }
+
     private static string ReadAppFile(params string[] pathSegments)
     {
         var root = FindRepoRoot();

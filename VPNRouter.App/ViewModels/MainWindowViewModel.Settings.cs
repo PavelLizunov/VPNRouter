@@ -837,7 +837,7 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
-    /// <returns>True when the running tunnel picked up the settings (or the service was asked to restart).</returns>
+    /// <returns>True when the engine applied the settings or they were submitted to the running service.</returns>
     private async Task<bool> ApplyPendingChangesInternalAsync(bool forceRestart)
     {
         if (!CanApplyAppChanges) return false;
@@ -852,6 +852,21 @@ public partial class MainWindowViewModel
             {
                 if (ServiceVm.IsAvailable)
                 {
+                    // The service watches config.yaml and validates before replacing its tunnel.
+                    // Let that apply finish in place when the new policy depends on local sets.
+                    if (!string.Equals(_settings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var required = _settings.App.CustomRules.Where(ConfigGenerator.RequiresLocalRuleSets).ToList();
+                        if (required.Count > 0)
+                        {
+                            await Task.Run(() => ConfigGenerator.ApplyCustomRules(new SingBoxConfig(), required));
+                            ClearPendingIfRevisionUnchanged(appliedRevision);
+                            StatusText = IsRussian
+                                ? "Настройки маршрутизации переданы работающей службе."
+                                : "Routing settings submitted to the running service.";
+                            return true;
+                        }
+                    }
                     StatusText = IsRussian
                         ? "Перезапускаю службу с новыми настройками..."
                         : "Restarting service with new settings...";
@@ -974,7 +989,8 @@ public partial class MainWindowViewModel
         {
             var parsed = VPNRouter.Core.Services.CustomRulesParser
                 .ParseFromText(CustomRulesText);
-            _settings.App.CustomRules = parsed.Rules;
+            if (parsed.Errors.Count == 0)
+                _settings.App.CustomRules = parsed.Rules;
             CustomRulesErrorText = parsed.Errors.Count == 0
                 ? string.Empty
                 : string.Join("\n", parsed.Errors.Select(e =>

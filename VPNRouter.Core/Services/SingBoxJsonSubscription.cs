@@ -15,36 +15,147 @@ internal static class SingBoxJsonSubscription
         && root.TryGetProperty("outbounds", out var outbounds)
         && outbounds.ValueKind == JsonValueKind.Array;
 
-    internal static List<string> ParseOutboundsToUris(JsonElement root, ILogger? logger = null)
+    internal static List<string> ParseOutboundsToUris(JsonElement root, ILogger? logger = null) =>
+        ParseOutboundsToUris(root, out _, logger);
+
+    internal static List<string> ParseOutboundsToUris(JsonElement root, out bool skippedChains, ILogger? logger = null)
     {
-        var uris = new List<string>();
-        if (!LooksLikeSingBoxConfig(root)) return uris;
+        skippedChains = false;
+        if (!LooksLikeSingBoxConfig(root)) return new List<string>();
+
+        var rows = new NativeSubscriptionRows();
+        // Endpoints share the tag namespace with outbounds.
+        if (root.TryGetProperty("endpoints", out var endpoints) && endpoints.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var endpoint in endpoints.EnumerateArray())
+                rows.Add(Str(endpoint, "tag"), null, false, null);
+        }
 
         var proxies = 0;
         foreach (var ob in root.GetProperty("outbounds").EnumerateArray())
         {
             if (ob.ValueKind != JsonValueKind.Object) continue;
-            var type = Str(ob, "type")?.ToLowerInvariant();
-            if (string.IsNullOrEmpty(type) || StructuralTypes.Contains(type)) continue;
-
-            proxies++;
+            string? tag = null;
+            string? via = null;
+            string? uri = null;
+            bool canChain = false;
             try
             {
-                var uri = MapOutbound(ob, type, out var skipReason);
-                if (uri is not null)
-                    uris.Add(uri);
-                else
-                    logger?.Information("[SingBox] Skipped outbound ({Reason})", skipReason);
+                tag = Str(ob, "tag");
+                var type = Str(ob, "type")?.ToLowerInvariant();
+                if (!string.IsNullOrEmpty(type) && !StructuralTypes.Contains(type))
+                {
+                    proxies++;
+                    via = ReadDetour(ob);
+                    uri = MapOutbound(ob, type, out var skipReason);
+                    if (uri is null)
+                        logger?.Information("[SingBox] Skipped outbound ({Reason})", skipReason);
+                    else
+                        canChain = type == "vless" && CanChainVless(ob);
+                }
             }
             catch (Exception)
             {
+                uri = null;
                 logger?.Warning("[SingBox] Skipped invalid outbound");
             }
+            rows.Add(tag, via, canChain, uri);
         }
 
+        var uris = rows.ToShareUris(out skippedChains);
         logger?.Debug("[SingBox] mapped {Count}/{Total} proxy outbounds to share URIs", uris.Count, proxies);
         return uris;
     }
+
+    private static string? ReadDetour(JsonElement ob)
+    {
+        string? tag = null;
+        var seen = false;
+        foreach (var field in ob.EnumerateObject())
+        {
+            if (!field.Name.Equals("detour", StringComparison.OrdinalIgnoreCase)) continue;
+            // A non-null empty dependency rejects an ambiguous or malformed declaration.
+            if (seen || !field.NameEquals("detour")) return string.Empty;
+            seen = true;
+            if (field.Value.ValueKind == JsonValueKind.Null) continue;
+            if (field.Value.ValueKind != JsonValueKind.String) return string.Empty;
+            tag = field.Value.GetString();
+        }
+        return string.IsNullOrEmpty(tag) ? null : tag;
+    }
+
+    // Only link hops whose explicit dial, TLS and transport options survive the VLESS share-link mapping.
+    private static bool CanChainVless(JsonElement ob) =>
+        NativeSubscriptionRows.IsValidHost(Str(ob, "server")) && ob.EnumerateObject().All(p => p.Name switch
+        {
+            "type" or "tag" or "server" or "server_port" or "uuid" or "detour" => true,
+            "flow" => p.Value.ValueKind == JsonValueKind.String,
+            "packet_encoding" => p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() == "xudp",
+            "tcp_keep_alive" or "tcp_keep_alive_interval" =>
+                p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() == "30s",
+            "tls" => CanChainTls(p.Value),
+            "transport" => CanChainTransport(p.Value),
+            _ => false,
+        });
+
+    private static bool CanChainTransport(JsonElement transport)
+    {
+        if (transport.ValueKind == JsonValueKind.Null) return true;
+        if (transport.ValueKind != JsonValueKind.Object) return false;
+        return Str(transport, "type") switch
+        {
+            null or "" or "tcp" => transport.EnumerateObject().All(p =>
+                p.Name == "type" && p.Value.ValueKind == JsonValueKind.String),
+            "grpc" => transport.EnumerateObject().All(p =>
+                (p.Name is "type" or "service_name") && p.Value.ValueKind == JsonValueKind.String),
+            "ws" => transport.EnumerateObject().All(p => p.Name == "headers"
+                ? CanChainWsHeaders(p.Value)
+                : (p.Name is "type" or "path") && p.Value.ValueKind == JsonValueKind.String),
+            _ => false,
+        };
+    }
+
+    private static bool CanChainWsHeaders(JsonElement headers) =>
+        headers.ValueKind == JsonValueKind.Object && headers.EnumerateObject().Count() <= 1 &&
+        headers.EnumerateObject().All(p => p.Name.Equals("Host", StringComparison.OrdinalIgnoreCase) &&
+            (p.Value.ValueKind == JsonValueKind.String || (p.Value.ValueKind == JsonValueKind.Array &&
+                p.Value.GetArrayLength() == 1 && p.Value[0].ValueKind == JsonValueKind.String)));
+
+    private static bool CanChainTls(JsonElement tls)
+    {
+        if (tls.ValueKind == JsonValueKind.Null) return true;
+        if (tls.ValueKind != JsonValueKind.Object) return false;
+        var reality = Bool(Obj(tls, "reality") ?? default, "enabled");
+        if (reality && (!Bool(tls, "enabled") || !Bool(Obj(tls, "utls") ?? default, "enabled")))
+            return false;
+        return tls.EnumerateObject().All(p => p.Name switch
+        {
+            "enabled" => p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            "server_name" => p.Value.ValueKind == JsonValueKind.String,
+            "insecure" => p.Value.ValueKind == JsonValueKind.False ||
+                (!reality && p.Value.ValueKind == JsonValueKind.True),
+            "alpn" => !reality && (CanMapAlpn(p.Value) ||
+                (p.Value.ValueKind == JsonValueKind.Array && p.Value.EnumerateArray().All(CanMapAlpn))),
+            "reality" => p.Value.ValueKind == JsonValueKind.Object && p.Value.EnumerateObject()
+                .All(field => field.Name switch
+                {
+                    "enabled" => field.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                    "public_key" => field.Value.ValueKind == JsonValueKind.String,
+                    "short_id" => field.Value.ValueKind == JsonValueKind.String &&
+                        VlessUriParser.IsValidRealityShortId(field.Value.GetString()),
+                    _ => false,
+                }),
+            "utls" => p.Value.ValueKind == JsonValueKind.Object && p.Value.EnumerateObject().All(field =>
+                (field.Name == "fingerprint" && field.Value.ValueKind == JsonValueKind.String) ||
+                (field.Name == "enabled" && field.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)) &&
+                Bool(p.Value, "enabled") == !string.IsNullOrEmpty(Str(p.Value, "fingerprint")),
+            _ => false,
+        });
+    }
+
+    private static bool CanMapAlpn(JsonElement value) =>
+        value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } s &&
+        !s.Contains(',') && s.Trim() == s;
 
     private static string? MapOutbound(JsonElement ob, string type, out string? skipReason)
     {

@@ -60,13 +60,14 @@ public sealed class SubscriptionUrlRedactionTests
         System.IO.Directory.CreateDirectory(tmp);
         try
         {
-            var handler = new SimpleStaticResponseHandler(System.Net.HttpStatusCode.OK, System.Text.Encoding.UTF8.GetBytes("data"));
+            var handler = new SimpleStaticResponseHandler(System.Net.HttpStatusCode.OK, RuleSetSamples.UpstreamGeositeTldRu());
             var client = new System.Net.Http.HttpClient(handler);
             const string sensitiveUrl = "https://rules.example/list.srs?token=secret123";
 
             var result = await RuleSetCacheManager.EnsureLocalAsync(
                 sensitiveUrl,
                 "cached-rules.srs",
+                checkContents: RuleSetSamples.CheckFixtureContentsAsync,
                 logger: logger,
                 httpClient: client,
                 cacheDir: tmp,
