@@ -32,9 +32,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [ ] **P1** - Update, restart and service shutdown can abandon a live winws after an unconfirmed stop (#661).
 - [ ] **P2** - Partial setup in the protected directory can suppress unrelated legacy filter choices during first installation (#661).
 
-- [ ] **P2** - On Android 14 at 3e96d410, the home and app picker still show Active after manual disconnect despite OS teardown. Show Next connection when the service disconnects (#689).
+- [x] **P2** - On Android 14 at 3e96d410, the home and app picker still show Active after manual disconnect despite OS teardown. Show Next connection when the service disconnects (#689). RESOLVED in the unreleased branch. Both screens showed Next connection after OS teardown at `f36c646f` on Android 14.
 
-- [ ] **P2** - The Android client build resolves RadioButton to two platform namespaces in the app picker. Both ARM64 jobs failed with CS0104 on the policy summary.
+- [x] **P2** - The Android client build resolves RadioButton to two platform namespaces in the app picker. Both ARM64 jobs failed with CS0104 on the policy summary. RESOLVED in the unreleased branch. Run 44359387714 built the ARM64 APK used for device acceptance at `f36c646f`.
 - [ ] **P1** - A rejected subscription row with outbound metadata can survive as a legacy scalar after reopening Headless settings (SubscriptionFeature). Compare the fields the scalar actually stored.
 - [ ] **P1** - A refused escalated Unix stop releases the process handle during verified desktop Apply before termination is confirmed (SingBoxManager.Lifecycle). Preserve the handle, session, active file and TUN lease.
 - [ ] **P2** - The hosted Windows repair environment fixture exits with code 1. The xUnit wrapper loses the PowerShell error; the same test passes on elevated WINBRAT (ReleaseToolingContractTests, #661).

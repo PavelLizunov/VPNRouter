@@ -186,3 +186,11 @@ The visible Simple page now reads the accepted routing mode and generated proxy 
 Independent source review accepted Android pending-route ownership for null and duplicate feed IDs, equivalent native chains and changed upstreams at f36c646f. The post-preflight service check covers a cancellation between dispatch and intent delivery. The ARM64 run and hosted tests provide separate execution evidence.
 
 Integrate the desktop and Headless required-hop refresh fix. Exercise rotated IDs, upstream port changes, ambiguous routes, explicit direct selection and saved-settings recovery. Preserve the Headless protocol response and exact-URL eviction on a definitive unsupported native subscription. Verify the new Desktop/Core fixtures in the compiled Business matrix.
+
+## Android 14 ARM64 device acceptance for #689
+
+The installed APK matched artifact `14453264259` at commit `f36c646fa1d6a01b96bfbb7bc7a1e36a6019b7fa`. Its SHA-256 was `2e83b9a2102e3b422b0a7a26cdd31c388b3261bb5334e60a6dd4662d0c9a84e8`. [Android build and artifact](https://github.com/PavelLizunov/VPNRouter/actions/runs/44359387714/artifacts/14453264259)
+
+- Switching from a subscription to Custom JSON used the custom TUN on the first Connect and after reopening. The subscription remained enabled. Selecting manual C and then re-entering A started A on both attempts.
+- Off, Include and Exclude each completed Stop, Connect and Stop in the same process. Android reported a new VPN network with the original UID ranges. Home and Apps showed the complete Next connection label after Stop.
+- Refreshing an unchanged native detour feed preserved the selected target and the established VPN network. Reconnecting and reopening selected the same target. Hosted tests cover the generated detour and invalidation after an upstream change. External exit IP and payload transit through the hop remain unmeasured.
