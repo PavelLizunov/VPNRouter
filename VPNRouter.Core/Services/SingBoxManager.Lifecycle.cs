@@ -207,13 +207,13 @@ public partial class SingBoxManager
         {
             if (targetHandle != null)
             {
-                if (!targetHandle.HasExited)
+                if (targetHandle.QueryHasExited() == false)
                 {
                     targetHandle.SuppressExitedEvent();
                     // SIGTERM first: sing-box removes its auto_route ip rules only on a
                     // graceful exit; SIGKILL leaves them behind after every disconnect.
                     targetHandle.Terminate();
-                    if (!WaitForHandleExit(targetHandle, TimeSpan.FromSeconds(5)))
+                    if (WaitForHandleExit(targetHandle, TimeSpan.FromSeconds(5)) == false)
                     {
                         _logger.Warning("[SingBoxManager] sing-box ignored SIGTERM; killing");
                         targetHandle.Kill(entireProcessTree: false);
@@ -221,7 +221,7 @@ public partial class SingBoxManager
                     }
                 }
 
-                capabilityStopped = targetHandle.HasExited;
+                capabilityStopped = targetHandle.QueryHasExited() == true;
             }
         }
         catch (Exception ex)
@@ -250,7 +250,7 @@ public partial class SingBoxManager
         }
     }
 
-    private static bool WaitForHandleExit(IProcessHandle handle, TimeSpan timeout)
+    private static bool? WaitForHandleExit(IProcessHandle handle, TimeSpan timeout)
     {
         try
         {
@@ -260,7 +260,7 @@ public partial class SingBoxManager
         catch (OperationCanceledException)
         {
         }
-        return handle.HasExited;
+        return handle.QueryHasExited();
     }
 
     private void StopUnixEscalated(bool releaseLock)
@@ -776,7 +776,7 @@ public partial class SingBoxManager
                 }
             }
         };
-        startedHandle.Exited += (_, code) => OnProcessExited(code);
+        startedHandle.Exited += (_, code) => OnProcessExited(startedHandle, code);
 
         AcknowledgePolicyLaunch(startedHandle);
         State = SingBoxState.Running;

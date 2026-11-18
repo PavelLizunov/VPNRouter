@@ -9,6 +9,22 @@ namespace VPNRouter.Tests;
 public class ServiceSettingsReceiptTests
 {
     [Theory]
+    [InlineData("0.0.0.0:9555", "http://127.0.0.1:9555/")]
+    [InlineData(":9555", "http://127.0.0.1:9555/")]
+    [InlineData("[::]:9555", "http://[::1]:9555/")]
+    [InlineData("localhost:9555", "http://localhost:9555/")]
+    public void ReadinessAndRecoveryUseTheSameLocalControlAddress(string bind, string expected)
+    {
+        var config = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            experimental = new { clash_api = new { external_controller = bind, secret = "fixture" } }
+        });
+        var controller = ClashSingBoxApi.ReadLocalController(config);
+        Assert.Equal(expected, controller.Endpoint.AbsoluteUri);
+        using var healthApi = ClashSingBoxApi.ForController(controller.Endpoint, controller.Secret, logger: null);
+    }
+
+    [Theory]
     [InlineData("127.0.0.1:9090", "127.0.0.1:49301")]
     [InlineData("[::1]:9090", "[::1]:49301")]
     public void ControlConnectionMatchesBothEndpointsAndTheReplacementProcess(string service, string client)
@@ -22,20 +38,26 @@ public class ServiceSettingsReceiptTests
         Assert.False(ServiceTunnelReadiness.OwnsConnection(table, 42, clientEndpoint, serverEndpoint));
     }
 
-    [Fact]
-    public async Task Characterization_WindowsConfirmsAReadyControlConnectionOwnedByItsProcess()
+    [Theory]
+    [InlineData(true, "0.0.0.0")]
+    [InlineData(false, "0.0.0.0")]
+    [InlineData(false, "localhost")]
+    public async Task Characterization_ReadinessAndHealthUseTheConfiguredLocalListener(bool verifyOwner, string bind)
     {
-        Assert.SkipUnless(OperatingSystem.IsWindows(), "The service verifies TCP ownership on Windows.");
+        Assert.SkipUnless(!verifyOwner || OperatingSystem.IsWindows(), "The service verifies TCP ownership on Windows.");
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         lifetime.CancelAfter(TimeSpan.FromSeconds(15));
         using var server = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         server.Start();
         var config = System.Text.Json.JsonSerializer.Serialize(new
         {
-            experimental = new { clash_api = new { external_controller = server.LocalEndpoint.ToString(), secret = "fixture" } }
+            experimental = new { clash_api = new { external_controller = $"{bind}:{((System.Net.IPEndPoint)server.LocalEndpoint).Port}", secret = "fixture" } }
         });
         using var handle = new FakeProcessHandle(Environment.ProcessId);
-        var verify = ServiceTunnelReadiness.WaitAsync(handle, config, lifetime.Token);
+        var target = ClashSingBoxApi.ReadLocalController(config);
+        using var api = ClashSingBoxApi.ForController(target.Endpoint, target.Secret, logger: null);
+        async Task<bool> CheckHealth() => await api.GetVersionAsync(lifetime.Token) == "fixture";
+        var verify = verifyOwner ? ServiceTunnelReadiness.WaitAsync(handle, config, lifetime.Token) : CheckHealth();
         using var connection = await server.AcceptTcpClientAsync(lifetime.Token);
         using var stream = connection.GetStream();
         using var reader = new StreamReader(stream, leaveOpen: true);

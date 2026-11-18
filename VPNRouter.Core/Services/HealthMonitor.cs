@@ -12,6 +12,7 @@ public class HealthMonitor : IDisposable
     private MonitoringSettings _settings;
     // Drain old timer, process and crash work before swapping the settings used for recovery.
     private readonly object _settingsWork = new();
+    private long _settingsGeneration;
     private readonly ILogger _logger;
 
     private ISingBoxApi _api;
@@ -96,15 +97,12 @@ public class HealthMonitor : IDisposable
         }
         else
         {
-            var baseUrl = string.IsNullOrWhiteSpace(clashApiBase)
-                ? "http://127.0.0.1:9090"
-                : $"http://{clashApiBase}";
-            var concrete = new ClashSingBoxApi(baseUrl: baseUrl, logger: _logger, secret: clashApiSecret);
+            var concrete = ClashSingBoxApi.ForController(ClashSingBoxApi.LocalController(clashApiBase), clashApiSecret, _logger);
             _api = concrete;
             _ownedApi = concrete;
         }
 
-        _singBox.Crashed += OnSingBoxCrashed;
+        _singBox.Crashed += QueueCrashedProcess;
     }
 
     public void Start(Profile profile, AppSettings appSettings, ScanResult? initialScan = null)
@@ -139,23 +137,43 @@ public class HealthMonitor : IDisposable
             intervalSeconds, _settings.MaxRestartAttempts, appSettings.App.StrictMode);
     }
 
-    internal void ResumeAfterApply(Profile profile, AppSettings settings, ScanResult? scan)
+    internal void ResumeAfterApply(Profile profile, AppSettings settings, ScanResult? scan,
+        (Uri Endpoint, string? Secret)? controller = null, Action? commit = null)
     {
         lock (_settingsWork)
         {
-            _settings = settings.Monitoring;
-            if (_ownedApi != null)
+            // Rollback reuses the previously accepted API client, including an import's control address.
+            var candidateApi = _ownedApi != null && controller is { } target
+                ? ClashSingBoxApi.ForController(target.Endpoint, target.Secret, _logger)
+                : null;
+            try
             {
-                _ownedApi.Dispose();
-                var controller = string.IsNullOrWhiteSpace(settings.SingBox.ClashApi) ? "127.0.0.1:9090" : settings.SingBox.ClashApi;
-                var api = new ClashSingBoxApi(baseUrl: $"http://{controller}", logger: _logger, secret: settings.SingBox.ClashApiSecret);
-                _ownedApi = api;
-                _api = api;
+                _settings = settings.Monitoring;
+                Start(profile, settings, scan);
+                commit?.Invoke();
+            }
+            catch
+            {
+                candidateApi?.Dispose();
+                StopCore(preserveFirewallRelease: true);
+                throw;
+            }
+
+            if (candidateApi != null)
+            {
+                var oldApi = _ownedApi;
+                _api = candidateApi;
+                _ownedApi = candidateApi;
+                oldApi?.Dispose();
             }
             _strictDnsFailedOver = false;
             _strictDnsUnhealthyStreak = _strictDnsHealthyStreak = 0;
-            Start(profile, settings, scan);
         }
+    }
+
+    internal void PauseForApply()
+    {
+        lock (_settingsWork) StopCore(preserveFirewallRelease: true);
     }
 
     internal bool TryRetireForFailover(Func<bool> retire)
@@ -176,17 +194,21 @@ public class HealthMonitor : IDisposable
 
     public void Stop()
     {
-        lock (_settingsWork) StopCore();
+        lock (_settingsWork) StopCore(preserveFirewallRelease: false);
     }
 
-    private void StopCore()
+    private void StopCore(bool preserveFirewallRelease)
     {
+        Interlocked.Increment(ref _settingsGeneration);
         _isStopping = true;
         _shouldBeRunning = false;
         _unhealthyHealthProbeStreak = 0;
 
-        System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
-        _lastFullRestart = DateTime.MinValue;
+        if (!preserveFirewallRelease)
+        {
+            Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
+            _lastFullRestart = DateTime.MinValue;
+        }
         var cts = _restartCts;
         _restartCts = null;
         if (cts != null)
@@ -409,6 +431,27 @@ public class HealthMonitor : IDisposable
         {
             _logger.Error("[HealthMonitor] StrictDns failover reload failed");
         }
+    }
+
+    private void QueueCrashedProcess(object? sender, EventArgs e)
+    {
+        if (e is SingBoxManager.ChildExit exit)
+            _ = QueueCrashRecoveryAsync(exit.Child);
+    }
+
+    internal Task QueueCrashRecoveryAsync(IProcessHandle child)
+    {
+        var generation = Volatile.Read(ref _settingsGeneration);
+        // Process disposal may wait for Exited subscribers. Never take the monitor lock on that callback.
+        return Task.Run(() =>
+        {
+            lock (_settingsWork)
+            {
+                if (_disposed || _isStopping || generation != _settingsGeneration ||
+                    !ReferenceEquals(child, _singBox.OwnedProcessHandle)) return;
+                RecoverCrashedProcess();
+            }
+        });
     }
 
     private void OnSingBoxCrashed(object? sender, EventArgs e) => RunForActiveSettings(RecoverCrashedProcess);
@@ -749,7 +792,7 @@ public class HealthMonitor : IDisposable
                 return json;
             }
 
-            var selectedPath = VpnEngine.ResolveCustomConfigPath(_appSettings);
+            var (selectedPath, _) = VpnEngine.ResolveCustomConfigFiles(_appSettings, preferManagedCopy: true);
             if (File.Exists(selectedPath)) return CheckImport(selectedPath);
 
             var configName = _appSettings.App.ActiveCustomConfig;
@@ -788,7 +831,7 @@ public class HealthMonitor : IDisposable
         Stop();
 
         // Unsubscribe in Dispose, not Stop: the subscription is made once in the constructor.
-        try { _singBox.Crashed -= OnSingBoxCrashed; } catch { }
+        try { _singBox.Crashed -= QueueCrashedProcess; } catch { }
 
         _ownedApi?.Dispose();
     }

@@ -79,9 +79,7 @@ public partial class VpnEngine
                 return false;
             }
 
-            bool validateBeforeRetiring = _singBox?.ExactStopUnconfirmed == true ||
-                (_singBox?.OwnedProcessHandle is { } handle && handle.QueryHasExited() != true) ||
-                HasLiveOrStartingSingBox();
+            bool validateBeforeRetiring = HasLiveOrStartingSingBox();
             if (!validateBeforeRetiring)
                 RetireCurrentTunnel();
 

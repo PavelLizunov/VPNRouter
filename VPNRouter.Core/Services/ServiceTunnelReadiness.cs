@@ -11,35 +11,18 @@ internal static class ServiceTunnelReadiness
     // Pin the accepted TCP connection to the replacement PID before sending its control credential.
     internal static async Task<bool> WaitAsync(IProcessHandle child, string configJson, CancellationToken ct)
     {
-        using var config = JsonDocument.Parse(configJson);
-        var clash = config.RootElement.GetProperty("experimental").GetProperty("clash_api");
-        var address = clash.GetProperty("external_controller").GetString();
-        if (!Uri.TryCreate("http://" + address, UriKind.Absolute, out var controller)) return false;
-        if (controller.UserInfo.Length != 0 || controller.AbsolutePath != "/" ||
-            controller.Query.Length != 0 || controller.Fragment.Length != 0) return false;
-
-        var host = controller.IdnHost.Trim('[', ']');
-        if (host == "0.0.0.0")
-            host = "127.0.0.1";
-        else if (host == "::")
-            host = "::1";
-
-        var localAddresses = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
-            .SelectMany(n => n.GetIPProperties().UnicastAddresses).Select(a => a.Address).ToHashSet();
-        var resolved = IPAddress.TryParse(host, out var literal) ? new[] { literal } :
-            await Dns.GetHostAddressesAsync(host, ct).ConfigureAwait(false);
-        var targets = resolved.Where(a => IPAddress.IsLoopback(a) || localAddresses.Contains(a)).ToArray();
-        if (targets.Length == 0) return false;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(12));
+        var (controller, credential) = ClashSingBoxApi.ReadLocalController(configJson);
         var netstat = Path.Combine(Environment.SystemDirectory, "netstat.exe");
         using var handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false, UseProxy = false, UseCookies = false,
             ConnectCallback = async (_, token) =>
             {
-                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+                var socket = await ClashSingBoxApi.OpenControlSocketAsync(controller, token).ConfigureAwait(false);
                 try
                 {
-                    await socket.ConnectAsync(targets, controller.Port, token).ConfigureAwait(false);
                     var table = await new ProcessRunner().RunAsync(
                         new ProcessRequest(netstat, ["-ano"],
                             WorkingDirectory: Environment.SystemDirectory, Timeout: TimeSpan.FromSeconds(2)), token)
@@ -53,10 +36,8 @@ internal static class ServiceTunnelReadiness
             }
         };
         using var client = new HttpClient(handler) { MaxResponseContentBufferSize = 4096 };
-        if (clash.TryGetProperty("secret", out var secret) && secret.GetString() is { Length: > 0 } credential)
+        if (!string.IsNullOrEmpty(credential))
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credential);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(TimeSpan.FromSeconds(12));
         try
         {
             while (child.QueryHasExited() == false)

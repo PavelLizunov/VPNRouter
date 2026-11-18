@@ -42,6 +42,8 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <EmbeddedResource Include="Services/relaunch-rollback.ps1" LogicalName="VPNRouter.Windows.RollbackRelaunch"
+                      Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
     <EmbeddedResource Include="../VPNRouter.GUI/repair-bootstrap.ps1" LogicalName="VPNRouter.Windows.RepairBootstrap" Condition="'$(VPNRouterEdition)' != 'Business'" />
     <None Include="..\packaging\windows\installer\stop-vpnrouter.ps1" Link="stop-vpnrouter.ps1"
           Condition="$([MSBuild]::IsOSPlatform('Windows'))" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

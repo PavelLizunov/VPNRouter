@@ -173,10 +173,12 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests
             var tag = managed["tag"]!.GetValue<string>();
             Assert.NotEqual("vpnrouter-adblock", tag);
             var routeRules = config["route"]!["rules"]!.AsArray();
-            var routeReject = Assert.Single(routeRules, r => r?["rule_set"] is JsonArray list && list[0]!.GetValue<string>() == tag);
-            Assert.Equal("reject", routeReject!["action"]!.GetValue<string>());
             var importedRule = Assert.Single(routeRules, r => r?["rule_set"] is JsonValue v && v.GetValue<string>() == "vpnrouter-adblock");
-            Assert.True(routeRules.IndexOf(routeReject) < routeRules.IndexOf(importedRule));
+            var scopedReject = routeRules[routeRules.IndexOf(importedRule) - 1]!;
+            Assert.Equal("reject", (string?)scopedReject["action"]);
+            Assert.Equal("vpnrouter-adblock", (string?)scopedReject["rules"]![0]!["rule_set"]);
+            Assert.Equal(tag, (string?)scopedReject["rules"]![1]!["rule_set"]![0]);
+            Assert.Equal(tag, (string?)routeRules.Last()!["rule_set"]![0]);
             var dnsReject = config["dns"]!["rules"]![0]!;
             Assert.Equal("reject", dnsReject["action"]!.GetValue<string>());
             Assert.Equal(tag, dnsReject["rule_set"]![0]!.GetValue<string>());
@@ -211,26 +213,73 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests
     }
 
     [Fact]
-    public void ReimportChecksAdFilterBeforeRoutingAndAfterConditionalSniff()
+    public void ReimportKeepsScopedDenialsAndOnlyInterceptsFlowsTheImportWouldForward()
     {
         const string source = """
-            {"route":{"rules":[{"network":"udp","outbound":"proxy"},{"action":"sniff","network":"tcp"},
-                               {"network":"tcp","outbound":"proxy"}]},
-             "outbounds":[{"type":"socks","tag":"proxy","server":"10.0.0.2","server_port":1080}]}
+            {"route":{"rules":[
+                 {"inbound":"guest","source_ip_cidr":"192.0.2.0/24","action":"reject","method":"drop"},
+                 {"network":"udp","source_ip_cidr":"198.51.100.0/24","outbound":"proxy","udp_timeout":"4s"},
+                 {"inbound":"internal","protocol":"dns","outbound":"legacy-block"},
+                 {"action":"sniff","network":"tcp","sniffer":["tls"]},
+                 {"type":"logical","mode":"or","invert":true,"rules":[{"protocol":"tls"},{"port":443}],
+                  "action":"route","outbound":"proxy"}]},
+             "outbounds":[{"type":"socks","tag":"proxy","server":"127.0.0.1","server_port":1080},
+                          {"type":"block","tag":"legacy-block"}]}
             """;
         RuleSetSamples.WithBuiltInGeoFiles(() =>
         {
             string Inject(string raw) => CustomConfigInjector.Inject(raw, [], BuildSettings(true, false),
                 ConfigGenerator.RejectMissingRuleSet, resolveRuleSet: (_, _) => AppPaths.GeoSiteRuPath);
-            var config = JsonNode.Parse(Inject(Inject(source)))!;
-            Assert.Single(config["route"]!["rule_set"]!.AsArray());
+            var first = JsonNode.Parse(Inject(source))!;
+            var config = JsonNode.Parse(Inject(first.ToJsonString()))!;
             var rules = config["route"]!["rules"]!.AsArray();
-            Assert.Equal(new[] { "hijack-dns", "sniff", "hijack-dns", "reject", "udp", "sniff", "reject", "tcp" },
-                rules.Select(r => (string?)r?["action"] ?? (string?)r?["network"]));
-            Assert.Equal(53, (int?)rules[0]!["port"]);
-            Assert.Equal("dns", (string?)rules[2]!["protocol"]);
-            Assert.Equal("tcp", (string?)rules[5]!["network"]);
-            Assert.Single(config["dns"]!["rules"]!.AsArray(), r => (string?)r?["action"] == "reject");
+            Assert.True(JsonNode.DeepEquals(first["route"]!["rules"], rules), "Re-import changed routing precedence.");
+            Assert.Single(config["route"]!["rule_set"]!.AsArray());
+
+            var original = JsonNode.Parse(source)!["route"]!["rules"]!.AsArray();
+            Assert.Equal(new[] { "reject", "hijack-dns", "reject", "forward", "reject", "sniff",
+                "hijack-dns", "reject", "route", "hijack-dns", "reject" },
+                rules.Select(r => (string?)r?["action"] ?? "forward"));
+            Assert.True(JsonNode.DeepEquals(original[0], rules[0]));
+            Assert.True(JsonNode.DeepEquals(original[1], rules[3]));
+            Assert.Equal("internal", (string?)rules[4]!["inbound"]);
+            Assert.Equal("dns", (string?)rules[4]!["protocol"]);
+            Assert.True(JsonNode.DeepEquals(original[3], rules[5]));
+            Assert.True(JsonNode.DeepEquals(original[4], rules[8]));
+            Assert.Single(rules, r => (string?)r?["action"] == "sniff");
+
+            var dnsMatch = JsonNode.Parse("""{"type":"logical","mode":"or","rules":[{"port":53},{"protocol":"dns"}]}""");
+            var adMatch = JsonNode.Parse("""{"rule_set":["vpnrouter-adblock"]}""");
+            foreach (var (index, expectedMatch) in new[] {
+                (1, """{"network":"udp","source_ip_cidr":"198.51.100.0/24"}"""),
+                (6, """{"type":"logical","mode":"or","invert":true,"rules":[{"protocol":"tls"},{"port":443}]}""")
+            })
+            {
+                var match = JsonNode.Parse(expectedMatch);
+                foreach (var guard in new[] { rules[index]!, rules[index + 1]! })
+                {
+                    Assert.Equal("and", (string?)guard["mode"]);
+                    Assert.True(JsonNode.DeepEquals(match, guard["rules"]![0]));
+                }
+                Assert.True(JsonNode.DeepEquals(dnsMatch, rules[index]!["rules"]![1]));
+                Assert.True(JsonNode.DeepEquals(adMatch, rules[index + 1]!["rules"]![1]));
+            }
+
+            var finalDns = rules[9]!.DeepClone().AsObject();
+            finalDns.Remove("action");
+            Assert.True(JsonNode.DeepEquals(dnsMatch, finalDns));
+            var dnsReject = Assert.Single(config["dns"]!["rules"]!.AsArray(), r => (string?)r?["action"] == "reject");
+            Assert.True(JsonNode.DeepEquals(rules[10], dnsReject));
+
+            var runtime = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
+            if (runtime != null)
+            {
+                var result = new ProcessRunner().RunAsync(new ProcessRequest(Path.GetFullPath(runtime), ["check", "-c", "stdin"],
+                    StdinInput: config.ToJsonString(), Timeout: TimeSpan.FromSeconds(15)), TestContext.Current.CancellationToken)
+                    .GetAwaiter().GetResult();
+                Assert.Equal(0, result.ExitCode);
+                Assert.False(result.TimedOut);
+            }
         });
     }
 

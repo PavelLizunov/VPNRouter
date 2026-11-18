@@ -373,7 +373,6 @@ public class VPNRouterService : BackgroundService
                 {
                     if (!ct.IsCancellationRequested && engine == _engine)
                     {
-                        applied = applied && engine.IsServiceApplyCurrent(newSettings);
                         if (applied) _currentSettings = newSettings;
                         if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
                         {

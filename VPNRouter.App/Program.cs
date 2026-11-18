@@ -280,24 +280,15 @@ sealed class Program
 
                 if (rollback.Restored)
                 {
-                    Console.Error.WriteLine($"[health] rollback ok: {rollback.Reason} — relaunching with restored binaries");
-                    VPNRouter.Core.Services.UpdateBackup.ClearFailureMarker(installDir);
                     try
                     {
-                        var guiExe = System.IO.Path.Combine(appDir, "VPNRouter.GUI.exe");
-                        var exeToLaunch = System.IO.File.Exists(guiExe)
-                            ? guiExe
-                            : System.IO.Path.Combine(appDir, "VPNRouter.App.exe");
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = exeToLaunch,
-                            UseShellExecute = true,
-                            WorkingDirectory = appDir,
-                        });
+                        Services.WindowsRollbackRelaunch.Start(installDir);
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"[health] post-rollback relaunch failed: {ex.Message}");
+                        Environment.ExitCode = 1;
+                        try { Log.Error(ex, "[health] Could not securely relaunch the restored application"); } catch { }
+                        try { Console.Error.WriteLine($"[health] post-rollback relaunch failed: {ex.Message}"); } catch { }
                     }
                     return false;
                 }

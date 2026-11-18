@@ -72,6 +72,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [InlineData("missing-ad-filter")]
     [InlineData("failover-missing-ad-filter")]
     [InlineData("failover-unix-stop-refused")]
+    [InlineData("failover-linux-exit-unknown")]
     [InlineData("verified-free-missing-rule-set")]
     [InlineData("verified-free-invalid-native")]
     [InlineData("damaged-built-in")]
@@ -81,7 +82,10 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [InlineData("imported-valid-srs")]
     public async Task ApplyAsync_FailedGenerationOrReload_PreservesActiveTunnel(string scenario)
     {
-        bool refusedStop = scenario == "failover-unix-stop-refused";
+        bool unknownExit = scenario == "failover-linux-exit-unknown";
+        if (unknownExit)
+            Assert.SkipUnless(OperatingSystem.IsLinux(), "Exercises Linux capability-mode process ownership.");
+        bool refusedStop = unknownExit || scenario == "failover-unix-stop-refused";
         if (refusedStop)
             Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(),
                 "Exercises the escalated Unix stop with an isolated ownership record.");
@@ -218,10 +222,17 @@ public sealed class VpnEngineApplyStructuralChangeTests
             File.WriteAllText(VPNRouter.Core.AppPaths.CurrentConfigPath, originalJson);
             if (refusedStop)
             {
-                // A current-format record with an absent child refuses escalation before any signal.
-                ProcessOwnership.WriteRuntimeOwnerRecord(Path.Combine(tempDir, "runtime-owner.json"),
-                    new OwnedProcessIdentity(int.MaxValue, 1, Path.Combine(tempDir, "fixture-sing-box")));
-                SetField(singBox, "_linuxUsedPkexec", true);
+                if (unknownExit)
+                {
+                    initialHandle.ExitQueryUnavailable = true;
+                }
+                else
+                {
+                    // An absent recorded child refuses escalation before any signal.
+                    ProcessOwnership.WriteRuntimeOwnerRecord(Path.Combine(tempDir, "runtime-owner.json"),
+                        new OwnedProcessIdentity(int.MaxValue, 1, Path.Combine(tempDir, "fixture-sing-box")));
+                    SetField(singBox, "_linuxUsedPkexec", true);
+                }
                 SetField(singBox, "_tunLock", lease);
                 SetField(lease!, "_owned", true);
                 SetField(singBox, "_ownsTunLock", true);
@@ -317,6 +328,13 @@ public sealed class VpnEngineApplyStructuralChangeTests
                     Assert.Same(singBox, GetField(engine, "_singBox"));
                     Assert.Same(initialHandle, singBox.OwnedProcessHandle);
                     Assert.Equal(0, initialHandle.DisposeCallCount);
+                    if (unknownExit)
+                    {
+                        Assert.Null(initialHandle.QueryHasExited());
+                        Assert.False(engine.TryPrepareColdReconnect());
+                        Assert.Equal(0, initialHandle.KillCallCount);
+                        initialHandle.ExitQueryUnavailable = false;
+                    }
                     Assert.Same(sessionCts, GetField(engine, "_sessionCts"));
                     Assert.False(sessionCts.IsCancellationRequested);
                     Assert.Same(probeCts, GetField(engine, "_probeCts"));
@@ -414,6 +432,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 SetField(lease, "_owned", false);
             }
             SetField(engine, "_sessionCts", null);
+            initialHandle.ExitQueryUnavailable = false;
             initialHandle.Dispose();
 
             Assert.False(engine.IsRunning);

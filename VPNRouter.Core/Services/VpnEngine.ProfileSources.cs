@@ -7,7 +7,11 @@ namespace VPNRouter.Core.Services;
 
 public partial class VpnEngine
 {
-    internal static string ResolveCustomConfigPath(AppSettings settings)
+    internal static string ResolveCustomConfigPath(AppSettings settings) =>
+        ResolveCustomConfigFiles(settings).SourcePath;
+
+    internal static (string SourcePath, string? ManagedPath) ResolveCustomConfigFiles(
+        AppSettings settings, bool preferManagedCopy = false)
     {
         if (settings.App.CustomConfigs?.Count > 0)
         {
@@ -18,15 +22,16 @@ public partial class VpnEngine
                 : settings.App.CustomConfigs[0];
 
             var path = Environment.ExpandEnvironmentVariables(entry.Path);
+            var managedPath = CustomConfigInjector.GetProgramDataPath(entry.Name);
+            if (preferManagedCopy && File.Exists(managedPath))
+                return (managedPath, managedPath);
             if (File.Exists(path))
-                return path;
-
-            var pdPath = CustomConfigInjector.GetProgramDataPath(entry.Name);
-            if (File.Exists(pdPath))
-                return pdPath;
+                return (path, managedPath);
+            if (File.Exists(managedPath))
+                return (managedPath, managedPath);
         }
 
-        return Environment.ExpandEnvironmentVariables(settings.App.CustomConfig ?? "");
+        return (Environment.ExpandEnvironmentVariables(settings.App.CustomConfig ?? ""), null);
     }
 
     internal static string ComputeTunFingerprint(Models.TunSettings tun)
