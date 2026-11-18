@@ -236,7 +236,7 @@ internal sealed class StartupPipeline
         }
 
         var pid = await StartSingBoxPhaseAsync(
-            settings, configJson, ct);
+            settings, configJson, monitorController, ct);
 
         ct.ThrowIfCancellationRequested();
 
@@ -786,11 +786,12 @@ internal sealed class StartupPipeline
     private async Task<int> StartSingBoxPhaseAsync(
         AppSettings settings,
         string configJson,
+        (Uri Endpoint, string? Secret) controller,
         CancellationToken ct)
     {
         _host.OnStatus("Starting sing-box...");
 
-        var singBox = new SingBoxManager(settings.SingBox, _host.Logger);
+        var singBox = new SingBoxManager(settings.SingBox, controller, _host.Logger);
         singBox.Started += pid => _host.OnSingBoxStarted(pid);
         _host.SetSingBoxManager(singBox);
         if (settings.BusinessPolicy is { } businessPolicy)
