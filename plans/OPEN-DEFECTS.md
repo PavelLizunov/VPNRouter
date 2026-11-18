@@ -16,6 +16,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Headless rejection recovery can persist a surviving subscription selection and then clear it on reload because placeholder cleanup checks only manual servers. Both PR contract tests failed in SubscriptionRefreshChecks. Check enabled subscription entries when reloading a subscription selection.
 - [ ] **P2** - Android subscription cleanup logs the selected server name on clearing a stale preference. Preference repair also logs exception messages and raw recovery notices. Limit Logcat messages to event names and error types.
 - [ ] **P1** - The Windows ownership review found that migration and automatic strategy testing can stop existing helpers before checking for a conflicting driver. GUI shutdown can also lose a live handle when termination fails. Verify SCM, process lifetime and settings preservation at each entry point in #661.
 - [ ] **P1** - Standard automatic launcher repair can execute a script in user Temp during an elevated relaunch. Its DPI folder action and main-service controls also need trusted executable and service identity checks. See #661.
