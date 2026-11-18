@@ -2,6 +2,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
 using VPNRouter.Core;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
@@ -127,6 +128,9 @@ public partial class MainWindowViewModel
     private async Task RestartTrueSplitAsync()
     {
         if (!IsConnected || !_engine.IsRunning) return;
+        SaveSettings();
+        _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
+        var capturedSettings = CaptureBusinessConnectionSettings();
 #if PLATFORM_WINDOWS
         await Task.Run(() =>
         {
@@ -145,9 +149,7 @@ public partial class MainWindowViewModel
             }
         });
 #endif
-        SaveSettings();
-        _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-        await Task.Run(() => _engine.RestartTrueSplitAsync(_settings, CancellationToken.None));
+        await Task.Run(() => _engine.RestartTrueSplitAsync(capturedSettings, CancellationToken.None));
     }
 
     // The window lost track of a tunnel that is running (a routing change restarts sing-box). Show the truth instead of
@@ -255,17 +257,6 @@ public partial class MainWindowViewModel
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
 
-#if PLATFORM_WINDOWS
-            await Task.Run(() =>
-            {
-                // A cold start may clean up processes only while the TUN is unclaimed.
-                if (TunOwnershipLock.ProbeOwnership() != TunOwnershipStatus.Free) return;
-                try { OrphanCleanup.KillOrphans(); } catch { }
-                try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
-                catch { }
-            });
-#endif
-
             SaveSettings();
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
@@ -281,17 +272,27 @@ public partial class MainWindowViewModel
                     "[VM] Connecting with {Count} aggregated subscription servers", aggregatedServers.Count);
             }
 
-            if (OperatingSystem.IsMacOS())
-                await Task.Run(EnsureMacSudoAccess);
-
             try
             {
+                var capturedSettings = CaptureBusinessConnectionSettings();
+                var skipConflictCheck = _skipVpnConflictThisSession;
+#if PLATFORM_WINDOWS
+                await Task.Run(() =>
+                {
+                    // A cold start may clean up processes only while the TUN is unclaimed.
+                    if (TunOwnershipLock.ProbeOwnership() != TunOwnershipStatus.Free) return;
+                    try { OrphanCleanup.KillOrphans(); } catch { }
+                    try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
+                    catch { }
+                });
+#endif
+                if (OperatingSystem.IsMacOS())
+                    await Task.Run(EnsureMacSudoAccess);
+
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                var skipConflictCheck = _skipVpnConflictThisSession;
-
-                var (startTask, outcome) = await RunTwoPhaseStartAsync(cts.Token, () => skipConflictCheck);
+                var (startTask, outcome) = await RunTwoPhaseStartAsync(capturedSettings, cts.Token, skipConflictCheck);
 
                 if (outcome == Internals.TwoPhaseStartOutcome.Connected)
                 {
@@ -400,12 +401,10 @@ public partial class MainWindowViewModel
 #endif
 
     private async Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)> RunTwoPhaseStartAsync(
-        CancellationToken ct, Func<bool> skipConflictCheck)
+        AppSettings capturedSettings, CancellationToken ct, bool skipConflictCheck)
     {
-        var capturedSettings = CaptureBusinessConnectionSettings();
-        var skipConflict = skipConflictCheck();
         var startTask = Task.Run(
-            () => _engine.StartAsync(capturedSettings, ct, skipConflict),
+            () => _engine.StartAsync(capturedSettings, ct, skipConflictCheck),
             ct);
 
         var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
@@ -716,10 +715,11 @@ public partial class MainWindowViewModel
                     "[VM] Reconnecting with {Count} aggregated subscription servers", aggregated.Count);
             }
 
+            var capturedSettings = CaptureBusinessConnectionSettings();
+            var skipConflictCheck = _skipVpnConflictThisSession;
             if (_engine.HasActiveTunnel)
             {
                 _logger.Information("[VM] ReconnectAsync applying new config via ApplyAsync(forceRestart=true)");
-                var capturedSettings = CaptureBusinessConnectionSettings();
                 var applied = await Task.Run(() => _engine.ApplyAsync(
                     capturedSettings,
                     CancellationToken.None,
@@ -755,7 +755,7 @@ public partial class MainWindowViewModel
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                         Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                    var (startTask, outcome) = await RunTwoPhaseStartAsync(cts.Token, () => _skipVpnConflictThisSession);
+                    var (startTask, outcome) = await RunTwoPhaseStartAsync(capturedSettings, cts.Token, skipConflictCheck);
 
                     if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout)
                     {

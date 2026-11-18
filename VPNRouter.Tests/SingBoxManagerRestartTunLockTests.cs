@@ -103,6 +103,34 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
     }
 
     [Fact]
+    public void StartWithJson_FailedConfigWrite_ReleasesLeaseBeforeAnyChildStarts()
+    {
+        var exe = VPNRouter.Core.AppPaths.SingBoxExePath;
+        File.WriteAllText(exe, "fixture");
+        Directory.CreateDirectory(VPNRouter.Core.AppPaths.CurrentConfigPath);
+        var runner = new FakeProcessRunner();
+        using var manager = new SingBoxManager(
+            new SingBoxSettings { ExecutablePath = exe }, null, new FakeHttpClient(), runner);
+
+        var lease = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lease, manager);
+        var previousExe = ProcessOwnership.ConfiguredExePath;
+        try
+        {
+            Assert.Throws<UnauthorizedAccessException>(() => manager.StartWithJson("{}"));
+
+            Assert.Empty(runner.StartCalls);
+            Assert.Null(manager.OwnedProcessHandle);
+            Assert.False(lease.HasOwnership);
+            Assert.True(manager.TryRetireForReplacement());
+        }
+        finally
+        {
+            ProcessOwnership.ConfiguredExePath = previousExe;
+        }
+    }
+
+    [Fact]
     public void StartWithJson_ThrowingStartedSubscriber_KillsProcessAndReleasesLease()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),

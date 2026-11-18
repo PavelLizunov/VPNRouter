@@ -49,16 +49,13 @@ public partial class SingBoxManager
             Stop();
         }
 
+        var exePath = RuntimeExecutablePath;
         if (!TryAcquireTunOwnership())
         {
             throw new TunOwnershipException(
                 "Another VPNRouter instance already owns the TUN adapter. " +
                 "Stop the other instance (e.g. disable Windows Service autostart) and try again.");
         }
-
-        var exePath = RuntimeExecutablePath;
-
-        ProcessOwnership.ConfiguredExePath = exePath;
 
         if (!File.Exists(exePath))
         {
@@ -70,6 +67,7 @@ public partial class SingBoxManager
         _policySpawnAttempted = false;
         try
         {
+            ProcessOwnership.ConfiguredExePath = exePath;
             RotateSingBoxLog();
             _currentConfigPath = WriteJsonToDisk(configJson);
             _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);

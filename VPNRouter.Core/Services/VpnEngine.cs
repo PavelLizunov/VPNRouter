@@ -165,7 +165,7 @@ public partial class VpnEngine : IDisposable
         try { _unixDns.RestoreStrandedIfAny(_logger); } catch { }
     }
 
-    private static AppSettings CopySessionSettings(AppSettings settings)
+    internal static AppSettings CopySessionSettings(AppSettings settings)
     {
         var snapshot = SettingsLoader.Copy(settings);
         if (settings.Tun?.AutoDetectedExcludeAddress is { Count: > 0 } detected)
