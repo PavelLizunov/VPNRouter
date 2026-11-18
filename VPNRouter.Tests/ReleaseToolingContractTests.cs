@@ -386,8 +386,11 @@ public sealed class ReleaseToolingContractTests
         Assert.Contains("$SystemDirectory  = [Environment]::SystemDirectory", script);
         Assert.Contains("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;RC;;;OW)", verification);
         Assert.Contains("[IO.FileSystemAclExtensions]::Create($stage, $acl)", verification);
-        Assert.Contains("} finally {", script[assetStart..]);
-        Assert.Contains("Remove-Item $stagingDir -Recurse -Force", script[assetStart..]);
+        var cleanupStart = script.LastIndexOf("} finally {", StringComparison.Ordinal);
+        Assert.True(cleanupStart > extractEnd);
+        AssertOrder(script[cleanupStart..],
+            "$repairLock.Dispose()",
+            "if (-not $keepStaging) { Remove-Item -LiteralPath $stagingDir -Recurse -Force");
         Assert.DoesNotContain("$env:TEMP", verification);
         Assert.DoesNotContain("$env:ProgramFiles", script);
         Assert.DoesNotContain("$env:ProgramData", script);
