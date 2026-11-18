@@ -14,7 +14,8 @@ internal static class ConfigPipeline
         ILogger? logger = null,
         bool? strictDnsOverride = null,
         Func<VlessServerEntry, bool>? isServerAlive = null,
-        Action<string>? onMissingRuleSet = null)
+        Action<string>? onMissingRuleSet = null,
+        Func<string, CancellationToken, Task<bool>>? checkRuleSet = null)
     {
         var resolved = VlessServersResolver.Resolve(settings, logger);
 
@@ -26,7 +27,7 @@ internal static class ConfigPipeline
         }
 
         var sbConfig = ConfigGenerator.Generate(profile, resolvedProcessNames, settings, strictDnsOverride, isServerAlive,
-            resolveRuleSet: null, onMissingRuleSet: onMissingRuleSet);
+            resolveRuleSet: null, onMissingRuleSet: onMissingRuleSet, checkGeoContents: checkRuleSet);
         ValidateGeneratedConfig(sbConfig, settings, validationMode, warningSink, logger);
         return ConfigGenerator.Serialize(sbConfig);
     }

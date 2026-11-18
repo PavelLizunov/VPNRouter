@@ -1,6 +1,7 @@
 using System.Text.Json;
 using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
@@ -31,9 +32,21 @@ public sealed class AndroidPerAppPolicyTests
             // A recreated view or a rejected switch reads the same successful session record.
             var reopened = JsonSerializer.Deserialize<AndroidPerAppPolicy>(ConnectedInclude)!;
             Assert.Equal(activeText + "\n" + pendingText, Strings.PerAppPolicySummary(reopened, "exclude", apps));
-            Assert.Equal(disconnectedText, Strings.PerAppPolicySummary(null, "exclude", apps));
+            // A down notification can follow the button press, or an up notification can arrive late.
+            // Consult both the service record and its live instance even when an old policy is still available.
+            string OnServiceUpdate(VpnConnectionState state, bool live, AndroidPerAppPolicy recorded)
+            {
+                var snapshot = new VpnStateSnapshot(state, null, 123, DateTimeOffset.UtcNow);
+                var effective = TunnelStateResync.IsConfirmedConnected(snapshot, live) ? recorded : null;
+                return Strings.PerAppPolicySummary(effective, "exclude", apps);
+            }
+            Assert.Equal(activeText + "\n" + pendingText, OnServiceUpdate(VpnConnectionState.Connected, true, reopened));
+            Assert.Equal(disconnectedText, OnServiceUpdate(VpnConnectionState.Disconnected, false, reopened));
+            Assert.Equal(disconnectedText, OnServiceUpdate(VpnConnectionState.Disconnected, true, reopened));
+            Assert.Equal(disconnectedText, OnServiceUpdate(VpnConnectionState.Connected, false, reopened));
+            Assert.Equal(disconnectedText, OnServiceUpdate(VpnConnectionState.Connecting, true, reopened));
             var reconnected = new AndroidPerAppPolicy("exclude", apps, "exclude", apps);
-            Assert.Equal(reconnectedText, Strings.PerAppPolicySummary(reconnected, "exclude", apps));
+            Assert.Equal(reconnectedText, OnServiceUpdate(VpnConnectionState.Connected, true, reconnected));
             var off = Strings.PerAppPolicySummary(reconnected, "off", apps);
             Assert.StartsWith(reconnectedText + "\n", off);
             Assert.EndsWith(lang == "ru" ? "Фильтр приложений выключен" : "App filter off", off);

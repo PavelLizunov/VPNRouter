@@ -413,7 +413,7 @@ public final class VpnRouterService extends VpnService {
             submitCommand(startId, new Runnable() {
                 @Override
                 public void run() {
-                    stopTunnel();
+                    stopTunnel(true);
                     finishCommand(startId);
                 }
             });
@@ -967,20 +967,23 @@ public final class VpnRouterService extends VpnService {
         }, 4, TimeUnit.SECONDS);
     }
 
-    private void stopTunnel() {
+    private void stopTunnel(boolean requested) {
+        if (liveService != null && liveService != this && session == null) return;
         boolean wasLive = session != null;
         String recorded = readVpnState();
+        boolean wasActive = STATE_CONNECTING.equals(recorded) || STATE_CONNECTED.equals(recorded);
         setTunnelLive(false);
         retireTunnel();
-        if (wasLive) broadcastTunnelEvent(new Intent(ACTION_TUNNEL_DOWN));
-        if (STATE_CONNECTING.equals(recorded) || STATE_CONNECTED.equals(recorded)) {
-            if (previousTunnelClosed()) {
-                writeVpnState(STATE_DISCONNECTED, null);
-            } else {
+        if (wasActive || requested) {
+            if (!previousTunnelClosed()) {
                 writeVpnState(STATE_ERROR, "tunnel-closing");
                 broadcastTunnelEvent(new Intent(ACTION_TUNNEL_ERROR).putExtra(EXTRA_ERROR_MESSAGE, "tunnel-closing"));
+                return;
             }
+            writeVpnState(STATE_DISCONNECTED, null);
         }
+        // Receivers can now reread the terminal state and the cleared app selection together.
+        if (wasLive || wasActive || requested) broadcastTunnelEvent(new Intent(ACTION_TUNNEL_DOWN));
     }
 
     @Override
@@ -990,7 +993,7 @@ public final class VpnRouterService extends VpnService {
         cancelScheduledRestart();
         submitLifecycle(() -> {
             writeVpnState(STATE_ERROR, "no-permission");
-            stopTunnel();
+            stopTunnel(false);
             broadcastTunnelEvent(new Intent(ACTION_TUNNEL_ERROR).putExtra(EXTRA_ERROR_MESSAGE, "no-permission"));
         });
         super.onRevoke();
@@ -1002,7 +1005,7 @@ public final class VpnRouterService extends VpnService {
         releaseScreenStateReceiver();
         removeForegroundNotification();
         submitLifecycle(() -> {
-            stopTunnel();
+            stopTunnel(false);
             quitNetCallbackThread();
         });
         super.onDestroy();

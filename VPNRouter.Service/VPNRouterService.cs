@@ -161,6 +161,7 @@ public class VPNRouterService : BackgroundService
         _engine = VPNRouter.Core.Platform.PlatformServices
             .CreateVpnEngine(Serilog.Log.Logger);
         _engine.RequireCompleteRuleSetsOnStart = retryRejected;
+        _engine.ConfirmServiceReplacement = ServiceTunnelReadiness.WaitAsync;
 
         _engine.StatusChanged += msg =>
             _logger.LogInformation("[Service] {Status}", msg);
@@ -372,7 +373,7 @@ public class VPNRouterService : BackgroundService
                 {
                     if (!ct.IsCancellationRequested && engine == _engine)
                     {
-                        applied = applied && engine.HasActiveTunnel;
+                        applied = applied && engine.IsServiceApplyCurrent(newSettings);
                         if (applied) _currentSettings = newSettings;
                         if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
                         {

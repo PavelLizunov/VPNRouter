@@ -50,7 +50,7 @@ public static partial class CustomConfigInjector
         if (hasGeoBypass)
             _ = EnsureGeoProxyDns(config, proxyTag);
 
-        EnsureDnsHijackRule(config, isActionBased);
+        EnsureDnsHijackRule(config, isActionBased || settings.App.BlockAds);
 
         if (!isFullTunnel && processes.Count > 0)
         {
@@ -117,6 +117,21 @@ public static partial class CustomConfigInjector
             for (int i = rules.Count - 1; i >= 0; i--)
                 if (JsonNode.DeepEquals(rules[i], reject)) rules.RemoveAt(i);
         }
+
+        // Port 53 interception works even when the flow has no protocol metadata yet.
+        // Sniff other ports before an imported forwarding rule can consume the flow.
+        var portDns = new JsonObject { ["port"] = 53, ["action"] = "hijack-dns" };
+        var sniff = new JsonObject { ["action"] = "sniff" };
+        var protocolDns = new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" };
+        for (int i = routeRules.Count - 1; i >= 0; i--)
+        {
+            if (JsonNode.DeepEquals(routeRules[i], portDns) || JsonNode.DeepEquals(routeRules[i], sniff) ||
+                JsonNode.DeepEquals(routeRules[i], protocolDns))
+                routeRules.RemoveAt(i);
+        }
+        routeRules.Insert(0, portDns);
+        routeRules.Insert(1, sniff);
+        routeRules.Insert(2, protocolDns);
 
         // A native import can sniff after a conditional route. Check newly discovered domains
         // before the next forwarding rule, including the implicit route.final.

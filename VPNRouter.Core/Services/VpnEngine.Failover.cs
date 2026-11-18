@@ -54,7 +54,21 @@ public partial class VpnEngine
         long? expectedGeneration = null)
     {
         await _lifecycleGate.WaitAsync().ConfigureAwait(false);
-        bool validatingLiveReplacement = false;
+        bool preserveCurrentSession = true;
+
+        void RetireCurrentTunnel()
+        {
+            if (_singBox is { } current)
+            {
+                bool retired = _healthMonitor?.TryRetireForFailover(current.TryRetireForReplacement)
+                    ?? current.TryRetireForReplacement();
+                if (!retired)
+                    throw new InvalidOperationException("The current tunnel stop was not confirmed.");
+            }
+            preserveCurrentSession = false;
+            TeardownInternal();
+        }
+
         try
         {
             if ((expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) ||
@@ -65,9 +79,11 @@ public partial class VpnEngine
                 return false;
             }
 
-            validatingLiveReplacement = HasActiveTunnel;
-            if (!validatingLiveReplacement)
-                TeardownInternal();
+            bool validateBeforeRetiring = _singBox?.ExactStopUnconfirmed == true ||
+                (_singBox?.OwnedProcessHandle is { } handle && handle.QueryHasExited() != true) ||
+                HasLiveOrStartingSingBox();
+            if (!validateBeforeRetiring)
+                RetireCurrentTunnel();
 
             var session = _sessionCts;
             if (session == null || session.IsCancellationRequested)
@@ -78,16 +94,12 @@ public partial class VpnEngine
             }
             var settings = captured;
             Action? retireAfterValidation = null;
-            if (validatingLiveReplacement)
+            if (validateBeforeRetiring)
             {
                 // Resolution can normalize subscription rows and runtime settings in place.
                 settings = SettingsLoader.Copy(captured);
                 settings.BusinessPolicy = captured.BusinessPolicy;
-                retireAfterValidation = () =>
-                {
-                    validatingLiveReplacement = false;
-                    TeardownInternal();
-                };
+                retireAfterValidation = RetireCurrentTunnel;
             }
             await StartAsyncInternal(settings, session.Token, _skipVpnConflictCheck, retireAfterValidation).ConfigureAwait(false);
             return true;
@@ -104,7 +116,7 @@ public partial class VpnEngine
                 "[VpnEngine] Failover restart aborted — engine disposed during shutdown");
             return false;
         }
-        catch (Exception ex) when (validatingLiveReplacement)
+        catch (Exception ex) when (preserveCurrentSession)
         {
             _logger?.Warning("[VpnEngine] Rejected automatic replacement before teardown ({ExceptionType})", ex.GetType().Name);
             OnStatus("Automatic failover rejected before tunnel replacement.");

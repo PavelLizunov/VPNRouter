@@ -157,7 +157,7 @@ function Get-InstallerHelper([string]$embedded, [string]$name, [string]$digest) 
     return ,$bytes
 }
 $installerHelpers = if ($PSScriptRoot) { [IO.Path]::Combine($PSScriptRoot, 'installer') }
-$environmentBytes = Get-InstallerHelper '__VPNROUTER_REPAIR_ENVIRONMENT__' 'repair-environment.ps1' 'b25bc6d2ea24bec4c29b0210a92a248c351c5cd3d6ec5878945ef12ac46aae7a'
+$environmentBytes = Get-InstallerHelper '__VPNROUTER_REPAIR_ENVIRONMENT__' 'repair-environment.ps1' '4a3f68e87e16be9e4837ce12cf64825f1fa2c01948ff5a8dea054019eb8eaf53'
 . ([scriptblock]::Create([Text.Encoding]::UTF8.GetString($environmentBytes)))
 
 Say "Querying GitHub for target release..."

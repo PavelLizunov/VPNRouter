@@ -125,7 +125,8 @@ public sealed class AndroidSingBoxRuntime
     {
         try
         {
-            using var service = Java.Lang.Class.ForName("com.ninitux.vpnrouter.VpnRouterService");
+            var loader = Application.Context?.ClassLoader;
+            using var service = loader?.LoadClass("com.ninitux.vpnrouter.VpnRouterService");
             using var method = service?.GetMethod(methodName);
             using var result = method?.Invoke(null);
             return result is Java.Lang.Boolean value && value.BooleanValue();
