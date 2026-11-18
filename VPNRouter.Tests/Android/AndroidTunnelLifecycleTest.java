@@ -63,6 +63,21 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(start, "retireTunnel();", "session = new AndroidTunnelSession();", "startLibboxService(tunnelConfig);",
                 "session.requireEstablishedTun();", "persistLastGoodConfig();", "liveService = this;",
                 "writeVpnState(STATE_CONNECTED,", "setTunnelLive(true);", "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))");
+
+        String stop = source.substring(source.indexOf("private void stopTunnel("),
+                source.indexOf("public synchronized void onRevoke("));
+        requireOrdered(stop, "retireTunnel();", "if (!previousTunnelClosed())", "writeVpnState(STATE_DISCONNECTED, null);",
+                "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_DOWN))");
+        int requestStart = activity.indexOf("public void RequestDisconnect()");
+        String request = activity.substring(requestStart, activity.indexOf("protected override", requestStart));
+        require(request.contains("StartService(intent);") && !request.contains("SetIntent("),
+                "requesting stop published a result before the service");
+        requireOrdered(activity, "case ActionTunnelUp:", "case ActionTunnelDown:", "SetIntent(AndroidStorage.HasConfirmedTunnel());",
+                "AndroidApp.RefreshPerAppSelection();", "case ActionTunnelError:");
+        String app = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.axaml.cs"));
+        String summary = app.substring(app.indexOf("private void UpdatePerAppSummary("),
+                app.indexOf("private void OnSaveClicked("));
+        requireOrdered(summary, "PerAppPolicySummary(AndroidStorage.GetActivePerAppPolicy()", "_appPickerModeHint.Text =", "_configRowValue.Text =");
     }
 
     private static void requireOrdered(String source, String... steps) {

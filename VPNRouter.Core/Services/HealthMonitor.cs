@@ -9,12 +9,14 @@ public class HealthMonitor : IDisposable
     private readonly SingBoxManager _singBox;
     private readonly IProcessScanner _scanner;
     private readonly IFirewallManager _firewall;
-    private readonly MonitoringSettings _settings;
+    private MonitoringSettings _settings;
+    // Drain old timer, process and crash work before swapping the settings used for recovery.
+    private readonly object _settingsWork = new();
     private readonly ILogger _logger;
 
-    private readonly ISingBoxApi _api;
+    private ISingBoxApi _api;
 
-    private readonly IDisposable? _ownedApi;
+    private IDisposable? _ownedApi;
 
     private readonly IWindowsDnsHardening _dnsHardening;
 
@@ -51,9 +53,6 @@ public class HealthMonitor : IDisposable
     private volatile bool _failoverRequested;
 
     private CancellationTokenSource? _restartCts;
-
-    // Re-entry guard: timer callbacks can overlap while a slow tick (Clash API / process probe) is still running.
-    private int _onHealthTickInProgress;
 
     // Serialises AttemptRestart, which is invoked from both the health tick and the Crashed callback on different threads.
     private readonly object _attemptRestartLock = new();
@@ -140,7 +139,47 @@ public class HealthMonitor : IDisposable
             intervalSeconds, _settings.MaxRestartAttempts, appSettings.App.StrictMode);
     }
 
+    internal void ResumeAfterApply(Profile profile, AppSettings settings, ScanResult? scan)
+    {
+        lock (_settingsWork)
+        {
+            _settings = settings.Monitoring;
+            if (_ownedApi != null)
+            {
+                _ownedApi.Dispose();
+                var controller = string.IsNullOrWhiteSpace(settings.SingBox.ClashApi) ? "127.0.0.1:9090" : settings.SingBox.ClashApi;
+                var api = new ClashSingBoxApi(baseUrl: $"http://{controller}", logger: _logger, secret: settings.SingBox.ClashApiSecret);
+                _ownedApi = api;
+                _api = api;
+            }
+            _strictDnsFailedOver = false;
+            _strictDnsUnhealthyStreak = _strictDnsHealthyStreak = 0;
+            Start(profile, settings, scan);
+        }
+    }
+
+    internal bool TryRetireForFailover(Func<bool> retire)
+    {
+        lock (_settingsWork)
+        {
+            if (!retire()) return false;
+            Stop();
+            return true;
+        }
+    }
+
+    private void RunForActiveSettings(Action work)
+    {
+        lock (_settingsWork)
+            if (!_isStopping && !_disposed) work();
+    }
+
     public void Stop()
+    {
+        lock (_settingsWork) StopCore();
+    }
+
+    private void StopCore()
     {
         _isStopping = true;
         _shouldBeRunning = false;
@@ -174,6 +213,7 @@ public class HealthMonitor : IDisposable
 
     public void OnNewProcessDetected(string processName)
     {
+        if (_isStopping || _disposed) return;
         if (_lastScan?.ProcessNames != null &&
             _lastScan.ProcessNames.Contains(processName, StringComparer.OrdinalIgnoreCase))
         {
@@ -194,7 +234,7 @@ public class HealthMonitor : IDisposable
 
     private void OnHealthTick(object? state)
     {
-        if (System.Threading.Interlocked.CompareExchange(ref _onHealthTickInProgress, 1, 0) != 0)
+        if (!Monitor.TryEnter(_settingsWork))
         {
             _logger.Debug("[HealthMonitor] OnHealthTick skipped — previous tick still in progress");
             return;
@@ -202,6 +242,7 @@ public class HealthMonitor : IDisposable
 
         try
         {
+            if (_isStopping || _disposed) return;
             var isHealthy = _singBox.IsHealthy();
 
             bool? _servingThisTick = null;
@@ -282,7 +323,7 @@ public class HealthMonitor : IDisposable
         }
         finally
         {
-            System.Threading.Interlocked.Exchange(ref _onHealthTickInProgress, 0);
+            Monitor.Exit(_settingsWork);
         }
     }
 
@@ -370,7 +411,9 @@ public class HealthMonitor : IDisposable
         }
     }
 
-    private void OnSingBoxCrashed(object? sender, EventArgs e)
+    private void OnSingBoxCrashed(object? sender, EventArgs e) => RunForActiveSettings(RecoverCrashedProcess);
+
+    private void RecoverCrashedProcess()
     {
         if (_isStopping)
             return;
@@ -475,7 +518,7 @@ public class HealthMonitor : IDisposable
         _logger.Warning("[HealthMonitor] Restarting sing-box (attempt {N}/{Max}) in {Delay}ms",
             attempt, _settings.MaxRestartAttempts, delayMs);
 
-        Task.Delay(delayMs, ct).ContinueWith(_ =>
+        Task.Delay(delayMs, ct).ContinueWith(_ => RunForActiveSettings(() =>
         {
             if (ct.IsCancellationRequested || _isStopping) return;
 
@@ -551,7 +594,7 @@ public class HealthMonitor : IDisposable
             {
                 _logger.Error("[HealthMonitor] Restart attempt {N} failed ({ExceptionType})", _restartAttempts, ex.GetType().Name);
             }
-        }, CancellationToken.None);
+        }), CancellationToken.None);
     }
 
     internal bool RunTunOrphanRecoveryCleanup(CancellationToken ct)
@@ -613,7 +656,9 @@ public class HealthMonitor : IDisposable
         }
     }
 
-    private void OnDebounceElapsed(object? state)
+    private void OnDebounceElapsed(object? state) => RunForActiveSettings(RescanProcesses);
+
+    private void RescanProcesses()
     {
         if (_isStopping) return;
 
@@ -686,12 +731,15 @@ public class HealthMonitor : IDisposable
         {
             string CheckImport(string path)
             {
-                var json = CustomConfigInjector.Inject(File.ReadAllText(path), processNames, _appSettings,
-                    ConfigGenerator.RejectMissingRuleSet);
+                var json = CustomConfigInjector.Inject(CustomConfigInjector.ReadImport(path), processNames, _appSettings,
+                    ConfigGenerator.RejectMissingRuleSet, _singBox.CheckRuleSetAsync);
                 if (!_singBox.CheckCandidateAsync(json, CancellationToken.None).GetAwaiter().GetResult())
                     throw new InvalidOperationException("The imported VPN configuration failed native validation.");
                 return json;
             }
+
+            var selectedPath = VpnEngine.ResolveCustomConfigPath(_appSettings);
+            if (File.Exists(selectedPath)) return CheckImport(selectedPath);
 
             var configName = _appSettings.App.ActiveCustomConfig;
             if (!string.IsNullOrEmpty(configName))
@@ -702,8 +750,6 @@ public class HealthMonitor : IDisposable
 
             var legacyPath = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config\custom.json");
             if (File.Exists(legacyPath)) return CheckImport(legacyPath);
-            if (!string.IsNullOrEmpty(_appSettings.App.CustomConfig))
-                return CheckImport(Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig));
             throw new InvalidOperationException("The selected custom VPN configuration is missing.");
         }
 
@@ -715,7 +761,8 @@ public class HealthMonitor : IDisposable
             warningSink: null,
             logger: _logger,
             strictDnsOverride: (strictDnsFailedOverOverride ?? _strictDnsFailedOver) ? false : (bool?)null,
-            onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet);
+            onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet,
+            checkRuleSet: _singBox.CheckRuleSetAsync);
     }
 
     private static List<string> FilterForSingBox(IEnumerable<string> names) =>

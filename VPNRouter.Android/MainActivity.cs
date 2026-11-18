@@ -522,13 +522,10 @@ public class MainActivity : AvaloniaMainActivity
             switch (action)
             {
                 case ActionTunnelUp:
-                    global::Android.Util.Log.Info("VpnRouter", "Phase 1.I: ACTION_TUNNEL_UP received");
-                    SetIntent(true);
-                    AndroidApp.RefreshPerAppSelection();
-                    break;
                 case ActionTunnelDown:
-                    global::Android.Util.Log.Info("VpnRouter", "Phase 1.I: ACTION_TUNNEL_DOWN received");
-                    SetIntent(false);
+                    // An older broadcast may arrive after a newer transition. Read the service's current state.
+                    SetIntent(AndroidStorage.HasConfirmedTunnel());
+                    AndroidApp.RefreshPerAppSelection();
                     break;
                 case ActionTunnelError:
                     PresentTunnelError(context, Localization.TunnelError(intent?.GetStringExtra(ExtraErrorMessage)),
@@ -554,16 +551,17 @@ public class MainActivity : AvaloniaMainActivity
 
     private static void PresentTunnelError(Context? context, string message, bool previousActive)
     {
-        if (previousActive)
+        if (AndroidStorage.HasConfirmedTunnel())
         {
             SetIntent(true);
             AndroidApp.RefreshPerAppSelection();
-            if (context is not null)
+            if (previousActive && context is not null)
                 global::Android.Widget.Toast.MakeText(context, message + " " + Localization.PreviousTunnelActive,
                     global::Android.Widget.ToastLength.Long)?.Show();
             return;
         }
         SetIntent(false, refresh: true);
+        AndroidApp.RefreshPerAppSelection();
         try { TunnelErrorReported?.Invoke(message); }
         catch (Exception ex)
         {
@@ -612,7 +610,6 @@ public class MainActivity : AvaloniaMainActivity
             .SetClassName(PackageName!, "com.ninitux.vpnrouter.VpnRouterService")
             .SetAction(ActionStop);
         StartService(intent);
-        SetIntent(false);
     }
 
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)

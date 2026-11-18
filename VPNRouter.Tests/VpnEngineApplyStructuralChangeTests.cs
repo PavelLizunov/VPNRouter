@@ -71,6 +71,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [InlineData("missing-rule-set")]
     [InlineData("missing-ad-filter")]
     [InlineData("failover-missing-ad-filter")]
+    [InlineData("failover-unix-stop-refused")]
     [InlineData("verified-free-missing-rule-set")]
     [InlineData("verified-free-invalid-native")]
     [InlineData("damaged-built-in")]
@@ -80,6 +81,11 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [InlineData("imported-valid-srs")]
     public async Task ApplyAsync_FailedGenerationOrReload_PreservesActiveTunnel(string scenario)
     {
+        bool refusedStop = scenario == "failover-unix-stop-refused";
+        if (refusedStop)
+            Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(),
+                "Exercises the escalated Unix stop with an isolated ownership record.");
+
         var priorDataDir = GetAppPathsDataDir();
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-apply-reload-fail-{Guid.NewGuid():N}");
         VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
@@ -136,6 +142,8 @@ public sealed class VpnEngineApplyStructuralChangeTests
         SetProperty(engine, "ActiveAppRoutingFingerprint", baselineAppRoutingFingerprint);
 
         using var sessionCts = new CancellationTokenSource();
+        using var probeCts = new CancellationTokenSource();
+        using var lease = refusedStop ? new TunOwnershipLock() : null;
         SetField(engine, "_sessionCts", sessionCts);
 
         bool importedSet = scenario is "imported-unreadable-srs" or "failover-imported-missing-srs" or "imported-valid-srs";
@@ -147,6 +155,10 @@ public sealed class VpnEngineApplyStructuralChangeTests
             new SingBoxSettings { ExecutablePath = "sing-box.exe", ClashApi = "127.0.0.1:9090" },
             null, fakeHttp, runner);
 
+        using var health = refusedStop
+            ? new HealthMonitor(singBox, scanner, firewall, new MonitoringSettings(), api: new FakeSingBoxApi(),
+                dnsHardening: dnsHardening)
+            : null;
         var initialHandle = new FakeProcessHandle(pid: 12345);
         SetField(singBox, "_handle", initialHandle);
         typeof(SingBoxManager).GetProperty("State", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
@@ -204,6 +216,20 @@ public sealed class VpnEngineApplyStructuralChangeTests
         {
             const string originalJson = """{"route":{"final":"proxy"}}""";
             File.WriteAllText(VPNRouter.Core.AppPaths.CurrentConfigPath, originalJson);
+            if (refusedStop)
+            {
+                // A current-format record with an absent child refuses escalation before any signal.
+                ProcessOwnership.WriteRuntimeOwnerRecord(Path.Combine(tempDir, "runtime-owner.json"),
+                    new OwnedProcessIdentity(int.MaxValue, 1, Path.Combine(tempDir, "fixture-sing-box")));
+                SetField(singBox, "_linuxUsedPkexec", true);
+                SetField(singBox, "_tunLock", lease);
+                SetField(lease!, "_owned", true);
+                SetField(singBox, "_ownsTunLock", true);
+                SetField(engine, "_probeCts", probeCts);
+                SetField(engine, "_firewall", firewall);
+                SetField(engine, "_healthMonitor", health);
+                SetField(health!, "_shouldBeRunning", true);
+            }
             string expectedFailure = "Apply failed: sing-box reload or restart was not confirmed";
             if (scenario is "missing-rule-set" or "verified-free-missing-rule-set")
             {
@@ -224,6 +250,8 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 File.WriteAllBytes(VPNRouter.Core.AppPaths.GeoIpRuPath, RuleSetSamples.IntactEnvelope(12 * 1024));
                 File.WriteAllBytes(VPNRouter.Core.AppPaths.GeoSiteRuPath, RuleSetSamples.UpstreamGeositeTldRu());
                 settings.App.BypassRussianTraffic = true;
+                runner.OnRun(r => r.Arguments.SequenceEqual(["check", "-c", "stdin"]),
+                    new ProcessResult(1, "", "", TimeSpan.Zero, false));
             }
             if (scenario == "missing-custom-config")
             {
@@ -242,7 +270,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
                         new { type = "socks", tag = "proxy", server = "10.0.0.2", server_port = 1080 },
                         new { type = "direct", tag = "direct" }
                     },
-                    route = new { rule_set = new[] { new { type = "local", format = "binary", tag = "imported", path = srs } } }
+                    route = new { rule_set = new[] { new { type = "local", format = "binary", tag = "imported", path = Path.GetFileName(srs) } } }
                 };
                 File.WriteAllText(settings.App.CustomConfig, System.Text.Json.JsonSerializer.Serialize(native));
                 if (!failover)
@@ -282,6 +310,21 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 Assert.True(Assert.IsType<bool>(GetField(engine, "_warmupConfirmed")));
                 Assert.Same(settings, GetField(engine, "_failoverSettingsContext"));
                 Assert.Equal(0, dnsHardening.RestoreCount);
+                if (refusedStop)
+                {
+                    Assert.True(singBox.ExactStopUnconfirmed);
+                    Assert.True(lease!.HasOwnership);
+                    Assert.Same(singBox, GetField(engine, "_singBox"));
+                    Assert.Same(initialHandle, singBox.OwnedProcessHandle);
+                    Assert.Equal(0, initialHandle.DisposeCallCount);
+                    Assert.Same(sessionCts, GetField(engine, "_sessionCts"));
+                    Assert.False(sessionCts.IsCancellationRequested);
+                    Assert.Same(probeCts, GetField(engine, "_probeCts"));
+                    Assert.False(probeCts.IsCancellationRequested);
+                    Assert.Same(firewall, GetField(engine, "_firewall"));
+                    Assert.Same(health, GetField(engine, "_healthMonitor"));
+                    Assert.True(Assert.IsType<bool>(GetField(health!, "_shouldBeRunning")));
+                }
             }
             else if (scenario.StartsWith("verified-free-", StringComparison.Ordinal))
             {
@@ -344,6 +387,14 @@ public sealed class VpnEngineApplyStructuralChangeTests
                     Assert.DoesNotContain("Stopping...", statuses);
                 }
             }
+            else if (scenario == "damaged-built-in")
+            {
+                var check = Assert.Single(runner.RunCalls);
+                var deployed = OperatingSystem.IsWindows() ? "sing-box.exe" : VPNRouter.Core.AppPaths.SingBoxExePath;
+                Assert.Equal(Path.GetFullPath(deployed), check.ExecutablePath);
+                var json = System.Text.Json.Nodes.JsonNode.Parse(check.StdinInput!)!;
+                Assert.Equal(VPNRouter.Core.AppPaths.GeoIpRuPath, (string?)json["route"]!["rule_set"]![0]!["path"]);
+            }
             else
             {
                 Assert.Empty(runner.RunCalls);
@@ -357,6 +408,11 @@ public sealed class VpnEngineApplyStructuralChangeTests
         {
             SetField(engine, "_singBox", null);
             SetField(singBox, "_handle", null);
+            if (lease != null)
+            {
+                SetField(singBox, "_ownsTunLock", false);
+                SetField(lease, "_owned", false);
+            }
             SetField(engine, "_sessionCts", null);
             initialHandle.Dispose();
 

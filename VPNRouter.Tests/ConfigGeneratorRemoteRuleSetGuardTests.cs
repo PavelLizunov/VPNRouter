@@ -178,10 +178,34 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests
     }
 
     [Fact]
+    public void ImportedLocalRuleSetKeepsItsSourceDirectoryAfterCopy()
+    {
+        RuleSetSamples.WithBuiltInGeoFiles(() =>
+        {
+            var sourceDir = Directory.CreateDirectory(Path.Combine(AppPaths.DataDir, "import"));
+            var source = Path.Combine(sourceDir.FullName, "external.json");
+            const string raw = """
+                {"route":{"rule_set":[{"type":"local","tag":"personal","format":"source","path":"rules/local.json"},
+                    {"type":"inline","tag":"inline","rules":[{"domain":"example.test"}]}]}}
+                """;
+            File.WriteAllText(source, raw);
+            var copied = CustomConfigInjector.CopyToProgramData(source, "relative-rules");
+            Assert.Equal(raw, File.ReadAllText(source));
+            File.Delete(source);
+
+            var saved = CustomConfigInjector.ReadImport(copied);
+            Assert.Equal(saved, File.ReadAllText(copied));
+            var sets = JsonNode.Parse(saved)!["route"]!["rule_set"]!;
+            Assert.Equal(Path.Combine(sourceDir.FullName, "rules", "local.json"), (string?)sets[0]!["path"]);
+            Assert.Equal("inline", (string?)sets[1]!["type"]);
+        });
+    }
+
+    [Fact]
     public void ReimportChecksAdFilterBeforeRoutingAndAfterConditionalSniff()
     {
         const string source = """
-            {"route":{"rules":[{"network":"udp","outbound":"proxy"},{"action":"sniff"},
+            {"route":{"rules":[{"network":"udp","outbound":"proxy"},{"action":"sniff","network":"tcp"},
                                {"network":"tcp","outbound":"proxy"}]},
              "outbounds":[{"type":"socks","tag":"proxy","server":"10.0.0.2","server_port":1080}]}
             """;
@@ -191,10 +215,12 @@ public sealed class ConfigGeneratorRemoteRuleSetGuardTests
                 ConfigGenerator.RejectMissingRuleSet, resolveRuleSet: (_, _) => AppPaths.GeoSiteRuPath);
             var config = JsonNode.Parse(Inject(Inject(source)))!;
             Assert.Single(config["route"]!["rule_set"]!.AsArray());
-            var sequence = config["route"]!["rules"]!.AsArray()
-                .Select(r => (string?)r?["network"] ?? (string?)r?["action"])
-                .Where(action => action != "hijack-dns");
-            Assert.Equal(new[] { "reject", "udp", "sniff", "reject", "tcp" }, sequence);
+            var rules = config["route"]!["rules"]!.AsArray();
+            Assert.Equal(new[] { "hijack-dns", "sniff", "hijack-dns", "reject", "udp", "sniff", "reject", "tcp" },
+                rules.Select(r => (string?)r?["action"] ?? (string?)r?["network"]));
+            Assert.Equal(53, (int?)rules[0]!["port"]);
+            Assert.Equal("dns", (string?)rules[2]!["protocol"]);
+            Assert.Equal("tcp", (string?)rules[5]!["network"]);
             Assert.Single(config["dns"]!["rules"]!.AsArray(), r => (string?)r?["action"] == "reject");
         });
     }

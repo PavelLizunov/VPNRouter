@@ -16,6 +16,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - An elevated health-check rollback relaunches the restored GUI with inherited repair paths (#661).
+- [ ] **P1** - Update Zapret can stop an active strategy before driver ownership and the update lock are confirmed (#661).
+- [ ] **P1** - Update, restart and service shutdown can abandon a live winws after an unconfirmed stop (#661).
+- [ ] **P2** - Partial setup in the protected directory can suppress unrelated legacy filter choices during first installation (#661).
+
+- [ ] **P2** - On Android 14 at 3e96d410, the home and app picker still show Active after manual disconnect despite OS teardown. Show Next connection when the service disconnects (#689).
+
 - [ ] **P2** - The Android client build resolves RadioButton to two platform namespaces in the app picker. Both ARM64 jobs failed with CS0104 on the policy summary.
 - [ ] **P1** - A rejected subscription row with outbound metadata can survive as a legacy scalar after reopening Headless settings (SubscriptionFeature). Compare the fields the scalar actually stored.
 - [ ] **P1** - A refused escalated Unix stop releases the process handle during verified desktop Apply before termination is confirmed (SingBoxManager.Lifecycle). Preserve the handle, session, active file and TUN lease.

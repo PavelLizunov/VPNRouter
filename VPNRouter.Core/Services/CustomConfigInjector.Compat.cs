@@ -86,10 +86,38 @@ public static partial class CustomConfigInjector
         var dir = AppPaths.ConfigDir;
         Directory.CreateDirectory(dir);
 
-        var safeName = string.Join("_", configName.Split(Path.GetInvalidFileNameChars()));
-        var destPath = Path.Combine(dir, $"custom-{safeName}.json");
-        File.Copy(sourcePath, destPath, overwrite: true);
-        return destPath;
+        var destPath = GetProgramDataPath(configName);
+        var contents = ReadImport(sourcePath);
+        var temporary = destPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temporary, contents);
+            File.Move(temporary, destPath, overwrite: true);
+            return destPath;
+        }
+        finally
+        {
+            File.Delete(temporary);
+        }
+    }
+
+    internal static string ReadImport(string sourcePath)
+    {
+        var raw = File.ReadAllText(sourcePath);
+        var config = JsonNode.Parse(raw);
+        if (config?["route"]?["rule_set"] is not JsonArray sets) return raw;
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
+        bool changed = false;
+        foreach (var set in sets.OfType<JsonObject>())
+        {
+            if ((string?)set["type"] != "local" || (string?)set["path"] is not { Length: > 0 } path ||
+                Path.IsPathFullyQualified(path))
+                continue;
+            set["path"] = Path.GetFullPath(path, directory);
+            changed = true;
+        }
+        return changed ? config.ToJsonString(InjectorOutputOptions) : raw;
     }
 
     public static string GetProgramDataPath(string configName)

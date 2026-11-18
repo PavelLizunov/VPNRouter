@@ -63,12 +63,9 @@ public static class RuleSetFile
     internal static Task<bool> CheckContentsAsync(string path, CancellationToken ct) =>
         CheckContentsAsync(path, ct, new ProcessRunner());
 
-    internal static async Task<bool> CheckContentsAsync(string path, CancellationToken ct, IProcessRunner runner,
-        Models.SingBoxSettings? settings = null)
-    {
-        // Constructing this config loads the local rule-set with the runtime parser.
-        // There are no inbounds, remote rule-sets, or running services in a config check.
-        var config = new System.Text.Json.Nodes.JsonObject
+    // This config loads only the specified file through the native parser.
+    internal static string BuildCheckConfig(string path) =>
+        new System.Text.Json.Nodes.JsonObject
         {
             ["route"] = new System.Text.Json.Nodes.JsonObject
             {
@@ -78,6 +75,11 @@ public static class RuleSetFile
                 })
             }
         }.ToJsonString();
+
+    internal static async Task<bool> CheckContentsAsync(string path, CancellationToken ct, IProcessRunner runner,
+        Models.SingBoxSettings? settings = null)
+    {
+        var config = BuildCheckConfig(path);
         try
         {
 #if PLATFORM_ANDROID

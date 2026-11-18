@@ -51,6 +51,13 @@ public partial class VpnEngine : IDisposable
     public int? SingBoxPid => _singBox?.Pid;
     // Unix readiness uses Clash, which can be unavailable while the owned process is alive.
     internal bool RequireCompleteRuleSetsOnStart { get; set; }
+    internal Func<IProcessHandle, string, CancellationToken, Task<bool>>? ConfirmServiceReplacement { get; set; }
+    private IProcessHandle? _confirmedServiceHandle;
+    internal bool IsServiceApplyCurrent(AppSettings? settings) =>
+        settings != null && ReferenceEquals(settings, _failoverSettingsContext) &&
+        _sessionCts is { IsCancellationRequested: false } && _confirmedServiceHandle is { } accepted &&
+        ReferenceEquals(accepted, _singBox?.OwnedProcessHandle) && accepted.QueryHasExited() == false;
+
     public bool HasActiveTunnel => _singBox?.HasActiveTunnel ?? false;
     public List<string> MonitoredProcesses => _scanResult?.ProcessNames ?? new();
 
@@ -329,6 +336,9 @@ public partial class VpnEngine : IDisposable
         var configCommitted = false;
         var previousSettings = _failoverSettingsContext;
         bool pausedHealth = false;
+        string? lastGoodJson = null;
+        IProcessHandle? previousServiceHandle = null;
+        IProcessHandle? confirmedServiceHandle = null;
 
         void RestoreActiveBaseline()
         {
@@ -339,10 +349,10 @@ public partial class VpnEngine : IDisposable
             ActiveServerAddress = oldServerAddress;
             _activeProfile = oldProfile;
             _scanResult = oldScanResult;
-            if (pausedHealth && oldProfile != null && previousSettings != null && HasActiveTunnel)
+            if (pausedHealth && oldProfile != null && previousSettings != null && !_sessionCts.IsCancellationRequested)
             {
                 pausedHealth = false;
-                _healthMonitor?.Start(oldProfile, previousSettings, oldScanResult);
+                _healthMonitor?.ResumeAfterApply(oldProfile, previousSettings, oldScanResult);
             }
         }
 
@@ -428,29 +438,49 @@ public partial class VpnEngine : IDisposable
                 ? "[VpnEngine] Forced full restart (structural change)"
                 : "[VpnEngine] Applying config via full restart");
 
-            if (verifySelection && _healthMonitor != null)
+            if (_healthMonitor != null)
             {
                 _healthMonitor.Stop();
                 pausedHealth = true;
             }
+            var confirm = ConfirmServiceReplacement;
+            if (confirm != null)
+            {
+                previousServiceHandle = _singBox.OwnedProcessHandle;
+                lastGoodJson = File.ReadAllText(AppPaths.CurrentConfigPath);
+            }
             if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart: true))
             {
+                if (lastGoodJson != null && !ReferenceEquals(previousServiceHandle, _singBox.OwnedProcessHandle))
+                    throw new InvalidOperationException("Service replacement did not start.");
                 RestoreActiveBaseline();
                 _logger?.Error("[VpnEngine] Apply failed: sing-box reload or restart was not confirmed");
                 OnStatus("Apply failed: sing-box reload or restart was not confirmed");
                 return false;
             }
 
+            if (confirm != null)
+            {
+                var replacement = _singBox.OwnedProcessHandle;
+                using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct, _sessionCts.Token);
+                if (replacement == null || !await confirm(replacement, configJson, lifetime.Token).ConfigureAwait(false) ||
+                    lifetime.IsCancellationRequested || replacement.QueryHasExited() != false ||
+                    !ReferenceEquals(replacement, _singBox.OwnedProcessHandle))
+                    throw new InvalidOperationException("The service tunnel did not confirm its replacement configuration.");
+                confirmedServiceHandle = replacement;
+            }
+
             ActiveConfigMode = newConfigMode;
             ActiveRoutingMode = newRoutingMode;
             TunFingerprint = newTunFingerprint;
             ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
-            configCommitted = true;
             // Restart replaces the link and resolved drops its per-link settings.
             ApplyUnixDnsSettings(settings);
             ResetFailoverContext(settings);
             if (pausedHealth && result.Profile != null)
-                _healthMonitor?.Start(result.Profile, settings, _scanResult);
+                _healthMonitor?.ResumeAfterApply(result.Profile, settings, _scanResult);
+            _confirmedServiceHandle = confirmedServiceHandle;
+            configCommitted = true;
             UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 
@@ -460,7 +490,24 @@ public partial class VpnEngine : IDisposable
         catch (Exception ex)
         {
             if (!configCommitted)
+            {
+                if (lastGoodJson != null && !_sessionCts.IsCancellationRequested &&
+                    !ReferenceEquals(previousServiceHandle, _singBox.OwnedProcessHandle))
+                {
+                    try
+                    {
+                        if (_singBox.HasActiveTunnel)
+                        {
+                            if (!_singBox.ReloadConfigJsonWithResult(lastGoodJson, forceRestart: true))
+                                _logger?.Error("[VpnEngine] Service tunnel rollback was not confirmed");
+                        }
+                        else
+                            _singBox.StartWithJson(lastGoodJson);
+                    }
+                    catch (Exception) { _logger?.Error("[VpnEngine] Service tunnel rollback failed"); }
+                }
                 RestoreActiveBaseline();
+            }
             _logger?.Error("[VpnEngine] Apply failed ({ExceptionType})", ex.GetType().Name);
             OnStatus("Apply failed: check the selected configuration and required rule sets, then retry.");
             return false;

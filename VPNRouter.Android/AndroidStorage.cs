@@ -60,9 +60,12 @@ public static class AndroidStorage
 
     public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
 
+    internal static bool HasConfirmedTunnel() => TunnelStateResync.IsConfirmedConnected(
+        ResolveVpnState(), VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
+
     public static AndroidPerAppPolicy? GetActivePerAppPolicy()
     {
-        if (!VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel()) return null;
+        if (!HasConfirmedTunnel()) return null;
         var json = GetString("vpn_active_per_app_policy");
         if (json is null) return null;
         try

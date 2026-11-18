@@ -174,7 +174,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
                                 StubProcessMonitor monitor,
                                 AppSettings settings,
                                 IDisposable cleanup)>
-        StartHappyPathAsync()
+        StartHappyPathAsync(bool isolatedProfile = false)
     {
         var previousDataDir = AppPaths.DataDir;
         var tempDataDir = Path.Combine(
@@ -197,6 +197,14 @@ public sealed class VpnEngineHotReloadLifecycleTests
         var engine = BuildEngine(dnsHardening, out var firewall, out var monitor);
 
         var settings = BuildHappyPathSettings(stubExe);
+        if (isolatedProfile)
+        {
+            var profile = Path.Combine(tempDataDir, "receipt-profile.json");
+            File.WriteAllText(profile, """{"profiles":[{"name":"Receipt","dns_mode":"vpn_only","processes":[]}]}""");
+            settings.ProfileSources = [new ProfileSource { Type = "local", Path = profile }];
+            settings.ActiveProfile = "Receipt";
+            settings.SingBox.ClashApi = "127.0.0.1:0";
+        }
 
         var cleanup = new HotReloadCleanup(
             engine,
@@ -258,6 +266,56 @@ public sealed class VpnEngineHotReloadLifecycleTests
             try { Directory.Delete(_tempDataDir, recursive: true); } catch { }
             try { File.Delete(_stubExe); } catch { }
         }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ServiceSettingsReceipt_Characterization_WaitsForReplacementAndRecoversAcceptedPolicy(bool ready)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows service Apply uses the Windows restart path.");
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient().Setup("generate_204", "");
+        try
+        {
+            var (engine, _, handles, _, _, initial, cleanup) = await StartHappyPathAsync(isolatedProfile: true);
+            using var fixture = cleanup;
+            var previousJson = File.ReadAllText(AppPaths.CurrentConfigPath);
+            var candidate = SettingsLoader.Copy(initial);
+            candidate.Vless.Servers[0].Server = "192.0.2.42";
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var result = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            engine.ConfirmServiceReplacement = async (handle, json, ct) =>
+            {
+                Assert.Same(handles[1], handle);
+                Assert.Contains("192.0.2.42", json);
+                entered.TrySetResult();
+                return await result.Task.WaitAsync(ct);
+            };
+
+            var apply = engine.ApplyAsync(candidate, TestContext.Current.CancellationToken);
+            try
+            {
+                await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+                Assert.False(apply.IsCompleted);
+                Assert.False(engine.IsServiceApplyCurrent(candidate));
+            }
+            finally { result.TrySetResult(ready); }
+            Assert.Equal(ready, await apply);
+            Assert.Equal(ready, engine.IsServiceApplyCurrent(candidate));
+            if (!ready) Assert.Equal(previousJson, File.ReadAllText(AppPaths.CurrentConfigPath));
+
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
+            var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
+            var recoveryJson = Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null]));
+            using var json = System.Text.Json.JsonDocument.Parse(recoveryJson);
+            var proxy = Assert.Single(json.RootElement.GetProperty("outbounds").EnumerateArray(),
+                outbound => outbound.GetProperty("type").GetString() == "vless");
+            Assert.Equal(ready ? "192.0.2.42" : initial.Vless.Servers[0].Server, proxy.GetProperty("server").GetString());
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
     }
 
     [Fact]

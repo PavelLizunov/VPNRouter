@@ -9,8 +9,15 @@ function Get-RepairScratch([string]$applicationDir) {
     }
     $scratch.Refresh()
     $sections = [Security.AccessControl.AccessControlSections]'Owner, Access'
-    if (($scratch.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
-        (Get-Acl -LiteralPath $scratch.FullName).GetSecurityDescriptorSddlForm($sections) -cne $acl.GetSecurityDescriptorSddlForm($sections)) {
+    if ($scratch.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'The repair scratch directory is a reparse point.'
+    }
+    $actual = if ($PSVersionTable.PSEdition -eq 'Core') {
+        [IO.FileSystemAclExtensions]::GetAccessControl($scratch, $sections)
+    } else {
+        $scratch.GetAccessControl($sections)
+    }
+    if ($actual.GetSecurityDescriptorSddlForm($sections) -cne $acl.GetSecurityDescriptorSddlForm($sections)) {
         throw 'Could not verify the administrator-protected repair directory.'
     }
     return $scratch.FullName

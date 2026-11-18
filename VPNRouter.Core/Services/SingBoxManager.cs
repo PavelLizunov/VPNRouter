@@ -16,7 +16,6 @@ public partial class SingBoxManager : IDisposable
     private readonly IProcessRunner _runner;
     private IProcessHandle? _handle;
     private string _currentConfigPath = string.Empty;
-    // int, not bool: Dispose uses Interlocked.CompareExchange for single execution.
     private int _disposed;
     private TunOwnershipLock _tunLock;
 
@@ -92,13 +91,19 @@ public partial class SingBoxManager : IDisposable
 
     private const long MaxLogSizeBytes = 10 * 1024 * 1024;
 
-    private string RuntimeExecutablePath => EffectivePolicy?.SelectedExecutablePath ??
-        AppPaths.DeployedSingBoxExePath(_settings);
+    private string RuntimeExecutablePath => Path.GetFullPath(
+        EffectivePolicy?.SelectedExecutablePath ?? AppPaths.DeployedSingBoxExePath(_settings));
 
-    internal async Task<bool> CheckCandidateAsync(string json, CancellationToken ct)
+    internal Task<bool> CheckRuleSetAsync(string path, CancellationToken ct) =>
+        CheckCandidateAsync(RuleSetFile.BuildCheckConfig(path), ct);
+
+    internal async Task<bool> CheckCandidateAsync(string json, CancellationToken ct, SingBoxSettings? nextDeployment = null)
     {
         EffectivePolicy?.Authorize(SingBoxRuntimeOperation.Verify);
-        var check = new ProcessRequest(RuntimeExecutablePath, ["check", "-c", "stdin"], StdinInput: json,
+        var executable = nextDeployment == null ? RuntimeExecutablePath :
+            EffectivePolicy?.SelectedExecutablePath ?? AppPaths.SingBoxDeploymentSource(
+                AppPaths.BundledSingBoxExePath, AppPaths.DeployedSingBoxExePath(nextDeployment));
+        var check = new ProcessRequest(Path.GetFullPath(executable), ["check", "-c", "stdin"], StdinInput: json,
             Timeout: TimeSpan.FromSeconds(15));
         var result = await _runner.RunAsync(check, ct).ConfigureAwait(false);
         return result.ExitCode == 0 && !result.TimedOut;
@@ -166,22 +171,31 @@ public partial class SingBoxManager : IDisposable
 
     private const string DefaultTunInterfaceName = "VPNRouter-TUN";
 
-    public void Dispose()
+    public void Dispose() => DisposeCore(requireConfirmedStop: false);
+
+    internal bool TryRetireForReplacement() => DisposeCore(requireConfirmedStop: true);
+
+    private bool DisposeCore(bool requireConfirmedStop)
     {
-        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
-        AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit;
-        LastCrashWasTunOrphan = false;
-        LastCrashWasLinuxTunPermissionFailure = false;
-        Stop();
-        if (!_ownsTunLock)
-            _handle?.Dispose();
-        if (_ownsTunLock)
+        lock (_lifecycleGate)
         {
-            _logger.Warning(
-                "[SingBoxManager] Dispose preserved TUN ownership because exact stop was not confirmed (state={State})",
-                State);
-            AppDomain.CurrentDomain.ProcessExit += OnAppDomainProcessExit;
-            Volatile.Write(ref _disposed, 0);
+            if (Volatile.Read(ref _disposed) != 0) return true;
+
+            StopInternal(releaseLock: true);
+            if (_ownsTunLock || (requireConfirmedStop && (_exactStopUnconfirmed ||
+                (_handle is { } handle && handle.QueryHasExited() != true))))
+            {
+                _logger.Warning("[SingBoxManager] Retaining manager because exact stop was not confirmed (state={State})", State);
+                return false;
+            }
+
+            Volatile.Write(ref _disposed, 1);
+            AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit;
+            LastCrashWasTunOrphan = false;
+            LastCrashWasLinuxTunPermissionFailure = false;
+            _handle?.Dispose();
+            _handle = null;
+            return true;
         }
     }
 }

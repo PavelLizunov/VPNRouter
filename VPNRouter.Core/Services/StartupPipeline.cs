@@ -144,6 +144,9 @@ internal sealed class StartupPipeline
             ? null
             : await TryProbeUdpForNaivePairingAsync(settings, ct).ConfigureAwait(false);
 
+        var current = (_host as StartupHostInternal)?.SingBox;
+        Func<string, CancellationToken, Task<bool>>? checkRuleSet =
+            context.Mode == StartupMode.HotReload && current != null ? current.CheckRuleSetAsync : null;
         var configJson = GenerateConfigPhase(
             profile,
             scanResult,
@@ -151,14 +154,16 @@ internal sealed class StartupPipeline
             isCustomConfig,
             customConfigJson,
             context.ValidateRequiredRuleSets,
-            isServerAlive);
+            isServerAlive,
+            checkRuleSet);
 
         ct.ThrowIfCancellationRequested();
 
         if (isCustomConfig && (context.Mode == StartupMode.HotReload || retireAfterValidation != null))
         {
-            var current = (_host as StartupHostInternal)?.SingBox;
-            if (current == null || !await current.CheckCandidateAsync(configJson, ct).ConfigureAwait(false))
+            // Failover provisions a new manager after validation. Hot Apply uses the existing deployment.
+            var nextDeployment = retireAfterValidation == null ? null : settings.SingBox;
+            if (current == null || !await current.CheckCandidateAsync(configJson, ct, nextDeployment).ConfigureAwait(false))
                 throw new InvalidOperationException("The imported VPN configuration failed native validation.");
             ct.ThrowIfCancellationRequested();
         }
@@ -352,7 +357,7 @@ internal sealed class StartupPipeline
                 throw new InvalidOperationException(
                     "Custom config not found. Add a config in the Servers tab.");
 
-            rawCustomJson = File.ReadAllText(customPath);
+            rawCustomJson = CustomConfigInjector.ReadImport(customPath);
             var (isValid, errors) = CustomConfigInjector.Validate(rawCustomJson);
             if (!isValid)
                 throw new InvalidOperationException(
@@ -645,7 +650,8 @@ internal sealed class StartupPipeline
         bool isCustomConfig,
         string? rawCustomJson,
         bool validateRequiredRuleSets,
-        Func<VlessServerEntry, bool>? isServerAlive = null)
+        Func<VlessServerEntry, bool>? isServerAlive,
+        Func<string, CancellationToken, Task<bool>>? checkRuleSet)
     {
         Action<string>? onMissingRuleSet = validateRequiredRuleSets ? ConfigGenerator.RejectMissingRuleSet : null;
         if (isCustomConfig)
@@ -665,9 +671,9 @@ internal sealed class StartupPipeline
 
             var injectSource = (rawCustomJson != null && File.Exists(customPath))
                 ? rawCustomJson
-                : File.ReadAllText(localCopy);
+                : CustomConfigInjector.ReadImport(localCopy);
             var configJson = CustomConfigInjector.Inject(
-                injectSource, scanResult.ProcessNames, settings, onMissingRuleSet: onMissingRuleSet);
+                injectSource, scanResult.ProcessNames, settings, onMissingRuleSet, checkRuleSet);
             _host.OnStatus("Prepared process routing for the selected custom configuration");
             return configJson;
         }
@@ -680,7 +686,8 @@ internal sealed class StartupPipeline
             warningSink: msg => _host.OnWarning(msg),
             logger: _host.Logger,
             isServerAlive: isServerAlive,
-            onMissingRuleSet: onMissingRuleSet);
+            onMissingRuleSet: onMissingRuleSet,
+            checkRuleSet: checkRuleSet);
         return json;
     }
 
