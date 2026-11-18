@@ -140,6 +140,12 @@ internal static class AndroidSubscriptionRefresh
         return true;
     }
 
+    internal static bool HasServerInputEdit(string? displayed, string? saved)
+    {
+        var input = displayed?.Trim();
+        return !string.IsNullOrEmpty(input) && !string.Equals(input, saved?.Trim(), StringComparison.Ordinal);
+    }
+
     private static string ManualOwner(string url, string uri) =>
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(url + "\0" + uri)));

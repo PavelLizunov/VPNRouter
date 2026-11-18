@@ -94,14 +94,30 @@ public final class AndroidTunnelLifecycleTest {
                 "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))", "else if (loadLastGoodConfig())");
         require(source.contains("synchronized void onTaskRemoved(") && source.contains("synchronized void onRevoke(")
                 && source.contains("synchronized int onStartCommand("), "swipe scheduling must serialize with revoke and stop");
-        requireOrdered(activity, "var (command, pending) = _consentGate.ResolveResult(AndroidStorage.IsCurrentUiCommand);",
-                "if (pending != null)", "Post(() => RequestConnect(pending))",
-                "!AndroidStorage.IsCurrentUiCommand(command)", "resultCode == Result.Ok", "StartTunnelService(command)");
+        require(activity.contains("private ConnectConsentGate _consentGate = new();"), "fresh launches must start with an empty consent gate");
+        requireOrdered(activity, "base.OnCreate(savedInstanceState);", "if (savedInstanceState != null)",
+                "_consentGate = _retainedConsentGate ?? new ConnectConsentGate(",
+                "savedInstanceState.GetString(AndroidStorage.UiCommandKey), savedInstanceState.GetString(QueuedConsentKey)",
+                "_retainedConsentGate = _consentGate;", "Instance = this;");
+        requireOrdered(activity, "protected override void OnSaveInstanceState(", "var (owner, pending) = _consentGate.Requests;",
+                "outState.PutString(AndroidStorage.UiCommandKey, owner);", "outState.PutString(QueuedConsentKey, pending);");
+        String resume = activity.substring(activity.indexOf("protected override void OnResume()"),
+                activity.indexOf("protected override void OnNewIntent("));
+        requireOrdered(resume, "base.OnResume();", "_consentGate.ClaimPending(ReferenceEquals(Instance, this) && !IsFinishing,",
+                "AndroidStorage.IsCurrentUiCommand) is { } pending)", "RequestConnect(pending);");
+        String result = activity.substring(activity.indexOf("protected override void OnActivityResult("),
+                activity.indexOf("private static string? _pendingExportContent;"));
+        requireOrdered(result, "if (requestCode != RequestVpnConsent)", "if (!ReferenceEquals(Instance, this)) return;",
+                "var command = _consentGate.ResolveResult(AndroidStorage.IsCurrentUiCommand);",
+                "if (command is null || !AndroidStorage.IsCurrentUiCommand(command)) return;", "resultCode == Result.Ok",
+                "StartTunnelService(command);", "else", "PresentStartError(Localization.TunnelError(\"no-permission\"), command);");
+        require(!result.contains("RequestConnect(") && !resume.contains("Post(() => RequestConnect("),
+                "consent retry must be claimed and started on the resumed activity");
         String free = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.FreeConfigs.cs"));
         requireOrdered(free, "AndroidStorage.ApplyFreeConfig(", "RefreshConfigModeUiFromStorage();",
                 "RequestConnect(command);");
         String simple = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.VpnLifecycle.cs"));
-        requireOrdered(simple, "!string.Equals(input, AndroidStorage.SavedServerInput()", "OnSaveClicked(sender, e);",
+        requireOrdered(simple, "if (AndroidSubscriptionRefresh.HasServerInputEdit(input, AndroidStorage.SavedServerInput()))", "OnSaveClicked(sender, e);",
                 "activity.RequestConnect();");
         String external = Files.readString(root.resolve("VPNRouter.Android/VpnControlReceiver.cs"));
         require(external.contains("SvcActionStart = \"com.ninitux.vpnrouter.TILE_START\""), "external restore requires an unticketed action");

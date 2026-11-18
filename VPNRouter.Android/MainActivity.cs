@@ -187,12 +187,11 @@ public class MainActivity : AvaloniaMainActivity
         SetupWindowInsetsAndEdgeToEdge();
 
         base.OnCreate(savedInstanceState);
-        if (savedInstanceState?.GetString(AndroidStorage.UiCommandKey) is { } owner)
-        {
-            _consentGate.OpenOrQueue(owner);
-            if (savedInstanceState.GetString(QueuedConsentKey) is { } pending && AndroidStorage.IsCurrentUiCommand(pending))
-                _consentGate.OpenOrQueue(pending);
-        }
+        // A result may have advanced the live gate since Android last saved the Bundle.
+        if (savedInstanceState != null)
+            _consentGate = _retainedConsentGate ?? new ConnectConsentGate(
+                savedInstanceState.GetString(AndroidStorage.UiCommandKey), savedInstanceState.GetString(QueuedConsentKey));
+        _retainedConsentGate = _consentGate;
         Instance = this;
 #if VPNROUTER_TESTHOOK
         global::Android.Util.Log.Warn("VpnRouterTest",
@@ -448,6 +447,8 @@ public class MainActivity : AvaloniaMainActivity
     {
         _isActivityPaused = false;
         base.OnResume();
+        if (_consentGate.ClaimPending(ReferenceEquals(Instance, this) && !IsFinishing, AndroidStorage.IsCurrentUiCommand) is { } pending)
+            RequestConnect(pending);
         AndroidApp.RefreshPerAppSelection();
         try
         {
@@ -610,7 +611,8 @@ public class MainActivity : AvaloniaMainActivity
             PresentTunnelError(this, owner, message, VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
     }
 
-    private readonly VPNRouter.Core.Services.ConnectConsentGate _consentGate = new();
+    private static ConnectConsentGate? _retainedConsentGate;
+    private ConnectConsentGate _consentGate = new();
 
     private const string QueuedConsentKey = "queued_vpn_consent_command";
 
@@ -626,6 +628,7 @@ public class MainActivity : AvaloniaMainActivity
 
     internal void RequestConnect(string? reserved)
     {
+        if (!ReferenceEquals(Instance, this)) return;
         if (reserved != null && !AndroidStorage.IsCurrentUiCommand(reserved)) return;
         var (owner, pending) = _consentGate.Requests;
         if (reserved == null && (AndroidStorage.IsCurrentUiCommand(owner) || AndroidStorage.IsCurrentUiCommand(pending)))
@@ -692,13 +695,8 @@ public class MainActivity : AvaloniaMainActivity
             return;
         }
 
-        var (command, pending) = _consentGate.ResolveResult(AndroidStorage.IsCurrentUiCommand);
-        if (pending != null)
-        {
-            // Only the opening command receives this result. A subsequent Connect checks
-            // Android's current permission independently, after the first dialog closes.
-            new Handler(Looper.MainLooper!).Post(() => RequestConnect(pending));
-        }
+        if (!ReferenceEquals(Instance, this)) return;
+        var command = _consentGate.ResolveResult(AndroidStorage.IsCurrentUiCommand);
         if (command is null || !AndroidStorage.IsCurrentUiCommand(command)) return;
 
         if (resultCode == Result.Ok)
