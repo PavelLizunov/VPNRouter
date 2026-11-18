@@ -156,6 +156,78 @@ public sealed class WindowsRollbackRelaunchTests
     }
 
     [Fact]
+    public void RepeatedCompensatedLaunchesReachEditionRecoveryOnlyOnce()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows() && ZapretAutoStrategy.IsRunningAsAdmin(), "Windows administrator rollback fixture");
+        const string childId = "VPNROUTER_TEST_ROLLBACK_ID";
+        var child = Guid.TryParseExact(Environment.GetEnvironmentVariable(childId), "N", out var id);
+        if (!child) id = Guid.NewGuid();
+        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Rollback attempts " + id.ToString("N"));
+        var live = Path.Combine(root, "app");
+        var backup = Path.Combine(root, "app.bak");
+        var data = Path.Combine(root, "fixture-data");
+        var repairCalls = Path.Combine(data, "repair-calls.txt");
+        if (child)
+        {
+            // A separate process runs the production startup decision and actually exits after
+            // handoff. Redirect only application data and the network installer dispatch.
+            VPNRouter.Core.AppPaths.OverrideDataDir(data);
+            Assert.False(VPNRouter.App.Program.RunInstallHealthCheck(live, () => File.AppendAllText(repairCalls, "repair\n")));
+            File.WriteAllText(Path.Combine(data, "result"), Environment.ExitCode.ToString());
+            Environment.ExitCode = 0;
+            return;
+        }
+
+        try
+        {
+            ZapretRuntimeDirectory.PrepareWindowsRoot(root);
+            Directory.CreateDirectory(live);
+            Directory.CreateDirectory(backup);
+            Directory.CreateDirectory(data);
+            File.WriteAllText(Path.Combine(live, UpdateBackup.FailureMarkerName), "original");
+            for (var i = 0; i < 5; i++) File.WriteAllText(Path.Combine(backup, $"fixture-{i}"), "inert");
+            File.WriteAllText(Path.Combine(backup, "VPNRouter.App.exe"), "inert non-executable fixture");
+            var runner = Path.ChangeExtension(typeof(WindowsRollbackRelaunchTests).Assembly.Location, ".exe");
+            for (var launch = 1; launch <= 5; launch++)
+            {
+                var start = new System.Diagnostics.ProcessStartInfo(runner) { UseShellExecute = false, WorkingDirectory = live };
+                start.ArgumentList.Add("-method");
+                start.ArgumentList.Add(typeof(WindowsRollbackRelaunchTests).FullName + "." + nameof(RepeatedCompensatedLaunchesReachEditionRecoveryOnlyOnce));
+                start.Environment[childId] = id.ToString("N");
+                using var process = System.Diagnostics.Process.Start(start);
+                Assert.NotNull(process);
+                Assert.True(process.WaitForExit(90_000), $"Fixture launch {launch} did not exit.");
+                Assert.Equal(0, process.ExitCode);
+                var expectedReceipts = Math.Min(launch, LaunchFailureCounter.SelfRepairThreshold);
+                Assert.True(SpinWait.SpinUntil(() =>
+                {
+                    using var operationLock = TryOpenFixtureLock(root);
+                    return operationLock != null && Directory.GetFiles(root, "rollback-*.log").Length == expectedReceipts;
+                }, TimeSpan.FromSeconds(45)), $"Worker did not finish launch {launch}.");
+                var strikes = LaunchFailureCounter.Read(Path.Combine(data, "launch-counter.json")).ConsecutiveFailures;
+                Assert.Equal(Math.Min(launch - 1, LaunchFailureCounter.SelfRepairThreshold), strikes);
+                Assert.Equal("original", File.ReadAllText(Path.Combine(live, UpdateBackup.FailureMarkerName)));
+                Assert.True(File.Exists(Path.Combine(backup, "VPNRouter.App.exe")));
+#if VPNROUTER_BUSINESS
+                Assert.False(File.Exists(repairCalls));
+                var refused = launch >= 4;
+#else
+                Assert.Equal(launch >= 4 ? 1 : 0, File.Exists(repairCalls) ? File.ReadAllLines(repairCalls).Length : 0);
+                var refused = launch == 5;
+#endif
+                Assert.Equal(refused ? "1" : "0", File.ReadAllText(Path.Combine(data, "result")));
+            }
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
+    private static FileStream? TryOpenFixtureLock(string root)
+    {
+        try { return File.Open(Path.Combine(root, UpdateBackup.OperationLockName), FileMode.Open, FileAccess.ReadWrite, FileShare.None); }
+        catch (IOException) { return null; }
+    }
+
+    [Fact]
     public void FlatApplicationCannotRestoreOrCleanANeighbor()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows() && ZapretAutoStrategy.IsRunningAsAdmin(), "Windows administrator ACL fixture");

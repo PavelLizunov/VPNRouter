@@ -58,6 +58,19 @@ internal static class WindowsRollbackRelaunch
                 if (!Directory.EnumerateFiles(backup, "*", SearchOption.AllDirectories).Skip(4).Any())
                     return new(false, "Rollback snapshot is truncated.");
                 UpdateBackup.VerifyWindowsApplicationTree(install, applicationDir);
+                worker.StandardInput.WriteLine("HISTORY");
+                var history = ReadStatus()?.Split(' ');
+                if (history == null || history.Length != 3 || history[0] != "HISTORY" ||
+                    !Guid.TryParseExact(history[1], "N", out var generation) ||
+                    !int.TryParse(history[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var failures))
+                    throw new IOException("The rollback worker could not verify the snapshot failure history.");
+                var scheduleRepair = LaunchFailureCounter.ObserveRollbackFailures(generation, failures);
+                if (failures >= LaunchFailureCounter.SelfRepairThreshold)
+                {
+                    var reason = $"This snapshot failed to restore {failures} times. The current installation and snapshot are retained.";
+                    if (!scheduleRepair) reason += " Recovery was already requested recently. Retry repair later or contact the administrator.";
+                    return new(false, reason) { SnapshotExhausted = true, RelaunchRejected = !scheduleRepair };
+                }
                 bool trampoline = RunHelper(backup, validateOnly: true);
                 worker.StandardInput.WriteLine(trampoline ? "TRAMPOLINE" : "DIRECT");
                 if (ReadStatus() != "READY") throw new IOException("The rollback worker did not accept the handoff.");

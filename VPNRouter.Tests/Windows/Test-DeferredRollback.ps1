@@ -51,14 +51,21 @@ function Read-Status($p) {
     return $read.Result
 }
 try {
-    foreach ($case in 'success','failure','wrong-parent','busy','cancel') {
-        $install = [IO.Directory]::CreateDirectory([IO.Path]::Combine($testRoot,$case)).FullName
+    $previousGeneration = $null
+    foreach ($case in 'success','failure','failure','failure','exhausted','replacement','wrong-parent','busy','cancel') {
+        $name = if ($case -in 'failure','exhausted','replacement') { 'repeated' } else { $case }
+        $install = [IO.Directory]::CreateDirectory([IO.Path]::Combine($testRoot,$name)).FullName
         $app = [IO.Directory]::CreateDirectory([IO.Path]::Combine($install,'app')).FullName
         $backup = [IO.Directory]::CreateDirectory([IO.Path]::Combine($install,'app.bak')).FullName
         $old = [IO.Path]::Combine($app,'fixture.dll')
         [IO.File]::WriteAllText($old,'current')
         [IO.File]::WriteAllText([IO.Path]::Combine($backup,'VPNRouter.App.exe'),'inert')
         [IO.File]::WriteAllText([IO.Path]::Combine($backup,'.update-failed'),'candidate diagnostic')
+        if ($case -eq 'replacement') {
+            # A publication replaces the snapshot and its generation under the lock.
+            [IO.File]::WriteAllText([IO.Path]::Combine($install,'app.bak.id'), [Guid]::NewGuid().ToString('N'))
+        }
+        $prior = [IO.Directory]::GetFiles($install, 'rollback-*.log').Count
         $parent = $worker = $held = $null
         try {
             $parent = [Diagnostics.Process]::Start((New-FixtureShell $app))
@@ -84,6 +91,18 @@ try {
             } else {
                 if ($status -ne 'LOCKED') { throw "Worker did not acquire lock: $status ($case)" }
                 if ($case -ne 'cancel') {
+                    $worker.StandardInput.WriteLine('HISTORY')
+                    $worker.StandardInput.Flush()
+                    $history = (Read-Status $worker) -split ' '
+                    $expected = if ($case -eq 'replacement') { 0 } else { $prior }
+                    if ($history.Count -ne 3 -or $history[0] -ne 'HISTORY' -or $history[2] -ne [string]$expected) { throw "Bad snapshot history: $history" }
+                    if ($case -ne 'failure' -and [IO.Directory]::GetFiles($install,'rollback-*.log').Count -ne $prior) { throw 'Unattempted rollback recorded a failure.' }
+                if ($case -eq 'failure' -and $previousGeneration -and $previousGeneration -ne $history[1]) { throw 'A compensated attempt changed generation.' }
+                    if ($case -eq 'failure') { $previousGeneration = $history[1] }
+                    if ($case -eq 'exhausted' -and $expected -ne 3) { throw 'Repeated launches missed compensation receipts.' }
+                    if ($case -eq 'replacement' -and $previousGeneration -eq $history[1]) { throw 'The new snapshot reused the exhausted identity.' }
+                }
+                if ($case -notin 'cancel','exhausted') {
                     $worker.StandardInput.WriteLine('DIRECT')
                     $worker.StandardInput.Flush()
                     if ((Read-Status $worker) -ne 'READY') { throw 'Worker did not accept handoff.' }
@@ -96,11 +115,12 @@ try {
             if (![IO.File]::Exists($old) -or ![IO.Directory]::Exists($backup)) { throw 'Worker mutated live files before initiator exit.' }
             $parent.StandardInput.Close()
             if (!$parent.WaitForExit(10000) -or !$worker.WaitForExit(10000)) { throw 'Worker or initiator failed to exit.' }
-            if ($case -eq 'success') {
+            if ($case -in 'success','replacement') {
                 if ($worker.ExitCode -ne 0 -or ![IO.File]::Exists([IO.Path]::Combine($app,'started.txt')) -or [IO.File]::Exists($old)) { throw 'Rollback handoff failed.' }
             } else {
                 if (![IO.File]::Exists($old) -or [IO.File]::ReadAllText([IO.Path]::Combine($backup,'.update-failed')) -ne 'candidate diagnostic') { throw 'Worker lost live tree or candidate diagnostics.' }
-                if ($case -eq 'failure' -and ($worker.ExitCode -eq 0 -or [IO.Directory]::GetFiles($install,'rollback-*.log').Count -ne 1)) { throw 'Worker did not report compensated launch failure.' }
+                if ($case -ne 'failure' -and [IO.Directory]::GetFiles($install,'rollback-*.log').Count -ne $prior) { throw 'Unattempted rollback recorded a failure.' }
+                if ($case -eq 'failure' -and ($worker.ExitCode -eq 0 -or [IO.Directory]::GetFiles($install,"rollback-$previousGeneration-*.log").Count -ne ($prior + 1))) { throw 'Worker did not report compensated launch failure.' }
             }
         } finally {
             if ($held) { $held.Dispose() }
@@ -113,4 +133,4 @@ try {
         }
     }
 } finally { [IO.Directory]::Delete($testRoot,$true) }
-'Rollback worker: exact parent exit, lock retention, successful launch, compensation, PID reuse refusal, contention and cancellation passed.'
+'Rollback worker: exact parent exit, lock retention, successful launch, three independent compensated launches, exhausted snapshot and fresh-generation success, PID reuse refusal, contention and cancellation passed.'

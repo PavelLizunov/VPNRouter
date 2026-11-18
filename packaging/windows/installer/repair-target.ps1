@@ -30,11 +30,13 @@ function Assert-RepairRoot([IO.DirectoryInfo]$dir) {
     Assert-RepairObject $dir $false
 }
 
-function Assert-RepairTree([IO.DirectoryInfo]$dir) {
+function Assert-RepairTree([IO.DirectoryInfo]$dir, [IO.FileStream]$heldLock) {
     $pending = [Collections.Generic.Stack[IO.FileSystemInfo]]::new()
     $pending.Push($dir)
     while ($pending.Count) {
         $item = $pending.Pop()
+        # Open-RepairInstallLock already verified this exact file before opening it exclusively.
+        if ($heldLock -and $item.FullName -eq $heldLock.Name) { continue }
         Assert-RepairObject $item $false
         if ($item -is [IO.DirectoryInfo]) {
             foreach ($child in $item.EnumerateFileSystemInfos()) { $pending.Push($child) }

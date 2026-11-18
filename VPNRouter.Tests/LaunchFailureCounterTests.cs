@@ -23,6 +23,30 @@ public sealed class LaunchFailureCounterTests
     }
 
     [Fact]
+    public void ConfirmedRollbackFailuresCountOncePerSnapshotAndRespectRepairCooldown()
+    {
+        var path = NewTempPath();
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        try
+        {
+            Assert.False(LaunchFailureCounter.ObserveRollbackFailures(first, 0, path));
+            Assert.False(File.Exists(path));
+            Assert.False(LaunchFailureCounter.ObserveRollbackFailures(first, 1, path));
+            Assert.False(LaunchFailureCounter.ObserveRollbackFailures(second, 1, path));
+            Assert.False(LaunchFailureCounter.ObserveRollbackFailures(first, 1, path));
+            Assert.Equal(2, LaunchFailureCounter.Read(path).ConsecutiveFailures);
+            Assert.True(LaunchFailureCounter.ObserveRollbackFailures(first, 3, path));
+            Assert.False(LaunchFailureCounter.ObserveRollbackFailures(first, 3, path));
+            Assert.Equal(4, LaunchFailureCounter.Read(path).ConsecutiveFailures);
+            LaunchFailureCounter.MarkStable(path);
+            Assert.False(LaunchFailureCounter.ObserveRollbackFailures(first, 3, path));
+            Assert.Equal(0, LaunchFailureCounter.Read(path).ConsecutiveFailures);
+        }
+        finally { CleanUp(path); }
+    }
+
+    [Fact]
     public void IncrementOnStartup_StartsAtOneOnFreshFile()
     {
         var path = NewTempPath();

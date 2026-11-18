@@ -61,6 +61,7 @@ public static class UpdateBackup
     {
         public bool OperationInProgress { get; init; }
         public bool RelaunchRejected { get; init; }
+        public bool SnapshotExhausted { get; init; }
     }
 
     public static string? GetSnapshotGeneration(string installDir)

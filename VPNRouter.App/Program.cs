@@ -86,7 +86,7 @@ sealed class Program
             RelaunchElevated(args);
             return;
         }
-        if (!RunInstallHealthCheck()) return;
+        if (!RunInstallHealthCheck(AppContext.BaseDirectory, () => Services.SelfRepair.Run())) return;
 #endif
 
         InitializeLogging();
@@ -255,11 +255,11 @@ sealed class Program
         catch { }
     }
 
-    private static bool RunInstallHealthCheck()
+    internal static bool RunInstallHealthCheck(string applicationDir, Action startRepair)
     {
         try
         {
-            var appDir = System.IO.Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+            var appDir = System.IO.Path.TrimEndingDirectorySeparator(applicationDir);
             var health = Services.InstallHealthCheck.Check(appDir);
             var installDir = UpdateBackup.SnapshotInstallDirectory(appDir);
             var failureMarkerPresent = UpdateBackup.HasApplicationFailureMarker(appDir);
@@ -296,10 +296,24 @@ sealed class Program
                 var plan = VPNRouter.App.Services.SelfRepair.Plan();
                 if (plan.ShouldRun)
                 {
-                    VPNRouter.App.Services.SelfRepair.Run();
-                    return false;
+                    try
+                    {
+                        startRepair();
+                        return false;
+                    }
+                    catch (Exception ex) when (rollback.SnapshotExhausted)
+                    {
+                        Console.Error.WriteLine($"[health] Could not start repair: {ex.Message}");
+                        Environment.ExitCode = 1;
+                        return false;
+                    }
                 }
                 Console.Error.WriteLine($"[health] self-repair declined: {plan.Reason}");
+                if (rollback.SnapshotExhausted)
+                {
+                    Environment.ExitCode = 1;
+                    return false;
+                }
             }
             else
             {

@@ -5,6 +5,26 @@ function Write-RollbackStatus([string]$status) {
     [Console]::Out.Flush()
 }
 
+# Legacy snapshots can predate app.bak.id. The lock protects this identity and all
+# receipts from concurrent publication. A replacement snapshot gets a new identity.
+function Get-RollbackGeneration([IO.DirectoryInfo]$root) {
+    $id = [IO.FileInfo]::new([IO.Path]::Combine($root.FullName, 'app.bak.id'))
+    if ([int]$id.Attributes -eq -1) {
+        $generation = [Guid]::NewGuid().ToString('N')
+        $file = $id.Open('CreateNew', 'Write', 'None')
+        try {
+            $bytes = [Text.Encoding]::ASCII.GetBytes($generation)
+            $file.Write($bytes, 0, $bytes.Length)
+        } finally { $file.Dispose() }
+        return $generation
+    }
+    Assert-RepairObject $id $false
+    if ($id.Length -gt 64) { throw 'Invalid rollback snapshot identity.' }
+    $generation = [IO.File]::ReadAllText($id.FullName)
+    if ($generation -cnotmatch '\A[0-9A-Fa-f]{32}\z') { throw 'Invalid rollback snapshot identity.' }
+    return $generation.ToLowerInvariant()
+}
+
 function Invoke-DeferredRollback([IO.DirectoryInfo]$application, [string]$mode) {
     $root = $application.Parent
     $backup = [IO.DirectoryInfo]::new([IO.Path]::Combine($root.FullName, 'app.bak'))
@@ -58,6 +78,16 @@ try {
     # The initiating App checks the candidate, its historical launcher ABI and the live
     # tree while this handle excludes publishers. EOF cancels without changing files.
     Write-RollbackStatus 'LOCKED'
+    if ([Console]::In.ReadLine() -cne 'HISTORY') { return }
+    $generation = Get-RollbackGeneration $application.Parent
+    $failed = 0
+    do {
+        $receipt = [IO.FileInfo]::new([IO.Path]::Combine($application.Parent.FullName, "rollback-$generation-$($failed + 1).log"))
+        if ([int]$receipt.Attributes -eq -1) { break }
+        Assert-RepairObject $receipt $false
+        $failed++
+    } while ($true)
+    Write-RollbackStatus "HISTORY $generation $failed"
     $mode = [Console]::In.ReadLine()
     if ($mode -cnotin @('DIRECT','TRAMPOLINE')) { return }
     Write-RollbackStatus 'READY'
@@ -66,8 +96,7 @@ try {
     Invoke-DeferredRollback $application $mode
 } catch {
     if ($ready) {
-        $diagnostic = [IO.Path]::Combine($application.Parent.FullName, 'rollback-' + [Guid]::NewGuid().ToString('N') + '.log')
-        $file = [IO.File]::Open($diagnostic, 'CreateNew', 'Write', 'Read')
+        $file = $receipt.Open('CreateNew', 'Write', 'Read')
         try {
             $bytes = [Text.Encoding]::UTF8.GetBytes($_.Exception.Message)
             $file.Write($bytes, 0, $bytes.Length)

@@ -415,7 +415,7 @@ public sealed class ReleaseToolingContractTests
             "if ($LASTEXITCODE -ne 0) { throw",
             "Get-CimInstance Win32_SystemDriver -Filter \"Name='mullvad-split-tunnel'\"",
             "Stop-Service -Name 'mullvad-split-tunnel' -ErrorAction Stop",
-            "Get-ChildItem $InstallRoot -Force | ForEach-Object",
+            "Get-ChildItem -LiteralPath $InstallRoot -Force | ForEach-Object",
             "Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop",
             "-ArgumentList '--migrate-zapret'");
         Assert.DoesNotContain("-DestinationPath $InstallRoot", script, StringComparison.Ordinal);
@@ -442,7 +442,7 @@ public sealed class ReleaseToolingContractTests
             info.ArgumentList.Add(arg);
         using var process = System.Diagnostics.Process.Start(info)!;
         var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
-        if (!process.WaitForExit(30_000))
+        if (!process.WaitForExit(fixture == "Test-DeferredRollback.ps1" ? 90_000 : 30_000))
         {
             process.Kill();
             Assert.Fail($"{fixture} timed out.");

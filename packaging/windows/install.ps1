@@ -79,6 +79,7 @@ $response = Invoke-WebRequest -Uri 'https://vpn.ninitux.com/install.ps1' -UseBas
 $content = $response.Content
 if ($content -is [byte[]]) { $content = [Text.Encoding]::UTF8.GetString($content) }
 & ([ScriptBlock]::Create([string]$content)) @installParams
+if ($flags -band 8) { exit 0 }
 pause
 '@
     $bootstrap = $bootstrapTemplate.Replace('__REPAIR_DIRECTORY__', $encodedRepairDir).Replace('__FORWARDED_VERSION__', $encodedVersion).Replace('__FORWARDED_FLAGS__', [string]$forwardFlags)
@@ -87,7 +88,13 @@ pause
         Err "Trusted Windows PowerShell executable not found: $WindowsPowerShell"
         exit 1
     }
-    Start-Process -FilePath $WindowsPowerShell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedBootstrap"
+    $elevation = Start-Process -FilePath $WindowsPowerShell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedBootstrap" -PassThru
+    try {
+        if ($Repair) {
+            $elevation.WaitForExit()
+            exit $elevation.ExitCode
+        }
+    } finally { $elevation.Dispose() }
     exit 0
 }
 
@@ -107,6 +114,7 @@ function Open-TargetFailureMarker([string]$applicationDir) {
     $path = [IO.Path]::Combine($applicationDir, '.update-failed')
     try { return [IO.File]::Open($path, 'Open', 'Read', 'Read') }
     catch [IO.FileNotFoundException] { return $null }
+    catch [IO.DirectoryNotFoundException] { return $null }
 }
 
 function Complete-TargetRepair([string]$applicationDir, [IO.FileStream]$failureMarker, [switch]$NoLaunch) {
@@ -127,16 +135,20 @@ function Complete-TargetRepair([string]$applicationDir, [IO.FileStream]$failureM
     if ($saved) { try { [IO.File]::Delete($saved) } catch { Warn "Repaired installation verified; private marker copy retained at $saved." } }
 }
 
-function Resolve-RepairApplication([string]$path) {
+function Assert-PublicInstallTarget([string]$path) {
+    if ([IO.File]::Exists((Join-Path $path 'vpnrouter-business-update.json')) -or
+        [IO.File]::Exists((Join-Path $path 'business-provisioning.json'))) {
+        throw 'Use the Business updater to repair a Business installation.'
+    }
+}
+
+function Resolve-RepairApplication([string]$path, [IO.FileStream]$heldLock) {
     if ($path -notmatch '^[a-zA-Z]:\\' -or $path.Substring(2).Contains(':')) { throw 'Expected a local installation directory.' }
     $dir = Get-Item -LiteralPath ([IO.Path]::GetFullPath($path)) -Force -ErrorAction Stop
     if ($dir -isnot [IO.DirectoryInfo] -or !$dir.Parent) { throw 'Expected an installed VPNRouter directory.' }
     Assert-RepairRoot $dir
-    Assert-RepairTree $dir
-    if ([IO.File]::Exists((Join-Path $dir.FullName 'vpnrouter-business-update.json')) -or
-        [IO.File]::Exists((Join-Path $dir.FullName 'business-provisioning.json'))) {
-        throw 'Use the Business updater to repair a Business installation.'
-    }
+    Assert-RepairTree $dir $heldLock
+    Assert-PublicInstallTarget $dir.FullName
     if (!([IO.File]::Exists((Join-Path $dir.FullName 'VPNRouter.GUI.exe')) -or
           [IO.File]::Exists((Join-Path $dir.FullName 'VPNRouter.App.exe')))) { throw 'The repair target is not a VPNRouter installation.' }
     return $dir.FullName
@@ -160,20 +172,45 @@ function Get-InstallerHelper([string]$embedded, [string]$name, [string]$digest) 
 $installerHelpers = if ($PSScriptRoot) { [IO.Path]::Combine($PSScriptRoot, 'installer') }
 $environmentBytes = Get-InstallerHelper '__VPNROUTER_REPAIR_ENVIRONMENT__' 'repair-environment.ps1' '4a3f68e87e16be9e4837ce12cf64825f1fa2c01948ff5a8dea054019eb8eaf53'
 . ([scriptblock]::Create([Text.Encoding]::UTF8.GetString($environmentBytes)))
-$targetBytes = Get-InstallerHelper '__VPNROUTER_REPAIR_TARGET__' 'repair-target.ps1' '1eb207083ee3af10944b7e6e8289027fcada6e64962a5909db340f7c432f0525'
+$targetBytes = Get-InstallerHelper '__VPNROUTER_REPAIR_TARGET__' 'repair-target.ps1' '43d9c9974e0e00e200e068799d4bf6aef4bcc6b40dd17b027df3ef63361272be'
 . ([scriptblock]::Create([Text.Encoding]::UTF8.GetString($targetBytes)))
 
-$repairLock = $repairMarker = $null
-try {
-if ($RepairApplicationDir) {
-    if (!$Repair) { throw 'RepairApplicationDir requires repair mode.' }
-    $AppDir = Resolve-RepairApplication $RepairApplicationDir
-    $repairLock = Open-RepairInstallLock ([IO.DirectoryInfo]::new($AppDir))
-    $InstallRoot = [IO.Path]::GetDirectoryName($repairLock.Name)
-    $AppDir = Resolve-RepairApplication $AppDir
-    $repairMarker = Open-TargetFailureMarker $AppDir
+function New-DefaultInstallRoot([IO.DirectoryInfo]$root) {
+    # Users must be able to launch the App. Only administrators and SYSTEM may publish into it.
+    $acl = [Security.AccessControl.DirectorySecurity]::new()
+    $acl.SetSecurityDescriptorSddlForm('O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)(A;OICI;RC;;;OW)')
+    if ($PSVersionTable.PSEdition -eq 'Core') { [IO.FileSystemAclExtensions]::Create($root, $acl) }
+    else { $root.Create($acl) }
 }
 
+function Open-InstallerLock([string]$defaultRoot, [string]$target, [bool]$repairMode) {
+    if ($target) {
+        if (!$repairMode) { throw 'RepairApplicationDir requires repair mode.' }
+        $application = Resolve-RepairApplication $target
+    } else {
+        $root = [IO.DirectoryInfo]::new($defaultRoot)
+        if (!$root.Exists) {
+            Assert-RepairRoot $root.Parent
+            New-DefaultInstallRoot $root
+        }
+        $application = [IO.Path]::Combine($root.FullName, 'app')
+    }
+    return Open-RepairInstallLock ([IO.DirectoryInfo]::new($application))
+}
+
+function Get-DefaultApplication([string]$root) {
+    $nested = [IO.Path]::Combine($root, 'app')
+    Assert-PublicInstallTarget $root
+    Assert-PublicInstallTarget $nested
+    foreach ($name in 'VPNRouter.App.exe','VPNRouter.GUI.exe') {
+        if ([IO.File]::Exists([IO.Path]::Combine($root,$name))) {
+            if ([IO.Directory]::Exists($nested)) { throw 'Ambiguous flat and nested VPNRouter installation.' }
+            return $root
+        }
+    }
+    if (![IO.Directory]::Exists($nested) -and [IO.File]::Exists([IO.Path]::Combine($root,'.update-failed'))) { return $root }
+    return $nested
+}
 
 Say "Querying GitHub for target release..."
 
@@ -233,6 +270,7 @@ if ($PSVersionTable.PSEdition -eq 'Core') {
 } else {
     $stage.Create($acl)
 }
+$repairLock = $repairMarker = $null
 try {
 $zipPath = Join-Path $stagingDir $expectedZipName
 $shaTmp = Join-Path $stagingDir $expectedShaName
@@ -270,12 +308,22 @@ if (-not (Test-Path (Join-Path $payloadDir "app\VPNRouter.App.exe"))) {
     exit 1
 }
 
-if ($RepairApplicationDir) {
+foreach ($dir in $payloadDir, (Join-Path $payloadDir 'app')) {
     foreach ($name in '.update-failed','.update-backup.lock','.repair-temp') {
-        $reserved = [IO.FileInfo]::new([IO.Path]::Combine($payloadDir, 'app', $name))
-        if ([int]$reserved.Attributes -ne -1) { throw 'Repair payload contains reserved installation state.' }
+        $reserved = [IO.FileInfo]::new([IO.Path]::Combine($dir, $name))
+        if ([int]$reserved.Attributes -ne -1) { throw 'Release payload contains reserved installation state.' }
     }
 }
+
+$repairLock = Open-InstallerLock $InstallRoot $RepairApplicationDir ([bool]$Repair)
+$InstallRoot = [IO.Path]::GetDirectoryName($repairLock.Name)
+if ($RepairApplicationDir) {
+    $AppDir = Resolve-RepairApplication $RepairApplicationDir $repairLock
+} else {
+    Assert-RepairTree ([IO.DirectoryInfo]::new($InstallRoot)) $repairLock
+    $AppDir = Get-DefaultApplication $InstallRoot
+}
+if ($Repair) { $repairMarker = Open-TargetFailureMarker $AppDir }
 
 # Capture the old service's start mode and running state before stopping the old app.
 $canRestoreZapret = [IO.File]::Exists((Join-Path $payloadDir 'app\zapret-maintenance.ps1'))
@@ -357,22 +405,23 @@ if ($driver -and $driver.State -ne 'Stopped') {
 }
 
 Say "Installing to $InstallRoot"
-if (!$RepairApplicationDir -and (Test-Path $InstallRoot) -and !$Repair) {
-    Get-ChildItem $InstallRoot -Force | ForEach-Object {
-        try { Remove-Item $_.FullName -Recurse -Force -ErrorAction Stop } catch {
+if (!$Repair) {
+    Get-ChildItem -LiteralPath $InstallRoot -Force | ForEach-Object {
+        if ([string]::Equals($_.FullName, $repairLock.Name, [StringComparison]::OrdinalIgnoreCase)) { return }
+        try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop } catch {
             Warn "Could not remove $($_.FullName): $_"
         }
     }
-} elseif (!$RepairApplicationDir) {
-    New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
 }
 
 try {
-    if ($RepairApplicationDir) {
-        Get-ChildItem -LiteralPath (Join-Path $payloadDir 'app') -Force | Copy-Item -Destination $AppDir -Recurse -Force -ErrorAction Stop
-        Assert-TargetRepairCopy ([IO.DirectoryInfo]::new((Join-Path $payloadDir 'app'))) $AppDir
+    if ($RepairApplicationDir -or $AppDir -eq $InstallRoot) {
+        $source = [IO.DirectoryInfo]::new((Join-Path $payloadDir 'app'))
+        Get-ChildItem -LiteralPath $source.FullName -Force | Copy-Item -Destination $AppDir -Recurse -Force -ErrorAction Stop
+        if ($Repair) { Assert-TargetRepairCopy $source $AppDir }
     } else {
-        Get-ChildItem $payloadDir -Force | Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop
+        Get-ChildItem -LiteralPath $payloadDir -Force | Copy-Item -Destination $InstallRoot -Recurse -Force -ErrorAction Stop
+        if ($Repair) { Assert-TargetRepairCopy ([IO.DirectoryInfo]::new($payloadDir)) $InstallRoot }
     }
 } catch {
     Err "Copying the new files failed: $_"
@@ -385,14 +434,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $AppDir "VPNRouter.App.exe"))) {
     Err "Expected VPNRouter.App.exe not found after extraction. ZIP layout may have changed."
     exit 1
 }
-} finally {
-    if (-not $keepStaging) { Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue }
-}
-
-Ok "Installed $resolvedVersion to $InstallRoot"
-
 # Historical App/GUI versions may run their own automatic repair using inherited TEMP and PATH.
-Set-RepairEnvironment (Resolve-RepairApplication $AppDir)
+Set-RepairEnvironment (Resolve-RepairApplication $AppDir $repairLock)
 
 if ($canRestoreZapret) {
     $migration = Start-Process -FilePath (Join-Path $AppDir 'VPNRouter.App.exe') -ArgumentList '--migrate-zapret' -WorkingDirectory $AppDir -Wait -PassThru
@@ -405,15 +448,12 @@ if ($canRestoreZapret) {
 if ($Repair) {
     if ($svcWasRunning -and (Test-OwnService)) { Start-OwnService }
     & (Join-Path $AppDir 'VPNRouter.CLI.exe') doctor
-    if ($RepairApplicationDir) {
-        if ($LASTEXITCODE -eq 2) { Warn 'Repair files verified. Doctor reported additional configuration or runtime errors.' }
-        Complete-TargetRepair $AppDir $repairMarker -NoLaunch:$NoLaunch
-    }
+    $doctorExit = $LASTEXITCODE
+    if ($doctorExit -notin @(0,1,2)) { throw "Repair verification failed: doctor exited with code $doctorExit." }
+    if ($doctorExit -eq 2) { Warn 'Repair files verified. Doctor reported additional configuration or runtime errors.' }
+    Complete-TargetRepair $AppDir $repairMarker -NoLaunch:($NoLaunch -or !$RepairApplicationDir)
+    Ok "Repaired $resolvedVersion in $AppDir"
     return
-}
-} finally {
-    if ($repairMarker) { $repairMarker.Dispose() }
-    if ($repairLock) { $repairLock.Dispose() }
 }
 
 $exclOk = $false
@@ -485,8 +525,6 @@ try {
     Warn "     Restrict it manually: icacls `"$DataRoot`" /inheritance:r /grant:r SYSTEM:F Administrators:F"
 }
 
-Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
-
 Say "Creating Start Menu shortcut..."
 $lnkPath = Join-Path $StartMenuDir "VPNRouter.lnk"
 $wsh = New-Object -ComObject WScript.Shell
@@ -555,3 +593,8 @@ Write-Host "  Upgrade:       iwr -useb https://vpn.ninitux.com/install.ps1 | iex
 Write-Host "  Uninstall:     iwr -useb https://vpn.ninitux.com/uninstall.ps1 | iex"
 Write-Host "                 (or Settings -> Apps -> VPNRouter -> Uninstall)"
 Write-Host ""
+} finally {
+    if ($repairMarker) { $repairMarker.Dispose() }
+    if ($repairLock) { $repairLock.Dispose() }
+    if (-not $keepStaging) { Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue }
+}
