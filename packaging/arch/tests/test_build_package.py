@@ -1229,8 +1229,8 @@ class TestBuildPackageCliAndExport(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 build_package.main(["--repo", str(self.tmp), "--work-dir", str(self.tmp / "w"), "--skip-makepkg"])
 
-    def test_export_source_includes_version_props_and_root_configs(self) -> None:
-        """Verify export_source includes Version.props and all root props/targets/json/config."""
+    def test_export_source_includes_build_inputs_and_embedded_updater_resources(self) -> None:
+        """Include Core resource inputs alongside the project and root build configuration."""
         tracked_output = "\n".join([
             "Directory.Build.props",
             "Directory.Build.targets",
@@ -1245,6 +1245,7 @@ class TestBuildPackageCliAndExport(unittest.TestCase):
             "VPNRouter.Core/App.cs",
             "VPNRouter.Headless/Program.cs",
             "profiles/default.json",
+            "packaging/windows/installer/publish-windows-update.ps1",
             "unrelated/file.txt",
         ])
 
@@ -1263,6 +1264,7 @@ class TestBuildPackageCliAndExport(unittest.TestCase):
         with mock.patch("subprocess.run", side_effect=fake_run):
             build_package.export_source(self.tmp, "dummy_commit", self.tmp)
 
+        self.assertIn("packaging/windows/installer", archive_args)
         self.assertIn("Version.props", archive_args)
         self.assertIn("Directory.Build.props", archive_args)
         self.assertIn("Directory.Build.targets", archive_args)

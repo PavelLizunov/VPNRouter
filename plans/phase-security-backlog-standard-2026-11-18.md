@@ -210,3 +210,7 @@ The complete [test run](https://github.com/PavelLizunov/VPNRouter/actions/runs/4
 - Windows ran the installed-App rollback, five-process compensation, installer cleanup, strategy ownership and repair fixtures. Source review traced the installation lock through Prepare, copy, doctor and marker handling. SCM conflict tests used fixture registrations.
 - Desktop and Headless checks exercised detour refresh, ambiguous successors, an explicit direct selection and reopening saved settings. The Simple page fixtures exercised the active and pending labels. Service acceptance, imported route and DNS filtering, and retention after a refused stop passed the applicable suites.
 - The device acceptance above covers the installed Android build, selected target, UID ranges and TUN lifecycle. Issue #689 stays open for external exit-IP evidence.
+
+The post-merge Arch build failed with CS1566. Core embeds updater scripts outside the Core project directory. Include their tracked source directory in the same Git archive as the project, and verify that each declared resource is present before rerunning the Arch package workflow.
+
+The focused Python export test passed. All 4 Core resources in the exported source matched the committed Git blobs after applying repository line-ending attributes. Package installation and smoke verification run in the Arch CI container.
