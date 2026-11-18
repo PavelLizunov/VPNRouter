@@ -568,14 +568,18 @@ public class AndroidSubscriptionRefreshTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task PageRefreshRetiringTheResolvedRowCancelsDispatch(bool autoSelect, bool rejected)
+    [InlineData(false, false, "a")]
+    [InlineData(true, false, "a")]
+    [InlineData(false, true, "a")]
+    [InlineData(true, true, "a")]
+    [InlineData(false, false, null)]
+    [InlineData(true, false, null)]
+    [InlineData(false, true, null)]
+    [InlineData(true, true, null)]
+    public async Task PageRefreshRetiringTheResolvedRowCancelsDispatch(bool autoSelect, bool rejected, string? storedId)
     {
         var row = ServerUriParser.Parse(OldTargetUri);
-        var a = new SubscriptionEntry { Id = "a", Url = Feed, Servers = [row] };
+        var a = new SubscriptionEntry { Id = storedId!, Url = Feed, Servers = [row] };
         var b = new SubscriptionEntry { Id = "b", Url = Feed + "/b", Servers = [ServerUriParser.Parse(ManualUri)] };
         using var prefs = new PreferenceFile(new() { ["subscriptions_json"] = JsonSerializer.Serialize(new[] { a, b }) });
         prefs.Select(a, row);
@@ -618,6 +622,75 @@ public class AndroidSubscriptionRefreshTests
             prefs.Commit(new Dictionary<string, string?> { ["vpn_state_command"] = command, ["vpn_state"] = "connected" });
         Assert.Equal(1, await ReimportAsync(a, prefs, scenario == "unchanged" ? OldTargetUri : FreshUri, command: null));
         Assert.True(AndroidSubscriptionRefresh.IsCurrentSelection(command, prefs.Read));
+    }
+
+    [Theory]
+    [InlineData("shared", false)]
+    [InlineData("shared", true)]
+    [InlineData(null, false)]
+    [InlineData(null, true)]
+    public async Task RefreshUsesTheUrlToDistinguishRegistrationsWithTheSameId(string? storedId, bool rejected)
+    {
+        var first = new SubscriptionEntry { Id = storedId!, Url = Feed, Servers = [ServerUriParser.Parse(OldTargetUri)] };
+        var second = new SubscriptionEntry { Id = storedId!, Url = Feed + "/b", Servers = [ServerUriParser.Parse(ManualUri)] };
+        second.Servers[0].Name = first.Servers[0].Name;
+        using var prefs = new PreferenceFile(new() { ["subscriptions_json"] = JsonSerializer.Serialize(new[] { first, second }) });
+        prefs.Select(second, second.Servers[0]);
+        prefs.Commit(new Dictionary<string, string?> { [AndroidSubscriptionRefresh.UiCommand] = "connect" });
+        var selected = prefs.Resolve("connect")!;
+        Assert.Equal("manual.invalid", selected.Server);
+
+        if (rejected)
+            await Assert.ThrowsAsync<UnsupportedSubscriptionChainException>(() => ReimportAsync(first, prefs, UnsupportedBody, command: null));
+        else
+            Assert.Equal(1, await ReimportAsync(first, prefs, FreshUri, command: null));
+        Assert.True(AndroidSubscriptionRefresh.IsCurrentSelection("connect", prefs.Read));
+        Assert.Equal("manual.invalid", prefs.GeneratePrimary(selected));
+
+        Assert.Equal(1, await ReimportAsync(second, prefs, FreshUri, command: null));
+        Assert.False(AndroidSubscriptionRefresh.IsCurrentSelection("connect", prefs.Read));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PendingNativeRouteSurvivesOnlyAnEquivalentRefresh(bool changeUpstream)
+    {
+        const string body = """
+            {"outbounds":[
+              {"type":"vless","tag":"target","server":"exit.invalid","server_port":443,"uuid":"00000000-0000-4000-8000-000000000001","detour":"hop"},
+              {"type":"vless","tag":"hop","server":"via.invalid","server_port":8443,"uuid":"00000000-0000-4000-8000-000000000002"}
+            ]}
+            """;
+        var feed = new SubscriptionEntry { Id = "chain", Url = Feed };
+        using var prefs = new PreferenceFile(new() { ["subscriptions_json"] = JsonSerializer.Serialize(new[] { feed }) });
+        Assert.Equal(2, await ReimportAsync(feed, prefs, body));
+        var cached = Assert.Single(prefs.Feeds);
+        prefs.Select(cached, cached.Servers.Single(row => !string.IsNullOrEmpty(row.DetourVia)));
+        prefs.Commit(new Dictionary<string, string?> { [AndroidSubscriptionRefresh.UiCommand] = "connect" });
+        var pending = prefs.Resolve("connect")!;
+        void CheckGeneratedChain()
+        {
+            var generated = PreferenceFile.Generate(prefs.Prepare(pending));
+            var proxy = generated.Outbounds.Single(row => row.Tag == "proxy");
+            Assert.Equal("exit.invalid", proxy.Server);
+            Assert.Equal("chain-entry", proxy.Detour);
+            var hop = generated.Outbounds.Single(row => row.Tag == proxy.Detour);
+            Assert.Equal("via.invalid", hop.Server);
+            Assert.Equal(8443, hop.ServerPort);
+        }
+        CheckGeneratedChain();
+        Assert.Equal(2, await ReimportAsync(feed, prefs, changeUpstream ? body.Replace("8443", "9443") : body, command: null));
+        var rows = Assert.Single(prefs.Feeds).Servers;
+        var refreshed = rows.Single(row => !string.IsNullOrEmpty(row.DetourVia));
+        Assert.NotEqual(pending.OutboundId, refreshed.OutboundId);
+        Assert.NotEqual(pending.DetourVia, refreshed.DetourVia);
+        Assert.Equal(rows.Single(row => row.Server == "via.invalid").OutboundId, refreshed.DetourVia);
+        Assert.Equal(!changeUpstream, AndroidSubscriptionRefresh.IsCurrentSelection("connect", prefs.Read));
+        if (changeUpstream)
+            Assert.Throws<InvalidOperationException>(() => prefs.Prepare(pending));
+        else
+            CheckGeneratedChain();
     }
 
     [Fact]
@@ -893,7 +966,7 @@ public class AndroidSubscriptionRefreshTests
         string? command = "qr-command")
     {
         var previous = SubscriptionFetcher.Http;
-        SubscriptionFetcher.Http = new FakeHttpClient().Setup(Feed, body, status);
+        SubscriptionFetcher.Http = new FakeHttpClient().Setup(entry.Url, body, status);
         try
         {
             return await AndroidSubscriptionRefresh.RefreshAsync(entry, prefs.ImportRevision, (updated, rejected, revision) =>
@@ -935,13 +1008,18 @@ public class AndroidSubscriptionRefreshTests
         }
         public string? GeneratePrimary(VlessServerEntry selected) => GenerateMembers(Prepare(selected)).First();
 
-        public static List<string?> GenerateMembers(VlessConfig prepared)
+        public static SingBoxConfig Generate(VlessConfig prepared)
         {
             var settings = new AppSettings { Vless = prepared };
             settings.App.BypassRussianTraffic = false;
             settings.App.RoutingMode = "full";
-            var config = ConfigGenerator.Generate(new Profile { Name = "AndroidDefault" }, [], settings,
+            return ConfigGenerator.Generate(new Profile { Name = "AndroidDefault" }, [], settings,
                 strictDnsOverride: false, isServerAlive: null, resolveRuleSet: (_, _) => null);
+        }
+
+        public static List<string?> GenerateMembers(VlessConfig prepared)
+        {
+            var config = Generate(prepared);
             var proxy = config.Outbounds.Single(row => row.Tag == "proxy");
             return proxy.Type == "urltest"
                 ? proxy.Outbounds!.Select(tag => config.Outbounds.Single(row => row.Tag == tag).Server).ToList()
