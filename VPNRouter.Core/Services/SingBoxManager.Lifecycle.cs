@@ -56,10 +56,7 @@ public partial class SingBoxManager
                 "Stop the other instance (e.g. disable Windows Service autostart) and try again.");
         }
 
-        var exePath = EffectivePolicy?.SelectedExecutablePath
-            ?? (OperatingSystem.IsWindows()
-                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-                : AppPaths.SingBoxExePath);
+        var exePath = RuntimeExecutablePath;
 
         ProcessOwnership.ConfiguredExePath = exePath;
 
@@ -511,7 +508,27 @@ public partial class SingBoxManager
             RestartCore();
     }
 
-    private bool RestartCore()
+    private bool RestartWithConfig(string json)
+    {
+        var current = AppPaths.CurrentConfigPath;
+        var staged = Path.Combine(AppPaths.ConfigDir, $"current-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            WriteConfigFile(staged, json);
+            return RestartCore(() =>
+            {
+                File.Move(staged, current, overwrite: true);
+                _currentConfigPath = current;
+                _sourceConfigJson = json;
+            });
+        }
+        finally
+        {
+            File.Delete(staged);
+        }
+    }
+
+    private bool RestartCore(Action? publishAfterStop = null)
     {
         // A stale HealthMonitor restart continuation can arrive after Dispose: never relaunch a disposed manager.
         if (Volatile.Read(ref _disposed) != 0)
@@ -540,6 +557,7 @@ public partial class SingBoxManager
                     State);
                 return false;
             }
+            publishAfterStop?.Invoke();
             State = SingBoxState.Restarting;
             _policySpawnAttempted = false;
 
@@ -548,10 +566,7 @@ public partial class SingBoxManager
                 try { Thread.Sleep(750); } catch { }
             }
 
-            var exePath = EffectivePolicy?.SelectedExecutablePath
-                ?? (OperatingSystem.IsWindows()
-                    ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-                    : AppPaths.SingBoxExePath);
+            var exePath = RuntimeExecutablePath;
             LaunchProcess(exePath);
             if (_handle is null)
             {
@@ -766,7 +781,14 @@ public partial class SingBoxManager
 
     private string WriteJsonToDisk(string json)
     {
+        var path = AppPaths.CurrentConfigPath;
+        WriteConfigFile(path, json);
         _sourceConfigJson = json;
+        return path;
+    }
+
+    private static void WriteConfigFile(string path, string json)
+    {
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
             AppPaths.EnsurePrivateUnixDirectory(AppPaths.DataDir);
@@ -775,9 +797,7 @@ public partial class SingBoxManager
         else
             Directory.CreateDirectory(AppPaths.ConfigDir);
 
-        var path = AppPaths.CurrentConfigPath;
         AppPaths.WritePrivateText(path, json);
-        return path;
     }
 
 }

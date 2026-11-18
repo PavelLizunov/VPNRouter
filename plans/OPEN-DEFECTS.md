@@ -16,6 +16,12 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Settings loading and recovery wrote private server labels and configuration paths to stderr, Serilog and the Windows event log. Regression cases cover normal load, invalid input recovery and Headless storage. Fixed in the runtime changes pending CI.
+- [ ] **P1** - Confirmed rejection of a subscription chain must clear every registration of the same URL and cover a legacy-only feed during Headless refresh-all. A later refresh must not restore a stale result.
+- [ ] **P1** - Desktop Free Configs Apply can leave a rejected candidate on disk if the owned engine does not stop. Keep the last committed runtime file and selection consistent with the active process.
+- [ ] **P1** - General proxy credentials and concurrent CONNECT requests can bypass the intended per-request authentication boundary. Restrict credentials to the authenticated local proxy connection and isolate simultaneous probes.
+- [ ] **P2** - The Android 14 Business device test at 89b5a6f4 showed newer per-app choices as active until reconnect. Display both the effective policy and pending change.
+
 - [ ] **P2** - Headless rejection recovery can persist a surviving subscription selection and then clear it on reload because placeholder cleanup checks only manual servers. Both PR contract tests failed in SubscriptionRefreshChecks. Check enabled subscription entries when reloading a subscription selection.
 - [ ] **P2** - Android subscription cleanup logs the selected server name on clearing a stale preference. Preference repair also logs exception messages and raw recovery notices. Limit Logcat messages to event names and error types.
 - [ ] **P1** - The Windows ownership review found that migration and automatic strategy testing can stop existing helpers before checking for a conflicting driver. GUI shutdown can also lose a live handle when termination fails. Verify SCM, process lifetime and settings preservation at each entry point in #661.

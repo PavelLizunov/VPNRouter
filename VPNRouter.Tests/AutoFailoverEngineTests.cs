@@ -38,6 +38,34 @@ public class AutoFailoverEngineTests
     }
 
     [Fact]
+    public async Task ExactSelectionCannotSwitchUntilItsConnectionIsConfirmed()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.Vless.ActiveServer = "checked";
+        settings.Vless.Servers =
+        [
+            new() { Name = "checked", Server = "192.0.2.10", UseAsSingleOutbound = true },
+            new() { Name = "alternative", Server = "192.0.2.11" }
+        ];
+        bool confirmed = false;
+        var failover = new AutoFailoverEngine(settings, new ConfigSanityCheck(), store: _store)
+        {
+            IsSelectionConfirmed = () => confirmed
+        };
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.False((await failover.HandleDeadConfigAsync("failed", ct)).Switched);
+        Assert.Equal("checked", settings.Vless.ActiveServer);
+        Assert.Empty(failover.TriedServers);
+        Assert.Equal(0, _store.SaveCount);
+
+        confirmed = true;
+        Assert.True((await failover.HandleDeadConfigAsync("failed", ct)).Switched);
+        Assert.Equal("alternative", settings.Vless.ActiveServer);
+    }
+
+    [Fact]
     public async Task PicksNextSubscriptionServer()
     {
         var settings = BuildSubscribeSettings(

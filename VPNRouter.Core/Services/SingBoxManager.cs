@@ -91,6 +91,18 @@ public partial class SingBoxManager : IDisposable
 
     private const long MaxLogSizeBytes = 10 * 1024 * 1024;
 
+    private string RuntimeExecutablePath => EffectivePolicy?.SelectedExecutablePath ??
+        (OperatingSystem.IsWindows() ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath) : AppPaths.SingBoxExePath);
+
+    internal async Task<bool> CheckCandidateAsync(string json, CancellationToken ct)
+    {
+        EffectivePolicy?.Authorize(SingBoxRuntimeOperation.Verify);
+        var check = new ProcessRequest(RuntimeExecutablePath, ["check", "-c", "stdin"], StdinInput: json,
+            Timeout: TimeSpan.FromSeconds(15));
+        var result = await _runner.RunAsync(check, ct).ConfigureAwait(false);
+        return result.ExitCode == 0 && !result.TimedOut;
+    }
+
     public void ReloadConfigJson(string configJson, bool forceRestart = false) =>
         ReloadConfigJsonWithResult(configJson, forceRestart);
 
@@ -127,15 +139,12 @@ public partial class SingBoxManager : IDisposable
 
         _logger.Information("[SingBoxManager] Reloading config{Mode}",
             forceRestart ? " (force restart, no hot-reload attempt)" : "");
+        if (forceRestart || _businessPolicy != null) return RestartWithConfig(configJson);
+
         _currentConfigPath = WriteJsonToDisk(configJson);
+        if (TryHotReload()) return true;
 
-        if (_businessPolicy != null) forceRestart = true;
-        if (!forceRestart && TryHotReload())
-            return true;
-
-        if (!forceRestart)
-            _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
-
+        _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
         return RestartCore();
     }
 

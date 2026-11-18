@@ -77,11 +77,11 @@ public static partial class ConfigGenerator
         AppSettings settings,
         bool? strictDnsOverride,
         Func<VlessServerEntry, bool>? isServerAlive,
-        Func<string, string, string?>? resolveRuleSet, bool requireGeo = false,
+        Func<string, string, string?>? resolveRuleSet, Action<string>? onMissingRuleSet = null,
         Func<string, CancellationToken, Task<bool>>? checkGeoContents = null)
     {
         resolveRuleSet ??= (url, filename) => RuleSetCacheManager.EnsureLocal(url, filename);
-        var useGeoBypass = GeoDataDownloader.UseGeoBypass(settings.App.BypassRussianTraffic, requireGeo, checkGeoContents);
+        var useGeoBypass = GeoDataDownloader.UseGeoBypass(settings.App.BypassRussianTraffic, onMissingRuleSet, checkGeoContents);
         var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
             .ToLowerInvariant();
         var isExcludeMode = routingAppsMode == "exclude";
@@ -131,7 +131,7 @@ public static partial class ConfigGenerator
 
         if (customFirst)
         {
-            if (settings.App.BlockAds) ApplyAdBlock(config, resolveRuleSet);
+            if (settings.App.BlockAds) ApplyAdBlock(config, resolveRuleSet, onMissingRuleSet);
             if (useGeoBypass)
                 ApplyGeoBypass(config);
             if (settings.App.CustomRules?.Count > 0)
@@ -141,7 +141,7 @@ public static partial class ConfigGenerator
         {
             if (settings.App.CustomRules?.Count > 0)
                 ApplyCustomRules(config, settings.App.CustomRules, resolveRuleSet);
-            if (settings.App.BlockAds) ApplyAdBlock(config, resolveRuleSet);
+            if (settings.App.BlockAds) ApplyAdBlock(config, resolveRuleSet, onMissingRuleSet);
             if (useGeoBypass)
                 ApplyGeoBypass(config);
         }

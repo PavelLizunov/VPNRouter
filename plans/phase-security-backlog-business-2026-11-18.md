@@ -54,3 +54,7 @@ Headless and Android now persist confirmed subscription-chain rejections before 
 Windows #661 review follow-up covers migration preflight, acquisition of a verified package on Business repair, and protected automatic repair following publication. Recheck using synthetic registrations and offline publisher/repair fixtures.
 
 The Headless save/reload regression exposed placeholder cleanup discarding an active server held only by an enabled subscription. Reload now includes enabled subscription rows when checking the active subscription selection. The regression verifies each selection field and subsequent offline resolution.
+
+On the Business ARM64 test build 89b5a6f4 (CI 44305441476), Android 14 reported the expected UID ranges in Off, Include and Exclude after connection. Each selection survived a cold app relaunch. The screen showed a saved Include-to-Exclude change before reconnect applied it. No external IP measurement was made.
+
+Live replacement validates the selected rules and profile before retiring the original tunnel. A forced restart stages the candidate beside the active configuration and publishes it only after the old process stops. The refused-stop fixture verifies that the previous file and lease survive. Settings diagnostics keep counts and fixed status messages while the UI retains its recovery notice.

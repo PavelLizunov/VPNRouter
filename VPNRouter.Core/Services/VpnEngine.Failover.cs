@@ -54,6 +54,7 @@ public partial class VpnEngine
         long? expectedGeneration = null)
     {
         await _lifecycleGate.WaitAsync().ConfigureAwait(false);
+        bool validatingLiveReplacement = false;
         try
         {
             if ((expectedGeneration.HasValue && expectedGeneration.Value != _failoverGeneration) ||
@@ -64,7 +65,10 @@ public partial class VpnEngine
                 return false;
             }
 
-            TeardownInternal();
+            validatingLiveReplacement = HasActiveTunnel;
+            if (!validatingLiveReplacement)
+                TeardownInternal();
+
             var session = _sessionCts;
             if (session == null || session.IsCancellationRequested)
             {
@@ -72,7 +76,20 @@ public partial class VpnEngine
                     "[VpnEngine] Failover restart aborted — session cancelled (user disconnect)");
                 return false;
             }
-            await StartAsyncInternal(captured, session.Token, _skipVpnConflictCheck).ConfigureAwait(false);
+            var settings = captured;
+            Action? retireAfterValidation = null;
+            if (validatingLiveReplacement)
+            {
+                // Resolution can normalize subscription rows and runtime settings in place.
+                settings = SettingsLoader.Copy(captured);
+                settings.BusinessPolicy = captured.BusinessPolicy;
+                retireAfterValidation = () =>
+                {
+                    validatingLiveReplacement = false;
+                    TeardownInternal();
+                };
+            }
+            await StartAsyncInternal(settings, session.Token, _skipVpnConflictCheck, retireAfterValidation).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException)
@@ -87,9 +104,15 @@ public partial class VpnEngine
                 "[VpnEngine] Failover restart aborted — engine disposed during shutdown");
             return false;
         }
+        catch (Exception ex) when (validatingLiveReplacement)
+        {
+            _logger?.Warning("[VpnEngine] Rejected automatic replacement before teardown ({ExceptionType})", ex.GetType().Name);
+            OnStatus("Automatic failover rejected before tunnel replacement.");
+            return false;
+        }
         catch (Exception ex)
         {
-            if (!IsRunning)
+            if (!HasActiveTunnel)
             {
                 _logger?.Warning(
                     "[VpnEngine] Failover restart failed to bring up replacement, tearing down partial state ({ExceptionType})", ex.GetType().Name);

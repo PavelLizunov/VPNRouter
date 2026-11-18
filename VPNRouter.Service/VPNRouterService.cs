@@ -38,13 +38,13 @@ public class VPNRouterService : BackgroundService
         {
             _currentSettings = _store.Load();
             var settings = _currentSettings;
-            _logger.LogInformation("[Service] Config loaded, mode: {Mode}", settings.App.ConfigMode);
+            _logger.LogInformation("[Service] Config loaded");
 
-            var recovery = _store.ConsumeRecoveryNotice();
-            if (!string.IsNullOrWhiteSpace(recovery))
+            if (!string.IsNullOrWhiteSpace(_store.ConsumeRecoveryNotice()))
             {
-                _logger.LogWarning("[Service] {Notice}", recovery);
-                WriteEventLog(recovery, EventLogEntryType.Warning);
+                const string recoveryStatus = "[Service] Settings recovery used defaults";
+                _logger.LogWarning(recoveryStatus);
+                WriteEventLog(recoveryStatus, EventLogEntryType.Warning);
             }
 
             _store.StartWatching(onReload: OnConfigChanged);

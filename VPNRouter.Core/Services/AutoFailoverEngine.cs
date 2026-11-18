@@ -18,6 +18,7 @@ public sealed class AutoFailoverEngine
     private readonly HashSet<string> _tried = new(StringComparer.OrdinalIgnoreCase);
 
     internal Func<bool>? IsCurrentIntent { get; init; }
+    internal Func<bool>? IsSelectionConfirmed { get; init; }
 
     // When set, the replacement is the fastest candidate that answers a quick probe, not the first in list order.
     internal Func<VlessServerEntry, CancellationToken, Task<ServerProbeResult>>? ProbeCandidate { get; init; }
@@ -120,6 +121,10 @@ public sealed class AutoFailoverEngine
                 NewActiveServer: null,
                 UserFacingMessage: Strings.FailoverCustomConfigUnusable);
         }
+
+        if (configMode == "generated" && IsSelectionConfirmed?.Invoke() != true &&
+            _settings.Vless.GetActiveServers().FirstOrDefault()?.UseAsSingleOutbound == true)
+            return new FailoverOutcome(false, null, null);
 
         var hasEnabledSub = _settings.App.Subscriptions?
             .Any(s => s != null && s.Enabled && (s.Servers?.Count ?? 0) > 0) == true;

@@ -517,7 +517,7 @@ public class CustomConfigInjectorTests
             settings.App.BypassRussianTraffic = true;
             settings.App.RoutingAppsMode = "exclude";
             settings.App.RoutingAppsExclude = new List<string> { "Steam.exe" };
-            var result = CustomConfigInjector.Inject(source.ToJsonString(), [], settings, requireGeo: false,
+            var result = CustomConfigInjector.Inject(source.ToJsonString(), [], settings, onMissingRuleSet: null,
                 checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
             var parsed = (JsonNode.Parse(result) as JsonObject)!;
             var resultServers = (parsed["dns"]?["servers"] as JsonArray)!;

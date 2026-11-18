@@ -475,7 +475,12 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         try
         {
+            const string previous = """{"route":{"final":"proxy"}}""";
+            var configPath = manager.WriteConfigToDisk(previous);
             var result = manager.ReloadConfigJsonWithResult("{}", forceRestart: true);
+
+            Assert.Equal(previous, File.ReadAllText(configPath));
+            Assert.Empty(Directory.EnumerateFiles(VPNRouter.Core.AppPaths.ConfigDir, "current-*.tmp"));
 
             Assert.False(result, "ReloadConfigJsonWithResult must return false when exact stop is unconfirmed.");
             Assert.Equal(SingBoxState.Failed, manager.State);

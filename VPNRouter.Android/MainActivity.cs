@@ -52,6 +52,7 @@ public class MainActivity : AvaloniaMainActivity
     private const string ActionStart = "com.ninitux.vpnrouter.START";
     private const string ActionStop = "com.ninitux.vpnrouter.STOP";
     private const string ExtraConfigJson = "config_json";
+    private const string ExtraColdStartOnly = "cold_start_only";
     private const string ExtraAllowedPackages = "allowed_packages";
     private const string ExtraPerAppMode = "per_app_mode";
     private const string ExtraPerAppPackages = "per_app_packages";
@@ -896,6 +897,10 @@ public class MainActivity : AvaloniaMainActivity
         global::Android.Util.Log.Info("VpnRouter",
             $"AND-CC: ConfigMode={configMode}");
 
+        // The service knows whether this queued request will replace an active tunnel.
+        bool coldStartOnly = false;
+        void OnMissingRuleSet(string _) => coldStartOnly = true;
+
         string configJson;
         if (configMode == "custom")
         {
@@ -911,7 +916,7 @@ public class MainActivity : AvaloniaMainActivity
             try
             {
                 configJson = await System.Threading.Tasks.Task.Run(
-                    () => AndroidConfigBuilder.BuildConfigJsonFromCustom(rawJson, singboxLogPath));
+                    () => AndroidConfigBuilder.BuildConfigJsonFromCustom(rawJson, singboxLogPath, OnMissingRuleSet));
                 global::Android.Util.Log.Info("VpnRouter",
                     $"AND-CC: custom JSON injected ({rawJson.Length} → {configJson.Length} chars)");
             }
@@ -940,7 +945,7 @@ public class MainActivity : AvaloniaMainActivity
                 }
             }
 
-            DispatchTunnelStart(configJson);
+            DispatchTunnelStart(configJson, coldStartOnly);
             return;
         }
 
@@ -1001,7 +1006,7 @@ public class MainActivity : AvaloniaMainActivity
         try
         {
             configJson = await System.Threading.Tasks.Task.Run(
-                () => AndroidConfigBuilder.BuildConfigJson(entry, singboxLogPath));
+                () => AndroidConfigBuilder.BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet));
             // The config dump contains credentials (UUID, Reality keys): debug builds only.
             if (IsDebuggable() && singboxLogPath is not null)
             {
@@ -1029,10 +1034,10 @@ public class MainActivity : AvaloniaMainActivity
             return;
         }
 
-        DispatchTunnelStart(configJson, entry);
+        DispatchTunnelStart(configJson, coldStartOnly, entry);
     }
 
-    private void DispatchTunnelStart(string configJson, VPNRouter.Core.Models.VlessServerEntry? dnsTunnelEntry = null)
+    private void DispatchTunnelStart(string configJson, bool coldStartOnly, VPNRouter.Core.Models.VlessServerEntry? dnsTunnelEntry = null)
     {
         var perAppMode = AndroidStorage.GetPerAppMode();
         var perAppPackages = AndroidStorage.GetPerAppPackages().ToArray();
@@ -1043,6 +1048,7 @@ public class MainActivity : AvaloniaMainActivity
             .SetClassName(PackageName!, "com.ninitux.vpnrouter.VpnRouterService")
             .SetAction(ActionStart)
             .PutExtra(ExtraConfigJson, configJson)
+            .PutExtra(ExtraColdStartOnly, coldStartOnly)
             .PutExtra(ExtraAllowedPackages, Array.Empty<string>())
             .PutExtra(ExtraPerAppMode, perAppMode)
             .PutExtra(ExtraPerAppPackages, perAppPackages)
