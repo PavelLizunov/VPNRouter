@@ -119,8 +119,10 @@ public sealed class PerformanceShareLinkTests
             Assert.Empty(SubscriptionFetcher.ParseBody(uri, logger));
             var warning = Assert.Single(sink.Events);
             Assert.Equal(LogEventLevel.Warning, warning.Level);
-            Assert.Equal(error.Message, warning.Exception!.Message);
-            var logged = warning.RenderMessage() + "\n" + warning.Exception;
+            Assert.Null(warning.Exception);
+            var logged = warning.RenderMessage();
+            Assert.Equal("[Subscription] Skipped invalid server URI", logged);
+            Assert.Empty(warning.Properties);
             Assert.DoesNotContain((string)link[1], logged);
             Assert.DoesNotContain("port-secret-marker", logged);
             Assert.DoesNotContain("bracket-secret-marker", logged);
