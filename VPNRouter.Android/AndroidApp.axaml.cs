@@ -872,6 +872,8 @@ public partial class AndroidApp : Avalonia.Application
         _configRowLabel = new TextBlock
         {
             Text = Localization.SmpConfigRowLabel,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
             FontSize = UiScale.Fs(9),
             FontWeight = FontWeight.SemiBold,
         };
@@ -912,33 +914,26 @@ public partial class AndroidApp : Avalonia.Application
         };
         togglePill.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
 
-        var configRowGrid = new Grid
+        var header = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
             ColumnSpacing = 10,
-            Margin = new Thickness(12, 8),
         };
         Grid.SetColumn(flagIcon, 0);
-        configRowGrid.Children.Add(flagIcon);
-        var configRowText = new StackPanel
-        {
-            Spacing = 1,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { _configRowLabel, _configRowValue }
-        };
-        Grid.SetColumn(configRowText, 1);
-        configRowGrid.Children.Add(configRowText);
+        header.Children.Add(flagIcon);
+        Grid.SetColumn(_configRowLabel, 1);
+        header.Children.Add(_configRowLabel);
         Grid.SetColumn(togglePill, 2);
-        configRowGrid.Children.Add(togglePill);
+        header.Children.Add(togglePill);
 
         var configRowButton = new Avalonia.Controls.Button
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(0),
+            Padding = new Thickness(12, 8),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(radiusSm),
-            Content = configRowGrid,
+            Content = new StackPanel { Spacing = 3, Children = { header, _configRowValue } },
         };
         configRowButton.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceRaisedBrush");
         configRowButton.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderSubtleBrush");
@@ -1509,7 +1504,8 @@ public partial class AndroidApp : Avalonia.Application
             "custom" => Localization.CcSourceCustom,
             _ => Localization.SmpSourceManual,
         };
-        _configRowValue.Text = $"{src} · {policy}";
+        if (_configRowLabel is not null) _configRowLabel.Text = $"{Localization.SmpConfigRowLabel} · {src}";
+        _configRowValue.Text = policy;
     }
 
     private void OnSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1723,7 +1719,6 @@ public partial class AndroidApp : Avalonia.Application
         }
         ApplyHealthCheckDisplay();
         ApplyErrorOneLinerDisplay();
-        if (_configRowLabel is not null) _configRowLabel.Text = Localization.SmpConfigRowLabel;
         if (_configRowToggleText is not null)
             _configRowToggleText.Text = _formExpanded ? Localization.SmpConfigRowHide : Localization.SmpConfigRowChange;
         if (_serverInputLabel is not null) _serverInputLabel.Text = Localization.SmpInputLabel;

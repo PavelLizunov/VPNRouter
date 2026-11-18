@@ -636,7 +636,7 @@ public class MainActivity : AvaloniaMainActivity
         var command = reserved ?? AndroidStorage.BeginUiCommand();
         if (command == null)
         {
-            PresentStartError(Localization.TunnelError("config-invalid"));
+            PresentStartError(Localization.TunnelError("command-unavailable"));
             return;
         }
         if (!_consentGate.OpenOrQueue(command)) return;
