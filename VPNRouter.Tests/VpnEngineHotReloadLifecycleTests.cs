@@ -335,6 +335,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
             finally { result.TrySetResult(ready); }
             Assert.Equal(accepted, await apply);
             Assert.Equal(accepted ? "192.0.2.42" : initialServer, engine.AcceptedTunnel?.Server.Address);
+            if (!accepted) Assert.Same(initialInfo, engine.AcceptedTunnel);
             var activeSnapshot = Assert.IsType<AppSettings>(failoverSettings.GetValue(engine));
             Assert.Equal(!accepted, ReferenceEquals(originalSnapshot, activeSnapshot));
             Assert.NotSame(candidate, activeSnapshot);
@@ -661,7 +662,9 @@ public sealed class VpnEngineHotReloadLifecycleTests
             await StartHappyPathAsync();
         using var _ = cleanup;
 
+        Assert.NotNull(engine.AcceptedTunnel);
         engine.Stop();
+        Assert.Null(engine.AcceptedTunnel);
         var handlesAfterStop = spawnedHandles.Count;
 
         var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);

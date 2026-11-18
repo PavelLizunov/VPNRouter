@@ -54,11 +54,11 @@ public partial class MainWindowViewModel
             }
             finally { _isLoadingUI = false; }
 
+            _displayExternalTunnel = false;
             IsConnected = true;
             _lastSuccessfulConnectAt = DateTime.UtcNow;
             ConnectButtonText = Strings.StopVPN;
             StartSubRefreshTimer();
-            RefreshActiveIndicator();
             RestoreConnectedStatus();
             ConflictingVpnWarningText = string.Empty;
             return true;

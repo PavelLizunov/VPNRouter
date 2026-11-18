@@ -55,7 +55,7 @@ public static partial class ConfigGenerator
     private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
     {
         var protocol = (entry.Protocol ?? "vless").ToLowerInvariant();
-        return protocol switch
+        var outbound = protocol switch
         {
             "hysteria2"   => BuildHysteria2Outbound(entry, tag),
             "hy2"         => BuildHysteria2Outbound(entry, tag),
@@ -66,6 +66,8 @@ public static partial class ConfigGenerator
             "dns-tunnel"  => BuildDnsTunnelOutbound(entry, tag),
             _             => BuildVlessOutboundCore(entry, tag),
         };
+        outbound.SourceServer = entry;
+        return outbound;
     }
 
     private static SingBoxOutbound BuildDnsTunnelOutbound(VlessServerEntry entry, string tag)
@@ -213,6 +215,7 @@ public static partial class ConfigGenerator
 
         return new SingBoxEndpoint
         {
+            SourceServer = entry,
             Type       = "wireguard",
             Tag        = tag,
             System     = false,

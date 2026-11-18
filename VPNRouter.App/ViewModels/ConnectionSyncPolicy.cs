@@ -27,6 +27,7 @@ internal static class ConnectionSyncPolicy
     internal static RuntimeSyncAction DecideRuntimeSync(
         bool vpnRunning,
         bool uiConnected,
+        bool uiShowsExternalTunnel,
         bool inTransition,
         bool failedStartStatus,
         bool inProcessEngineRunning,
@@ -39,11 +40,12 @@ internal static class ConnectionSyncPolicy
         {
             if (inProcessEngineRunning)
             {
-                if (!uiConnected) return RuntimeSyncAction.AdoptRunningEngine;
+                if (!uiConnected || uiShowsExternalTunnel) return RuntimeSyncAction.AdoptRunningEngine;
                 return failedStartStatus ? RuntimeSyncAction.RestoreConnectedStatus : RuntimeSyncAction.None;
             }
 
-            return !uiConnected || failedStartStatus ? RuntimeSyncAction.MarkConnectedViaService : RuntimeSyncAction.None;
+            return !uiConnected || !uiShowsExternalTunnel || failedStartStatus
+                ? RuntimeSyncAction.MarkConnectedViaService : RuntimeSyncAction.None;
         }
 
         if (!uiConnected) return RuntimeSyncAction.None;

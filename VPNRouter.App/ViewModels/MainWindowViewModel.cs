@@ -571,42 +571,36 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public event Action<ServerViewModel?>? ActiveServerChanged;
 
-    private AcceptedTunnelInfo? DisplayedTunnel => IsConnected ? _engine.AcceptedTunnel : null;
+    private bool _displayExternalTunnel;
+    private AcceptedTunnelInfo? DisplayedTunnel => IsConnected && !_displayExternalTunnel ? _engine.AcceptedTunnel : null;
 
-    private TunnelServerLabel? DisplayedMember(AcceptedTunnelInfo tunnel) =>
-        ReferenceEquals(_observedTunnel, tunnel) ? tunnel.FindMember(_observedMemberTag) : null;
+    private TunnelServerLabel? DisplayedServer(AcceptedTunnelInfo tunnel)
+    {
+        if (!tunnel.UsesAutoGroup) return tunnel.Server;
+        return ReferenceEquals(_statsTunnel, tunnel) ? tunnel.FindMember(_observedMemberTag) : null;
+    }
 
     private (string? name, string? ip) DeriveConnectedServerLabel()
     {
-        if (DisplayedTunnel is { } tunnel)
-        {
-            var current = tunnel.UsesAutoGroup ? DisplayedMember(tunnel) : tunnel.Server;
-            return current == null ? (Strings.AutoSelectStatusLabel, null) : (current.Name, current.Address);
-        }
+        if (DisplayedTunnel is { } tunnel) return AcceptedServerLabel(tunnel);
+        return IsConnected ? (null, null) : EditorServerLabel();
+    }
 
-        var serverIp = _engine.ActiveServerAddress;
-        var configuredMode = _settings.App.ConfigMode ?? "generated";
-        if (IsConnected && !configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
-        {
-            var viaSubscription = ActiveServerMatcher.FindName(
-                serverIp, SubscriptionServers.Select(s => (s.DisplayName, s.Server)));
-            if (viaSubscription is not null) return (viaSubscription, serverIp);
-        }
-        if (configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
-        {
-            return AutoSelectStatus.ResolveSubscribeLabel(
-                AutoSelectBestServer,
-                _autoSelectedServer is not null,
-                _autoSelectedServer?.DisplayName,
-                _autoSelectedServer?.Server,
-                Strings.AutoSelectStatusLabel,
-                (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName,
-                serverIp);
-        }
-        if (configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase))
-            return ((SelectedServer ?? Servers.FirstOrDefault())?.DisplayName, serverIp);
-        var c = CustomConfigs.FirstOrDefault(x => x.IsActive) ?? SelectedCustomConfig ?? CustomConfigs.FirstOrDefault();
-        return (c?.Name, serverIp);
+    private (string? name, string? ip) AcceptedServerLabel(AcceptedTunnelInfo tunnel)
+    {
+        var server = DisplayedServer(tunnel);
+        return server == null ? (Strings.AutoSelectStatusLabel, null) : (server.Name, server.Address);
+    }
+
+    private (string? name, string? ip) EditorServerLabel()
+    {
+        var mode = _settings.App.ConfigMode ?? "generated";
+        if (mode.Equals("custom", StringComparison.OrdinalIgnoreCase))
+            return ((CustomConfigs.FirstOrDefault(c => c.IsActive) ?? SelectedCustomConfig ?? CustomConfigs.FirstOrDefault())?.Name, null);
+        var row = mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
+            ? SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault()
+            : SelectedServer ?? Servers.FirstOrDefault();
+        return (row?.DisplayName, row?.Server);
     }
 
     private string FormatRelativeTime(DateTime utcWhen)

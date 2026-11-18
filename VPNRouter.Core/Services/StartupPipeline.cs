@@ -27,6 +27,7 @@ public sealed record StartupResult(
 {
     internal Action? PublishAcceptedImport { get; init; }
     internal string? ImportedJson { get; init; }
+    internal IReadOnlyDictionary<string, VlessServerEntry> ProxySources { get; init; } = new Dictionary<string, VlessServerEntry>();
 }
 
 public enum StartupMode
@@ -72,7 +73,7 @@ internal interface IStartupHost
 
     void SetActiveServerAddress(string address);
 
-    void CommitTunnelInfo(AppSettings settings, string json, string address, (Uri Endpoint, string? Secret)? controller) { }
+    void CommitTunnelInfo(AcceptedTunnelInfo tunnel) { }
 
     void SetActiveModes(string configMode, string routingMode, string tunFingerprint);
 
@@ -159,6 +160,7 @@ internal sealed class StartupPipeline
         var current = (_host as StartupHostInternal)?.SingBox;
         Func<string, CancellationToken, Task<bool>>? checkRuleSet =
             context.Mode == StartupMode.HotReload && current != null ? current.CheckRuleSetAsync : null;
+        var proxySources = new Dictionary<string, VlessServerEntry>(StringComparer.Ordinal);
         var configJson = GenerateConfigPhase(
             profile,
             scanResult,
@@ -166,7 +168,8 @@ internal sealed class StartupPipeline
             customConfigJson,
             context.ValidateRequiredRuleSets,
             isServerAlive,
-            checkRuleSet);
+            checkRuleSet,
+            proxySources);
 
         ct.ThrowIfCancellationRequested();
 
@@ -207,7 +210,12 @@ internal sealed class StartupPipeline
                 ProcessId: null,
                 Duration: sw.Elapsed,
                 ConfigJson: configJson,
-                Profile: profile) { PublishAcceptedImport = publishAcceptedImport, ImportedJson = customConfigJson };
+                Profile: profile)
+            {
+                PublishAcceptedImport = publishAcceptedImport,
+                ImportedJson = customConfigJson,
+                ProxySources = proxySources
+            };
         }
 
         if (context.Mode == StartupMode.ColdStart && !isCustomConfig)
@@ -224,6 +232,7 @@ internal sealed class StartupPipeline
             }
         }
 
+        var tunnelInfo = new AcceptedTunnelInfo(settings, configJson, serverAddress, monitorController, proxySources);
         await DeployAndSetupFirewallPhaseAsync(
             settings, profile, scanResult, ct);
 
@@ -256,7 +265,7 @@ internal sealed class StartupPipeline
             if (!_host.IsCurrentStart(pid))
                 throw new InvalidOperationException("The tunnel exited before its startup settings could be accepted.");
             publishAcceptedImport?.Invoke();
-            _host.CommitTunnelInfo(settings, configJson, serverAddress, monitorController);
+            _host.CommitTunnelInfo(tunnelInfo);
         }
         StartMonitorsPhase(settings, profile, scanResult, monitorController, customConfigJson, CommitStart);
 
@@ -682,7 +691,8 @@ internal sealed class StartupPipeline
         string? rawCustomJson,
         bool validateRequiredRuleSets,
         Func<VlessServerEntry, bool>? isServerAlive,
-        Func<string, CancellationToken, Task<bool>>? checkRuleSet)
+        Func<string, CancellationToken, Task<bool>>? checkRuleSet,
+        Dictionary<string, VlessServerEntry> proxySources)
     {
         Action<string>? onMissingRuleSet = validateRequiredRuleSets ? ConfigGenerator.RejectMissingRuleSet : null;
         if (rawCustomJson != null)
@@ -702,7 +712,8 @@ internal sealed class StartupPipeline
             logger: _host.Logger,
             isServerAlive: isServerAlive,
             onMissingRuleSet: onMissingRuleSet,
-            checkRuleSet: checkRuleSet);
+            checkRuleSet: checkRuleSet,
+            proxySources: proxySources);
         return json;
     }
 

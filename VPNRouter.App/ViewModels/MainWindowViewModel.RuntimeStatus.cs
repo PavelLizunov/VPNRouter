@@ -138,11 +138,12 @@ public partial class MainWindowViewModel
         UpdateRuntimeStatus();
     }
 
-    private void SyncConnectedWithVpnRuntime(bool vpnRunning)
+    internal void SyncConnectedWithVpnRuntime(bool vpnRunning)
     {
         var action = ConnectionSyncPolicy.DecideRuntimeSync(
             vpnRunning,
             IsConnected,
+            uiShowsExternalTunnel: _displayExternalTunnel,
             inTransition: IsConnecting || IsApplying || _isReconnecting,
             failedStartStatus: StatusText.StartsWith(Strings.FailedStartVpn, StringComparison.Ordinal),
             inProcessEngineRunning: _engine.SingBoxPid != null || _engine.IsRunning,
@@ -170,19 +171,10 @@ public partial class MainWindowViewModel
 
     private void MarkConnectedViaService()
     {
+        _displayExternalTunnel = true;
         IsConnected = true;
         ConnectButtonText = Strings.StopVPN;
-        var configuredMode = _settings.App.ConfigMode ?? "generated";
-        var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-            ? (IsRussian ? "подписка" : "subscribe")
-            : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
-                ? (IsRussian ? "ручной" : "manual")
-                : (IsRussian ? "свой" : "custom");
-        var tunnelLabel = IsSplitTunnel ? (IsRussian ? "сплит" : "split") : (IsRussian ? "полный" : "full");
-        var mode = $"{configLabel}/{tunnelLabel}";
-        StatusText = IsRussian
-            ? $"Подключено через службу [{mode}]"
-            : $"Connected via service [{mode}]";
+        RestoreConnectedStatus();
         MarkTrueSplitServiceManagedIfNeeded();
         try { StartSubRefreshTimer(); } catch { }
     }

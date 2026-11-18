@@ -15,7 +15,8 @@ internal static class ConfigPipeline
         bool? strictDnsOverride = null,
         Func<VlessServerEntry, bool>? isServerAlive = null,
         Action<string>? onMissingRuleSet = null,
-        Func<string, CancellationToken, Task<bool>>? checkRuleSet = null)
+        Func<string, CancellationToken, Task<bool>>? checkRuleSet = null,
+        Dictionary<string, VlessServerEntry>? proxySources = null)
     {
         var resolved = VlessServersResolver.Resolve(settings, logger);
 
@@ -29,6 +30,13 @@ internal static class ConfigPipeline
         var sbConfig = ConfigGenerator.Generate(profile, resolvedProcessNames, settings, strictDnsOverride, isServerAlive,
             resolveRuleSet: null, onMissingRuleSet: onMissingRuleSet, checkGeoContents: checkRuleSet);
         ValidateGeneratedConfig(sbConfig, settings, validationMode, warningSink, logger);
+        if (proxySources != null)
+        {
+            foreach (var outbound in sbConfig.Outbounds)
+                if (outbound.SourceServer is { } row) proxySources.Add(outbound.Tag, row);
+            foreach (var endpoint in sbConfig.Endpoints ?? [])
+                if (endpoint.SourceServer is { } row) proxySources.Add(endpoint.Tag, row);
+        }
         return ConfigGenerator.Serialize(sbConfig);
     }
 

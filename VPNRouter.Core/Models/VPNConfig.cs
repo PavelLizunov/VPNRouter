@@ -92,6 +92,8 @@ public class SingBoxConfig
 
 public class SingBoxEndpoint
 {
+    [JsonIgnore] internal VlessServerEntry? SourceServer { get; set; }
+
     [JsonPropertyName("type")] public string Type { get; set; } = "wireguard";
     [JsonPropertyName("tag")] public string Tag { get; set; } = string.Empty;
     [JsonPropertyName("system")] public bool System { get; set; }
@@ -289,6 +291,8 @@ public class SingBoxInbound
 
 public class SingBoxOutbound
 {
+    [JsonIgnore] internal VlessServerEntry? SourceServer { get; set; }
+
     [JsonPropertyName("type")]
     public string Type { get; set; } = string.Empty;
 
