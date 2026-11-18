@@ -429,7 +429,9 @@ public class ZapretUpdater
         long total = 0;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var buffer = new byte[65536];
-        Directory.CreateDirectory(target);
+        var root = Path.GetFullPath(target);
+        if (!Path.EndsInDirectorySeparator(root)) root += Path.DirectorySeparatorChar;
+        Directory.CreateDirectory(root);
         foreach (var entry in archive.Entries)
         {
             ct.ThrowIfCancellationRequested();
@@ -445,7 +447,9 @@ public class ZapretUpdater
             if (entry.Length > MaxEntryBytes || entry.Length > MaxExpandedBytes - total)
                 throw new InvalidDataException("Expanded Zapret package exceeds its size limit.");
             total += entry.Length;
-            var dest = Path.Combine(target, name);
+            var dest = Path.GetFullPath(Path.Combine(root, name));
+            if (!dest.StartsWith(root, StringComparison.Ordinal))
+                throw new InvalidDataException("Zapret archive entry is outside its staging directory.");
             if (entry.FullName.EndsWith('/'))
             {
                 if (entry.Length != 0) throw new InvalidDataException("Invalid Zapret directory entry.");
