@@ -47,6 +47,7 @@ public partial class SingBoxManager
             Stop();
         }
 
+        var exePath = RuntimeExecutablePath;
         if (!TryAcquireTunOwnership())
         {
             throw new TunOwnershipException(
@@ -54,24 +55,19 @@ public partial class SingBoxManager
                 "Stop the other instance (e.g. disable Windows Service autostart) and try again.");
         }
 
-        var exePath = RuntimeExecutablePath;
-
-        ProcessOwnership.ConfiguredExePath = exePath;
-
         if (!File.Exists(exePath))
         {
             ReleaseTunOwnership();
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
         }
 
-        RotateSingBoxLog();
-        _currentConfigPath = WriteJsonToDisk(configJson);
-
-        _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
-
         State = SingBoxState.Starting;
         try
         {
+            ProcessOwnership.ConfiguredExePath = exePath;
+            RotateSingBoxLog();
+            _currentConfigPath = WriteJsonToDisk(configJson);
+            _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
             LaunchProcess(exePath);
             if (_handle is null)
             {

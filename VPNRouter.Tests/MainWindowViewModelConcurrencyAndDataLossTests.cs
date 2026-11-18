@@ -14,6 +14,31 @@ namespace VPNRouter.Tests;
 public sealed class MainWindowViewModelConcurrencyAndDataLossTests
 {
     [AvaloniaFact]
+    public async Task SubmittedSettings_SurviveUiEditsBeforeWorkerConsumesThem()
+    {
+        var store = new InMemorySettingsStore();
+        var settings = new AppSettings();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store);
+        var editable = store.Load(AppPaths.ConfigYamlPath);
+        editable.App.ConfigMode = "generated";
+        editable.Vless.Servers = [new() { Name = "submitted" }];
+        var submitted = vm.CaptureConnectionSettings();
+
+        var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var worker = Task.Run(async () =>
+        {
+            await resume.Task;
+            return (submitted.App.ConfigMode, submitted.Vless.Servers[0].Name);
+        });
+        editable.App.ConfigMode = "custom";
+        editable.Vless.Servers[0].Name = "edited";
+        resume.SetResult();
+
+        Assert.Equal(("generated", "submitted"), await worker);
+    }
+
+    [AvaloniaFact]
     public void OnEngineStatus_WhenConnecting_StoppedDoesNotResetIsConnecting()
     {
         var store = new InMemorySettingsStore();

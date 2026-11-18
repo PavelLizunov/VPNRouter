@@ -846,7 +846,8 @@ public partial class MainWindowViewModel
 
             SaveSettings();
             _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
-            var ok = await Task.Run(() => _engine.ApplyAsync(_settings, CancellationToken.None, forceRestart));
+            var capturedSettings = CaptureConnectionSettings();
+            var ok = await Task.Run(() => _engine.ApplyAsync(capturedSettings, CancellationToken.None, forceRestart));
             if (ok)
             {
                 ClearPendingIfRevisionUnchanged(appliedRevision);
