@@ -62,6 +62,12 @@ public partial class VpnEngine : IDisposable
 
     public string ActiveServerAddress { get; private set; } = string.Empty;
 
+    internal AcceptedTunnelInfo? AcceptedTunnel => Volatile.Read(ref _acceptedTunnel);
+    private AcceptedTunnelInfo? _acceptedTunnel;
+
+    internal void CommitTunnelInfo(AppSettings settings, string json, string address, (Uri Endpoint, string? Secret)? controller) =>
+        Volatile.Write(ref _acceptedTunnel, new AcceptedTunnelInfo(settings, json, address, controller));
+
     internal string TunFingerprint { get; private set; } = string.Empty;
 
     internal string ActiveAppRoutingFingerprint { get; private set; } = string.Empty;
@@ -539,6 +545,7 @@ public partial class VpnEngine : IDisposable
 
                 result.PublishAcceptedImport?.Invoke();
                 if (_healthMonitor != null) _healthMonitor.AcceptedImportJson = result.ImportedJson;
+                CommitTunnelInfo(settings, configJson, ActiveServerAddress, controller);
                 ResetFailoverContext(settings);
                 configCommitted = true;
             }
@@ -681,6 +688,7 @@ public partial class VpnEngine : IDisposable
 
         try { _firewall?.Dispose(); } catch { }
 
+        Volatile.Write(ref _acceptedTunnel, null);
         _singBox = null;
         _slipstream = null;
         _healthMonitor = null;

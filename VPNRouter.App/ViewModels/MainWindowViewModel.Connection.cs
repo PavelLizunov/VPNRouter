@@ -514,14 +514,16 @@ public partial class MainWindowViewModel
 
     private void RefreshActiveIndicator()
     {
-        var activeIp = _engine?.ActiveServerAddress;
+        var tunnel = DisplayedTunnel;
+        var member = tunnel?.UsesAutoGroup == true ? DisplayedMember(tunnel) : tunnel?.Server;
+        var activeIp = member?.Address ?? _engine?.ActiveServerAddress;
 
-        var configMode = _settings?.App?.ConfigMode ?? "generated";
+        var configMode = tunnel?.ConfigMode ?? _settings?.App?.ConfigMode ?? "generated";
         var isManualMode = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
         var isSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
 
-        var manualActiveName = _settings?.Vless?.ActiveServer;
-        var subscriptionActiveName = _settings?.App?.ActiveSubscriptionServer;
+        var manualActiveName = member?.Name ?? _settings?.Vless?.ActiveServer;
+        var subscriptionActiveName = member?.Name ?? _settings?.App?.ActiveSubscriptionServer;
 
         ServerViewModel? active = null;
 
@@ -535,11 +537,13 @@ public partial class MainWindowViewModel
             if (isActive) active = s;
         }
 
-        var autoSelect = isSubscribeMode && AutoSelectBestServer;
+        var autoSelect = isSubscribeMode && (tunnel?.UsesAutoGroup ?? AutoSelectBestServer);
         foreach (var s in SubscriptionServers)
         {
             bool isActive;
-            if (autoSelect)
+            if (tunnel != null && autoSelect)
+                isActive = member != null && IsRowActive(s, member.Address, member.Name) && s.Port == member.Port;
+            else if (autoSelect)
                 isActive = IsConnected
                     && _autoSelectedServer is not null
                     && ReferenceEquals(s, _autoSelectedServer);
@@ -547,7 +551,7 @@ public partial class MainWindowViewModel
                 isActive = isSubscribeMode
                     && IsConnected
                     && !string.IsNullOrEmpty(activeIp)
-                    && IsRowActive(s, activeIp, subscriptionActiveName);
+                    && IsRowActive(s, activeIp, subscriptionActiveName) && (member == null || member.Port == s.Port);
             s.IsActive = isActive;
             if (isActive) active = s;
         }
@@ -606,12 +610,12 @@ public partial class MainWindowViewModel
     {
         if (!IsConnected) return;
         var (serverName, serverIp) = DeriveConnectedServerLabel();
-
-        var configuredMode = _settings.App.ConfigMode ?? "generated";
+        var tunnel = DisplayedTunnel;
+        var configuredMode = tunnel?.ConfigMode ?? _settings.App.ConfigMode ?? "generated";
         var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
             ? "subscribe"
             : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase) ? "manual" : "custom";
-        var tunnelLabel = IsSplitTunnel ? "split" : "full";
+        var tunnelLabel = tunnel?.RoutingMode ?? (IsSplitTunnel ? "split" : "full");
         var modeLabel = $"{configLabel}/{tunnelLabel}";
 
         StatusText = Strings.Connected(modeLabel, serverName, serverIp);

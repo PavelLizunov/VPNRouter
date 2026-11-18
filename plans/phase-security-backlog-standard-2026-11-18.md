@@ -158,3 +158,9 @@ The Windows rollback worker runs outside the installation. It verifies the initi
 Private Android 14 acceptance on Standard 048ad1ad and Business fc1bda16 confirmed six warm reconnects in the original application processes, expected UID ranges in Off, Include and Exclude, and distinct endpoints for manual and feed selections with the same name. File-based ConfigShare import was not exercised on the device. Saving Custom JSON after a feed still left its old URL in the input and Connect started that feed. Correct and verify that transition with the subscription and lifecycle follow-ups.
 
 Follow up the desktop Simple review. Select and restore the submitted row by source and identity across reordered or unnamed entries. Display the routing mode and selected endpoint of the accepted tunnel when the user edits the next connection during a probe. Cover the real command, status refresh and reopening saved settings.
+
+Business Windows CI on cf896155 passed the installed-App rollback case. The repair fixture could not load Get-FileHash in its inherited PowerShell module environment. It now sets the same PSHOME Modules path as the installer before executing the production repair functions.
+
+Recheck the default web repair and reinstall paths under a concurrent installation lock, account for repeated rollback failures, and distinguish a crashed doctor process from its documented configuration diagnostics in both repair layouts.
+
+The desktop publishes the display source, route mode and server with the accepted startup or Apply settings. Reported auto-select tags resolve against that generation's configuration. A delayed Simple Connect regression checks the editor choice, status and active indicator independently. The service fixture checks that failed Apply keeps the previous display and successful Apply changes it. Hosted results are pending.

@@ -296,6 +296,8 @@ public sealed class VpnEngineHotReloadLifecycleTests
             var originalSnapshot = Assert.IsType<AppSettings>(failoverSettings.GetValue(engine));
             Assert.NotSame(initial, originalSnapshot);
             var initialServer = initial.Vless.Servers[0].Server;
+            var initialInfo = Assert.IsType<AcceptedTunnelInfo>(engine.AcceptedTunnel);
+            Assert.Equal(initialServer, initialInfo.Server.Address);
             initial.App.ConfigMode = "custom";
             initial.App.CustomConfig = "unsaved-fixture.json";
             initial.Vless.Servers[0].Server = "unsaved.invalid";
@@ -325,12 +327,14 @@ public sealed class VpnEngineHotReloadLifecycleTests
             {
                 await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
                 Assert.False(apply.IsCompleted);
+                Assert.Same(initialInfo, engine.AcceptedTunnel);
                 Assert.Same(originalSnapshot, failoverSettings.GetValue(engine));
                 candidate.App.ConfigMode = "custom";
                 candidate.Vless.Servers[0].Server = "also-unsaved.invalid";
             }
             finally { result.TrySetResult(ready); }
             Assert.Equal(accepted, await apply);
+            Assert.Equal(accepted ? "192.0.2.42" : initialServer, engine.AcceptedTunnel?.Server.Address);
             var activeSnapshot = Assert.IsType<AppSettings>(failoverSettings.GetValue(engine));
             Assert.Equal(!accepted, ReferenceEquals(originalSnapshot, activeSnapshot));
             Assert.NotSame(candidate, activeSnapshot);

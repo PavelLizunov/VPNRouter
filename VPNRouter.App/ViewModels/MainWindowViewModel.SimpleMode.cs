@@ -167,13 +167,15 @@ public partial class MainWindowViewModel
     {
         get
         {
-            var configuredMode = _settings.App.ConfigMode ?? "generated";
+            var tunnel = DisplayedTunnel;
+            var configuredMode = tunnel?.ConfigMode ?? _settings.App.ConfigMode ?? "generated";
             var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
                 ? Strings.SmpCfgSubscribe
                 : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
                     ? Strings.SmpCfgManual
                     : Strings.SmpCfgCustom;
-            var tunnelLabel = IsSplitTunnel ? Strings.SmpCfgSplit : Strings.SmpCfgFull;
+            var split = tunnel != null ? tunnel.RoutingMode == "split" : IsSplitTunnel;
+            var tunnelLabel = split ? Strings.SmpCfgSplit : Strings.SmpCfgFull;
             return $"{configLabel} · {tunnelLabel}";
         }
     }
@@ -182,15 +184,9 @@ public partial class MainWindowViewModel
     {
         get
         {
-            var ip = _engine?.ActiveServerAddress;
+            if (!IsConnected) return string.Empty;
+            var (name, ip) = DeriveConnectedServerLabel();
             if (string.IsNullOrEmpty(ip)) return string.Empty;
-
-            var configuredMode = _settings.App.ConfigMode ?? "generated";
-            string? name = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-                ? (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName
-                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
-                    ? (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName
-                    : null;
 
             return string.IsNullOrEmpty(name)
                 ? $"{Strings.SmpStatusConnectedVia} {ip}"
@@ -202,7 +198,9 @@ public partial class MainWindowViewModel
     {
         get
         {
-            var ip = _engine?.ActiveServerAddress;
+            var tunnel = DisplayedTunnel;
+            if (tunnel != null && tunnel.ConfigMode != "custom") return false;
+            var ip = tunnel?.Server.Address ?? _engine?.ActiveServerAddress;
             if (string.IsNullOrEmpty(ip) || _settings == null)
                 return false;
 
@@ -636,6 +634,14 @@ public partial class MainWindowViewModel
     {
         get
         {
+            if (DisplayedTunnel is { } tunnel)
+            {
+                var row = tunnel.UsesAutoGroup ? DisplayedMember(tunnel) : tunnel.Server;
+                if (row == null || tunnel.ConfigMode == "custom") return null;
+                var rows = tunnel.ConfigMode == "subscribe" ? SubscriptionServers : Servers;
+                return rows.FirstOrDefault(s => s.Port == row.Port && s.Name == row.Name &&
+                    string.Equals(s.Server, row.Address, StringComparison.OrdinalIgnoreCase));
+            }
             var (name, _) = DeriveConnectedServerLabel();
             if (string.IsNullOrWhiteSpace(name)) return null;
             return SubscriptionServers.FirstOrDefault(s =>
@@ -651,14 +657,16 @@ public partial class MainWindowViewModel
     {
         get
         {
-            var mode = _settings?.App.ConfigMode ?? "generated";
-            if (IsConnected && !mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase) &&
+            var tunnel = DisplayedTunnel;
+            var mode = tunnel?.ConfigMode ?? _settings?.App.ConfigMode ?? "generated";
+            if (IsConnected && tunnel == null && !mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase) &&
                 ActiveServerMatcher.FindName(_engine.ActiveServerAddress, SubscriptionServers.Select(s => (s.DisplayName, s.Server))) is not null)
                 mode = "subscribe";
             if (mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
-                return SubscriptionServers.Count > 0
-                    ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(SubscriptionServers.Count)}"
-                    : Strings.SmpKindSubscription;
+            {
+                var count = tunnel?.SubscriptionServerCount ?? SubscriptionServers.Count;
+                return count > 0 ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(count)}" : Strings.SmpKindSubscription;
+            }
             return mode.Equals("generated", StringComparison.OrdinalIgnoreCase)
                 ? Strings.SmpKindServer
                 : Strings.SmpKindCustom;

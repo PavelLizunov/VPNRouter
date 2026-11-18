@@ -107,6 +107,9 @@ public partial class VpnEngine
         public void OnProcessDetected(string name, int pid) =>
             _engine.ProcessDetected?.Invoke(name, pid);
 
+        public void CommitTunnelInfo(AppSettings settings, string json, string address, (Uri Endpoint, string? Secret)? controller) =>
+            _engine.CommitTunnelInfo(settings, json, address, controller);
+
         public void SetActiveServerAddress(string address) =>
             _engine.ActiveServerAddress = address;
 

@@ -14,6 +14,8 @@ public partial class MainWindowViewModel
     private int _statsInFlight;
 
     private ServerViewModel? _autoSelectedServer;
+    private AcceptedTunnelInfo? _observedTunnel;
+    private string? _observedMemberTag;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasConnectionStats))]
@@ -31,6 +33,8 @@ public partial class MainWindowViewModel
         _statsPrevDown = 0;
         _statsPrevUp = 0;
         _autoSelectedServer = null;
+        _observedTunnel = null;
+        _observedMemberTag = null;
         _autoSelectPollTick = 0;
         ConnectionStatsText = string.Empty;
 
@@ -38,10 +42,15 @@ public partial class MainWindowViewModel
         {
             try
             {
-                var hostPort = string.IsNullOrWhiteSpace(_settings?.SingBox?.ClashApi)
-                    ? "127.0.0.1:9090" : _settings!.SingBox.ClashApi;
-                _statsApi = new ClashSingBoxApi(baseUrl: $"http://{hostPort}", logger: _logger,
-                    secret: _settings?.SingBox?.ClashApiSecret);
+                if (DisplayedTunnel is { } tunnel)
+                    _statsApi = tunnel.OpenController(_logger);
+                else
+                {
+                    var hostPort = string.IsNullOrWhiteSpace(_settings?.SingBox?.ClashApi)
+                        ? "127.0.0.1:9090" : _settings!.SingBox.ClashApi;
+                    _statsApi = new ClashSingBoxApi(baseUrl: $"http://{hostPort}", logger: _logger,
+                        secret: _settings?.SingBox?.ClashApiSecret);
+                }
             }
             catch (Exception ex)
             {
@@ -138,8 +147,9 @@ public partial class MainWindowViewModel
             _statsPrevAt = null;
             _statsPrevDown = 0;
             _statsPrevUp = 0;
-            if (_autoSelectedServer is not null)
+            if (_autoSelectedServer is not null || _observedMemberTag != null)
             {
+                _observedMemberTag = null;
                 _autoSelectedServer = null;
                 RestoreConnectedStatus();
                 RefreshActiveIndicator();
@@ -151,8 +161,9 @@ public partial class MainWindowViewModel
 
     private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api)
     {
-        if (!AutoSelectBestServer || !(_settings.App.ConfigMode ?? "generated")
-                .Equals("subscribe", StringComparison.OrdinalIgnoreCase))
+        var tunnel = DisplayedTunnel;
+        if (!(tunnel?.UsesAutoGroup ?? (AutoSelectBestServer &&
+            string.Equals(_settings.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase))))
             return;
 
         if (Interlocked.Increment(ref _autoSelectPollTick) % 3 != 1)
@@ -173,6 +184,16 @@ public partial class MainWindowViewModel
             if (!ReferenceEquals(api, _statsApi) || !IsConnected)
                 return;
 
+            if (!ReferenceEquals(tunnel, DisplayedTunnel)) return;
+            if (tunnel != null)
+            {
+                if (ReferenceEquals(tunnel, _observedTunnel) && _observedMemberTag == nowTag) return;
+                _observedTunnel = tunnel;
+                _observedMemberTag = nowTag;
+                RestoreConnectedStatus();
+                RefreshActiveIndicator();
+                return;
+            }
             var resolved = ResolveAutoSelectedServer(nowTag);
             if (!ReferenceEquals(_autoSelectedServer, resolved))
             {
