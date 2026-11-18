@@ -112,3 +112,5 @@ Independent review found two remaining rollback failure paths. Verify the candid
 The remaining Android corrections serialize service stop/revoke with swipe scheduling, distinguish explicit external restore, carry the original connect through QR selection and refresh, and check status-event ownership when updating the screen. Device acceptance of these cases remains pending.
 
 The Windows updater now waits for package ownership checks and its lock before suspending the owned strategy. GUI restart and SCM shutdown keep their handle until exit is confirmed. Routing corrections cover cold-start monitoring, immutable accepted imports, DNS fall-through, localhost address families and retrying explicit Stop after an unknown exit. Verify the desktop and service regression fixtures on the submitted commit.
+
+Linux and Windows CI found CS0117 in the desktop disconnect and quit handlers. Forward the existing localized TunnelStopUnconfirmed message from Core through the desktop Strings class and rerun compilation, tests and CodeQL. The missing Business screenshots followed the failed compilation.

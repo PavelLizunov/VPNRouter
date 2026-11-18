@@ -97,6 +97,7 @@ public static class Strings
 
     public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;
     public static string Stopping => global::VPNRouter.Core.Localization.Strings.Stopping;
+    public static string TunnelStopUnconfirmed => global::VPNRouter.Core.Localization.Strings.TunnelStopUnconfirmed;
     public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
     public static string BadgeTooltipVpn => global::VPNRouter.Core.Localization.Strings.BadgeTooltipVpn;
