@@ -209,8 +209,7 @@ public partial class MainWindowViewModel
             {
                 await Task.Run(() =>
                 {
-                    try { _engine.Stop(); }
-                    catch (Exception ex) { _logger.Debug(ex, "[VM] _engine.Stop"); }
+                    _engine.Stop();
 
                     try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); }
                     catch (Exception ex) { _logger.Debug(ex, "[VM] OrphanCleanup on stop"); }
@@ -224,15 +223,17 @@ public partial class MainWindowViewModel
             catch (Exception ex)
             {
                 _logger.Error(ex, "[VM] Error during Stop");
-            }
-            finally
-            {
-                IsConnected = false;
                 IsConnecting = false;
-                ConnectButtonText = Strings.StartVPN;
-                StatusText = Strings.NotConnected;
-                _lastSuccessfulConnectAt = DateTime.MinValue;
+                IsConnected = _engine.HasActiveTunnel;
+                ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
+                StatusText = Strings.TunnelStopUnconfirmed;
+                return;
             }
+            IsConnected = false;
+            IsConnecting = false;
+            ConnectButtonText = Strings.StartVPN;
+            StatusText = Strings.NotConnected;
+            _lastSuccessfulConnectAt = DateTime.MinValue;
             return;
         }
 

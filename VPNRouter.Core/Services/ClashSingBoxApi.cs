@@ -403,7 +403,9 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     {
         var host = endpoint.IdnHost.Trim('[', ']');
         if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
-            return [IPAddress.IPv6Loopback, IPAddress.Loopback];
+            return Socket.OSSupportsIPv6
+                ? (Socket.OSSupportsIPv4 ? [IPAddress.IPv6Loopback, IPAddress.Loopback] : [IPAddress.IPv6Loopback])
+                : [IPAddress.Loopback];
         if (IPAddress.TryParse(host, out var literal) && IPAddress.IsLoopback(literal))
             return [literal];
 
@@ -420,22 +422,49 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     internal static async Task<Socket> OpenControlSocketAsync(Uri endpoint, CancellationToken ct)
     {
         var targets = await ResolveControlTargetsAsync(endpoint, ct).ConfigureAwait(false);
-        foreach (var ip in targets)
+        // Windows can spend the entire health-ping budget refusing the first address family.
+        // Race local candidates so an IPv4-only or IPv6-only listener gets the full HTTP deadline.
+        using var race = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var pending = targets.Select(ip => ConnectLocalAsync(ip, endpoint.Port, race.Token)).ToList();
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            Socket? socket = null;
-            try
+            while (pending.Count > 0)
             {
-                socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                // Also bind the source to this address: a removed local address must never become a remote control peer.
-                socket.Bind(new IPEndPoint(ip, 0));
-                await socket.ConnectAsync(new IPEndPoint(ip, endpoint.Port), ct).ConfigureAwait(false);
-                return socket;
+                var attempt = await Task.WhenAny(pending).ConfigureAwait(false);
+                pending.Remove(attempt);
+                try { return await attempt.ConfigureAwait(false); }
+                catch (SocketException) { }
             }
-            catch (SocketException) { socket?.Dispose(); }
-            catch { socket?.Dispose(); throw; }
+            ct.ThrowIfCancellationRequested();
+            throw new IOException("The local VPN control endpoint is unavailable.");
         }
-        throw new IOException("The local VPN control endpoint is unavailable.");
+        finally
+        {
+            race.Cancel();
+            foreach (var attempt in pending)
+            {
+                try { (await attempt.ConfigureAwait(false)).Dispose(); }
+                catch (SocketException) { }
+                catch (OperationCanceledException) { }
+            }
+        }
+    }
+
+    private static async Task<Socket> ConnectLocalAsync(IPAddress ip, int port, CancellationToken ct)
+    {
+        var socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        try
+        {
+            // A removed local address must never become a remote control peer.
+            socket.Bind(new IPEndPoint(ip, 0));
+            await socket.ConnectAsync(new IPEndPoint(ip, port), ct).ConfigureAwait(false);
+            return socket;
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
     }
 
     internal static (Uri Endpoint, string? Secret) ReadLocalController(string configJson)

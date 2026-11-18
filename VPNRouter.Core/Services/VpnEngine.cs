@@ -28,6 +28,7 @@ public partial class VpnEngine : IDisposable
     private AppSettings? _failoverSettingsContext;
     private bool _skipVpnConflictCheck;
     private CancellationTokenSource? _probeCts;
+    private bool _startupIncomplete;
 
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private CancellationTokenSource? _sessionCts;
@@ -52,7 +53,7 @@ public partial class VpnEngine : IDisposable
     // Unix readiness uses Clash, which can be unavailable while the owned process is alive.
     internal bool RequireCompleteRuleSetsOnStart { get; set; }
     internal Func<IProcessHandle, string, CancellationToken, Task<bool>>? ConfirmServiceReplacement { get; set; }
-    public bool HasActiveTunnel => _singBox?.HasActiveTunnel ?? false;
+    public bool HasActiveTunnel => _singBox is { } manager && (manager.ExactStopUnconfirmed || manager.HasActiveTunnel);
     public List<string> MonitoredProcesses => _scanResult?.ProcessNames ?? new();
 
     public string ActiveConfigMode { get; private set; } = "generated";
@@ -164,7 +165,10 @@ public partial class VpnEngine : IDisposable
         try { _unixDns.RestoreStrandedIfAny(_logger); } catch { }
     }
 
-    public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
+    public Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false) =>
+        StartAsync(settings, ct, skipVpnConflictCheck, restoreAcceptedImport: false);
+
+    internal async Task StartAsync(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck, bool restoreAcceptedImport)
     {
         var policy = EffectivePolicy;
         using var _ = SingBoxRuntimePolicy.EnterScope(policy);
@@ -173,7 +177,7 @@ public partial class VpnEngine : IDisposable
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await StartSessionGatedAsync(settings, ct, skipVpnConflictCheck).ConfigureAwait(false);
+            await StartSessionGatedAsync(settings, ct, skipVpnConflictCheck, restoreAcceptedImport).ConfigureAwait(false);
         }
         finally
         {
@@ -181,8 +185,13 @@ public partial class VpnEngine : IDisposable
         }
     }
 
-    private async Task StartSessionGatedAsync(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck)
+    private async Task StartSessionGatedAsync(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck,
+        bool restoreAcceptedImport = false, string? sessionImportJson = null)
     {
+        if (_startupIncomplete || (ConfirmServiceReplacement != null && HasLiveOrStartingSingBox() &&
+            _singBox != null && _healthMonitor?.IsMonitoring(_singBox) != true))
+            RetireIncompleteStartup();
+
         if (HasLiveOrStartingSingBox())
         {
             _logger?.Warning(
@@ -199,25 +208,19 @@ public partial class VpnEngine : IDisposable
         _policySession = new BusinessPolicySession(_sessionCts);
         _policyReceipt = null;
         ResetFailoverContext(settings);
-        try
-        {
-            await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            if (!IsRunning)
-            {
-                _logger?.Warning(
-                    "[VpnEngine] StartAsync failed to bring up VPN, tearing down partial state ({ExceptionType})", ex.GetType().Name);
-                try { TeardownInternal(); } catch { }
-            }
-            else
-            {
-                _logger?.Warning(
-                    "[VpnEngine] StartAsync threw after sing-box came up, leaving live tunnel for Stop/Dispose ({ExceptionType})", ex.GetType().Name);
-            }
-            throw;
-        }
+        await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck,
+            restoreAcceptedImport: restoreAcceptedImport, sessionImportJson: sessionImportJson).ConfigureAwait(false);
+    }
+
+    private void RetireIncompleteStartup()
+    {
+        // Keep this flag and exact ownership if the child cannot be stopped. A retry must finish
+        // cleanup before treating any running child as a successful start.
+        _startupIncomplete = true;
+        _probeCts?.Cancel();
+        _healthMonitor?.Stop();
+        TeardownInternal();
+        _startupIncomplete = false;
     }
 
     private bool HasLiveOrStartingSingBox()
@@ -234,14 +237,16 @@ public partial class VpnEngine : IDisposable
     }
 
     internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck,
-        Action? retireAfterValidation = null)
+        Action? retireAfterValidation = null, bool restoreAcceptedImport = false, string? sessionImportJson = null)
     {
         if (_policySession?.CanApply(settings.BusinessPolicy) == false)
             throw new InvalidOperationException("A newer Business policy was already applied in this session.");
+        bool preparingNewRuntime = false;
         async Task PrepareRuntimeAsync()
         {
             ct.ThrowIfCancellationRequested();
             retireAfterValidation?.Invoke();
+            preparingNewRuntime = _startupIncomplete = true;
             _skipVpnConflictCheck = skipVpnConflictCheck;
             _warmupConfirmed = false;
             _postStartPhase = false;
@@ -252,27 +257,41 @@ public partial class VpnEngine : IDisposable
         var host = new VpnEngineStartupHost(this);
         var pipeline = new StartupPipeline(host, dnsHardening: _dnsHardening);
         var mode = retireAfterValidation == null ? StartupMode.ColdStart : StartupMode.AutoFailover;
-        if (mode == StartupMode.ColdStart)
-            await PrepareRuntimeAsync().ConfigureAwait(false);
-
-        var result = await pipeline.ExecuteAsync(
-            new StartupContext(settings, mode, skipVpnConflictCheck) { RequireCompleteRuleSets = RequireCompleteRuleSetsOnStart }, ct,
-            retireAfterValidation: mode == StartupMode.AutoFailover ? PrepareRuntimeAsync : null);
-
-        if (result.EarlyReturn)
+        try
         {
-            _logger?.Information(
-                "[VpnEngine] StartAsync: F-E re-entry handled by inner call (outer aborting)");
-            return;
+            if (mode == StartupMode.ColdStart)
+                await PrepareRuntimeAsync().ConfigureAwait(false);
+
+            var result = await pipeline.ExecuteAsync(
+                new StartupContext(settings, mode, skipVpnConflictCheck)
+                {
+                    RequireCompleteRuleSets = RequireCompleteRuleSetsOnStart,
+                    RestoreAcceptedImport = restoreAcceptedImport,
+                    SessionImportJson = sessionImportJson
+                }, ct,
+                retireAfterValidation: mode == StartupMode.AutoFailover ? PrepareRuntimeAsync : null);
+
+            if (result.EarlyReturn)
+            {
+                _logger?.Information(
+                    "[VpnEngine] StartAsync: F-E re-entry handled by inner call (outer aborting)");
+                return;
+            }
+
+            ActiveAppRoutingFingerprint = ConfigGenerator.ComputeAppRoutingFingerprint(
+                _scanResult?.ProcessNames ?? [],
+                settings);
+
+            ApplyUnixDnsSettings(settings);
+
+            await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
+            _startupIncomplete = false;
         }
-
-        ActiveAppRoutingFingerprint = ConfigGenerator.ComputeAppRoutingFingerprint(
-            _scanResult?.ProcessNames ?? [],
-            settings);
-
-        ApplyUnixDnsSettings(settings);
-
-        await TryEngageSplitDriverAsync(settings, ct).ConfigureAwait(false);
+        catch when (preparingNewRuntime)
+        {
+            RetireIncompleteStartup();
+            throw;
+        }
     }
 
     private void ApplyUnixDnsSettings(AppSettings settings)
@@ -336,6 +355,12 @@ public partial class VpnEngine : IDisposable
             return false;
         }
 
+        if (_startupIncomplete || (ConfirmServiceReplacement != null && _healthMonitor?.IsMonitoring(_singBox) != true))
+        {
+            _logger?.Warning("[VpnEngine] Apply skipped while service recovery is unavailable");
+            return false;
+        }
+
         var oldConfigMode = ActiveConfigMode;
         var oldRoutingMode = ActiveRoutingMode;
         var oldTunFingerprint = TunFingerprint;
@@ -346,8 +371,10 @@ public partial class VpnEngine : IDisposable
         var configCommitted = false;
         var previousSettings = _failoverSettingsContext;
         bool pausedHealth = false;
+        bool pausedTelemetry = false;
         string? lastGoodJson = null;
         IProcessHandle? previousServiceHandle = null;
+        bool rolledBack = false;
         IProcessHandle? confirmedServiceHandle = null;
         var policyRestartAttempted = false;
 
@@ -360,6 +387,13 @@ public partial class VpnEngine : IDisposable
             ActiveServerAddress = oldServerAddress;
             _activeProfile = oldProfile;
             _scanResult = oldScanResult;
+            if (pausedTelemetry && previousSettings != null && !_sessionCts.IsCancellationRequested &&
+                (rolledBack || (previousServiceHandle?.QueryHasExited() == false &&
+                 ReferenceEquals(previousServiceHandle, _singBox.OwnedProcessHandle))))
+            {
+                pausedTelemetry = false;
+                TryStartConnectionHealthStream(previousSettings);
+            }
             if (pausedHealth && oldProfile != null && previousSettings != null && !_sessionCts.IsCancellationRequested)
             {
                 pausedHealth = false;
@@ -460,11 +494,19 @@ public partial class VpnEngine : IDisposable
                 _healthMonitor.PauseForApply();
                 pausedHealth = true;
             }
+            previousServiceHandle = _singBox.OwnedProcessHandle;
             var confirm = ConfirmServiceReplacement;
             if (confirm != null || result.PublishAcceptedImport != null)
             {
-                previousServiceHandle = _singBox.OwnedProcessHandle;
                 lastGoodJson = File.ReadAllText(AppPaths.CurrentConfigPath);
+            }
+            // Stop old control requests before replacing the listener or its credentials.
+            _probeCts?.Cancel();
+            if (_connHealthStream != null)
+            {
+                _connHealthStream.Dispose();
+                _connHealthStream = null;
+                pausedTelemetry = true;
             }
             policyRestartAttempted = settings.BusinessPolicy != null;
             var restarted = settings.BusinessPolicy is { } businessPolicy
@@ -506,14 +548,18 @@ public partial class VpnEngine : IDisposable
                     throw new InvalidOperationException("The replacement exited before accepting settings.");
 
                 result.PublishAcceptedImport?.Invoke();
+                if (_healthMonitor != null) _healthMonitor.AcceptedImportJson = result.ImportedJson;
                 ResetFailoverContext(settings);
                 configCommitted = true;
             }
 
             if (pausedHealth && result.Profile != null)
                 _healthMonitor!.ResumeAfterApply(result.Profile, settings, _scanResult, controller, AcceptSettings);
-            else
+            else if (confirm == null)
                 AcceptSettings();
+            else
+                throw new InvalidOperationException("Service recovery could not accept the replacement settings.");
+            if (newConfigMode == "generated") TryStartConnectionHealthStream(settings);
             // Restart replaces the link and resolved drops its per-link settings.
             ApplyUnixDnsSettings(settings);
             UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
@@ -536,11 +582,14 @@ public partial class VpnEngine : IDisposable
                 {
                     if (_singBox.HasActiveTunnel)
                     {
-                        if (!_singBox.ReloadConfigJsonWithResult(lastGoodJson, forceRestart: true))
-                            _logger?.Error("[VpnEngine] Service tunnel rollback was not confirmed");
+                        rolledBack = _singBox.ReloadConfigJsonWithResult(lastGoodJson, forceRestart: true);
+                        if (!rolledBack) _logger?.Error("[VpnEngine] Service tunnel rollback was not confirmed");
                     }
                     else
+                    {
                         _singBox.StartWithJson(lastGoodJson);
+                        rolledBack = true;
+                    }
                 }
                 catch (Exception) { _logger?.Error("[VpnEngine] Service tunnel rollback failed"); }
             }
@@ -606,12 +655,17 @@ public partial class VpnEngine : IDisposable
         Volatile.Write(ref _policyReceipt, null);
         OnStatus("Stopping...");
 
+        if (_singBox is { } manager &&
+            !(_healthMonitor?.TryRetireForFailover(manager.TryRetireForReplacement) ?? manager.TryRetireForReplacement()))
+        {
+            OnStatus("Tunnel stop was not confirmed. Retry disconnect.");
+            throw new InvalidOperationException("Tunnel stop was not confirmed.");
+        }
+
         try { _probeCts?.Cancel(); } catch { }
         _warmupConfirmed = false;
         // Dispose the health monitor before sing-box, or its poll sees sing-box exiting and restarts it mid-stop.
         try { _healthMonitor?.Dispose(); } catch { }
-        // Dispose, not Stop: unhooks the ProcessExit handler so each connect cycle does not leak a manager.
-        try { _singBox?.Dispose(); } catch { }
         try { _slipstream?.Dispose(); } catch { }
 
         try { _splitDriver?.DisengageAsync(CancellationToken.None).Wait(TimeSpan.FromSeconds(5)); } catch { }
@@ -653,20 +707,18 @@ public partial class VpnEngine : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true;
 
-        if (IsRunning) Stop();
+        if (_singBox != null) Stop();
         else
         {
             try { _dnsHardening.Restore(_logger); } catch { }
             try { _unixDns.Restore(_logger); } catch { }
             try { _firewall?.Dispose(); } catch { }
             _firewall = null;
-            try { _singBox?.Dispose(); } catch { }
-            _singBox = null;
             try { _slipstream?.Dispose(); } catch { }
             _slipstream = null;
         }
+        _disposed = true;
         try { _splitDriver?.Dispose(); } catch { }
         try { _probeCts?.Cancel(); } catch { }
         try { _probeCts?.Dispose(); } catch { }

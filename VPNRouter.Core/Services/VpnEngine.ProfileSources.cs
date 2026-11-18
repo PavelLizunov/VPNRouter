@@ -10,28 +10,47 @@ public partial class VpnEngine
     internal static string ResolveCustomConfigPath(AppSettings settings) =>
         ResolveCustomConfigFiles(settings).SourcePath;
 
-    internal static (string SourcePath, string? ManagedPath) ResolveCustomConfigFiles(
-        AppSettings settings, bool preferManagedCopy = false)
+    internal static (string SourcePath, string? AcceptedPath) ResolveCustomConfigFiles(
+        AppSettings settings, bool preferAccepted = false)
     {
-        if (settings.App.CustomConfigs?.Count > 0)
+        if (settings.App.CustomConfigs is { Count: > 0 } entries)
         {
-            var entry = !string.IsNullOrEmpty(settings.App.ActiveCustomConfig)
-                ? settings.App.CustomConfigs
-                    .FirstOrDefault(c => c.Name == settings.App.ActiveCustomConfig)
-                    ?? settings.App.CustomConfigs[0]
-                : settings.App.CustomConfigs[0];
-
-            var path = Environment.ExpandEnvironmentVariables(entry.Path);
-            var managedPath = CustomConfigInjector.GetProgramDataPath(entry.Name);
-            if (preferManagedCopy && File.Exists(managedPath))
-                return (managedPath, managedPath);
-            if (File.Exists(path))
-                return (path, managedPath);
-            if (File.Exists(managedPath))
-                return (managedPath, managedPath);
+            var entry = string.IsNullOrEmpty(settings.App.ActiveCustomConfig) ? entries[0] :
+                entries.FirstOrDefault(c => c.Name == settings.App.ActiveCustomConfig) ?? entries[0];
+            var historicalCopy = CustomConfigInjector.GetProgramDataPath(entry.Name);
+            var source = CustomConfigInjector.GetRegisteredImportPath(entry);
+            var named = ResolveImport(source, entry.Name, historicalCopy, preferAccepted);
+            if (File.Exists(named.SourcePath)) return named;
         }
 
-        return (Environment.ExpandEnvironmentVariables(settings.App.CustomConfig ?? ""), null);
+        var legacy = settings.App.CustomConfig ?? "";
+        if (!string.IsNullOrWhiteSpace(legacy))
+            return ResolveImport(legacy, name: null, historicalCopy: null, preferAccepted);
+
+        // Older installations could use the conventional private file without a saved path.
+        if (preferAccepted && settings.App.CustomConfigs is not { Count: > 0 })
+        {
+            var historical = string.IsNullOrEmpty(settings.App.ActiveCustomConfig)
+                ? Path.Combine(AppPaths.ConfigDir, "custom.json")
+                : CustomConfigInjector.GetProgramDataPath(settings.App.ActiveCustomConfig);
+            var name = string.IsNullOrEmpty(settings.App.ActiveCustomConfig) ? null : settings.App.ActiveCustomConfig;
+            var prior = ResolveImport(historical, name, historical, preferAccepted);
+            if (File.Exists(prior.SourcePath)) return prior;
+        }
+        return (legacy, null);
+    }
+
+    private static (string SourcePath, string AcceptedPath) ResolveImport(
+        string registeredPath, string? name, string? historicalCopy, bool preferAccepted)
+    {
+        var accepted = CustomConfigInjector.GetAcceptedImportPath(registeredPath, name);
+        var source = Environment.ExpandEnvironmentVariables(registeredPath);
+        if (preferAccepted && File.Exists(accepted)) return (accepted, accepted);
+        if (preferAccepted && File.Exists(historicalCopy)) return (historicalCopy!, accepted);
+        if (File.Exists(source)) return (source, accepted);
+        if (File.Exists(accepted)) return (accepted, accepted);
+        if (File.Exists(historicalCopy)) return (historicalCopy!, accepted);
+        return (source, accepted);
     }
 
     internal static string ComputeTunFingerprint(Models.TunSettings tun)

@@ -109,7 +109,9 @@ public class ZapretUpdater
         return null;
     }
 
-    public async Task DownloadAndExtractAsync(CancellationToken ct)
+    public Task DownloadAndExtractAsync(CancellationToken ct) => DownloadAndExtractAsync(ct, null);
+
+    internal async Task DownloadAndExtractAsync(CancellationToken ct, ZapretManager? owner)
     {
         if (!await _downloadLock.WaitAsync(TimeSpan.Zero, ct).ConfigureAwait(false))
         {
@@ -319,7 +321,8 @@ public class ZapretUpdater
                     StatusChanged?.Invoke("Installing...");
                     var version = ParseVersionFromServiceBat(extractedRoot) ?? tagName;
                     File.WriteAllText(Path.Combine(extractedRoot, "version.txt"), version);
-                    PublishVerifiedPackage(extractedRoot);
+                    ct.ThrowIfCancellationRequested();
+                    PublishVerifiedPackage(extractedRoot, owner: owner);
                     _logger.Information("[ZapretUpdater] Installed version {Version}", version);
                     StatusChanged?.Invoke($"Installed {version}");
                 }
@@ -771,12 +774,21 @@ public class ZapretUpdater
             uint.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var prefix) && prefix <= (ipv4 ? 32u : 128u));
     }
 
-    internal static void PublishVerifiedPackage(string staged, Action? afterDetach = null) =>
+    internal static void PublishVerifiedPackage(string staged, Action? afterDetach = null, ZapretManager? owner = null) =>
         ZapretRuntimeDirectory.WithPackage(destination =>
         {
             if (!Directory.Exists(staged)) throw new DirectoryNotFoundException(staged);
             SeedUserLists(staged, destination);
-            ReplacePackage(staged, destination, afterDetach);
+            if (owner?.HasDriverConflict() == true)
+                throw new InvalidOperationException(Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict));
+            var restore = owner?.SuspendOwnedStrategy();
+            try { ReplacePackage(staged, destination, afterDetach); }
+            catch (Exception publishError) when (restore != null)
+            {
+                try { restore(); }
+                catch (Exception restartError) { throw new AggregateException(publishError, restartError); }
+                throw;
+            }
         });
 
     private static void ReplacePackage(string staged, string destination, Action? afterDetach)

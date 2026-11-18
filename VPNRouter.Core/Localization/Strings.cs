@@ -101,6 +101,7 @@ public static partial class Strings
     }
 
     public static string Starting => Ru ? "Запуск..." : "Starting...";
+    public static string TunnelStopUnconfirmed => Ru ? "Не удалось подтвердить остановку VPN. Повторите отключение." : "VPN stop could not be confirmed. Retry disconnect.";
     public static string Stopping => Ru ? "Остановка..." : "Stopping...";
 
     public static string Stopped => Ru ? "Остановлен" : "Stopped";

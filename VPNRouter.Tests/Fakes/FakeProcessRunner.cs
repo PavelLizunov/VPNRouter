@@ -118,6 +118,7 @@ public sealed class FakeProcessHandle : IProcessHandle
 
     public int KillCallCount { get; private set; }
     public bool RefuseKill { get; set; }
+    public Action? OnWaitForExit { get; init; }
     public bool? LastKillIncludedChildren { get; private set; }
     public int DisposeCallCount { get; private set; }
 
@@ -127,6 +128,7 @@ public sealed class FakeProcessHandle : IProcessHandle
 
     public Task<int> WaitForExitAsync(CancellationToken ct)
     {
+        OnWaitForExit?.Invoke();
         return _exit.Task.WaitAsync(ct);
     }
 
@@ -168,6 +170,11 @@ public sealed class FakeProcessHandle : IProcessHandle
     {
         if (_exit.TrySetResult(exitCode) && (!_exitedSuppressed || SimulateExitedRaceLost))
             Exited?.Invoke(this, exitCode);
+    }
+
+    public void DisposeAfterExit()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0) DisposeCallCount++;
     }
 
     public void Dispose()

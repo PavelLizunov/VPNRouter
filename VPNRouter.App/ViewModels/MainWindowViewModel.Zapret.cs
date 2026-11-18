@@ -420,27 +420,39 @@ public partial class MainWindowViewModel
         ZapretStrategiesDisplay = newDisplay;
     }
 
+#if PLATFORM_WINDOWS
+    internal Func<Serilog.ILogger, ZapretUpdater> CreateZapretUpdater { get; set; } = logger => new(logger);
+#endif
+
     [RelayCommand]
-    private async Task UpdateZapretAsync()
+    private Task UpdateZapretAsync() => TryUpdateZapretAsync();
+
+    private async Task<bool> TryUpdateZapretAsync()
     {
 #if PLATFORM_WINDOWS
-        if (!IsZapretMagicButtonEnabled || _disposed) return;
+        if (!IsZapretMagicButtonEnabled || _disposed) return false;
         IsZapretDownloading = true;
+        bool hadOwnedProcess = _zapret?.HasOwnedProcess == true;
         ZapretStatus = IsRussian ? "Загрузка zapret..." : "Downloading zapret...";
 
         try
         {
-            if (ZapretEnabled || IsZapretRunning())
+            if (_zapret == null)
             {
-                if (!StopZapret()) return;
-                ZapretEnabled = false;
+                _zapret = new ZapretManager(_logger);
+                _zapret.ImmediateExitDetected += OnZapretImmediateExit;
             }
-
-            var updater = new VPNRouter.Core.Services.ZapretUpdater(_logger);
+            if (_zapret.HasDriverConflict())
+            {
+                ZapretStatus = Core.Localization.Strings.ZapretServiceOutcome(ZapretActions.ServiceApply.Conflict);
+                return false;
+            }
+            var updater = CreateZapretUpdater(_logger);
             updater.StatusChanged += s =>
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => ZapretStatus = s);
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (IsZapretDownloading) ZapretStatus = s; });
 
-            await updater.DownloadAndExtractAsync(System.Threading.CancellationToken.None);
+            await updater.DownloadAndExtractAsync(System.Threading.CancellationToken.None, _zapret);
+            ZapretEnabled = false;
 
             LoadZapretStrategies();
 
@@ -448,6 +460,7 @@ public partial class MainWindowViewModel
             ZapretStatus = migration.Message ?? (IsRussian
                 ? $"zapret {ZapretVersionText} установлен"
                 : $"zapret {ZapretVersionText} installed");
+            return true;
         }
         catch (VPNRouter.Core.Services.ZapretDownloadException zex)
         {
@@ -463,9 +476,11 @@ public partial class MainWindowViewModel
         }
         finally
         {
+            if (hadOwnedProcess && _zapret?.HasOwnedProcess == false) ZapretEnabled = false;
             IsZapretDownloading = false;
         }
 #endif
+        return false;
     }
 
 #if PLATFORM_WINDOWS
@@ -517,8 +532,8 @@ public partial class MainWindowViewModel
 
         if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
-            await UpdateZapretAsync();
-            if (_disposed || !VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
+            if (!await TryUpdateZapretAsync()) return;
+            if (_disposed || _restartReserved || !VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
         }
 
         try
@@ -587,7 +602,7 @@ public partial class MainWindowViewModel
         ? Strings.ZapretOneTapStopButton
         : Strings.ZapretOneTapStartButton;
 
-    public bool IsZapretMagicButtonEnabled => !IsZapretDownloading && !IsZapretProbing && !IsZapretActionRunning;
+    public bool IsZapretMagicButtonEnabled => !_restartReserved && !IsZapretDownloading && !IsZapretProbing && !IsZapretActionRunning;
 
     public string L_ZapretOneTapTune => Strings.ZapretOneTapTune;
 
@@ -626,7 +641,7 @@ public partial class MainWindowViewModel
         if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
             ZapretStatus = Strings.ZapretOneTapDownloading;
-            await UpdateZapretAsync();
+            if (!await TryUpdateZapretAsync()) return;
             if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
         }
         else
@@ -647,7 +662,7 @@ public partial class MainWindowViewModel
                     ZapretStatus = IsRussian
                         ? $"Обновление Zapret до {remoteTag}…"
                         : $"Updating Zapret to {remoteTag}…";
-                    await UpdateZapretAsync();
+                    if (!await TryUpdateZapretAsync()) return;
                 }
             }
             catch (Exception ex)
@@ -1198,7 +1213,7 @@ public partial class MainWindowViewModel
     private async Task RunZapretActionAsync(string title,
         Func<CancellationToken, IAsyncEnumerable<string>> action)
     {
-        if (IsZapretActionRunning) return;
+        if (_disposed || _restartReserved || IsZapretActionRunning) return;
         IsZapretActionRunning = true;
         ZapretActionTitle = title;
         ZapretActionOutput.Clear();

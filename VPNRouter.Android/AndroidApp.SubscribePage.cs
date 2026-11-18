@@ -958,6 +958,8 @@ public partial class AndroidApp
     {
         var activity = MainActivity.Instance;
         if (activity is null) return;
+        var command = AndroidStorage.BeginUiCommand();
+        if (command == null) return;
         MainActivity.PendingQrScanCallback = (success, text) =>
         {
             Dispatcher.UIThread.Post(async () =>
@@ -973,7 +975,7 @@ public partial class AndroidApp
                     ShowMenuFeedback(msg);
                     return;
                 }
-                await ApplyScannedTextAsync(text);
+                await ApplyScannedTextAsync(text, command);
             });
         };
         activity.RequestQrCodeScan();

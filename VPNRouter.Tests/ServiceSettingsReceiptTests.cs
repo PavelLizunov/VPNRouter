@@ -39,15 +39,20 @@ public class ServiceSettingsReceiptTests
     }
 
     [Theory]
-    [InlineData(true, "0.0.0.0")]
-    [InlineData(false, "0.0.0.0")]
-    [InlineData(false, "localhost")]
-    public async Task Characterization_ReadinessAndHealthUseTheConfiguredLocalListener(bool verifyOwner, string bind)
+    [InlineData(true, "0.0.0.0", false)]
+    [InlineData(false, "0.0.0.0", false)]
+    [InlineData(false, "[::]", true)]
+    [InlineData(false, "localhost", false)]
+    [InlineData(false, "localhost", true)]
+    public async Task Characterization_ReadinessAndHealthUseTheConfiguredLocalListener(bool verifyOwner, string bind, bool ipv6)
     {
         Assert.SkipUnless(!verifyOwner || OperatingSystem.IsWindows(), "The service verifies TCP ownership on Windows.");
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         lifetime.CancelAfter(TimeSpan.FromSeconds(15));
-        using var server = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        Assert.SkipUnless(!ipv6 || System.Net.Sockets.Socket.OSSupportsIPv6, "IPv6 loopback is required.");
+        var address = ipv6 ? System.Net.IPAddress.IPv6Loopback : System.Net.IPAddress.Loopback;
+        using var server = new System.Net.Sockets.TcpListener(address, 0);
+        if (ipv6) server.Server.DualMode = false;
         server.Start();
         var config = System.Text.Json.JsonSerializer.Serialize(new
         {

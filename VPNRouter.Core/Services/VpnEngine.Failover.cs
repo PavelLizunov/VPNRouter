@@ -4,6 +4,14 @@ namespace VPNRouter.Core.Services;
 
 public partial class VpnEngine
 {
+    internal static async Task<ProbeResult?> ProbeCurrentStartAsync(Func<bool> isCurrent,
+        Func<CancellationToken, Task<ProbeResult>> probe, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested || !isCurrent()) return null;
+        var result = await probe(ct).ConfigureAwait(false);
+        return !ct.IsCancellationRequested && isCurrent() ? result : null;
+    }
+
     internal static bool ShouldAutoFailoverAfterProbe(
         bool probeIsDead, bool probeCancelled, bool warmupConfirmed)
         => probeIsDead && !probeCancelled && !warmupConfirmed;
@@ -33,17 +41,14 @@ public partial class VpnEngine
 
         try
         {
-            await StartAsyncInternal(captured, ct, _skipVpnConflictCheck).ConfigureAwait(false);
+            await StartAsyncInternal(captured, ct, _skipVpnConflictCheck,
+                restoreAcceptedImport: true, sessionImportJson: _healthMonitor?.AcceptedImportJson).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex)
         {
             _logger?.Warning(
                 "[VpnEngine] Pre-start failover restart threw inside StartAsyncInternal ({ExceptionType})", ex.GetType().Name);
-            if (!IsRunning)
-            {
-                try { TeardownInternal(); } catch { }
-            }
             return false;
         }
     }
@@ -79,6 +84,7 @@ public partial class VpnEngine
                 return false;
             }
 
+            var acceptedImport = _healthMonitor?.AcceptedImportJson;
             bool validateBeforeRetiring = HasLiveOrStartingSingBox();
             if (!validateBeforeRetiring)
                 RetireCurrentTunnel();
@@ -99,7 +105,8 @@ public partial class VpnEngine
                 settings.BusinessPolicy = captured.BusinessPolicy;
                 retireAfterValidation = RetireCurrentTunnel;
             }
-            await StartAsyncInternal(settings, session.Token, _skipVpnConflictCheck, retireAfterValidation).ConfigureAwait(false);
+            await StartAsyncInternal(settings, session.Token, _skipVpnConflictCheck, retireAfterValidation,
+                restoreAcceptedImport: true, sessionImportJson: acceptedImport).ConfigureAwait(false);
             return true;
         }
         catch (OperationCanceledException)
@@ -119,21 +126,6 @@ public partial class VpnEngine
             _logger?.Warning("[VpnEngine] Rejected automatic replacement before teardown ({ExceptionType})", ex.GetType().Name);
             OnStatus("Automatic failover rejected before tunnel replacement.");
             return false;
-        }
-        catch (Exception ex)
-        {
-            if (!HasActiveTunnel)
-            {
-                _logger?.Warning(
-                    "[VpnEngine] Failover restart failed to bring up replacement, tearing down partial state ({ExceptionType})", ex.GetType().Name);
-                try { TeardownInternal(); } catch { }
-            }
-            else
-            {
-                _logger?.Warning(
-                    "[VpnEngine] Failover restart threw after sing-box came up, leaving live tunnel for Stop/Dispose ({ExceptionType})", ex.GetType().Name);
-            }
-            throw;
         }
         finally
         {

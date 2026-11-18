@@ -85,6 +85,14 @@ public static partial class Strings
         ? "Образ службы не соответствует этой редакции. Для службы в другом каталоге используйте CLI её установки."
         : "The registered service image does not match this edition. Use the CLI from its installation to manage a relocated service.";
 
+    internal static string UpdateInstallNotStarted => Ru
+        ? "Не удалось запустить установку обновления. Повторите попытку."
+        : "The update installer did not start. Try again.";
+
+    internal static string ZapretRestartPending => Ru
+        ? "Дождитесь завершения текущей операции и повторите перезапуск."
+        : "Wait for the current operation to finish, then retry the restart.";
+
     internal static string ZapretQuitPending => Ru
         ? "VPNRouter остаётся открытым. Завершение работы Zapret не подтверждено. Повторите «Выход»."
         : "VPNRouter is staying open. Zapret shutdown is unconfirmed. Choose Quit again.";

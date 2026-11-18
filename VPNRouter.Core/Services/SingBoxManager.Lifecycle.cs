@@ -305,19 +305,17 @@ public partial class SingBoxManager
             return;
         }
 
-        var alreadyExited = false;
-        var probeFailed = false;
+        bool? alreadyExited = null;
         try
         {
-            alreadyExited = winTargetHandle.HasExited;
+            alreadyExited = winTargetHandle.QueryHasExited();
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[SingBoxManager] Error probing sing-box process exit state");
-            probeFailed = true;
         }
 
-        if (probeFailed)
+        if (!alreadyExited.HasValue)
         {
             _exactStopUnconfirmed = true;
             State = SingBoxState.Failed;
@@ -326,7 +324,7 @@ public partial class SingBoxManager
             return;
         }
 
-        if (alreadyExited)
+        if (alreadyExited == true)
         {
             _logger.Information(
                 "[SingBoxManager] Stop called but sing-box already exited (process=HasExited) — running cleanup-only path");
@@ -386,7 +384,7 @@ public partial class SingBoxManager
 
             try
             {
-                winStopped = winTargetHandle.HasExited;
+                winStopped = winTargetHandle.QueryHasExited() == true;
             }
             catch (Exception ex)
             {

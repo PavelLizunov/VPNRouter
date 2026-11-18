@@ -191,7 +191,7 @@ public partial class MainWindowViewModel
 
             var manager = await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                if (_disposed || IsZapretProbing || IsZapretRunning()) return null;
+                if (_disposed || !IsZapretMagicButtonEnabled || IsZapretRunning()) return null;
                 _zapret ??= new ZapretManager(_logger);
 
                 if (strategyName == "custom")

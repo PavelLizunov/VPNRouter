@@ -258,13 +258,16 @@ internal sealed class ProcessHandle : IProcessHandle
         try { _process.EnableRaisingEvents = false; } catch { }
     }
 
-    public void Dispose()
+    public void DisposeAfterExit() => Close(kill: false);
+    public void Dispose() => Close(kill: true);
+
+    private void Close(bool kill)
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         try { _process.EnableRaisingEvents = false; } catch { }
 
-        Kill(entireProcessTree: true);
+        if (kill) Kill(entireProcessTree: true);
 
         try { _process.Dispose(); } catch { }
     }

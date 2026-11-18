@@ -12,9 +12,9 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
-    private async Task ApplyScannedTextAsync(string? scanned)
+    private async Task ApplyScannedTextAsync(string? scanned, string command)
     {
-        if (string.IsNullOrWhiteSpace(scanned)) return;
+        if (!AndroidStorage.IsCurrentUiCommand(command) || string.IsNullOrWhiteSpace(scanned)) return;
         var trimmed = scanned.Trim();
         var lowered = trimmed.ToLowerInvariant();
 
@@ -32,20 +32,20 @@ public partial class AndroidApp
             lowered.StartsWith("tuic://") ||
             lowered.StartsWith("ss://"))
         {
-            ApplyScannedServerUri(trimmed);
+            ApplyScannedServerUri(trimmed, command);
             return;
         }
 
         if (lowered.StartsWith("http://") || lowered.StartsWith("https://"))
         {
-            await ApplyScannedSubscriptionUrlAsync(trimmed);
+            await ApplyScannedSubscriptionUrlAsync(trimmed, command);
             return;
         }
 
         ShowMenuFeedback(Localization.SmpQrUnsupportedScheme);
     }
 
-    private void ApplyScannedServerUri(string uri)
+    private void ApplyScannedServerUri(string uri, string command)
     {
         VlessServerEntry parsed;
         try
@@ -114,12 +114,14 @@ public partial class AndroidApp
 
         Dispatcher.UIThread.Post(() =>
         {
-            MainActivity.Instance?.RequestConnect();
+            MainActivity.Instance?.RequestConnect(command);
         }, DispatcherPriority.Background);
     }
 
-    private async Task ApplyScannedSubscriptionUrlAsync(string url)
+    private async Task ApplyScannedSubscriptionUrlAsync(string url, string? reserved = null)
     {
+        var command = reserved ?? AndroidStorage.BeginUiCommand();
+        if (command == null || !AndroidStorage.IsCurrentUiCommand(command)) return;
         var subs = AndroidStorage.GetSubscriptions();
         _subs = subs;
 
@@ -162,6 +164,7 @@ public partial class AndroidApp
             return;
         }
 
+        if (!AndroidStorage.IsCurrentUiCommand(command)) return;
         if (fetchedCount == 0)
         {
             ShowMenuFeedback(Localization.SmpQrSubscriptionEmpty);
@@ -176,7 +179,7 @@ public partial class AndroidApp
 
         Dispatcher.UIThread.Post(() =>
         {
-            MainActivity.Instance?.RequestConnect();
+            MainActivity.Instance?.RequestConnect(command);
         }, DispatcherPriority.Background);
     }
 

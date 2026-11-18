@@ -169,6 +169,7 @@ public class MainActivity : AvaloniaMainActivity
 
         base.OnCreate(savedInstanceState);
         _consentCommand = savedInstanceState?.GetString(AndroidStorage.UiCommandKey);
+        if (AndroidStorage.IsCurrentUiCommand(_consentCommand)) _consentGate.TryOpen();
         Instance = this;
 #if VPNROUTER_TESTHOOK
         global::Android.Util.Log.Warn("VpnRouterTest",
@@ -517,6 +518,13 @@ public class MainActivity : AvaloniaMainActivity
             var action = intent?.Action;
             if (string.IsNullOrEmpty(action)) return;
 
+            if ((action is ActionTunnelUp or ActionTunnelDown or ActionTunnelError) &&
+                (intent?.GetStringExtra(AndroidStorage.UiCommandKey) != AndroidStorage.CurrentUiCommand ||
+                 !AndroidStorage.IsCurrentStateEvent(intent?.GetStringExtra(AndroidStorage.StateEventKey))))
+            {
+                if (action != ActionTunnelError) AndroidApp.RefreshPerAppSelection();
+                return;
+            }
             switch (action)
             {
                 case ActionTunnelUp:
@@ -528,7 +536,6 @@ public class MainActivity : AvaloniaMainActivity
                     AndroidApp.RefreshPerAppSelection();
                     break;
                 case ActionTunnelError:
-                    if (!AndroidStorage.IsCurrentStateEvent(intent?.GetStringExtra(AndroidStorage.StateEventKey))) break;
                     PresentTunnelError(context, Localization.TunnelError(intent?.GetStringExtra(ExtraErrorMessage)),
                         intent?.GetBooleanExtra("previous_tunnel_active", false) == true);
                     break;
@@ -583,27 +590,31 @@ public class MainActivity : AvaloniaMainActivity
         outState.PutString(AndroidStorage.UiCommandKey, _consentCommand);
     }
 
-    public void RequestConnect()
+    public void RequestConnect() => RequestConnect(null);
+
+    internal void RequestConnect(string? reserved)
     {
+        if (reserved != null && !AndroidStorage.IsCurrentUiCommand(reserved)) return;
         global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: Connect requested by UI");
         var prepareIntent = VpnService.Prepare(this);
         if (prepareIntent is null)
         {
             global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: consent already granted, starting service");
-            if (AndroidStorage.BeginUiCommand() is { } command) StartTunnelService(command);
+            if ((reserved ?? AndroidStorage.BeginUiCommand()) is { } command) StartTunnelService(command);
             else PresentStartError(Localization.TunnelError("config-invalid"));
         }
         else
         {
             if (!_consentGate.TryOpen())
             {
+                if (reserved != null) _consentCommand = reserved;
                 global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: consent dialog is already open, ignoring the repeated request");
                 return;
             }
             global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: presenting system VPN consent dialog");
             try
             {
-                _consentCommand = AndroidStorage.BeginUiCommand();
+                _consentCommand = reserved ?? AndroidStorage.BeginUiCommand();
                 if (_consentCommand == null)
                 {
                     _consentGate.Close();

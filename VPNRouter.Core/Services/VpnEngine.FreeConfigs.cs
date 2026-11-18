@@ -21,6 +21,7 @@ public partial class VpnEngine
                 return false;
 
             var previous = _failoverSettingsContext;
+            var previousImport = _healthMonitor?.AcceptedImportJson;
             var previousHandle = _singBox?.OwnedProcessHandle;
             bool wasRunning = HasLiveOrStartingSingBox();
             if (wasRunning && (previous == null || previousHandle is not { HasExited: false }))
@@ -77,7 +78,8 @@ public partial class VpnEngine
                         if (wasRunning && !userStopped)
                         {
                             _confirmingFreeConfig = false;
-                            await StartSessionGatedAsync(previous!, CancellationToken.None, skipVpnConflictCheck).ConfigureAwait(false);
+                            await StartSessionGatedAsync(previous!, CancellationToken.None, skipVpnConflictCheck,
+                                restoreAcceptedImport: true, sessionImportJson: previousImport).ConfigureAwait(false);
                         }
                     }
                 }

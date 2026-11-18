@@ -12,7 +12,10 @@ public class ZapretManager : IDisposable
     private readonly IProcessRunner _runner;
     private readonly object _processGate = new();
     private IProcessHandle? _handle;
+    private Action? _restartStrategy;
     private bool _disposed;
+    private Task? _serviceStop;
+    internal TimeSpan ServiceStopRetryDelay { get; init; } = TimeSpan.FromSeconds(1);
 
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
 
@@ -58,7 +61,11 @@ public class ZapretManager : IDisposable
         _runner = runner ?? Runner;
     }
 
-    public void StartFromBat(string batPath, string parsedArgs) => StartWinws(ResolveInstalledStrategyArguments(batPath));
+    public void StartFromBat(string batPath, string parsedArgs) => StartInstalledStrategy(batPath);
+
+    private void StartInstalledStrategy(string batPath) =>
+        ZapretRuntimeDirectory.WithPackage(_ => StartWinws(ResolveInstalledStrategyArguments(batPath),
+            () => StartInstalledStrategy(batPath)));
 
     public static string[] ResolveInstalledStrategyArguments(string batPath)
     {
@@ -72,7 +79,8 @@ public class ZapretManager : IDisposable
         return ExpandArguments(installed.Arguments, fromPackage: true);
     }
 
-    public void Start(string args) => StartWinws(ExpandArguments(args, fromPackage: false));
+    public void Start(string args) =>
+        ZapretRuntimeDirectory.WithPackage(_ => StartWinws(ExpandArguments(args, fromPackage: false), () => Start(args)));
 
     internal static string[] ExpandArguments(string args, bool fromPackage)
     {
@@ -107,7 +115,7 @@ public class ZapretManager : IDisposable
         return tokens;
     }
 
-    private void StartWinws(string[] arguments)
+    private void StartWinws(string[] arguments, Action restartStrategy)
     {
         var exe = ZapretUpdater.WinwsExePath;
         if (!File.Exists(exe))
@@ -123,6 +131,7 @@ public class ZapretManager : IDisposable
             _handle = _runner.Start(new ProcessRequest(exe, arguments, ZapretUpdater.BinDir,
                 EnvironmentOverrides: OperatingSystem.IsWindows() ? ZapretRuntimeDirectory.ProcessEnvironment() : null,
                 CaptureStdout: false, CaptureStderr: false) { ClearInheritedEnvironment = OperatingSystem.IsWindows() });
+            _restartStrategy = restartStrategy;
             var startedAt = DateTime.UtcNow;
             _handle.Exited += (_, code) => DetectImmediateExit(DateTime.UtcNow - startedAt, code);
             _logger.Information("[Zapret] Started winws (PID {Pid})", _handle.Pid);
@@ -162,6 +171,20 @@ public class ZapretManager : IDisposable
         };
     }
 
+    // Keep only the application strategy selection. A retry revalidates the installed package and driver.
+    internal Action? SuspendOwnedStrategy()
+    {
+        lock (_processGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_handle == null) return null;
+            var exited = _handle.QueryHasExited() ?? throw new InvalidOperationException(Localization.Strings.ZapretStopPending);
+            var restart = exited ? null : _restartStrategy;
+            if (!StopOwnedProcess()) throw new InvalidOperationException(Localization.Strings.ZapretStopPending);
+            return restart;
+        }
+    }
+
     public void Stop() => TryStop();
 
     internal bool TryStop()
@@ -194,14 +217,71 @@ public class ZapretManager : IDisposable
                 return false;
             }
         }
-        try { handle.Dispose(); }
+        try { handle.DisposeAfterExit(); }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[Zapret] Could not release the owned winws handle");
             return false;
         }
         _handle = null;
+        _restartStrategy = null;
         return true;
+    }
+
+    internal Task StopForServiceAsync()
+    {
+        lock (_processGate)
+        {
+            _disposed = true; // A queued startup must not replace the process being drained.
+            if (_serviceStop is { IsCompleted: false })
+            {
+                // A second managed stop can retry a refusal while the first waits for exit.
+                if (_handle?.QueryHasExited() == false)
+                {
+                    try { _handle.Kill(entireProcessTree: false); }
+                    catch (Exception ex) { _logger.Warning(ex, "[Zapret] Service stop retry failed"); }
+                }
+                return _serviceStop;
+            }
+            return _serviceStop = DrainServiceProcessAsync();
+        }
+    }
+
+    private async Task DrainServiceProcessAsync()
+    {
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            if (TryDispose()) return;
+            if (attempt < 2) await Task.Delay(ServiceStopRetryDelay).ConfigureAwait(false);
+        }
+
+        IProcessHandle? remaining;
+        lock (_processGate) remaining = _handle;
+        if (remaining == null) return;
+        _logger.Warning("[Zapret] Service stop is pending until its winws process exits");
+        // A host deadline is not evidence of exit. Normally the single native wait stays asleep.
+        // If Windows refuses the wait itself, retain the handle and pace recovery attempts.
+        while (true)
+        {
+            try
+            {
+                await remaining.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Zapret] Could not wait for the owned winws process");
+                await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                if (TryDispose()) return;
+            }
+        }
+        lock (_processGate)
+        {
+            if (!ReferenceEquals(_handle, remaining)) return;
+            remaining.DisposeAfterExit();
+            _handle = null;
+            _restartStrategy = null;
+        }
     }
 
     internal bool TryDispose()

@@ -66,6 +66,8 @@ public interface IProcessHandle : IDisposable
 
     void SuppressExitedEvent();
 
+    void DisposeAfterExit() => Dispose();
+
     ProcessSnapshot? TryGetSnapshot();
 }
 

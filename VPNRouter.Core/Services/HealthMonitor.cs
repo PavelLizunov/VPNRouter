@@ -6,6 +6,8 @@ namespace VPNRouter.Core.Services;
 
 public class HealthMonitor : IDisposable
 {
+    // A removed registration must not change recovery for a tunnel which is still running.
+    internal string? AcceptedImportJson { get; set; }
     private readonly SingBoxManager _singBox;
     private readonly IProcessScanner _scanner;
     private readonly IFirewallManager _firewall;
@@ -169,6 +171,13 @@ public class HealthMonitor : IDisposable
             _strictDnsFailedOver = false;
             _strictDnsUnhealthyStreak = _strictDnsHealthyStreak = 0;
         }
+    }
+
+    internal bool IsMonitoring(SingBoxManager manager)
+    {
+        lock (_settingsWork)
+            return ReferenceEquals(manager, _singBox) && _healthTimer != null && !_disposed &&
+                !_isStopping && _shouldBeRunning;
     }
 
     internal void PauseForApply()
@@ -447,7 +456,7 @@ public class HealthMonitor : IDisposable
         {
             lock (_settingsWork)
             {
-                if (_disposed || _isStopping || generation != _settingsGeneration ||
+                if (_disposed || _isStopping || _healthTimer == null || generation != _settingsGeneration ||
                     !ReferenceEquals(child, _singBox.OwnedProcessHandle)) return;
                 RecoverCrashedProcess();
             }
@@ -781,29 +790,20 @@ public class HealthMonitor : IDisposable
         var isCustom = (_appSettings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
 
-        if (isCustom)
+        if (AcceptedImportJson != null || isCustom)
         {
-            string CheckImport(string path)
+            string CheckImport(string raw)
             {
-                var json = CustomConfigInjector.Inject(CustomConfigInjector.ReadImport(path), processNames, _appSettings,
+                var json = CustomConfigInjector.Inject(raw, processNames, _appSettings,
                     ConfigGenerator.RejectMissingRuleSet, _singBox.CheckRuleSetAsync);
                 if (!_singBox.CheckCandidateAsync(json, CancellationToken.None).GetAwaiter().GetResult())
                     throw new InvalidOperationException("The imported VPN configuration failed native validation.");
                 return json;
             }
 
-            var (selectedPath, _) = VpnEngine.ResolveCustomConfigFiles(_appSettings, preferManagedCopy: true);
-            if (File.Exists(selectedPath)) return CheckImport(selectedPath);
-
-            var configName = _appSettings.App.ActiveCustomConfig;
-            if (!string.IsNullOrEmpty(configName))
-            {
-                var namedPath = CustomConfigInjector.GetProgramDataPath(configName);
-                if (File.Exists(namedPath)) return CheckImport(namedPath);
-            }
-
-            var legacyPath = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config\custom.json");
-            if (File.Exists(legacyPath)) return CheckImport(legacyPath);
+            if (AcceptedImportJson is { } accepted) return CheckImport(accepted);
+            var (selectedPath, _) = VpnEngine.ResolveCustomConfigFiles(_appSettings, preferAccepted: true);
+            if (File.Exists(selectedPath)) return CheckImport(CustomConfigInjector.ReadImport(selectedPath));
             throw new InvalidOperationException("The selected custom VPN configuration is missing.");
         }
 

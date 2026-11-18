@@ -28,6 +28,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
     private readonly UpdateChecker _updateChecker;
     private readonly IUpdateSource _updateSource;
     private readonly Action<int> _exitApplication;
+    internal Func<Action<bool>>? ReserveRestart { get; set; }
     private System.Threading.CancellationTokenSource? _resetCheckStateCts;
 
     [ObservableProperty] private bool _isVisible;
@@ -332,27 +333,32 @@ public partial class UpdateNotificationViewModel : ObservableObject
         try
         {
             var extractedDir = await _updateSource.DownloadAsync(target, progress: null).ConfigureAwait(false);
-
-            await Dispatcher.UIThread.InvokeAsync(() => Message = Strings.UpdateApplying);
-
-            if (!ProductEdition.IsBusiness && _updateSource is not BusinessUpdateSource)
+            var finish = await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
-            }
-
-            await _updateSource.ApplyAsync(target, extractedDir).ConfigureAwait(false);
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                Message = Strings.UpdateRestarting;
-                _exitApplication(0);
+                Message = Strings.UpdateApplying;
+                return ReserveRestart?.Invoke();
             });
+            bool applied = false;
+            try
+            {
+                applied = await _updateSource.ApplyAsync(target, extractedDir).ConfigureAwait(false);
+                if (!applied) throw new InvalidOperationException(Core.Localization.Strings.UpdateInstallNotStarted);
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    Message = Strings.UpdateRestarting;
+                    _exitApplication(0);
+                });
+            }
+            finally
+            {
+                if (finish != null) await Dispatcher.UIThread.InvokeAsync(() => finish(applied));
+            }
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "[UpdateVm] Update failed");
             _errorLocked = true;
-            Dispatcher.UIThread.Post(() =>
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 Message = string.Format(Strings.UpdateFailed, ex.Message);
                 IsDownloading = false;

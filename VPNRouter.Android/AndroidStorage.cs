@@ -69,6 +69,8 @@ public static class AndroidStorage
         return SetString(UiCommandKey, id) ? id : null;
     }
 
+    internal static string? CurrentUiCommand => GetString(UiCommandKey);
+    internal static string? CurrentStateEvent => GetString(StateEventKey);
     internal static bool IsCurrentUiCommand(string? id) => id != null && id == GetString(UiCommandKey);
     internal static bool IsCurrentStateEvent(string? id) => id != null && id == GetString(StateEventKey);
 
