@@ -1006,15 +1006,15 @@ public partial class AndroidApp
         await RefreshOneAsync(entry);
     }
 
-    private Task<int> RefreshStoredSubscriptionAsync(SubscriptionEntry entry, bool selectOnSuccess = false)
+    private Task<int> RefreshStoredSubscriptionAsync(SubscriptionEntry entry, string? selectingCommand = null)
     {
         return AndroidSubscriptionRefresh.RefreshAsync(entry, (refreshed, rejected) =>
         {
-            AndroidStorage.SaveSubscriptionRefresh(refreshed, rejected, selectOnSuccess);
+            var selected = AndroidStorage.SaveSubscriptionRefresh(refreshed, rejected, selectingCommand);
             foreach (var current in _subs.Where(s => AndroidSubscriptionRefresh.AppliesTo(s, refreshed, rejected)))
             {
                 AndroidSubscriptionRefresh.CopyCache(refreshed, current);
-                if (selectOnSuccess && !rejected) current.Enabled = true;
+                if (selected) current.Enabled = true;
             }
             _cachedServers = AndroidStorage.GetServers();
             UpdateServerListView();
@@ -1024,7 +1024,7 @@ public partial class AndroidApp
                 RebuildServerList();
             }
             // Single and bulk page refreshes redraw once in their completion handlers.
-            if (selectOnSuccess) RebuildSubsList();
+            if (selectingCommand != null) RebuildSubsList();
         });
     }
 

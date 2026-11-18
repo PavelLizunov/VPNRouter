@@ -60,13 +60,24 @@ public static class AndroidStorage
 
     public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
 
-    internal const string UiCommandKey = "vpn_ui_command";
+    internal const string UiCommandKey = AndroidSubscriptionRefresh.UiCommand;
     internal const string StateEventKey = "vpn_state_event";
 
     internal static string? BeginUiCommand()
     {
-        string id = Guid.NewGuid().ToString("N");
-        return SetString(UiCommandKey, id) ? id : null;
+        try
+        {
+            return WithCommandPreferences(prefs =>
+            {
+                string id = Guid.NewGuid().ToString("N");
+                using var editor = prefs.Edit();
+                if (editor == null) return null;
+                editor.PutString(UiCommandKey, id);
+                editor.Apply();
+                return id;
+            });
+        }
+        catch { return null; }
     }
 
     internal static string? CurrentUiCommand => GetString(UiCommandKey);
@@ -107,7 +118,7 @@ public static class AndroidStorage
     public static string? GetSubscriptionUrl() => GetString(KeySubscriptionUrl);
     public static bool SetSubscriptionUrl(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value == GetSubscriptionUrl() || GetString(KeySubscriptions) != null)
+        if (value == GetSubscriptionUrl() || GetString(KeySubscriptions) != null)
             return SetString(KeySubscriptionUrl, value);
 
         try
@@ -118,7 +129,8 @@ public static class AndroidStorage
             using var editor = prefs?.Edit();
             if (editor == null) return false;
             editor.PutString(KeySubscriptions, JsonSerializer.Serialize(previous, JsonOptions));
-            editor.PutString(KeySubscriptionUrl, value);
+            if (string.IsNullOrWhiteSpace(value)) editor.Remove(KeySubscriptionUrl);
+            else editor.PutString(KeySubscriptionUrl, value);
             return editor.Commit();
         }
         catch
@@ -176,22 +188,35 @@ public static class AndroidStorage
         }
     }
 
-    internal static void SaveSubscriptionRefresh(SubscriptionEntry entry, bool rejected, bool selectOnSuccess)
+    private static readonly Lazy<Java.Lang.Class> CommandMonitor = new(() =>
+        Application.Context.ClassLoader?.LoadClass("com.ninitux.vpnrouter.VpnRouterService") ??
+        throw new InvalidOperationException("VPN command monitor unavailable."));
+
+    private static T WithCommandPreferences<T>(Func<ISharedPreferences, T> action)
     {
         var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private)
             ?? throw new InvalidOperationException("Preferences unavailable.");
-        AndroidSubscriptionRefresh.Save(entry, rejected, selectOnSuccess, key => prefs.GetString(key, null),
-            updates =>
-            {
-                using var editor = prefs.Edit() ?? throw new InvalidOperationException("Preferences unavailable.");
-                foreach (var (key, value) in updates)
-                {
-                    if (value == null) editor.Remove(key);
-                    else editor.PutString(key, value);
-                }
-                if (!editor.Commit()) throw new InvalidOperationException("Subscription settings could not be saved.");
-            }, JsonOptions);
+        // The service takes the same Java monitor when a tile, stop or revoke supersedes the UI.
+        var reference = ((Java.Interop.IJavaPeerable)CommandMonitor.Value).PeerReference;
+        Java.Interop.JniEnvironment.Monitors.MonitorEnter(reference);
+        try { return action(prefs); }
+        finally { Java.Interop.JniEnvironment.Monitors.MonitorExit(reference); }
     }
+
+    private static void CommitStrings(ISharedPreferences prefs, IReadOnlyDictionary<string, string?> changes)
+    {
+        using var editor = prefs.Edit() ?? throw new InvalidOperationException("Preferences unavailable.");
+        foreach (var (key, value) in changes)
+        {
+            if (value == null) editor.Remove(key);
+            else editor.PutString(key, value);
+        }
+        if (!editor.Commit()) throw new InvalidOperationException("VPN settings could not be saved.");
+    }
+
+    internal static bool SaveSubscriptionRefresh(SubscriptionEntry entry, bool rejected, string? selectingCommand) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.Save(entry, rejected, selectingCommand,
+            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
     internal static void PruneSubServerDuplicatesOnce()
     {
@@ -389,18 +414,9 @@ public static class AndroidStorage
     public static string? GetSelectedServerName() => GetString(KeySelectedServerName);
     public static bool SetSelectedServerName(string? value) => SetString(KeySelectedServerName, value);
 
-    internal static void ApplyFreeConfig(List<VlessServerEntry> servers, string selectedName, string uri)
-    {
-        var json = JsonSerializer.Serialize(servers, JsonOptions);
-        var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private);
-        using var editor = prefs?.Edit() ?? throw new InvalidOperationException("Preferences unavailable");
-        editor.PutString(KeyServersJson, json);
-        editor.PutString(KeySelectedServerName, selectedName);
-        editor.PutString(KeyVlessUri, uri);
-        editor.Remove(KeySubscriptionUrl);
-        editor.PutString(KeyConfigMode, "manual");
-        editor.Apply();
-    }
+    internal static bool ApplyFreeConfig(VlessServerEntry server, string uri, string command) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveFreeConfig(server, uri, command,
+            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
     public static VlessServerEntry? GetActiveServer()
     {
@@ -1032,7 +1048,7 @@ public static class AndroidStorage
 
             var liveKeys = new[]
             {
-                KeyVlessUri, KeySubscriptionUrl, KeyServersJson,
+                KeyVlessUri, KeySubscriptionUrl, KeyServersJson, AndroidSubscriptionRefresh.LegacyManualOwner,
                 KeySelectedServerName, KeyLanguage, KeyTheme,
                 KeySubscriptions, KeyPerAppMode, KeyPerAppPackages,
                 KeyPerAppLastMode, KeyRoutingMode, KeyBypassRussianTraffic,

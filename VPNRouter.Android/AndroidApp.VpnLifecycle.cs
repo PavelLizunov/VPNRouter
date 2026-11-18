@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
 using System;
+using VPNRouter.Core.Services;
 using UiIcons = VPNRouter.Core.Services.UiIcons;
 
 namespace VPNRouter.Android;
@@ -55,20 +56,14 @@ public partial class AndroidApp
         }
     }
 
-    private void OnIntentChanged(bool connected)
-    {
-        PaintCurrentTunnelState(() => UpdateConnectionState(connected));
-    }
+    private void OnIntentChanged(AndroidTunnelEvent owner, bool connected) =>
+        PaintCurrentTunnelState(owner, () => UpdateConnectionState(connected, owner));
 
-    private static void PaintCurrentTunnelState(Action paint)
+    private static void PaintCurrentTunnelState(AndroidTunnelEvent owner, Action paint)
     {
-        var command = AndroidStorage.CurrentUiCommand;
-        var stateEvent = AndroidStorage.CurrentStateEvent;
-        if (Dispatcher.UIThread.CheckAccess()) { paint(); return; }
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (command == AndroidStorage.CurrentUiCommand && stateEvent == AndroidStorage.CurrentStateEvent) paint();
-        });
+        void Paint() => owner.PaintIfCurrent(MainActivity.ReadTunnelEvent, paint);
+        if (Dispatcher.UIThread.CheckAccess()) Paint();
+        else Dispatcher.UIThread.Post(Paint);
     }
 
     private void AttachLifecycleEvents()
@@ -80,37 +75,18 @@ public partial class AndroidApp
         MainActivity.StatsReported += OnStatsReported;
     }
 
-    private long _statsPrevDown, _statsPrevUp;
-    private DateTime _statsPrevAt;
+    private readonly AndroidTunnelTraffic _traffic = new();
     private string? _lastStatsSubtitle;
 
-    private void OnStatsReported(long down, long up, int conn)
+    private void OnStatsReported(AndroidTunnelEvent owner, long sampleMs, long down, long up, int connections)
     {
-        Dispatcher.UIThread.Post(() =>
+        PaintCurrentTunnelState(owner, () =>
         {
-            try
-            {
-                if (_connectionStartedAt is null || _statusCard is null) return;
-                var now = DateTime.UtcNow;
-                string? subtitle = null;
-                if (_statsPrevAt != default)
-                {
-                    var dt = (now - _statsPrevAt).TotalSeconds;
-                    if (dt > 0.1)
-                    {
-                        var dRate = Math.Max(0, down - _statsPrevDown) / dt;
-                        var uRate = Math.Max(0, up - _statsPrevUp) / dt;
-                        subtitle = $"↓ {HumanRate(dRate)}   ↑ {HumanRate(uRate)}   · {conn} conn";
-                    }
-                }
-                _statsPrevDown = down; _statsPrevUp = up; _statsPrevAt = now;
-                if (subtitle is not null && !string.Equals(subtitle, _lastStatsSubtitle, StringComparison.Ordinal))
-                {
-                    _lastStatsSubtitle = subtitle;
-                    _statusCard.Subtitle = subtitle;
-                }
-            }
-            catch { }
+            if (MainActivity.IsActivityPaused || _connectionStartedAt == null || _statusCard == null) return;
+            if (_traffic.Measure(owner.Session, sampleMs, down, up) is not { } rate) return;
+            var subtitle = $"↓ {HumanRate(rate.Down)}   ↑ {HumanRate(rate.Up)}   · {connections} conn";
+            if (_statusCard.Subtitle != subtitle) _statusCard.Subtitle = subtitle;
+            _lastStatsSubtitle = subtitle;
         });
     }
 
@@ -125,25 +101,38 @@ public partial class AndroidApp
 
     private void UpdateConnectionState(bool connected)
     {
+        if (MainActivity.ReadTunnelEvent() is { } owner)
+            PaintCurrentTunnelState(owner, () => UpdateConnectionState(
+                owner.StateEvent == null ? connected : owner.Session != null &&
+                    VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel(), owner));
+    }
+
+    private void UpdateConnectionState(bool connected, AndroidTunnelEvent owner)
+    {
         if (_statusCard is null) return;
+        bool sessionChanged = _traffic.SetSession(owner.Session);
+        if (sessionChanged) _lastStatsSubtitle = null;
 
         if (connected)
         {
             _statusCard.IsOn = true;
             _statusCard.IsWarn = false;
             _statusCard.IsOff = false;
-            _statusCard.Title = Localization.SimpleStatusTitleOn;
-            _statusCard.Subtitle = Localization.SimpleStatusDescOn;
+            _statusCard.Title = sessionChanged ? Localization.SimpleStatusTitleOn :
+                _lastFormattedUptimeTitle ?? Localization.SimpleStatusTitleOn;
+            _statusCard.Subtitle = _lastStatsSubtitle ?? Localization.SimpleStatusDescOn;
             if (_ctaConnect is not null) _ctaConnect.IsVisible = false;
             if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
             if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = true;
             SetVpnChipState(ChipState.On);
 
-            _connectionStartedAt = DateTime.UtcNow;
-            _statsPrevAt = default; _lastStatsSubtitle = null;
-            _firstProbePending = true;
-            _lastHealthProbeAt = DateTime.MinValue;
-            _lastHealthOk = false;
+            if (sessionChanged || _connectionStartedAt == null)
+            {
+                _connectionStartedAt = DateTime.UtcNow;
+                _firstProbePending = true;
+                _lastHealthProbeAt = DateTime.MinValue;
+                _lastHealthOk = false;
+            }
             _lastError = null;
             if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
             _statusCard.IsError = false;
@@ -321,9 +310,9 @@ public partial class AndroidApp
         return cts;
     }
 
-    private void OnTunnelErrorReported(string message)
+    private void OnTunnelErrorReported(AndroidTunnelEvent owner, string message)
     {
-        PaintCurrentTunnelState(() =>
+        PaintCurrentTunnelState(owner, () =>
         {
             if (string.IsNullOrWhiteSpace(message)) return;
             _lastError = message.Trim();

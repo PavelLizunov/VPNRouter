@@ -133,7 +133,7 @@ public partial class AndroidApp
             {
                 Name = name,
                 Url = url,
-                Enabled = true,
+                Enabled = false,
             };
             subs.Add(entry);
             if (!AndroidStorage.SetSubscriptions(subs))
@@ -149,18 +149,18 @@ public partial class AndroidApp
         int fetchedCount;
         try
         {
-            fetchedCount = await RefreshStoredSubscriptionAsync(entry, selectOnSuccess: true);
+            fetchedCount = await RefreshStoredSubscriptionAsync(entry, command);
         }
         catch (UnsupportedSubscriptionChainException ex)
         {
-            ShowMenuFeedback(ex.Message);
+            if (AndroidStorage.IsCurrentUiCommand(command)) ShowMenuFeedback(ex.Message);
             return;
         }
         catch (Exception)
         {
             global::Android.Util.Log.Warn("VpnRouter.QrScan",
                 "Subscription refresh or save failed");
-            ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
+            if (AndroidStorage.IsCurrentUiCommand(command)) ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
             return;
         }
 

@@ -72,7 +72,7 @@ public final class AndroidTunnelLifecycleTest {
         String request = activity.substring(requestStart, activity.indexOf("protected override", requestStart));
         require(request.contains("StartService(intent);") && !request.contains("SetIntent("),
                 "requesting stop published a result before the service");
-        requireOrdered(activity, "case ActionTunnelUp:", "case ActionTunnelDown:", "SetIntent(AndroidStorage.HasConfirmedTunnel(), refresh: action == ActionTunnelDown);",
+        requireOrdered(activity, "case ActionTunnelUp:", "case ActionTunnelDown:", "SetIntent(AndroidStorage.HasConfirmedTunnel(), owner, refresh: action == ActionTunnelDown);",
                 "AndroidApp.RefreshPerAppSelection();", "case ActionTunnelError:");
         requireOrdered(activity, "private void DispatchTunnelStart(", "if (!AndroidStorage.IsCurrentUiCommand(command)) return;",
                 ".PutExtra(AndroidStorage.UiCommandKey, command)", "StartForegroundService(intent)");
@@ -83,8 +83,15 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(source, "RESTART_FLAGS = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE",
                 "RESTART_FLAGS | PendingIntent.FLAG_UPDATE_CURRENT", "private void cancelScheduledRestart()", "remove(RESTART_TICKET)",
                 "RESTART_FLAGS | PendingIntent.FLAG_NO_CREATE");
-        requireOrdered(activity, "intent?.GetStringExtra(AndroidStorage.UiCommandKey) != AndroidStorage.CurrentUiCommand",
-                "!AndroidStorage.IsCurrentStateEvent(", "case ActionTunnelError:", "PresentTunnelError(");
+        requireOrdered(activity, "new AndroidTunnelEvent(intent?.GetStringExtra(AndroidStorage.UiCommandKey)",
+                "owner.StateEvent == null || ReadTunnelEvent() != owner", "case ActionTunnelError:", "PresentTunnelError(context, owner,");
+        String tile = Files.readString(root.resolve("VPNRouter.Android/VpnTileService.cs"));
+        requireOrdered(tile, "var command = AndroidStorage.BeginUiCommand();", "intent.PutExtra(AndroidStorage.UiCommandKey, command);",
+                "PendingIntent.GetActivity(");
+        requireOrdered(activity, "case VPNRouter.Core.Services.TileIntentContract.ReasonConnect:", "intent.GetStringExtra(AndroidStorage.UiCommandKey)",
+                "AndroidStorage.IsCurrentUiCommand(command)", "Post(() => RequestConnect(command))");
+        requireOrdered(dispatch, "if (!java.util.Objects.equals(origin,", "if (commandServer != null)", "hasLiveTunnel()",
+                "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))", "else if (loadLastGoodConfig())");
         require(source.contains("synchronized void onTaskRemoved(") && source.contains("synchronized void onRevoke(")
                 && source.contains("synchronized int onStartCommand("), "swipe scheduling must serialize with revoke and stop");
         String external = Files.readString(root.resolve("VPNRouter.Android/VpnControlReceiver.cs"));
