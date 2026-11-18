@@ -1,9 +1,15 @@
 using System.ComponentModel;
 using System.Reflection;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using VPNRouter.App.Localization;
 using VPNRouter.App.ViewModels;
+using VPNRouter.App.Views.Pages;
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -142,38 +148,36 @@ public class AutostartStatusBindingTests
         Assert.Contains(nameof(MainWindowViewModel.IsAutostartTgProxyStatusBad), notifications);
     }
 
-    private static void InvokeRemoveServerByEntry(MainWindowViewModel vm, ServerViewModel entry)
-    {
-        var method = typeof(MainWindowViewModel).GetMethod(
-            "RemoveServerByEntry",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(method);
-        method!.Invoke(vm, new object?[] { entry });
-    }
-
     [AvaloniaFact]
     public void RemoveServerByEntry_Persists_BratRegression()
     {
-        var vm = new MainWindowViewModel();
-        var settings = (AppSettings)typeof(MainWindowViewModel)
-            .GetField("_settings", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(vm)!;
-
-        var keepEntry = new VlessServerEntry { Name = "keep", Server = "1.2.3.4", Port = 443, Uuid = "u-keep" };
-        var dropEntry = new VlessServerEntry { Name = "drop", Server = "5.6.7.8", Port = 443, Uuid = "u-drop" };
+        var store = new InMemorySettingsStore();
+        using var vm = new MainWindowViewModel(store);
+        var keep = new ServerViewModel(new VlessServerEntry { Name = "keep", Server = "192.0.2.1", Port = 443 });
+        var drop = new ServerViewModel(new VlessServerEntry { Name = "drop", Server = "192.0.2.2", Port = 443 });
         vm.Servers.Clear();
-        vm.Servers.Add(new ServerViewModel(keepEntry));
-        var dropVm = new ServerViewModel(dropEntry);
-        vm.Servers.Add(dropVm);
+        vm.Servers.Add(keep);
+        vm.Servers.Add(drop);
+        vm.SelectedServer = keep;
+        var window = new Window { Width = 360, Height = 640, Content = new ServersPage { DataContext = vm } };
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var buttons = window.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).ToArray();
+            Assert.Contains(buttons, b => ReferenceEquals(b.Command, vm.AddServerCommand));
+            Assert.DoesNotContain(buttons, b => ReferenceEquals(b.Command, vm.RemoveServerCommand));
+            var delete = Assert.Single(buttons, b => ReferenceEquals(b.Command, vm.RemoveServerByEntryCommand)
+                && ReferenceEquals(b.CommandParameter, drop));
+            delete.Command!.Execute(delete.CommandParameter);
 
-        Assert.Equal(2, vm.Servers.Count);
-
-        InvokeRemoveServerByEntry(vm, dropVm);
-
-        Assert.Single(vm.Servers);
-        Assert.DoesNotContain(vm.Servers, s => s.Name == "drop");
-
-        Assert.DoesNotContain(settings.Vless.Servers, s => s.Name == "drop");
+            Assert.Same(keep, Assert.Single(vm.Servers));
+            Assert.Same(keep, vm.SelectedServer);
+            var saved = store.Load(AppPaths.ConfigYamlPath).Vless;
+            Assert.Equal("keep", Assert.Single(saved.Servers).Name);
+            Assert.Equal("keep", saved.ActiveServer);
+        }
+        finally { window.Close(); }
     }
 
     [AvaloniaFact]

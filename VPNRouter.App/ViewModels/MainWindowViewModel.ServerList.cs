@@ -120,11 +120,7 @@ public partial class MainWindowViewModel
     }
 
     [RelayCommand]
-    private void RemoveServer()
-    {
-        if (SelectedServer != null)
-            RemoveServerByEntry(SelectedServer);
-    }
+    private void RemoveServer() => RemoveServerByEntry(SelectedServer);
 
     [RelayCommand]
     private void RemoveServerByEntry(ServerViewModel? entry)

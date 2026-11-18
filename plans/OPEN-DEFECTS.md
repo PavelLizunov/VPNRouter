@@ -548,3 +548,6 @@ and the narrow polkit rule correctly rejected that write. An uncached lookup
 then returned A+AAAA via ens18. Fix: wait briefly for a verified kernel TUN
 route, never mutate DNS on a physical link, and refresh the cleanup sentinel
 with that verified interface. Fixed in 4ad09f87: regression code is in LinuxDnsHardeningTests; exact-head test CI 40249714583 and Arch 40249712397 passed. N4 M records live r47 MTU 1420 -> 1280 -> 1420 and resolver recovery; this is scoped VM evidence.
+
+- [ ] **P3** - The VLESS import form also deletes the selected server. Move deletion to the existing row button and preserve its command and persistence. Source change under review in #692.
+- [ ] **P3** - At 360 px the Russian protocol-use badge overlaps ping in the Standard server row (CI run 44194961677). The follow-up in #692 gives metadata its own row.

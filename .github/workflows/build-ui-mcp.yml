@@ -16,6 +16,7 @@ on:
       - '.github/workflows/build-ui-mcp.yml'
   pull_request:
     paths:
+      - 'VPNRouter.App/Views/Pages/ServersPage.axaml'
       - 'VPNRouter.Tools/UiMcp/**'
       - 'VPNRouter.Tools/UiProbe/**'
       - 'tools/ui-mcp/**'
@@ -52,6 +53,7 @@ jobs:
           python3 tools/ui-mcp/mcpcall.py --out smoke --server ./publish/ui-mcp/vpnrouter-ui-mcp -- \
             ui_catalog '{}' \
             ui_render '{"surface":"apps","width":520,"height":1100}' \
+            ui_render '{"surface":"servers","scenario":"configured","width":360,"height":640,"language":"ru"}' \
             ui_render '{"surface":"window-advanced","width":520,"height":900,"theme":"dark","language":"ru"}' \
             ui_sweep '{"surface":"window-advanced","speed_ms":0,"mode":"monkey","max_steps":150,"render_every":7,"seed":7}' \
             2>&1 | tee smoke/session.txt
