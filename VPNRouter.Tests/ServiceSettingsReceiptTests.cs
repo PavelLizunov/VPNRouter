@@ -25,6 +25,74 @@ public class ServiceSettingsReceiptTests
     }
 
     [Theory]
+    [InlineData("", false, "shorthand-fixture")]
+    [InlineData("[::1]", true, "import-fixture")]
+    [InlineData("[::]", true, "wildcard-fixture")]
+    [InlineData("localhost", false, null)]
+    [InlineData("localhost", true, "localhost-fixture")]
+    public async Task UnixStartupReadinessUsesTheControllerAndSecretFromTheLaunchedJson(string host, bool ipv6, string? secret)
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "Unix startup waits for the Clash API.");
+        Assert.SkipUnless(!ipv6 || System.Net.Sockets.Socket.OSSupportsIPv6, "IPv6 loopback is required.");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        var ct = deadline.Token;
+        using var listener = new System.Net.Sockets.TcpListener(
+            ipv6 ? System.Net.IPAddress.IPv6Loopback : System.Net.IPAddress.Loopback, 0);
+        if (ipv6) listener.Server.DualMode = false;
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+
+        var settings = new AppSettings();
+        settings.App.BypassRussianTraffic = false;
+        settings.App.BlockAds = false;
+        settings.SingBox.ClashApi = "127.0.0.1:0";
+        settings.SingBox.ClashApiSecret = "unused-settings-fixture";
+        var clash = new System.Text.Json.Nodes.JsonObject { ["external_controller"] = $"{host}:{port}" };
+        if (secret != null) clash["secret"] = secret;
+        var raw = new System.Text.Json.Nodes.JsonObject
+        {
+            ["experimental"] = new System.Text.Json.Nodes.JsonObject { ["clash_api"] = clash },
+            ["outbounds"] = System.Text.Json.Nodes.JsonNode.Parse(
+                """[{"type":"socks","tag":"proxy","server":"proxy.invalid","server_port":1080},{"type":"direct","tag":"direct"}]""")
+        };
+        var config = CustomConfigInjector.Inject(raw.ToJsonString(), [], settings);
+        var controller = ClashSingBoxApi.ReadLocalController(config);
+        using var manager = new SingBoxManager(settings.SingBox, controller);
+        var ready = Task.Run(manager.IsRunning, ct);
+        using var peer = await listener.AcceptTcpClientAsync(ct);
+        using var stream = peer.GetStream();
+        using var reader = new StreamReader(stream, leaveOpen: true);
+        Assert.Equal("GET /configs HTTP/1.1", await reader.ReadLineAsync(ct));
+        var headers = new List<string>();
+        while (await reader.ReadLineAsync(ct) is { Length: > 0 } line) headers.Add(line);
+        Assert.Contains($"Host: {controller.Endpoint.Authority}", headers);
+        var auth = headers.Where(line => line.StartsWith("Authorization:", StringComparison.OrdinalIgnoreCase));
+        if (secret == null) Assert.Empty(auth);
+        else Assert.Equal($"Authorization: Bearer {secret}", Assert.Single(auth));
+        await stream.WriteAsync("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"u8.ToArray(), ct);
+        Assert.True(await ready);
+    }
+
+    [Fact]
+    public void UnixReadinessUsesInjectedTransportAndRejectsNonlocalController()
+    {
+        Assert.SkipUnless(OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(), "Unix startup waits for the Clash API.");
+        var transport = new FakeHttpClient().Setup("/configs", "{}");
+        var settings = new SingBoxSettings { ClashApi = ":9090", ClashApiSecret = "local-fixture" };
+        using var manager = new SingBoxManager(settings, http: transport);
+        Assert.True(manager.IsRunning());
+        var first = Assert.Single(transport.SentRequests);
+        Assert.Equal("http://127.0.0.1:9090/configs", first.Uri.AbsoluteUri);
+        Assert.Equal("Bearer local-fixture", first.Headers!["Authorization"]);
+
+        manager.SetClashController(ClashSingBoxApi.ReadLocalController(
+            """{"experimental":{"clash_api":{"external_controller":"192.0.2.77:9090","secret":"nonlocal-fixture"}}}"""));
+        Assert.False(manager.IsRunning());
+        Assert.Single(transport.SentRequests);
+    }
+
+    [Theory]
     [InlineData("127.0.0.1:9090", "127.0.0.1:49301")]
     [InlineData("[::1]:9090", "[::1]:49301")]
     public void ControlConnectionMatchesBothEndpointsAndTheReplacementProcess(string service, string client)

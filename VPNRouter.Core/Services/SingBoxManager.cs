@@ -71,11 +71,15 @@ public partial class SingBoxManager : IDisposable
 
     internal bool LastCrashWasLinuxTunPermissionFailure { get; private set; }
 
+    internal SingBoxManager(SingBoxSettings settings, (Uri Endpoint, string? Secret) controller,
+        ILogger? logger = null, IHttpClient? http = null) : this(settings, logger, http) =>
+        SetClashController(controller);
+
     public SingBoxManager(SingBoxSettings settings, ILogger? logger = null, IHttpClient? http = null, IProcessRunner? runner = null)
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
-        _http = http ?? PolicyHttpClient.Shared;
+        _http = http ?? LocalControllerHttp;
         _runner = runner ?? Runner;
         _tunLock = TunOwnershipLock.Instance(_logger);
         _policy = SingBoxRuntimePolicy.Current;

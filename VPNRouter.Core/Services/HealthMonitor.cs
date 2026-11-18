@@ -161,6 +161,7 @@ public class HealthMonitor : IDisposable
                 throw;
             }
 
+            if (controller is { } accepted) _singBox.SetClashController(accepted);
             if (candidateApi != null)
             {
                 var oldApi = _ownedApi;
