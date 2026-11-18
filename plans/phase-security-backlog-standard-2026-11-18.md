@@ -1,0 +1,22 @@
+# Close the confirmed security gaps from the issue queue
+
+Base main at e6d6df9fe4c928dcbaa0ab32cfec27d7cdfd2d17. Address the affected SDK-bundled VSTest version (#673),
+Android local control and per-app isolation (#689), and the elevated Windows
+service-menu launch boundary (#661). The Android report needs independent
+verification. Treat a successful configuration test as configuration evidence.
+Keep #664 (partially available routing sets) and #666 (desktop API coverage)
+separate from security closure unless a privacy or authorization impact is shown.
+
+Retain the .NET 10 target, single-tunnel lifecycle, local authenticated traffic
+statistics and liveness. Preserve existing settings and safe repair/support
+operations. Keep already issued clients and public releases outside this source
+change. Rollback is a revert of the relevant repair on the owning line.
+
+1. Build the affected targets with the fixed SDK in CI, including Android.
+2. Verify the actual SDK/test runner and the defensive regression cases.
+3. Record the reviewed source changes and observed verification here.
+4. Review trust boundaries, lifecycle compatibility and tests independently.
+5. Check Android isolation on an authorized Android environment before claiming
+   the reported symptom resolved. Use synthetic inputs and ordinary app actions.
+6. Compare both maintained branches, existing saved settings and production
+   entry points. Record unverified conditions and keep their issues open.
