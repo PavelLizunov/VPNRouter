@@ -200,3 +200,9 @@ The installed APK matched artifact `14454675371` at commit `2c1e21bd731f79443bb7
 - Switching from a subscription to Custom JSON used the custom TUN on the first Connect and after reopening. The subscription remained enabled. Selecting manual C and then re-entering A started A on both attempts.
 - Off, Include and Exclude each completed Stop, Connect and Stop in the same process. Android reported a new VPN network with the original UID ranges. Home and Apps showed the complete Next connection label after Stop.
 - Refreshing an unchanged native detour feed preserved the selected target and the established VPN network. Reconnecting and reopening selected the same target. Hosted tests cover the generated detour and invalidation after an upstream change. External exit IP and payload transit through the hop remain unmeasured.
+
+## Windows installer and rollback verification for #661
+
+The default reinstall and both repair entry points take the installation lock before Prepare. Repair verifies the copied payload and accepts doctor exit codes 0, 1 and 2. An abnormal exit preserves the failure marker, including with NoLaunch. Consecutive failed rollback handoffs are counted once per snapshot generation. After three failures Standard can request repair, while Business retains the installation for the administrator.
+
+Offline PowerShell fixtures passed for repeated compensation, snapshot replacement, concurrent repair and reinstall, and abnormal doctor exit. Seven edited C# files passed syntax parsing. The Pages publication step embedded all three helpers byte for byte. Their raw installer digests and all four embedded rollback resource paths were checked. Windows CI selects the five-process regression for the edition-specific recovery decision. Native execution is pending.

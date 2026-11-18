@@ -32,6 +32,8 @@ public static class LaunchFailureCounter
         public string LastFailureUtc { get; set; } = string.Empty;
         [JsonPropertyName("lastFailureType")]
         public string LastFailureType { get; set; } = string.Empty;
+        [JsonPropertyName("accountedRollbackFailures")]
+        public Dictionary<string, int> AccountedRollbackFailures { get; set; } = new();
         [JsonPropertyName("lastSuccessUtc")]
         public string LastSuccessUtc { get; set; } = string.Empty;
         [JsonPropertyName("lastSelfRepairUtc")]
@@ -52,6 +54,30 @@ public static class LaunchFailureCounter
             s.LastFailureType = failureType;
         TrySave(p, s);
         return s.ConsecutiveFailures;
+    }
+
+    // Called under the install lock. Only the external worker can confirm whether
+    // handing off a launch actually failed. A later App may see the same receipt again.
+    internal static bool ObserveRollbackFailures(Guid generation, int failures, string? path = null)
+    {
+        if (failures == 0) return false;
+        var p = path ?? DefaultPath;
+        var state = TryLoad(p);
+        var id = generation.ToString("N");
+        state.AccountedRollbackFailures.TryGetValue(id, out var previous);
+        var now = DateTime.UtcNow;
+        if (failures > previous)
+        {
+            state.ConsecutiveFailures += failures - previous;
+            state.LastFailureUtc = now.ToString("o");
+            state.LastFailureType = "rollback";
+            state.AccountedRollbackFailures[id] = failures;
+        }
+        var scheduleRepair = failures >= SelfRepairThreshold &&
+            !WithinCooldown(state.LastSelfRepairUtc, now, TimeSpan.FromMinutes(_cooldownMinutes));
+        if (scheduleRepair) state.LastSelfRepairUtc = now.ToString("o");
+        if (failures > previous || scheduleRepair) TrySave(p, state);
+        return scheduleRepair;
     }
 
     public static void MarkStable(string? path = null)
