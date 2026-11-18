@@ -13,8 +13,7 @@ public partial class MainWindowViewModel
     private DateTimeOffset? _statsPrevAt;
     private int _statsInFlight;
 
-    private ServerViewModel? _autoSelectedServer;
-    private AcceptedTunnelInfo? _observedTunnel;
+    private AcceptedTunnelInfo? _statsTunnel;
     private string? _observedMemberTag;
 
     [ObservableProperty]
@@ -25,46 +24,35 @@ public partial class MainWindowViewModel
 
     partial void OnIsConnectedChanged(bool value)
     {
+        if (!value) _displayExternalTunnel = false;
+        SyncStatsTunnel();
+        RefreshActiveIndicator();
+        OnConnectedForProblems(value);
+    }
+
+    private void SyncStatsTunnel()
+    {
+        var tunnel = DisplayedTunnel;
+        if (ReferenceEquals(tunnel, _statsTunnel)) return;
         var oldApi = _statsApi;
         _statsApi = null;
+        _statsTunnel = tunnel;
         try { oldApi?.Dispose(); } catch { }
 
         _statsPrevAt = null;
         _statsPrevDown = 0;
         _statsPrevUp = 0;
-        _autoSelectedServer = null;
-        _observedTunnel = null;
         _observedMemberTag = null;
         _autoSelectPollTick = 0;
         ConnectionStatsText = string.Empty;
 
-        if (value)
-        {
-            try
-            {
-                if (DisplayedTunnel is { } tunnel)
-                    _statsApi = tunnel.OpenController(_logger);
-                else
-                {
-                    var hostPort = string.IsNullOrWhiteSpace(_settings?.SingBox?.ClashApi)
-                        ? "127.0.0.1:9090" : _settings!.SingBox.ClashApi;
-                    _statsApi = new ClashSingBoxApi(baseUrl: $"http://{hostPort}", logger: _logger,
-                        secret: _settings?.SingBox?.ClashApiSecret);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Debug(ex, "[ConnStats] clash_api init failed — live stats disabled this session");
-                _statsApi = null;
-            }
-        }
-
-        OnConnectedForProblems(value);
+        try { _statsApi = tunnel?.OpenController(_logger); }
+        catch (Exception ex) { _logger.Debug(ex, "[ConnStats] Could not open the accepted controller"); }
     }
 
     private void MaybePollConnStats()
     {
-        if (!IsConnected || _statsApi is null) return;
+        if (!IsConnected || IsApplying || IsConnecting || _statsApi is null) return;
 
         var window = GetMainWindow();
         if (window is null || !window.IsVisible || window.WindowState == WindowState.Minimized) return;
@@ -76,12 +64,13 @@ public partial class MainWindowViewModel
     private async Task PollConnStatsAsync()
     {
         var api = _statsApi;
+        var tunnel = _statsTunnel;
 
         try
         {
-            if (api is null || !IsConnected) return;
+            if (api == null || tunnel == null || !ReferenceEquals(tunnel, DisplayedTunnel)) return;
 
-            await MaybeRefreshAutoSelectedAsync(api).ConfigureAwait(false);
+            await MaybeRefreshAutoSelectedAsync(api, tunnel).ConfigureAwait(false);
 
             var snap = await api.GetConnectionsAsync().ConfigureAwait(false);
             var now = snap.CapturedAt;
@@ -147,68 +136,29 @@ public partial class MainWindowViewModel
             _statsPrevAt = null;
             _statsPrevDown = 0;
             _statsPrevUp = 0;
-            if (_autoSelectedServer is not null || _observedMemberTag != null)
-            {
-                _observedMemberTag = null;
-                _autoSelectedServer = null;
-                RestoreConnectedStatus();
-                RefreshActiveIndicator();
-            }
+            if (tunnel != null) ObserveAutoMember(tunnel, null);
         }
     }
 
     private int _autoSelectPollTick;
 
-    private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api)
+    private async Task MaybeRefreshAutoSelectedAsync(ClashSingBoxApi api, AcceptedTunnelInfo tunnel)
     {
-        var tunnel = DisplayedTunnel;
-        if (!(tunnel?.UsesAutoGroup ?? (AutoSelectBestServer &&
-            string.Equals(_settings.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase))))
-            return;
+        if (!tunnel.UsesAutoGroup || Interlocked.Increment(ref _autoSelectPollTick) % 3 != 1) return;
 
-        if (Interlocked.Increment(ref _autoSelectPollTick) % 3 != 1)
-            return;
-
-        string? nowTag = null;
-        try
-        {
-            nowTag = await api.GetGroupNowAsync("proxy").ConfigureAwait(false);
-        }
-        catch
-        {
-            nowTag = null;
-        }
-
+        var nowTag = await api.GetGroupNowAsync("proxy").ConfigureAwait(false);
         Dispatcher.UIThread.Post(() =>
         {
-            if (!ReferenceEquals(api, _statsApi) || !IsConnected)
-                return;
-
-            if (!ReferenceEquals(tunnel, DisplayedTunnel)) return;
-            if (tunnel != null)
-            {
-                if (ReferenceEquals(tunnel, _observedTunnel) && _observedMemberTag == nowTag) return;
-                _observedTunnel = tunnel;
-                _observedMemberTag = nowTag;
-                RestoreConnectedStatus();
-                RefreshActiveIndicator();
-                return;
-            }
-            var resolved = ResolveAutoSelectedServer(nowTag);
-            if (!ReferenceEquals(_autoSelectedServer, resolved))
-            {
-                _autoSelectedServer = resolved;
-                RestoreConnectedStatus();
-                RefreshActiveIndicator();
-            }
+            if (ReferenceEquals(api, _statsApi)) ObserveAutoMember(tunnel, nowTag);
         });
     }
 
-    private ServerViewModel? ResolveAutoSelectedServer(string? nowTag)
+    internal void ObserveAutoMember(AcceptedTunnelInfo tunnel, string? tag)
     {
-        if (SubscriptionServers is null || string.IsNullOrEmpty(nowTag)) return null;
-        var idx = SuffixMatch.LongestSuffixIndex(SubscriptionServers, static s => s.Name, nowTag);
-        return idx >= 0 && idx < SubscriptionServers.Count ? SubscriptionServers[idx] : null;
+        if (_disposed || IsApplying || IsConnecting || !ReferenceEquals(tunnel, _statsTunnel) ||
+            !ReferenceEquals(tunnel, DisplayedTunnel) || _observedMemberTag == tag) return;
+        _observedMemberTag = tag;
+        RestoreConnectedStatus();
     }
 
     private static string HumanRate(double bytesPerSec)

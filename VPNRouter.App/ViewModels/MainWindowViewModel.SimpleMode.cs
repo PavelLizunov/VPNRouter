@@ -151,6 +151,7 @@ public partial class MainWindowViewModel
             if (HasConnectionAlert) return _lastConnectionAlert!;
             if (IsConnected)
             {
+                if (DisplayedTunnel == null) return Strings.SmpStatusConnectedNoDetails;
                 var (name, ip) = DeriveConnectedServerLabel();
                 var via = Strings.SmpStatusConnectedVia;
                 var note = string.IsNullOrEmpty(_smpChoiceNote) ? string.Empty : $"\n{_smpChoiceNote}";
@@ -163,21 +164,29 @@ public partial class MainWindowViewModel
         }
     }
 
-    public string SimpleConfigModeSummary
+    public string SimpleConfigModeSummary => DisplayedTunnel is { } tunnel
+        ? Core.Localization.Strings.SmpActiveMode(FormatConfigMode(tunnel.ConfigMode, tunnel.RoutingMode == "split"))
+        : IsConnected ? Core.Localization.Strings.SmpModeUnknown : FormatConfigMode(_settings.App.ConfigMode, IsSplitTunnel);
+
+    public string SimplePendingSummary
     {
         get
         {
-            var tunnel = DisplayedTunnel;
-            var configuredMode = tunnel?.ConfigMode ?? _settings.App.ConfigMode ?? "generated";
-            var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-                ? Strings.SmpCfgSubscribe
-                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase)
-                    ? Strings.SmpCfgManual
-                    : Strings.SmpCfgCustom;
-            var split = tunnel != null ? tunnel.RoutingMode == "split" : IsSplitTunnel;
-            var tunnelLabel = split ? Strings.SmpCfgSplit : Strings.SmpCfgFull;
-            return $"{configLabel} · {tunnelLabel}";
+            var mode = FormatConfigMode(_settings.App.ConfigMode, IsSplitTunnel);
+            var (name, _) = EditorServerLabel();
+            return Core.Localization.Strings.SmpPendingConfig(string.IsNullOrEmpty(name) ? mode : $"{name} · {mode}");
         }
+    }
+
+    private static string FormatConfigMode(string? source, bool split)
+    {
+        var config = (source ?? "generated").ToLowerInvariant() switch
+        {
+            "subscribe" => Strings.SmpCfgSubscribe,
+            "generated" => Strings.SmpCfgManual,
+            _ => Strings.SmpCfgCustom
+        };
+        return $"{config} · {(split ? Strings.SmpCfgSplit : Strings.SmpCfgFull)}";
     }
 
     public string SimpleActiveOutboundLine
@@ -199,8 +208,8 @@ public partial class MainWindowViewModel
         get
         {
             var tunnel = DisplayedTunnel;
-            if (tunnel != null && tunnel.ConfigMode != "custom") return false;
-            var ip = tunnel?.Server.Address ?? _engine?.ActiveServerAddress;
+            if (tunnel?.ConfigMode != "custom") return false;
+            var ip = tunnel.Server.Address;
             if (string.IsNullOrEmpty(ip) || _settings == null)
                 return false;
 
@@ -628,8 +637,10 @@ public partial class MainWindowViewModel
     {
         get
         {
-            var (name, _) = DeriveConnectedServerLabel();
-            return !string.IsNullOrWhiteSpace(name) ? name! : SmpConfigKind;
+            if (IsConnected && DisplayedTunnel == null) return Strings.SmpStatusConnectedNoDetails;
+            var (name, address) = DeriveConnectedServerLabel();
+            if (!string.IsNullOrWhiteSpace(name)) return name;
+            return string.IsNullOrWhiteSpace(address) ? SmpConfigKind : address;
         }
     }
 
@@ -639,12 +650,14 @@ public partial class MainWindowViewModel
         {
             if (DisplayedTunnel is { } tunnel)
             {
-                var row = tunnel.UsesAutoGroup ? DisplayedMember(tunnel) : tunnel.Server;
+                var row = DisplayedServer(tunnel);
                 if (row == null || tunnel.ConfigMode == "custom") return null;
                 var rows = tunnel.ConfigMode == "subscribe" ? SubscriptionServers : Servers;
                 return rows.FirstOrDefault(s => s.Port == row.Port && s.Name == row.Name &&
-                    string.Equals(s.Server, row.Address, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(s.Server, row.Address, StringComparison.OrdinalIgnoreCase) &&
+                    s.SubscriptionId == row.FeedId && SubscriptionEntry.RowKey(s.SourceEntry) == row.RowKey);
             }
+            if (IsConnected) return null;
             var (name, _) = DeriveConnectedServerLabel();
             if (string.IsNullOrWhiteSpace(name)) return null;
             return SubscriptionServers.FirstOrDefault(s =>
@@ -662,9 +675,7 @@ public partial class MainWindowViewModel
         {
             var tunnel = DisplayedTunnel;
             var mode = tunnel?.ConfigMode ?? _settings?.App.ConfigMode ?? "generated";
-            if (IsConnected && tunnel == null && !mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase) &&
-                ActiveServerMatcher.FindName(_engine.ActiveServerAddress, SubscriptionServers.Select(s => (s.DisplayName, s.Server))) is not null)
-                mode = "subscribe";
+            if (IsConnected && tunnel == null) return string.Empty;
             if (mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
             {
                 var count = tunnel?.SubscriptionServerCount ?? SubscriptionServers.Count;
@@ -689,7 +700,7 @@ public partial class MainWindowViewModel
         nameof(SmpFirstRunEditorVisible), nameof(SmpPickerVisible), nameof(SmpHasSubscriptionServers),
         nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
         nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
-        nameof(SmpConfigServer), nameof(SmpHasConfigServer),
+        nameof(SmpConfigServer), nameof(SmpHasConfigServer), nameof(SimpleConfigModeSummary), nameof(SimplePendingSummary),
     };
 
     private void RaiseSimpleHomeProps()
@@ -708,6 +719,8 @@ public partial class MainWindowViewModel
                 case nameof(IsConnected):
                 case nameof(IsConnecting):
                 case nameof(IsApplying):
+                case nameof(HasPendingAppChanges):
+                case nameof(IsSplitTunnel):
                 case nameof(SimpleStatusTitle):
                 case nameof(SimpleStatusDescription):
                 case nameof(SmpErrorText):

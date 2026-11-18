@@ -78,8 +78,7 @@ public partial class MainWindowViewModel
 
                 ConnectButtonText = Strings.StopVPN;
                 StartSubRefreshTimer();
-                OnIsConnectedChanged(true);
-                RefreshActiveIndicator();
+                OnConnectedForProblems(true);
                 RestoreConnectedStatus();
             }
             else if (status == "Stopped")
@@ -98,7 +97,9 @@ public partial class MainWindowViewModel
             {
                 if (IsConnected && status.StartsWith("Applied (", StringComparison.Ordinal))
                 {
-                    OnIsConnectedChanged(true);
+                    OnConnectedForProblems(true);
+                    RestoreConnectedStatus();
+                    return;
                 }
                 StatusText = status;
             }
@@ -116,10 +117,10 @@ public partial class MainWindowViewModel
             if (!readinessGuard()) return;
             if (IsConnecting || _isReconnecting) return;
 
+            _displayExternalTunnel = false;
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
             StartSubRefreshTimer();
-            RefreshActiveIndicator();
             RestoreConnectedStatus();
         });
     }
@@ -157,10 +158,10 @@ public partial class MainWindowViewModel
     private void AdoptRunningEngine()
     {
         _logger.Information("[VM] Engine is running while the window showed Not connected - showing Connected");
+        _displayExternalTunnel = false;
         IsConnected = true;
         ConnectButtonText = Strings.StopVPN;
         StartSubRefreshTimer();
-        RefreshActiveIndicator();
         RestoreConnectedStatus();
     }
 
@@ -296,12 +297,12 @@ public partial class MainWindowViewModel
                 {
                     try { await startTask; } catch {
  }
+                    _displayExternalTunnel = false;
                     IsConnected = true;
                     IsConnecting = false;
                     _lastSuccessfulConnectAt = DateTime.UtcNow;
                     ConnectButtonText = Strings.StopVPN;
                     StartSubRefreshTimer();
-                    RefreshActiveIndicator();
                     RestoreConnectedStatus();
                     ConflictingVpnWarningText = string.Empty;
                 }
@@ -535,60 +536,10 @@ public partial class MainWindowViewModel
 
     private void RefreshActiveIndicator()
     {
-        var tunnel = DisplayedTunnel;
-        var member = tunnel?.UsesAutoGroup == true ? DisplayedMember(tunnel) : tunnel?.Server;
-        var activeIp = member?.Address ?? _engine?.ActiveServerAddress;
-
-        var configMode = tunnel?.ConfigMode ?? _settings?.App?.ConfigMode ?? "generated";
-        var isManualMode = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
-        var isSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
-
-        var manualActiveName = member?.Name ?? _settings?.Vless?.ActiveServer;
-        var subscriptionActiveName = member?.Name ?? _settings?.App?.ActiveSubscriptionServer;
-
-        ServerViewModel? active = null;
-
-        foreach (var s in Servers)
-        {
-            var isActive = isManualMode
-                && IsConnected
-                && !string.IsNullOrEmpty(activeIp)
-                && IsRowActive(s, activeIp, manualActiveName);
-            s.IsActive = isActive;
-            if (isActive) active = s;
-        }
-
-        var autoSelect = isSubscribeMode && (tunnel?.UsesAutoGroup ?? AutoSelectBestServer);
-        foreach (var s in SubscriptionServers)
-        {
-            bool isActive;
-            if (tunnel != null && autoSelect)
-                isActive = member != null && IsRowActive(s, member.Address, member.Name) && s.Port == member.Port;
-            else if (autoSelect)
-                isActive = IsConnected
-                    && _autoSelectedServer is not null
-                    && ReferenceEquals(s, _autoSelectedServer);
-            else
-                isActive = isSubscribeMode
-                    && IsConnected
-                    && !string.IsNullOrEmpty(activeIp)
-                    && IsRowActive(s, activeIp, subscriptionActiveName) && (member == null || member.Port == s.Port);
-            s.IsActive = isActive;
-            if (isActive) active = s;
-        }
-
+        var active = IsConnected ? SmpConfigServer : null;
+        foreach (var row in Servers) row.IsActive = ReferenceEquals(row, active);
+        foreach (var row in SubscriptionServers) row.IsActive = ReferenceEquals(row, active);
         ActiveServerChanged?.Invoke(active);
-    }
-
-    private static bool IsRowActive(ServerViewModel row, string activeIp, string? activeName)
-    {
-        if (row.Server != activeIp)
-            return false;
-
-        if (string.IsNullOrWhiteSpace(activeName))
-            return true;
-
-        return string.Equals(row.Name, activeName, StringComparison.OrdinalIgnoreCase);
     }
 
     private void DetectServiceManagedVpn()
@@ -604,20 +555,8 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            IsConnected = true;
-            ConnectButtonText = Strings.StopVPN;
-            var configuredMode = _settings.App.ConfigMode ?? "generated";
-            var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-                ? "subscribe"
-                : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase) ? "manual" : "custom";
-            var tunnelLabel = IsSplitTunnel ? "split" : "full";
-            var mode = $"{configLabel}/{tunnelLabel}";
-            StatusText = IsRussian
-                ? $"Подключено через службу [{mode}]"
-                : $"Connected via service [{mode}]";
-            MarkTrueSplitServiceManagedIfNeeded();
-            StartSubRefreshTimer();
-            _logger.Information("[VM] Detected VPN running via service (sing-box alive + TUN owned)");
+            MarkConnectedViaService();
+            _logger.Information("[VM] Detected a running VPN outside the desktop engine (sing-box alive + TUN owned)");
         }
         catch (Exception ex)
         {
@@ -630,16 +569,23 @@ public partial class MainWindowViewModel
     private void RestoreConnectedStatus()
     {
         if (!IsConnected) return;
-        var (serverName, serverIp) = DeriveConnectedServerLabel();
-        var tunnel = DisplayedTunnel;
-        var configuredMode = tunnel?.ConfigMode ?? _settings.App.ConfigMode ?? "generated";
-        var configLabel = configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-            ? "subscribe"
-            : configuredMode.Equals("generated", StringComparison.OrdinalIgnoreCase) ? "manual" : "custom";
-        var tunnelLabel = tunnel?.RoutingMode ?? (IsSplitTunnel ? "split" : "full");
-        var modeLabel = $"{configLabel}/{tunnelLabel}";
+        SyncStatsTunnel();
+        RefreshActiveIndicator();
+        OnPropertyChanged(nameof(SimpleStatusDescription));
+        OnPropertyChanged(nameof(SmpActiveServerLine));
+        OnPropertyChanged(nameof(SimpleActiveOutboundLine));
+        OnPropertyChanged(nameof(SimpleActiveOutboundIsSuspect));
+        OnPropertyChanged(nameof(SimpleActiveOutboundNormalVisible));
+        OnPropertyChanged(nameof(SimpleActiveOutboundSuspectVisible));
 
-        StatusText = Strings.Connected(modeLabel, serverName, serverIp);
+        if (DisplayedTunnel is not { } tunnel)
+        {
+            StatusText = Strings.SmpStatusConnectedNoDetails;
+            return;
+        }
+        var configLabel = tunnel.ConfigMode switch { "subscribe" => "subscribe", "generated" => "manual", _ => "custom" };
+        var (serverName, serverIp) = AcceptedServerLabel(tunnel);
+        StatusText = Strings.Connected($"{configLabel}/{tunnel.RoutingMode}", serverName, serverIp);
     }
 
     private bool _isReconnecting;
@@ -745,8 +691,6 @@ public partial class MainWindowViewModel
                 if (applied)
                 {
                     RestoreConnectedStatus();
-                    try { RefreshActiveIndicator(); }
-                    catch (Exception) { _logger.Debug("[VM] Reconnect: RefreshActiveIndicator failed"); }
                     return;
                 }
 

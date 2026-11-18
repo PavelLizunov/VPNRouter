@@ -3,7 +3,7 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-internal sealed record TunnelServerLabel(string Name, string Address, int Port);
+internal sealed record TunnelServerLabel(string Name, string Address, int Port, string? RowKey = null, string? FeedId = null);
 
 internal sealed class AcceptedTunnelInfo
 {
@@ -16,12 +16,12 @@ internal sealed class AcceptedTunnelInfo
     internal ClashSingBoxApi? OpenController(Serilog.ILogger logger) =>
         _controller is { } local ? ClashSingBoxApi.ForController(local.Endpoint, local.Secret, logger) : null;
 
-    internal bool UsesAutoGroup => _members.Count != 0;
+    internal bool UsesAutoGroup { get; }
     internal TunnelServerLabel? FindMember(string? tag) =>
         tag != null && _members.TryGetValue(tag, out var member) ? member : null;
 
     internal AcceptedTunnelInfo(AppSettings settings, string configJson, string serverAddress,
-        (Uri Endpoint, string? Secret)? controller)
+        (Uri Endpoint, string? Secret)? controller, IReadOnlyDictionary<string, VlessServerEntry> proxySources)
     {
         _controller = controller;
         ConfigMode = (settings.App.ConfigMode ?? "generated").Trim().ToLowerInvariant();
@@ -34,43 +34,35 @@ internal sealed class AcceptedTunnelInfo
             return;
         }
 
-        var rows = settings.Vless.GetEffectiveServers();
-        var selected = rows.FirstOrDefault(s => string.Equals(s.Name, settings.Vless.ActiveServer, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(s.Server, serverAddress, StringComparison.OrdinalIgnoreCase))
-            ?? rows.FirstOrDefault(s => string.Equals(s.Server, serverAddress, StringComparison.OrdinalIgnoreCase));
-        if (ConfigMode == "generated" && selected != null &&
-            settings.App.Subscriptions.Any(feed => feed.Enabled && feed.Servers.Contains(selected)))
-            ConfigMode = "subscribe";
-        SubscriptionServerCount = ConfigMode == "subscribe" ? rows.Count : 0;
-        Server = new(selected?.Name ?? "", serverAddress, selected?.Port ?? 0);
-        if (ConfigMode != "subscribe" || !settings.Vless.AutoSelectBestServer) return;
+        // Tag assignment and health/protocol filtering belong to the generator. Two different
+        // source rows can produce the same host and port, or even identical wire outbounds.
+        var feeds = new Dictionary<VlessServerEntry, string>();
+        foreach (var feed in settings.App.Subscriptions ?? [])
+        {
+            if (feed?.Enabled != true || feed.Servers == null) continue;
+            foreach (var row in feed.Servers)
+                if (row != null) feeds.TryAdd(row, feed.Id);
+        }
 
-        // Runtime member tags are assigned after filtering and may be suffixed for duplicate names.
-        // Keep only their display fields from the generated configuration.
+        TunnelServerLabel Label(VlessServerEntry row) =>
+            new(row.Name, row.Server, row.Port, SubscriptionEntry.RowKey(row), feeds.GetValueOrDefault(row));
+
+        if (proxySources.Count > 0)
+            ConfigMode = proxySources.Values.Any(feeds.ContainsKey) ? "subscribe" : "generated";
+        SubscriptionServerCount = ConfigMode == "subscribe" ? settings.Vless.GetEffectiveServers().Count : 0;
+        Server = proxySources.TryGetValue("proxy", out var direct) ? Label(direct) : new("", serverAddress, 0);
+
         using var document = JsonDocument.Parse(configJson);
         if (!document.RootElement.TryGetProperty("outbounds", out var outbounds)) return;
-        var members = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var outbound in outbounds.EnumerateArray())
-            if (outbound.TryGetProperty("tag", out var tag) && tag.GetString() == "proxy" &&
-                outbound.TryGetProperty("outbounds", out var group))
-                foreach (var item in group.EnumerateArray())
-                    if (item.GetString() is { } member) members.Add(member);
-
         foreach (var outbound in outbounds.EnumerateArray())
         {
-            if (!outbound.TryGetProperty("tag", out var tagValue) || tagValue.GetString() is not { } tag ||
-                (tag != "proxy" && !members.Contains(tag)) ||
-                !outbound.TryGetProperty("server", out var host) || host.GetString() is not { } address) continue;
-            var port = outbound.TryGetProperty("server_port", out var portValue) && portValue.TryGetInt32(out var number) ? number : 0;
-            var sameEndpoint = rows.Where(s => string.Equals(s.Server, address, StringComparison.OrdinalIgnoreCase) && s.Port == port);
-            var row = sameEndpoint.FirstOrDefault(s => string.Equals("vless-" + s.Name, tag, StringComparison.Ordinal))
-                ?? sameEndpoint.FirstOrDefault();
-            if (tag == "proxy")
-            {
-                // A group narrowed to one healthy row is emitted as a direct proxy outbound.
-                if (row != null) Server = new(row.Name, address, port);
-            }
-            else _members[tag] = new(row?.Name ?? "", address, port);
+            if (!outbound.TryGetProperty("tag", out var tag) || tag.GetString() != "proxy" ||
+                !outbound.TryGetProperty("type", out var type) || type.GetString() != "urltest") continue;
+            UsesAutoGroup = true;
+            foreach (var child in outbound.GetProperty("outbounds").EnumerateArray())
+                if (child.GetString() is { } member && proxySources.TryGetValue(member, out var source))
+                    _members.Add(member, Label(source));
+            break;
         }
     }
 }

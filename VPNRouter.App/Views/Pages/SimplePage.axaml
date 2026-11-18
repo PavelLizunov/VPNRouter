@@ -373,9 +373,14 @@
                            Classes.warn="{Binding SmpHeroIsWarn}"
                            Margin="0,16,0,0"
                            Text="{Binding SmpHomeTitle}"/>
-                <TextBlock Classes="subline"
+                <TextBlock Name="ConnectionDetails" Classes="subline"
                            Margin="0,6,0,0"
                            Text="{Binding SmpHomeSubline}"/>
+                <StackPanel IsVisible="{Binding IsConnected}" Spacing="3" Margin="0,4,0,0">
+                    <TextBlock Name="ActiveMode" Classes="subline" Text="{Binding SimpleConfigModeSummary}"/>
+                    <TextBlock Name="PendingConfig" Classes="hint" HorizontalAlignment="Center" TextWrapping="Wrap"
+                               IsVisible="{Binding HasPendingAppChanges}" Text="{Binding SimplePendingSummary}"/>
+                </StackPanel>
                 <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up" icons:PictogramText.Text="{Binding ConnectionStatsText}"
                            IsVisible="{Binding HasConnectionStats}"
                            Margin="0,8,0,0"
@@ -601,12 +606,12 @@
                                                  Foreground="{DynamicResource AccentFgBrush}"/>
                             </Border>
                             <!-- The shown server's protocol icon, as in the server lists. -->
-                            <icons:ProtocolDisc Width="40" Height="40" GlyphSize="20" CornerRadius="20"
+                            <icons:ProtocolDisc Name="ConfigProtocol" Width="40" Height="40" GlyphSize="20" CornerRadius="20"
                                                 Group="{Binding SmpConfigServer.ProtocolGroup}"
                                                 IsVisible="{Binding SmpHasConfigServer}"
                                                 ToolTip.Tip="{Binding SmpConfigServer.ProtocolUseCaseTooltip}"/>
                             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding SmpConfigName}"
+                                <TextBlock Name="ConfigName" Text="{Binding SmpConfigName}"
                                            FontSize="{StaticResource FsLg}" FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource TextPrimaryBrush}"/>
@@ -686,7 +691,7 @@
                             <TextBlock Classes="label" Text="{Binding L_SmpTunnelModeLabel}"/>
                             <Border Classes="seg-track">
                                 <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
-                                    <RadioButton Classes="seg" GroupName="SmpTunnel"
+                                    <RadioButton Name="SplitInput" Classes="seg" GroupName="SmpTunnel"
                                                  IsChecked="{Binding IsSplitTunnel}"
                                                  AutomationProperties.Name="{Binding L_SmpSegSplit}">
                                         <StackPanel Orientation="Horizontal" Spacing="6">

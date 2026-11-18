@@ -65,8 +65,7 @@ public partial class VpnEngine : IDisposable
     internal AcceptedTunnelInfo? AcceptedTunnel => Volatile.Read(ref _acceptedTunnel);
     private AcceptedTunnelInfo? _acceptedTunnel;
 
-    internal void CommitTunnelInfo(AppSettings settings, string json, string address, (Uri Endpoint, string? Secret)? controller) =>
-        Volatile.Write(ref _acceptedTunnel, new AcceptedTunnelInfo(settings, json, address, controller));
+    internal void CommitTunnelInfo(AcceptedTunnelInfo tunnel) => Volatile.Write(ref _acceptedTunnel, tunnel);
 
     internal string TunFingerprint { get; private set; } = string.Empty;
 
@@ -504,6 +503,7 @@ public partial class VpnEngine : IDisposable
             // Resolve the control endpoint before retiring a live tunnel.
             var controller = _healthMonitor != null || ConfirmServiceReplacement != null
                 ? ClashSingBoxApi.ReadLocalController(configJson) : ((Uri Endpoint, string? Secret)?)null;
+            var tunnelInfo = new AcceptedTunnelInfo(settings, configJson, ActiveServerAddress, controller, result.ProxySources);
             if (controller is { } target)
                 await ClashSingBoxApi.ResolveControlTargetsAsync(target.Endpoint, ct).ConfigureAwait(false);
             if (_healthMonitor != null)
@@ -566,7 +566,7 @@ public partial class VpnEngine : IDisposable
 
                 result.PublishAcceptedImport?.Invoke();
                 if (_healthMonitor != null) _healthMonitor.AcceptedImportJson = result.ImportedJson;
-                CommitTunnelInfo(settings, configJson, ActiveServerAddress, controller);
+                CommitTunnelInfo(tunnelInfo);
                 ResetFailoverContext(settings);
                 configCommitted = true;
             }
