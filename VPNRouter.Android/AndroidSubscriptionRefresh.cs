@@ -110,7 +110,7 @@ internal static class AndroidSubscriptionRefresh
         return selected;
     }
 
-    internal static bool SaveFreeConfig(VlessServerEntry server, string uri, string command,
+    internal static bool SaveSingleServer(VlessServerEntry server, string uri, string command,
         Func<string, string?> read, Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
     {
         if (read(UiCommand) != command) return false;
@@ -138,6 +138,31 @@ internal static class AndroidSubscriptionRefresh
         updates[ConfigMode] = "manual";
         commit(updates);
         return true;
+    }
+
+    internal static VlessServerEntry? ResolveActiveServer(string? selectedName, List<VlessServerEntry> standalone,
+        List<SubscriptionEntry> subscriptions, string mode, string? manualUri, Action<string> rememberFallback)
+    {
+        // Earlier Simple saves kept the explicitly typed URI as the only manual selection.
+        if (mode == "manual" && string.IsNullOrEmpty(selectedName) && standalone.Count == 0 &&
+            !string.IsNullOrWhiteSpace(manualUri))
+        {
+            var manual = ServerUriParser.TryParse(manualUri);
+            if (manual != null) manual.UseAsSingleOutbound = true;
+            return manual;
+        }
+
+        var available = standalone.Concat(subscriptions.Where(s => s is { Enabled: true, Servers: not null })
+            .SelectMany(s => s.Servers)).Where(s => s != null);
+        if (!string.IsNullOrEmpty(selectedName) && available.FirstOrDefault(s =>
+                string.Equals(s.Name, selectedName, StringComparison.OrdinalIgnoreCase)) is { } selected)
+            return selected;
+        if (available.FirstOrDefault() is { } first)
+        {
+            if (!string.IsNullOrEmpty(first.Name)) rememberFallback(first.Name);
+            return first;
+        }
+        return ServerUriParser.TryParse(manualUri ?? string.Empty);
     }
 
     internal static bool HasServerInputEdit(string? displayed, string? saved)

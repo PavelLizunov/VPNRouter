@@ -417,8 +417,8 @@ public static class AndroidStorage
     public static string? GetSelectedServerName() => GetString(KeySelectedServerName);
     public static bool SetSelectedServerName(string? value) => SetString(KeySelectedServerName, value);
 
-    internal static bool ApplyFreeConfig(VlessServerEntry server, string uri, string command) =>
-        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveFreeConfig(server, uri, command,
+    internal static bool SelectSingleServer(VlessServerEntry server, string uri, string command) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveSingleServer(server, uri, command,
             key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
     public static VlessServerEntry? GetActiveServer()
@@ -429,61 +429,8 @@ public static class AndroidStorage
             return retained;
         var servers = GetServers();
 
-        if (!string.IsNullOrEmpty(selectedName))
-        {
-            foreach (var s in servers)
-            {
-                if (string.Equals(s.Name, selectedName, System.StringComparison.OrdinalIgnoreCase))
-                    return s;
-            }
-        }
-
-        var subscriptions = GetSubscriptionsBare();
-        if (!string.IsNullOrEmpty(selectedName))
-        {
-            foreach (var sub in subscriptions)
-            {
-                if (sub == null || !sub.Enabled || sub.Servers == null) continue;
-                foreach (var srv in sub.Servers)
-                {
-                    if (srv == null) continue;
-                    if (string.Equals(srv.Name, selectedName, System.StringComparison.OrdinalIgnoreCase))
-                        return srv;
-                }
-            }
-        }
-
-        if (servers.Count > 0)
-        {
-            var first = servers[0];
-            if (!string.IsNullOrEmpty(first.Name))
-                SetSelectedServerName(first.Name);
-            return first;
-        }
-
-        foreach (var sub in subscriptions)
-        {
-            if (sub == null || !sub.Enabled || sub.Servers == null || sub.Servers.Count == 0) continue;
-            var first = sub.Servers[0];
-            if (first == null) continue;
-            if (!string.IsNullOrEmpty(first.Name))
-                SetSelectedServerName(first.Name);
-            return first;
-        }
-
-        var manualUri = GetVlessUri();
-        if (!string.IsNullOrWhiteSpace(manualUri))
-        {
-            try
-            {
-                return VPNRouter.Core.Services.ServerUriParser.Parse(manualUri);
-            }
-            catch
-            {
-            }
-        }
-
-        return null;
+        return AndroidSubscriptionRefresh.ResolveActiveServer(selectedName, servers, GetSubscriptionsBare(),
+            GetConfigMode(), GetVlessUri(), name => SetSelectedServerName(name));
     }
 
     private static List<SubscriptionEntry> GetSubscriptionsBare()

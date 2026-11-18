@@ -1423,7 +1423,7 @@ public partial class AndroidApp : Avalonia.Application
     {
         var activity = MainActivity.Instance;
         if (activity is null) return;
-        var command = AndroidStorage.BeginUiCommand();
+        var command = ReserveConnectCommand();
         if (command == null) return;
         MainActivity.PendingQrScanCallback = (success, text) =>
         {
@@ -1508,23 +1508,11 @@ public partial class AndroidApp : Avalonia.Application
         _configRowValue.Text = policy;
     }
 
-    private void OnSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private bool TrySaveServerInput(string command)
     {
-        if (_serverInput is null || _serverInputError is null) return;
+        if (_serverInput is null || _serverInputError is null || !AndroidStorage.IsCurrentUiCommand(command)) return false;
         var raw = (_serverInput.Text ?? string.Empty).Trim();
         _serverInputError.IsVisible = false;
-
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            AndroidStorage.SetVlessUri(null);
-            AndroidStorage.SetSubscriptionUrl(null);
-            AndroidStorage.SetServers(null);
-            AndroidStorage.SetSelectedServerName(null);
-            _cachedServers = new List<VlessServerEntry>();
-            UpdateServerListView();
-            UpdateConfigSummary();
-            return;
-        }
 
         if (ServerUriParser.IsSupportedScheme(raw))
         {
@@ -1535,18 +1523,15 @@ public partial class AndroidApp : Avalonia.Application
                 {
                     _serverInputError.Text = Localization.SaveStatusUriBadHost;
                     _serverInputError.IsVisible = true;
-                    return;
+                    return false;
                 }
-                AndroidStorage.SetVlessUri(raw);
-                AndroidStorage.SetSubscriptionUrl(null);
-                AndroidStorage.SetServers(null);
-                AndroidStorage.SetSelectedServerName(null);
-                AndroidStorage.SetConfigMode("manual");
+                if (!AndroidStorage.SelectSingleServer(parsed, raw, command)) return false;
                 _ccMode = "manual";
                 ApplyCcModeVisuals();
-                _cachedServers = new List<VlessServerEntry>();
+                _cachedServers = AndroidStorage.GetServers();
                 UpdateServerListView();
                 UpdateConfigSummary();
+                return true;
             }
             catch (PlaceholderConfigException ex)
             {
@@ -1560,7 +1545,7 @@ public partial class AndroidApp : Avalonia.Application
                 _serverInputError.Text = string.Format(Localization.SaveStatusUriInvalid, ex.Message);
                 _serverInputError.IsVisible = true;
             }
-            return;
+            return false;
         }
 
         if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
@@ -1572,11 +1557,12 @@ public partial class AndroidApp : Avalonia.Application
             _ccMode = "subscribe";
             ApplyCcModeVisuals();
             UpdateConfigSummary();
-            return;
+            return true;
         }
 
         _serverInputError.Text = Localization.SaveStatusUnknown;
         _serverInputError.IsVisible = true;
+        return false;
     }
 
 

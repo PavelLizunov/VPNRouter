@@ -26,10 +26,12 @@ public partial class SingBoxManager
 
     private async Task<HttpResponse> SendClashRequestAsync(HttpRequest request, CancellationToken ct)
     {
-        // The production handler pins the socket to a local address. Check local scope for injected transports too.
-        if (!ReferenceEquals(_http, LocalControllerHttp))
-            await ClashSingBoxApi.ResolveControlTargetsAsync(request.Uri, ct).ConfigureAwait(false);
-        return await _http.SendAsync(request, ct).ConfigureAwait(false);
+        if (ReferenceEquals(_http, LocalControllerHttp))
+            return await _http.SendAsync(request, ct).ConfigureAwait(false);
+
+        var addresses = await ClashSingBoxApi.ResolveControlTargetsAsync(request.Uri, ct).ConfigureAwait(false);
+        var directUri = new UriBuilder(request.Uri) { Host = addresses[0].ToString() }.Uri;
+        return await _http.SendAsync(request with { Uri = directUri }, ct).ConfigureAwait(false);
     }
 
     public string WriteConfigToDisk(string configJson)

@@ -1003,13 +1003,13 @@ public partial class AndroidApp
         }
         if (string.IsNullOrEmpty(entry.RawUri)) return;
 
-        var command = AndroidStorage.BeginUiCommand();
+        var command = ReserveConnectCommand();
         if (command == null) return;
         try
         {
             var vless = VPNRouter.Core.Services.ServerUriParser.Parse(entry.RawUri);
             if (string.IsNullOrWhiteSpace(vless.Name)) vless.Name = "⚡ free";
-            if (!AndroidStorage.ApplyFreeConfig(vless, entry.RawUri, command)) return;
+            if (!AndroidStorage.SelectSingleServer(vless, entry.RawUri, command)) return;
         }
         catch (System.Exception ex)
         {

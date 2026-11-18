@@ -79,7 +79,12 @@ public partial class SingBoxManager : IDisposable
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
-        _http = http ?? LocalControllerHttp;
+        _http = http switch
+        {
+            null or PolicyHttpClient => LocalControllerHttp,
+            IDirectHttpClient direct => direct,
+            _ => throw new ArgumentException("The controller requires a direct HTTP transport.", nameof(http))
+        };
         _runner = runner ?? Runner;
         _tunLock = TunOwnershipLock.Instance(_logger);
         _policy = SingBoxRuntimePolicy.Current;
