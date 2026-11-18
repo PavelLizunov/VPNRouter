@@ -319,10 +319,15 @@ public sealed class SubscriptionFeature
         // Older desktop saves copied only the selected row's basic fields and Reality to the scalar fallback.
         var selectedScalarCopy = selected != null && evictedKeys.Contains(SavedRowKey(selected))
             && MatchesLegacyVless(vless, selected, desktopProjection: true);
+        if (selected == null && string.Equals(app.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase))
+            selectedScalarCopy = evicted.Any(row => string.Equals(row.Name, app.ActiveSubscriptionServer,
+                StringComparison.OrdinalIgnoreCase) && MatchesLegacyVless(vless, row, desktopProjection: true));
         var removedManualCopy = vless.Servers.RemoveAll(row => evictedKeys.Contains(SavedRowKey(row))) > 0;
+        bool OwnsDirectScalar(VlessServerEntry row) =>
+            string.Equals(row.Protocol, "vless", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(row.DetourVia) && !row.IsDnsTunnel && MatchesLegacyVless(vless, row);
         var removeScalar = (selectedScalarCopy || evicted.Any(row => MatchesLegacyVless(vless, row)))
-            && !vless.Servers.Any(row => MatchesLegacyVless(vless, row))
-            && !retained.Any(row => MatchesLegacyVless(vless, row));
+            && !vless.Servers.Any(OwnsDirectScalar) && !retained.Any(OwnsDirectScalar);
         if (removeScalar)
         {
             vless.Server = string.Empty;
@@ -347,15 +352,14 @@ public sealed class SubscriptionFeature
     private static bool MatchesLegacyVless(VlessConfig vless, VlessServerEntry row, bool desktopProjection = false)
     {
         if (string.IsNullOrEmpty(vless.Server) || vless.Server != row.Server ||
-            vless.Port != row.Port || vless.Uuid != row.Uuid) return false;
-        var legacy = new VlessServerEntry
-        {
-            Name = row.Name, Server = vless.Server, Port = vless.Port, Uuid = vless.Uuid,
-            Flow = vless.Flow, Security = vless.Security, Reality = vless.Reality,
-            Tls = desktopProjection ? row.Tls : vless.Tls,
-            Transport = desktopProjection ? row.Transport : vless.Transport
-        };
-        return SavedRowKey(legacy) == SavedRowKey(row);
+            vless.Port != row.Port || vless.Uuid != row.Uuid || vless.Flow != row.Flow ||
+            vless.Security != row.Security) return false;
+        var json = AppJsonContext.Default;
+        if (JsonSerializer.Serialize(vless.Reality, json.VlessRealityConfig) !=
+            JsonSerializer.Serialize(row.Reality, json.VlessRealityConfig)) return false;
+        return desktopProjection ||
+            (JsonSerializer.Serialize(vless.Tls, json.VlessTlsConfig) == JsonSerializer.Serialize(row.Tls, json.VlessTlsConfig) &&
+             JsonSerializer.Serialize(vless.Transport, json.VlessTransportConfig) == JsonSerializer.Serialize(row.Transport, json.VlessTransportConfig));
     }
 
     private static bool HasUsableManualServer(AppSettings settings)

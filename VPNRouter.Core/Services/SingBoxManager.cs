@@ -55,6 +55,7 @@ public partial class SingBoxManager : IDisposable
             ProcessOwnership.FindOwnedSingBox(ProcessOwnership.ConfiguredExePath) != null) ||
         IsRunning();
     internal IProcessHandle? OwnedProcessHandle => _handle;
+    internal bool ExactStopUnconfirmed => _exactStopUnconfirmed;
     public event EventHandler? Crashed;
     public event Action<int>? Started;
 

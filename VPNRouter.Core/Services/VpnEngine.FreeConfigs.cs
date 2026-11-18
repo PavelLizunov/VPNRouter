@@ -66,9 +66,10 @@ public partial class VpnEngine
                 if (!confirmed)
                 {
                     // Validation can reject the candidate without disturbing the original process.
-                    bool originalAlive = previousHandle is { HasExited: false } &&
-                        ReferenceEquals(previousHandle, _singBox?.OwnedProcessHandle);
-                    if (!originalAlive)
+                    bool originalRetained = previousHandle != null && _singBox != null &&
+                        ReferenceEquals(previousHandle, _singBox.OwnedProcessHandle) &&
+                        (_singBox.ExactStopUnconfirmed || previousHandle.QueryHasExited() != true);
+                    if (!originalRetained)
                     {
                         bool userStopped = _sessionCts?.IsCancellationRequested == true;
                         _sessionCts?.Cancel();

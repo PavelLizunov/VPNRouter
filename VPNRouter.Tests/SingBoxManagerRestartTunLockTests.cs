@@ -455,11 +455,13 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         }
     }
 
-    [Fact]
-    public void ReloadConfigJsonWithResult_LinuxCapabilityMode_FailedExactStop_ReturnsFalseWithRetainedHandleAndLock()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReloadConfigJsonWithResult_UnixFailedExactStop_PreservesActiveFileHandleAndLock(bool escalated)
     {
-        Assert.SkipUnless(OperatingSystem.IsLinux(),
-            "Linux-only — exercises the capability-mode Stop branch.");
+        Assert.SkipUnless(OperatingSystem.IsLinux() || (OperatingSystem.IsMacOS() && escalated),
+            "Requires the Linux capability or Unix escalated stop path.");
 
         var priorDataDir = GetAppPathsDataDir();
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-failed-stop-{Guid.NewGuid():N}");
@@ -475,6 +477,13 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         try
         {
+            if (escalated)
+            {
+                SetField(manager, "_linuxUsedPkexec", true);
+                // The isolated record points at an absent child. Exact stop refuses before sending a signal.
+                ProcessOwnership.WriteRuntimeOwnerRecord(Path.Combine(tempDir, "runtime-owner.json"),
+                    new OwnedProcessIdentity(int.MaxValue, 1, Path.Combine(tempDir, "fixture-sing-box")));
+            }
             const string previous = """{"route":{"final":"proxy"}}""";
             var configPath = manager.WriteConfigToDisk(previous);
             var result = manager.ReloadConfigJsonWithResult("{}", forceRestart: true);
@@ -486,6 +495,7 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             Assert.Equal(SingBoxState.Failed, manager.State);
             Assert.Empty(runner.StartCalls);
             Assert.Same(handle, GetField(manager, "_handle"));
+            Assert.False(handle.DisposeCalled);
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
         }

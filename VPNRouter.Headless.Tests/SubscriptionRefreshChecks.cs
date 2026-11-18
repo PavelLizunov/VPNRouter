@@ -27,6 +27,7 @@ public static class SubscriptionRefreshChecks
             await CheckRejectedChainAsync(Path.Combine(root, "chain-batch"), refreshAll: true);
             foreach (var scenario in new[] { "success", "rejected", "transient" })
                 await CheckLegacyRefreshAsync(Path.Combine(root, "legacy-" + scenario), scenario);
+            await CheckLegacyRefreshAsync(Path.Combine(root, "legacy-scalar-only"), "rejected", scalarOnly: true);
             await CheckStaleSameUrlResultAsync(Path.Combine(root, "newer-rejected"), rejectNewer: true);
             await CheckStaleSameUrlResultAsync(Path.Combine(root, "newer-valid"), rejectNewer: false);
             Console.WriteLine("[SubscriptionRefreshChecks] Offline refresh and persistence scenarios passed");
@@ -200,14 +201,15 @@ public static class SubscriptionRefreshChecks
             "Offline selection after restart must not return the historical direct target");
     }
 
-    private static async Task CheckLegacyRefreshAsync(string dir, string scenario)
+    private static async Task CheckLegacyRefreshAsync(string dir, string scenario, bool scalarOnly = false)
     {
         const string url = "https://fixture.invalid/legacy-feed";
         var storage = new ConfigStorage(dir);
         var settings = storage.GetSettings();
         var old = new VlessServerEntry
         {
-            Name = "old-target", Server = "exit.invalid", Port = 443, Uuid = "00000000-0000-4000-8000-000000000001"
+            Name = "old-target", OutboundId = "subscription-exit", Server = "exit.invalid",
+            Port = 443, Uuid = "00000000-0000-4000-8000-000000000001"
         };
         var manual = new VlessServerEntry { Name = "manual", Server = "manual.invalid" };
         settings.App.Subscriptions = [];
@@ -215,7 +217,7 @@ public static class SubscriptionRefreshChecks
         settings.App.SubscriptionServers = [old];
         settings.App.ConfigMode = "subscribe";
         settings.App.ActiveSubscriptionServer = settings.Vless.ActiveServer = old.Name;
-        settings.Vless.Servers = [old, manual];
+        settings.Vless.Servers = scalarOnly ? [] : [old, manual];
         settings.Vless.Server = old.Server;
         settings.Vless.Port = old.Port;
         settings.Vless.Uuid = old.Uuid;
@@ -237,6 +239,15 @@ public static class SubscriptionRefreshChecks
 
         var reopened = new ConfigStorage(dir);
         var reloaded = reopened.GetSettings();
+        if (scalarOnly)
+        {
+            Assert(response.Error?.Code == "subscription_chain_unsupported" &&
+                reloaded.App.Subscriptions.Single().Servers.Count == 0 && reloaded.App.SubscriptionServers.Count == 0 &&
+                reloaded.Vless.Servers.Count == 0 && string.IsNullOrEmpty(reloaded.Vless.Server) &&
+                reloaded.Vless.GetEffectiveServers().Count == 0,
+                "A rejected tagged row must not return through the legacy scalar after reopening an empty list");
+            return;
+        }
         Assert(reloaded.App.SubscriptionUrl == url && reloaded.App.StrictDns && reloaded.Vless.Servers.Any(s => s.Server == manual.Server),
             "Refresh must preserve the legacy URL, manual profile and unrelated settings");
         if (scenario == "transient")

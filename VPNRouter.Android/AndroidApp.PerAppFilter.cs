@@ -31,7 +31,7 @@ public partial class AndroidApp
 
     private void OnTunnelModeRadioChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (sender is not RadioButton { IsChecked: true } radio) return;
+        if (sender is not Avalonia.Controls.RadioButton { IsChecked: true } radio) return;
         var splitOn = ReferenceEquals(radio, _splitRadio);
 
         if (splitOn)

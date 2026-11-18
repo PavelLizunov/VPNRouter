@@ -258,6 +258,7 @@ public partial class SingBoxManager
 
     private void StopUnixEscalated(bool releaseLock)
     {
+        var targetHandle = _handle;
         var unixStopped = false;
         try
         {
@@ -269,8 +270,13 @@ public partial class SingBoxManager
         }
         finally
         {
-            _handle?.Dispose();
-            _handle = null;
+            if (!ReferenceEquals(_handle, targetHandle))
+                unixStopped = false;
+            if (unixStopped)
+            {
+                targetHandle?.Dispose();
+                _handle = null;
+            }
             _exactStopUnconfirmed = !unixStopped;
             State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed;
             if (releaseLock && unixStopped) ReleaseTunOwnership();
