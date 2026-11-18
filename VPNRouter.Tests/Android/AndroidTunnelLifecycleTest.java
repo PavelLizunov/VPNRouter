@@ -84,7 +84,8 @@ public final class AndroidTunnelLifecycleTest {
                 "AndroidApp.RefreshPerAppSelection();", "case ActionTunnelError:");
         requireOrdered(activity, "private void DispatchTunnelStart(", "if (!AndroidStorage.IsCurrentUiCommand(command)) return;",
                 ".PutExtra(AndroidStorage.UiCommandKey, command)", "StartForegroundService(intent)");
-        requireOrdered(dispatch, "if (uiCommand != null && !uiCommand.equals(prefs.getString(UI_COMMAND, null)))", "return;",
+        requireOrdered(dispatch, "if (uiCommand != null && (!uiCommand.equals(prefs.getString(UI_COMMAND, null))",
+                "uiCommand.equals(prefs.getString(\"vpn_superseded_selection\", null))", "return;",
                 "AndroidTunnelPolicy.Preferences selection = readAppPreferences(prefs);", "sourcePrefs = selection.snapshot();",
                 "mode = selection.mode", "packages = selection.packages", "prepareTunnelConfig(cfg,",
                 "pendingPerAppPrefs = sourcePrefs;", "startTunnel(checked);");

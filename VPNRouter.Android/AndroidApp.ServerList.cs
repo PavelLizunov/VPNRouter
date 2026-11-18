@@ -593,13 +593,14 @@ public partial class AndroidApp
     {
         var sub = _srvCurrentSub;
         if (sub is null || sub.Servers is null || sub.Servers.Count == 0) return;
-        var activeName = AndroidStorage.GetSelectedServerName();
+        var activeName = AndroidStorage.SelectedNameForFeed(_srvCurrentSub);
         if (string.IsNullOrEmpty(activeName)) return;
 
-        var before = sub.Servers.Count;
-        sub.Servers.RemoveAll(s =>
-            string.Equals(s.Name, activeName, StringComparison.OrdinalIgnoreCase));
-        if (sub.Servers.Count == before) return;
+        var matches = sub.Servers.FindAll(row => string.Equals(row?.Name, activeName, StringComparison.OrdinalIgnoreCase));
+        var identity = AndroidStorage.SelectedFeedRow;
+        var selected = matches.Count == 1 ? matches[0] : matches.Find(row => AndroidSubscriptionRefresh.RowIdentity(row) == identity);
+        if (selected == null) return;
+        sub.Servers.Remove(selected);
 
         AndroidStorage.SetSelectedServerName(null);
         var subs = AndroidStorage.GetSubscriptions();
@@ -709,14 +710,15 @@ public partial class AndroidApp
     private void RebuildServerList()
     {
         if (_srvListStack is null || _srvEmptyHint is null) return;
+        var source = _srvCurrentSub;
         _srvListStack.Children.Clear();
 
         var servers = _srvCurrentSub?.Servers ?? new List<VlessServerEntry>();
-        var activeName = AndroidStorage.GetSelectedServerName();
+        var activeName = AndroidStorage.SelectedNameForFeed(_srvCurrentSub);
         // Nothing to test in an empty list: the test buttons read as disabled instead of doing nothing.
         if (_srvTestAllBtn is not null && _srvTestAllCts is null) _srvTestAllBtn.IsEnabled = servers.Count > 0;
         if (_srvDeepVerifyBtn is not null && _srvTestAllCts is null) _srvDeepVerifyBtn.IsEnabled = servers.Count > 0;
-        if (servers.Count == 0)
+        if (source == null || servers.Count == 0)
         {
             _srvEmptyHint.Text = SrvEmptyHintFor(_srvCurrentSub);
             _srvEmptyHint.IsVisible = true;
@@ -729,7 +731,7 @@ public partial class AndroidApp
         global::Android.Util.Log.Info("VpnRouter.Perf", "server list rebuilt rows=" + ordered.Count);
         foreach (var srv in ordered)
         {
-            _srvListStack.Children.Add(BuildServerRow(srv, activeName));
+            _srvListStack.Children.Add(BuildServerRow(source, srv, activeName));
         }
         UpdateRemoveButtonEnabled(servers, activeName);
     }
@@ -777,15 +779,16 @@ public partial class AndroidApp
         };
     }
 
-    private Control BuildServerRow(VlessServerEntry srv, string? activeServerName)
+    private Control BuildServerRow(SubscriptionEntry source, VlessServerEntry srv, string? activeServerName)
     {
         var key = AndroidStorage.BuildServerKey(srv);
         var hasResult = _srvResults.TryGetValue(key, out var result);
-        return BuildServerRowCore(srv, activeServerName, hasResult ? result : null,
+        return BuildServerRowCore(source, srv, activeServerName, hasResult ? result : null,
             _srvTestingKeys.Contains(key), TestSingleServerAsync);
     }
 
     private Control BuildServerRowCore(
+        SubscriptionEntry source,
         VlessServerEntry srv,
         string? activeServerName,
         AndroidStorage.ServerTestResultDto? result,
@@ -793,7 +796,9 @@ public partial class AndroidApp
         Func<VlessServerEntry, Task> onTest)
     {
         var isActive = !string.IsNullOrEmpty(activeServerName)
-                       && string.Equals(srv.Name, activeServerName, StringComparison.OrdinalIgnoreCase);
+                       && string.Equals(srv.Name, activeServerName, StringComparison.OrdinalIgnoreCase)
+                       && (source.Servers.Count(s => s?.Name == srv.Name) == 1 ||
+                           AndroidStorage.SelectedFeedRow == AndroidSubscriptionRefresh.RowIdentity(srv));
 
         var radioOuter = new Border
         {
@@ -807,7 +812,7 @@ public partial class AndroidApp
             Background = isActive ? GetBrush("SuccessSolidBrush") : Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        radioOuter.PointerReleased += (s, e) => ApplyServerSelection(srv);
+        radioOuter.PointerReleased += (s, e) => ApplyServerSelection(source, srv);
         if (isActive)
         {
             radioOuter.Child = new Ellipse
@@ -837,7 +842,7 @@ public partial class AndroidApp
                 VerticalAlignment = VerticalAlignment.Center,
             },
         };
-        protocolDisc.PointerReleased += (s, e) => ApplyServerSelection(srv);
+        protocolDisc.PointerReleased += (s, e) => ApplyServerSelection(source, srv);
 
         var displayName = string.IsNullOrWhiteSpace(srv.Name) ? srv.Server : srv.Name;
 
@@ -876,7 +881,7 @@ public partial class AndroidApp
             },
         };
         ToolTip.SetTip(nameStack, Localization.SrvTipSelectServer);
-        nameStack.PointerReleased += (s, e) => ApplyServerSelection(srv);
+        nameStack.PointerReleased += (s, e) => ApplyServerSelection(source, srv);
 
         var (pingDisplay, _) = ResolveLatencyDisplay(result, isTesting);
         var pingBgBrush = ResolveLatencyBadgeBackground(result, isTesting);
@@ -901,7 +906,7 @@ public partial class AndroidApp
             VerticalAlignment = VerticalAlignment.Center,
             Child = pingTextInside,
         };
-        pingBadge.PointerReleased += (s, e) => ApplyServerSelection(srv);
+        pingBadge.PointerReleased += (s, e) => ApplyServerSelection(source, srv);
         if (!string.IsNullOrEmpty(result?.Error))
             ToolTip.SetTip(pingBadge, result.Error);
 
@@ -1038,15 +1043,32 @@ public partial class AndroidApp
         };
     }
 
-    private void ApplyServerSelection(VlessServerEntry srv)
+    private void ApplyServerSelection(SubscriptionEntry source, VlessServerEntry srv)
     {
-        AndroidStorage.SetSelectedServerName(srv.Name);
-
         var activity = MainActivity.Instance;
-        if (activity is not null && MainActivity.IntendedConnected)
+        bool reconnect = activity != null && MainActivity.IntendedConnected;
+        var command = reconnect ? ReserveConnectCommand() : null;
+        if (reconnect && command == null) return;
+        try
+        {
+            if (!AndroidStorage.SelectSubscriptionServer(source, srv, command))
+            {
+                if (command == null || AndroidStorage.IsCurrentUiCommand(command))
+                    ShowMenuFeedback(Localization.TunnelError("config-invalid"));
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            ShowMenuFeedback(Localization.TunnelError("config-invalid"));
+            return;
+        }
+        RefreshConfigModeUiFromStorage();
+
+        if (activity != null && reconnect)
         {
             ShowMenuFeedback(string.Format(Localization.SrvSwitchedReconnect, srv.Name));
-            activity.RequestConnect();
+            activity.RequestConnect(command);
         }
         else
         {

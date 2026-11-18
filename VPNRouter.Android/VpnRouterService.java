@@ -416,7 +416,8 @@ public final class VpnRouterService extends VpnService {
             submitCommand(startId, origin, new Runnable() {
                 @Override
                 public void run() {
-                    if (uiCommand != null && !uiCommand.equals(prefs.getString(UI_COMMAND, null))) {
+                    if (uiCommand != null && (!uiCommand.equals(prefs.getString(UI_COMMAND, null)) ||
+                            uiCommand.equals(prefs.getString("vpn_superseded_selection", null)))) {
                         if (commandServer == null) finishCommand(startId);
                         return;
                     }

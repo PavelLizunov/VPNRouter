@@ -390,16 +390,93 @@ public class AndroidSubscriptionRefreshTests
             Assert.Equal(accepted, prefs.Contents);
         }
 
-        var saved = prefs.Reload();
-        var feedRows = JsonSerializer.Deserialize<List<SubscriptionEntry>>(saved["subscriptions_json"])!;
-        var standalone = JsonSerializer.Deserialize<List<VlessServerEntry>>(saved.GetValueOrDefault("servers_json") ?? "[]")!;
-        var active = AndroidSubscriptionRefresh.ResolveActiveServer(saved.GetValueOrDefault("selected_server_name"),
-            standalone, feedRows, saved["config_mode"], saved["vless_uri"], _ => Assert.Fail("Unexpected fallback"));
+        else
+        {
+            // The old Simple summary saved this unrelated name immediately after the manual edit.
+            prefs.Commit(new Dictionary<string, string?> { ["selected_server_name"] = feed.Servers[0].Name });
+        }
+        var active = prefs.Resolve();
         Assert.NotNull(active);
         Assert.Equal(ServerUriParser.Parse(ManualUri).Server, active.Server);
         Assert.True(active.UseAsSingleOutbound);
-        Assert.True(Assert.Single(feedRows).Enabled);
-        Assert.Equal("exit.invalid", Assert.Single(feedRows[0].Servers).Server);
+        var afterMigration = prefs.Contents;
+        Assert.Equal(active.Server, prefs.Resolve()?.Server);
+        Assert.Equal(afterMigration, prefs.Contents);
+        Assert.Equal(active.Name, prefs.Read("selected_server_name"));
+        var feeds = prefs.Feeds;
+        Assert.True(Assert.Single(feeds).Enabled);
+        Assert.Equal("exit.invalid", Assert.Single(feeds[0].Servers).Server);
+    }
+
+    [Fact]
+    public void SharedManualProfileReplacesSelectionBeforeTheNextConnect()
+    {
+        using var prefs = new PreferenceFile(new());
+        Assert.True(AndroidSubscriptionRefresh.SaveSingleServer(ServerUriParser.Parse(FreshUri), FreshUri, "qr-command",
+            prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+        var snapshot = ConfigShareDocument.TryParse(ConfigShareDocument.Serialize(new ConfigShareDocument
+        {
+            ConfigMode = "manual", ManualVlessUri = ManualUri
+        })).Document!;
+        AndroidSubscriptionRefresh.ImportProfile(snapshot, prefs.Read, prefs.Commit, JsonSerializerOptions.Default);
+        Assert.False(AndroidSubscriptionRefresh.HasServerInputEdit(ManualUri, prefs.Read("vless_uri")));
+        Assert.False(AndroidSubscriptionRefresh.IsCurrentSelection("qr-command", prefs.Read));
+        Assert.Equal("qr-command", prefs.Read(AndroidSubscriptionRefresh.UiCommand));
+        var chosen = prefs.Resolve();
+        Assert.NotNull(chosen);
+        Assert.True(chosen.UseAsSingleOutbound);
+        Assert.Equal("manual.invalid", chosen.Server);
+        var beforeFailure = prefs.Contents;
+        Assert.False(AndroidSubscriptionRefresh.SaveSingleServer(ServerUriParser.Parse(FreshUri), FreshUri, "qr-command",
+            prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+        snapshot.ManualVlessUri = "invalid";
+        Assert.Throws<FormatException>(() => AndroidSubscriptionRefresh.ImportProfile(snapshot, prefs.Read, prefs.Commit,
+            JsonSerializerOptions.Default));
+        Assert.Equal(beforeFailure, prefs.Contents);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SelectedFeedOwnsItsDisplayNameAfterReopen(bool useRefresh)
+    {
+        var manual = ServerUriParser.Parse(ManualUri);
+        var a = ServerUriParser.Parse(OldTargetUri);
+        var b = ServerUriParser.Parse(FreshUri);
+        a.Name = b.Name = manual.Name;
+        var feed = new SubscriptionEntry { Url = Feed, Id = "feed", Servers = [b] };
+        var other = new SubscriptionEntry { Url = Feed, Id = "other", Servers = [a] };
+        using var prefs = new PreferenceFile(new()
+        {
+            ["subscriptions_json"] = JsonSerializer.Serialize(new[] { other, feed })
+        });
+        Assert.True(AndroidSubscriptionRefresh.SaveSingleServer(manual, ManualUri, "qr-command",
+            prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+        if (useRefresh)
+            Assert.True(AndroidSubscriptionRefresh.Save(feed, false, "qr-command", prefs.Read, prefs.Commit,
+                JsonSerializerOptions.Default));
+        else
+            Assert.True(AndroidSubscriptionRefresh.SaveFeedSelection(feed, b, null, prefs.Feeds, prefs.Read, prefs.Commit,
+                JsonSerializerOptions.Default));
+        var chosen = prefs.Resolve();
+        Assert.NotNull(chosen);
+        Assert.Equal("fresh.invalid", chosen.Server);
+        Assert.Equal(feed.Id, prefs.Read(AndroidSubscriptionRefresh.SelectedFeedId));
+        var pool = prefs.Standalone.Concat(prefs.Feeds.SelectMany(f => f.Servers)).ToList();
+        AndroidSubscriptionRefresh.PutSelectedServerFirst(pool, chosen);
+        var config = new VlessConfig { Servers = pool, ActiveServer = chosen.Name, AutoSelectBestServer = true };
+        Assert.Equal(3, config.GetActiveServers().Count);
+        Assert.Equal("fresh.invalid", config.GetActiveServers()[0].Server);
+
+        // Old clients saved only the subscription URL. A retained manual row cannot shadow that source.
+        other.Url += "/other";
+        prefs.Commit(new Dictionary<string, string?>
+        {
+            [AndroidSubscriptionRefresh.SelectedFeedId] = null,
+            [AndroidSubscriptionRefresh.SelectedFeedRow] = null,
+            ["subscriptions_json"] = JsonSerializer.Serialize(new[] { other, feed })
+        });
+        Assert.Equal("fresh.invalid", prefs.Resolve()?.Server);
     }
 
     [Fact]
@@ -520,6 +597,11 @@ public class AndroidSubscriptionRefreshTests
             initial.TryAdd(AndroidSubscriptionRefresh.UiCommand, "qr-command");
             File.WriteAllText(_path, JsonSerializer.Serialize(initial));
         }
+
+        public List<SubscriptionEntry> Feeds => JsonSerializer.Deserialize<List<SubscriptionEntry>>(Read("subscriptions_json") ?? "[]")!;
+        public List<VlessServerEntry> Standalone => JsonSerializer.Deserialize<List<VlessServerEntry>>(Read("servers_json") ?? "[]")!;
+        public VlessServerEntry? Resolve() => AndroidSubscriptionRefresh.ResolveActiveServer(Standalone, Feeds,
+            Read("config_mode") ?? "manual", Read, Commit, JsonSerializerOptions.Default);
 
         public string Contents => File.ReadAllText(_path);
         public int CommitCount { get; private set; }

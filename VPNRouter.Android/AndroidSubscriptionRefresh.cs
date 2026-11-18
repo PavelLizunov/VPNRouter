@@ -14,9 +14,14 @@ internal static class AndroidSubscriptionRefresh
     internal const string StandaloneServers = "servers_json";
     internal const string SelectedName = "selected_server_name";
     internal const string SubscriptionUrl = "subscription_url";
+    internal const string SelectedFeedId = "selected_subscription_id";
+    internal const string SelectedFeedRow = "selected_subscription_row";
     internal const string ManualUri = "vless_uri";
     internal const string ConfigMode = "config_mode";
     internal const string UiCommand = "vpn_ui_command";
+    internal const string CustomJson = "custom_config_json";
+    internal const string CustomName = "custom_config_name";
+    internal const string SupersededSelection = "vpn_superseded_selection";
     internal const string LegacyManualOwner = "subscription_manual_owner_hash";
 
     private static readonly Dictionary<string, Task> PendingRefreshes = new(StringComparer.Ordinal);
@@ -91,18 +96,14 @@ internal static class AndroidSubscriptionRefresh
 
         var updates = new Dictionary<string, string?>();
         // Once a registration is replaced, a later rejection cannot identify its former standalone copies.
-        bool superseded = selectingCommand != null && selectingCommand != read(UiCommand);
+        bool superseded = selectingCommand != null && !IsCurrentSelection(selectingCommand, read);
         RemoveSupersededCopies(refreshed.Url, oldRows, subscriptions, read, options, updates,
             preserveSelection: superseded && !rejected, rejected: rejected);
         bool selected = !rejected && selectingCommand != null && !superseded;
         if (selected)
         {
             affected[0].Enabled = true;
-            updates[SelectedName] = refreshed.Servers[0].Name;
-            updates[SubscriptionUrl] = refreshed.Url;
-            updates[ManualUri] = null;
-            updates[LegacyManualOwner] = null;
-            updates[ConfigMode] = "subscribe";
+            SelectFeedRow(updates, affected[0], refreshed.Servers[0]);
         }
 
         updates[Subscriptions] = JsonSerializer.Serialize(subscriptions, options);
@@ -113,7 +114,7 @@ internal static class AndroidSubscriptionRefresh
     internal static bool SaveSingleServer(VlessServerEntry server, string uri, string command,
         Func<string, string?> read, Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
     {
-        if (read(UiCommand) != command) return false;
+        if (!IsCurrentSelection(command, read)) return false;
         var servers = ReadStandalone(read, options);
         var updates = new Dictionary<string, string?>();
         // Removing the old scalar URL must not sever its ownership of legacy cached rows.
@@ -129,40 +130,162 @@ internal static class AndroidSubscriptionRefresh
             var identity = JsonSerializer.Serialize(retired, options);
             servers.RemoveAll(row => JsonSerializer.Serialize(row, options) == identity);
         }
+        SelectManualRow(updates, servers, server, uri, options);
+        commit(updates);
+        return true;
+    }
+
+    private static void SelectManualRow(Dictionary<string, string?> updates, List<VlessServerEntry> servers,
+        VlessServerEntry server, string uri, JsonSerializerOptions options)
+    {
         var index = VPNRouter.Core.Services.FreeConfigs.FreeConfigSelection.SelectOrAdd(servers, server);
+        updates[SelectedFeedId] = null;
+        updates[SelectedFeedRow] = null;
         updates[StandaloneServers] = JsonSerializer.Serialize(servers, options);
         updates[SelectedName] = servers[index].Name;
         updates[ManualUri] = uri;
         updates[LegacyManualOwner] = null;
         updates[SubscriptionUrl] = null;
         updates[ConfigMode] = "manual";
-        commit(updates);
+    }
+
+    internal static bool IsCurrentSelection(string? command, Func<string, string?> read) =>
+        command != null && command == read(UiCommand) && command != read(SupersededSelection);
+
+    internal static string RowIdentity(VlessServerEntry row) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            JsonSerializer.SerializeToUtf8Bytes(row, VPNRouter.Core.Json.AppJsonContext.Default.VlessServerEntry)));
+
+    private static void SelectFeedRow(Dictionary<string, string?> updates, SubscriptionEntry feed, VlessServerEntry row)
+    {
+        updates[SelectedName] = row.Name;
+        updates[SelectedFeedId] = feed.Id;
+        updates[SelectedFeedRow] = RowIdentity(row);
+        updates[SubscriptionUrl] = feed.Url;
+        updates[ManualUri] = null;
+        updates[LegacyManualOwner] = null;
+        updates[ConfigMode] = "subscribe";
+    }
+
+    internal static bool SaveFeedSelection(SubscriptionEntry source, VlessServerEntry row, string? command,
+        List<SubscriptionEntry> subscriptions, Func<string, string?> read,
+        Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
+    {
+        if (command != null && !IsCurrentSelection(command, read)) return false;
+        var feed = subscriptions.FirstOrDefault(s => s != null && s.Id == source.Id && s.Url == source.Url);
+        var identity = RowIdentity(row);
+        if (feed?.Servers == null || !feed.Servers.Any(s => s != null && s.Name == row.Name && RowIdentity(s) == identity))
+            return false;
+        feed.Enabled = true;
+        var changes = new Dictionary<string, string?> { [Subscriptions] = JsonSerializer.Serialize(subscriptions, options) };
+        if (command == null) changes[SupersededSelection] = read(UiCommand);
+        SelectFeedRow(changes, feed, row);
+        commit(changes);
         return true;
     }
 
-    internal static VlessServerEntry? ResolveActiveServer(string? selectedName, List<VlessServerEntry> standalone,
-        List<SubscriptionEntry> subscriptions, string mode, string? manualUri, Action<string> rememberFallback)
+    internal static void ImportProfile(ConfigShareDocument doc, Func<string, string?> read,
+        Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
     {
-        // Earlier Simple saves kept the explicitly typed URI as the only manual selection.
-        if (mode == "manual" && string.IsNullOrEmpty(selectedName) && standalone.Count == 0 &&
-            !string.IsNullOrWhiteSpace(manualUri))
+        var mode = (doc.ConfigMode ?? "subscribe").ToLowerInvariant();
+        var feeds = doc.Subscriptions ?? [];
+        var changes = new Dictionary<string, string?>
         {
-            var manual = ServerUriParser.TryParse(manualUri);
-            if (manual != null) manual.UseAsSingleOutbound = true;
-            return manual;
+            [SupersededSelection] = read(UiCommand),
+            [ConfigMode] = mode,
+            [Subscriptions] = JsonSerializer.Serialize(feeds, options),
+            [SelectedName] = null, [SelectedFeedId] = null, [SelectedFeedRow] = null,
+            [SubscriptionUrl] = null, [LegacyManualOwner] = null, [ManualUri] = null
+        };
+        if (mode == "manual")
+        {
+            if (string.IsNullOrWhiteSpace(doc.ManualVlessUri))
+                changes[ManualUri] = string.Empty; // An exported empty profile has no active server.
+            else
+                SelectManualRow(changes, ReadStandalone(read, options), ServerUriParser.Parse(doc.ManualVlessUri),
+                    doc.ManualVlessUri, options);
+        }
+        else if (mode == "subscribe")
+        {
+            var enabled = feeds.Where(f => f is { Enabled: true, Servers.Count: > 0 }).ToList();
+            var source = enabled.Find(f => read(SelectedFeedId) == f.Id && read(SubscriptionUrl) == f.Url)
+                ?? enabled.Find(f => read(SubscriptionUrl) == f.Url) ?? enabled.FirstOrDefault();
+            if (source != null)
+            {
+                var active = source.Servers.Find(s => s != null && s.Name == read(SelectedName) &&
+                    RowIdentity(s) == read(SelectedFeedRow));
+                SelectFeedRow(changes, source, active ?? source.Servers[0]);
+            }
+            else changes[SubscriptionUrl] = feeds.FirstOrDefault(f => f?.Enabled == true)?.Url;
+        }
+        else if (mode == "custom" && doc.CustomConfig != null)
+        {
+            changes[CustomJson] = doc.CustomConfig.SingBoxJson;
+            changes[CustomName] = doc.CustomConfig.Name;
+        }
+        else throw new FormatException("Invalid connection profile mode or payload.");
+        commit(changes);
+    }
+
+    internal static VlessServerEntry? ResolveActiveServer(List<VlessServerEntry> standalone,
+        List<SubscriptionEntry> subscriptions, string mode, Func<string, string?> read,
+        Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
+    {
+        var name = read(SelectedName);
+        if (ReadRetainedManual(read) is { } retained &&
+            (string.IsNullOrEmpty(name) || string.Equals(name, retained.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            retained.UseAsSingleOutbound = true;
+            return retained;
         }
 
-        var available = standalone.Concat(subscriptions.Where(s => s is { Enabled: true, Servers: not null })
-            .SelectMany(s => s.Servers)).Where(s => s != null);
-        if (!string.IsNullOrEmpty(selectedName) && available.FirstOrDefault(s =>
-                string.Equals(s.Name, selectedName, StringComparison.OrdinalIgnoreCase)) is { } selected)
-            return selected;
-        if (available.FirstOrDefault() is { } first)
+        if (mode == "manual" && read(ManualUri) is { } uri)
         {
-            if (!string.IsNullOrEmpty(first.Name)) rememberFallback(first.Name);
-            return first;
+            var manual = ServerUriParser.TryParse(uri);
+            if (manual == null) return null;
+            // Old Simple saves could persist the fallback feed name when drawing the summary.
+            var previous = standalone.Find(s => s != null && s.Name == name && s.UseAsSingleOutbound);
+            var index = VPNRouter.Core.Services.FreeConfigs.FreeConfigSelection.SelectOrAdd(standalone, manual);
+            var selected = standalone[index];
+            if (!ReferenceEquals(previous, selected))
+                commit(new Dictionary<string, string?>
+                {
+                    [StandaloneServers] = JsonSerializer.Serialize(standalone, options), [SelectedName] = selected.Name
+                });
+            return selected;
         }
-        return ServerUriParser.TryParse(manualUri ?? string.Empty);
+
+        var feeds = subscriptions.Where(f => f is { Enabled: true, Servers: not null });
+        var feedId = read(SelectedFeedId);
+        var url = read(SubscriptionUrl);
+        var scoped = mode == "subscribe" && (feedId != null || !string.IsNullOrEmpty(url));
+        if (scoped)
+            feeds = feeds.Where(f => (feedId == null || f.Id == feedId) && f.Url == url);
+        var feedRows = feeds.SelectMany(f => f.Servers).Where(s => s != null);
+        var available = mode == "subscribe" ? feedRows : standalone.Concat(feedRows);
+        if (!string.IsNullOrEmpty(name))
+        {
+            var matches = available.Where(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count == 1) return matches[0];
+            if (matches.Count > 1)
+            {
+                var identity = scoped ? read(SelectedFeedRow) : null;
+                return identity == null ? matches[0] : matches.Find(s => RowIdentity(s) == identity);
+            }
+        }
+        var first = available.FirstOrDefault();
+        if (first == null) return mode == "subscribe" ? null : ServerUriParser.TryParse(read(ManualUri) ?? string.Empty);
+        if (!string.IsNullOrEmpty(first.Name) && first.Name != name)
+            commit(new Dictionary<string, string?> { [SelectedName] = first.Name, [SelectedFeedRow] = null });
+        return first;
+    }
+
+    internal static void PutSelectedServerFirst(List<VlessServerEntry> pool, VlessServerEntry selected)
+    {
+        // The generator finds its active row by name before applying the auto-select policy.
+        var identity = RowIdentity(selected);
+        pool.RemoveAll(row => row.Name == selected.Name && RowIdentity(row) == identity);
+        pool.Insert(0, selected);
     }
 
     internal static bool HasServerInputEdit(string? displayed, string? saved)
