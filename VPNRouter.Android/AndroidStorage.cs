@@ -158,17 +158,7 @@ public static class AndroidStorage
         var legacy = GetString(KeySubscriptionUrl);
         if (!string.IsNullOrWhiteSpace(legacy))
         {
-            return new List<SubscriptionEntry>
-            {
-                new SubscriptionEntry
-                {
-                    Id = "legacy-default",
-                    Name = "Default",
-                    Url = legacy,
-                    Enabled = true,
-                    Servers = GetServers(),
-                }
-            };
+            return [AndroidSubscriptionRefresh.LegacyFeed(legacy, GetServers())];
         }
         return new List<SubscriptionEntry>();
     }
@@ -442,9 +432,17 @@ public static class AndroidStorage
         WithCommandPreferences(prefs => AndroidSubscriptionRefresh.ResolveActiveServer(GetServers(), GetSubscriptions(),
             GetConfigMode(), key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
+    internal static VlessServerEntry? GetActiveServer(string command) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.ResolveForConnect(command, GetServers(), GetSubscriptions(),
+            GetConfigMode(), key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
+
     internal static AndroidSubscriptionRefresh.FeedRow? SelectedSubscriptionRow() =>
-        GetConfigMode() == "subscribe" && AndroidSubscriptionRefresh.ReadRetainedManual(GetString) == null
-            ? AndroidSubscriptionRefresh.FindFeedRow(GetSubscriptions(), GetString) : null;
+        WithCommandPreferences(prefs =>
+        {
+            string? Read(string key) => prefs.GetString(key, null);
+            return AndroidSubscriptionRefresh.ReadMode(Read) == "subscribe" && AndroidSubscriptionRefresh.ReadRetainedManual(Read) == null
+                ? AndroidSubscriptionRefresh.FindFeedRow(GetSubscriptions(), Read) : null;
+        });
 
     internal static void PrepareServerPool(VlessConfig config, VlessServerEntry selected) =>
         WithCommandPreferences(prefs =>

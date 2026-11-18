@@ -39,6 +39,13 @@ public final class AndroidTunnelLifecycleTest {
         String storage = Files.readString(root.resolve("VPNRouter.Android/AndroidStorage.cs"));
         requireOrdered(storage, "private static T WithCommandPreferences", "AndroidSingBoxRuntime.ServiceClassReference",
                 "MonitorEnter(reference)", "action(prefs)", "MonitorExit(reference)");
+        requireOrdered(storage, "SelectedSubscriptionRow() =>", "WithCommandPreferences(prefs =>",
+                "string? Read(string key) => prefs.GetString(key, null);", "FindFeedRow(GetSubscriptions(), Read)");
+        String picker = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.ServerList.cs"));
+        requireOrdered(picker, "var selected = AndroidStorage.SelectedSubscriptionRow()?.In(source);",
+                "BuildServerRow(source, srv, selected)", "_srvRemoveBtn.IsEnabled = selected != null");
+        requireOrdered(activity, "var resolved = AndroidStorage.GetActiveServer(command);",
+                "BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet)", "if (!AndroidStorage.IsCurrentUiCommand(command)) return;");
         String builder = Files.readString(root.resolve("VPNRouter.Android/AndroidConfigBuilder.cs"));
         require(activity.contains("ExtraColdStartOnly = \"cold_start_only\"")
                 && source.contains("EXTRA_COLD_START_ONLY = \"cold_start_only\""), "cold start marker keys differ");
