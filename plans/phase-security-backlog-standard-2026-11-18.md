@@ -58,3 +58,7 @@ The Headless save/reload regression exposed placeholder cleanup discarding an ac
 On the Business ARM64 test build 89b5a6f4 (CI 44305441476), Android 14 reported the expected UID ranges in Off, Include and Exclude after connection. Each selection survived a cold app relaunch. The screen showed a saved Include-to-Exclude change before reconnect applied it. No external IP measurement was made.
 
 Live replacement validates the selected rules and profile before retiring the original tunnel. A forced restart stages the candidate beside the active configuration and publishes it only after the old process stops. The refused-stop fixture verifies that the previous file and lease survive. Settings diagnostics keep counts and fixed status messages while the UI retains its recovery notice.
+
+The verifier now authenticates one CONNECT per physical connection after checking the private proxy's certificate. Local HTTP and HTTPS fixtures cover origin requests, a redirect and concurrent cancellation. The PR review also identified four remaining live-replacement paths and two runtime/CI coverage gaps tracked in the defect ledger.
+
+Confirmed chain rejection clears duplicate registrations for the same URL and identifiable legacy copies in the saved revision. Transient refresh failure preserves the previous saved state. Android and Headless fixtures reopen storage and exercise both refresh orderings.

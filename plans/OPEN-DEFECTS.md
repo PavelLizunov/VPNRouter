@@ -16,6 +16,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - Service-owned desktop Apply stops the Windows service before validating enabled ad, geo or imported policies (MainWindowViewModel.Settings, #664).
+- [ ] **P1** - Imported JSON can omit the enabled managed ad filter during replacement (CustomConfigInjector and AndroidConfigBuilder, #664).
+- [ ] **P1** - An imported profile's own unreadable local rule set can reach desktop restart before native candidate validation (VpnEngine, #664).
+- [ ] **P1** - Desktop Connect can retire an owned Unix process during pre-start cleanup when its control API is unavailable (MainWindowViewModel.Connection, #664).
+- [ ] **P2** - Rule-set validation overlooks a supported deployed sing-box when the bundled runtime is absent (RuleSetFile and StartupPipeline, #664).
+- [ ] **P2** - The Business tree tests the wrong cold-start expectation in the default flavor and omits that fixture from the Business matrix (ConfigGeneratorRemoteRuleSetGuardTests, #664).
+
 - [ ] **P2** - Settings loading and recovery wrote private server labels and configuration paths to stderr, Serilog and the Windows event log. Regression cases cover normal load, invalid input recovery and Headless storage. Fixed in the runtime changes pending CI.
 - [ ] **P1** - Confirmed rejection of a subscription chain must clear every registration of the same URL and cover a legacy-only feed during Headless refresh-all. A later refresh must not restore a stale result.
 - [ ] **P1** - Desktop Free Configs Apply can leave a rejected candidate on disk if the owned engine does not stop. Keep the last committed runtime file and selection consistent with the active process.

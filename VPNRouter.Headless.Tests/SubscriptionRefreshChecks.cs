@@ -9,6 +9,12 @@ namespace VPNRouter.Headless.Tests;
 
 public static class SubscriptionRefreshChecks
 {
+    private const string FreshBody = "ss://aes-256-gcm:synthetic-password@192.0.2.8:443#fresh";
+    private const string RejectedBody = """
+        {"outbounds":[{"type":"vless","tag":"old-target","server":"exit.invalid","server_port":443,
+        "uuid":"00000000-0000-4000-8000-000000000001","detour":"missing-private-hop"}]}
+        """;
+
     public static async Task RunAsync()
     {
         var root = Path.Combine(Path.GetTempPath(), "vpnrouter-refresh-" + Guid.NewGuid().ToString("N"));
@@ -19,6 +25,10 @@ public static class SubscriptionRefreshChecks
                 await CheckAsync(Path.Combine(root, scenario), scenario);
             await CheckRejectedChainAsync(Path.Combine(root, "chain"), refreshAll: false);
             await CheckRejectedChainAsync(Path.Combine(root, "chain-batch"), refreshAll: true);
+            foreach (var scenario in new[] { "success", "rejected", "transient" })
+                await CheckLegacyRefreshAsync(Path.Combine(root, "legacy-" + scenario), scenario);
+            await CheckStaleSameUrlResultAsync(Path.Combine(root, "newer-rejected"), rejectNewer: true);
+            await CheckStaleSameUrlResultAsync(Path.Combine(root, "newer-valid"), rejectNewer: false);
             Console.WriteLine("[SubscriptionRefreshChecks] Offline refresh and persistence scenarios passed");
         }
         finally
@@ -31,7 +41,6 @@ public static class SubscriptionRefreshChecks
     private static async Task CheckAsync(string dir, string scenario)
     {
         const string safeMessage = "Subscription refresh failed or returned no usable servers. Cached servers were kept.";
-        const string validBody = "ss://aes-256-gcm:synthetic-password@192.0.2.8:443#fresh";
         var storage = new ConfigStorage(dir);
         var settings = storage.GetSettings();
         settings.App.Subscriptions = scenario == "none" ? new() : new() { Entry("first") };
@@ -58,11 +67,10 @@ public static class SubscriptionRefreshChecks
             {
                 "empty" => "",
                 "invalid" => "not a subscription",
-                _ => validBody
+                _ => FreshBody
             };
             var status = scenario == "http" || (scenario == "partial" && request.Uri.AbsolutePath == "/second") ? 503 : 200;
-            return Task.FromResult(new HttpResponse(status, new Dictionary<string, string>(),
-                Encoding.UTF8.GetBytes(body), TimeSpan.Zero));
+            return Task.FromResult(Reply(body, status));
         });
         var session = new FakeRouterSession { State = "connected" };
         await using var backend = new RouterBackend(session, dir);
@@ -106,10 +114,6 @@ public static class SubscriptionRefreshChecks
 
     private static async Task CheckRejectedChainAsync(string dir, bool refreshAll)
     {
-        const string rejectedBody = """
-            {"outbounds":[{"type":"vless","tag":"old-target","server":"exit.invalid","server_port":443,
-            "uuid":"00000000-0000-4000-8000-000000000001","detour":"missing-private-hop"}]}
-            """;
         static VlessServerEntry Flattened() => new()
         {
             Name = "old-target", Server = "exit.invalid", Port = 443, Security = "tls",
@@ -123,15 +127,24 @@ public static class SubscriptionRefreshChecks
         var rejected = Entry("rejected");
         rejected.Servers = [Flattened()];
         var other = Entry("other");
+        other.Url = "https://fixture.invalid/REJECTED";
         other.Enabled = refreshAll;
+        var shared = other.Servers.Single();
+        var alias = Entry("alias");
+        alias.Url = rejected.Url;
+        alias.Enabled = !refreshAll;
+        alias.UserInfo = "alias quota";
+        var aliasRow = new VlessServerEntry { Name = "old-alias", Server = "old-alias.invalid" };
+        alias.Servers = [aliasRow, shared];
+        alias.LastServerCount = alias.Servers.Count;
         var manual = new VlessServerEntry { Name = "manual", Server = "manual.invalid" };
         var sameName = new VlessServerEntry { Name = "old-target", Server = "other-manual.invalid" };
-        settings.App.Subscriptions = [other, rejected];
+        settings.App.Subscriptions = [other, rejected, alias];
         settings.App.ConfigMode = "subscribe";
         settings.App.SubscriptionUrl = refreshAll ? other.Url : rejected.Url;
         settings.App.SubscriptionServers = refreshAll ? Entry("other").Servers : [Flattened()];
         settings.App.ActiveSubscriptionServer = settings.Vless.ActiveServer = "old-target";
-        settings.Vless.Servers = [Flattened(), manual, sameName];
+        settings.Vless.Servers = [Flattened(), aliasRow, manual, sameName, shared];
         // Older settings mirrored the selected row here without its TLS or transport fields.
         settings.Vless.Server = rejected.Servers[0].Server;
         settings.Vless.Port = rejected.Servers[0].Port;
@@ -144,37 +157,33 @@ public static class SubscriptionRefreshChecks
         SubscriptionFetcher.Http = new RefreshHttp((request, _) =>
         {
             requests.Add(request.Uri.AbsolutePath);
-            var body = request.Uri.AbsolutePath == "/rejected" ? rejectedBody :
+            var body = request.Uri.AbsolutePath == "/rejected" ? RejectedBody :
                 "ss://aes-256-gcm:synthetic-password@192.0.2.8:443#staged";
-            return Task.FromResult(new HttpResponse(200, new Dictionary<string, string>(),
-                Encoding.UTF8.GetBytes(body), TimeSpan.Zero));
+            return Task.FromResult(Reply(body));
         });
-        var revision = storage.CurrentRevision;
-        var parameters = refreshAll ? JsonSerializer.SerializeToElement(new { revision })
-            : JsonSerializer.SerializeToElement(new { revision, id = rejected.Id });
-        await using var backend = new RouterBackend(new FakeRouterSession(), dir);
-        await using var handler = new RouterBackendHandler(backend);
-        var dispatcher = new ProtocolDispatcher(handler);
-        var response = await dispatcher.DispatchAsync(new ProtocolRequest(1, "chain-refresh", "subscriptions.refresh", parameters),
-            CancellationToken.None);
+        var response = await DispatchRefreshAsync(dir, storage.CurrentRevision, refreshAll ? null : rejected.Id);
         using var frame = JsonDocument.Parse(response.ToUtf8Bytes());
         var error = frame.RootElement.GetProperty("error");
         Assert(error.GetProperty("code").GetString() == "subscription_chain_unsupported", "Expected an unsupported-chain error");
         Assert(error.GetProperty("message").GetString() == "The subscription uses an unsupported proxy chain. Its cached servers were removed.",
             "The rejection must explain eviction without exposing provider data");
-        Assert(requests.SequenceEqual(refreshAll ? new[] { "/other", "/rejected" } : new[] { "/rejected" }),
+        Assert(requests.SequenceEqual(refreshAll ? new[] { "/REJECTED", "/rejected" } : new[] { "/rejected" }),
             "The fixture must reach the rejected feed through the requested refresh path");
 
         var reloaded = new ConfigStorage(dir).GetSettings();
         var purged = reloaded.App.Subscriptions.Single(s => s.Id == rejected.Id);
+        var purgedAlias = reloaded.App.Subscriptions.Single(s => s.Id == alias.Id);
         var kept = reloaded.App.Subscriptions.Single(s => s.Id == other.Id);
         Assert(purged.Servers.Count == 0 && purged.LastServerCount == 0 && purged.Enabled && purged.Url == rejected.Url,
             "Reload must retain the subscription registration and evict its historical rows");
+        Assert(purgedAlias.Servers.Count == 0 && purgedAlias.LastServerCount == 0
+            && purgedAlias.Name == alias.Name && purgedAlias.Url == rejected.Url && purgedAlias.Enabled == alias.Enabled
+            && purgedAlias.UserInfo == alias.UserInfo, "Reload must evict the duplicate cache and retain its registration");
         var legacy = reloaded.App.SubscriptionServers;
         Assert(refreshAll ? legacy.Single().Server == other.Servers.Single().Server : legacy.Count == 0,
             "Reload must keep a different feed's legacy cache and evict the rejected feed's mirror");
-        Assert(reloaded.Vless.Servers.Select(s => s.Server).SequenceEqual(new[] { manual.Server, sameName.Server }),
-            "Only the flattened copy should be evicted, even if another manual row shares its display name");
+        Assert(reloaded.Vless.Servers.Select(s => s.Server).SequenceEqual(new[] { manual.Server, sameName.Server, shared.Server }),
+            "Evict both flattened copies and preserve manual rows, including a matching name and a row shared with another URL");
         Assert(string.IsNullOrEmpty(reloaded.Vless.Server) && string.IsNullOrEmpty(reloaded.Vless.Uuid),
             "The scalar fallback must not retain the evicted destination and credentials");
         Assert(kept.Enabled == other.Enabled && kept.Servers.Single().Server == other.Servers.Single().Server
@@ -187,9 +196,151 @@ public static class SubscriptionRefreshChecks
             $"Rejected chain: wrong subscription selection after reload in {mode} mode");
         Assert(reloaded.Vless.ActiveServer == active, $"Rejected chain: wrong active server after reload in {mode} mode");
         var resolved = VlessServersResolver.Resolve(reloaded);
-        Assert(resolved.Any(s => s.Name == active) && resolved.All(s => s.Server != "exit.invalid"),
+        Assert(resolved.Any(s => s.Name == active) && resolved.All(s => s.Server != "exit.invalid" && s.Server != aliasRow.Server),
             "Offline selection after restart must not return the historical direct target");
     }
+
+    private static async Task CheckLegacyRefreshAsync(string dir, string scenario)
+    {
+        const string url = "https://fixture.invalid/legacy-feed";
+        var storage = new ConfigStorage(dir);
+        var settings = storage.GetSettings();
+        var old = new VlessServerEntry
+        {
+            Name = "old-target", Server = "exit.invalid", Port = 443, Uuid = "00000000-0000-4000-8000-000000000001"
+        };
+        var manual = new VlessServerEntry { Name = "manual", Server = "manual.invalid" };
+        settings.App.Subscriptions = [];
+        settings.App.SubscriptionUrl = url;
+        settings.App.SubscriptionServers = [old];
+        settings.App.ConfigMode = "subscribe";
+        settings.App.ActiveSubscriptionServer = settings.Vless.ActiveServer = old.Name;
+        settings.Vless.Servers = [old, manual];
+        settings.Vless.Server = old.Server;
+        settings.Vless.Port = old.Port;
+        settings.Vless.Uuid = old.Uuid;
+        settings.App.StrictDns = true;
+        storage.SaveSettings(settings, storage.CurrentRevision);
+        var before = File.ReadAllBytes(storage.ConfigPath);
+        var revision = storage.CurrentRevision;
+
+        var requests = new List<string>();
+        var body = scenario == "rejected" ? RejectedBody : FreshBody;
+        var status = scenario == "transient" ? 503 : 200;
+        SubscriptionFetcher.Http = new RefreshHttp((request, _) =>
+        {
+            requests.Add(request.Uri.OriginalString);
+            return Task.FromResult(Reply(body, status));
+        });
+        var response = await DispatchRefreshAsync(dir, revision);
+        Assert(requests.SequenceEqual(new[] { url }), "Refresh-all must fetch the exact legacy URL once");
+
+        var reopened = new ConfigStorage(dir);
+        var reloaded = reopened.GetSettings();
+        Assert(reloaded.App.SubscriptionUrl == url && reloaded.App.StrictDns && reloaded.Vless.Servers.Any(s => s.Server == manual.Server),
+            "Refresh must preserve the legacy URL, manual profile and unrelated settings");
+        if (scenario == "transient")
+        {
+            Assert(response.Error?.Code == "subscription_refresh_failed" && reopened.CurrentRevision == revision
+                && before.SequenceEqual(File.ReadAllBytes(reopened.ConfigPath)), "A transient legacy failure must keep the exact saved file");
+            Assert(reloaded.App.Subscriptions.Count == 0 && reloaded.App.SubscriptionServers.Single().Server == old.Server
+                && reloaded.App.ConfigMode == "subscribe" && reloaded.App.ActiveSubscriptionServer == old.Name
+                && reloaded.Vless.ActiveServer == old.Name && reloaded.Vless.Server == old.Server && reloaded.Vless.Uuid == old.Uuid,
+                "The legacy cache, scalar and selection must survive a transient failure");
+            return;
+        }
+
+        var feed = reloaded.App.Subscriptions.Single();
+        Assert(feed.Enabled && feed.Url == url && reloaded.App.SubscriptionServers.Count == 0,
+            "A definitive legacy refresh must save the registration and retire its old cache");
+        if (scenario == "success")
+        {
+            Assert(response.Error == null && feed.Servers.Single().Name == "fresh" && feed.LastServerCount == 1
+                && reloaded.App.ConfigMode == "subscribe" && reloaded.App.ActiveSubscriptionServer == "fresh"
+                && reloaded.Vless.ActiveServer == "fresh" && VlessServersResolver.Resolve(reloaded).Single().Name == "fresh",
+                "The fresh legacy result and subscription selection must survive a restart");
+            body = RejectedBody;
+            response = await DispatchRefreshAsync(dir, reopened.CurrentRevision);
+            Assert(requests.SequenceEqual(new[] { url, url }), "The next refresh must fetch the same registered legacy URL");
+            reloaded = new ConfigStorage(dir).GetSettings();
+        }
+        var rejected = reloaded.App.Subscriptions.Single();
+        Assert(response.Error?.Code == "subscription_chain_unsupported" && rejected.Id == feed.Id && rejected.Url == url
+            && rejected.Servers.Count == 0 && rejected.LastServerCount == 0 && reloaded.App.SubscriptionServers.Count == 0,
+            "Legacy rejection must be visible and its historical feed cache must be empty after restart");
+        Assert(reloaded.Vless.Servers.Single().Server == manual.Server && string.IsNullOrEmpty(reloaded.Vless.Server)
+            && string.IsNullOrEmpty(reloaded.Vless.Uuid) && reloaded.App.StrictDns, "Superseded mirrors must not outlive the legacy cache");
+        Assert(reloaded.App.ConfigMode == "generated" && reloaded.App.ActiveSubscriptionServer == string.Empty
+            && reloaded.Vless.ActiveServer == manual.Name && VlessServersResolver.Resolve(reloaded).Single().Server == manual.Server,
+            "Legacy rejection must select the surviving manual server");
+    }
+
+    private static async Task CheckStaleSameUrlResultAsync(string dir, bool rejectNewer)
+    {
+        var storage = new ConfigStorage(dir);
+        var settings = storage.GetSettings();
+        var first = Entry("first");
+        var second = Entry("second");
+        second.Url = first.Url;
+        second.Servers[0].Server = "old-alias.invalid";
+        settings.App.Subscriptions = [first, second];
+        storage.SaveSettings(settings, storage.CurrentRevision);
+        var revision = storage.CurrentRevision;
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int requests = 0;
+        SubscriptionFetcher.Http = new RefreshHttp(async (_, ct) =>
+        {
+            if (Interlocked.Increment(ref requests) != 1) return Reply(rejectNewer ? RejectedBody : FreshBody);
+            started.SetResult();
+            await release.Task.WaitAsync(ct);
+            return Reply(rejectNewer ? FreshBody : RejectedBody);
+        });
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var older = DispatchRefreshAsync(dir, revision, first.Id, timeout.Token);
+        ProtocolResponseFrame late;
+        string winningRevision;
+        try
+        {
+            await started.Task.WaitAsync(timeout.Token);
+            var newer = await DispatchRefreshAsync(dir, revision, second.Id, timeout.Token);
+            Assert(rejectNewer ? newer.Error?.Code == "subscription_chain_unsupported" : newer.Error == null,
+                "The later refresh must persist its result before the earlier request resumes");
+            winningRevision = new ConfigStorage(dir).CurrentRevision;
+        }
+        finally
+        {
+            release.TrySetResult();
+            late = await older;
+        }
+        Assert(requests == 2 && late.Error?.Code == "conflict", "The older response must lose the on-disk revision check");
+        var reopened = new ConfigStorage(dir);
+        var feeds = reopened.GetSettings().App.Subscriptions;
+        Assert(reopened.CurrentRevision == winningRevision && feeds.Select(s => s.Id).SequenceEqual(new[] { first.Id, second.Id })
+            && feeds.All(s => s.Url == first.Url), "Neither registration nor the committed revision may change when the stale result arrives");
+        if (rejectNewer)
+            Assert(feeds.All(s => s.Servers.Count == 0 && s.LastServerCount == 0),
+                "After both responses the committed eviction must still cover both registrations on disk");
+        else
+        {
+            var refreshed = feeds.Single(s => s.Id == second.Id);
+            Assert(refreshed.Servers.Single().Name == "fresh" && refreshed.LastServerCount == 1,
+                "A stale rejection must not erase the newer usable result");
+        }
+    }
+
+    private static async Task<ProtocolResponseFrame> DispatchRefreshAsync(string dir, string revision, string? id = null,
+        CancellationToken ct = default)
+    {
+        await using var handler = new RouterBackendHandler(new RouterBackend(new FakeRouterSession(), dir));
+        var parameters = id == null ? JsonSerializer.SerializeToElement(new { revision })
+            : JsonSerializer.SerializeToElement(new { revision, id });
+        return await new ProtocolDispatcher(handler).DispatchAsync(new(1, "refresh", "subscriptions.refresh", parameters), ct);
+    }
+
+    private static HttpResponse Reply(string body, int status = 200) =>
+        new(status, new Dictionary<string, string>(), Encoding.UTF8.GetBytes(body), TimeSpan.Zero);
 
     private static SubscriptionEntry Entry(string id) => new()
     {

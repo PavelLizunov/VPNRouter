@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json.Nodes;
 using Serilog;
@@ -384,28 +385,14 @@ public sealed class VlessDeepVerifier
         {
             var targets = CanaryTargets.Load();
             var now = DateTimeOffset.UtcNow;
-            var results = new List<(bool Passed, bool Stale)>();
-
-            var handler = proxy.CreateHttpHandler(TimeSpan.FromSeconds(4));
-            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
-
             var probes = targets.Select(async t =>
             {
                 var stale = CanaryPolicy.IsStale(t, now, CanaryTargets.ReviewTtl);
-                bool passed;
-                try
-                {
-                    using var resp = await http.GetAsync(t.Url, HttpCompletionOption.ResponseHeadersRead, ct);
-                    passed = (int)resp.StatusCode < 500;
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-                catch { passed = false; }
+                var passed = await ProbeCanaryAsync(proxy, t.Url, ct);
                 return (passed, stale);
-            }).ToList();
+            });
 
-            results.AddRange(await Task.WhenAll(probes));
-
-            var agg = CanaryPolicy.Evaluate(controlPassed: true, results);
+            var agg = CanaryPolicy.Evaluate(controlPassed: true, await Task.WhenAll(probes));
             if (agg.BlockedTargetCanary == PhaseOutcome.Fail)
                 _logger.Information("[VlessDeepVerifier] Canary check failed");
             return agg.BlockedTargetCanary;
@@ -416,6 +403,19 @@ public sealed class VlessDeepVerifier
             _logger.Debug("[VlessDeepVerifier] Canary stage failed ({Type})", ex.GetType().Name);
             return PhaseOutcome.Unknown;
         }
+    }
+
+    internal static async Task<bool> ProbeCanaryAsync(VerificationProxy proxy, string url, CancellationToken ct)
+    {
+        var timeout = TimeSpan.FromSeconds(4);
+        using var http = new HttpClient(proxy.CreateHttpHandler(timeout)) { Timeout = timeout };
+        try
+        {
+            using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+            return (int)response.StatusCode < 500 && response.StatusCode != HttpStatusCode.ProxyAuthenticationRequired;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return false; }
     }
 
     internal static JsonObject BuildVlessOutbound(VlessServerEntry s)

@@ -1009,20 +1009,16 @@ public partial class AndroidApp
         return AndroidSubscriptionRefresh.RefreshAsync(entry, (refreshed, rejected) =>
         {
             AndroidStorage.SaveSubscriptionRefresh(refreshed, rejected, selectOnSuccess);
-            var current = _subs.Find(s => s.Id == refreshed.Id && s.Url == refreshed.Url);
-            if (current != null)
+            foreach (var current in _subs.Where(s => AndroidSubscriptionRefresh.AppliesTo(s, refreshed, rejected)))
             {
                 AndroidSubscriptionRefresh.CopyCache(refreshed, current);
                 if (selectOnSuccess && !rejected) current.Enabled = true;
             }
-            if (rejected)
+            _cachedServers = AndroidStorage.GetServers();
+            UpdateServerListView();
+            if (_srvCurrentSub is { } open && AndroidSubscriptionRefresh.AppliesTo(open, refreshed, rejected))
             {
-                _cachedServers = AndroidStorage.GetServers();
-                UpdateServerListView();
-            }
-            if (_srvCurrentSub is { } open && open.Id == refreshed.Id && open.Url == refreshed.Url)
-            {
-                _srvCurrentSub = current ?? refreshed;
+                _srvCurrentSub = _subs.Find(s => s.Id == open.Id && s.Url == open.Url);
                 RebuildServerList();
             }
             // Single and bulk page refreshes redraw once in their completion handlers.

@@ -210,8 +210,8 @@ public sealed class SubscriptionFeature
         }
 
         var settings = _storage.GetSettings();
-        var subs = settings.App?.Subscriptions ?? new List<SubscriptionEntry>();
-
+        var app = settings.App;
+        var subs = app.Subscriptions;
         List<SubscriptionEntry> targets;
         if (!string.IsNullOrWhiteSpace(targetId))
         {
@@ -222,9 +222,19 @@ public sealed class SubscriptionFeature
         }
         else
         {
+            if (subs.Count == 0 && !string.IsNullOrWhiteSpace(app.SubscriptionUrl))
+            {
+                // Stage the legacy feed in the candidate; a transient failure keeps the original file.
+                subs.Add(new SubscriptionEntry
+                {
+                    Name = "Default", Url = app.SubscriptionUrl, Servers = app.SubscriptionServers
+                });
+                app.SubscriptionServers = new();
+            }
             targets = subs.Where(s => s.Enabled).ToList();
         }
 
+        var previousRows = targets.SelectMany(s => s.Servers).ToList();
         int done = 0;
         int total = targets.Count;
         foreach (var sub in targets)
@@ -249,6 +259,7 @@ public sealed class SubscriptionFeature
             progress?.Invoke(new { stage = "refresh_subscription", completed = done, total });
         }
 
+        RemoveRetiredCopies(settings, previousRows, targets.Any(s => s.Url == app.SubscriptionUrl));
         ReconcileActiveSubscriptionServer(settings);
 
         _storage.SaveSettings(settings, revision);
@@ -259,23 +270,49 @@ public sealed class SubscriptionFeature
     {
         // A failed batch must not commit successful candidates from earlier in the loop.
         var settings = _storage.GetSettings();
-        var cached = settings.App.Subscriptions.FirstOrDefault(s => s.Id == rejected.Id && s.Url == rejected.Url);
-        if (cached == null) throw new RouterException("conflict");
+        var app = settings.App;
+        if (app.Subscriptions.Count == 0 && app.SubscriptionUrl == rejected.Url)
+            app.Subscriptions.Add(rejected);
+        var registrations = app.Subscriptions.Where(s => s.Url == rejected.Url).ToList();
+        var fetched = registrations.FirstOrDefault(s => s.Id == rejected.Id);
+        if (fetched == null) throw new RouterException("conflict");
 
-        var evicted = new List<VlessServerEntry>(cached.Servers);
-        cached.Servers = rejected.Servers;
-        cached.LastServerCount = rejected.LastServerCount;
-        cached.LastRefreshedAt = rejected.LastRefreshedAt;
-        cached.UserInfo = rejected.UserInfo;
-
-        if (settings.App.SubscriptionUrl == rejected.Url)
+        var evicted = registrations.SelectMany(s => s.Servers).ToList();
+        foreach (var registration in registrations)
         {
-            evicted.AddRange(settings.App.SubscriptionServers);
-            settings.App.SubscriptionServers.Clear();
+            registration.Servers.Clear();
+            registration.LastServerCount = 0;
         }
+        fetched.LastRefreshedAt = rejected.LastRefreshedAt;
+        fetched.UserInfo = rejected.UserInfo;
+
+        RemoveRetiredCopies(settings, evicted, app.SubscriptionUrl == rejected.Url);
+        ReconcileActiveSubscriptionServer(settings, activateSubscription: false);
+        _storage.SaveSettings(settings, revision);
+    }
+
+    private static void RemoveRetiredCopies(AppSettings settings, List<VlessServerEntry> evicted, bool refreshedLegacyUrl)
+    {
+        var app = settings.App;
+        if (refreshedLegacyUrl && app.SubscriptionServers.Count > 0)
+        {
+            evicted.AddRange(app.SubscriptionServers);
+            var sourceKeys = app.Subscriptions.Where(s => s.Url == app.SubscriptionUrl)
+                .SelectMany(s => s.Servers).Select(SavedRowKey).ToHashSet(StringComparer.Ordinal);
+            app.SubscriptionServers.RemoveAll(row => !sourceKeys.Contains(SavedRowKey(row)));
+        }
+        if (evicted.Count == 0) return;
+
+        // Only retire a detached copy once no registration or separately owned legacy feed retains it.
+        var retained = app.Subscriptions.SelectMany(s => s.Servers);
+        if (!string.IsNullOrEmpty(app.SubscriptionUrl))
+            retained = retained.Concat(app.SubscriptionServers);
+        var retainedKeys = retained.Select(SavedRowKey).ToHashSet(StringComparer.Ordinal);
+        evicted.RemoveAll(row => retainedKeys.Contains(SavedRowKey(row)));
+        if (evicted.Count == 0) return;
         var evictedKeys = evicted.Select(SavedRowKey).ToHashSet(StringComparer.Ordinal);
-        if (string.IsNullOrEmpty(settings.App.SubscriptionUrl))
-            settings.App.SubscriptionServers.RemoveAll(row => evictedKeys.Contains(SavedRowKey(row)));
+        if (string.IsNullOrEmpty(app.SubscriptionUrl))
+            app.SubscriptionServers.RemoveAll(row => evictedKeys.Contains(SavedRowKey(row)));
 
         var vless = settings.Vless;
         var selected = vless.Servers.FirstOrDefault(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase));
@@ -284,7 +321,8 @@ public sealed class SubscriptionFeature
             && MatchesLegacyVless(vless, selected, desktopProjection: true);
         var removedManualCopy = vless.Servers.RemoveAll(row => evictedKeys.Contains(SavedRowKey(row))) > 0;
         var removeScalar = (selectedScalarCopy || evicted.Any(row => MatchesLegacyVless(vless, row)))
-            && !vless.Servers.Any(row => MatchesLegacyVless(vless, row));
+            && !vless.Servers.Any(row => MatchesLegacyVless(vless, row))
+            && !retained.Any(row => MatchesLegacyVless(vless, row));
         if (removeScalar)
         {
             vless.Server = string.Empty;
@@ -299,9 +337,6 @@ public sealed class SubscriptionFeature
         if ((removedManualCopy || removeScalar) && evicted.Any(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase))
             && !vless.Servers.Any(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase)))
             vless.ActiveServer = vless.Servers.FirstOrDefault()?.Name ?? string.Empty;
-
-        ReconcileActiveSubscriptionServer(settings, activateSubscription: false);
-        _storage.SaveSettings(settings, revision);
     }
 
     // Historical settings can contain a detached copy of a subscription row among
