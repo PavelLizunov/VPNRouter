@@ -34,6 +34,7 @@ public class RouterException : Exception
         "unavailable" => "The requested service or feature is unavailable.",
         "unsupported" => "The requested operation or parameter is unsupported.",
         "subscription_refresh_failed" => "Subscription refresh failed or returned no usable servers. Cached servers were kept.",
+        "subscription_chain_unsupported" => "The subscription uses an unsupported proxy chain. Its cached servers were removed.",
         "storage_error" => "A configuration storage error occurred.",
         "connect_failed" => "Failed to initiate VPN connection.",
         "vpn_conflict" => "Another VPN already routes all traffic. Turn it off before connecting.",

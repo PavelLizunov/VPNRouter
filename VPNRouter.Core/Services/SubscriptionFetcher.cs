@@ -10,10 +10,14 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
+public sealed class UnsupportedSubscriptionChainException : InvalidOperationException
+{
+    public UnsupportedSubscriptionChainException()
+        : base("No servers could be imported. The subscription uses an unsupported proxy chain.") { }
+}
+
 public static class SubscriptionFetcher
 {
-    private const string UnsupportedChainMessage = "No servers could be imported. The subscription uses an unsupported proxy chain.";
-
     public static IHttpClient Http { get; set; } = PolicyHttpClient.Shared;
 
     private static readonly IReadOnlyDictionary<string, string> SubscriptionHeaders =
@@ -25,7 +29,7 @@ public static class SubscriptionFetcher
     public static async Task<List<VlessServerEntry>> FetchAsync(string url, ILogger? logger = null, CancellationToken ct = default)
     {
         var result = await FetchWithDiagnosticsAsync(url, logger, ct);
-        if (result.ChainImportFailed) throw new InvalidOperationException(UnsupportedChainMessage);
+        if (result.ChainImportFailed) throw new UnsupportedSubscriptionChainException();
         return result.Entries;
     }
 
@@ -243,7 +247,7 @@ public static class SubscriptionFetcher
             entry.Servers = servers;
             entry.LastServerCount = servers.Count;
             entry.LastRefreshedAt = DateTimeOffset.UtcNow;
-            if (chainImportFailed) throw new InvalidOperationException(UnsupportedChainMessage);
+            if (chainImportFailed) throw new UnsupportedSubscriptionChainException();
         }
         else
         {

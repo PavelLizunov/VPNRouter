@@ -27,20 +27,20 @@ public static class AndroidStorage
             new DefaultJsonTypeInfoResolver()),
     };
 
-    private const string KeyVlessUri = "vless_uri";
-    private const string KeySubscriptionUrl = "subscription_url";
-    private const string KeyServersJson = "servers_json";
-    private const string KeySelectedServerName = "selected_server_name";
+    private const string KeyVlessUri = AndroidSubscriptionRefresh.ManualUri;
+    private const string KeySubscriptionUrl = AndroidSubscriptionRefresh.SubscriptionUrl;
+    private const string KeyServersJson = AndroidSubscriptionRefresh.StandaloneServers;
+    private const string KeySelectedServerName = AndroidSubscriptionRefresh.SelectedName;
     private const string KeyLanguage = "language";
     private const string KeyTheme = "theme";
-    private const string KeySubscriptions = "subscriptions_json";
+    private const string KeySubscriptions = AndroidSubscriptionRefresh.Subscriptions;
 
     private const string KeyV4SubServersPruneDone = "v4_sub_servers_prune_done";
 
     private const string KeyV4PlaceholderPruneDone = "v4_placeholder_prune_done";
     private const string KeyPlaceholderPruneCount = "v4_placeholder_prune_count";
 
-    private const string KeyConfigMode = "config_mode";
+    private const string KeyConfigMode = AndroidSubscriptionRefresh.ConfigMode;
     private const string KeyCustomConfigJson = "custom_config_json";
     private const string KeyCustomConfigName = "custom_config_name";
 
@@ -74,7 +74,27 @@ public static class AndroidStorage
     public static bool SetVlessUri(string? value) => SetString(KeyVlessUri, value);
 
     public static string? GetSubscriptionUrl() => GetString(KeySubscriptionUrl);
-    public static bool SetSubscriptionUrl(string? value) => SetString(KeySubscriptionUrl, value);
+    public static bool SetSubscriptionUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == GetSubscriptionUrl() || GetString(KeySubscriptions) != null)
+            return SetString(KeySubscriptionUrl, value);
+
+        try
+        {
+            // Materialize the old layout before changing the URL that identifies its cache.
+            var previous = GetSubscriptions();
+            var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+            using var editor = prefs?.Edit();
+            if (editor == null) return false;
+            editor.PutString(KeySubscriptions, JsonSerializer.Serialize(previous, JsonOptions));
+            editor.PutString(KeySubscriptionUrl, value);
+            return editor.Commit();
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     public static List<SubscriptionEntry> GetSubscriptions()
     {
@@ -100,6 +120,7 @@ public static class AndroidStorage
             {
                 new SubscriptionEntry
                 {
+                    Id = "legacy-default",
                     Name = "Default",
                     Url = legacy,
                     Enabled = true,
@@ -122,6 +143,23 @@ public static class AndroidStorage
         {
             return false;
         }
+    }
+
+    internal static void SaveSubscriptionRefresh(SubscriptionEntry entry, bool rejected, bool selectOnSuccess)
+    {
+        var prefs = Application.Context.GetSharedPreferences(PrefsName, FileCreationMode.Private)
+            ?? throw new InvalidOperationException("Preferences unavailable.");
+        AndroidSubscriptionRefresh.Save(entry, rejected, selectOnSuccess, key => prefs.GetString(key, null),
+            updates =>
+            {
+                using var editor = prefs.Edit() ?? throw new InvalidOperationException("Preferences unavailable.");
+                foreach (var (key, value) in updates)
+                {
+                    if (value == null) editor.Remove(key);
+                    else editor.PutString(key, value);
+                }
+                if (!editor.Commit()) throw new InvalidOperationException("Subscription settings could not be saved.");
+            }, JsonOptions);
     }
 
     internal static void PruneSubServerDuplicatesOnce()
@@ -184,7 +222,7 @@ public static class AndroidStorage
         catch (System.Exception ex)
         {
             global::Android.Util.Log.Warn("VpnRouter.Storage",
-                $"PruneSubServerDuplicatesOnce threw: {ex.GetType().Name}: {ex.Message}");
+                $"PruneSubServerDuplicatesOnce threw: {ex.GetType().Name}");
         }
     }
 
@@ -260,7 +298,7 @@ public static class AndroidStorage
                 {
                     SetSelectedServerName(null);
                     global::Android.Util.Log.Info("VpnRouter.Storage",
-                        $"PruneKnownPlaceholdersOnce: cleared dangling KeySelectedServerName='{selectedName}' (entry no longer in storage)");
+                        "Cleared a stale server selection");
                 }
             }
 
@@ -274,7 +312,7 @@ public static class AndroidStorage
         catch (System.Exception ex)
         {
             global::Android.Util.Log.Warn("VpnRouter.Storage",
-                $"PruneKnownPlaceholdersOnce threw: {ex.GetType().Name}: {ex.Message}");
+                $"PruneKnownPlaceholdersOnce threw: {ex.GetType().Name}");
         }
     }
 
@@ -838,7 +876,7 @@ public static class AndroidStorage
         if (string.IsNullOrWhiteSpace(message)) return;
         try
         {
-            global::Android.Util.Log.Warn("VpnRouter.SelfRepair", message);
+            global::Android.Util.Log.Warn("VpnRouter.SelfRepair", "Recovered an invalid preference");
         }
         catch { }
 
@@ -879,7 +917,7 @@ public static class AndroidStorage
             try
             {
                 global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
-                    $"quarantine of '{key}' failed: {ex.GetType().Name}: {ex.Message}");
+                    $"quarantine of '{key}' failed: {ex.GetType().Name}");
             }
             catch { }
         }
@@ -914,7 +952,7 @@ public static class AndroidStorage
             try
             {
                 global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
-                    $"RepairAllOnLoad failed: {ex.GetType().Name}: {ex.Message}");
+                    $"RepairAllOnLoad failed: {ex.GetType().Name}");
             }
             catch { }
             return 0;

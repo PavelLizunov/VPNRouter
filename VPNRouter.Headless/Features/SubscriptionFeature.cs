@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
+using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Headless.Storage;
@@ -230,7 +231,17 @@ public sealed class SubscriptionFeature
         {
             ct.ThrowIfCancellationRequested();
             progress?.Invoke(new { stage = "refresh_subscription", completed = done, total });
-            var count = await SubscriptionFetcher.RefreshEntryAsync(sub, _logger, ct);
+            int count;
+            try
+            {
+                count = await SubscriptionFetcher.RefreshEntryAsync(sub, _logger, ct);
+            }
+            catch (UnsupportedSubscriptionChainException)
+            {
+                PersistRejectedSubscription(sub, revision);
+                ct.ThrowIfCancellationRequested();
+                throw new RouterException("subscription_chain_unsupported");
+            }
             ct.ThrowIfCancellationRequested();
             if (count == 0)
                 throw new RouterException("subscription_refresh_failed");
@@ -244,6 +255,74 @@ public sealed class SubscriptionFeature
         _logger.Information("[SubscriptionFeature] Refreshed {Count} subscriptions", targets.Count);
     }
 
+    private void PersistRejectedSubscription(SubscriptionEntry rejected, string revision)
+    {
+        // A failed batch must not commit successful candidates from earlier in the loop.
+        var settings = _storage.GetSettings();
+        var cached = settings.App.Subscriptions.FirstOrDefault(s => s.Id == rejected.Id && s.Url == rejected.Url);
+        if (cached == null) throw new RouterException("conflict");
+
+        var evicted = new List<VlessServerEntry>(cached.Servers);
+        cached.Servers = rejected.Servers;
+        cached.LastServerCount = rejected.LastServerCount;
+        cached.LastRefreshedAt = rejected.LastRefreshedAt;
+        cached.UserInfo = rejected.UserInfo;
+
+        if (settings.App.SubscriptionUrl == rejected.Url)
+        {
+            evicted.AddRange(settings.App.SubscriptionServers);
+            settings.App.SubscriptionServers.Clear();
+        }
+        var evictedKeys = evicted.Select(SavedRowKey).ToHashSet(StringComparer.Ordinal);
+        if (string.IsNullOrEmpty(settings.App.SubscriptionUrl))
+            settings.App.SubscriptionServers.RemoveAll(row => evictedKeys.Contains(SavedRowKey(row)));
+
+        var vless = settings.Vless;
+        var selected = vless.Servers.FirstOrDefault(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase));
+        // Older desktop saves copied only the selected row's basic fields and Reality to the scalar fallback.
+        var selectedScalarCopy = selected != null && evictedKeys.Contains(SavedRowKey(selected))
+            && MatchesLegacyVless(vless, selected, desktopProjection: true);
+        var removedManualCopy = vless.Servers.RemoveAll(row => evictedKeys.Contains(SavedRowKey(row))) > 0;
+        var removeScalar = (selectedScalarCopy || evicted.Any(row => MatchesLegacyVless(vless, row)))
+            && !vless.Servers.Any(row => MatchesLegacyVless(vless, row));
+        if (removeScalar)
+        {
+            vless.Server = string.Empty;
+            vless.Uuid = string.Empty;
+            vless.Port = 443;
+            vless.Flow = string.Empty;
+            vless.Security = "reality";
+            vless.Tls = new();
+            vless.Reality = new();
+            vless.Transport = new();
+        }
+        if ((removedManualCopy || removeScalar) && evicted.Any(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase))
+            && !vless.Servers.Any(s => string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase)))
+            vless.ActiveServer = vless.Servers.FirstOrDefault()?.Name ?? string.Empty;
+
+        ReconcileActiveSubscriptionServer(settings, activateSubscription: false);
+        _storage.SaveSettings(settings, revision);
+    }
+
+    // Historical settings can contain a detached copy of a subscription row among
+    // manual servers. Compare the full saved profile, including its name and route.
+    private static string SavedRowKey(VlessServerEntry row) =>
+        JsonSerializer.Serialize(row, AppJsonContext.Default.VlessServerEntry);
+
+    private static bool MatchesLegacyVless(VlessConfig vless, VlessServerEntry row, bool desktopProjection = false)
+    {
+        if (string.IsNullOrEmpty(vless.Server) || vless.Server != row.Server ||
+            vless.Port != row.Port || vless.Uuid != row.Uuid) return false;
+        var legacy = new VlessServerEntry
+        {
+            Name = row.Name, Server = vless.Server, Port = vless.Port, Uuid = vless.Uuid,
+            Flow = vless.Flow, Security = vless.Security, Reality = vless.Reality,
+            Tls = desktopProjection ? row.Tls : vless.Tls,
+            Transport = desktopProjection ? row.Transport : vless.Transport
+        };
+        return SavedRowKey(legacy) == SavedRowKey(row);
+    }
+
     private static bool HasUsableManualServer(AppSettings settings)
     {
         var active = settings.Vless?.ActiveServer;
@@ -253,7 +332,7 @@ public sealed class SubscriptionFeature
                 && !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com");
     }
 
-    private static void ReconcileActiveSubscriptionServer(AppSettings settings)
+    private static void ReconcileActiveSubscriptionServer(AppSettings settings, bool activateSubscription = true)
     {
         var subs = settings.App?.Subscriptions ?? new List<SubscriptionEntry>();
         var remainingServers = subs
@@ -291,7 +370,7 @@ public sealed class SubscriptionFeature
                 }
             }
         }
-        else if (remainingServers.Count > 0 && !HasUsableManualServer(settings)
+        else if (activateSubscription && remainingServers.Count > 0 && !HasUsableManualServer(settings)
                  && !string.Equals(settings.App?.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase))
         {
             // Nothing else to connect with: start using the
