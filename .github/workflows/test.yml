@@ -23,11 +23,13 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Record selected SDK and bundled VSTest
+        run: python .github/scripts/report-test-sdk.py
       - name: Restore
-        run: dotnet restore VPNRouter.Tests/VPNRouter.Tests.csproj
+        run: dotnet restore VPNRouter.sln
 
       - name: Build
-        run: dotnet build VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-restore
+        run: dotnet build VPNRouter.sln -c Release --no-restore
 
       - name: Test
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"
@@ -105,6 +107,8 @@ jobs:
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
         with:
           global-json-file: global.json
+      - name: Record selected SDK and bundled VSTest
+        run: python .github/scripts/report-test-sdk.py
       - name: Publish CLI (Windows)
         run: dotnet publish VPNRouter.CLI/VPNRouter.CLI.csproj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\vpnrouter-cli"
       - name: Characterization and release-gate contracts (Windows)
