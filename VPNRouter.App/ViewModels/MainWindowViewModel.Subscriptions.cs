@@ -21,30 +21,14 @@ public partial class MainWindowViewModel
             var selectedPort = SelectedSubscriptionServer?.Port ?? 0;
             SubscriptionServers.Clear();
 
-            foreach (var sub in Subscriptions)
-            {
-                if (!sub.Enabled) continue;
-                foreach (var serverEntry in sub.UnderlyingEntry.Servers)
-                    SubscriptionServers.Add(new ServerViewModel(serverEntry));
-            }
+            var entries = Subscriptions.Where(s => s.Enabled).SelectMany(s => s.UnderlyingEntry.Servers).ToList();
+            foreach (var entry in entries)
+                SubscriptionServers.Add(new ServerViewModel(entry));
             ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
             ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
 
-            SelectedSubscriptionServer = (!string.IsNullOrEmpty(selectedName)
-                ? SubscriptionServers.FirstOrDefault(s =>
-                    string.Equals(s.Name, selectedName, StringComparison.Ordinal) &&
-                    ((!string.IsNullOrEmpty(selectedUuid) && string.Equals(s.Uuid, selectedUuid, StringComparison.Ordinal)) ||
-                     (!string.IsNullOrEmpty(selectedHost) && string.Equals(s.Server, selectedHost, StringComparison.OrdinalIgnoreCase) && s.Port == selectedPort)))
-                  ?? SubscriptionServers.FirstOrDefault(s => string.Equals(s.Name, selectedName, StringComparison.Ordinal))
-                : null)
-                ?? (!string.IsNullOrEmpty(selectedHost) && selectedPort > 0
-                    ? SubscriptionServers.FirstOrDefault(s =>
-                        string.Equals(s.Server, selectedHost, StringComparison.OrdinalIgnoreCase) && s.Port == selectedPort)
-                    : null)
-                ?? (!string.IsNullOrEmpty(selectedUuid) && SubscriptionServers.Count(s => string.Equals(s.Uuid, selectedUuid, StringComparison.Ordinal)) == 1
-                    ? SubscriptionServers.FirstOrDefault(s => string.Equals(s.Uuid, selectedUuid, StringComparison.Ordinal))
-                    : null)
-                ?? SubscriptionServers.FirstOrDefault();
+            var selected = SubscriptionRefreshDiff.FindActiveServer(entries, selectedName, selectedUuid, selectedHost, selectedPort);
+            SelectedSubscriptionServer = selected == null ? SubscriptionServers.FirstOrDefault() : SubscriptionServers[entries.IndexOf(selected)];
 
             RefreshActiveIndicator();
         }
@@ -181,23 +165,7 @@ public partial class MainWindowViewModel
         foreach (var s in enabled) s.IsRefreshing = true;
         try
         {
-            await Task.WhenAll(enabled.Select(async s =>
-            {
-                try
-                {
-                    var count = await SubscriptionFetcher.RefreshEntryAsync(
-                        s.UnderlyingEntry, _logger, CancellationToken.None);
-                    s.LastRefreshFailed = count == 0;
-                    s.LastServerCount = count > 0 ? count : (s.UnderlyingEntry.Servers?.Count ?? 0);
-                    s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
-                }
-                catch (Exception)
-                {
-                    _logger.Warning("[VM] Subscription refresh failed during refresh all");
-                    s.LastRefreshFailed = true;
-                    s.LastServerCount = s.UnderlyingEntry.Servers?.Count ?? 0;
-                }
-            }));
+            await RefreshSubscriptionRowsAsync(enabled);
         }
         finally
         {
@@ -228,6 +196,27 @@ public partial class MainWindowViewModel
                 await ReconnectAsync(reconnectName, ReconnectIntent.Subscription);
             }
         }
+    }
+
+    private async Task RefreshSubscriptionRowsAsync(IEnumerable<SubscriptionViewModel> enabled)
+    {
+        await Task.WhenAll(enabled.Select(async s =>
+        {
+            try
+            {
+                var count = await SubscriptionFetcher.RefreshEntryAsync(
+                    s.UnderlyingEntry, _logger, CancellationToken.None);
+                s.LastRefreshFailed = count == 0;
+                s.LastServerCount = count > 0 ? count : (s.UnderlyingEntry.Servers?.Count ?? 0);
+                s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
+            }
+            catch (Exception)
+            {
+                _logger.Warning("[VM] Subscription refresh failed during refresh all");
+                s.LastRefreshFailed = true;
+                s.LastServerCount = s.UnderlyingEntry.Servers?.Count ?? 0;
+            }
+        }));
     }
 
     [RelayCommand]
