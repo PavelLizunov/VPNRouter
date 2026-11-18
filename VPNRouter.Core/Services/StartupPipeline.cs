@@ -670,7 +670,7 @@ internal sealed class StartupPipeline
                 : File.ReadAllText(localCopy);
             var configJson = CustomConfigInjector.Inject(
                 injectSource, scanResult.ProcessNames, settings, onMissingRuleSet: onMissingRuleSet);
-            _host.OnStatus("Applied process routing to selected custom configuration");
+            _host.OnStatus("Prepared process routing for the selected custom configuration");
             return configJson;
         }
 

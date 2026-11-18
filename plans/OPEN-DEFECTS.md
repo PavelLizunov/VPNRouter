@@ -21,6 +21,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [ ] **P1** - A refused escalated Unix stop releases the process handle during verified desktop Apply before termination is confirmed (SingBoxManager.Lifecycle). Preserve the handle, session, active file and TUN lease.
 - [ ] **P1** - Business GUI discovers the main service as VPNRouterBusiness, while the shipped service host, CLI and installer can register it as VPNRouter. Settings Apply must recognize the running owner by its registered image and preserve existing installations (#661, #664).
 - [ ] **P2** - The Business policy admission fixture calls ApplyGatedAsync with three reflection arguments after a fourth parameter was added. Both Business matrix jobs reported TargetParameterCountException on 2380c75c.
+- [ ] **P2** - The hosted Windows repair environment fixture exits with code 1. The xUnit wrapper loses the PowerShell error; the same test passes on elevated WINBRAT (ReleaseToolingContractTests, #661).
+- [ ] **P1** - Windows service Apply can acknowledge a spawned child before readiness, and health recovery can restore older settings (#664).
+- [ ] **P1** - An imported forwarding rule can precede DNS interception for enabled ad blocking (#664).
+- [ ] **P1** - Relative imported local rule sets and differing bundled and deployed engines can make preflight validate a different replacement (#664).
+- [ ] **P1** - Automatic failover can lose its manager and session after refusal to stop the owned Unix child (#664).
 - [ ] **P1** - Service-owned desktop Apply stops the Windows service before validating enabled ad, geo or imported policies (MainWindowViewModel.Settings, #664).
 - [ ] **P1** - Imported JSON can omit the enabled managed ad filter during replacement (CustomConfigInjector and AndroidConfigBuilder, #664).
 - [ ] **P1** - An imported profile's own unreadable local rule set can reach desktop restart before native candidate validation (VpnEngine, #664).

@@ -427,17 +427,26 @@ public sealed class ReleaseToolingContractTests
     [InlineData("Test-RepairEnvironment.ps1")]
     [InlineData("Test-InstallerRepair.ps1")]
     [InlineData("Test-MainService.ps1")]
-    public void WindowsMaintenanceFixtureCompletes(string fixture)
+    public async Task WindowsMaintenanceFixtureCompletes(string fixture)
     {
         if (!OperatingSystem.IsWindows()) return;
         var info = new System.Diagnostics.ProcessStartInfo(
-            Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe")) { UseShellExecute = false };
+            Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"))
+        {
+            UseShellExecute = false,
+            RedirectStandardError = true,
+        };
         foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
                      Path.Combine(FindRoot(), "VPNRouter.Tests", "Windows", fixture) })
             info.ArgumentList.Add(arg);
         using var process = System.Diagnostics.Process.Start(info)!;
-        Assert.True(process.WaitForExit(30_000));
-        Assert.Equal(0, process.ExitCode);
+        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill();
+            Assert.Fail($"{fixture} timed out.");
+        }
+        Assert.True(process.ExitCode == 0, await stderr);
     }
 
     private static void AssertFailClosedBranch(string text, string condition)

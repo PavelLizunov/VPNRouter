@@ -76,6 +76,10 @@ jobs:
           Write-Host "Resolved AppVersion: $v"
           "version=$v" >> $env:GITHUB_OUTPUT
 
+      - name: Verify native Windows repair scratch and child environment
+        shell: powershell
+        run: ./VPNRouter.Tests/Windows/Test-RepairEnvironment.ps1
+
       - name: Build Windows install + update ZIPs
         shell: pwsh
         run: |
