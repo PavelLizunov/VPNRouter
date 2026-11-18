@@ -51,7 +51,11 @@ function Invoke-WindowsPublication {
 }
 
 try {
-    $lock = [IO.File]::Open((Join-Path $InstallDir '.update-publish.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+    $lockPath = Join-Path $InstallDir '.update-backup.lock'
+    if ([IO.File]::Exists($lockPath) -and ([IO.File]::GetAttributes($lockPath) -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Update lock is redirected.'
+    }
+    $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
     [IO.File]::WriteAllText($log, "Windows update publisher started" + [Environment]::NewLine)
     $parent = Get-Process -Id $ParentId -ErrorAction SilentlyContinue
     if ($parent) {

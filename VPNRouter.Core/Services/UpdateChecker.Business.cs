@@ -62,6 +62,7 @@ public partial class UpdateChecker
         var destination = Path.GetFullPath(AppContext.BaseDirectory);
         if (OperatingSystem.IsWindows() && launchHelper == null)
         {
+            UpdateBackup.VerifyWindowsInstallDirectory(UpdateBackup.SnapshotInstallDirectory(destination) ?? destination);
             ZapretRuntimeDirectory.CheckWindowsParents(destination);
             ZapretRuntimeDirectory.CheckWindowsTree(new DirectoryInfo(destination), allowCreatorOwnerTemplate: true);
         }
@@ -182,6 +183,8 @@ public partial class UpdateChecker
             $manifestPath = {{Literal(Path.GetFullPath(manifestPath))}}
             $manifestHash = {{Literal(manifestSha256)}}
             $logPath = {{Literal(Path.GetFullPath(logPath))}}
+            $lockPath = {{Literal(Path.Combine(UpdateBackup.SnapshotInstallDirectory(destinationDirectory) ?? Path.GetFullPath(destinationDirectory), UpdateBackup.OperationLockName))}}
+            $lock = $null
             $temporary = $null
             $phase = 'WAIT_PARENT'
             function Assert-OrdinaryPath([string]$path) {
@@ -210,6 +213,9 @@ public partial class UpdateChecker
                 Assert-OrdinaryPath $source
                 Assert-OrdinaryPath $destination
                 Assert-OrdinaryPath $manifestPath
+                $phase = 'LOCK_INSTALLATION'
+                Assert-OrdinaryPath $lockPath
+                $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
                 $phase = 'READ_MANIFEST'
                 $manifestBytes = [IO.File]::ReadAllBytes($manifestPath)
                 $phase = 'VERIFY_MANIFEST'
@@ -291,6 +297,7 @@ public partial class UpdateChecker
                 exit 1
             } finally {
                 if ($temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+                if ($lock) { $lock.Dispose() }
                 Remove-Item -LiteralPath $manifestPath -Force -ErrorAction SilentlyContinue
             }
             """;

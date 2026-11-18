@@ -7,20 +7,22 @@ $launcher = [IO.File]::ReadAllText((Join-Path $repo 'VPNRouter.App/Services/rela
 $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseInput($launcher, [ref]$null, [ref]$errors)
 if ($errors.Count) { throw $errors[0] }
-$entry = $ast.Find({ param($node)
-    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-RollbackRelaunch'
-}, $true)
-. ([scriptblock]::Create($entry.Extent.Text))
+foreach ($name in 'Start-RestoredApplication','Invoke-RollbackRelaunch') {
+    $entry = $ast.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
+    }, $true)
+    . ([scriptblock]::Create($entry.Extent.Text))
+}
 
 $fixture = [IO.Path]::Combine([IO.Path]::GetTempPath(), [Guid]::NewGuid().ToString('N'))
 $system = [IO.Path]::Combine($fixture, 'Windows', 'System32')
 if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { $system = [Environment]::SystemDirectory }
 $root = [IO.Path]::Combine($fixture, "Owner's VPN [moved] & 100%")
 $app = [IO.Path]::Combine($root, 'app')
-$entryPoint = [scriptblock]::Create($ast.EndBlock.Statements[-1].Extent.Text)
-function Invoke-FixtureRollback {
+function Invoke-FixtureRollback([bool]$trampoline = $false) {
     $env:VPNROUTER_ROLLBACK_APP = $app
-    & $entryPoint
+    $env:VPNROUTER_ROLLBACK_TRAMPOLINE = if ($trampoline) { '1' } else { '0' }
+    Invoke-RollbackRelaunch $env:VPNROUTER_ROLLBACK_APP
 }
 $privateRoot = [IO.Path]::Combine($app, '.repair-temp')
 $record = [Collections.Generic.List[object]]::new()
@@ -33,7 +35,7 @@ function Get-RepairScratch([string]$applicationDir) {
     return [IO.Directory]::CreateDirectory($path).FullName
 }
 function Set-RepairEnvironment([string]$applicationDir) { & $setEnvironment $applicationDir $system }
-function Start-RestoredApplication([Diagnostics.ProcessStartInfo]$info) {
+function New-RollbackProcess([Diagnostics.ProcessStartInfo]$info) {
     if ($info.UseShellExecute -or $info.WorkingDirectory -cne $app -or
         $info.EnvironmentVariables['DOTNET_STARTUP_HOOKS'] -or $info.EnvironmentVariables['VPNROUTER_ROLLBACK_APP'] -or $env:PATH -like '*untrusted-fixture*' -or
         !$env:PATH.StartsWith($system) -or !$env:PSModulePath.StartsWith($system) -or
@@ -43,7 +45,16 @@ function Start-RestoredApplication([Diagnostics.ProcessStartInfo]$info) {
         throw 'A rollback child inherited an unsafe path or environment.'
     }
     if ($refuse -eq 'creation') { throw 'Fixture child creation failure.' }
-    $record.Add([pscustomobject]@{ Exe = $info.FileName; Scratch = $env:TEMP })
+    if ($trampoline -and $exitCode -eq 0) {
+        $line = if ($noHandoff) { '[fixture] repair returned ok' } else { '[fixture] App.exe launched pid=125' }
+        [IO.File]::WriteAllText([IO.Path]::Combine($env:TEMP, 'vpnrouter-trampoline.log'), $line)
+    }
+    $process = [pscustomobject]@{ Exe = $info.FileName; Scratch = $env:TEMP; Waited = $false; Disposed = $false; Result = $exitCode }
+    $process | Add-Member ScriptMethod WaitForExit { $this.Waited = $true }
+    $process | Add-Member ScriptProperty ExitCode { if (!$this.Waited) { throw 'Read exit status before handoff.' }; $this.Result }
+    $process | Add-Member ScriptMethod Dispose { $this.Disposed = $true }
+    $record.Add($process)
+    return $process
 }
 try {
     $backup = [IO.Path]::Combine($root, 'app.bak')
@@ -54,13 +65,31 @@ try {
     $fallback = [IO.Path]::Combine($app, 'VPNRouter.App.exe')
     $marker = [IO.Path]::Combine($app, '.update-failed')
     $env:TEMP = $env:TMP = $env:PATH = $env:DOTNET_STARTUP_HOOKS = 'untrusted-fixture'
-    Invoke-FixtureRollback
-    if ($record.Count -ne 1 -or $record[0].Exe -cne $gui) { throw 'Legacy GUI was not selected.' }
+    $exitCode = 0
+    Invoke-FixtureRollback $true
+    if ($record.Count -ne 1 -or $record[0].Exe -cne $gui -or !$record[0].Waited -or !$record[0].Disposed) { throw 'GUI handoff was not confirmed.' }
+    foreach ($exitCode in 2,3) {
+        [IO.File]::WriteAllText($marker, 'original diagnostic')
+        $failure = $null
+        try { Invoke-FixtureRollback $true } catch { $failure = $_.Exception.Data['TrampolineExit'] }
+        $last = $record[$record.Count - 1]
+        if ($failure -ne $exitCode -or !$last.Waited -or !$last.Disposed -or [IO.File]::ReadAllText($marker) -ne 'original diagnostic') {
+            throw "Failed trampoline committed rollback: $exitCode"
+        }
+    }
+    $exitCode = 0
+    $noHandoff = $true
+    $failed = $false
+    try { Invoke-FixtureRollback $true } catch { $failed = $true }
+    if (!$failed -or [IO.File]::ReadAllText($marker) -ne 'original diagnostic') { throw 'Accepted a zero exit after repair without App launch.' }
+    $noHandoff = $false
+    Invoke-FixtureRollback  # standalone legacy GUI requires no handoff
+    if ($record.Count -ne 5 -or $record[4].Waited -or !$record[4].Disposed) { throw 'Waited for the lifetime of a standalone GUI.' }
     [IO.File]::WriteAllText([IO.Path]::Combine($privateRoot, 'legacy-data'), 'older scratch')
     [IO.File]::Delete($gui)
     [IO.File]::WriteAllText($marker, 'old update')
     Invoke-FixtureRollback
-    if ($record.Count -ne 2 -or $record[1].Exe -cne $fallback -or $record[0].Scratch -eq $record[1].Scratch -or [IO.File]::Exists($marker)) {
+    if ($record.Count -ne 6 -or $record[5].Waited -or $record[5].Exe -cne $fallback -or $record[0].Scratch -eq $record[5].Scratch -or [IO.File]::Exists($marker)) {
         throw 'App fallback, fresh scratch or marker handling failed.'
     }
     foreach ($refuse in 'restored','session','creation','missing-launcher') {
@@ -68,11 +97,11 @@ try {
         if ($refuse -eq 'missing-launcher') { [IO.File]::Delete($fallback) }
         $failed = $false
         try { Invoke-FixtureRollback } catch { $failed = $true }
-        if (!$failed -or $record.Count -ne 2 -or ![IO.File]::Exists($marker)) { throw "Launched after refusal: $refuse" }
+        if (!$failed -or $record.Count -ne 6 -or ![IO.File]::Exists($marker)) { throw "Launched after refusal: $refuse" }
     }
 } finally {
     foreach ($key in [Environment]::GetEnvironmentVariables().Keys) { [Environment]::SetEnvironmentVariable($key, [NullString]::Value, 'Process') }
     foreach ($key in $oldEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key, $oldEnvironment[$key], 'Process') }
     if ([IO.Directory]::Exists($fixture)) { [IO.Directory]::Delete($fixture, $true) }
 }
-'Rollback relaunch: legacy GUI, App fallback and four refusal scenarios passed.'
+'Rollback relaunch: trampoline handoff, exit 2/3 and zero without App, standalone GUI, direct App and four refusal scenarios passed.'

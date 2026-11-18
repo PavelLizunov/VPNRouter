@@ -345,6 +345,15 @@ public static class ZapretActions
     public static bool IsGameFilterConfigured =>
         ZapretRuntimeDirectory.WithPackage(package => File.Exists(GameFilterFlagPath(package)));
 
+    internal static bool SetOneClickGameFilterDefault() =>
+        ZapretRuntimeDirectory.WithPackage(package =>
+        {
+            var flag = GameFilterFlagPath(package);
+            if (File.Exists(flag) || File.Exists(flag + PreinstallDisabledSuffix)) return false;
+            SetFilterFlag(package, flag, "all");
+            return true;
+        });
+
     public static GameFilterMode GetGameFilterMode() => ReadGameFilter().Mode;
 
     internal static (GameFilterMode Mode, string Tcp, string Udp) ReadGameFilter()
@@ -414,14 +423,15 @@ public static class ZapretActions
     internal const string PreinstallDisabledSuffix = ".disabled-before-install";
     internal const string PreinstallLoadedSuffix = ".load-on-install";
 
-    private static void SetFilterFlag(string package, string flag, string? value)
+    internal static void SetFilterFlag(string package, string flag, string? value)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(flag)!);
         var disabled = flag + PreinstallDisabledSuffix;
         if (value == null)
         {
-            // Flowseal reads absence as off. Remember which switch the user turned off until publication.
-            if (!ZapretUpdater.HasInstalledPackage(package)) File.WriteAllText(disabled, "");
+            // Flowseal reads absence as Off. One-click also needs to distinguish an explicit game choice.
+            if (flag == GameFilterFlagPath(package) || !ZapretUpdater.HasInstalledPackage(package))
+                File.WriteAllText(disabled, "");
             File.Delete(flag);
         }
         else

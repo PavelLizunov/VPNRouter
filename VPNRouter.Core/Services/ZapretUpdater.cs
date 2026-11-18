@@ -644,12 +644,12 @@ public class ZapretUpdater
             }
             else if (installed || File.Exists(source + ZapretActions.PreinstallDisabledSuffix))
             {
-                if (File.Exists(target)) File.Delete(target);
+                ZapretActions.SetFilterFlag(staged, target, null);
             }
             else if (legacy != null)
             {
                 var text = legacy.ReadText(Path.Combine("utils", name), 4096, out var missing);
-                if (missing && File.Exists(target)) File.Delete(target);
+                if (missing) ZapretActions.SetFilterFlag(staged, target, null);
                 if (text == null) continue;
                 // The update flag encodes presence alone. Never carry its bytes into the package.
                 var setting = name == "check_updates.enabled" ? "ENABLED" : ZapretActions.NormalizeLegacyGameFilter(text);

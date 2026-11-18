@@ -260,23 +260,19 @@ sealed class Program
     {
         try
         {
-            var health = VPNRouter.App.Services.InstallHealthCheck.Check();
-            var appDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
-            var installDir = System.IO.Path.GetDirectoryName(appDir) ?? string.Empty;
-            var failureMarkerPresent =
-                !string.IsNullOrEmpty(installDir) &&
-                VPNRouter.Core.Services.UpdateBackup.HasFailureMarker(installDir);
+            var appDir = System.IO.Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+            var health = Services.InstallHealthCheck.Check(appDir);
+            var installDir = UpdateBackup.SnapshotInstallDirectory(appDir);
+            var failureMarkerPresent = UpdateBackup.HasApplicationFailureMarker(appDir);
 
             if (!health.IsHealthy || failureMarkerPresent)
             {
                 var trigger = failureMarkerPresent
-                    ? $"Update helper .update-failed marker present ({VPNRouter.Core.Services.UpdateBackup.ReadFailureMarker(installDir)})"
+                    ? $"Update helper .update-failed marker present ({UpdateBackup.ReadApplicationFailureMarker(appDir)})"
                     : health.Diagnostic;
                 Console.Error.WriteLine($"[health] {trigger} — attempting local rollback first");
 
-                var rollback = !string.IsNullOrEmpty(installDir)
-                    ? Services.WindowsRollbackRelaunch.RestoreAndStart(installDir)
-                    : new VPNRouter.Core.Services.UpdateBackup.RestoreResult(false, "no installDir");
+                var rollback = Services.WindowsRollbackRelaunch.RestoreAndStart(appDir);
 
                 if (rollback.Restored)
                 {
@@ -308,9 +304,8 @@ sealed class Program
             }
             else
             {
-                if (!string.IsNullOrEmpty(installDir))
+                if (installDir != null)
                 {
-                    VPNRouter.Core.Services.UpdateBackup.ClearFailureMarker(installDir);
                     var cleanupGeneration =
                         VPNRouter.Core.Services.UpdateBackup.GetSnapshotGeneration(installDir);
                     if (cleanupGeneration is not null)

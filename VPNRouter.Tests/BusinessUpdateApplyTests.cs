@@ -97,6 +97,24 @@ public sealed class BusinessUpdateApplyTests
         Assert.False(File.Exists(fixture.MigrationMarker));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WindowsHelperRefusesSnapshotLockBeforePrepareOrPublication(bool nested)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new HelperFixture(nested);
+        File.WriteAllText(Path.Combine(fixture.Source, "payload.dll"), "release");
+        File.WriteAllText(Path.Combine(fixture.Destination, "payload.dll"), "live");
+        var root = nested ? Directory.GetParent(fixture.Destination)!.FullName : fixture.Destination;
+        using var held = File.Open(Path.Combine(root, UpdateBackup.OperationLockName), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        Assert.Equal(1, RunHelper(fixture.PrepareScript(int.MaxValue, 0, 100)));
+        Assert.Contains("PHASE=LOCK_INSTALLATION", File.ReadAllText(fixture.Log));
+        Assert.False(File.Exists(fixture.PrepareMarker));
+        Assert.False(File.Exists(fixture.LaunchMarker));
+        Assert.Equal("live", File.ReadAllText(Path.Combine(fixture.Destination, "payload.dll")));
+    }
+
     [Fact]
     public void WindowsHelperPreparationFailurePreservesTheInstalledPayload()
     {
@@ -216,20 +234,25 @@ public sealed class BusinessUpdateApplyTests
     {
         private string Root { get; } = Path.Combine(Path.GetTempPath(), "business-apply-" + Guid.NewGuid().ToString("N"));
         internal string Source => Path.Combine(Root, "source' ; throw 'INJECTED");
-        internal string Destination => Path.Combine(Root, "destination' ; throw 'INJECTED");
+        internal string Destination { get; }
         internal string Log => Path.Combine(Root, "helper.log");
         internal string MigrationMarker => Path.Combine(Root, "migrated.txt");
         internal string PreparePolicy { get; set; }
         internal string PrepareMarker => Path.Combine(Root, "prepared.txt");
         internal string LaunchMarker => Path.Combine(Root, "launch.txt");
-        internal HelperFixture()
+        internal HelperFixture(bool nested = false)
         {
+            var install = Path.Combine(Root, "destination' ; throw 'INJECTED");
+            Destination = nested ? Path.Combine(install, "app") : install;
             Directory.CreateDirectory(Source);
             Directory.CreateDirectory(Destination);
             var payload = Path.Combine(Destination, "payload.dll").Replace("'", "''");
             var marker = PrepareMarker.Replace("'", "''");
             File.WriteAllText(Path.Combine(Source, "zapret-maintenance.ps1"), "param($Edition,$Operation); exit 9");
-            PreparePolicy = $"param($Edition,$Operation)\n$old = if ([IO.File]::Exists('{payload}')) {{ [IO.File]::ReadAllText('{payload}') }}\n" +
+            var lockPath = Path.Combine(install, UpdateBackup.OperationLockName).Replace("'", "''");
+            PreparePolicy = $"param($Edition,$Operation)\nif (![IO.File]::Exists('{lockPath}')) {{ exit 8 }}\n$probe = $null\ntry {{ $probe = [IO.File]::Open('{lockPath}', 'Open', 'ReadWrite', 'None') }} " +
+                "catch [IO.IOException] { }\nif ($probe) { $probe.Dispose(); exit 8 }\n" +
+                $"$old = if ([IO.File]::Exists('{payload}')) {{ [IO.File]::ReadAllText('{payload}') }}\n" +
                 $"[IO.File]::WriteAllText('{marker}', $Edition + ':' + $Operation + ':' + $old)\nexit 0";
         }
         internal string PrepareScript(int parent, long started, int timeout)

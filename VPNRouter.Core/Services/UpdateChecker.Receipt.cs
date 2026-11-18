@@ -46,15 +46,8 @@ public partial class UpdateChecker
     }
 
     private static bool UseProtectedWindowsReceipt => OperatingSystem.IsWindows() && !ProductEdition.IsBusiness && ZapretRuntimeDirectory.TestRoot is null;
-    private static string WindowsInstallDir
-    {
-        get
-        {
-            var app = new DirectoryInfo(AppContext.BaseDirectory);
-            return app.Name.Equals("app", StringComparison.OrdinalIgnoreCase) && app.Parent != null
-                ? app.Parent.FullName : Path.TrimEndingDirectorySeparator(app.FullName);
-        }
-    }
+    private static string WindowsInstallDir => UpdateBackup.SnapshotInstallDirectory(AppContext.BaseDirectory)
+        ?? Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
 
     public static string? CheckInstallReceipt(string currentVersion)
     {
