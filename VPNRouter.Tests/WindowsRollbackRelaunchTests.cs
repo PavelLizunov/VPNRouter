@@ -100,6 +100,62 @@ public sealed class WindowsRollbackRelaunchTests
     }
 
     [Fact]
+    public void InstalledAppRollsBackAfterItReleasesItsWorkingDirectoryAndImages()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows() && ZapretAutoStrategy.IsRunningAsAdmin(), "Windows administrator entry-point fixture");
+        var repo = new DirectoryInfo(AppContext.BaseDirectory);
+        while (repo != null && !File.Exists(Path.Combine(repo.FullName, "VPNRouter.sln"))) repo = repo.Parent;
+        Assert.NotNull(repo);
+        // Use the actual apphost and matching build output from this test run (including the compiled edition).
+        var loaded = File.ReadAllBytes(typeof(WindowsRollbackRelaunch).Assembly.Location);
+        var executable = Directory.EnumerateFiles(Path.Combine(repo.FullName, "VPNRouter.App", "bin"),
+            "VPNRouter.App.exe", SearchOption.AllDirectories).First(path =>
+            File.Exists(Path.ChangeExtension(path, ".runtimeconfig.json")) &&
+            File.ReadAllBytes(Path.ChangeExtension(path, ".dll")).AsSpan().SequenceEqual(loaded));
+        var source = Path.GetDirectoryName(executable)!;
+        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Rollback apphost " + Guid.NewGuid().ToString("N"));
+        try
+        {
+            ZapretRuntimeDirectory.PrepareWindowsRoot(root);
+            var live = Directory.CreateDirectory(Path.Combine(root, "app")).FullName;
+            foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+            {
+                var target = Path.Combine(live, Path.GetRelativePath(source, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(file, target);
+                File.SetAttributes(target, FileAttributes.Normal);
+            }
+            File.WriteAllText(Path.Combine(live, UpdateBackup.FailureMarkerName), "offline repair fixture");
+            var backup = Directory.CreateDirectory(Path.Combine(root, "app.bak")).FullName;
+            for (var i = 0; i < 5; i++) File.WriteAllText(Path.Combine(backup, "restored-" + i), "snapshot");
+            File.Copy(Path.Combine(Environment.SystemDirectory, "where.exe"), Path.Combine(backup, "VPNRouter.App.exe"));
+            using var app = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.Combine(live, "VPNRouter.App.exe"))
+            {
+                WorkingDirectory = live, UseShellExecute = false, CreateNoWindow = true
+            });
+            Assert.NotNull(app);
+            Assert.True(app.WaitForExit(90_000), "Initiating installed App did not exit after handoff.");
+            Assert.Equal(0, app.ExitCode);
+            Assert.True(SpinWait.SpinUntil(() => File.Exists(Path.Combine(live, "restored-0")) &&
+                !Directory.Exists(backup) && Directory.GetDirectories(root, "app.displaced-*").Length == 0, TimeSpan.FromSeconds(90)),
+                "External worker did not finish publication after the old App unloaded.");
+            Assert.False(File.Exists(Path.Combine(live, "VPNRouter.Core.dll")));
+            Assert.False(File.Exists(Path.Combine(live, UpdateBackup.FailureMarkerName)));
+            Assert.True(Directory.Exists(Path.Combine(live, ".repair-temp")));
+            Assert.Empty(Directory.GetFiles(root, "rollback-*.log"));
+        }
+        finally
+        {
+            Assert.True(SpinWait.SpinUntil(() =>
+            {
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); return true; }
+                catch (IOException) { return false; }
+                catch (UnauthorizedAccessException) { return false; }
+            }, TimeSpan.FromSeconds(8)));
+        }
+    }
+
+    [Fact]
     public void FlatApplicationCannotRestoreOrCleanANeighbor()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows() && ZapretAutoStrategy.IsRunningAsAdmin(), "Windows administrator ACL fixture");

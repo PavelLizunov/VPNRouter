@@ -211,8 +211,9 @@ jobs:
           # Keep the web installer and uninstaller usable with older ZIPs that predate the maintenance helper.
           maintenance=$(base64 -w0 packaging/windows/installer/zapret-maintenance.ps1)
           repair_environment=$(base64 -w0 packaging/windows/installer/repair-environment.ps1)
+          repair_target=$(base64 -w0 packaging/windows/installer/repair-target.ps1)
           for script in install uninstall; do
-            sed -e 's/\r$//' -e "s|__VPNROUTER_MAINTENANCE_BASE64__|$maintenance|g" -e "s|__VPNROUTER_REPAIR_ENVIRONMENT__|$repair_environment|g" \
+            sed -e 's/\r$//' -e "s|__VPNROUTER_MAINTENANCE_BASE64__|$maintenance|g" -e "s|__VPNROUTER_REPAIR_ENVIRONMENT__|$repair_environment|g" -e "s|__VPNROUTER_REPAIR_TARGET__|$repair_target|g" \
                 "packaging/windows/$script.ps1" > "gh-pages-dir/$script.ps1"
           done
           sed 's/\r$//' packaging/windows/diagnose.ps1  > gh-pages-dir/diagnose.ps1

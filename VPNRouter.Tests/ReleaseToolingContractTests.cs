@@ -427,6 +427,7 @@ public sealed class ReleaseToolingContractTests
     [InlineData("Test-RepairEnvironment.ps1")]
     [InlineData("Test-InstallerRepair.ps1")]
     [InlineData("Test-RollbackRelaunch.ps1")]
+    [InlineData("Test-DeferredRollback.ps1")]
     [InlineData("Test-MainService.ps1")]
     public async Task WindowsMaintenanceFixtureCompletes(string fixture)
     {
