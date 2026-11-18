@@ -60,6 +60,7 @@ public static class SubscriptionResolver
 
         if (aggregated.Count > 0)
         {
+            VlessServersResolver.PrioritizeSelectedRow(settings, aggregated);
             settings.Vless.Servers = aggregated;
             settings.Vless.ActiveServer = settings.App.ActiveSubscriptionServer;
             settings.App.ConfigMode = "generated";

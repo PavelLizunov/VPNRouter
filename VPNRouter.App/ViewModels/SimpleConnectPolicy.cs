@@ -34,6 +34,8 @@ internal static class SimpleConnectPolicy
         return SubscriptionInputAction.Replace;
     }
 
+    internal static bool SameUrl(string? left, string? right) => Normalize(left) == Normalize(right);
+
     private static string Normalize(string? url)
     {
         var text = url?.Trim() ?? string.Empty;
@@ -53,8 +55,8 @@ internal static class SimpleConnectPolicy
 
     // The pre-flight of Connect: a server that is already selected and answers does not need the other twelve probed (a silent UDP port costs
     // two seconds each). Only when the selected server is missing, not answering, or the intent asks for a specific kind is the whole list probed.
-    internal static bool ShouldProbeSelectedFirst(string? activeName, IEnumerable<VlessServerEntry> candidates, bool generalIntent)
-        => generalIntent
-           && !string.IsNullOrEmpty(activeName)
-           && candidates.Any(c => string.Equals(c.Name, activeName, StringComparison.Ordinal));
+    internal static bool ShouldProbeSelectedFirst(string? activeName, IEnumerable<VlessServerEntry> candidates,
+        bool generalIntent, VlessServerEntry? selected = null) =>
+        generalIntent && (selected != null ? candidates.Contains(selected) :
+            !string.IsNullOrEmpty(activeName) && candidates.Any(c => c.Name == activeName));
 }

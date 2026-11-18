@@ -246,6 +246,9 @@ public partial class MainWindowViewModel
     partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value)
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
+        if (value.SubscriptionId is { } id && (IsSubscribeMode || _settings.App.ConfigMode == "subscribe") &&
+            Subscriptions.FirstOrDefault(s => s.Id == id) is { } source)
+            SmpInput = source.Url;
         if (value.IsActive) return;
         _logger.Information(
             "[VM] Subscription server selected (connected={Connected}, subscribeMode={SubscribeMode}, connecting={Connecting})",

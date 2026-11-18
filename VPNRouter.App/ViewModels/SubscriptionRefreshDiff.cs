@@ -21,6 +21,23 @@ internal static class SubscriptionRefreshDiff
         return selected == null ? null : SignatureOf(selected.Server, selected.Port, selected.Uuid, selected.Awg?.HeaderProtectionKey);
     }
 
+    internal static VlessServerEntry? FindRegisteredServer(SubscriptionEntry? source, IEnumerable<VlessServerEntry> all,
+        string? name, string? key, VlessServerEntry? previous, string? previousRoute)
+    {
+        var pool = source?.Servers ?? all;
+        var exact = source?.FindExactRow(name, key);
+        if (exact != null) return exact;
+        if (source != null && previous != null && previousRoute != null)
+        {
+            var equivalent = source.Servers.Where(s => s.Port == previous.Port && s.Server == previous.Server &&
+                SubscriptionEntry.RouteKey(s, source.Servers) == previousRoute).ToList();
+            if (equivalent.Count > 0) return equivalent.FirstOrDefault(s => s.Name == name) ?? equivalent[0];
+        }
+        return FindActiveServer(pool, name, previous?.Uuid, previous?.Server, previous?.Port ?? 0)
+            ?? pool.FirstOrDefault(s => !string.IsNullOrEmpty(name) && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
+            ?? pool.FirstOrDefault();
+    }
+
     internal static VlessServerEntry? FindActiveServer(IEnumerable<VlessServerEntry>? servers,
         string? activeName, string? activeUuid, string? activeHost, int activePort)
     {

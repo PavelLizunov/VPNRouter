@@ -327,9 +327,14 @@ public partial class MainWindowViewModel
             var submitted = CaptureConnectionSettings();
             revision = _routingSettingsRevision;
             choiceUnchanged = CaptureSimpleChoice();
-            var selected = SelectedSubscriptionServer;
-            var selectedIndex = selected == null ? -1 : SubscriptionServers.IndexOf(selected);
-            var preference = (Uuid: selected?.Uuid, Server: selected?.Server, Port: selected?.Port ?? 0);
+            var selectedSource = submitted.App.Subscriptions.FirstOrDefault(s => s.Enabled && s.Id == submitted.App.ActiveSubscriptionId);
+            if (kind == SmpInputKind.SubscriptionUrl && !SimpleConnectPolicy.SameUrl(selectedSource?.Url, input))
+                selectedSource = submitted.App.Subscriptions.FirstOrDefault(s => s.Enabled && SimpleConnectPolicy.SameUrl(s.Url, input));
+            var sameRegistration = selectedSource?.Id == submitted.App.ActiveSubscriptionId;
+            var selectedName = sameRegistration ? submitted.App.ActiveSubscriptionServer : null;
+            var selectedKey = sameRegistration ? submitted.App.ActiveSubscriptionRow : null;
+            var previous = selectedSource?.FindExactRow(selectedName, selectedKey);
+            var previousRoute = previous == null ? null : SubscriptionEntry.RouteKey(previous, selectedSource!.Servers);
 
             if (refresh)
             {
@@ -356,10 +361,8 @@ public partial class MainWindowViewModel
                     return;
                 }
 
-                var preferred = !refresh && selectedIndex >= 0 && selectedIndex < candidates.Count
-                    ? candidates[selectedIndex]
-                    : SubscriptionRefreshDiff.FindActiveServer(candidates, submitted.App.ActiveSubscriptionServer,
-                        preference.Uuid, preference.Server, preference.Port) ?? candidates[0];
+                var preferred = SubscriptionRefreshDiff.FindRegisteredServer(selectedSource, candidates,
+                    selectedName, selectedKey, previous, previousRoute) ?? candidates[0];
                 StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                 var chosen = await PickSimpleServerAsync(candidates, preferred, submitted.App.ConnectionIntent, Preparing);
                 if (!Preparing()) return;
@@ -371,11 +374,18 @@ public partial class MainWindowViewModel
                     return;
                 }
 
-                var chosenIndex = candidates.IndexOf(chosen);
-                SelectSubmittedSubscriptionServer(submitted, candidates, chosen);
+                var source = selectedSource != null && selectedSource.Servers.Contains(chosen)
+                    ? selectedSource : submitted.App.Subscriptions.First(s => s.Enabled && s.Servers.Contains(chosen));
+                var rowKey = SubscriptionEntry.RowKey(chosen);
+                submitted.App.ActiveSubscriptionId = source.Id;
+                submitted.App.ActiveSubscriptionRow = rowKey;
+                submitted.App.ActiveSubscriptionServer = submitted.Vless.ActiveServer = chosen.Name;
+                VlessServersResolver.Resolve(submitted);
                 if (choiceUnchanged())
                 {
-                    ApplySmartConnectSelection(chosen, SubscriptionServers.ElementAtOrDefault(chosenIndex));
+                    var winner = SubscriptionServers.FirstOrDefault(row => row.SubscriptionId == source.Id &&
+                        row.Name == chosen.Name && SubscriptionEntry.RowKey(row.SourceEntry) == rowKey);
+                    if (winner != null) ApplySmartConnectSelection(chosen, winner);
                     if (ConnectionIntent.Normalize(submitted.App.ConnectionIntent) != ConnectionIntent.General)
                         StatusText = $"{ConnectionIntentStatusText} -> {chosen.Name}";
                     choiceUnchanged = CaptureSimpleChoice();
@@ -391,7 +401,10 @@ public partial class MainWindowViewModel
             if (_simplePreparationGeneration == generation) IsConnecting = false;
             if (!_disposed && choiceUnchanged != null && (revision != _routingSettingsRevision || !choiceUnchanged()))
             {
-                if (SmpInput != input) ApplyPendingSimpleInput();
+                if (SmpInput != input && (IsSimpleMode ||
+                    (IsSubscribeMode && SimpleInputDetector.Classify(SmpInput) == SmpInputKind.SubscriptionUrl) ||
+                    (IsVlessMode && SimpleInputDetector.Classify(SmpInput) == SmpInputKind.ServerUri)))
+                    ApplyPendingSimpleInput();
                 SaveSettings();
                 HasPendingAppChanges = true;
             }
@@ -404,8 +417,10 @@ public partial class MainWindowViewModel
         // The editor and the engine must not share mutable servers after publishing the cache.
         var caches = VpnEngine.CopySessionSettings(submitted).App.Subscriptions
             .Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
-        foreach (var (live, refreshed, cache) in liveRows.Zip(rows, caches))
+        foreach (var live in liveRows)
         {
+            var refreshed = rows.First(s => s.Id == live.Id && s.Url == live.Url);
+            var cache = caches.First(s => s.Id == live.Id && s.Url == live.Url);
             live.UnderlyingEntry.Servers = cache.Servers;
             live.UnderlyingEntry.UserInfo = cache.UserInfo;
             live.LastRefreshedAt = refreshed.LastRefreshedAt;
@@ -423,7 +438,7 @@ public partial class MainWindowViewModel
         {
             var probe = SimpleProbe ?? ((servers, timeout) => new ServerHealthProbe(_logger).ProbeAllAsync(servers, timeout));
             if (SimpleConnectPolicy.ShouldProbeSelectedFirst(preferred.Name, candidates,
-                ConnectionIntent.Normalize(intent) == ConnectionIntent.General))
+                ConnectionIntent.Normalize(intent) == ConnectionIntent.General, preferred))
             {
                 if (SimpleConnectPolicy.CannotBeVerifiedByProbe(preferred)) return preferred;
                 var result = await probe(new[] { preferred }, TimeSpan.FromSeconds(2));
@@ -431,7 +446,7 @@ public partial class MainWindowViewModel
                 if (SimpleConnectPolicy.KeepSelectedAfterProbe(result) || result.Any(r => r.Alive)) return preferred;
             }
             var results = await probe(candidates, TimeSpan.FromSeconds(4));
-            return ConnectionIntentScorer.PickServer(results, intent, preferred.Name);
+            return ConnectionIntentScorer.PickRegisteredServer(results, intent, preferred);
         }
         catch (Exception)
         {
@@ -457,6 +472,13 @@ public partial class MainWindowViewModel
             Subscriptions.Clear();
             Subscriptions.Add(new SubscriptionViewModel(entry));
             RebuildSubscriptionPool();
+        }
+        else if (SelectedSubscriptionServer?.SubscriptionId is not { } id ||
+                 !Subscriptions.Any(s => s.Id == id && SimpleConnectPolicy.SameUrl(s.Url, input)))
+        {
+            var source = Subscriptions.FirstOrDefault(s => s.Enabled && SimpleConnectPolicy.SameUrl(s.Url, input));
+            if (source != null)
+                SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault(row => row.SubscriptionId == source.Id);
         }
         _settings.App.ConfigMode = "subscribe";
         IsSubscribeMode = true;
@@ -489,40 +511,21 @@ public partial class MainWindowViewModel
         var input = SmpInput;
         var mode = _settings.App.ConfigMode;
         var intent = ConnectionIntentIndex;
-        var tabs = (IsSubscribeMode, IsVlessMode, SelectedCustomConfig);
+        var tabs = (IsSimpleMode, SelectedTabIndex, SelectedServerModeIndex, IsSubscribeMode, IsVlessMode, SelectedCustomConfig);
         var selected = SelectedSubscriptionServer;
         var manual = SelectedServer;
         var feeds = Subscriptions.Select(s => (s, s.Url, s.Enabled, s.UnderlyingEntry.Servers)).ToArray();
         return () => SmpInput == input && _settings.App.ConfigMode == mode && ConnectionIntentIndex == intent &&
-            tabs == (IsSubscribeMode, IsVlessMode, SelectedCustomConfig) &&
+            tabs == (IsSimpleMode, SelectedTabIndex, SelectedServerModeIndex, IsSubscribeMode, IsVlessMode, SelectedCustomConfig) &&
             ReferenceEquals(selected, SelectedSubscriptionServer) && ReferenceEquals(manual, SelectedServer) &&
             feeds.SequenceEqual(Subscriptions.Select(s => (s, s.Url, s.Enabled, s.UnderlyingEntry.Servers)));
-    }
-
-    private static void SelectSubmittedSubscriptionServer(AppSettings submitted, List<VlessServerEntry> candidates,
-        VlessServerEntry chosen)
-    {
-        submitted.App.ActiveSubscriptionServer = submitted.Vless.ActiveServer = chosen.Name;
-        var firstMatch = candidates.First(s => string.Equals(s.Name, chosen.Name, StringComparison.OrdinalIgnoreCase));
-        if (!ReferenceEquals(firstMatch, chosen))
-        {
-            // The engine rebuilds the pool from enabled feeds and resolves the active name in order.
-            var feeds = submitted.App.Subscriptions;
-            var source = feeds.First(s => s.Enabled && s.Servers.Contains(chosen));
-            source.Servers.Remove(chosen);
-            source.Servers.Insert(0, chosen);
-            feeds.Remove(source);
-            feeds.Insert(0, source);
-            candidates = feeds.Where(s => s.Enabled).SelectMany(s => s.Servers).ToList();
-        }
-        submitted.Vless.Servers = candidates;
     }
 
     internal void ApplySmartConnectSelection(VlessServerEntry chosen, ServerViewModel? winnerVm = null)
     {
         var previousServer = _settings.App.ActiveSubscriptionServer;
-        winnerVm ??= SubscriptionServers.FirstOrDefault(s => s.Name == chosen.Name && s.Port == chosen.Port &&
-            s.Uuid == chosen.Uuid && string.Equals(s.Server, chosen.Server, StringComparison.OrdinalIgnoreCase));
+        winnerVm ??= SubscriptionServers.FirstOrDefault(row => ReferenceEquals(row.SourceEntry, chosen));
+        if (winnerVm == null) return;
         if (string.Equals(chosen.Name, previousServer, StringComparison.Ordinal) &&
             ReferenceEquals(SelectedSubscriptionServer, winnerVm)) return;
 
@@ -530,8 +533,7 @@ public partial class MainWindowViewModel
         if (!string.IsNullOrWhiteSpace(previousServer))
             _smpChoiceNote = Strings.SmpServerSwitchedNote(previousServer);
         _settings.App.ActiveSubscriptionServer = chosen.Name ?? previousServer;
-        if (winnerVm is not null)
-            SelectedSubscriptionServer = winnerVm;
+        SelectedSubscriptionServer = winnerVm;
         SaveSettings();
     }
 
