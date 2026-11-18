@@ -14,6 +14,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class AndroidTunnelLifecycleTest {
     public static void main(String[] args) throws Exception {
         serviceChecksSwitchAndRestoreBeforePublishing();
+        replacementDuringPreflightKeepsEstablishedTunnel(false);
+        replacementDuringPreflightKeepsEstablishedTunnel(true);
+        lateActivationCannotSaveOrPublish();
         onlyTheSessionWithAnOpenDescriptorIsReady();
         lateTunWaitsForMainClose();
         slowOrFailedSidecarBlocksReplacement();
@@ -41,8 +44,10 @@ public final class AndroidTunnelLifecycleTest {
                 && source.contains("EXTRA_COLD_START_ONLY = \"cold_start_only\""), "cold start marker keys differ");
         requireOrdered(activity, "void OnMissingRuleSet(string _) => coldStartOnly = true;",
                 "BuildConfigJsonFromCustom(rawJson, singboxLogPath, OnMissingRuleSet)",
-                "DispatchTunnelStart(command, configJson, coldStartOnly);", "BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet)",
-                "DispatchTunnelStart(command, configJson, coldStartOnly, entry);", ".PutExtra(ExtraColdStartOnly, coldStartOnly)");
+                "origin.CompletePreparation(ReadTunnelEvent, _ => DispatchTunnelStart(command, configJson, coldStartOnly))",
+                "BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet)",
+                "origin.CompletePreparation(ReadTunnelEvent, _ => DispatchTunnelStart(command, configJson, coldStartOnly, entry))",
+                ".PutExtra(ExtraColdStartOnly, coldStartOnly)");
         String imported = builder.substring(builder.indexOf("internal static string BuildConfigJsonFromCustom("));
         requireOrdered(imported, "settings.App.BlockAds = AndroidStorage.GetBlockAds();",
                 "CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet)");
@@ -51,11 +56,9 @@ public final class AndroidTunnelLifecycleTest {
                 "Android builder did not propagate rule-set availability");
         requireOrdered(dispatch, "getBooleanExtra(EXTRA_COLD_START_ONLY, false)", "submitCommand(startId,",
                 "if (coldStartOnly && commandServer != null)", "reportFailure(\"config-invalid\", true);",
-                "return;", "prepareTunnelConfig(cfg,", "if (checked == null) return;",
-                "pendingConfigJson = cfg;", "startTunnel(checked);");
+                "return;", "startTunnel(() -> prepareTunnelConfig(cfg,", "pendingConfigJson = cfg;");
         require(!dispatch.contains("retireTunnel()"), "service retired the old tunnel during preflight");
-        requireOrdered(dispatch, "else if (loadLastGoodConfig())", "prepareTunnelConfig(pendingConfigJson,",
-                "if (checked != null) startTunnel(checked);");
+        requireOrdered(dispatch, "else if (loadLastGoodConfig())", "startTunnel(() -> prepareTunnelConfig(pendingConfigJson,");
 
         String preflight = source.substring(source.indexOf("private String prepareTunnelConfig("),
                 source.indexOf("private void startTunnel("));
@@ -68,8 +71,11 @@ public final class AndroidTunnelLifecycleTest {
 
         String start = source.substring(source.indexOf("private void startTunnel("),
                 source.indexOf("private void reportStartFailure("));
-        requireOrdered(start, "retireTunnel();", "session = new AndroidTunnelSession();", "startLibboxService(tunnelConfig);",
-                "session.requireEstablishedTun();", "persistLastGoodConfig();", "liveService = this;",
+        requireOrdered(start, "start.prepareAndClaim(preflight, () -> {", "select.run();", "detachTunnel();",
+                "if (tunnelConfig == null)", "closeDetachedTunnel(previous, previousServer);", "if (!start.current()) return;",
+                "session = new AndroidTunnelSession();", "startSlipstreamIfNeeded();", "if (!start.current()) return;",
+                "startLibboxService(tunnelConfig);", "session.requireEstablishedTun();", "start.commit(() -> {",
+                "persistLastGoodConfig();", "liveService = this;",
                 "writeVpnState(STATE_CONNECTED,", "setTunnelLive(true);", "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))");
 
         String stop = source.substring(source.indexOf("private void stopTunnel("),
@@ -83,23 +89,28 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(activity, "case ActionTunnelUp:", "case ActionTunnelDown:", "SetIntent(AndroidStorage.HasConfirmedTunnel(), owner, refresh: action == ActionTunnelDown);",
                 "AndroidApp.RefreshPerAppSelection();", "case ActionTunnelError:");
         requireOrdered(activity, "private void DispatchTunnelStart(", "if (!AndroidStorage.IsCurrentUiCommand(command)) return;",
-                ".PutExtra(AndroidStorage.UiCommandKey, command)", "StartForegroundService(intent)");
-        requireOrdered(dispatch, "if (uiCommand != null && (!uiCommand.equals(prefs.getString(UI_COMMAND, null))",
-                "uiCommand.equals(prefs.getString(\"vpn_superseded_selection\", null))", "return;",
+                ".PutExtra(AndroidStorage.UiCommandKey, command)", "if (!AndroidStorage.IsCurrentUiCommand(command)) return;",
+                "StartForegroundService(intent)");
+        requireOrdered(dispatch, "if (!start.current())", "return;",
                 "AndroidTunnelPolicy.Preferences selection = readAppPreferences(prefs);", "sourcePrefs = selection.snapshot();",
-                "mode = selection.mode", "packages = selection.packages", "prepareTunnelConfig(cfg,",
-                "pendingPerAppPrefs = sourcePrefs;", "startTunnel(checked);");
+                "mode = selection.mode", "packages = selection.packages", "startTunnel(() -> prepareTunnelConfig(cfg,",
+                "pendingPerAppPrefs = sourcePrefs;");
         requireOrdered(source, "RESTART_FLAGS = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE",
                 "RESTART_FLAGS | PendingIntent.FLAG_UPDATE_CURRENT", "private void cancelScheduledRestart()", "remove(RESTART_TICKET)",
                 "RESTART_FLAGS | PendingIntent.FLAG_NO_CREATE");
         requireOrdered(activity, "new AndroidTunnelEvent(intent?.GetStringExtra(AndroidStorage.UiCommandKey)",
-                "owner.StateEvent == null || ReadTunnelEvent() != owner", "case ActionTunnelError:", "PresentTunnelError(context, owner,");
+                "owner.StateEvent == null || (action == ActionStats ? ReadServiceEvent() : ReadTunnelEvent()) != owner",
+                "case ActionTunnelError:", "PresentTunnelError(context, owner,");
+        requireOrdered(activity, "void ShowPreparationError(string message) => origin.CompletePreparation(",
+                "PresentTunnelError(this, owner, message", "origin.CompletePreparation(ReadTunnelEvent, _ => DispatchTunnelStart(");
+        requireOrdered(source, "String stateEvent = serviceStateEvent;", "String command = serviceStateCommand;",
+                "event.putExtra(UI_COMMAND, command);", "event.putExtra(STATE_EVENT, stateEvent);", "event.putExtra(ACTIVE_SESSION, sessionId);");
         String tile = Files.readString(root.resolve("VPNRouter.Android/VpnTileService.cs"));
         requireOrdered(tile, "var command = AndroidStorage.BeginUiCommand();", "intent.PutExtra(AndroidStorage.UiCommandKey, command);",
                 "PendingIntent.GetActivity(");
         requireOrdered(activity, "case VPNRouter.Core.Services.TileIntentContract.ReasonConnect:", "intent.GetStringExtra(AndroidStorage.UiCommandKey)",
                 "AndroidStorage.IsCurrentUiCommand(command)", "Post(() => RequestConnect(command))");
-        requireOrdered(dispatch, "if (!java.util.Objects.equals(origin,", "if (commandServer != null)", "hasLiveTunnel()",
+        requireOrdered(dispatch, "if (!start.current())", "if (commandServer != null)", "hasLiveTunnel()",
                 "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))", "else if (loadLastGoodConfig())");
         require(source.contains("synchronized void onTaskRemoved(") && source.contains("synchronized void onRevoke(")
                 && source.contains("synchronized int onStartCommand("), "swipe scheduling must serialize with revoke and stop");
@@ -150,6 +161,70 @@ public final class AndroidTunnelLifecycleTest {
             int found = source.indexOf(step, offset);
             require(found >= offset, "Missing or misplaced service step: " + step);
             offset = found + step.length();
+        }
+    }
+
+    private static void lateActivationCannotSaveOrPublish() throws Exception {
+        Object monitor = new Object();
+        java.util.Map<String, String> prefs = new java.util.HashMap<>();
+        prefs.put(AndroidTunnelStart.COMMAND, "A");
+        prefs.put("last-good", "fixture-live");
+        AndroidTunnelStart start = new AndroidTunnelStart(monitor, prefs::get, () -> true, "A", true);
+        CountDownLatch activating = new CountDownLatch(1);
+        CountDownLatch ready = new CountDownLatch(1);
+        FutureTask<Boolean> late = new FutureTask<>(() -> {
+            String profile = start.prepareAndClaim(() -> "fixture-A", () -> {
+                require(Thread.holdsLock(monitor), "replacement was claimed outside the selection transaction");
+            });
+            require(profile != null, "current start failed preflight");
+            activating.countDown();
+            await(ready);
+            return start.commit(() -> prefs.put("last-good", profile));
+        });
+        new Thread(late).start();
+        await(activating);
+        synchronized (monitor) { prefs.put(AndroidTunnelStart.SUPERSEDED, "A"); }
+        ready.countDown();
+        require(!late.get(3, TimeUnit.SECONDS), "late activation published after import");
+        require("fixture-live".equals(prefs.get("last-good")), "late activation replaced last-good");
+    }
+
+    private static void replacementDuringPreflightKeepsEstablishedTunnel(boolean newerCommand) throws Exception {
+        Object monitor = new Object();
+        java.util.Map<String, String> prefs = new java.util.HashMap<>();
+        prefs.put(AndroidTunnelStart.COMMAND, "A");
+        AndroidTunnelStart start = new AndroidTunnelStart(monitor, prefs::get, () -> true, "A", true);
+        AndroidTunnelSession live = new AndroidTunnelSession();
+        Path fixture = Files.createTempFile("vpn-preflight", ".test");
+        try (FileInputStream descriptor = new FileInputStream(fixture.toFile())) {
+            live.openTun(() -> descriptor, FileInputStream::getFD);
+            CountDownLatch checking = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            FutureTask<String> prepared = new FutureTask<>(() -> start.prepareAndClaim(() -> {
+                require(!Thread.holdsLock(monitor), "preflight blocked profile changes");
+                checking.countDown();
+                await(release);
+                return "{\"inbounds\":[{\"type\":\"tun\"}]}";
+            }, live::retire));
+            new Thread(prepared).start();
+            await(checking);
+            synchronized (monitor) {
+                if (newerCommand) prefs.put(AndroidTunnelStart.COMMAND, "B");
+                else prefs.put(AndroidTunnelStart.SUPERSEDED, "A");
+            }
+            release.countDown();
+            require(prepared.get(3, TimeUnit.SECONDS) == null, "cancelled config reached native activation");
+            live.requireEstablishedTun();
+            require(!start.commit(() -> { throw new AssertionError("stale last-good or error published"); }),
+                    "superseded command can publish");
+            synchronized (monitor) { prefs.put(AndroidTunnelStart.COMMAND, "C"); }
+            AndroidTunnelStart next = new AndroidTunnelStart(monitor, prefs::get, () -> true, "C", true);
+            require("fixture-C".equals(next.prepareAndClaim(() -> "fixture-C", live::retire)),
+                    "replacement blocked after supersession");
+            requireNotReady(live);
+            require(live.releaseIfClosed(true), "fixture descriptor did not close");
+        } finally {
+            Files.deleteIfExists(fixture);
         }
     }
 

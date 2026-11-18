@@ -104,8 +104,9 @@ public final class VpnRouterService extends VpnService {
     // Single connection-state record read by the quick-settings tile and the app screen
     // (VPNRouter.Core VpnStateCodec parses these four words; this service is the only writer).
     public static final String ACTION_TILE_START = "com.ninitux.vpnrouter.TILE_START";
-    private static final String UI_COMMAND = "vpn_ui_command";
+    private static final String UI_COMMAND = AndroidTunnelStart.COMMAND;
     private static final String STATE_EVENT = "vpn_state_event";
+    private static final String STATE_COMMAND = "vpn_state_command";
 
     // AndroidStorage uses this class monitor for the matching managed selection transaction.
     private static synchronized void supersedeUiCommand(SharedPreferences prefs, String command) {
@@ -148,7 +149,10 @@ public final class VpnRouterService extends VpnService {
     private volatile boolean stopRequested;
     private int executingStartId;
     private String executingUiCommand;
+    private AndroidTunnelStart executingStart;
+    private volatile AndroidTunnelStart establishedStart;
     private volatile String serviceStateEvent;
+    private volatile String serviceStateCommand;
     private String tunnelSessionId;
     private static final String ACTIVE_SESSION = "vpn_active_tunnel_session";
     private PowerManager.WakeLock connectWakeLock;
@@ -174,11 +178,12 @@ public final class VpnRouterService extends VpnService {
         lifecycleExecutor.execute(task);
     }
 
-    private void submitCommand(int startId, String origin, Runnable task) {
+    private void submitCommand(int startId, AndroidTunnelStart start, Runnable task) {
         submitLifecycle(() -> {
             if (ended) return;
             executingStartId = startId;
-            executingUiCommand = origin;
+            executingUiCommand = start.command;
+            executingStart = start;
             task.run();
         });
     }
@@ -197,12 +202,16 @@ public final class VpnRouterService extends VpnService {
 
     private void broadcastTunnelEvent(Intent event) {
         String pkg = getPackageName();
+        event.setPackage(pkg);
         if (!ACTION_STATS.equals(event.getAction())) {
             event.putExtra(UI_COMMAND, executingUiCommand);
             event.putExtra(STATE_EVENT, serviceStateEvent);
             event.putExtra(ACTIVE_SESSION, tunnelSessionId);
+            // Capture the event under its owner, then release the transaction before the Binder call.
+            mainHandler.post(() -> sendBroadcast(event, pkg + ".permission.TUNNEL_STATUS"));
+            return;
         }
-        sendBroadcast(event.setPackage(pkg), pkg + ".permission.TUNNEL_STATUS");
+        sendBroadcast(event, pkg + ".permission.TUNNEL_STATUS");
     }
 
     @androidx.annotation.Keep
@@ -389,8 +398,11 @@ public final class VpnRouterService extends VpnService {
         } else {
             origin = uiCommand != null ? uiCommand : prefs.getString(UI_COMMAND, null);
         }
+        AndroidTunnelStart start = new AndroidTunnelStart(VpnRouterService.class, key -> prefs.getString(key, null),
+                () -> !ended && !stopRequested, origin,
+                uiCommand != null || ACTION_START.equals(action) || ACTION_TILE_START.equals(action));
         if (scheduledRestart && (restartTicket == null || !restartTicket.equals(prefs.getString(RESTART_TICKET, null)))) {
-            submitCommand(startId, origin, () -> { if (commandServer == null) finishCommand(startId); });
+            submitCommand(startId, start, () -> { if (commandServer == null) finishCommand(startId); });
             return START_NOT_STICKY;
         }
         if (ACTION_STOP.equals(action)) stopRequested = true;
@@ -400,7 +412,7 @@ public final class VpnRouterService extends VpnService {
             if (nText != null && !nText.isEmpty()) notifText = nText;
             String nDisc = intent.getStringExtra(EXTRA_NOTIF_DISCONNECT);
             if (nDisc != null && !nDisc.isEmpty()) notifDisconnect = nDisc;
-            if (!ensureForegroundStarted(startId, origin)) {
+            if (!ensureForegroundStarted(startId, start)) {
                 return START_NOT_STICKY;
             }
             final String cfg = intent.getStringExtra(EXTRA_CONFIG_JSON);
@@ -413,11 +425,10 @@ public final class VpnRouterService extends VpnService {
             final String dnsCert = intent.getStringExtra(EXTRA_DNS_TUNNEL_CERT);
             final int dnsPort = intent.getIntExtra(EXTRA_DNS_TUNNEL_PORT, 7001);
             final boolean dnsUseSystem = intent.getBooleanExtra(EXTRA_DNS_TUNNEL_USE_SYSTEM_RESOLVER, false);
-            submitCommand(startId, origin, new Runnable() {
+            submitCommand(startId, start, new Runnable() {
                 @Override
                 public void run() {
-                    if (uiCommand != null && (!uiCommand.equals(prefs.getString(UI_COMMAND, null)) ||
-                            uiCommand.equals(prefs.getString("vpn_superseded_selection", null)))) {
+                    if (!start.current()) {
                         if (commandServer == null) finishCommand(startId);
                         return;
                     }
@@ -444,23 +455,22 @@ public final class VpnRouterService extends VpnService {
                         reportStartFailure(e, commandServer != null);
                         return;
                     }
-                    String checked = prepareTunnelConfig(cfg, mode, packages, dnsDomain);
-                    if (checked == null) return;
-                    pendingConfigJson = cfg;
-                    pendingPerAppMode = mode;
-                    pendingPerAppPackages = packages;
-                    pendingPerAppPrefs = sourcePrefs;
-                    pendingDnsTunnelDomain = dnsDomain;
-                    pendingDnsTunnelResolvers = dnsResolvers;
-                    pendingDnsTunnelCert = dnsCert;
-                    pendingDnsTunnelPort = dnsPort;
-                    pendingDnsTunnelUseSystemResolver = dnsUseSystem;
-                    startTunnel(checked);
+                    startTunnel(() -> prepareTunnelConfig(cfg, mode, packages, dnsDomain), () -> {
+                        pendingConfigJson = cfg;
+                        pendingPerAppMode = mode;
+                        pendingPerAppPackages = packages;
+                        pendingPerAppPrefs = sourcePrefs;
+                        pendingDnsTunnelDomain = dnsDomain;
+                        pendingDnsTunnelResolvers = dnsResolvers;
+                        pendingDnsTunnelCert = dnsCert;
+                        pendingDnsTunnelPort = dnsPort;
+                        pendingDnsTunnelUseSystemResolver = dnsUseSystem;
+                    });
                 }
             });
         } else if (ACTION_STOP.equals(action)) {
             cancelScheduledRestart();
-            submitCommand(startId, origin, new Runnable() {
+            submitCommand(startId, start, new Runnable() {
                 @Override
                 public void run() {
                     stopTunnel(true);
@@ -471,10 +481,10 @@ public final class VpnRouterService extends VpnService {
         } else {
             Log.i(LOG_TAG, "AND-NETRES: system-initiated start (action=" + action
                     + ") — attempting last-good config restore");
-            if (!ensureForegroundStarted(startId, origin)) {
+            if (!ensureForegroundStarted(startId, start)) {
                 return START_NOT_STICKY;
             }
-            submitCommand(startId, origin, new Runnable() {
+            submitCommand(startId, start, new Runnable() {
                 @Override
                 public void run() {
                     if (scheduledRestart && !restartTicket.equals(prefs.getString(RESTART_TICKET, null))) {
@@ -482,24 +492,25 @@ public final class VpnRouterService extends VpnService {
                         return;
                     }
                     if (scheduledRestart) prefs.edit().remove(RESTART_TICKET).apply();
-                    if (!java.util.Objects.equals(origin, prefs.getString(UI_COMMAND, null))) {
+                    if (!start.current()) {
                         if (commandServer == null) finishCommand(startId);
                         return;
                     }
                     if (commandServer != null) {
                         if (liveService == VpnRouterService.this && hasLiveTunnel() && session != null) {
                             // The tile can write Connecting before asking to restore an already-established tunnel.
-                            if (!STATE_CONNECTED.equals(readVpnState())) writeVpnState(STATE_CONNECTED, null);
-                            broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP));
+                            start.commit(() -> {
+                                writeVpnState(STATE_CONNECTED, null);
+                                broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP));
+                            });
                         }
                     } else if (loadLastGoodConfig()) {
-                        String checked = prepareTunnelConfig(pendingConfigJson, pendingPerAppMode,
-                                pendingPerAppPackages, pendingDnsTunnelDomain);
-                        if (checked != null) startTunnel(checked);
+                        startTunnel(() -> prepareTunnelConfig(pendingConfigJson, pendingPerAppMode,
+                                pendingPerAppPackages, pendingDnsTunnelDomain), () -> { });
                     } else {
                         Log.w(LOG_TAG, "AND-NETRES: no last-good config saved; "
                                 + "user must launch app and tap Connect at least once");
-                        writeVpnState(STATE_ERROR, "no-config");
+                        start.commit(() -> writeVpnState(STATE_ERROR, "no-config"));
                         finishCommand(startId);
                     }
                 }
@@ -513,7 +524,7 @@ public final class VpnRouterService extends VpnService {
         return super.onBind(intent);
     }
 
-    private boolean ensureForegroundStarted(int startId, String origin) {
+    private boolean ensureForegroundStarted(int startId, AndroidTunnelStart start) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(NOTIFICATION_ID, buildNotification(),
@@ -523,7 +534,7 @@ public final class VpnRouterService extends VpnService {
             }
             return true;
         } catch (Exception e) {
-            submitCommand(startId, origin, () -> reportFailure("foreground-start-blocked", commandServer != null));
+            submitCommand(startId, start, () -> reportFailure("foreground-start-blocked", commandServer != null));
             return false;
         }
     }
@@ -536,17 +547,19 @@ public final class VpnRouterService extends VpnService {
                     .edit()
                     .putString(KEY_VPN_STATE, state)
                     .putString(STATE_EVENT, stateEvent)
+                    .putString(STATE_COMMAND, executingUiCommand)
                     .putString(ACTIVE_SESSION, STATE_CONNECTED.equals(state) ? tunnelSessionId : null)
                     .putString("vpn_active_per_app_policy", STATE_CONNECTED.equals(state) ? establishedAppPolicy : null)
                     .putString(KEY_VPN_STATE_REASON, reason)
                     .putInt(KEY_VPN_STATE_PID, android.os.Process.myPid())
                     .putLong(KEY_VPN_STATE_AT_MS, System.currentTimeMillis())
                     .apply();
+            serviceStateCommand = executingUiCommand;
             serviceStateEvent = stateEvent;
         } catch (Exception e) {
             Log.w(LOG_TAG, "writeVpnState(" + state + ") threw: " + e.getMessage());
         }
-        refreshTile();
+        mainHandler.post(this::refreshTile);
     }
 
     private String readVpnState() {
@@ -605,36 +618,64 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    private void startTunnel(String tunnelConfig) {
-        if (ended || stopRequested) return;
-        writeVpnState(STATE_CONNECTING, null);
-        setTunnelLive(false);
-        retireTunnel();
-        if (ended || stopRequested) return;
-        if (!previousTunnelClosed()) {
-            reportFailure("tunnel-closing", false);
+    private void startTunnel(AndroidTunnelStart.Preflight preflight, Runnable select) {
+        AndroidTunnelStart start = executingStart;
+        AndroidTunnelSession previous = session;
+        CommandServer previousServer = commandServer;
+        String tunnelConfig = start.prepareAndClaim(preflight, () -> {
+            select.run();
+            writeVpnState(STATE_CONNECTING, null);
+            setTunnelLive(false);
+            detachTunnel();
+        });
+        if (tunnelConfig == null) {
+            if (!start.current() && commandServer == null) finishCommand(executingStartId);
             return;
         }
-        session = new AndroidTunnelSession();
-        tunnelSessionId = java.util.UUID.randomUUID().toString();
-        establishedAppPolicy = null;
-        acquireConnectWakeLock();
+        String connectingEvent = serviceStateEvent;
+        closeDetachedTunnel(previous, previousServer);
         try {
+            if (!start.current()) return;
+            if (!previousTunnelClosed()) {
+                reportFailure("tunnel-closing", false);
+                return;
+            }
+            session = new AndroidTunnelSession();
+            tunnelSessionId = java.util.UUID.randomUUID().toString();
+            establishedAppPolicy = null;
+            acquireConnectWakeLock();
+            if (!start.current()) return;
             startSlipstreamIfNeeded();
-            if (ended || stopRequested) return;
+            if (!start.current()) return;
             startLibboxService(tunnelConfig);
-            if (ended || stopRequested) return; // Stop or destruction already queued retirement.
             session.requireEstablishedTun();
-            persistLastGoodConfig();
-            liveService = this;
-            writeVpnState(STATE_CONNECTED, null);
-            setTunnelLive(true);
-            broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP));
-            startStatsPoller();
+            if (start.commit(() -> {
+                persistLastGoodConfig();
+                establishedStart = start;
+                liveService = this;
+                writeVpnState(STATE_CONNECTED, null);
+                setTunnelLive(true);
+                broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP));
+            })) startStatsPoller();
         } catch (Exception | LinkageError e) {
             retireTunnel();
             if (!ended) reportFailure("start-failed", false);
         } finally {
+            if (liveService != this) {
+                retireTunnel();
+                // A saved selection may cancel this attempt without queuing another service command.
+                // Clear only the Connecting record this attempt published. Stop/revoke own their terminal event.
+                if (!ended && !stopRequested && !start.current()) {
+                    SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                    synchronized (VpnRouterService.class) {
+                        if (connectingEvent != null && connectingEvent.equals(prefs.getString(STATE_EVENT, null))) {
+                            writeVpnState(STATE_DISCONNECTED, null);
+                            broadcastTunnelEvent(new Intent(ACTION_TUNNEL_DOWN));
+                        }
+                    }
+                    finishCommand(executingStartId);
+                }
+            }
             releaseConnectWakeLock();
         }
     }
@@ -677,6 +718,11 @@ public final class VpnRouterService extends VpnService {
     }
 
     private void reportFailure(String code, boolean previousTunnelActive) {
+        if (!executingStart.commit(() -> publishStartFailure(code, previousTunnelActive)) && !previousTunnelActive)
+            finishCommand(executingStartId);
+    }
+
+    private void publishStartFailure(String code, boolean previousTunnelActive) {
         Log.w(LOG_TAG, "VPN start failed: " + code);
         Intent err = new Intent(ACTION_TUNNEL_ERROR);
         err.putExtra(EXTRA_ERROR_MESSAGE, code);
@@ -684,8 +730,8 @@ public final class VpnRouterService extends VpnService {
         if (!previousTunnelActive) {
             writeVpnState(STATE_ERROR, code);
             setTunnelLive(false);
-        } else if (liveService == this && !STATE_CONNECTED.equals(readVpnState())) {
-            // A pending tile request must not hide the TUN that survived this rejected command.
+        } else if (liveService == this) {
+            // Record which request finished even if a recreated activity misses its rejection broadcast.
             writeVpnState(STATE_CONNECTED, null);
         }
         broadcastTunnelEvent(err);
@@ -824,7 +870,7 @@ public final class VpnRouterService extends VpnService {
     }
 
     private void startLibboxService(String tunnelConfig) throws Exception {
-        VpnRouterPlatformInterface platform = new VpnRouterPlatformInterface(this, session,
+        VpnRouterPlatformInterface platform = new VpnRouterPlatformInterface(this, session, executingStart,
                 pendingPerAppMode, pendingPerAppPackages);
         commandServer = LibboxRuntime.startChecked(tunnelConfig, platform, true);
 
@@ -860,6 +906,7 @@ public final class VpnRouterService extends VpnService {
         }
         Log.i(LOG_TAG, "dns-tunnel: starting Slipstream front on 127.0.0.1:" + port
                 + " (domain=" + pendingDnsTunnelDomain + ", resolvers=" + resolvers.length + ")");
+        if (!executingStart.current()) throw new IllegalStateException("tunnel-closing");
         boolean spawned = SlipstreamNative.nativeStart(
                 certPath,
                 pendingDnsTunnelDomain,
@@ -983,7 +1030,7 @@ public final class VpnRouterService extends VpnService {
             long receivedAt = SystemClock.elapsedRealtime();
             // Capture ownership at native callback time, before queuing the sample.
             String stateEvent = serviceStateEvent;
-            String command = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(UI_COMMAND, null);
+            String command = serviceStateCommand;
             if (stateEvent == null || !stateEvent.equals(serviceStateEvent)) return;
             boolean traffic = status.getTrafficAvailable();
             final long down = status.getDownlinkTotal(), up = status.getUplinkTotal();
@@ -1022,15 +1069,25 @@ public final class VpnRouterService extends VpnService {
     }
 
     private void retireTunnel() {
+        AndroidTunnelSession old = session;
+        CommandServer server = commandServer;
+        detachTunnel();
+        closeDetachedTunnel(old, server);
+    }
+
+    private void detachTunnel() {
         if (session == null) return;
         if (liveService == this) liveService = null;
-        AndroidTunnelSession old = session;
-        old.retire();
+        establishedStart = null;
+        session.retire();
+        closingSession = session;
         session = null;
         tunnelSessionId = null;
-        closingSession = old;
-        CommandServer server = commandServer;
         commandServer = null;
+    }
+
+    private void closeDetachedTunnel(AndroidTunnelSession old, CommandServer server) {
+        if (old == null) return;
         stopStatsPoller();
         // stopMain already bounds the wait and its gate survives a failed/partial start.
         if (server != null && !LibboxRuntime.stopMain(server)) {
@@ -1057,6 +1114,8 @@ public final class VpnRouterService extends VpnService {
 
     private void stopTunnel(boolean requested) {
         if (liveService != null && liveService != this && session == null) return;
+        if (!requested && session == null && (serviceStateEvent == null ||
+                !serviceStateEvent.equals(getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(STATE_EVENT, null)))) return;
         boolean wasLive = session != null;
         String recorded = readVpnState();
         boolean wasActive = STATE_CONNECTING.equals(recorded) || STATE_CONNECTED.equals(recorded);
@@ -1191,7 +1250,7 @@ public final class VpnRouterService extends VpnService {
         return id != 0 ? id : android.R.drawable.ic_lock_idle_lock;
     }
 
-    private ParcelFileDescriptor establishTun(TunOptions options, String mode, String[] packages) throws Exception {
+    private ParcelFileDescriptor establishTun(TunOptions options, String mode, String[] packages, AndroidTunnelStart start) throws Exception {
         Builder builder = new Builder()
                 .setSession("Virtual Penguin Network")
                 .setMtu(options.getMTU());
@@ -1255,7 +1314,7 @@ public final class VpnRouterService extends VpnService {
                 .put("ActivePackages", new org.json.JSONArray(applied))
                 .put("RequestedMode", mode == null ? "off" : mode)
                 .put("RequestedPackages", new org.json.JSONArray(selected)).toString();
-        requireMainStartPermitted();
+        requireMainStartPermitted(start);
         ParcelFileDescriptor pfd = builder.establish();
         if (pfd == null) {
             throw new Exception("VpnService.Builder.establish returned null");
@@ -1264,8 +1323,9 @@ public final class VpnRouterService extends VpnService {
         return pfd;
     }
 
-    private void requireMainStartPermitted() {
-        if (ended || stopRequested || !LibboxRuntime.mainStartPermitted()) throw new IllegalStateException("tunnel-closing");
+    private void requireMainStartPermitted(AndroidTunnelStart start) {
+        if (ended || stopRequested || !LibboxRuntime.mainStartPermitted() ||
+                (establishedStart != start && !start.current())) throw new IllegalStateException("tunnel-closing");
     }
 
     private static List<String> addPrefixesAsAddresses(Builder builder, RoutePrefixIterator iter) {
@@ -1328,6 +1388,7 @@ public final class VpnRouterService extends VpnService {
     private static final class VpnRouterPlatformInterface extends LibboxRuntime.PlatformDefaults {
         private final VpnRouterService service;
         private final AndroidTunnelSession session;
+        private final AndroidTunnelStart start;
         private final String mode;
         private final String[] packages;
 
@@ -1335,9 +1396,11 @@ public final class VpnRouterService extends VpnService {
         private ConnectivityManager.NetworkCallback defaultCallback;
         private boolean firstUpdateFired = false;
 
-        VpnRouterPlatformInterface(VpnRouterService service, AndroidTunnelSession session, String mode, String[] packages) {
+        VpnRouterPlatformInterface(VpnRouterService service, AndroidTunnelSession session, AndroidTunnelStart start,
+                                   String mode, String[] packages) {
             this.service = service;
             this.session = session;
+            this.start = start;
             this.mode = mode;
             this.packages = packages == null ? null : packages.clone();
         }
@@ -1345,10 +1408,10 @@ public final class VpnRouterService extends VpnService {
         @Override
         public int openTun(TunOptions options) throws Exception {
             ParcelFileDescriptor pfd = session.openTun(() -> {
-                service.requireMainStartPermitted();
-                return service.establishTun(options, mode, packages);
+                service.requireMainStartPermitted(start);
+                return service.establishTun(options, mode, packages, start);
             }, ParcelFileDescriptor::getFileDescriptor);
-            service.requireMainStartPermitted();
+            service.requireMainStartPermitted(start);
             return pfd.getFd();
         }
 

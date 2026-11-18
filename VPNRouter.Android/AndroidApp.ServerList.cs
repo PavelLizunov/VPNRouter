@@ -560,9 +560,15 @@ public partial class AndroidApp
         }
 
         var (isValid, errors) = VPNRouter.Core.Services.CustomConfigInjector.Validate(raw);
-        AndroidStorage.SetCustomConfigJson(raw);
-        AndroidStorage.SetConfigMode("custom");
-        _ccMode = "custom";
+        try { AndroidStorage.SaveCustomProfile(raw); }
+        catch (Exception)
+        {
+            _srvCustomJsonStatus.Text = Localization.TunnelError("config-invalid");
+            _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+            SetStatusIcon(_srvCustomJsonStatusIcon, UiIcons.CircleX);
+            return;
+        }
+        RefreshConfigModeUiFromStorage();
         UpdateConfigSummary();
 
         if (!isValid)
@@ -593,26 +599,13 @@ public partial class AndroidApp
     {
         var sub = _srvCurrentSub;
         if (sub is null || sub.Servers is null || sub.Servers.Count == 0) return;
-        var activeName = AndroidStorage.SelectedNameForFeed(_srvCurrentSub);
-        if (string.IsNullOrEmpty(activeName)) return;
-
-        var matches = sub.Servers.FindAll(row => string.Equals(row?.Name, activeName, StringComparison.OrdinalIgnoreCase));
-        var identity = AndroidStorage.SelectedFeedRow;
-        var selected = matches.Count == 1 ? matches[0] : matches.Find(row => AndroidSubscriptionRefresh.RowIdentity(row) == identity);
-        if (selected == null) return;
-        sub.Servers.Remove(selected);
-
-        AndroidStorage.SetSelectedServerName(null);
         var subs = AndroidStorage.GetSubscriptions();
-        var idx = subs.FindIndex(s =>
-            string.Equals(s.Id, sub.Id, StringComparison.OrdinalIgnoreCase));
-        if (idx >= 0)
-        {
-            subs[idx] = sub;
-            AndroidStorage.SetSubscriptions(subs);
-        }
-        RebuildServerList();
-        if (_srvRemoveBtn is not null) _srvRemoveBtn.IsEnabled = false;
+        var current = subs.Find(f => f != null && f.Id == sub.Id && f.Url == sub.Url);
+        var selected = AndroidStorage.SelectedSubscriptionRow()?.In(current);
+        if (selected == null) return;
+        current!.Servers.Remove(selected);
+        _subs = subs;
+        SaveSubscriptionEdits();
     }
 
     private void OnSrvAddClicked()
@@ -714,7 +707,7 @@ public partial class AndroidApp
         _srvListStack.Children.Clear();
 
         var servers = _srvCurrentSub?.Servers ?? new List<VlessServerEntry>();
-        var activeName = AndroidStorage.SelectedNameForFeed(_srvCurrentSub);
+        var selected = AndroidStorage.SelectedSubscriptionRow()?.In(source);
         // Nothing to test in an empty list: the test buttons read as disabled instead of doing nothing.
         if (_srvTestAllBtn is not null && _srvTestAllCts is null) _srvTestAllBtn.IsEnabled = servers.Count > 0;
         if (_srvDeepVerifyBtn is not null && _srvTestAllCts is null) _srvDeepVerifyBtn.IsEnabled = servers.Count > 0;
@@ -722,7 +715,7 @@ public partial class AndroidApp
         {
             _srvEmptyHint.Text = SrvEmptyHintFor(_srvCurrentSub);
             _srvEmptyHint.IsVisible = true;
-            UpdateRemoveButtonEnabled(servers, activeName);
+            if (_srvRemoveBtn != null) _srvRemoveBtn.IsEnabled = false;
             return;
         }
         _srvEmptyHint.IsVisible = false;
@@ -731,21 +724,9 @@ public partial class AndroidApp
         global::Android.Util.Log.Info("VpnRouter.Perf", "server list rebuilt rows=" + ordered.Count);
         foreach (var srv in ordered)
         {
-            _srvListStack.Children.Add(BuildServerRow(source, srv, activeName));
+            _srvListStack.Children.Add(BuildServerRow(source, srv, selected));
         }
-        UpdateRemoveButtonEnabled(servers, activeName);
-    }
-
-    private void UpdateRemoveButtonEnabled(IReadOnlyList<VlessServerEntry> servers, string? activeName)
-    {
-        if (_srvRemoveBtn is null) return;
-        if (string.IsNullOrEmpty(activeName))
-        {
-            _srvRemoveBtn.IsEnabled = false;
-            return;
-        }
-        _srvRemoveBtn.IsEnabled = servers.Any(s =>
-            string.Equals(s.Name, activeName, StringComparison.OrdinalIgnoreCase));
+        if (_srvRemoveBtn != null) _srvRemoveBtn.IsEnabled = selected != null;
     }
 
     private List<VlessServerEntry> OrderServers(IReadOnlyList<VlessServerEntry> source)
@@ -779,26 +760,23 @@ public partial class AndroidApp
         };
     }
 
-    private Control BuildServerRow(SubscriptionEntry source, VlessServerEntry srv, string? activeServerName)
+    private Control BuildServerRow(SubscriptionEntry source, VlessServerEntry srv, VlessServerEntry? selected)
     {
         var key = AndroidStorage.BuildServerKey(srv);
         var hasResult = _srvResults.TryGetValue(key, out var result);
-        return BuildServerRowCore(source, srv, activeServerName, hasResult ? result : null,
+        return BuildServerRowCore(source, srv, selected, hasResult ? result : null,
             _srvTestingKeys.Contains(key), TestSingleServerAsync);
     }
 
     private Control BuildServerRowCore(
         SubscriptionEntry source,
         VlessServerEntry srv,
-        string? activeServerName,
+        VlessServerEntry? selected,
         AndroidStorage.ServerTestResultDto? result,
         bool isTesting,
         Func<VlessServerEntry, Task> onTest)
     {
-        var isActive = !string.IsNullOrEmpty(activeServerName)
-                       && string.Equals(srv.Name, activeServerName, StringComparison.OrdinalIgnoreCase)
-                       && (source.Servers.Count(s => s?.Name == srv.Name) == 1 ||
-                           AndroidStorage.SelectedFeedRow == AndroidSubscriptionRefresh.RowIdentity(srv));
+        var isActive = ReferenceEquals(selected, srv);
 
         var radioOuter = new Border
         {

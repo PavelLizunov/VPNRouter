@@ -484,20 +484,21 @@ public partial class AndroidApp
         if (_subsAggListStack is null || _subsAggEmptyHint is null) return;
         _subsAggListStack.Children.Clear();
 
+        var choice = AndroidStorage.SelectedSubscriptionRow();
         foreach (var feed in _subs.Where(s => s is { Enabled: true, Servers: not null }))
         {
-            var activeName = AndroidStorage.SelectedNameForFeed(feed);
+            var selected = choice?.In(feed);
             foreach (var server in feed.Servers.Where(s => !string.IsNullOrWhiteSpace(s?.Server)))
-                _subsAggListStack.Children.Add(BuildAggregatedServerRow(feed, server, activeName));
+                _subsAggListStack.Children.Add(BuildAggregatedServerRow(feed, server, selected));
         }
         _subsAggEmptyHint.IsVisible = _subsAggListStack.Children.Count == 0;
     }
 
-    private Control BuildAggregatedServerRow(SubscriptionEntry source, VlessServerEntry srv, string? activeServerName)
+    private Control BuildAggregatedServerRow(SubscriptionEntry source, VlessServerEntry srv, VlessServerEntry? selected)
     {
         var key = AndroidStorage.BuildServerKey(srv);
         var hasResult = _subsAggResults.TryGetValue(key, out var result);
-        return BuildServerRowCore(source, srv, activeServerName, hasResult ? result : null,
+        return BuildServerRowCore(source, srv, selected, hasResult ? result : null,
             _subsAggTestingKeys.Contains(key), TestSingleAggregatedServerAsync);
     }
 
@@ -687,8 +688,7 @@ public partial class AndroidApp
         enabledChk.IsCheckedChanged += (s, e) =>
         {
             sub.Enabled = enabledChk.IsChecked == true;
-            AndroidStorage.SetSubscriptions(_subs);
-            RebuildAggregatedServerList();
+            SaveSubscriptionEdits();
         };
 
         var nameText = new TextBlock
@@ -837,8 +837,7 @@ public partial class AndroidApp
                 sub.Url = newUrl;
                 if (!string.IsNullOrEmpty(newName)) sub.Name = newName;
                 _editingId = null;
-                AndroidStorage.SetSubscriptions(_subs);
-                RebuildSubsList();
+                SaveSubscriptionEdits();
             };
             var cancelBtn = StyledSecondaryButton(Localization.SubsCancelEdit);
             cancelBtn.MinHeight = 44;
@@ -940,8 +939,16 @@ public partial class AndroidApp
 
         _pendingDeleteId = null;
         _subs.RemoveAll(s => string.Equals(s.Id, sub.Id, StringComparison.Ordinal));
-        AndroidStorage.SetSubscriptions(_subs);
-        RebuildSubsList();
+        SaveSubscriptionEdits();
+    }
+
+    private void SaveSubscriptionEdits()
+    {
+        var saved = AndroidStorage.SetSubscriptions(_subs);
+        ReloadServerListFromStorage();
+        if (!saved) ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
+        RefreshConfigModeUiFromStorage(preserveInputEdit: true);
+        UpdateConfigSummary();
     }
 
     private void OnSubscribeQrScanClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -996,11 +1003,14 @@ public partial class AndroidApp
         await RefreshOneAsync(entry);
     }
 
-    private Task<int> RefreshStoredSubscriptionAsync(SubscriptionEntry entry, string? selectingCommand = null)
+    private Task<int> RefreshStoredSubscriptionAsync(SubscriptionEntry entry, string? selectingCommand = null) =>
+        RefreshStoredSubscriptionAsync(entry, selectingCommand, AndroidStorage.SubscriptionImportRevision);
+
+    private Task<int> RefreshStoredSubscriptionAsync(SubscriptionEntry entry, string? selectingCommand, string? importRevision)
     {
-        return AndroidSubscriptionRefresh.RefreshAsync(entry, (refreshed, rejected) =>
+        return AndroidSubscriptionRefresh.RefreshAsync(entry, importRevision, (refreshed, rejected, revision) =>
         {
-            var selected = AndroidStorage.SaveSubscriptionRefresh(refreshed, rejected, selectingCommand);
+            var selected = AndroidStorage.SaveSubscriptionRefresh(refreshed, rejected, selectingCommand, revision);
             foreach (var current in _subs.Where(s => AndroidSubscriptionRefresh.AppliesTo(s, refreshed, rejected)))
             {
                 AndroidSubscriptionRefresh.CopyCache(refreshed, current);
@@ -1046,6 +1056,7 @@ public partial class AndroidApp
 
     private async void OnSubsRefreshAllClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        var importRevision = AndroidStorage.SubscriptionImportRevision;
         var enabled = _subs.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url) && !_refreshingIds.Contains(s.Id)).ToList();
         if (enabled.Count == 0) return;
 
@@ -1061,7 +1072,7 @@ public partial class AndroidApp
             {
                 try
                 {
-                    var count = await RefreshStoredSubscriptionAsync(s);
+                    var count = await RefreshStoredSubscriptionAsync(s, null, importRevision);
                     totalServers += count;
                 }
                 catch (UnsupportedSubscriptionChainException ex)

@@ -94,7 +94,9 @@ public partial class AndroidApp
         var subs = AndroidStorage.GetSubscriptions();
         _subs = subs;
 
-        var entry = subs.FirstOrDefault(s => string.Equals(s.Url, url, StringComparison.Ordinal));
+        var selectedId = AndroidStorage.SelectedSubscriptionId;
+        var entry = subs.FirstOrDefault(s => s != null && s.Url == url && s.Id == selectedId)
+            ?? subs.FirstOrDefault(s => s != null && s.Url == url);
         if (entry is null)
         {
             var name = ExtractDisplayNameFromUrl(url, fallback: $"Sub {subs.Count + 1}");

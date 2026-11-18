@@ -29,21 +29,13 @@ public partial class AndroidApp
         }
         else
         {
+            BindSimpleInput(preserveEdit: true);
             var input = (_serverInput?.Text ?? string.Empty).Trim();
-            var savedUrl = AndroidStorage.GetSubscriptionUrl();
-            var typedSubscription = input.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
-                || input.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
-            var subscriptionUrl = typedSubscription ? input : input.Length == 0 && AndroidStorage.GetConfigMode() == "subscribe" ? savedUrl : null;
-            if (!string.IsNullOrEmpty(subscriptionUrl))
+            if (AndroidStorage.SubscriptionToRefresh(input) is { } subscriptionUrl)
             {
-                var hasCurrentCache = savedUrl == subscriptionUrl && AndroidStorage.GetSubscriptions().Exists(s =>
-                    s.Enabled && s.Url == subscriptionUrl && s.Servers is { Count: > 0 });
-                if (!hasCurrentCache)
-                {
-                    if (_serverInputError != null) _serverInputError.IsVisible = false;
-                    await ApplyScannedSubscriptionUrlAsync(subscriptionUrl);
-                    return;
-                }
+                if (_serverInputError != null) _serverInputError.IsVisible = false;
+                await ApplyScannedSubscriptionUrlAsync(subscriptionUrl);
+                return;
             }
 
             string? command = null;
@@ -53,23 +45,19 @@ public partial class AndroidApp
                 if (command == null || !TrySaveServerInput(command)) return;
             }
 
-            if (_statusCard is not null)
-            {
-                _statusCard.IsError = false;
-                _statusCard.IsWarn = true;
-            }
-            SetVpnChipState(ChipState.Connecting);
-            UpdateZapretChipFromState();
             activity.RequestConnect(command);
         }
     }
 
     private void OnIntentChanged(AndroidTunnelEvent owner, bool connected) =>
-        PaintCurrentTunnelState(owner, () => UpdateConnectionState(connected, owner));
+        PaintCurrentTunnelState(owner, () =>
+        {
+            if (!MainActivity.IsPreparing(owner)) UpdateConnectionState(connected, owner);
+        });
 
-    private static void PaintCurrentTunnelState(AndroidTunnelEvent owner, Action paint)
+    private static void PaintCurrentTunnelState(AndroidTunnelEvent owner, Action paint, Func<AndroidTunnelEvent?>? read = null)
     {
-        void Paint() => owner.PaintIfCurrent(MainActivity.ReadTunnelEvent, paint);
+        void Paint() => owner.PaintIfCurrent(read ?? MainActivity.ReadTunnelEvent, paint);
         if (Dispatcher.UIThread.CheckAccess()) Paint();
         else Dispatcher.UIThread.Post(Paint);
     }
@@ -78,6 +66,13 @@ public partial class AndroidApp
     {
         if (_lifecycleEventsAttached) return;
         _lifecycleEventsAttached = true;
+        MainActivity.ConnectPreparing += owner => PaintCurrentTunnelState(owner, () =>
+        {
+            if (!MainActivity.IsPreparing(owner)) return;
+            ClearTunnelError();
+            SetVpnChipState(ChipState.Connecting);
+            UpdateZapretChipFromState();
+        });
         MainActivity.IntentChanged += OnIntentChanged;
         MainActivity.TunnelErrorReported += OnTunnelErrorReported;
         MainActivity.StatsReported += OnStatsReported;
@@ -95,7 +90,7 @@ public partial class AndroidApp
             var subtitle = $"↓ {HumanRate(rate.Down)}   ↑ {HumanRate(rate.Up)}   · {connections} conn";
             if (_statusCard.Subtitle != subtitle) _statusCard.Subtitle = subtitle;
             _lastStatsSubtitle = subtitle;
-        });
+        }, MainActivity.ReadServiceEvent);
     }
 
     private static string HumanRate(double bytesPerSec)
@@ -110,9 +105,12 @@ public partial class AndroidApp
     private void UpdateConnectionState(bool connected)
     {
         if (MainActivity.ReadTunnelEvent() is { } owner)
-            PaintCurrentTunnelState(owner, () => UpdateConnectionState(
-                owner.StateEvent == null ? connected : owner.Session != null &&
-                    VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel(), owner));
+            PaintCurrentTunnelState(owner, () =>
+            {
+                if (!MainActivity.IsPreparing(owner))
+                    UpdateConnectionState(owner.StateEvent == null ? connected : owner.Session != null &&
+                        VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel(), owner);
+            });
     }
 
     private void UpdateConnectionState(bool connected, AndroidTunnelEvent owner)
@@ -141,9 +139,7 @@ public partial class AndroidApp
                 _lastHealthProbeAt = DateTime.MinValue;
                 _lastHealthOk = false;
             }
-            _lastError = null;
-            if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
-            _statusCard.IsError = false;
+            ClearTunnelError();
             StartDiagnosticsTimer();
             ApplyHealthCheckDisplay();
 
@@ -156,12 +152,9 @@ public partial class AndroidApp
             _statusCard.IsOn = false;
             _statusCard.IsWarn = false;
             _statusCard.IsOff = true;
-            if (AndroidStorage.ResolveVpnState().State == VPNRouter.Core.Services.VpnConnectionState.Disconnected)
-            {
-                _lastError = null;
-                _statusCard.IsError = false;
-                if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
-            }
+            if (_lastErrorOwner != owner || owner.SelectionSuperseded ||
+                AndroidStorage.ResolveVpnState().State == VPNRouter.Core.Services.VpnConnectionState.Disconnected)
+                ClearTunnelError();
             _statusCard.Title = Localization.SimpleStatusTitleOff;
             _statusCard.Subtitle = Localization.SimpleStatusDescOff;
             if (_ctaConnect is not null) _ctaConnect.IsVisible = true;
@@ -318,11 +311,22 @@ public partial class AndroidApp
         return cts;
     }
 
+    private AndroidTunnelEvent? _lastErrorOwner;
+
+    private void ClearTunnelError()
+    {
+        _lastError = null;
+        _lastErrorOwner = null;
+        if (_statusCard is not null) _statusCard.IsError = false;
+        if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
+    }
+
     private void OnTunnelErrorReported(AndroidTunnelEvent owner, string message)
     {
         PaintCurrentTunnelState(owner, () =>
         {
             if (string.IsNullOrWhiteSpace(message)) return;
+            _lastErrorOwner = owner;
             _lastError = message.Trim();
             _lastErrorAt = DateTime.UtcNow;
             // a reported error ends the attempt: the ring shows the error, not "connecting", even if the chip still pulses

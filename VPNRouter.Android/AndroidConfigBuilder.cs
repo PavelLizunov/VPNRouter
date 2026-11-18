@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Text.Json.Nodes;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -31,21 +30,7 @@ public static class AndroidConfigBuilder
             _ => true,
         };
         if (!entry.UseAsSingleOutbound && AndroidStorage.GetAutoSelectBestServer())
-        {
-            var pool = GetAllCandidateServers();
-            AndroidSubscriptionRefresh.PutSelectedServerFirst(pool, entry);
-            if (pool.Count > 1)
-            {
-                foreach (var s in pool)
-                    settings.Vless.Servers.Add(s);
-                settings.Vless.ActiveServer = entry.Name ?? string.Empty;
-                settings.Vless.AutoSelectBestServer = true;
-            }
-            else
-            {
-                settings.Vless.Servers.Add(entry);
-            }
-        }
+            AndroidStorage.PrepareServerPool(settings.Vless, entry);
         else
         {
             settings.Vless.Servers.Add(entry);
@@ -113,17 +98,6 @@ public static class AndroidConfigBuilder
 
     public static string InjectDpiBypass(string json, string mode)
         => AndroidDpiBypassInjector.Inject(json, mode);
-
-    private static System.Collections.Generic.List<VlessServerEntry> GetAllCandidateServers()
-    {
-        var all = new System.Collections.Generic.List<VlessServerEntry>(AndroidStorage.GetServers());
-        foreach (var sub in AndroidStorage.GetSubscriptions())
-        {
-            if (sub is { Enabled: true, Servers: not null })
-                all.AddRange(sub.Servers);
-        }
-        return all;
-    }
 
     private static string PatchLogPathForAndroid(string json, string? logOutputPath)
     {

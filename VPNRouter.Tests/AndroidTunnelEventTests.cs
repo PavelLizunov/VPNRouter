@@ -4,6 +4,57 @@ namespace VPNRouter.Tests;
 
 public sealed class AndroidTunnelEventTests
 {
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public async Task LatePreparationCannotDispatchOrPaintAfterAProfileChange(bool fail, bool connectB, bool live)
+    {
+        var a = new AndroidTunnelEvent("A", "state-1", live ? "existing-tun" : null);
+        var current = a;
+        var feedbackCommand = "A";
+        var ui = "Connecting A";
+        var dispatched = new List<string>();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task<bool> PrepareA()
+        {
+            await release.Task;
+            return a.CompletePreparation(() => current, owner =>
+            {
+                if (fail) owner.PaintIfCurrent(() => current, () => ui = "A error");
+                else dispatched.Add("fixture-profile-A");
+            });
+        }
+        var late = PrepareA();
+        var imported = a with { SelectionSuperseded = true };
+        current = imported;
+        if (connectB)
+        {
+            current = a with { Command = "B" };
+            feedbackCommand = "B";
+            ui = "Connecting B";
+        }
+        // Delayed import notification and an already queued error use the event they observed.
+        bool reconciled = imported.ReconcileIfCurrent(() => current, feedbackCommand,
+            () => ui = live ? "Connected" : "Off");
+        Assert.Equal(!connectB, reconciled);
+        a.PaintIfCurrent(() => current, () => ui = "A error");
+        release.SetResult();
+        Assert.False(await late);
+        Assert.Empty(dispatched);
+        Assert.Equal(connectB ? "Connecting B" : live ? "Connected" : "Off", ui);
+        if (connectB)
+        {
+            var originB = current;
+            current = current with { StateEvent = "prior-tun-down", Session = null };
+            Assert.True(originB.CompletePreparation(() => current, _ => dispatched.Add("fixture-profile-B")));
+            Assert.Equal(new[] { "fixture-profile-B" }, dispatched);
+        }
+    }
+
     [Fact]
     public void DelayedStatusErrorAndTrafficPaintsKeepTheirOriginalCommandAndState()
     {

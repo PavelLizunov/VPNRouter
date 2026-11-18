@@ -29,7 +29,7 @@ namespace VPNRouter.Android;
         ConfigChanges.Navigation |
         ConfigChanges.Orientation |
         ConfigChanges.Density)]
-public class MainActivity : AvaloniaMainActivity
+public class MainActivity : AvaloniaMainActivity, ISharedPreferencesOnSharedPreferenceChangeListener
 {
     private const int RequestVpnConsent = 0xBEEF;
 
@@ -89,24 +89,33 @@ public class MainActivity : AvaloniaMainActivity
     }
 
     internal static event Action<AndroidTunnelEvent, bool>? IntentChanged;
+    internal static event Action<AndroidTunnelEvent>? ConnectPreparing;
     internal static event Action<AndroidTunnelEvent, string>? TunnelErrorReported;
     internal static event Action<AndroidTunnelEvent, long, long, long, int>? StatsReported;
     private const string ActiveSessionKey = "vpn_active_tunnel_session";
     private static AndroidTunnelEvent? _intentOwner;
+    private static string? _connectingCommand;
+    internal static bool IsPreparing(AndroidTunnelEvent owner) => owner.OwnsCommand(_connectingCommand);
+    private ISharedPreferences? _statePreferences;
 
-    internal static AndroidTunnelEvent? ReadTunnelEvent()
+    internal static AndroidTunnelEvent? ReadTunnelEvent() => ReadTunnelEvent(false);
+    internal static AndroidTunnelEvent? ReadServiceEvent() => ReadTunnelEvent(true);
+
+    private static AndroidTunnelEvent? ReadTunnelEvent(bool published)
     {
         try
         {
             var prefs = global::Android.App.Application.Context.GetSharedPreferences("vpnrouter_settings", FileCreationMode.Private);
             if (prefs == null) return null;
             // Fresh revisions bound the session read, so the three fields belong to one snapshot.
-            var command = prefs.GetString(AndroidStorage.UiCommandKey, null);
+            var commandKey = published ? "vpn_state_command" : AndroidStorage.UiCommandKey;
+            var command = prefs.GetString(commandKey, null);
             var state = prefs.GetString(AndroidStorage.StateEventKey, null);
             var session = prefs.GetString(ActiveSessionKey, null);
+            var superseded = !published && command != null && command == prefs.GetString(AndroidSubscriptionRefresh.SupersededSelection, null);
             return state == prefs.GetString(AndroidStorage.StateEventKey, null) &&
-                command == prefs.GetString(AndroidStorage.UiCommandKey, null)
-                ? new AndroidTunnelEvent(command, state, session) : null;
+                command == prefs.GetString(commandKey, null)
+                ? new AndroidTunnelEvent(command, state, session, superseded) : null;
         }
         catch (Java.Lang.RuntimeException) { return null; }
     }
@@ -193,6 +202,8 @@ public class MainActivity : AvaloniaMainActivity
                 savedInstanceState.GetString(AndroidStorage.UiCommandKey), savedInstanceState.GetString(QueuedConsentKey));
         _retainedConsentGate = _consentGate;
         Instance = this;
+        _statePreferences = GetSharedPreferences("vpnrouter_settings", FileCreationMode.Private);
+        _statePreferences?.RegisterOnSharedPreferenceChangeListener(this);
 #if VPNROUTER_TESTHOOK
         global::Android.Util.Log.Warn("VpnRouterTest",
             "TEST HOOK BUILD: an exported adb test receiver is present; never distribute this APK");
@@ -424,6 +435,8 @@ public class MainActivity : AvaloniaMainActivity
 
     protected override void OnDestroy()
     {
+        _statePreferences?.UnregisterOnSharedPreferenceChangeListener(this);
+        _statePreferences = null;
         if (_tunnelReceiver is not null)
         {
             try { UnregisterReceiver(_tunnelReceiver); } catch { }
@@ -433,6 +446,24 @@ public class MainActivity : AvaloniaMainActivity
             Instance = null;
         base.OnDestroy();
     }
+
+    public void OnSharedPreferenceChanged(ISharedPreferences? prefs, string? key)
+    {
+        if (key != null && key != AndroidSubscriptionRefresh.SupersededSelection &&
+            key != AndroidStorage.UiCommandKey && key != AndroidStorage.StateEventKey) return;
+        if (ReadTunnelEvent() is not { } observed ||
+            !observed.NeedsReconciliation(_connectingCommand ?? _intentOwner?.Command)) return;
+        // A profile transaction can notify inline on the UI thread. Leave the shared class monitor
+        // before querying the engine, and recheck both owners if a newer Connect has painted meanwhile.
+        new Handler(Looper.MainLooper!).Post(() =>
+        {
+            if (ReferenceEquals(Instance, this)) ReconcileSuperseded(observed);
+        });
+    }
+
+    private static bool ReconcileSuperseded(AndroidTunnelEvent observed) => observed.ReconcileIfCurrent(
+        ReadTunnelEvent, _connectingCommand ?? _intentOwner?.Command,
+        () => SetIntent(AndroidStorage.HasConfirmedTunnel(), observed, refresh: true));
 
     private static volatile bool _isActivityPaused;
     public static bool IsActivityPaused => _isActivityPaused;
@@ -453,6 +484,17 @@ public class MainActivity : AvaloniaMainActivity
         try
         {
             if (ReadTunnelEvent() is not { } owner) return;
+            if (ReconcileSuperseded(owner)) return;
+            if (IsPreparing(owner))
+            {
+                // The service may have announced completion between activity instances.
+                var state = AndroidStorage.ResolveVpnState();
+                if (ReadServiceEvent() != owner || state.State == VpnConnectionState.Connecting) return;
+                if (state.State == VpnConnectionState.Error)
+                    PresentTunnelError(this, owner, Localization.TunnelError(state.Reason), false);
+                else SetIntent(AndroidStorage.HasConfirmedTunnel(), owner, refresh: true);
+                return;
+            }
             var live = VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel();
             var vpnActive = IsVpnTransportActive();
             if (VPNRouter.Core.Services.TunnelStateResync.TryResolveOnResume(
@@ -549,7 +591,7 @@ public class MainActivity : AvaloniaMainActivity
 
             var owner = new AndroidTunnelEvent(intent?.GetStringExtra(AndroidStorage.UiCommandKey),
                 intent?.GetStringExtra(AndroidStorage.StateEventKey), intent?.GetStringExtra(ActiveSessionKey));
-            if (owner.StateEvent == null || ReadTunnelEvent() != owner) return;
+            if (owner.StateEvent == null || (action == ActionStats ? ReadServiceEvent() : ReadTunnelEvent()) != owner) return;
             switch (action)
             {
                 case ActionTunnelUp:
@@ -585,7 +627,7 @@ public class MainActivity : AvaloniaMainActivity
 
     private static void PresentTunnelError(Context? context, AndroidTunnelEvent owner, string message, bool previousActive)
     {
-        if (ReadTunnelEvent() != owner) return;
+        if (owner.SelectionSuperseded || ReadTunnelEvent() != owner) return;
         if (AndroidStorage.HasConfirmedTunnel() || (previousActive && owner.Session != null &&
             VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel()))
         {
@@ -607,7 +649,12 @@ public class MainActivity : AvaloniaMainActivity
 
     private void PresentStartError(string message, string? command = null)
     {
-        if (ReadTunnelEvent() is { } owner && (command == null || owner.Command == command))
+        if (command == null)
+        {
+            global::Android.Widget.Toast.MakeText(this, message, global::Android.Widget.ToastLength.Long)?.Show();
+            return;
+        }
+        if (ReadTunnelEvent() is { } owner && owner.OwnsCommand(command))
             PresentTunnelError(this, owner, message, VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
     }
 
@@ -639,6 +686,9 @@ public class MainActivity : AvaloniaMainActivity
             PresentStartError(Localization.TunnelError("command-unavailable"));
             return;
         }
+        if (ReadTunnelEvent() is not { } requested || !requested.OwnsCommand(command)) return;
+        _connectingCommand = command;
+        ConnectPreparing?.Invoke(requested);
         if (!_consentGate.OpenOrQueue(command)) return;
 
         try
@@ -655,7 +705,7 @@ public class MainActivity : AvaloniaMainActivity
         catch
         {
             _consentGate.Close();
-            throw;
+            PresentStartError(Localization.TunnelError("no-permission"), command);
         }
     }
 
@@ -935,9 +985,9 @@ public class MainActivity : AvaloniaMainActivity
 
     private async void StartTunnelService(string command)
     {
-        if (ReadTunnelEvent() is not { } origin || command != origin.Command) return;
-        void ShowPreparationError(string message) => PresentTunnelError(this, origin, message,
-            VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
+        if (ReadTunnelEvent() is not { } origin || !origin.OwnsCommand(command)) return;
+        void ShowPreparationError(string message) => origin.CompletePreparation(ReadTunnelEvent, owner =>
+            PresentTunnelError(this, owner, message, VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel()));
         string? singboxLogPath = null;
         try
         {
@@ -979,6 +1029,7 @@ public class MainActivity : AvaloniaMainActivity
             {
                 configJson = await System.Threading.Tasks.Task.Run(
                     () => AndroidConfigBuilder.BuildConfigJsonFromCustom(rawJson, singboxLogPath, OnMissingRuleSet));
+                if (!AndroidStorage.IsCurrentUiCommand(command)) return;
                 global::Android.Util.Log.Info("VpnRouter",
                     $"AND-CC: custom JSON injected ({rawJson.Length} → {configJson.Length} chars)");
             }
@@ -1007,7 +1058,7 @@ public class MainActivity : AvaloniaMainActivity
                 }
             }
 
-            DispatchTunnelStart(command, configJson, coldStartOnly);
+            origin.CompletePreparation(ReadTunnelEvent, _ => DispatchTunnelStart(command, configJson, coldStartOnly));
             return;
         }
 
@@ -1069,6 +1120,7 @@ public class MainActivity : AvaloniaMainActivity
         {
             configJson = await System.Threading.Tasks.Task.Run(
                 () => AndroidConfigBuilder.BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet));
+            if (!AndroidStorage.IsCurrentUiCommand(command)) return;
             // The config dump contains credentials (UUID, Reality keys): debug builds only.
             if (IsDebuggable() && singboxLogPath is not null)
             {
@@ -1096,7 +1148,7 @@ public class MainActivity : AvaloniaMainActivity
             return;
         }
 
-        DispatchTunnelStart(command, configJson, coldStartOnly, entry);
+        origin.CompletePreparation(ReadTunnelEvent, _ => DispatchTunnelStart(command, configJson, coldStartOnly, entry));
     }
 
     private void DispatchTunnelStart(string command, string configJson, bool coldStartOnly, VPNRouter.Core.Models.VlessServerEntry? dnsTunnelEntry = null)
@@ -1138,6 +1190,7 @@ public class MainActivity : AvaloniaMainActivity
 
         try
         {
+            if (!AndroidStorage.IsCurrentUiCommand(command)) return;
             if (Build.VERSION.SdkInt >= BuildVersionCodes.O) StartForegroundService(intent);
             else StartService(intent);
         }
@@ -1150,7 +1203,10 @@ public class MainActivity : AvaloniaMainActivity
 
     private static void SetIntent(bool connected, AndroidTunnelEvent owner, bool refresh = false)
     {
-        if (ReadTunnelEvent() != owner || (_intendedConnected == connected && _intentOwner == owner && !refresh)) return;
+        if (ReadTunnelEvent() != owner) return;
+        bool preparing = _connectingCommand != null;
+        _connectingCommand = null;
+        if (_intendedConnected == connected && _intentOwner == owner && !refresh && !preparing) return;
         _intendedConnected = connected;
         _intentOwner = owner;
         try { IntentChanged?.Invoke(owner, connected); }
