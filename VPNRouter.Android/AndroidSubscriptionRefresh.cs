@@ -20,8 +20,8 @@ internal static class AndroidSubscriptionRefresh
     internal const string ManualUri = "vless_uri";
     internal const string ConfigMode = "config_mode";
     private const string ResolvedCommand = "vpn_resolved_server_command";
-    private const string ResolvedFeedId = "vpn_resolved_feed_id";
-    private const string ResolvedRow = "vpn_resolved_feed_row";
+    private const string ResolvedSource = "vpn_resolved_feed_source";
+    private const string ResolvedRoute = "vpn_resolved_feed_route";
     internal const string UiCommand = "vpn_ui_command";
     internal const string CustomJson = "custom_config_json";
     internal const string CustomName = "custom_config_name";
@@ -105,9 +105,10 @@ internal static class AndroidSubscriptionRefresh
         var resolved = read(ResolvedCommand);
         var prepared = IsCurrentSelection(resolved, read) &&
             (read("vpn_state_command") != resolved || read("vpn_state") == "connecting");
-        var resolvedFeed = prepared ? read(ResolvedFeedId) : null;
+        var resolvedFeed = prepared ? read(ResolvedSource) : null;
         var retained = prepared && resolvedFeed == null ? ReadRetainedManual(read) : null;
         var oldRows = affected.SelectMany(s => s.Servers ?? []).Where(row => row != null).ToList();
+        var previousRows = affected[0].Servers ?? [];
         foreach (var current in affected) CopyCache(refreshed, current);
 
         var updates = new Dictionary<string, string?>();
@@ -121,22 +122,32 @@ internal static class AndroidSubscriptionRefresh
             affected[0].Enabled = true;
             SelectFeedRow(updates, affected[0], refreshed.Servers[0]);
         }
-        else if (!rejected && !superseded && read(ConfigMode) == "subscribe" && read(SelectedFeedId) == refreshed.Id &&
+        else if (!rejected && !superseded && ReadMode(read) == "subscribe" && read(SelectedFeedId) == refreshed.Id &&
             read(SubscriptionUrl) == refreshed.Url && ReadRetainedManual(read) == null)
         {
             var identity = read(SelectedFeedRow);
             if (!refreshed.Servers.Any(row => RowIdentity(row) == identity))
             {
-                var matches = refreshed.Servers.Where(row =>
-                    string.Equals(row.Name, read(SelectedName), StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
-                if (matches.Count <= 1)
-                    BindFeed(updates, affected[0], matches.FirstOrDefault() ?? refreshed.Servers[0]);
+                var previous = identity == null ? null : previousRows.Find(row => row != null && RowIdentity(row) == identity);
+                var route = previous == null ? null : SubscriptionEntry.RouteKey(previous, previousRows);
+                var equivalent = route == null ? null :
+                    refreshed.Servers.FirstOrDefault(row => SubscriptionEntry.RouteKey(row, refreshed.Servers) == route);
+                if (equivalent != null)
+                    BindFeed(updates, affected[0], equivalent);
+                else if (string.IsNullOrEmpty(previous?.DetourVia))
+                {
+                    var name = read(SelectedName);
+                    var matches = refreshed.Servers.Where(row =>
+                        string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+                    if (matches.Count <= 1)
+                        BindFeed(updates, affected[0], matches.FirstOrDefault() ?? refreshed.Servers[0]);
+                }
             }
         }
 
-        var resolvedRow = resolvedFeed != null ? read(ResolvedRow) : null;
-        if ((resolvedRow != null && affected.Any(feed => feed.Id == resolvedFeed) &&
-             !refreshed.Servers.Any(row => RowIdentity(row) == resolvedRow)) ||
+        var resolvedRoute = resolvedFeed != null ? read(ResolvedRoute) : null;
+        if ((resolvedRoute != null && affected.Any(feed => SourceIdentity(feed.Id, feed.Url) == resolvedFeed) &&
+             !refreshed.Servers.Any(row => SubscriptionEntry.RouteKey(row, refreshed.Servers) == resolvedRoute)) ||
             (retained != null && updates.ContainsKey(ManualUri) && read(SubscriptionUrl) == refreshed.Url))
             updates[SupersededSelection] = resolved;
         updates[Subscriptions] = JsonSerializer.Serialize(subscriptions, options);
@@ -195,9 +206,7 @@ internal static class AndroidSubscriptionRefresh
     internal static bool IsCurrentSelection(string? command, Func<string, string?> read) =>
         command != null && command == read(UiCommand) && command != read(SupersededSelection);
 
-    internal static string RowIdentity(VlessServerEntry row) =>
-        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
-            JsonSerializer.SerializeToUtf8Bytes(row, VPNRouter.Core.Json.AppJsonContext.Default.VlessServerEntry)));
+    internal static string RowIdentity(VlessServerEntry row) => SubscriptionEntry.RowKey(row);
 
     private static void BindFeed(Dictionary<string, string?> updates, SubscriptionEntry? feed, VlessServerEntry? row)
     {
@@ -359,10 +368,12 @@ internal static class AndroidSubscriptionRefresh
         var row = ResolveActiveServer(standalone, subscriptions, mode, read, commit, options);
         if (row == null) return null;
         SelectedSources.TryGetValue(row, out var source);
-        if (source?.Id != null || ReadRetainedManual(read) != null)
+        if (source?.Url != null || ReadRetainedManual(read) != null)
             commit(new Dictionary<string, string?>
             {
-                [ResolvedCommand] = command, [ResolvedFeedId] = source?.Id, [ResolvedRow] = RowIdentity(row)
+                [ResolvedCommand] = command,
+                [ResolvedSource] = source?.Url == null ? null : SourceIdentity(source.Id, source.Url),
+                [ResolvedRoute] = source?.Route
             });
         return row;
     }
@@ -400,19 +411,19 @@ internal static class AndroidSubscriptionRefresh
         {
             var choice = FindFeedRow(subscriptions, read);
             if (choice == null) return null;
-            if (read(SelectedFeedId) == null || read(SelectedFeedRow) == null)
+            if (read(SelectedFeedRow) == null)
             {
                 var changes = new Dictionary<string, string?>();
                 BindFeed(changes, choice.Feed, choice.Row);
                 commit?.Invoke(changes);
             }
-            SelectedSources.AddOrUpdate(choice.Row, new FeedSource(choice.Feed.Id, choice.Feed.Url));
+            SelectedSources.AddOrUpdate(choice.Row, FeedSource.Capture(choice.Feed, choice.Row));
             return choice.Row;
         }
         var first = FindLegacyRow(standalone, subscriptions, name);
         if (first == null) return null;
         var source = subscriptions.Find(f => f is { Enabled: true } && f.Servers?.Contains(first) == true);
-        SelectedSources.AddOrUpdate(first, new FeedSource(source?.Id, source?.Url));
+        SelectedSources.AddOrUpdate(first, FeedSource.Capture(source, first));
         if (!string.IsNullOrEmpty(first.Name) && first.Name != name)
             commit?.Invoke(new Dictionary<string, string?> { [SelectedName] = first.Name, [SelectedFeedRow] = null });
         return first;
@@ -446,10 +457,11 @@ internal static class AndroidSubscriptionRefresh
             .SelectMany(f => f.Servers.Where(s => s != null).Select(s => new FeedRow(f, s)));
         bool Named(FeedRow choice) => !string.IsNullOrEmpty(name) &&
             string.Equals(choice.Row.Name, name, StringComparison.OrdinalIgnoreCase);
-        if (id != null)
+        var selectedIdentity = read(SelectedFeedRow);
+        if (id != null || selectedIdentity != null)
         {
             rows = rows.Where(choice => choice.Feed.Id == id && choice.Feed.Url == url);
-            if (read(SelectedFeedRow) is { } identity)
+            if (selectedIdentity is { } identity)
                 return rows.FirstOrDefault(choice => RowIdentity(choice.Row) == identity);
         }
         else
@@ -497,7 +509,20 @@ internal static class AndroidSubscriptionRefresh
 
     // The Android service passes the resolved entry to the builder on a worker thread.
     // Keep its registration with that instance until the builder checks the current preferences.
-    private sealed record FeedSource(string? Id, string? Url);
+    private sealed record FeedSource(string? Id, string? Url, string Route)
+    {
+        internal static FeedSource Capture(SubscriptionEntry? feed, VlessServerEntry row) =>
+            new(feed?.Id, feed?.Url, feed == null ? RowIdentity(row) : SubscriptionEntry.RouteKey(row, feed.Servers));
+    }
+
+    private static string SourceIdentity(string? id, string url)
+    {
+        // A length prefix distinguishes missing and empty IDs without splitting imported text.
+        var bytes = System.Text.Encoding.UTF8.GetBytes($"{id?.Length ?? -1}:{id}{url}");
+        try { return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)); }
+        finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
+    }
+
     private static readonly ConditionalWeakTable<VlessServerEntry, FeedSource> SelectedSources = new();
 
     internal static void PreparePool(VlessConfig config, VlessServerEntry selected, List<VlessServerEntry> standalone,
@@ -509,12 +534,24 @@ internal static class AndroidSubscriptionRefresh
             config.Servers = [selected];
             return;
         }
-        var identity = RowIdentity(selected);
         var current = ResolveActiveServer(standalone, subscriptions, mode, read, null, options);
         if (current == null || !SelectedSources.TryGetValue(current, out var currentSource) ||
-            currentSource != origin || RowIdentity(current) != identity)
+            currentSource != origin)
             throw new InvalidOperationException("Selected server is no longer available.");
 
+        if (!string.IsNullOrEmpty(current.DetourVia))
+        {
+            var feed = subscriptions.FirstOrDefault(f => f is { Enabled: true, Servers: not null } &&
+                f.Id == origin.Id && f.Url == origin.Url && f.Servers.Contains(current));
+            config.Servers = [current];
+            if (feed != null)
+                config.Servers.AddRange(feed.Servers.Where(row => string.IsNullOrEmpty(row.DetourVia) &&
+                    string.Equals(row.OutboundId, current.DetourVia, StringComparison.OrdinalIgnoreCase)));
+            config.ActiveServer = current.Name ?? string.Empty;
+            return;
+        }
+
+        var identity = RowIdentity(current);
         var pool = standalone.Concat(subscriptions.Where(f => f is { Enabled: true, Servers: not null })
             .SelectMany(f => f.Servers)).Where(row => row != null).ToList();
         pool.RemoveAll(row => RowIdentity(row) == identity);

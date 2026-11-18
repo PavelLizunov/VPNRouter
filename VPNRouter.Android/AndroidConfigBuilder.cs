@@ -29,7 +29,7 @@ public static class AndroidConfigBuilder
             "prefer_ipv4" => false,
             _ => true,
         };
-        if (!entry.UseAsSingleOutbound && AndroidStorage.GetAutoSelectBestServer())
+        if (!string.IsNullOrEmpty(entry.DetourVia) || (!entry.UseAsSingleOutbound && AndroidStorage.GetAutoSelectBestServer()))
             AndroidStorage.PrepareServerPool(settings.Vless, entry);
         else
         {
