@@ -16,9 +16,10 @@ internal static class AndroidSubscriptionRefresh
     internal const string SubscriptionUrl = "subscription_url";
     internal const string ManualUri = "vless_uri";
     internal const string ConfigMode = "config_mode";
+    internal const string UiCommand = "vpn_ui_command";
+    internal const string LegacyManualOwner = "subscription_manual_owner_hash";
 
     private static readonly Dictionary<string, Task> PendingRefreshes = new(StringComparer.Ordinal);
-    private static readonly System.Threading.Lock WriteLock = new();
 
     internal static async Task<int> RefreshAsync(SubscriptionEntry entry, Action<SubscriptionEntry, bool> persist)
     {
@@ -63,10 +64,10 @@ internal static class AndroidSubscriptionRefresh
         return count;
     }
 
-    internal static void Save(SubscriptionEntry refreshed, bool rejected, bool selectOnSuccess,
+    // The caller holds the preference transaction through read, selection check and commit.
+    internal static bool Save(SubscriptionEntry refreshed, bool rejected, string? selectingCommand,
         Func<string, string?> read, Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
     {
-        using var write = WriteLock.EnterScope();
         var json = read(Subscriptions);
         List<SubscriptionEntry> subscriptions;
         if (string.IsNullOrWhiteSpace(json) && read(SubscriptionUrl) == refreshed.Url)
@@ -90,18 +91,46 @@ internal static class AndroidSubscriptionRefresh
 
         var updates = new Dictionary<string, string?>();
         // Once a registration is replaced, a later rejection cannot identify its former standalone copies.
-        RemoveSupersededCopies(refreshed.Url, oldRows, subscriptions, read, options, updates);
-        if (!rejected && selectOnSuccess)
+        bool superseded = selectingCommand != null && selectingCommand != read(UiCommand);
+        RemoveSupersededCopies(refreshed.Url, oldRows, subscriptions, read, options, updates,
+            preserveSelection: superseded && !rejected, rejected: rejected);
+        bool selected = !rejected && selectingCommand != null && !superseded;
+        if (selected)
         {
             affected[0].Enabled = true;
             updates[SelectedName] = refreshed.Servers[0].Name;
             updates[SubscriptionUrl] = refreshed.Url;
             updates[ManualUri] = null;
+            updates[LegacyManualOwner] = null;
             updates[ConfigMode] = "subscribe";
         }
 
         updates[Subscriptions] = JsonSerializer.Serialize(subscriptions, options);
         commit(updates);
+        return selected;
+    }
+
+    internal static bool SaveFreeConfig(VlessServerEntry server, string uri, string command,
+        Func<string, string?> read, Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
+    {
+        if (read(UiCommand) != command) return false;
+        var servers = ReadStandalone(read, options);
+        var updates = new Dictionary<string, string?>();
+        // Removing the old scalar URL must not sever its ownership of legacy cached rows.
+        if (string.IsNullOrWhiteSpace(read(Subscriptions)) && read(SubscriptionUrl) is { Length: > 0 } previousUrl)
+        {
+            var legacy = new SubscriptionEntry { Id = "legacy-default", Name = "Default", Url = previousUrl, Servers = servers };
+            updates[Subscriptions] = JsonSerializer.Serialize(new List<SubscriptionEntry> { legacy }, options);
+        }
+        var index = VPNRouter.Core.Services.FreeConfigs.FreeConfigSelection.SelectOrAdd(servers, server);
+        updates[StandaloneServers] = JsonSerializer.Serialize(servers, options);
+        updates[SelectedName] = servers[index].Name;
+        updates[ManualUri] = uri;
+        updates[LegacyManualOwner] = null;
+        updates[SubscriptionUrl] = null;
+        updates[ConfigMode] = "manual";
+        commit(updates);
+        return true;
     }
 
     internal static bool AppliesTo(SubscriptionEntry? registration, SubscriptionEntry refreshed, bool rejected) =>
@@ -120,40 +149,54 @@ internal static class AndroidSubscriptionRefresh
 
     private static void RemoveSupersededCopies(string url, List<VlessServerEntry> oldRows,
         List<SubscriptionEntry> subscriptions, Func<string, string?> read, JsonSerializerOptions options,
-        Dictionary<string, string?> updates)
+        Dictionary<string, string?> updates, bool preserveSelection, bool rejected)
     {
-        if (oldRows.Count == 0) return;
+        var recordedOwner = read(LegacyManualOwner);
+        if (oldRows.Count == 0 && !(rejected && recordedOwner != null)) return;
 
         // A name or endpoint alone can also identify an independently saved manual server.
         string Identity(VlessServerEntry row) => JsonSerializer.Serialize(row, options);
         var oldCopies = oldRows.Select(Identity).ToHashSet(StringComparer.Ordinal);
-        foreach (var subscription in subscriptions)
-        {
-            if (subscription?.Servers != null)
-                oldCopies.ExceptWith(subscription.Servers.Where(row => row != null).Select(Identity));
-        }
+        var retained = subscriptions.OfType<SubscriptionEntry>().SelectMany(s => s.Servers ?? [])
+            .Where(row => row != null).Select(Identity).ToHashSet(StringComparer.Ordinal);
+        oldCopies.ExceptWith(retained);
 
-        var manual = ServerUriParser.TryParse(read(ManualUri) ?? string.Empty);
+        var uri = read(ManualUri);
+        var manual = ServerUriParser.TryParse(uri ?? string.Empty);
+        string? retiredManualName = null;
         if (manual != null)
         {
             var manualKey = Identity(manual);
-            if (oldCopies.Contains(manualKey) && read(SubscriptionUrl) == url && read(ConfigMode) is null or "subscribe")
+            if (read(SubscriptionUrl) == url && read(ConfigMode) is null or "subscribe")
             {
-                updates[ManualUri] = null;
-                manual = null;
+                // A superseded success keeps the selected legacy URI but replaces the cache that
+                // identified its owner. Retain only a digest so a later rejection can still clear it.
+                var owner = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(url + "\0" + uri)));
+                if (rejected && recordedOwner == owner && !retained.Contains(manualKey)) oldCopies.Add(manualKey);
+                if (oldCopies.Contains(manualKey))
+                {
+                    if (preserveSelection) updates[LegacyManualOwner] = owner;
+                    else
+                    {
+                        updates[ManualUri] = null;
+                        updates[LegacyManualOwner] = null;
+                        retiredManualName = manual.Name;
+                        manual = null;
+                    }
+                }
             }
-            else
-            {
-                oldCopies.Remove(manualKey);
-            }
+            if (manual != null) oldCopies.Remove(manualKey);
         }
         var standalone = ReadStandalone(read, options);
         if (standalone.RemoveAll(row => oldCopies.Contains(Identity(row))) > 0)
             updates[StandaloneServers] = JsonSerializer.Serialize(standalone, options);
 
+        if (preserveSelection) return;
         var selected = read(SelectedName);
         bool IsSelected(VlessServerEntry row) => string.Equals(row?.Name, selected, StringComparison.OrdinalIgnoreCase);
-        if (!string.IsNullOrEmpty(selected) && oldRows.Any(IsSelected)
+        if (!string.IsNullOrEmpty(selected) && (oldRows.Any(IsSelected) ||
+                string.Equals(selected, retiredManualName, StringComparison.OrdinalIgnoreCase))
             && !standalone.Any(IsSelected) && !subscriptions.Any(s => s is { Enabled: true } && s.Servers?.Any(IsSelected) == true)
             && (manual == null || !IsSelected(manual)))
             updates[SelectedName] = null;

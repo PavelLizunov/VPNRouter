@@ -365,7 +365,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
             }
 
             Assert.False(result);
-            Assert.False(initialHandle.HasExited);
+            Assert.Equal(unknownExit ? (bool?)null : false, initialHandle.QueryHasExited());
             Assert.True(engine.HasActiveTunnel);
             Assert.Equal(OperatingSystem.IsWindows() || !invalidCandidate, engine.IsRunning);
             Assert.Equal(originalJson, File.ReadAllText(VPNRouter.Core.AppPaths.CurrentConfigPath));
@@ -430,6 +430,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 Assert.True(lease!.HasOwnership);
                 Assert.Equal(0, initialHandle.KillCallCount);
                 initialHandle.ExitQueryUnavailable = false;
+                Assert.False(initialHandle.HasExited);
                 initialHandle.SignalExit(0);
                 engine.Stop();
                 Assert.Null(GetField(engine, "_singBox"));

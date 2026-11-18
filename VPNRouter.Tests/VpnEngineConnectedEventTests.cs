@@ -262,9 +262,14 @@ public sealed class VpnEngineConnectedEventTests
         var (manager, handle) = CreateFakeManager(55555);
         InvokeSetSingBoxManager(host, manager);
         InvokeOnSingBoxStarted(host, 55555);
+        using var childExit = sessionCts.Token.Register(() => handle.SignalExit(0));
+        Assert.False(handle.HasExited);
 
         engine.Stop();
 
+        Assert.True(sessionCts.IsCancellationRequested);
+        Assert.True(handle.HasExited);
+        Assert.Null(manager.OwnedProcessHandle);
         InvokeOnConnected(host, pid: 55555);
 
         Assert.Empty(captured);

@@ -215,7 +215,7 @@ public class AndroidSubscriptionRefreshTests
         try
         {
             Task<int> Refresh(SubscriptionEntry entry) => AndroidSubscriptionRefresh.RefreshAsync(entry, (updated, rejected) =>
-                AndroidSubscriptionRefresh.Save(updated, rejected, false, prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+                AndroidSubscriptionRefresh.Save(updated, rejected, null, prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
 
             var earlier = Refresh(first);
             await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
@@ -245,6 +245,147 @@ public class AndroidSubscriptionRefreshTests
         }
     }
 
+    [Theory]
+    [InlineData("free", false)]
+    [InlineData("free", true)]
+    [InlineData("subscription", false)]
+    [InlineData("subscription", true)]
+    [InlineData("disconnect", false)]
+    [InlineData("disconnect", true)]
+    public async Task SelectingRefresh_CannotReplaceNewerCommandAfterPreferencesReopen(string later, bool reject)
+    {
+        var old = VlessUriParser.Parse(OldTargetUri);
+        var manual = VlessUriParser.Parse(ManualUri);
+        var feed = new SubscriptionEntry { Id = "first", Url = Feed, Enabled = false, Servers = [old] };
+        var second = new SubscriptionEntry { Id = "second", Url = "https://fixture.invalid/other", Enabled = false };
+        using var prefs = new PreferenceFile(new()
+        {
+            ["subscriptions_json"] = JsonSerializer.Serialize(new[] { feed, second }),
+            ["servers_json"] = JsonSerializer.Serialize(new[] { old, manual }),
+            ["config_mode"] = "manual",
+            ["vless_uri"] = ManualUri,
+            ["selected_server_name"] = manual.Name,
+        });
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var previous = SubscriptionFetcher.Http;
+        SubscriptionFetcher.Http = new OrderedHttp(async request =>
+        {
+            if (request != 1) return FreshUri.Replace("fresh", "second");
+            firstStarted.SetResult();
+            await release.Task;
+            return reject ? UnsupportedBody : FreshUri;
+        });
+
+        var selectionResult = true;
+        Task<int> EarlyRefresh() => AndroidSubscriptionRefresh.RefreshAsync(feed, (row, rejected) =>
+            selectionResult = AndroidSubscriptionRefresh.Save(row, rejected, "qr-command",
+                prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+        var early = EarlyRefresh();
+        try
+        {
+            await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            prefs.Commit(new Dictionary<string, string?> { [AndroidSubscriptionRefresh.UiCommand] = "newer" });
+            if (later == "free")
+            {
+                var uri = ManualUri.Replace("manual", "free");
+                Assert.True(AndroidSubscriptionRefresh.SaveFreeConfig(VlessUriParser.Parse(uri), uri, "newer",
+                    prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+            }
+            else if (later == "subscription")
+            {
+                bool selected = false;
+                var secondCount = await AndroidSubscriptionRefresh.RefreshAsync(second, (row, rejected) =>
+                    selected = AndroidSubscriptionRefresh.Save(row, rejected, "newer", prefs.Read, prefs.Commit,
+                        JsonSerializerOptions.Default)).WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+                Assert.True(selected);
+                Assert.Equal(1, secondCount);
+            }
+            var selectedState = prefs.Reload();
+            release.SetResult();
+            if (reject) await Assert.ThrowsAsync<UnsupportedSubscriptionChainException>(() => early);
+            else Assert.Equal(1, await early);
+
+            var reopened = prefs.Reload();
+            foreach (var key in new[] { "vpn_ui_command", "selected_server_name", "vless_uri", "subscription_url", "config_mode" })
+                Assert.Equal(selectedState.GetValueOrDefault(key), reopened.GetValueOrDefault(key));
+            Assert.False(selectionResult);
+            var saved = JsonSerializer.Deserialize<List<SubscriptionEntry>>(reopened["subscriptions_json"])!;
+            Assert.False(saved[0].Enabled);
+            if (reject) Assert.Empty(saved[0].Servers);
+            else Assert.Equal("fresh.invalid", Assert.Single(saved[0].Servers).Server);
+            Assert.Equal(later == "subscription", saved[1].Enabled);
+            if (later == "subscription") Assert.Equal("second.invalid", Assert.Single(saved[1].Servers).Server);
+            var standalone = JsonSerializer.Deserialize<List<VlessServerEntry>>(reopened["servers_json"])!;
+            Assert.DoesNotContain(standalone, row => row.Server == old.Server);
+            Assert.Contains(standalone, row => row.Server == manual.Server);
+
+            var before = prefs.Contents;
+            Assert.False(AndroidSubscriptionRefresh.SaveFreeConfig(old, OldTargetUri, "qr-command",
+                prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+            Assert.Equal(before, prefs.Contents);
+        }
+        finally
+        {
+            release.TrySetResult();
+            try { await early; }
+            catch (UnsupportedSubscriptionChainException) { }
+            finally { SubscriptionFetcher.Http = previous; }
+        }
+    }
+
+    [Fact]
+    public async Task LaterFreeSelection_PreservesLegacyFeedOwnershipForRejection()
+    {
+        var old = VlessUriParser.Parse(OldTargetUri);
+        using var prefs = new PreferenceFile(new()
+        {
+            [AndroidSubscriptionRefresh.UiCommand] = "free-command",
+            ["subscription_url"] = Feed,
+            ["servers_json"] = JsonSerializer.Serialize(new[] { old }),
+            ["selected_server_name"] = old.Name,
+            ["config_mode"] = "subscribe",
+        });
+        var feed = new SubscriptionEntry { Id = "legacy-default", Url = Feed, Servers = [old] };
+        Assert.True(AndroidSubscriptionRefresh.SaveFreeConfig(VlessUriParser.Parse(ManualUri), ManualUri, "free-command",
+            prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+        await Assert.ThrowsAsync<UnsupportedSubscriptionChainException>(() => ReimportAsync(feed, prefs, UnsupportedBody));
+        var reopened = prefs.Reload();
+        var legacy = Assert.Single(JsonSerializer.Deserialize<List<SubscriptionEntry>>(reopened["subscriptions_json"])!);
+        Assert.Equal(Feed, legacy.Url);
+        Assert.Empty(legacy.Servers);
+        var selected = Assert.Single(JsonSerializer.Deserialize<List<VlessServerEntry>>(reopened["servers_json"])!);
+        Assert.Equal(selected.Name, reopened["selected_server_name"]);
+        Assert.Equal(ManualUri, reopened["vless_uri"]);
+        Assert.Equal("manual", reopened["config_mode"]);
+    }
+
+    [Fact]
+    public async Task SupersededSuccess_LeavesLegacySelectionUntilAConfirmedRejection()
+    {
+        var old = VlessUriParser.Parse(OldTargetUri);
+        using var prefs = new PreferenceFile(new()
+        {
+            [AndroidSubscriptionRefresh.UiCommand] = "stop",
+            ["subscription_url"] = Feed,
+            ["servers_json"] = JsonSerializer.Serialize(new[] { old }),
+            ["selected_server_name"] = old.Name,
+            ["vless_uri"] = OldTargetUri,
+            ["config_mode"] = "subscribe",
+        });
+        var feed = new SubscriptionEntry { Id = "legacy-default", Url = Feed };
+        Assert.Equal(1, await ReimportAsync(feed, prefs, FreshUri));
+        var saved = prefs.Reload();
+        Assert.Equal(old.Name, saved["selected_server_name"]);
+        Assert.Equal(OldTargetUri, saved["vless_uri"]);
+        await Assert.ThrowsAsync<UnsupportedSubscriptionChainException>(() => ReimportAsync(feed, prefs, UnsupportedBody));
+        var reopened = prefs.Reload();
+        Assert.Equal("stop", reopened[AndroidSubscriptionRefresh.UiCommand]);
+        Assert.False(reopened.ContainsKey("selected_server_name"));
+        Assert.False(reopened.ContainsKey("vless_uri"));
+        Assert.Empty(JsonSerializer.Deserialize<List<VlessServerEntry>>(reopened["servers_json"])!);
+    }
+
     private sealed class OrderedHttp(Func<int, Task<string>> reply) : IHttpClient
     {
         private int _requests;
@@ -266,7 +407,7 @@ public class AndroidSubscriptionRefreshTests
         try
         {
             return await AndroidSubscriptionRefresh.RefreshAsync(entry, (updated, rejected) =>
-                AndroidSubscriptionRefresh.Save(updated, rejected, true, prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+                AndroidSubscriptionRefresh.Save(updated, rejected, "qr-command", prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
         }
         finally
         {
@@ -279,8 +420,11 @@ public class AndroidSubscriptionRefreshTests
     {
         private readonly string _path = Path.GetTempFileName();
 
-        public PreferenceFile(Dictionary<string, string> initial) =>
+        public PreferenceFile(Dictionary<string, string> initial)
+        {
+            initial.TryAdd(AndroidSubscriptionRefresh.UiCommand, "qr-command");
             File.WriteAllText(_path, JsonSerializer.Serialize(initial));
+        }
 
         public string Contents => File.ReadAllText(_path);
         public int CommitCount { get; private set; }

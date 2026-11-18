@@ -81,6 +81,7 @@ public final class VpnRouterService extends VpnService {
     public static final String EXTRA_STATS_DOWN = "stats_down_total";
     public static final String EXTRA_STATS_UP = "stats_up_total";
     public static final String EXTRA_STATS_CONN = "stats_conn";
+    public static final String EXTRA_STATS_AT = "stats_at_elapsed_ms";
     public static final String EXTRA_ERROR_MESSAGE = "error_message";
     public static final String EXTRA_DNS_TUNNEL_DOMAIN = "dns_tunnel_domain";
     public static final String EXTRA_DNS_TUNNEL_RESOLVERS = "dns_tunnel_resolvers";
@@ -105,6 +106,12 @@ public final class VpnRouterService extends VpnService {
     public static final String ACTION_TILE_START = "com.ninitux.vpnrouter.TILE_START";
     private static final String UI_COMMAND = "vpn_ui_command";
     private static final String STATE_EVENT = "vpn_state_event";
+
+    // AndroidStorage uses this class monitor for the matching managed selection transaction.
+    private static synchronized void supersedeUiCommand(SharedPreferences prefs, String command) {
+        prefs.edit().putString(UI_COMMAND, command).apply();
+    }
+
     private static final String RESTART_TICKET = "vpn_swipe_restart";
     private static final int RESTART_FLAGS = PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE;
 
@@ -141,6 +148,9 @@ public final class VpnRouterService extends VpnService {
     private volatile boolean stopRequested;
     private int executingStartId;
     private String executingUiCommand;
+    private volatile String serviceStateEvent;
+    private String tunnelSessionId;
+    private static final String ACTIVE_SESSION = "vpn_active_tunnel_session";
     private PowerManager.WakeLock connectWakeLock;
 
     private HandlerThread netCallbackThread;
@@ -189,7 +199,8 @@ public final class VpnRouterService extends VpnService {
         String pkg = getPackageName();
         if (!ACTION_STATS.equals(event.getAction())) {
             event.putExtra(UI_COMMAND, executingUiCommand);
-            event.putExtra(STATE_EVENT, getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(STATE_EVENT, null));
+            event.putExtra(STATE_EVENT, serviceStateEvent);
+            event.putExtra(ACTIVE_SESSION, tunnelSessionId);
         }
         sendBroadcast(event.setPackage(pkg), pkg + ".permission.TUNNEL_STATUS");
     }
@@ -374,7 +385,7 @@ public final class VpnRouterService extends VpnService {
         final String origin;
         if (uiCommand == null && (ACTION_STOP.equals(action) || ACTION_START.equals(action) || ACTION_TILE_START.equals(action))) {
             origin = java.util.UUID.randomUUID().toString();
-            prefs.edit().putString(UI_COMMAND, origin).apply();
+            supersedeUiCommand(prefs, origin);
         } else {
             origin = uiCommand != null ? uiCommand : prefs.getString(UI_COMMAND, null);
         }
@@ -470,9 +481,16 @@ public final class VpnRouterService extends VpnService {
                         return;
                     }
                     if (scheduledRestart) prefs.edit().remove(RESTART_TICKET).apply();
+                    if (!java.util.Objects.equals(origin, prefs.getString(UI_COMMAND, null))) {
+                        if (commandServer == null) finishCommand(startId);
+                        return;
+                    }
                     if (commandServer != null) {
-                        Log.i(LOG_TAG, "AND-NODOZE: restart/always-on intent but tunnel "
-                                + "already running — no-op (service survived the swipe)");
+                        if (liveService == VpnRouterService.this && hasLiveTunnel() && session != null) {
+                            // The tile can write Connecting before asking to restore an already-established tunnel.
+                            if (!STATE_CONNECTED.equals(readVpnState())) writeVpnState(STATE_CONNECTED, null);
+                            broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP));
+                        }
                     } else if (loadLastGoodConfig()) {
                         String checked = prepareTunnelConfig(pendingConfigJson, pendingPerAppMode,
                                 pendingPerAppPackages, pendingDnsTunnelDomain);
@@ -510,16 +528,20 @@ public final class VpnRouterService extends VpnService {
     }
 
     private void writeVpnState(String state, String reason) {
+        serviceStateEvent = null;
+        String stateEvent = java.util.UUID.randomUUID().toString();
         try {
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                     .edit()
                     .putString(KEY_VPN_STATE, state)
-                    .putString(STATE_EVENT, java.util.UUID.randomUUID().toString())
+                    .putString(STATE_EVENT, stateEvent)
+                    .putString(ACTIVE_SESSION, STATE_CONNECTED.equals(state) ? tunnelSessionId : null)
                     .putString("vpn_active_per_app_policy", STATE_CONNECTED.equals(state) ? establishedAppPolicy : null)
                     .putString(KEY_VPN_STATE_REASON, reason)
                     .putInt(KEY_VPN_STATE_PID, android.os.Process.myPid())
                     .putLong(KEY_VPN_STATE_AT_MS, System.currentTimeMillis())
                     .apply();
+            serviceStateEvent = stateEvent;
         } catch (Exception e) {
             Log.w(LOG_TAG, "writeVpnState(" + state + ") threw: " + e.getMessage());
         }
@@ -593,6 +615,7 @@ public final class VpnRouterService extends VpnService {
             return;
         }
         session = new AndroidTunnelSession();
+        tunnelSessionId = java.util.UUID.randomUUID().toString();
         establishedAppPolicy = null;
         acquireConnectWakeLock();
         try {
@@ -660,6 +683,9 @@ public final class VpnRouterService extends VpnService {
         if (!previousTunnelActive) {
             writeVpnState(STATE_ERROR, code);
             setTunnelLive(false);
+        } else if (liveService == this && !STATE_CONNECTED.equals(readVpnState())) {
+            // A pending tile request must not hide the TUN that survived this rejected command.
+            writeVpnState(STATE_CONNECTED, null);
         }
         broadcastTunnelEvent(err);
         if (!previousTunnelActive) finishCommand(executingStartId);
@@ -919,7 +945,7 @@ public final class VpnRouterService extends VpnService {
                     CommandClientOptions options = new CommandClientOptions();
                     options.addCommand(Libbox.CommandStatus);
                     options.setStatusInterval(TimeUnit.SECONDS.toNanos(2));
-                    return Libbox.newCommandClient(new StatsHandler(generation), options);
+                    return Libbox.newCommandClient(new StatsHandler(generation, tunnelSessionId), options);
                 }
                 public void connect(CommandClient client) throws Exception { client.connect(); }
                 public void disconnect(CommandClient client) throws Exception { client.disconnect(); }
@@ -931,7 +957,7 @@ public final class VpnRouterService extends VpnService {
             });
 
     private boolean wantsStats() {
-        return !ended && !stopRequested && isScreenOn && commandServer != null;
+        return liveService == this && !ended && !stopRequested && isScreenOn && commandServer != null;
     }
 
     private void startStatsPoller() {
@@ -944,18 +970,32 @@ public final class VpnRouterService extends VpnService {
 
     private final class StatsHandler implements CommandClientHandler {
         private final long generation;
-        StatsHandler(long generation) { this.generation = generation; }
+        private final String sessionId;
+        private long lastSampleAt = -1; // Accessed only on the lifecycle executor.
+        StatsHandler(long generation, String sessionId) {
+            this.generation = generation;
+            this.sessionId = sessionId;
+        }
 
         public void writeStatus(StatusMessage status) {
             if (status == null || !wantsStats()) return;
             long receivedAt = SystemClock.elapsedRealtime();
+            // Capture ownership at native callback time, before queuing the sample.
+            String stateEvent = serviceStateEvent;
+            String command = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(UI_COMMAND, null);
+            if (stateEvent == null || !stateEvent.equals(serviceStateEvent)) return;
             boolean traffic = status.getTrafficAvailable();
             final long down = status.getDownlinkTotal(), up = status.getUplinkTotal();
             final int connections = status.getConnectionsIn();
             submitLifecycle(() -> {
-                if (!wantsStats() || !stats.acceptStatus(generation, receivedAt)) return;
+                if (!wantsStats() || receivedAt <= lastSampleAt || !stats.acceptStatus(generation, receivedAt)) return;
+                lastSampleAt = receivedAt;
                 if (!traffic) return;
                 Intent event = new Intent(ACTION_STATS);
+                event.putExtra(UI_COMMAND, command);
+                event.putExtra(STATE_EVENT, stateEvent);
+                event.putExtra(ACTIVE_SESSION, sessionId);
+                event.putExtra(EXTRA_STATS_AT, receivedAt);
                 event.putExtra(EXTRA_STATS_DOWN, down);
                 event.putExtra(EXTRA_STATS_UP, up);
                 event.putExtra(EXTRA_STATS_CONN, connections);
@@ -986,6 +1026,7 @@ public final class VpnRouterService extends VpnService {
         AndroidTunnelSession old = session;
         old.retire();
         session = null;
+        tunnelSessionId = null;
         closingSession = old;
         CommandServer server = commandServer;
         commandServer = null;
@@ -1037,7 +1078,7 @@ public final class VpnRouterService extends VpnService {
         if (ended) return;
         ended = true;
         String revoked = java.util.UUID.randomUUID().toString();
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putString(UI_COMMAND, revoked).apply();
+        supersedeUiCommand(getSharedPreferences(PREFS_NAME, MODE_PRIVATE), revoked);
         cancelScheduledRestart();
         submitLifecycle(() -> {
             executingUiCommand = revoked;
