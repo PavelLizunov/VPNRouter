@@ -56,6 +56,7 @@ function Test-ReferencesRoot($name, $image, $root) {
 try {
     if (!$services) { throw 'Cannot inspect Windows service registrations.' }
     if ($Operation -eq 'Prepare') {
+        Add-Type -AssemblyName System.ServiceProcess
         foreach ($name in $known) {
             $key = $services.OpenSubKey($name)
             if (!$key) { continue }
@@ -63,7 +64,7 @@ try {
             try {
                 $image = $key.GetValue('ImagePath', $null, $options)
                 if (!(Test-LegacyImage $name $image $key.GetValue('Type'))) { continue }
-                $controller = Get-Service -Name $name -ErrorAction Stop
+                $controller = New-Object System.ServiceProcess.ServiceController($name)
                 $null = $controller.ServiceHandle
                 if ($key.GetValue('ImagePath', $null, $options) -ne $image) { throw 'Legacy service registration changed.' }
                 $start = $key.GetValue('Start')

@@ -52,6 +52,7 @@ sealed class Program
                 {
                     var action = paths.Remove(name, WindowsServiceRegistration.Open, dryRun: false);
                     Console.WriteLine($"{name}: {action.Outcome} {action.Detail}");
+                    if (action.Outcome == CleanupOutcome.Skipped) Environment.ExitCode = 2;
                 }
             }
             catch (Exception) { Environment.ExitCode = 1; }
