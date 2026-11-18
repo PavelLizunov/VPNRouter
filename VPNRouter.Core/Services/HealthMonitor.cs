@@ -364,9 +364,9 @@ public class HealthMonitor : IDisposable
 
             StrictDnsFailoverChanged?.Invoke(this, failOpen);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.Error(ex, "[HealthMonitor] StrictDns failover reload failed");
+            _logger.Error("[HealthMonitor] StrictDns failover reload failed");
         }
     }
 
@@ -521,9 +521,9 @@ public class HealthMonitor : IDisposable
                         scan = freshScan;
                         _singBox.ReloadConfigJson(configJson, forceRestart: true);
                     }
-                    catch (Exception regenEx)
+                    catch (Exception)
                     {
-                        _logger.Warning(regenEx,
+                        _logger.Warning(
                             "[HealthMonitor] Config regen before full restart failed — " +
                             "falling back to relaunch of last-good on-disk config");
                         _singBox.Restart();
@@ -549,7 +549,7 @@ public class HealthMonitor : IDisposable
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[HealthMonitor] Restart attempt {N} failed", _restartAttempts);
+                _logger.Error("[HealthMonitor] Restart attempt {N} failed ({ExceptionType})", _restartAttempts, ex.GetType().Name);
             }
         }, CancellationToken.None);
     }
@@ -606,9 +606,9 @@ public class HealthMonitor : IDisposable
         {
             return _api.ReloadConfigAsync(path).GetAwaiter().GetResult();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.Debug(ex, "[HealthMonitor] ISingBoxApi.ReloadConfigAsync threw — returning false");
+            _logger.Debug("[HealthMonitor] ISingBoxApi.ReloadConfigAsync threw — returning false");
             return false;
         }
     }
@@ -673,7 +673,7 @@ public class HealthMonitor : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[HealthMonitor] Error in debounced rescan");
+            _logger.Error("[HealthMonitor] Error in debounced rescan ({ExceptionType})", ex.GetType().Name);
         }
     }
 

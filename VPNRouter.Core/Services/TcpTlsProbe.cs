@@ -415,9 +415,7 @@ public static class TcpTlsProbe
         var host = server.Server ?? string.Empty;
         var port = server.Port;
 
-        Logger?.Debug(
-            "TcpTlsProbe.ProbeServerAsync start: name={Name} host={Host} port={Port} protocol={Protocol}",
-            server.Name, host, port, protocol);
+        Logger?.Debug("[TcpTlsProbe] Starting server probe");
 
         ServerProbeResult result;
         switch (protocol)
@@ -466,8 +464,7 @@ public static class TcpTlsProbe
         }
 
         Logger?.Information(
-            "[TcpTlsProbe] {Name} {Host}:{Port} protocol={Protocol} status={Status} latency={LatencyMs}ms err={Error}",
-            server.Name, host, port, protocol, result.Status, result.LatencyMs, result.Error ?? "-");
+            "[TcpTlsProbe] Server probe status={Status} latency={LatencyMs}ms", result.Status, result.LatencyMs);
         return result;
     }
 

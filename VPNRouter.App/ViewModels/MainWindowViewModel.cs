@@ -479,11 +479,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public MainWindowViewModel() : this(null) { }
 
-    public MainWindowViewModel(ISettingsStore? settingsStore)
+    public MainWindowViewModel(ISettingsStore? settingsStore) : this(settingsStore, null) { }
+
+    internal MainWindowViewModel(ISettingsStore? settingsStore, ILogger? logger)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
 
-        _logger = new LoggerConfiguration()
+        _logger = logger ?? new LoggerConfiguration()
             .WriteTo.File(
                 Path.Combine(AppPaths.LogsDir, "vpnrouter.log"),
                 rollingInterval: RollingInterval.Day,

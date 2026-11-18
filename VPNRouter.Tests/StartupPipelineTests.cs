@@ -63,6 +63,78 @@ public sealed class StartupPipelineTests : IDisposable
         };
 
     [Fact]
+    public async Task PreStartFailover_LogsFieldAndOutcomeWithoutReasonOrReplacementName()
+    {
+        const string config = """{"outbounds":[]}""";
+        var sink = new CapturingSink();
+        using var logger = sink.CreateLogger();
+        var settings = BuildBaseSettings();
+        settings.Vless.Servers = [new VlessServerEntry
+        {
+            Name = "fixture-replacement", Server = "fixture-replacement.invalid", Port = 443, Uuid = "fixture",
+        }];
+        var sanity = new ConfigSanityCheck(logger);
+        var host = new TestStartupHost
+        {
+            Logger = logger,
+            Failover = new AutoFailoverEngine(settings, sanity, logger: logger, store: _store),
+        };
+
+        var pipeline = new StartupPipeline(host, _store);
+        var switched = await pipeline.PreStartChecksPhaseAsync(settings, config, TestContext.Current.CancellationToken);
+
+        Assert.True(switched);
+        Assert.True(host.AutoFailoverInvoked);
+        Assert.Equal("fixture-replacement", settings.Vless.ActiveServer);
+        Assert.Contains(sink.Events, e => e.Properties.ContainsKey("Field") && e.RenderMessage().Contains("outbounds"));
+        Assert.Contains(sink.Events, e => e.RenderMessage().Contains("switched servers"));
+        sink.AssertExcludes("fixture-replacement", sanity.CheckBeforeStart(config).Reason!);
+    }
+
+    [Fact]
+    public async Task RejectedManualServer_DetailsReachOnlyTheFailoverUi()
+    {
+        const string manualName = "fixture-manual-selection";
+        const string config = """{"outbounds":[{"tag":"proxy","type":"vless","server":"fixture-manual.invalid","server_port":443}]}""";
+        const string diagnostic = "VPN startup rejected: check the selected server or choose another (pre_start_check_failed).";
+        var sink = new CapturingSink();
+        using var logger = sink.CreateLogger();
+        var settings = BuildBaseSettings();
+        settings.Vless.ActiveServer = manualName;
+        settings.Vless.Servers = [new VlessServerEntry { Name = manualName, Server = "fixture-manual.invalid" }];
+        settings.App.Subscriptions = [new SubscriptionEntry
+        {
+            Enabled = true,
+            Servers = [new VlessServerEntry { Name = "fixture-backup", Server = "fixture-backup.invalid" }],
+        }];
+        var sanity = new ConfigSanityCheck(logger);
+        var reason = sanity.CheckBeforeStart(config).Reason!;
+        var host = new TestStartupHost
+        {
+            Logger = logger,
+            Failover = new AutoFailoverEngine(settings, sanity, logger: logger, store: _store),
+        };
+        var pipeline = new StartupPipeline(host, _store);
+        var retrySink = new CapturingSink();
+        using var retryLogger = retrySink.CreateLogger();
+
+        var started = await ResilientStarter.StartWithBackoffAsync("VPN",
+            ct => pipeline.PreStartChecksPhaseAsync(settings, config, ct), backoffSeconds: [],
+            logger: retryLogger, ct: TestContext.Current.CancellationToken);
+
+        Assert.False(started);
+        Assert.Equal(manualName, settings.Vless.ActiveServer);
+        Assert.Contains(manualName, host.FailoverMessage!);
+        Assert.Contains(reason, host.FailoverMessage!);
+        Assert.Equal(diagnostic, Assert.Single(host.Warnings));
+        var failure = Assert.IsType<InvalidOperationException>(Assert.Single(retrySink.Events, e => e.Exception != null).Exception);
+        Assert.Equal(diagnostic, failure.Message);
+        Assert.Null(failure.InnerException);
+        retrySink.AssertNoPrivateValues(manualName, reason, "fixture-manual.invalid");
+        sink.AssertExcludes(manualName, reason, "fixture-manual.invalid");
+    }
+
+    [Fact]
     public async Task ResolveProfile_NoActiveProfileInSplitMode_ThrowsInvariantViolation()
     {
         var settings = BuildBaseSettings();
@@ -467,7 +539,8 @@ public sealed class StartupPipelineTests : IDisposable
                 new() { ProcessNames = new List<string>(), ScannedAt = DateTime.Now };
         }
 
-        public ILogger? Logger { get; } = null;
+        public ILogger? Logger { get; init; }
+        public AutoFailoverEngine? Failover { get; init; }
         public IProcessScanner Scanner { get; } = new StubProcessScanner();
         public CapturingFirewall CapturedFirewall { get; } = new();
         public Func<IFirewallManager> FirewallFactory { get; }
@@ -496,7 +569,8 @@ public sealed class StartupPipelineTests : IDisposable
         public IProcessMonitor? SetEtw { get; private set; }
         public HealthMonitor? SetHealth { get; private set; }
         public bool SanityCheckEnsured { get; private set; }
-        public bool AutoFailoverInvoked { get; private set; }
+        public string? FailoverMessage { get; private set; }
+        public bool AutoFailoverInvoked => FailoverMessage != null;
         public bool PostStartProbeScheduled { get; private set; }
 
         public void OnStatus(string message) => Statuses.Add(message);
@@ -508,7 +582,7 @@ public sealed class StartupPipelineTests : IDisposable
         public void OnRestartAttempted(int attempt, int max) { }
         public void OnFailoverRequested(string reason) { }
         public void OnAutoFailoverTriggered(string message) =>
-            AutoFailoverInvoked = true;
+            FailoverMessage = message;
         public void OnProcessDetected(string name, int pid) { }
         public void SetActiveServerAddress(string address) =>
             ActiveServerAddress = address;
@@ -536,7 +610,7 @@ public sealed class StartupPipelineTests : IDisposable
         }
 
         public AutoFailoverEngine WireFailover(ConfigSanityCheck sanityCheck) =>
-            new(new AppSettings(), sanityCheck);
+            Failover ?? new(new AppSettings(), sanityCheck);
 
         public AutoFailoverEngine WireFailoverWithStop(ConfigSanityCheck sanityCheck) =>
             new(new AppSettings(), sanityCheck);
