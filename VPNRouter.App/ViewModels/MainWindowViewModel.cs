@@ -606,8 +606,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     public event Action<ServerViewModel?>? ActiveServerChanged;
 
+    private AcceptedTunnelInfo? DisplayedTunnel => IsConnected ? _engine.AcceptedTunnel : null;
+
+    private TunnelServerLabel? DisplayedMember(AcceptedTunnelInfo tunnel) =>
+        ReferenceEquals(_observedTunnel, tunnel) ? tunnel.FindMember(_observedMemberTag) : null;
+
     private (string? name, string? ip) DeriveConnectedServerLabel()
     {
+        if (DisplayedTunnel is { } tunnel)
+        {
+            var current = tunnel.UsesAutoGroup ? DisplayedMember(tunnel) : tunnel.Server;
+            return current == null ? (Strings.AutoSelectStatusLabel, null) : (current.Name, current.Address);
+        }
+
         var serverIp = _engine.ActiveServerAddress;
         var configuredMode = _settings.App.ConfigMode ?? "generated";
         if (IsConnected && !configuredMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))

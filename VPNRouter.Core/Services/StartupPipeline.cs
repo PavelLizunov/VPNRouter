@@ -72,6 +72,8 @@ internal interface IStartupHost
 
     void SetActiveServerAddress(string address);
 
+    void CommitTunnelInfo(AppSettings settings, string json, string address, (Uri Endpoint, string? Secret)? controller) { }
+
     void SetActiveModes(string configMode, string routingMode, string tunFingerprint);
 
     void SetActiveProfile(Profile profile);
@@ -254,6 +256,7 @@ internal sealed class StartupPipeline
             if (!_host.IsCurrentStart(pid))
                 throw new InvalidOperationException("The tunnel exited before its startup settings could be accepted.");
             publishAcceptedImport?.Invoke();
+            _host.CommitTunnelInfo(settings, configJson, serverAddress, monitorController);
         }
         StartMonitorsPhase(settings, profile, scanResult, monitorController, customConfigJson, CommitStart);
 
