@@ -113,9 +113,8 @@ public sealed class FakeProcessHandle : IProcessHandle
     public int Pid { get; }
 
     public bool ExitQueryUnavailable { get; set; }
-    public bool HasExited => ExitQueryUnavailable
-        ? throw new InvalidOperationException("Process state unavailable in fixture.")
-        : _exit.Task.IsCompleted;
+    public bool HasExited => QueryHasExited() ?? true;
+    public bool? QueryHasExited() => ExitQueryUnavailable ? null : _exit.Task.IsCompleted;
 
     public int KillCallCount { get; private set; }
     public bool RefuseKill { get; set; }

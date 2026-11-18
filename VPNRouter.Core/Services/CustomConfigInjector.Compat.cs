@@ -83,17 +83,26 @@ public static partial class CustomConfigInjector
 
     public static string CopyToProgramData(string sourcePath, string configName = "custom")
     {
-        var dir = AppPaths.ConfigDir;
-        Directory.CreateDirectory(dir);
+        var destination = GetProgramDataPath(configName);
+        WriteImportCopy(destination, ReadImport(sourcePath), overwrite: true);
+        return destination;
+    }
 
-        var destPath = GetProgramDataPath(configName);
-        var contents = ReadImport(sourcePath);
-        var temporary = destPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+    internal static void WriteImportCopy(string destination, string normalizedJson, bool overwrite)
+    {
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temporary, contents);
-            File.Move(temporary, destPath, overwrite: true);
-            return destPath;
+            using (var stream = AppPaths.CreatePrivateFile(temporary, FileMode.CreateNew))
+            using (var writer = new StreamWriter(stream))
+            {
+                writer.Write(normalizedJson);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+            try { File.Move(temporary, destination, overwrite); }
+            catch (IOException) when (!overwrite && File.Exists(destination)) { }
         }
         finally
         {
@@ -104,8 +113,17 @@ public static partial class CustomConfigInjector
     internal static string ReadImport(string sourcePath)
     {
         var raw = File.ReadAllText(sourcePath);
-        var config = JsonNode.Parse(raw);
-        if (config?["route"]?["rule_set"] is not JsonArray sets) return raw;
+        const string invalid = "Custom config validation failed. Check the selected JSON configuration.";
+        JsonObject config;
+        try
+        {
+            config = JsonNode.Parse(raw) as JsonObject ?? throw new InvalidOperationException(invalid);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            throw new InvalidOperationException(invalid);
+        }
+        if (config["route"] is not JsonObject route || route["rule_set"] is not JsonArray sets) return raw;
 
         var directory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
         bool changed = false;
@@ -507,10 +525,10 @@ public static partial class CustomConfigInjector
         }
     }
 
-    private static HashSet<string> RemoveBlockAndDnsOutbounds(JsonObject config)
+    private static Dictionary<string, string> RemoveBlockAndDnsOutbounds(JsonObject config)
     {
         var outbounds = config["outbounds"] as JsonArray;
-        var removedTags = new HashSet<string>();
+        var removedTags = new Dictionary<string, string>(StringComparer.Ordinal);
         if (outbounds != null)
         {
             for (int i = outbounds.Count - 1; i >= 0; i--)
@@ -519,7 +537,7 @@ public static partial class CustomConfigInjector
                 var type = StjNodeHelpers.AsString(obItem["type"]);
                 if (type == "block" || type == "dns")
                 {
-                    removedTags.Add(StjNodeHelpers.AsString(obItem["tag"]) ?? "");
+                    removedTags[StjNodeHelpers.AsString(obItem["tag"]) ?? ""] = type == "block" ? "reject" : "hijack-dns";
                     outbounds.RemoveAt(i);
                 }
             }
@@ -527,7 +545,7 @@ public static partial class CustomConfigInjector
         return removedTags;
     }
 
-    private static void RewriteRouteRules(JsonObject config, HashSet<string> removedTags)
+    private static void RewriteRouteRules(JsonObject config, Dictionary<string, string> removedTags)
     {
         var routeRules = StjNodeHelpers.SelectToken(config, "route.rules") as JsonArray;
         if (routeRules != null)
@@ -544,12 +562,10 @@ public static partial class CustomConfigInjector
                 }
 
                 var outbound = StjNodeHelpers.AsString(rule["outbound"]);
-                if (outbound != null && removedTags.Contains(outbound))
+                if (outbound != null && removedTags.TryGetValue(outbound, out var action))
                 {
                     rule.Remove("outbound");
-                    rule["action"] = StjNodeHelpers.AsString(rule["protocol"]) == "dns"
-                        ? "hijack-dns"
-                        : "reject";
+                    rule["action"] = action;
                 }
             }
         }

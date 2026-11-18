@@ -50,7 +50,13 @@ public static partial class CustomConfigInjector
         if (hasGeoBypass)
             _ = EnsureGeoProxyDns(config, proxyTag);
 
-        EnsureDnsHijackRule(config, isActionBased || settings.App.BlockAds);
+        string? adBlockPath = null;
+        if (settings.App.BlockAds)
+        {
+            resolveRuleSet ??= (url, name) => RuleSetCacheManager.EnsureLocal(url, name, checkGeoContents);
+            adBlockPath = ConfigGenerator.ResolveAdBlock(resolveRuleSet, onMissingRuleSet);
+        }
+        if (adBlockPath == null) EnsureDnsHijackRule(config, isActionBased);
 
         if (!isFullTunnel && processes.Count > 0)
         {
@@ -81,12 +87,7 @@ public static partial class CustomConfigInjector
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
         EnsureUrltest(config);
-        if (settings.App.BlockAds)
-        {
-            resolveRuleSet ??= (url, name) => RuleSetCacheManager.EnsureLocal(url, name, checkGeoContents);
-            var path = ConfigGenerator.ResolveAdBlock(resolveRuleSet, onMissingRuleSet);
-            if (path != null) InjectAdBlock(config, path);
-        }
+        if (adBlockPath != null) InjectAdBlock(config, adBlockPath);
         EnsureTunSelfRouteGuard(config);
 
         return config.ToJsonString(InjectorOutputOptions);
@@ -112,41 +113,31 @@ public static partial class CustomConfigInjector
         var routeRules = (route["rules"] ??= new JsonArray()).AsArray();
         var dnsRules = (dns["rules"] ??= new JsonArray()).AsArray();
         var reject = new JsonObject { ["rule_set"] = new JsonArray(JsonValue.Create(tag)), ["action"] = "reject" };
-        foreach (var rules in new[] { routeRules, dnsRules })
+        var dnsMatch = new JsonObject
         {
-            for (int i = rules.Count - 1; i >= 0; i--)
-                if (JsonNode.DeepEquals(rules[i], reject)) rules.RemoveAt(i);
-        }
+            ["type"] = "logical", ["mode"] = "or",
+            ["rules"] = new JsonArray(new JsonObject { ["port"] = 53 }, new JsonObject { ["protocol"] = "dns" })
+        };
+        var adMatch = new JsonObject { ["rule_set"] = reject["rule_set"]!.DeepClone() };
 
-        // Port 53 interception works even when the flow has no protocol metadata yet.
-        // Sniff other ports before an imported forwarding rule can consume the flow.
-        var portDns = new JsonObject { ["port"] = 53, ["action"] = "hijack-dns" };
-        var sniff = new JsonObject { ["action"] = "sniff" };
-        var protocolDns = new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" };
-        for (int i = routeRules.Count - 1; i >= 0; i--)
+        // Keep the first-match semantics of the import. Only intercept a flow at the
+        // point where the original rule (or route.final) would actually forward it.
+        for (int i = 0; i <= routeRules.Count; i++)
         {
-            if (JsonNode.DeepEquals(routeRules[i], portDns) || JsonNode.DeepEquals(routeRules[i], sniff) ||
-                JsonNode.DeepEquals(routeRules[i], protocolDns))
-                routeRules.RemoveAt(i);
-        }
-        routeRules.Insert(0, portDns);
-        routeRules.Insert(1, sniff);
-        routeRules.Insert(2, protocolDns);
+            var forward = i < routeRules.Count ? routeRules[i] as JsonObject : null;
+            if (forward != null && (string?)forward["action"] is not (null or "" or "route" or "direct" or "bypass"))
+                continue;
 
-        // A native import can sniff after a conditional route. Check newly discovered domains
-        // before the next forwarding rule, including the implicit route.final.
-        bool needsCheck = true;
-        for (int i = 0; i < routeRules.Count; i++)
-        {
-            var action = StjNodeHelpers.AsString(routeRules[i]?["action"]);
-            if (action == "sniff") needsCheck = true;
-            if (!needsCheck || action is "sniff" or "hijack-dns" or "reject" or "route-options") continue;
-            routeRules.Insert(i, reject.DeepClone());
-            i++;
-            needsCheck = false;
+            var match = ForwardMatch(forward);
+            var hijack = GuardForward(match, dnsMatch, "hijack-dns");
+            var block = GuardForward(match, adMatch, "reject");
+            if (i >= 2 && JsonNode.DeepEquals(routeRules[i - 2], hijack) && JsonNode.DeepEquals(routeRules[i - 1], block))
+                continue;
+            routeRules.Insert(i++, hijack);
+            routeRules.Insert(i++, block);
         }
-        if (needsCheck) routeRules.Add(reject.DeepClone());
-        dnsRules.Insert(0, reject);
+        if (dnsRules.Count == 0 || !JsonNode.DeepEquals(dnsRules[0], reject))
+            dnsRules.Insert(0, reject);
     }
 
     private static void ThrowIfPlaceholderProxy(JsonObject config)

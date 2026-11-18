@@ -426,6 +426,7 @@ public sealed class ReleaseToolingContractTests
     [InlineData("Test-InstallerPrepare.ps1")]
     [InlineData("Test-RepairEnvironment.ps1")]
     [InlineData("Test-InstallerRepair.ps1")]
+    [InlineData("Test-RollbackRelaunch.ps1")]
     public async Task WindowsMaintenanceFixtureCompletes(string fixture)
     {
         if (!OperatingSystem.IsWindows()) return;

@@ -52,12 +52,6 @@ public partial class VpnEngine : IDisposable
     // Unix readiness uses Clash, which can be unavailable while the owned process is alive.
     internal bool RequireCompleteRuleSetsOnStart { get; set; }
     internal Func<IProcessHandle, string, CancellationToken, Task<bool>>? ConfirmServiceReplacement { get; set; }
-    private IProcessHandle? _confirmedServiceHandle;
-    internal bool IsServiceApplyCurrent(AppSettings? settings) =>
-        settings != null && ReferenceEquals(settings, _failoverSettingsContext) &&
-        _sessionCts is { IsCancellationRequested: false } && _confirmedServiceHandle is { } accepted &&
-        ReferenceEquals(accepted, _singBox?.OwnedProcessHandle) && accepted.QueryHasExited() == false;
-
     public bool HasActiveTunnel => _singBox?.HasActiveTunnel ?? false;
     public List<string> MonitoredProcesses => _scanResult?.ProcessNames ?? new();
 
@@ -230,7 +224,9 @@ public partial class VpnEngine : IDisposable
         if (singBox.State is SingBoxState.Starting or SingBoxState.Restarting)
             return true;
 
-        return singBox.HasActiveTunnel;
+        return singBox.ExactStopUnconfirmed ||
+            (singBox.OwnedProcessHandle is { } child && child.QueryHasExited() != true) ||
+            singBox.HasActiveTunnel;
     }
 
     internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck,
@@ -438,13 +434,18 @@ public partial class VpnEngine : IDisposable
                 ? "[VpnEngine] Forced full restart (structural change)"
                 : "[VpnEngine] Applying config via full restart");
 
+            // Resolve the control endpoint before retiring a live tunnel.
+            var controller = _healthMonitor != null || ConfirmServiceReplacement != null
+                ? ClashSingBoxApi.ReadLocalController(configJson) : ((Uri Endpoint, string? Secret)?)null;
+            if (controller is { } target)
+                await ClashSingBoxApi.ResolveControlTargetsAsync(target.Endpoint, ct).ConfigureAwait(false);
             if (_healthMonitor != null)
             {
-                _healthMonitor.Stop();
+                _healthMonitor.PauseForApply();
                 pausedHealth = true;
             }
             var confirm = ConfirmServiceReplacement;
-            if (confirm != null)
+            if (confirm != null || result.PublishAcceptedImport != null)
             {
                 previousServiceHandle = _singBox.OwnedProcessHandle;
                 lastGoodJson = File.ReadAllText(AppPaths.CurrentConfigPath);
@@ -474,13 +475,25 @@ public partial class VpnEngine : IDisposable
             ActiveRoutingMode = newRoutingMode;
             TunFingerprint = newTunFingerprint;
             ActiveAppRoutingFingerprint = newAppRoutingFingerprint;
+            void AcceptSettings()
+            {
+                if (confirm != null &&
+                    (ct.IsCancellationRequested || _sessionCts.IsCancellationRequested ||
+                     confirmedServiceHandle?.QueryHasExited() != false ||
+                     !ReferenceEquals(confirmedServiceHandle, _singBox.OwnedProcessHandle)))
+                    throw new InvalidOperationException("The replacement exited before accepting settings.");
+
+                result.PublishAcceptedImport?.Invoke();
+                ResetFailoverContext(settings);
+                configCommitted = true;
+            }
+
+            if (pausedHealth && result.Profile != null)
+                _healthMonitor!.ResumeAfterApply(result.Profile, settings, _scanResult, controller, AcceptSettings);
+            else
+                AcceptSettings();
             // Restart replaces the link and resolved drops its per-link settings.
             ApplyUnixDnsSettings(settings);
-            ResetFailoverContext(settings);
-            if (pausedHealth && result.Profile != null)
-                _healthMonitor?.ResumeAfterApply(result.Profile, settings, _scanResult);
-            _confirmedServiceHandle = confirmedServiceHandle;
-            configCommitted = true;
             UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 
@@ -489,25 +502,27 @@ public partial class VpnEngine : IDisposable
         }
         catch (Exception ex)
         {
-            if (!configCommitted)
+            if (configCommitted)
             {
-                if (lastGoodJson != null && !_sessionCts.IsCancellationRequested &&
-                    !ReferenceEquals(previousServiceHandle, _singBox.OwnedProcessHandle))
-                {
-                    try
-                    {
-                        if (_singBox.HasActiveTunnel)
-                        {
-                            if (!_singBox.ReloadConfigJsonWithResult(lastGoodJson, forceRestart: true))
-                                _logger?.Error("[VpnEngine] Service tunnel rollback was not confirmed");
-                        }
-                        else
-                            _singBox.StartWithJson(lastGoodJson);
-                    }
-                    catch (Exception) { _logger?.Error("[VpnEngine] Service tunnel rollback failed"); }
-                }
-                RestoreActiveBaseline();
+                _logger?.Warning("[VpnEngine] Post-apply step failed ({ExceptionType})", ex.GetType().Name);
+                return true;
             }
+            if (lastGoodJson != null && !_sessionCts.IsCancellationRequested &&
+                !ReferenceEquals(previousServiceHandle, _singBox.OwnedProcessHandle))
+            {
+                try
+                {
+                    if (_singBox.HasActiveTunnel)
+                    {
+                        if (!_singBox.ReloadConfigJsonWithResult(lastGoodJson, forceRestart: true))
+                            _logger?.Error("[VpnEngine] Service tunnel rollback was not confirmed");
+                    }
+                    else
+                        _singBox.StartWithJson(lastGoodJson);
+                }
+                catch (Exception) { _logger?.Error("[VpnEngine] Service tunnel rollback failed"); }
+            }
+            RestoreActiveBaseline();
             _logger?.Error("[VpnEngine] Apply failed ({ExceptionType})", ex.GetType().Name);
             OnStatus("Apply failed: check the selected configuration and required rule sets, then retry.");
             return false;

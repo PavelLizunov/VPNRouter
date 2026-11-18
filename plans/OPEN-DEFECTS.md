@@ -16,6 +16,14 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Invalid imported JSON escapes the established validation error before startup. Both full suites failed StartAsync_CustomMode_InvalidJson_Throws (#664).
+- [ ] **P2** - The recovery fixture assumes a single VLESS outbound in Business, which also emits a business-portal outbound. Check recovery for every VLESS row and the primary proxy tag (#664).
+
+- [ ] **P1** - Service Apply can leave recovery on a rejected revision, block a process exit callback during retirement, or discard a pending firewall release (#664).
+- [ ] **P1** - Imported DNS interception can supersede an explicit deny or alter unrelated protocol selection (#664).
+- [ ] **P1** - Recovery of an edited external import can reopen an older managed copy after a successful Apply (#664).
+- [ ] **P1** - Linux capability-mode retirement can release the handle and lease on an indeterminate exit query (#664).
+
 - [ ] **P1** - An elevated health-check rollback relaunches the restored GUI with inherited repair paths (#661).
 - [ ] **P1** - Update Zapret can stop an active strategy before driver ownership and the update lock are confirmed (#661).
 - [ ] **P1** - Update, restart and service shutdown can abandon a live winws after an unconfirmed stop (#661).

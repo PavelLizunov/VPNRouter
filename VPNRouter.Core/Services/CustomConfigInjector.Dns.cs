@@ -215,6 +215,47 @@ public static partial class CustomConfigInjector
         });
     }
 
+    // Native route, bypass and direct options belong to the action. Their remaining
+    // fields are the original match expression, including invert and nested logical rules.
+    private static readonly HashSet<string> ForwardActionFields = new(StringComparer.Ordinal)
+    {
+        "action", "outbound", "override_address", "override_port", "network_strategy", "fallback_delay",
+        "udp_disable_domain_unmapping", "udp_connect", "udp_timeout", "tls_fragment",
+        "tls_fragment_fallback_delay", "tls_record_fragment", "tls_spoof", "tls_spoof_method",
+        "bind_interface", "inet4_bind_address", "inet6_bind_address", "bind_address_no_port",
+        "protect_path", "routing_mark", "reuse_addr", "netns", "connect_timeout", "tcp_fast_open",
+        "tcp_multi_path", "disable_tcp_keep_alive", "tcp_keep_alive", "tcp_keep_alive_interval",
+        "udp_fragment", "domain_resolver", "fallback_network_type", "domain_strategy"
+    };
+
+    private static JsonObject ForwardMatch(JsonObject? forwarding)
+    {
+        var match = new JsonObject();
+        if (forwarding == null) return match;
+        bool logical = (string?)forwarding["type"] == "logical";
+        foreach (var (key, value) in forwarding)
+        {
+            // network_type is a match on a default rule and a dial option on logical direct.
+            if (ForwardActionFields.Contains(key) || (logical && key == "network_type")) continue;
+            if (key == "type" && !logical) continue;
+            match.Add(key, value?.DeepClone());
+        }
+        // A native default rule without match items is unconditional even with invert set.
+        if (match.Count == 1) match.Remove("invert");
+        return match;
+    }
+
+    private static JsonObject GuardForward(JsonObject match, JsonObject condition, string action)
+    {
+        var rule = match.Count == 0 ? condition.DeepClone().AsObject() : new JsonObject
+        {
+            ["type"] = "logical", ["mode"] = "and",
+            ["rules"] = new JsonArray(match.DeepClone(), condition.DeepClone())
+        };
+        rule["action"] = action;
+        return rule;
+    }
+
     private static void EnsureDnsHijackRule(JsonObject config, bool isActionBased)
     {
         var route = config["route"] as JsonObject;

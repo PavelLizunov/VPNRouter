@@ -269,9 +269,12 @@ public sealed class VpnEngineHotReloadLifecycleTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task ServiceSettingsReceipt_Characterization_WaitsForReplacementAndRecoversAcceptedPolicy(bool ready)
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, true)]
+    public async Task ServiceSettingsReceipt_Characterization_WaitsForReplacementAndRecoversAcceptedPolicy(
+        bool ready, bool resumeFails, bool crashAfterAcceptance)
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows service Apply uses the Windows restart path.");
         var previousWarmup = StartupPipeline.WarmupHttp;
@@ -283,6 +286,20 @@ public sealed class VpnEngineHotReloadLifecycleTests
             var previousJson = File.ReadAllText(AppPaths.CurrentConfigPath);
             var candidate = SettingsLoader.Copy(initial);
             candidate.Vless.Servers[0].Server = "192.0.2.42";
+            candidate.SingBox.ClashApi = "0.0.0.0:39990";
+            if (resumeFails) candidate.Monitoring.HealthCheckInterval = -2;
+            bool accepted = ready && !resumeFails;
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
+            var failoverSettings = typeof(VpnEngine).GetField("_failoverSettingsContext", flags)!;
+            var deferredLift = typeof(HealthMonitor).GetField("_deferredBlockRuleDisable", flags)!;
+            deferredLift.SetValue(monitor, 1);
+            engine.StatusChanged += status =>
+            {
+                if (crashAfterAcceptance && status.StartsWith("Applied (restart", StringComparison.Ordinal))
+                    handles[1].SignalExit(1);
+            };
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var result = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             engine.ConfirmServiceReplacement = async (handle, json, ct) =>
@@ -298,22 +315,133 @@ public sealed class VpnEngineHotReloadLifecycleTests
             {
                 await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
                 Assert.False(apply.IsCompleted);
-                Assert.False(engine.IsServiceApplyCurrent(candidate));
+                Assert.Same(initial, failoverSettings.GetValue(engine));
             }
             finally { result.TrySetResult(ready); }
-            Assert.Equal(ready, await apply);
-            Assert.Equal(ready, engine.IsServiceApplyCurrent(candidate));
-            if (!ready) Assert.Equal(previousJson, File.ReadAllText(AppPaths.CurrentConfigPath));
+            Assert.Equal(accepted, await apply);
+            Assert.Same(accepted ? candidate : initial, failoverSettings.GetValue(engine));
+            Assert.Equal(1, Assert.IsType<int>(deferredLift.GetValue(monitor)));
+            if (crashAfterAcceptance) Assert.True(handles[1].HasExited);
+            if (!accepted) Assert.Equal(previousJson, File.ReadAllText(AppPaths.CurrentConfigPath));
+            var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
+            var recoveryJson = Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null]));
+            using var json = System.Text.Json.JsonDocument.Parse(recoveryJson);
+            var proxies = json.RootElement.GetProperty("outbounds").EnumerateArray()
+                .Where(outbound => outbound.GetProperty("type").GetString() == "vless").ToArray();
+            Assert.Single(proxies, outbound => outbound.GetProperty("tag").GetString() == "proxy");
+            var expectedServer = accepted ? "192.0.2.42" : initial.Vless.Servers[0].Server;
+            Assert.All(proxies, outbound => Assert.Equal(expectedServer, outbound.GetProperty("server").GetString()));
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ServiceSettingsReceipt_Characterization_RecoversAcceptedExternalImport(bool acceptEdit)
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Exercises the Windows replacement path with fake processes.");
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient().Setup("generate_204", "");
+        try
+        {
+            var (engine, _, _, _, _, initial, cleanup) = await StartHappyPathAsync(isolatedProfile: true);
+            using var fixture = cleanup;
+            var runner = Assert.IsType<FakeProcessRunner>(SingBoxManager.Runner);
+            runner.OnRun(r => r.Arguments.SequenceEqual(["check", "-c", "stdin"]),
+                new ProcessResult(0, "", "", TimeSpan.Zero, false));
+
+            var directory = Directory.CreateDirectory(Path.Combine(AppPaths.DataDir, "imports")).FullName;
+            var source = Path.Combine(directory, "source.json");
+            var srs = Path.Combine(directory, "allowed.srs");
+            File.WriteAllBytes(srs, RuleSetSamples.KeywordRule());
+            const string first = """
+                {"outbounds":[{"type":"socks","tag":"proxy","server":"192.0.2.41","server_port":1080},
+                    {"type":"direct","tag":"direct"}],
+                 "route":{"rule_set":[{"type":"local","tag":"allowed","format":"binary","path":"allowed.srs"}]}}
+                """;
+            File.WriteAllText(source, first);
+            var normalizedFirst = CustomConfigInjector.ReadImport(source);
+            var settings = SettingsLoader.Copy(initial);
+            settings.App.ConfigMode = "custom";
+            settings.App.CustomConfigs = [new CustomConfigEntry { Name = "desk", Path = source }];
+            settings.App.ActiveCustomConfig = ""; // Legacy selection uses the first named entry.
+            var managed = CustomConfigInjector.GetProgramDataPath("desk");
+            Assert.True(await engine.ApplyAsync(settings, TestContext.Current.CancellationToken));
+            Assert.Equal(normalizedFirst, File.ReadAllText(managed));
+
+            File.WriteAllText(source, first.Replace("192.0.2.41", "192.0.2.42"));
+            var normalizedEdit = CustomConfigInjector.ReadImport(source);
+            string? copyBeforeConfirmation = null;
+            string? candidateJson = null;
+            engine.ConfirmServiceReplacement = (_, json, _) =>
+            {
+                copyBeforeConfirmation = File.ReadAllText(managed);
+                candidateJson = json;
+                File.WriteAllText(source, first.Replace("192.0.2.41", "192.0.2.43"));
+                return Task.FromResult(acceptEdit);
+            };
+            Assert.Equal(acceptEdit, await engine.ApplyAsync(settings, TestContext.Current.CancellationToken));
+            Assert.Equal(normalizedFirst, copyBeforeConfirmation);
+            Assert.NotNull(candidateJson);
+            Assert.Contains("192.0.2.42", candidateJson);
+            var accepted = acceptEdit ? normalizedEdit : normalizedFirst;
+            Assert.Equal(accepted, File.ReadAllText(managed));
+            using var raw = System.Text.Json.JsonDocument.Parse(accepted);
+            Assert.Equal(srs, raw.RootElement.GetProperty("route").GetProperty("rule_set")[0].GetProperty("path").GetString());
 
             const System.Reflection.BindingFlags flags =
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
-            var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
-            var recoveryJson = Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null]));
-            using var json = System.Text.Json.JsonDocument.Parse(recoveryJson);
-            var proxy = Assert.Single(json.RootElement.GetProperty("outbounds").EnumerateArray(),
-                outbound => outbound.GetProperty("type").GetString() == "vless");
-            Assert.Equal(ready ? "192.0.2.42" : initial.Vless.Servers[0].Server, proxy.GetProperty("server").GetString());
+            void CheckRecovery()
+            {
+                var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
+                var json = Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null]));
+                using var recovered = System.Text.Json.JsonDocument.Parse(json);
+                var proxy = Assert.Single(recovered.RootElement.GetProperty("outbounds").EnumerateArray(),
+                    ob => ob.GetProperty("tag").GetString() == "proxy");
+                Assert.Equal(acceptEdit ? "192.0.2.42" : "192.0.2.41", proxy.GetProperty("server").GetString());
+            }
+            CheckRecovery();
+            File.Delete(source);
+            Assert.Equal(managed, VpnEngine.ResolveCustomConfigPath(settings));
+            CheckRecovery();
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
+    }
+
+    [Fact]
+    public async Task Characterization_ChildExitReturnsWhileMonitorIsLockedAndStaleRecoveryIsDiscarded()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The fixture uses the Windows lifecycle with fake children.");
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient().Setup("generate_204", "");
+        try
+        {
+            var (engine, _, handles, firewall, _, settings, cleanup) = await StartHappyPathAsync(isolatedProfile: true);
+            using var fixture = cleanup;
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
+            var gate = typeof(HealthMonitor).GetField("_settingsWork", flags)!.GetValue(monitor)!;
+            using var returned = new ManualResetEventSlim();
+            Task signal;
+            Task stale;
+            lock (gate)
+            {
+                signal = Task.Run(() => { handles[0].SignalExit(1); returned.Set(); });
+                Assert.True(returned.Wait(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+                stale = monitor.QueueCrashRecoveryAsync(handles[0]);
+                monitor.PauseForApply();
+                monitor.ResumeAfterApply(new Profile { Name = "Receipt" }, settings, scan: null);
+            }
+            await Task.WhenAll(signal, stale);
+            Assert.Equal(0, firewall.EnableBlockRulesCount);
+            using var differentChild = new FakeProcessHandle(handles[0].Pid);
+            await monitor.QueueCrashRecoveryAsync(differentChild);
+            Assert.Equal(0, firewall.EnableBlockRulesCount);
+            await monitor.QueueCrashRecoveryAsync(handles[0]);
+            Assert.Equal(1, firewall.EnableBlockRulesCount);
         }
         finally { StartupPipeline.WarmupHttp = previousWarmup; }
     }

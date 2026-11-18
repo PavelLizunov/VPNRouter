@@ -8,27 +8,34 @@ namespace VPNRouter.Core.Services;
 
 public partial class SingBoxManager
 {
-    private void OnProcessExited() => OnProcessExited(null);
-
-    private void OnProcessExited(int? eventExitCode)
+    internal sealed class ChildExit(IProcessHandle child) : EventArgs
     {
-        int? exitCode = eventExitCode;
-        Exception? exitCodeError = null;
-        if (!exitCode.HasValue)
+        internal IProcessHandle Child { get; } = child;
+    }
+
+    private void OnProcessExited(IProcessHandle child, int exitCode)
+    {
+        // An OS callback must be able to return while another thread is disposing this handle.
+        if (!Monitor.TryEnter(_lifecycleGate))
         {
-            try
+            _ = Task.Run(() =>
             {
-                if (_handle is { HasExited: true } h)
-                {
-                    exitCode = h.WaitForExitAsync(CancellationToken.None).GetAwaiter().GetResult();
-                }
-            }
-            catch (Exception ex)
-            {
-                exitCodeError = ex;
-            }
+                bool crashed;
+                lock (_lifecycleGate) crashed = RecordExit(child, exitCode);
+                if (crashed) Crashed?.Invoke(this, new ChildExit(child));
+            });
+            return;
         }
 
+        bool notify;
+        try { notify = RecordExit(child, exitCode); }
+        finally { Monitor.Exit(_lifecycleGate); }
+        if (notify) Crashed?.Invoke(this, new ChildExit(child));
+    }
+
+    private bool RecordExit(IProcessHandle child, int exitCode)
+    {
+        if (!ReferenceEquals(child, _handle) || Volatile.Read(ref _disposed) != 0) return false;
         // An exit during an intentional Stop or Restart is expected, not a crash.
         if ((_restartInProgress || _stopInProgress) && (exitCode == -1 || exitCode == 137 || exitCode == 143))
         {
@@ -37,22 +44,16 @@ public partial class SingBoxManager
                 _restartInProgress ? "restart" : "stop",
                 exitCode);
             DetectTunOrphanCrashSignature();
-            return;
+            return false;
         }
 
         if (exitCode == 0)
         {
             _logger.Warning("[SingBoxManager] sing-box exited unexpectedly (exit code 0) — will attempt restart");
         }
-        else if (exitCode.HasValue)
-        {
-            _logger.Error("[SingBoxManager] sing-box crashed (exit code: {Code})", exitCode.Value);
-        }
         else
         {
-            _logger.Error(exitCodeError,
-                "[SingBoxManager] sing-box exited but ExitCode could not be read ({ErrType})",
-                exitCodeError?.GetType().Name ?? "no exception");
+            _logger.Error("[SingBoxManager] sing-box crashed (exit code: {Code})", exitCode);
         }
 
         LogSingBoxCrashTail();
@@ -60,7 +61,6 @@ public partial class SingBoxManager
         DetectTunOrphanCrashSignature();
 
         State = SingBoxState.Failed;
-        Crashed?.Invoke(this, EventArgs.Empty);
 
         if (OperatingSystem.IsWindows())
         {
@@ -73,6 +73,7 @@ public partial class SingBoxManager
                 _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
             }
         }
+        return true;
     }
 
     private void LogSingBoxCrashTail()

@@ -168,9 +168,13 @@ internal static class ZapretRuntimeDirectory
     }
 
     [SupportedOSPlatform("windows")]
+    internal static void CheckWindowsDirectory(DirectoryInfo dir, bool allowCreatorOwnerTemplate) =>
+        CheckAccess(dir, dir.GetAccessControl(), parent: false, allowCreatorOwnerTemplate);
+
+    [SupportedOSPlatform("windows")]
     internal static void CheckWindowsTree(DirectoryInfo dir, bool allowCreatorOwnerTemplate = false)
     {
-        CheckAccess(dir, dir.GetAccessControl(), parent: false, allowCreatorOwnerTemplate);
+        CheckWindowsDirectory(dir, allowCreatorOwnerTemplate);
         foreach (var child in dir.EnumerateFileSystemInfos())
         {
             if ((child.Attributes & FileAttributes.ReparsePoint) != 0)
