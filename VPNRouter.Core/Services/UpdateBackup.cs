@@ -147,7 +147,7 @@ public static class UpdateBackup
                 }
             }
 
-            CopyDirectoryRecursive(src, stage);
+            CopyDirectoryRecursive(src, stage, applicationRoot: true);
 
             try { File.Delete(generationPath); }
             catch (Exception ex)
@@ -376,7 +376,7 @@ public static class UpdateBackup
         catch { return string.Empty; }
     }
 
-    private static void CopyDirectoryRecursive(string sourceDir, string destDir)
+    private static void CopyDirectoryRecursive(string sourceDir, string destDir, bool applicationRoot = false)
     {
         Directory.CreateDirectory(destDir);
 
@@ -402,6 +402,8 @@ public static class UpdateBackup
         foreach (var sub in Directory.EnumerateDirectories(sourceDir))
         {
             var name = Path.GetFileName(sub);
+            // A rollback snapshot is an application payload. Private repair scratch keeps its own ACL.
+            if (applicationRoot && name.Equals(".repair-temp", StringComparison.OrdinalIgnoreCase)) continue;
             CopyDirectoryRecursive(sub, Path.Combine(destDir, name));
         }
     }
