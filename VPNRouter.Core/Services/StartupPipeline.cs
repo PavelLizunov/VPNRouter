@@ -97,6 +97,7 @@ internal interface IStartupHost
     void SchedulePostStartProbe(
         AppSettings settings,
         ConfigSanityCheck sanityCheck,
+        Func<CancellationToken, Task<ProbeResult>> probeProxy,
         CancellationToken ct);
 }
 
@@ -256,13 +257,7 @@ internal sealed class StartupPipeline
         }
         StartMonitorsPhase(settings, profile, scanResult, monitorController, customConfigJson, CommitStart);
 
-        var probeToken = _host.BeginStartupProbes(ct);
-        ScheduleWarmupProbe(pid, settings, probeToken);
-        if (!isCustomConfig)
-        {
-            _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
-            _host.SchedulePostStartProbe(settings, sanityCheck, probeToken);
-        }
+        _ = ScheduleStartupProbes(pid, settings, isCustomConfig, monitorController, ct);
 
         _host.OnStatus("VPN Router is running");
 
@@ -821,15 +816,29 @@ internal sealed class StartupPipeline
         return pid;
     }
 
-    private void ScheduleWarmupProbe(int pidSnapshot, AppSettings settings, CancellationToken ct)
+    internal Task ScheduleStartupProbes(int pid, AppSettings settings, bool isCustomConfig,
+        (Uri Endpoint, string? Secret) controller, CancellationToken ct)
     {
-        if (_host.CallerConfirmsProxy) return;
+        var token = _host.BeginStartupProbes(ct);
+        if (isCustomConfig) return ScheduleWarmupProbe(pid, settings, null, token);
+
+        _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
+        Task<ProbeResult> ProbeProxy(CancellationToken probeToken) =>
+            sanityCheck.ProbeAsync(controller.Endpoint, controller.Secret, probeToken);
+        bool singleOutbound = (settings.App.ConfigMode ?? "generated").Trim().Equals("generated", StringComparison.OrdinalIgnoreCase) &&
+            settings.Vless.GetActiveServers().FirstOrDefault()?.UseAsSingleOutbound == true;
+        var warmup = ScheduleWarmupProbe(pid, settings, singleOutbound ? ProbeProxy : null, token);
+        _host.SchedulePostStartProbe(settings, sanityCheck, ProbeProxy, token);
+        return warmup;
+    }
+
+    private Task ScheduleWarmupProbe(int pidSnapshot, AppSettings settings,
+        Func<CancellationToken, Task<ProbeResult>>? exactProxy, CancellationToken ct)
+    {
+        if (_host.CallerConfirmsProxy) return Task.CompletedTask;
         _host.OnStatus("Warming up network...");
-        ConfigSanityCheck? exactProxy = null;
-        if (settings.App.ConfigMode == "generated" && settings.Vless.GetActiveServers().FirstOrDefault()?.UseAsSingleOutbound == true)
-            _host.EnsureSanityCheckScaffolding(settings, out exactProxy);
         var seamHttp = WarmupHttp;
-        _ = Task.Run(async () =>
+        return Task.Run(async () =>
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             using var inlineHttp = seamHttp == null && exactProxy == null
@@ -843,8 +852,7 @@ internal sealed class StartupPipeline
                     if (exactProxy != null)
                     {
                         if (!_host.IsCurrentStart(pidSnapshot)) return;
-                        var probe = await exactProxy.ProbeAsync(VpnEngine.ParseClashApiPort(settings.SingBox.ClashApi),
-                            settings.SingBox.ClashApiSecret, ct);
+                        var probe = await exactProxy(ct);
                         if (probe.IsDead) continue;
                     }
                     else if (seamHttp != null)

@@ -293,6 +293,16 @@ public sealed class VpnEngineHotReloadLifecycleTests
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var monitor = Assert.IsType<HealthMonitor>(typeof(VpnEngine).GetField("_healthMonitor", flags)!.GetValue(engine));
             var failoverSettings = typeof(VpnEngine).GetField("_failoverSettingsContext", flags)!;
+            var originalSnapshot = Assert.IsType<AppSettings>(failoverSettings.GetValue(engine));
+            Assert.NotSame(initial, originalSnapshot);
+            var initialServer = initial.Vless.Servers[0].Server;
+            initial.App.ConfigMode = "custom";
+            initial.App.CustomConfig = "unsaved-fixture.json";
+            initial.Vless.Servers[0].Server = "unsaved.invalid";
+            var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
+            var beforeApply = Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null]));
+            Assert.Contains(initialServer, beforeApply);
+            Assert.DoesNotContain("unsaved.invalid", beforeApply);
             var deferredLift = typeof(HealthMonitor).GetField("_deferredBlockRuleDisable", flags)!;
             deferredLift.SetValue(monitor, 1);
             engine.StatusChanged += status =>
@@ -315,21 +325,25 @@ public sealed class VpnEngineHotReloadLifecycleTests
             {
                 await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
                 Assert.False(apply.IsCompleted);
-                Assert.Same(initial, failoverSettings.GetValue(engine));
+                Assert.Same(originalSnapshot, failoverSettings.GetValue(engine));
+                candidate.App.ConfigMode = "custom";
+                candidate.Vless.Servers[0].Server = "also-unsaved.invalid";
             }
             finally { result.TrySetResult(ready); }
             Assert.Equal(accepted, await apply);
-            Assert.Same(accepted ? candidate : initial, failoverSettings.GetValue(engine));
+            var activeSnapshot = Assert.IsType<AppSettings>(failoverSettings.GetValue(engine));
+            Assert.Equal(!accepted, ReferenceEquals(originalSnapshot, activeSnapshot));
+            Assert.NotSame(candidate, activeSnapshot);
+            Assert.Equal("generated", activeSnapshot.App.ConfigMode);
             Assert.Equal(1, Assert.IsType<int>(deferredLift.GetValue(monitor)));
             if (crashAfterAcceptance) Assert.True(handles[1].HasExited);
             if (!accepted) Assert.Equal(previousJson, File.ReadAllText(AppPaths.CurrentConfigPath));
-            var recover = typeof(HealthMonitor).GetMethod("GenerateConfigJson", flags)!;
             var recoveryJson = Assert.IsType<string>(recover.Invoke(monitor, [new List<string>(), null]));
             using var json = System.Text.Json.JsonDocument.Parse(recoveryJson);
             var proxies = json.RootElement.GetProperty("outbounds").EnumerateArray()
                 .Where(outbound => outbound.GetProperty("type").GetString() == "vless").ToArray();
             Assert.Single(proxies, outbound => outbound.GetProperty("tag").GetString() == "proxy");
-            var expectedServer = accepted ? "192.0.2.42" : initial.Vless.Servers[0].Server;
+            var expectedServer = accepted ? "192.0.2.42" : initialServer;
             Assert.All(proxies, outbound => Assert.Equal(expectedServer, outbound.GetProperty("server").GetString()));
         }
         finally { StartupPipeline.WarmupHttp = previousWarmup; }

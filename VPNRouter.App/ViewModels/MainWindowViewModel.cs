@@ -508,7 +508,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         DeployBundledProfiles();
 
         _engine = PlatformServices.CreateVpnEngine(_logger);
-        _stopOwnedEngineForUpdate = stopOwnedEngineForUpdate ?? _engine.Stop;
+        _stopOwnedEngineForUpdate = stopOwnedEngineForUpdate ?? _engine.StopOwnedSession;
         _engine.StatusChanged += OnEngineStatus;
         _engine.Connected += OnEngineConnected;
         _engine.AutoFailoverTriggered += OnAutoFailoverMessage;
@@ -544,7 +544,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             updateSource: businessUpdateSourceFactory?.Invoke(PrepareBusinessUpdateAsync),
             exitApplication: exitApplication, prepareBusinessUpdate: PrepareBusinessUpdateAsync);
         UpdateVm.PropertyChanged += OnBusinessPolicyUpdateStateChanged;
-        UpdateVm.ReserveRestart = ReserveUpdateRestart;
+        UpdateVm.ReserveRestart = () => ReserveRestart(stopOwnedTunnel: !ProductEdition.IsBusiness);
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
@@ -749,14 +749,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return true;
         if (!TryReleaseZapretForShutdown()) return false;
 
-        if (_engine.HasActiveTunnel)
+        try { _engine.StopOwnedSession(); }
+        catch (InvalidOperationException)
         {
-            try { _engine.Stop(); }
-            catch (InvalidOperationException)
-            {
-                StatusText = Strings.TunnelStopUnconfirmed;
-                return false;
-            }
+            StatusText = Strings.TunnelStopUnconfirmed;
+            return false;
         }
 
         StopSubRefreshTimer();
@@ -774,18 +771,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private bool _restartReserved;
 
-    private Action<bool> ReserveUpdateRestart()
-    {
-        var finish = ReserveRestart();
-        try
-        {
-            if (!ProductEdition.IsBusiness && _engine.IsRunning) _engine.Stop();
-            return finish;
-        }
-        catch { finish(false); throw; }
-    }
-
-    private Action<bool> ReserveRestart()
+    private Action<bool> ReserveRestart(bool stopOwnedTunnel = true)
     {
         if (_disposed || !IsZapretMagicButtonEnabled)
             throw new InvalidOperationException(Core.Localization.Strings.ZapretRestartPending);
@@ -796,11 +782,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #if PLATFORM_WINDOWS
             restore = _zapret?.SuspendOwnedStrategy();
 #endif
+            if (stopOwnedTunnel) _engine.StopOwnedSession();
             OnPropertyChanged(nameof(IsZapretMagicButtonEnabled));
         }
         catch
         {
-            _restartReserved = false;
+            try { restore?.Invoke(); }
+            finally { _restartReserved = false; }
             throw;
         }
         return committed =>
@@ -853,6 +841,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         if (!TryReleaseZapretForShutdown())
             throw new InvalidOperationException(Core.Localization.Strings.ZapretQuitPending);
+        _engine.StopOwnedSession();
         _disposed = true;
         DisposeBusinessPolicy();
 

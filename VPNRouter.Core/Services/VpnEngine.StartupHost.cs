@@ -35,7 +35,8 @@ public partial class VpnEngine
 
         public void OnSingBoxStarted(int pid)
         {
-            _startedHandle = _singBoxManager?.OwnedProcessHandle;
+            // The manager also raises Started for recovery children. This host's probes belong to its first child.
+            _startedHandle ??= _singBoxManager?.OwnedProcessHandle;
             if (_engine._policySession is { } session && ReferenceEquals(session.Cancellation, _sessionCts))
                 session.HasRun = true;
             _engine.EnterPostStartPhase();
@@ -85,15 +86,17 @@ public partial class VpnEngine
             // The monitor raises this event under its settings gate. Freeze the active policy
             // here; a queued task may begin after Apply accepts a different one.
             var token = _engine._sessionCts?.Token ?? CancellationToken.None;
+            var captured = _engine._failoverSettingsContext ?? CapturedSettings();
+            var generation = _engine._failoverGeneration;
             var failover = WireFailoverWithStop(new ConfigSanityCheck(_engine._logger));
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    if (token.IsCancellationRequested || failover.IsCurrentIntent?.Invoke() != true) return;
-                    var outcome = await failover.HandleDeadConfigAsync(reason, token);
-                    if (outcome.UserFacingMessage != null && failover.IsCurrentIntent?.Invoke() == true)
-                        _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
+                    var outcome = await _engine.HandlePostStartFailureAsync(failover, reason, captured,
+                        generation, probeChild: null, token);
+                    if (outcome?.UserFacingMessage is { } message && failover.IsCurrentIntent?.Invoke() == true)
+                        _engine.AutoFailoverTriggered?.Invoke(message);
                 }
                 catch (Exception)
                 {
@@ -216,15 +219,16 @@ public partial class VpnEngine
         public void SchedulePostStartProbe(
             AppSettings settings,
             ConfigSanityCheck sanityCheck,
+            Func<CancellationToken, Task<ProbeResult>> probeProxy,
             CancellationToken ct)
         {
             CaptureSettings(settings);
 
             _engine.TryStartConnectionHealthStream(settings);
 
-            var pid = _startedHandle?.Pid ?? -1;
-            var port = ParseClashApiPort(settings.SingBox.ClashApi);
-            var secret = settings.SingBox.ClashApiSecret;
+            var child = _startedHandle;
+            if (child == null) return;
+            var captured = _engine._failoverSettingsContext ?? settings;
             var failover = WireFailoverWithStop(sanityCheck);
             _ = Task.Run(async () =>
             {
@@ -232,8 +236,8 @@ public partial class VpnEngine
                 {
                     await Task.Delay(TimeSpan.FromSeconds(15), ct);
                     var probe = await ProbeCurrentStartAsync(
-                        () => IsCurrentStart(pid),
-                        token => sanityCheck.ProbeAsync(port, secret, token), ct);
+                        () => IsCurrentStart(child.Pid),
+                        probeProxy, ct);
                     if (probe == null || ct.IsCancellationRequested) return;
                     var warmedUp = _engine._warmupConfirmed;
                     if (!ShouldAutoFailoverAfterProbe(probe.IsDead, ct.IsCancellationRequested, warmedUp))
@@ -245,9 +249,10 @@ public partial class VpnEngine
                     }
 
                     _engine._logger?.Warning("[VpnEngine] F-E post-start probe failed, requesting failover");
-                    var outcome = await failover.HandleDeadConfigAsync(probe.Reason ?? "probe failed", ct);
-                    if (outcome.UserFacingMessage != null && failover.IsCurrentIntent?.Invoke() == true)
-                        _engine.AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
+                    var outcome = await _engine.HandlePostStartFailureAsync(failover, probe.Reason ?? "probe failed",
+                        captured, _generation, child, ct);
+                    if (outcome?.UserFacingMessage is { } message && failover.IsCurrentIntent?.Invoke() == true)
+                        _engine.AutoFailoverTriggered?.Invoke(message);
                 }
                 catch (OperationCanceledException) { }
                 catch (Exception)

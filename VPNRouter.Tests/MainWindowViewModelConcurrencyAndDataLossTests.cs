@@ -143,6 +143,70 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
         }
     }
 
+    [AvaloniaTheory]
+    [InlineData("quit")]
+    [InlineData("safe")]
+    [InlineData("reset")]
+    public void DesktopExitWaitsForOwnedLinuxTunnelWithUnreadableStatus(string command)
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var store = new InMemorySettingsStore();
+        var settings = store.Load();
+        settings.App.ZapretStrategy = "keep-until-reset";
+        store.Save(settings);
+        using var vm = new MainWindowViewModel(store);
+        const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+        var engine = (VPNRouter.Core.Services.VpnEngine)typeof(MainWindowViewModel).GetField("_engine", fields)!.GetValue(vm)!;
+        var managerField = engine.GetType().GetField("_singBox", fields)!;
+        using var lease = new VPNRouter.Core.Services.TunOwnershipLock();
+        using var manager = new VPNRouter.Core.Services.SingBoxManager(new SingBoxSettings(), null,
+            new FakeHttpClient().Setup("/configs", "", statusCode: 503), new FakeProcessRunner());
+        using var child = new FakeProcessHandle(142) { ExitQueryUnavailable = true };
+        manager.GetType().GetField("_handle", fields)!.SetValue(manager, child);
+        manager.GetType().GetField("_tunLock", fields)!.SetValue(manager, lease);
+        manager.GetType().GetField("_ownsTunLock", fields)!.SetValue(manager, true);
+        lease.GetType().GetField("_owned", fields)!.SetValue(lease, true);
+        managerField.SetValue(engine, manager);
+        var exits = 0;
+        var launches = 0;
+        vm.RequestDesktopShutdown = () => exits++;
+        vm.ExitAfterMenuRestart = _ => exits++;
+        vm.LaunchRestart = _ => launches++;
+        void Execute()
+        {
+            switch (command)
+            {
+                case "quit": vm.QuitCommand.Execute(null); break;
+                case "safe": vm.RestartInSafeModeCommand.Execute(null); break;
+                case "reset":
+                    vm.ResetConfigCommand.Execute(null);
+                    vm.ResetConfigCommand.Execute(null);
+                    break;
+            }
+        }
+
+        try
+        {
+            Execute();
+            Assert.Equal((0, 0), (exits, launches));
+            Assert.Equal("keep-until-reset", store.Load().App.ZapretStrategy);
+            Assert.Same(child, manager.OwnedProcessHandle);
+            Assert.True(lease.HasOwnership);
+            Assert.False(vm.IsShutdownPrepared);
+            child.ExitQueryUnavailable = false;
+            child.SignalExit(0);
+            Execute();
+            Assert.Equal((1, command == "quit" ? 0 : 1), (exits, launches));
+            Assert.False(lease.HasOwnership);
+        }
+        finally
+        {
+            child.ExitQueryUnavailable = false;
+            child.SignalExit(0);
+            if (managerField.GetValue(engine) != null) engine.Stop();
+        }
+    }
+
     private static string ReadAppFile(params string[] pathSegments)
     {
         var root = FindRepoRoot();

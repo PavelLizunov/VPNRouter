@@ -42,9 +42,11 @@ public sealed class AutoFailoverEngine
         _store = store ?? RealSettingsStore.Instance;
     }
 
-    public async Task<FailoverOutcome> HandleDeadConfigAsync(
-        string reason,
-        CancellationToken ct = default)
+    public Task<FailoverOutcome> HandleDeadConfigAsync(string reason, CancellationToken ct = default) =>
+        HandleDeadConfigAsync(reason, ct, _restart, canReplace: null);
+
+    internal async Task<FailoverOutcome> HandleDeadConfigAsync(string reason, CancellationToken ct,
+        Func<CancellationToken, Task<bool>>? restart, Func<bool>? canReplace)
     {
         _logger?.Warning("[AutoFailover] Dead config reported");
 
@@ -62,20 +64,19 @@ public sealed class AutoFailoverEngine
             newName = $"{candidate.Server}:{candidate.Port}";
         }
 
-        if (!IsIntentCurrent())
+        if (!IsIntentCurrent() || canReplace?.Invoke() == false)
         {
             _logger?.Information(
                 "[AutoFailover] Stale failover intent before selector mutation — aborting without changes");
             return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
         }
 
-        if (!string.IsNullOrWhiteSpace(oldActive))
-            _tried.Add(oldActive);
+        bool addedOld = !string.IsNullOrWhiteSpace(oldActive) && _tried.Add(oldActive);
 
         _settings.Vless.ActiveServer = newName;
         _settings.App.ActiveSubscriptionServer = newName;
 
-        var committed = await RestartWithRollbackAsync(oldActive, oldActiveSub, ct);
+        var committed = await RestartWithRollbackAsync(oldActive, oldActiveSub, ct, restart);
 
         if (!IsIntentCurrent())
         {
@@ -86,7 +87,11 @@ public sealed class AutoFailoverEngine
 
         if (!committed)
         {
-            if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(newName))
+            if (canReplace?.Invoke() == false)
+            {
+                if (addedOld) _tried.Remove(oldActive);
+            }
+            else if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(newName))
                 _tried.Add(newName);
             _settings.Vless.ActiveServer = oldActive;
             _settings.App.ActiveSubscriptionServer = oldActiveSub;
@@ -171,12 +176,12 @@ public sealed class AutoFailoverEngine
     }
 
     private async Task<bool> RestartWithRollbackAsync(
-        string oldActive, string oldActiveSub, CancellationToken ct)
+        string oldActive, string oldActiveSub, CancellationToken ct, Func<CancellationToken, Task<bool>>? restart)
     {
         bool committed = true;
-        if (_restart != null)
+        if (restart != null)
         {
-            try { committed = await _restart(ct); }
+            try { committed = await restart(ct); }
             catch (OperationCanceledException)
             {
                 if (IsIntentCurrent())

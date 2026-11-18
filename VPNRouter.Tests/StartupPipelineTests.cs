@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using Serilog;
 using VPNRouter.Core;
 using VPNRouter.Core.Interfaces;
@@ -62,6 +64,72 @@ public sealed class StartupPipelineTests : IDisposable
             Vless = new VlessConfig(),
             ActiveProfile = "TestProfile"
         };
+
+    [Theory]
+    [InlineData("[::1]", true)]
+    [InlineData("[::]", true)]
+    [InlineData("localhost", true)]
+    [InlineData("localhost", false)]
+    public async Task GeneratedStartupProbes_UseAcceptedControllerForSingleOutboundWarmupAndDelay(string bind, bool ipv6)
+    {
+        Assert.SkipUnless(!ipv6 || Socket.OSSupportsIPv6, "IPv6 loopback is required.");
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        lifetime.CancelAfter(TimeSpan.FromSeconds(15));
+        var ct = lifetime.Token;
+        using var server = new TcpListener(ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback, 0);
+        if (ipv6) server.Server.DualMode = false;
+        server.Start();
+        var config = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            experimental = new { clash_api = new
+            {
+                external_controller = $"{bind}:{((IPEndPoint)server.LocalEndpoint).Port}",
+                secret = "delay-fixture"
+            } }
+        });
+        var controller = ClashSingBoxApi.ReadLocalController(config);
+        async Task ServeDelayAsync()
+        {
+            using var client = await server.AcceptTcpClientAsync(ct);
+            using var stream = client.GetStream();
+            using var reader = new StreamReader(stream, leaveOpen: true);
+            Assert.StartsWith("GET /proxies/proxy/delay?", await reader.ReadLineAsync(ct));
+            var headers = new List<string>();
+            while (await reader.ReadLineAsync(ct) is { Length: > 0 } header) headers.Add(header);
+            Assert.Contains($"Host: {controller.Endpoint.Authority}", headers);
+            Assert.Contains("Authorization: Bearer delay-fixture", headers);
+            const string body = """{"delay":23}""";
+            await stream.WriteAsync(System.Text.Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 200 OK\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}"), ct);
+        }
+
+        var settings = BuildBaseSettings(configMode: ipv6 ? "generated" : "Generated");
+        settings.SingBox.ClashApi = "127.0.0.1:0";
+        settings.SingBox.ClashApiSecret = "unused-edit";
+        var active = MakeServer("active", "active.invalid");
+        active.UseAsSingleOutbound = true;
+        settings.Vless.Servers = [active];
+        settings.Vless.ActiveServer = active.Name;
+        var host = new TestStartupHost();
+        var pipeline = new StartupPipeline(host, _store, new NullWindowsDnsHardening());
+        var previousWarmup = StartupPipeline.WarmupHttp;
+        StartupPipeline.WarmupHttp = new FakeHttpClient();
+        try
+        {
+            var warmup = pipeline.ScheduleStartupProbes(401, settings, false, controller, ct);
+            await ServeDelayAsync();
+            await warmup.WaitAsync(ct);
+            Assert.Equal(401, Assert.Single(host.ConnectedPids));
+
+            Assert.NotNull(host.PostStartProbe);
+            var delayed = host.PostStartProbe(ct);
+            await ServeDelayAsync();
+            var result = await delayed;
+            Assert.False(result.IsDead);
+            Assert.Equal(23, result.LastDelayMs);
+        }
+        finally { StartupPipeline.WarmupHttp = previousWarmup; }
+    }
 
     [Fact]
     public async Task PreStartFailover_LogsFieldAndOutcomeWithoutReasonOrReplacementName()
@@ -572,7 +640,7 @@ public sealed class StartupPipelineTests : IDisposable
         public bool SanityCheckEnsured { get; private set; }
         public string? FailoverMessage { get; private set; }
         public bool AutoFailoverInvoked => FailoverMessage != null;
-        public bool PostStartProbeScheduled { get; private set; }
+        public Func<CancellationToken, Task<ProbeResult>>? PostStartProbe { get; private set; }
 
         public void OnStatus(string message) => Statuses.Add(message);
         public void OnWarning(string message) => Warnings.Add(message);
@@ -619,9 +687,10 @@ public sealed class StartupPipelineTests : IDisposable
         public void SchedulePostStartProbe(
             AppSettings settings,
             ConfigSanityCheck sanityCheck,
+            Func<CancellationToken, Task<ProbeResult>> probeProxy,
             CancellationToken ct)
         {
-            PostStartProbeScheduled = true;
+            PostStartProbe = probeProxy;
         }
     }
 }
