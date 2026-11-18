@@ -106,6 +106,8 @@ public sealed class BusinessUpdatesWindowTests
     public void UpdateNotice_RendersLocalizedActionsWithinNarrowWindows(int width, string language)
     {
         using var fixture = new Fixture(width, language);
+        var heading = ById<TextBlock>(fixture.Window, "BusinessProductVersion");
+        Assert.Equal($"VPNRouter Business v{AppVersion.Version}", heading.Text);
         fixture.Vm.UpdateVm.Message = string.Format(Strings.UpdateAvailableMessage, "2.50.6", 60.0);
         fixture.Vm.UpdateVm.IsVisible = true;
         Flush(fixture.Window);
@@ -120,7 +122,7 @@ public sealed class BusinessUpdatesWindowTests
             text => text.Text == fixture.Vm.UpdateVm.Message && text.IsEffectivelyVisible);
         var scroll = Assert.IsType<ScrollViewer>(fixture.Window.Content);
         Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-        foreach (var control in new Control[] { notice, install, dismiss })
+        foreach (var control in new Control[] { heading, notice, install, dismiss })
         {
             Assert.True(control.IsEffectivelyVisible);
             Assert.True(control.Bounds.Width > 0 && control.Bounds.Height > 0);
