@@ -360,8 +360,11 @@ public class AndroidSubscriptionRefreshTests
         Assert.Equal("manual", reopened["config_mode"]);
     }
 
-    [Fact]
-    public async Task SupersededSuccess_LeavesLegacySelectionUntilAConfirmedRejection()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SupersededSuccess_LeavesLegacySelectionUntilAConfirmedRejection(bool switchToFree, bool migrateOldDuplicate)
     {
         var old = VlessUriParser.Parse(OldTargetUri);
         using var prefs = new PreferenceFile(new()
@@ -378,12 +381,36 @@ public class AndroidSubscriptionRefreshTests
         var saved = prefs.Reload();
         Assert.Equal(old.Name, saved["selected_server_name"]);
         Assert.Equal(OldTargetUri, saved["vless_uri"]);
+        Assert.Equal(old.Server, AndroidSubscriptionRefresh.ReadRetainedManual(prefs.Read)?.Server);
+        Assert.Empty(JsonSerializer.Deserialize<List<VlessServerEntry>>(saved["servers_json"])!);
+        if (switchToFree)
+        {
+            if (migrateOldDuplicate) prefs.Commit(new Dictionary<string, string?>
+            {
+                ["servers_json"] = JsonSerializer.Serialize(new[] { old })
+            });
+            prefs.Commit(new Dictionary<string, string?> { [AndroidSubscriptionRefresh.UiCommand] = "free" });
+            Assert.True(AndroidSubscriptionRefresh.SaveFreeConfig(VlessUriParser.Parse(ManualUri), ManualUri, "free",
+                prefs.Read, prefs.Commit, JsonSerializerOptions.Default));
+        }
         await Assert.ThrowsAsync<UnsupportedSubscriptionChainException>(() => ReimportAsync(feed, prefs, UnsupportedBody));
         var reopened = prefs.Reload();
-        Assert.Equal("stop", reopened[AndroidSubscriptionRefresh.UiCommand]);
-        Assert.False(reopened.ContainsKey("selected_server_name"));
-        Assert.False(reopened.ContainsKey("vless_uri"));
-        Assert.Empty(JsonSerializer.Deserialize<List<VlessServerEntry>>(reopened["servers_json"])!);
+        Assert.Null(AndroidSubscriptionRefresh.ReadRetainedManual(prefs.Read));
+        var standalone = JsonSerializer.Deserialize<List<VlessServerEntry>>(reopened["servers_json"])!;
+        if (switchToFree)
+        {
+            Assert.Equal(VlessUriParser.Parse(ManualUri).Server, Assert.Single(standalone).Server);
+            Assert.Equal(standalone[0].Name, reopened["selected_server_name"]);
+            Assert.Equal(ManualUri, reopened["vless_uri"]);
+            Assert.Equal("manual", reopened["config_mode"]);
+        }
+        else
+        {
+            Assert.Equal("stop", reopened[AndroidSubscriptionRefresh.UiCommand]);
+            Assert.False(reopened.ContainsKey("selected_server_name"));
+            Assert.False(reopened.ContainsKey("vless_uri"));
+            Assert.Empty(standalone);
+        }
     }
 
     private sealed class OrderedHttp(Func<int, Task<string>> reply) : IHttpClient

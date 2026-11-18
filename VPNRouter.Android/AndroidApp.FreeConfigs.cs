@@ -1021,6 +1021,7 @@ public partial class AndroidApp
         }
 
         if (!AndroidStorage.IsCurrentUiCommand(command)) return;
+        RefreshConfigModeUiFromStorage();
         ShowMenuFeedback(Localization.FcUsedToast);
 
         CloseAdvancedShell();

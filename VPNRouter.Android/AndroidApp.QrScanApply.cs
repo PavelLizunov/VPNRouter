@@ -108,6 +108,7 @@ public partial class AndroidApp
             catch { }
         }
 
+        RefreshConfigModeUiFromStorage();
         ShowMenuFeedback(Localization.SmpQrConnecting);
         CloseAdvancedShell();
         UpdateConfigSummary();
@@ -173,6 +174,7 @@ public partial class AndroidApp
 
         _ccMode = "subscribe";
         ApplyCcModeVisuals();
+        RefreshConfigModeUiFromStorage();
         ShowMenuFeedback(Localization.SmpQrConnecting);
         CloseAdvancedShell();
         UpdateConfigSummary();

@@ -965,9 +965,7 @@ public partial class AndroidApp : Avalonia.Application
             CornerRadius = new CornerRadius(radiusXs),
             Watermark = Localization.SmpInputWatermark,
         };
-        var existingSub = AndroidStorage.GetSubscriptionUrl();
-        var existingUri = AndroidStorage.GetVlessUri();
-        _serverInput.Text = existingSub ?? existingUri ?? string.Empty;
+        _serverInput.Text = AndroidStorage.SavedServerInput();
 
         var smpQrButton = new Avalonia.Controls.Button
         {

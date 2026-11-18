@@ -7,13 +7,47 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public sealed class ConnectConsentGate
 {
-    private int _open;
+    private readonly Lock _sync = new();
+    private string? _owner;
+    private string? _pending;
 
-    public bool IsOpen => Volatile.Read(ref _open) == 1;
+    internal (string? Owner, string? Pending) Requests
+    {
+        get { lock (_sync) return (_owner, _pending); }
+    }
 
-    /// <summary>True when the caller may open the dialog; false when one is already open.</summary>
-    public bool TryOpen() => Interlocked.CompareExchange(ref _open, 1, 0) == 0;
+    public bool IsOpen => Requests.Owner != null;
+    public bool TryOpen() => OpenOrQueue(string.Empty);
 
-    /// <summary>Call when the dialog returned its result, whatever the result was.</summary>
-    public void Close() => Volatile.Write(ref _open, 0);
+    internal bool OpenOrQueue(string command)
+    {
+        lock (_sync)
+        {
+            if (_owner != null)
+            {
+                if (command.Length > 0 && command != _owner) _pending = command;
+                return false;
+            }
+            _owner = command;
+            return true;
+        }
+    }
+
+    public void Close() => TakeResult();
+
+    internal (string? Owner, string? Pending) ResolveResult(Func<string?, bool> isCurrent)
+    {
+        var (owner, pending) = TakeResult();
+        return (isCurrent(owner) ? owner : null, isCurrent(pending) ? pending : null);
+    }
+
+    private (string? Owner, string? Pending) TakeResult()
+    {
+        lock (_sync)
+        {
+            var requests = (_owner, _pending);
+            _owner = _pending = null;
+            return requests;
+        }
+    }
 }

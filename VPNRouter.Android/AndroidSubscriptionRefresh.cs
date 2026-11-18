@@ -122,6 +122,13 @@ internal static class AndroidSubscriptionRefresh
             var legacy = new SubscriptionEntry { Id = "legacy-default", Name = "Default", Url = previousUrl, Servers = servers };
             updates[Subscriptions] = JsonSerializer.Serialize(new List<SubscriptionEntry> { legacy }, options);
         }
+        // Earlier clients kept a duplicate of the superseded scalar in the standalone list.
+        // Its digest still identifies it until this transaction changes the active selection.
+        if (ReadRetainedManual(read) is { } retired)
+        {
+            var identity = JsonSerializer.Serialize(retired, options);
+            servers.RemoveAll(row => JsonSerializer.Serialize(row, options) == identity);
+        }
         var index = VPNRouter.Core.Services.FreeConfigs.FreeConfigSelection.SelectOrAdd(servers, server);
         updates[StandaloneServers] = JsonSerializer.Serialize(servers, options);
         updates[SelectedName] = servers[index].Name;
@@ -131,6 +138,19 @@ internal static class AndroidSubscriptionRefresh
         updates[ConfigMode] = "manual";
         commit(updates);
         return true;
+    }
+
+    private static string ManualOwner(string url, string uri) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(url + "\0" + uri)));
+
+    internal static VlessServerEntry? ReadRetainedManual(Func<string, string?> read)
+    {
+        var owner = read(LegacyManualOwner);
+        if (owner == null || read(ConfigMode) is not (null or "subscribe") ||
+            read(SubscriptionUrl) is not { Length: > 0 } url || read(ManualUri) is not { Length: > 0 } uri ||
+            owner != ManualOwner(url, uri)) return null;
+        return ServerUriParser.TryParse(uri);
     }
 
     internal static bool AppliesTo(SubscriptionEntry? registration, SubscriptionEntry refreshed, bool rejected) =>
@@ -164,6 +184,7 @@ internal static class AndroidSubscriptionRefresh
         var uri = read(ManualUri);
         var manual = ServerUriParser.TryParse(uri ?? string.Empty);
         string? retiredManualName = null;
+        bool keepScalarOnly = false;
         if (manual != null)
         {
             var manualKey = Identity(manual);
@@ -171,12 +192,15 @@ internal static class AndroidSubscriptionRefresh
             {
                 // A superseded success keeps the selected legacy URI but replaces the cache that
                 // identified its owner. Retain only a digest so a later rejection can still clear it.
-                var owner = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(url + "\0" + uri)));
+                var owner = ManualOwner(url, uri!);
                 if (rejected && recordedOwner == owner && !retained.Contains(manualKey)) oldCopies.Add(manualKey);
                 if (oldCopies.Contains(manualKey))
                 {
-                    if (preserveSelection) updates[LegacyManualOwner] = owner;
+                    if (preserveSelection)
+                    {
+                        updates[LegacyManualOwner] = owner;
+                        keepScalarOnly = true;
+                    }
                     else
                     {
                         updates[ManualUri] = null;
@@ -186,7 +210,7 @@ internal static class AndroidSubscriptionRefresh
                     }
                 }
             }
-            if (manual != null) oldCopies.Remove(manualKey);
+            if (manual != null && !keepScalarOnly) oldCopies.Remove(manualKey);
         }
         var standalone = ReadStandalone(read, options);
         if (standalone.RemoveAll(row => oldCopies.Contains(Identity(row))) > 0)

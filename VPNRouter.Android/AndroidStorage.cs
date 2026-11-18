@@ -54,6 +54,13 @@ public static class AndroidStorage
         if (!string.IsNullOrEmpty(GetString(KeyVlessUri))) return "manual";
         return "manual";
     }
+    internal static string SavedServerInput() => GetConfigMode() switch
+    {
+        "subscribe" => GetSubscriptionUrl() ?? string.Empty,
+        "manual" => GetVlessUri() ?? string.Empty,
+        _ => string.Empty
+    };
+
     public static bool SetConfigMode(string value) => SetString(KeyConfigMode, value);
 
     private const string KeyTunnelLive = "tunnel_live";
@@ -80,10 +87,7 @@ public static class AndroidStorage
         catch { return null; }
     }
 
-    internal static string? CurrentUiCommand => GetString(UiCommandKey);
-    internal static string? CurrentStateEvent => GetString(StateEventKey);
     internal static bool IsCurrentUiCommand(string? id) => id != null && id == GetString(UiCommandKey);
-    internal static bool IsCurrentStateEvent(string? id) => id != null && id == GetString(StateEventKey);
 
     internal static bool HasConfirmedTunnel() => TunnelStateResync.IsConfirmedConnected(
         ResolveVpnState(), VPNRouter.Core.Platform.Android.AndroidSingBoxRuntime.HasLiveTunnel());
@@ -421,6 +425,9 @@ public static class AndroidStorage
     public static VlessServerEntry? GetActiveServer()
     {
         var selectedName = GetSelectedServerName();
+        if (AndroidSubscriptionRefresh.ReadRetainedManual(GetString) is { } retained &&
+            (string.IsNullOrEmpty(selectedName) || string.Equals(selectedName, retained.Name, StringComparison.OrdinalIgnoreCase)))
+            return retained;
         var servers = GetServers();
 
         if (!string.IsNullOrEmpty(selectedName))

@@ -685,9 +685,9 @@ public partial class MainWindowViewModel
             catch (Exception ex) { _logger.Warning(ex, "[VM] Discord/Flowseal hosts reconcile failed (non-fatal)"); }
         }
 
+        GameFilterModeIndex = (int?)VPNRouter.Core.Services.ZapretActions.GetConfiguredGameFilterMode() ?? -1;
         if (VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
-            GameFilterModeIndex = (int)VPNRouter.Core.Services.ZapretActions.GetGameFilterMode();
             IpSetModeIndex = (int)VPNRouter.Core.Services.ZapretActions.GetIpSetMode();
             ZapretAutoUpdateCheck = VPNRouter.Core.Services.ZapretActions.IsAutoUpdateCheckEnabled();
         }

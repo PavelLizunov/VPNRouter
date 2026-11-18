@@ -345,6 +345,20 @@ public static class ZapretActions
     public static bool IsGameFilterConfigured =>
         ZapretRuntimeDirectory.WithPackage(package => File.Exists(GameFilterFlagPath(package)));
 
+    internal static GameFilterMode? GetConfiguredGameFilterMode()
+    {
+        try
+        {
+            return ZapretRuntimeDirectory.WithPackage<GameFilterMode?>(package =>
+            {
+                var flag = GameFilterFlagPath(package);
+                if (File.Exists(flag)) return ReadGameFilter(package).Mode;
+                return File.Exists(flag + PreinstallDisabledSuffix) ? GameFilterMode.Off : null;
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
     internal static bool SetOneClickGameFilterDefault() =>
         ZapretRuntimeDirectory.WithPackage(package =>
         {

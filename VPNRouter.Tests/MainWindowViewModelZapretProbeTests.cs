@@ -4,7 +4,9 @@
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using VPNRouter.App.Localization;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core;
@@ -89,9 +91,11 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
         WriteZapretFile(
             $"start \"\" \"%BIN%winws.exe\" {string.Format(StrategyArgs, name)}", name + ".bat");
 
-    private MainWindowViewModel NewVm(params string[] strategyNames)
+    private MainWindowViewModel NewVm(params string[] strategyNames) => NewVm(true, strategyNames);
+
+    private MainWindowViewModel NewVm(bool installed, params string[] strategyNames)
     {
-        WriteZapretFile("stub winws for tests", "bin", "winws.exe");
+        if (installed) WriteZapretFile("stub winws for tests", "bin", "winws.exe");
         foreach (var name in strategyNames) WriteStrategy(name);
 
         var vm = new MainWindowViewModel(_store);
@@ -695,9 +699,24 @@ public sealed class MainWindowViewModelZapretProbeTests : IDisposable
     [InlineData(true)]
     public async Task OneClickFirstInstallHonorsExplicitGameFilterOff(bool chooseOff)
     {
-        var vm = NewVm();
-        File.Delete(ZapretUpdater.WinwsExePath);
-        if (chooseOff) ZapretActions.SetGameFilterMode(ZapretActions.GameFilterMode.Off);
+        var vm = NewVm(installed: false);
+        var page = new VPNRouter.App.Views.Pages.DpiBypassPage { DataContext = vm };
+        var window = new Window { Content = page };
+        window.Show();
+        try
+        {
+            var picker = page.FindControl<ComboBox>("GameFilterModePicker")!;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(-1, picker.SelectedIndex);
+            Assert.False(string.IsNullOrWhiteSpace(picker.PlaceholderText));
+            if (chooseOff)
+            {
+                picker.SelectedIndex = 0;
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(ZapretActions.GameFilterMode.Off, ZapretActions.GetConfiguredGameFilterMode());
+            }
+        }
+        finally { window.Close(); }
         vm.DiscordHostsInstalled = true;
         vm.FlowsealHostsInstalled = true;
         var http = ZapretUpdaterDownloadTests.ReleaseForGuiUpdate(validPackage: true);
