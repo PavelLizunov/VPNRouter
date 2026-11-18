@@ -16,6 +16,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - The Android client build resolves RadioButton to two platform namespaces in the app picker. Both ARM64 jobs failed with CS0104 on the policy summary.
+- [ ] **P1** - A rejected subscription row with outbound metadata can survive as a legacy scalar after reopening Headless settings (SubscriptionFeature). Compare the fields the scalar actually stored.
+- [ ] **P1** - A refused escalated Unix stop releases the process handle during verified desktop Apply before termination is confirmed (SingBoxManager.Lifecycle). Preserve the handle, session, active file and TUN lease.
 - [ ] **P1** - Business GUI discovers the main service as VPNRouterBusiness, while the shipped service host, CLI and installer can register it as VPNRouter. Settings Apply must recognize the running owner by its registered image and preserve existing installations (#661, #664).
 - [ ] **P2** - The Business policy admission fixture calls ApplyGatedAsync with three reflection arguments after a fourth parameter was added. Both Business matrix jobs reported TargetParameterCountException on 2380c75c.
 - [ ] **P1** - Service-owned desktop Apply stops the Windows service before validating enabled ad, geo or imported policies (MainWindowViewModel.Settings, #664).
