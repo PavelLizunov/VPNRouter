@@ -23,6 +23,8 @@ public static class SubscriptionRefreshChecks
         {
             foreach (var scenario in new[] { "http", "transport", "empty", "invalid", "cancel", "partial", "success", "none" })
                 await CheckAsync(Path.Combine(root, scenario), scenario);
+            foreach (var scenario in new[] { "rotated", "removed", "invalid-native" })
+                await CheckRequiredDetourAsync(Path.Combine(root, "detour-" + scenario), scenario);
             await CheckRejectedChainAsync(Path.Combine(root, "chain"), refreshAll: false);
             await CheckRejectedChainAsync(Path.Combine(root, "chain-batch"), refreshAll: true);
             foreach (var scenario in new[] { "success", "rejected", "transient" })
@@ -111,6 +113,76 @@ public static class SubscriptionRefreshChecks
                     "The last usable subscription and selection must survive a network failure and reload");
             }
         }
+    }
+
+    private static async Task CheckRequiredDetourAsync(string dir, string scenario)
+    {
+        const string user = "00000000-0000-4000-8000-000000000001";
+        const string direct = $"vless://{user}@exit.invalid:443?security=none#node";
+        static string Target(string id) => $"vless://{user}@exit.invalid:443?security=none&detour={id}#node";
+        static string Hop(string id, int port) => $"vless://{user}@entry.invalid:{port}?security=none&outbound={id}#via";
+        var storage = new ConfigStorage(dir);
+        var settings = storage.GetSettings();
+        var target = ServerUriParser.Parse(Target("old"));
+        var source = Entry("selected");
+        source.Servers = [ServerUriParser.Parse(direct), target, ServerUriParser.Parse(Hop("old", 443))];
+        settings.App.Subscriptions = [source];
+        settings.App.ConfigMode = "subscribe";
+        settings.App.ActiveSubscriptionId = source.Id;
+        settings.App.ActiveSubscriptionServer = target.Name;
+        settings.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(target);
+        storage.SaveSettings(settings, storage.CurrentRevision);
+        var revision = storage.CurrentRevision;
+        var original = File.ReadAllBytes(storage.ConfigPath);
+        var updated = scenario == "rotated";
+        var body = updated ? string.Join("\n", direct, Target("fresh"), Hop("fresh", 8443))
+            : scenario == "removed" ? direct : RejectedBody;
+        SubscriptionFetcher.Http = new RefreshHttp((_, _) => Task.FromResult(Reply(body)));
+        var session = new FakeRouterSession { State = "connected" };
+        await using var handler = new RouterBackendHandler(new RouterBackend(session, dir));
+        var dispatcher = new ProtocolDispatcher(handler);
+        var response = await dispatcher.DispatchAsync(new(1, "refresh", "subscriptions.refresh",
+            JsonSerializer.SerializeToElement(new { revision, id = source.Id })), CancellationToken.None);
+
+        Assert(session.State == "connected" && session.DisconnectCallCount == 0, "The current session must stay connected");
+        Assert(session.ApplyCallCount == (updated ? 1 : 0), "Only a usable selected chain may reach Apply");
+        if (scenario == "invalid-native")
+        {
+            Assert(response.Error?.Code == "subscription_chain_unsupported", "A confirmed parser rejection must evict the feed");
+            var reopened = new ConfigStorage(dir).GetSettings();
+            Assert(reopened.App.Subscriptions.Single().Servers.Count == 0, "Reopening must not revive a rejected registration");
+            VlessServersResolver.Resolve(reopened);
+            Assert(!reopened.Vless.GetActiveServers().Any(s => s.Server == target.Server || s.OutboundId == "old"),
+                "Neither a direct sibling nor its former hop may recover from the rejected feed");
+            return;
+        }
+        if (updated) Assert(response.Error == null, "A single replacement chain should be accepted");
+        else Assert(response.Error?.Code == "subscription_refresh_failed" && storage.CurrentRevision == revision &&
+            original.SequenceEqual(File.ReadAllBytes(storage.ConfigPath)), "Rejection must preserve the exact recovery file");
+        var saved = new ConfigStorage(dir).GetSettings();
+        VlessServersResolver.Resolve(saved);
+        var active = saved.Vless.GetActiveServers();
+        Assert(active.Count == 2 && active[0].DetourVia == (updated ? "fresh" : "old") &&
+            active[0].DetourVia == active[1].OutboundId && active[1].Port == (updated ? 8443 : 443),
+            "Recovery must select the registered detour even with an identical direct sibling first");
+        if (!updated) return;
+
+        var listed = await dispatcher.DispatchAsync(new(1, "list", "servers.list", JsonSerializer.SerializeToElement(new { })),
+            CancellationToken.None);
+        using var list = JsonDocument.Parse(listed.ToUtf8Bytes());
+        var siblings = list.RootElement.GetProperty("result").GetProperty("items").EnumerateArray()
+            .Where(row => row.GetProperty("source").GetString() == "subscription" &&
+                row.GetProperty("subscriptionId").GetString() == source.Id && row.GetProperty("name").GetString() == "node")
+            .ToArray();
+        Assert(siblings.Length == 2 && !siblings[0].GetProperty("selected").GetBoolean() && siblings[1].GetProperty("selected").GetBoolean(),
+            "Only the registered chained row should be selected when a direct sibling shares its name");
+        var directId = siblings[0].GetProperty("id").GetString();
+        var selection = await dispatcher.DispatchAsync(new(1, "select", "servers.select",
+            JsonSerializer.SerializeToElement(new { revision = storage.CurrentRevision, id = directId })), CancellationToken.None);
+        Assert(selection.Error == null, "An explicit choice of the direct sibling must supersede the detour");
+        saved = new ConfigStorage(dir).GetSettings();
+        VlessServersResolver.Resolve(saved);
+        Assert(saved.Vless.GetActiveServers().Single().DetourVia.Length == 0, "The explicit direct choice must survive reload");
     }
 
     private static async Task CheckRejectedChainAsync(string dir, bool refreshAll)

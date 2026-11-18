@@ -352,7 +352,16 @@ public partial class MainWindowViewModel
                 var rows = submitted.App.Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url))
                     .Select(s => new SubscriptionViewModel(s)).ToList();
                 foreach (var row in liveRows) row.IsRefreshing = true;
-                try { await RefreshSubscriptionRowsAsync(rows); }
+                try
+                {
+                    var updates = await FetchSubscriptionRowsAsync(rows, CancellationToken.None);
+                    if (!Preparing()) return;
+                    if (!PublishSubscriptionRows(rows, updates, submitted))
+                    {
+                        SmpErrorText = Strings.SyncEmpty;
+                        return;
+                    }
+                }
                 finally { foreach (var row in liveRows) row.IsRefreshing = false; }
                 if (!Preparing()) return;
                 if (choiceUnchanged())
@@ -372,9 +381,17 @@ public partial class MainWindowViewModel
                 }
 
                 var preferred = SubscriptionRefreshDiff.FindRegisteredServer(selectedSource, candidates,
-                    selectedName, selectedKey, previous, previousRoute) ?? candidates[0];
+                    selectedName, selectedKey, previous, previousRoute);
+                if (preferred == null && previous != null && !string.IsNullOrEmpty(previous.DetourVia))
+                {
+                    SmpErrorText = Strings.SyncEmpty;
+                    return;
+                }
+                preferred ??= candidates[0];
                 StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
-                var chosen = await PickSimpleServerAsync(candidates, preferred, submitted.App.ConnectionIntent, Preparing);
+                // A direct probe of an exit cannot judge the selected route through its required hop.
+                var chosen = !string.IsNullOrEmpty(preferred.DetourVia) ? preferred :
+                    await PickSimpleServerAsync(candidates, preferred, submitted.App.ConnectionIntent, Preparing);
                 if (!Preparing()) return;
                 if (chosen == null)
                 {
@@ -386,6 +403,13 @@ public partial class MainWindowViewModel
 
                 var source = selectedSource != null && selectedSource.Servers.Contains(chosen)
                     ? selectedSource : submitted.App.Subscriptions.First(s => s.Enabled && s.Servers.Contains(chosen));
+                if (!string.IsNullOrEmpty(chosen.DetourVia) &&
+                    new SubscriptionChainSelection(source.Id, source.Url, chosen, SubscriptionEntry.RouteKey(chosen, source.Servers))
+                        .Match(source, candidates) != chosen)
+                {
+                    SmpErrorText = Strings.SyncEmpty;
+                    return;
+                }
                 var rowKey = SubscriptionEntry.RowKey(chosen);
                 submitted.App.ActiveSubscriptionId = source.Id;
                 submitted.App.ActiveSubscriptionRow = rowKey;

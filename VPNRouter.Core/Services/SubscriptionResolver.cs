@@ -39,16 +39,21 @@ public static class SubscriptionResolver
             if (enabled.Count > 0)
             {
                 logger?.Information("[SubscriptionResolver] Refreshing {Count} subscription(s)...", enabled.Count);
-                try
+                var updates = await Task.WhenAll(enabled.Select(s => SubscriptionCacheUpdate.FetchAsync(s, logger, ct)));
+                ct.ThrowIfCancellationRequested();
+                var chain = SubscriptionChainSelection.Capture(settings.App);
+                if (!SubscriptionCacheUpdate.TryPublish(updates, settings.App.Subscriptions, chain, out var selected))
                 {
-                    await Task.WhenAll(enabled.Select(s =>
-                        SubscriptionFetcher.RefreshEntryAsync(s, logger, ct)));
-                    var total = enabled.Sum(s => s.Servers.Count);
-                    logger?.Information("[SubscriptionResolver] Subscriptions refreshed: {Total} servers", total);
+                    logger?.Warning("[SubscriptionResolver] Rejected feed replacement, retaining the registered cache");
+                    if (chain != null)
+                        selected = chain.Match(enabled.FirstOrDefault(s => s.Id == chain.FeedId),
+                            enabled.SelectMany(s => s.Servers)) ?? throw new UnsupportedSubscriptionChainException();
                 }
-                catch (Exception)
+                if (selected != null)
                 {
-                    logger?.Warning("[SubscriptionResolver] Refresh failed, using cached servers");
+                    settings.App.ActiveSubscriptionServer = selected.Name;
+                    settings.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(selected);
+                    settings.App.ActiveSubscriptionId = chain!.FeedId;
                 }
             }
         }

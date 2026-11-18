@@ -91,7 +91,9 @@ public sealed class SimpleConnectStatusTests
     public void AutoGroupChangesTheOpenCardAndRejectsOldTags(string mode, bool autoSelect)
     {
         var first = Entry("same", "one.invalid");
-        var second = Entry("same", autoSelect ? "two.invalid" : "one.invalid", 8443);
+        // The Business portal must identify one direct VLESS choice by name.
+        var second = Entry(ProductEdition.IsBusiness ? "secondary" : "same", autoSelect ? "two.invalid" : "one.invalid", 8443);
+        var secondTag = ProductEdition.IsBusiness ? "vless-secondary" : "vless-same-2";
         var settings = new AppSettings();
         settings.App.ConfigMode = mode;
         settings.Vless.AutoSelectBestServer = autoSelect;
@@ -121,17 +123,17 @@ public sealed class SimpleConnectStatusTests
         vm.ObserveAutoMember(accepted, "vless-same");
         Assert.Equal(first.Port, vm.SmpConfigServer?.Port);
         Assert.True(vm.SmpConfigServer!.IsActive);
-        vm.ObserveAutoMember(accepted, "vless-same-2");
+        vm.ObserveAutoMember(accepted, secondTag);
         Assert.Equal(second.Port, vm.SmpConfigServer?.Port);
         Assert.True(vm.SmpConfigServer!.IsActive);
-        Assert.Equal("same", BoundText(page, "ConfigName"));
+        Assert.Equal(second.Name, BoundText(page, "ConfigName"));
         Assert.Contains(second.Server, BoundText(page, "ConnectionDetails"));
 
         vm.ObserveAutoMember(accepted, null);
         Assert.Null(vm.SmpConfigServer);
         Assert.DoesNotContain(second.Server, BoundText(page, "ConnectionDetails"));
 
-        vm.ObserveAutoMember(accepted, "vless-same-2");
+        vm.ObserveAutoMember(accepted, secondTag);
         Assert.True(vm.SmpConfigServer!.IsActive);
         // An Apply that narrows the same pool to one row keeps IsConnected true.
         var replacement = VpnEngine.CopySessionSettings(settings);
@@ -139,7 +141,7 @@ public sealed class SimpleConnectStatusTests
         else replacement.Vless.Servers.RemoveAt(1);
         engine.CommitTunnelInfo(Generate(replacement));
         ReportStatus(engine, "Applied (restart, PID 42)");
-        vm.ObserveAutoMember(accepted, "vless-same-2");
+        vm.ObserveAutoMember(accepted, secondTag);
         var rows = mode == "subscribe" ? vm.SubscriptionServers : vm.Servers;
         Assert.Equal(first.Port, Assert.Single(rows, row => row.IsActive).Port);
         Assert.Contains(first.Server, BoundText(page, "ConnectionDetails"));
@@ -154,10 +156,12 @@ public sealed class SimpleConnectStatusTests
     [AvaloniaFact]
     public void SingleProxyKeepsItsProtocolWhenTwoRowsShareAnEndpoint()
     {
-        var first = Entry("vless", "shared.invalid");
-        var selected = Entry("hy2", "shared.invalid");
-        selected.Protocol = "hysteria2";
-        selected.Password = "fixture";
+        var vless = Entry("vless", "shared.invalid");
+        var hy2 = Entry("hy2", "shared.invalid");
+        hy2.Protocol = "hysteria2";
+        hy2.Password = "fixture";
+        // Keep the selected row second at an identical address and port in each edition.
+        var (first, selected) = ProductEdition.IsBusiness ? (hy2, vless) : (vless, hy2);
         var settings = new AppSettings();
         settings.App.ConfigMode = "subscribe";
         settings.App.ActiveSubscriptionServer = selected.Name;
@@ -170,14 +174,14 @@ public sealed class SimpleConnectStatusTests
         var page = view.Page;
         var tunnel = Generate(settings);
         Assert.False(tunnel.UsesAutoGroup);
-        Assert.Equal("hy2", tunnel.Server.Name);
+        Assert.Equal(selected.Name, tunnel.Server.Name);
         Engine(vm).CommitTunnelInfo(tunnel);
         vm.IsConnected = true;
-        Assert.Equal("hy2", BoundText(page, "ConfigName"));
+        Assert.Equal(selected.Name, BoundText(page, "ConfigName"));
         var disc = page.FindControl<ProtocolDisc>("ConfigProtocol")!;
         Assert.True(disc.IsEffectivelyVisible);
-        Assert.Equal(ProtocolGroup.GamesVoice, disc.Group);
-        Assert.Equal("hy2", Assert.Single(vm.SubscriptionServers, row => row.IsActive).Name);
+        Assert.Equal(ProductEdition.IsBusiness ? ProtocolGroup.Daily : ProtocolGroup.GamesVoice, disc.Group);
+        Assert.Equal(selected.Name, Assert.Single(vm.SubscriptionServers, row => row.IsActive).Name);
 
         // A subsequently detected service owns a different process, even if a local snapshot exists.
         vm.SyncConnectedWithVpnRuntime(vpnRunning: true);
