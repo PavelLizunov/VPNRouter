@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -85,6 +86,57 @@ public sealed class ConfigPipelineTests
 
         Assert.Single(settings.Vless.Servers);
         Assert.Equal("104.194.156.93", settings.Vless.Servers[0].Server);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    public void Validation_ReportsCountsWithoutPublishingEndpoints(bool strict, bool invalidDns)
+    {
+        const string endpoint = "fixture-stale.invalid";
+        const string process = "fixture-routed.exe";
+        var settings = BuildBaseSettings("subscribe");
+        settings.App.Subscriptions = [new SubscriptionEntry
+        {
+            Servers = [new VlessServerEntry { Name = "fixture-selected", Server = "fixture-current.invalid", Port = 443 }],
+        }];
+        var config = new SingBoxConfig
+        {
+            Outbounds =
+            [
+                new() { Type = "vless", Tag = "proxy", Server = endpoint, ServerPort = 18443, Uuid = "fixture" },
+                new() { Type = "direct", Tag = "direct" },
+            ],
+        };
+        config.Route.Rules.Add(new RouteRule { ProcessName = [process], Outbound = "proxy", Action = "route" });
+        if (invalidDns) config.Dns.Strategy = "prefer_ipv6";
+        var validation = LeakProtection.ValidateConfig(config, settings);
+        Assert.Contains(validation.Errors, e => e.Contains(endpoint));
+        Assert.Contains(validation.Warnings, w => w.Contains(process));
+
+        var sink = new CapturingSink();
+        using var logger = sink.CreateLogger();
+        var warnings = new List<string>();
+        var mode = strict ? ConfigPipeline.ValidationMode.Strict : ConfigPipeline.ValidationMode.Advisory;
+        var error = Record.Exception(() => ConfigPipeline.ValidateGeneratedConfig(config, settings, mode, warnings.Add, logger));
+
+        if (strict || invalidDns)
+        {
+            var rejected = Assert.IsType<InvalidOperationException>(error);
+            Assert.Contains(invalidDns ? "ipv4_only" : "Check the selected server", rejected.Message);
+            Assert.DoesNotContain(endpoint, rejected.ToString());
+            Assert.DoesNotContain(process, rejected.ToString());
+            Assert.Null(rejected.InnerException);
+        }
+        else
+        {
+            Assert.Null(error);
+        }
+        Assert.Equal("Review VPN routing and DNS settings: configuration validation reported warnings.", Assert.Single(warnings));
+        Assert.Contains(sink.Events, e => e.Properties.ContainsKey("WarningCount"));
+        Assert.Contains(sink.Events, e => e.Properties.ContainsKey("ErrorCount"));
+        sink.AssertExcludes(endpoint, "18443", process);
     }
 
     [Fact]

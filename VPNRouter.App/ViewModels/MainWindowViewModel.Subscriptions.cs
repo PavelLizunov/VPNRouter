@@ -125,9 +125,9 @@ public partial class MainWindowViewModel
             sub.LastServerCount = count > 0 ? count : (sub.UnderlyingEntry.Servers?.Count ?? 0);
             sub.LastRefreshedAt = sub.UnderlyingEntry.LastRefreshedAt;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.Error(ex, "[VM] RefreshSubscription failed for {Url}", CanaryPolicy.RedactUrl(sub.Url));
+            _logger.Error("[VM] Subscription refresh failed");
             sub.LastRefreshFailed = true;
             sub.LastServerCount = sub.UnderlyingEntry.Servers?.Count ?? 0;
         }
@@ -149,9 +149,7 @@ public partial class MainWindowViewModel
 
             if (!activeChanged)
             {
-                _logger.Information(
-                    "[VM] RefreshSubscription: active server '{Active}' unchanged — tunnel preserved",
-                    activeName ?? "(none)");
+                _logger.Information("[VM] Subscription refreshed, keeping current connection");
                 RefreshActiveIndicator();
                 OnPropertyChanged(nameof(SimpleStatusDescription));
                 OnPropertyChanged(nameof(SimpleActiveOutboundLine));
@@ -193,9 +191,9 @@ public partial class MainWindowViewModel
                     s.LastServerCount = count > 0 ? count : (s.UnderlyingEntry.Servers?.Count ?? 0);
                     s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _logger.Warning(ex, "[VM] Refresh of {Url} failed", CanaryPolicy.RedactUrl(s.Url));
+                    _logger.Warning("[VM] Subscription refresh failed during refresh all");
                     s.LastRefreshFailed = true;
                     s.LastServerCount = s.UnderlyingEntry.Servers?.Count ?? 0;
                 }
@@ -218,9 +216,7 @@ public partial class MainWindowViewModel
 
             if (!activeChanged)
             {
-                _logger.Information(
-                    "[VM] RefreshAll: server pool refreshed, active server '{Active}' unchanged — tunnel preserved",
-                    activeName ?? "(none)");
+                _logger.Information("[VM] All subscriptions refreshed, keeping current connection");
                 RefreshActiveIndicator();
                 OnPropertyChanged(nameof(SimpleStatusDescription));
                 OnPropertyChanged(nameof(SimpleActiveOutboundLine));
@@ -266,7 +262,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] Subscription sync failed");
+            _logger.Error("[VM] Subscription sync failed ({ExceptionType})", ex.GetType().Name);
             StatusText = Strings.SyncFailed(CrashReporter.ScrubSecrets(ex.Message));
         }
     }
@@ -341,9 +337,9 @@ public partial class MainWindowViewModel
                     s.LastServerCount = count > 0 ? count : (s.UnderlyingEntry.Servers?.Count ?? 0);
                     s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _logger.Warning(ex, "[SubRefresh] Failed for {Url}", CanaryPolicy.RedactUrl(s.Url));
+                    _logger.Warning("[SubRefresh] Subscription refresh failed");
                     s.LastRefreshFailed = true;
                     s.LastServerCount = s.UnderlyingEntry.Servers?.Count ?? 0;
                 }
@@ -380,9 +376,7 @@ public partial class MainWindowViewModel
 
             if (!activeChanged)
             {
-                _logger.Information(
-                    "[SubRefresh] Server set changed but active '{Active}' unchanged — pool refreshed, no reconnect",
-                    activeName ?? "(none)");
+                _logger.Information("[SubRefresh] Server pool changed, keeping current connection");
                 RefreshActiveIndicator();
                 OnPropertyChanged(nameof(SimpleStatusDescription));
                 OnPropertyChanged(nameof(SimpleActiveOutboundLine));
@@ -393,9 +387,9 @@ public partial class MainWindowViewModel
             var reconnectName = SelectedSubscriptionServer?.Name ?? "subscription";
             await ReconnectAsync(reconnectName);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.Error(ex, "[SubRefresh] Auto-refresh failed");
+            _logger.Error("[SubRefresh] Auto-refresh failed");
         }
     }
 }

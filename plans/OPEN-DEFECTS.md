@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - The first Business branch CodeQL analysis (2195530999) reports alert 13 in SlipstreamManager. Both editions persist DNS tunnel arguments and raw native output. Emit fixed transport events, export only the new event files and verify the final commit with CodeQL.
+
+- [ ] **P1** - Provider-controlled names, endpoints, parse exceptions and notification text flow to diagnostics in subscription, selection and failover paths. CodeQL alerts 1-12 cite eleven log sites on e7b4a384. Rejected selection can propagate the same private reason through StartupPipeline, service and headless log sinks, and TCP health probes log private labels. Keep diagnostic event types and counters without recording input. Runtime phase, Business.
+
 - [ ] **P1** - The 10.0.303 SDK selected by CI includes affected VSTest 18.6.0 (CVE-2026-105544). Move test and build entry points to the fixed servicing line and verify bundled versions on both hosted platforms. #673. PR #695.
 
 - [ ] **P2 CONFIRMED OWNER DELETION GAP** - BUSINESS-DIAGNOSTICS-REPORT-DELETE: the authenticated Corp inbox has list/detail/retry only; receiver.py exposes no deletion route. Owner requests removing reports and reclaiming archive storage. Add service-scoped locked JSON/ZIP deletion, preserve foreign reports/credentials, and verify late analysis cannot resurrect deleted data. Recorded before implementation, 2026-11-16.

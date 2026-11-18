@@ -7,7 +7,6 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
@@ -42,8 +41,6 @@ public class SlipstreamManager : IDisposable
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
     private IProcessHandle? _handle;
-    private readonly StringBuilder _capturedStderr = new();
-    private readonly object _stderrGate = new();
     private bool _disposed;
 
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
@@ -65,7 +62,7 @@ public class SlipstreamManager : IDisposable
         if (entry == null) throw new ArgumentNullException(nameof(entry));
         if (!string.Equals(entry.Protocol, "dns-tunnel", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException(
-                $"SlipstreamManager.Start requires a dns-tunnel server (got protocol '{entry.Protocol}')",
+                "SlipstreamManager.Start requires a dns-tunnel server",
                 nameof(entry));
 
         if (IsRunning)
@@ -119,7 +116,7 @@ public class SlipstreamManager : IDisposable
             else if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
             {
                 throw new SlipstreamException(
-                    $"dns-tunnel leaf fingerprint mismatch (link={expected}, cert={actual}) — " +
+                    "dns-tunnel leaf fingerprint mismatch — " +
                     "refusing to connect (tampered or corrupt profile)");
             }
         }
@@ -173,17 +170,7 @@ public class SlipstreamManager : IDisposable
             CaptureStdout: true,
             CaptureStderr: true);
 
-        _logger.Information(
-            "[Slipstream] Spawn: {Exe} -d {Domain} -l {Port} (resolvers: {N}, authoritative: {M})",
-            request.ExecutablePath, entry.DnsDomain, localPort, resolvers.Count, authoritative.Count);
-
         RotateTransportLog();
-
-        var argvLine = "[Slipstream] argv: " + string.Join(" ", argv);
-        _logger.Information(argvLine);
-        AppendTransportLog(argvLine);
-
-        lock (_stderrGate) _capturedStderr.Clear();
 
         try
         {
@@ -191,8 +178,8 @@ public class SlipstreamManager : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[Slipstream] Failed to start process");
-            throw new SlipstreamException("Failed to start slipstream-client", ex);
+            _logger.Error("[Slipstream] Failed to start process ({Type})", ex.GetType().Name);
+            throw new SlipstreamException("Failed to start slipstream-client");
         }
 
         LocalPort = localPort;
@@ -202,13 +189,11 @@ public class SlipstreamManager : IDisposable
             _logger.Warning("[Slipstream] Process exited (exit code: {Code})", code);
             AppendTransportLog($"--- process exited (code {code}) ---");
         };
-        AppendTransportLog(
-            $"=== spawn PID {startedHandle.Pid} -d {entry.DnsDomain} -l {localPort} " +
-            $"resolvers={resolvers.Count} ===");
-        startedHandle.OutputLine += OnOutputLineHandler;
-        startedHandle.ErrorLine += OnErrorLineHandler;
-        _logger.Information("[Slipstream] Spawned PID {Pid} on 127.0.0.1:{Port}",
-            startedHandle.Pid, localPort);
+        AppendTransportLog($"Started PID {startedHandle.Pid}; resolvers={resolvers.Count}, authoritative={authoritative.Count}");
+        startedHandle.OutputLine += OnTransportLine;
+        startedHandle.ErrorLine += OnTransportLine;
+        _logger.Information("[Slipstream] Spawned PID {Pid} on loopback port {Port}; resolvers={N}, authoritative={M}",
+            startedHandle.Pid, localPort, resolvers.Count, authoritative.Count);
 
         using var probeCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(StartupProbeMs));
         int? earlyExitCode = null;
@@ -228,34 +213,25 @@ public class SlipstreamManager : IDisposable
 
         if (earlyExitCode.HasValue)
         {
-            string stderrTail;
-            lock (_stderrGate) stderrTail = _capturedStderr.ToString();
-            _logger.Error(
-                "[Slipstream] Exited within {Ms}ms of spawn (code {Code}) — startup failure. Stderr: {Stderr}",
-                StartupProbeMs, earlyExitCode, stderrTail.Trim());
+            _logger.Error("[Slipstream] Exited within {Ms}ms of spawn (code {Code})", StartupProbeMs, earlyExitCode);
             Stop();
-            throw new SlipstreamException(
-                $"slipstream-client exited immediately (code {earlyExitCode}). {Truncate(stderrTail.Trim(), 200)}");
+            throw new SlipstreamException($"slipstream-client exited immediately (code {earlyExitCode}).");
         }
     }
 
-    private void OnErrorLineHandler(object? sender, string line)
+    private void OnTransportLine(object? sender, string line)
     {
         if (string.IsNullOrEmpty(line)) return;
-        AppendTransportLog(line);
-        const int MaxStderrBuffer = 16 * 1024;
-        lock (_stderrGate)
-            if (_capturedStderr.Length < MaxStderrBuffer)
-                _capturedStderr.AppendLine(line);
-    }
-
-    private void OnOutputLineHandler(object? sender, string line)
-    {
-        if (string.IsNullOrEmpty(line)) return;
-        AppendTransportLog(line);
-        if (line.IndexOf("WARN", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            line.IndexOf("ERROR", StringComparison.OrdinalIgnoreCase) >= 0)
-            _logger.Warning("[Slipstream] {Line}", StripAnsi(line));
+        if (line.Contains("ERROR", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.Error("[Slipstream] Transport reported an error");
+            AppendTransportLog("Transport error");
+        }
+        else if (line.Contains("WARN", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.Warning("[Slipstream] Transport reported a warning");
+            AppendTransportLog("Transport warning");
+        }
     }
 
     private const long TransportLogMaxBytes = 8 * 1024 * 1024;
@@ -289,14 +265,11 @@ public class SlipstreamManager : IDisposable
                 if (fi.Exists && fi.Length > TransportLogMaxBytes) return;
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.AppendAllText(path,
-                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {StripAnsi(line)}{Environment.NewLine}");
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {line}{Environment.NewLine}");
             }
         }
         catch { }
     }
-
-    private static string StripAnsi(string s)
-        => System.Text.RegularExpressions.Regex.Replace(s, "\\[[0-9;]*m", "");
 
     public void Stop()
     {
@@ -493,9 +466,6 @@ public class SlipstreamManager : IDisposable
         }
         return false;
     }
-
-    private static string Truncate(string s, int max)
-        => string.IsNullOrEmpty(s) || s.Length <= max ? s : s.Substring(0, max) + "…";
 
     public void Dispose()
     {

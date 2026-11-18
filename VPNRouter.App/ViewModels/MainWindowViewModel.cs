@@ -487,11 +487,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     internal MainWindowViewModel(ISettingsStore? settingsStore,
         Func<Func<Task>, IUpdateSource>? businessUpdateSourceFactory,
         Action<int>? exitApplication, Action? stopOwnedEngineForUpdate,
-        Func<AppSettings, ISettingsStore, Services.BusinessPolicyCoordinator?>? businessBootstrap = null)
+        Func<AppSettings, ISettingsStore, Services.BusinessPolicyCoordinator?>? businessBootstrap = null,
+        ILogger? logger = null)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
 
-        _logger = new LoggerConfiguration()
+        _logger = logger ?? new LoggerConfiguration()
             .WriteTo.File(
                 Path.Combine(AppPaths.LogsDir, "vpnrouter.log"),
                 rollingInterval: RollingInterval.Day,

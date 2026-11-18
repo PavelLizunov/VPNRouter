@@ -4,8 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Serilog;
-using Serilog.Core;
-using Serilog.Events;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -17,7 +15,6 @@ namespace VPNRouter.Tests;
 public sealed class SubscriptionUrlRedactionTests
 {
     private const string SubUrl = "https://provider.example/api/sub?token=secret123";
-    private const string RedactedHost = "https://provider.example";
 
     private const string CleanVless =
         "vless://uuid1@server1.example:443?security=tls&type=tcp&flow=xtls-rprx-vision#one";
@@ -46,7 +43,8 @@ public sealed class SubscriptionUrlRedactionTests
             Assert.DoesNotContain("secret123", all);
             Assert.DoesNotContain("/api/sub", all);
             Assert.DoesNotContain(SubUrl, all);
-            Assert.Contains(RedactedHost, all);
+            Assert.Contains("[Subscription] Fetched 1 servers", all);
+            sink.AssertExcludes("provider.example", "server1.example", "secret123", "/api/sub");
         }
         finally
         {
@@ -174,7 +172,8 @@ public sealed class SubscriptionUrlRedactionTests
             Assert.DoesNotContain("secret123", all);
             Assert.DoesNotContain("/api/sub", all);
             Assert.DoesNotContain(SubUrl, all);
-            Assert.Contains(RedactedHost, all);
+            Assert.Contains("keeping 0 cached server(s)", all);
+            sink.AssertExcludes("provider.example", "bad1.example", "secret123", "/api/sub");
         }
         finally
         {
@@ -185,11 +184,7 @@ public sealed class SubscriptionUrlRedactionTests
     private static (ILogger logger, CapturingSink sink) BuildCapturingLogger()
     {
         var sink = new CapturingSink();
-        var logger = new LoggerConfiguration()
-            .MinimumLevel.Verbose()
-            .WriteTo.Sink(sink)
-            .CreateLogger();
-        return (logger, sink);
+        return (sink.CreateLogger(), sink);
     }
 
     [Theory]
@@ -210,6 +205,9 @@ public sealed class SubscriptionUrlRedactionTests
 
             var rendered = AllRenderedText(sink);
             Assert.Contains("Refusing non-http(s) subscription URL", rendered);
+            Assert.Empty(fake.SentRequests);
+            Assert.Empty(Assert.Single(sink.Events).Properties);
+            sink.AssertExcludes(invalidUrl);
         }
         finally
         {
@@ -223,7 +221,7 @@ public sealed class SubscriptionUrlRedactionTests
         var (logger, sink) = BuildCapturingLogger();
         var fake = new FakeHttpClient().ThrowOn(
             "provider.example",
-            new TimeoutException("HTTP request timed out after 15000 ms."));
+            new TimeoutException($"Timeout fetching {SubUrl}"));
         var previous = SubscriptionFetcher.Http;
         SubscriptionFetcher.Http = fake;
         try
@@ -232,17 +230,12 @@ public sealed class SubscriptionUrlRedactionTests
             Assert.Empty(servers);
 
             var rendered = AllRenderedText(sink);
-            var exceptions = string.Join("\n", sink.Events
-                .Select(e => e.Exception?.ToString() ?? string.Empty));
 
             Assert.DoesNotContain("secret123", rendered);
             Assert.DoesNotContain("/api/sub", rendered);
             Assert.DoesNotContain(SubUrl, rendered);
-            Assert.Contains(RedactedHost, rendered);
             Assert.Contains("TimeoutException", rendered);
-
-            Assert.DoesNotContain("secret123", exceptions);
-            Assert.DoesNotContain(SubUrl, exceptions);
+            sink.AssertExcludes("provider.example", "secret123", "/api/sub");
         }
         finally
         {
@@ -265,19 +258,4 @@ public sealed class SubscriptionUrlRedactionTests
     private static string AllRenderedText(CapturingSink sink) =>
         string.Join("\n", sink.Events.Select(e => e.RenderMessage()));
 
-    private sealed class CapturingSink : ILogEventSink
-    {
-        private readonly List<LogEvent> _events = new();
-        private readonly object _gate = new();
-
-        public void Emit(LogEvent logEvent)
-        {
-            lock (_gate) _events.Add(logEvent);
-        }
-
-        public IReadOnlyList<LogEvent> Events
-        {
-            get { lock (_gate) return _events.ToList(); }
-        }
-    }
 }

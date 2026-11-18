@@ -28,18 +28,17 @@ internal static class SingBoxJsonSubscription
             if (string.IsNullOrEmpty(type) || StructuralTypes.Contains(type)) continue;
 
             proxies++;
-            var tag = Str(ob, "tag");
             try
             {
                 var uri = MapOutbound(ob, type, out var skipReason);
                 if (uri is not null)
                     uris.Add(uri);
                 else
-                    logger?.Information("[SingBox] skipped outbound '{Tag}' ({Type}): {Reason}", tag, type, skipReason);
+                    logger?.Information("[SingBox] Skipped outbound ({Reason})", skipReason);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                logger?.Warning(ex, "[SingBox] skipped outbound '{Tag}' ({Type})", tag, type);
+                logger?.Warning("[SingBox] Skipped invalid outbound");
             }
         }
 
@@ -72,13 +71,13 @@ internal static class SingBoxJsonSubscription
             "hysteria2" => MapHysteria2(ob, hostPort, name, out skipReason),
             "tuic" => MapTuic(ob, hostPort, name, out skipReason),
             "shadowsocks" => MapShadowsocks(ob, hostPort, name, out skipReason),
-            _ => Unsupported(type, out skipReason),
+            _ => Unsupported(out skipReason),
         };
     }
 
-    private static string? Unsupported(string type, out string? skipReason)
+    private static string? Unsupported(out string? skipReason)
     {
-        skipReason = $"protocol '{type}' is not supported";
+        skipReason = "unsupported protocol";
         return null;
     }
 
@@ -117,7 +116,7 @@ internal static class SingBoxJsonSubscription
                 if (Bool(transport, "no_grpc_header")) q.Add(("no_grpc_header", "1"));
                 break;
             default:
-                skipReason = $"unsupported transport '{transportType}'";
+                skipReason = "unsupported transport";
                 return null;
         }
 

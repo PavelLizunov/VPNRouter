@@ -173,6 +173,41 @@ public class SlipstreamManagerTests
     }
 
     [Fact]
+    public void Start_PassesPrivateTransportSettingsOnlyToChild()
+    {
+        EnsureDummyBinary();
+        try
+        {
+            const string marker = "private-slipstream-fixture";
+            var entry = MakeEntry();
+            entry.DnsDomain = marker + ".example";
+            entry.DnsResolvers = [marker + "-resolver.example:53"];
+            entry.DnsAuthoritative = [marker + "-auth.example:53"];
+            var (runner, handle) = AliveRunner();
+            var sink = new CapturingSink();
+            using var logger = sink.CreateLogger();
+            using var manager = new SlipstreamManager(logger, runner) { StartupProbeMs = 50 };
+
+            manager.Start(entry);
+            var request = Assert.Single(runner.StartCalls);
+            Assert.Contains(entry.DnsDomain, request.Arguments);
+            Assert.Contains(entry.DnsResolvers[0], request.Arguments);
+            Assert.Contains(entry.DnsAuthoritative[0], request.Arguments);
+            handle.EmitOutput("WARN " + marker);
+            handle.EmitError("ERROR " + marker);
+            handle.SignalExit(1);
+
+            sink.AssertExcludes(marker);
+            var transportEvents = File.ReadAllText(AppPaths.SlipstreamLogPath);
+            Assert.DoesNotContain(marker, transportEvents);
+            Assert.Contains("Transport warning", transportEvents);
+            Assert.Contains("Transport error", transportEvents);
+            Assert.Contains("process exited", transportEvents);
+        }
+        finally { CleanupFiles(); }
+    }
+
+    [Fact]
     public void Start_FingerprintMatch_Spawns()
     {
         EnsureDummyBinary();
