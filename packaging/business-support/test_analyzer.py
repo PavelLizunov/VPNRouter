@@ -91,6 +91,27 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(analyzer.run_once(self.root, self.config, provider)['state'], 'idle')
         self.assertEqual(len(calls), 1)
 
+    def test_large_valid_russian_result_fits_the_utf8_receipt(self):
+        candidate = result()
+        statement = ('Для проверки нужно сопоставить время подключения и состояние туннеля. ' * 30)[:997]
+        candidate['unknown'] = [{
+            'statement': statement,
+            'time_scope': 'unknown',
+            'evidence': [{'kind': 'packet', 'field': 'received_utc'}],
+        } for _ in range(12)]
+        self.assertLess(len(analyzer.encode(candidate)), analyzer.MAX_RESULT)
+        self.assertGreater(len(json.dumps(candidate, ensure_ascii=True).encode()), receiver.MAX_RECEIPT)
+
+        path = self.root / (self.receipt['report_id'] + '.json')
+        before = path.stat().st_mtime_ns
+        outcome = analyzer.run_once(self.root, self.config, lambda *_: (candidate, 'synthetic-model'))
+        self.assertEqual(outcome['state'], 'ready')
+        self.assertEqual(path.stat().st_mtime_ns, before)
+        self.assertLessEqual(path.stat().st_size, receiver.MAX_RECEIPT)
+        saved = receiver.load_receipt(self.root, self.receipt['report_id'], self.identity)
+        self.assertEqual(saved['diagnosis']['result'], candidate)
+        self.assertEqual(saved['analysis'], candidate['public_analysis'])
+
     def test_historical_crash_does_not_prove_current_runtime(self):
         packet, refs, names = analyzer.prepare(self.root, self.receipt, self.config)
         self.assertEqual(refs[('crash-01.txt', 1)], 'historical')

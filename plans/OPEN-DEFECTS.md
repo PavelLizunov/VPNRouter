@@ -14,6 +14,10 @@ deferred, reached v2.44.0/.1 stable and bit a user (auto-failover teardown, diag
 Only the `## Open` section is gated; `## Resolved` is history. Keep entries to one
 line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target version>`.
 
+## Business diagnostics delivery (2026-11-20)
+
+- [x] **P2** - A validated Russian result within the 24 KiB limit could expand past the 64 KiB receipt limit when written with ASCII escapes. The receiver now counts and atomically writes the same UTF-8 bytes. The synthetic worker regression covers publication and the unchanged retention timestamp. Deployment is pending.
+
 ## Open
 
 - [ ] **P2** - Business 2.50.13 looks up DNSTT country and activity by the recursive resolver and displays its TCP reachability as server health. Match the deployed node and skip the resolver TCP probe. See phase-business-dnstt-card-2026-11-19.md.
