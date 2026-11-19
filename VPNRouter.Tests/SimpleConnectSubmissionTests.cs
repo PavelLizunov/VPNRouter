@@ -22,6 +22,44 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
 
     private static string Link(string name) => $"vless://{Id}@{name}.invalid:443?security=none#{name}";
 
+    [AvaloniaFact]
+    public async Task DisablingFeedKeepsItsCacheButCannotRestoreItFromTheSimpleUrl()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.Subscriptions =
+        [
+            new() { Url = Feed, Name = "first", Servers = [ServerUriParser.Parse(Link("first"))] },
+            new() { Url = NextFeed, Name = "next", Servers = [ServerUriParser.Parse(Link("next"))] }
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, Link("retrieved"));
+        SubscriptionFetcher.Http = http;
+
+        using (var vm = new MainWindowViewModel(store))
+        {
+            var original = vm.Subscriptions[0];
+            Assert.Equal(Feed, vm.SmpInput);
+            original.Enabled = false;
+
+            Assert.Equal("next", Assert.Single(vm.SubscriptionServers).Name);
+            Assert.Equal(NextFeed, vm.SmpInput);
+            Assert.False(store.Load(AppPaths.ConfigYamlPath).App.Subscriptions[0].Enabled);
+
+            vm.SmpInput = Feed;
+            await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            await vm.RefreshSubscriptionCommand.ExecuteAsync(original);
+            Assert.Empty(http.SentRequests);
+        }
+
+        using var reopened = new MainWindowViewModel(store);
+        Assert.Equal("next", Assert.Single(reopened.SubscriptionServers).Name);
+        Assert.Equal("first", Assert.Single(reopened.Subscriptions[0].UnderlyingEntry.Servers).Name);
+        reopened.Subscriptions[0].Enabled = true;
+        Assert.Equal(2, reopened.SubscriptionServers.Count);
+    }
+
     [AvaloniaTheory]
     [InlineData("routing")]
     [InlineData("new-feed")]
@@ -30,6 +68,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
     [InlineData("refresh-url")]
     [InlineData("server-uri")]
     [InlineData("cached-choice")]
+    [InlineData("disable")]
     [InlineData("cancel")]
     [InlineData("busy")]
     public async Task SimpleConnectStartsTheSubmissionAndPreservesEditsDuringProbe(string edit)
@@ -92,6 +131,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
                         break;
                     case "server-uri": vm.SmpInput = Link("next"); break;
                     case "cancel": vm.IsConnecting = false; break;
+                    case "disable": vm.Subscriptions[0].Enabled = false; break;
                     case "busy": vm.IsConnected = true; break;
                 }
             }
@@ -110,10 +150,10 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
         Assert.True(vm.HasPendingAppChanges);
         var saved = store.Load(AppPaths.ConfigYamlPath);
         Assert.Equal("full", saved.App.RoutingMode);
-        if (edit is "cancel" or "busy")
+        if (edit is "cancel" or "busy" or "disable")
         {
             Assert.Null(started);
-            Assert.Single(probes);
+            if (edit != "disable") Assert.Single(probes);
             Assert.Equal(edit == "busy", vm.IsConnected);
             return;
         }

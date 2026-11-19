@@ -9,6 +9,22 @@ namespace VPNRouter.App.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private string SubscriptionDisabledMessage => IsRussian
+        ? "Подписка выключена. Включите её в разделе «Подписки»."
+        : "This subscription is disabled. Enable it in Subscriptions.";
+
+    private SubscriptionViewModel CreateSubscriptionView(SubscriptionEntry entry) => new(entry, sub =>
+    {
+        if (_isLoadingUI || !Subscriptions.Contains(sub)) return;
+        var replaceInput = !sub.Enabled && SimpleConnectPolicy.SameUrl(SmpInput, sub.Url);
+        RebuildSubscriptionPool();
+        if (replaceInput)
+            SmpInput = Subscriptions.FirstOrDefault(s => s.Id == SelectedSubscriptionServer?.SubscriptionId)?.Url
+                ?? Subscriptions.FirstOrDefault(s => s.Enabled)?.Url ?? string.Empty;
+        SaveSettings();
+        if (IsConnected) HasPendingAppChanges = true;
+    });
+
     private (string? Feed, string Route)? SelectedSubscriptionRoute() => SelectedSubscriptionServer is { } row
         ? (row.SubscriptionId, SubscriptionEntry.RouteKey(row.SourceEntry,
             SubscriptionServers.Where(s => s.SubscriptionId == row.SubscriptionId).Select(s => s.SourceEntry))) : null;
@@ -29,7 +45,13 @@ public partial class MainWindowViewModel
             var selected = SubscriptionRefreshDiff.FindRegisteredServer(source?.UnderlyingEntry, entries, name, key,
                 previous?.SourceEntry, SelectedSubscriptionRoute()?.Route);
             if (selected == null && source != null &&
-                (previous?.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia))) return;
+                (previous?.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia)))
+            {
+                foreach (var row in SubscriptionServers.Where(row => enabled.All(feed => feed.Id != row.SubscriptionId)).ToArray())
+                    SubscriptionServers.Remove(row);
+                RefreshActiveIndicator();
+                return;
+            }
 
             SubscriptionServers.Clear();
             foreach (var feed in enabled)
@@ -66,9 +88,15 @@ public partial class MainWindowViewModel
         var name = (NewSubName ?? "").Trim();
         if (string.IsNullOrEmpty(name)) name = $"Sub {Subscriptions.Count + 1}";
 
+        if (Subscriptions.Any(s => !s.Enabled && SimpleConnectPolicy.SameUrl(s.Url, url))
+            && !Subscriptions.Any(s => s.Enabled && SimpleConnectPolicy.SameUrl(s.Url, url)))
+        {
+            StatusText = SubscriptionDisabledMessage;
+            return;
+        }
         var entry = new SubscriptionEntry { Name = name, Url = url, Enabled = true };
         _settings.App.Subscriptions.Add(entry);
-        var svm = new SubscriptionViewModel(entry);
+        var svm = CreateSubscriptionView(entry);
         Subscriptions.Add(svm);
 
         NewSubName = string.Empty;
@@ -106,7 +134,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task RefreshSubscriptionAsync(SubscriptionViewModel? sub)
     {
-        if (sub == null || string.IsNullOrWhiteSpace(sub.Url)) return;
+        if (sub == null || !sub.Enabled || string.IsNullOrWhiteSpace(sub.Url)) return;
         if (sub.IsRefreshing) return;
 
         await RefreshRegisteredSubscriptionsAsync([sub], CancellationToken.None);
@@ -203,6 +231,11 @@ public partial class MainWindowViewModel
                 StatusText = registered.LastRefreshFailed ? Strings.SyncEmpty : Strings.SyncComplete(registered.CachedServerCount);
                 return;
             }
+            if (Subscriptions.Any(s => !s.Enabled && SimpleConnectPolicy.SameUrl(s.Url, url)))
+            {
+                StatusText = SubscriptionDisabledMessage;
+                return;
+            }
             var selectionAtStart = SelectedSubscriptionServer;
             var entries = await SubscriptionFetcher.FetchAsync(url, _logger);
             if (_disposed || !SimpleConnectPolicy.SameUrl(url, SubscriptionUrl) ||
@@ -224,7 +257,7 @@ public partial class MainWindowViewModel
                     StatusText = Strings.SyncEmpty;
                     return;
                 }
-                Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry { Url = url, Name = "Default", Servers = entries }));
+                Subscriptions.Add(CreateSubscriptionView(new SubscriptionEntry { Url = url, Name = "Default", Servers = entries }));
                 RebuildSubscriptionPool();
                 SaveSettings();
                 StatusText = Strings.SyncComplete(entries.Count);

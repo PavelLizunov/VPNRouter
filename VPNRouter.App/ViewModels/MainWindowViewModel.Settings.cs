@@ -748,7 +748,7 @@ public partial class MainWindowViewModel
 
         Subscriptions.Clear();
         foreach (var entry in _settings.App.Subscriptions)
-            Subscriptions.Add(new SubscriptionViewModel(entry));
+            Subscriptions.Add(CreateSubscriptionView(entry));
 
         RebuildSubscriptionPool();
         if (IsSubscribeMode && SelectedSubscriptionServer?.SubscriptionId is { } id)

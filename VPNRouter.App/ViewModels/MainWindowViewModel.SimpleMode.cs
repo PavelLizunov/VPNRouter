@@ -321,6 +321,11 @@ public partial class MainWindowViewModel
             else if (kind == SmpInputKind.SubscriptionUrl)
             {
                 var action = ApplySimpleSubscriptionInput(input);
+                if (action == SubscriptionInputAction.Disabled)
+                {
+                    SmpErrorText = SubscriptionDisabledMessage;
+                    return;
+                }
                 refresh = action != SubscriptionInputAction.KeepCached;
             }
             else if (_settings.Vless.Servers is not { Count: > 0 } &&
@@ -403,6 +408,11 @@ public partial class MainWindowViewModel
 
                 var source = selectedSource != null && selectedSource.Servers.Contains(chosen)
                     ? selectedSource : submitted.App.Subscriptions.First(s => s.Enabled && s.Servers.Contains(chosen));
+                if (Subscriptions.Any(s => !s.Enabled && s.Id == source.Id))
+                {
+                    SmpErrorText = SubscriptionDisabledMessage;
+                    return;
+                }
                 if ((chosen.Dnstt != null || !string.IsNullOrEmpty(chosen.DetourVia)) &&
                     new SubscriptionChainSelection(source.Id, source.Url, chosen, SubscriptionEntry.RouteKey(chosen, source.Servers))
                         .Match(source, candidates) != chosen)
@@ -492,6 +502,7 @@ public partial class MainWindowViewModel
     private SubscriptionInputAction ApplySimpleSubscriptionInput(string input)
     {
         var action = SimpleConnectPolicy.DecideSubscriptionInput(input, _settings.App.Subscriptions);
+        if (action == SubscriptionInputAction.Disabled) return action;
         if (action == SubscriptionInputAction.Replace)
         {
             var entry = new SubscriptionEntry
@@ -504,7 +515,7 @@ public partial class MainWindowViewModel
             _settings.App.Subscriptions = new List<SubscriptionEntry> { entry };
 
             Subscriptions.Clear();
-            Subscriptions.Add(new SubscriptionViewModel(entry));
+            Subscriptions.Add(CreateSubscriptionView(entry));
             RebuildSubscriptionPool();
         }
         else if (SelectedSubscriptionServer?.SubscriptionId is not { } id ||

@@ -89,11 +89,11 @@ public sealed class SimpleConnectPolicyTests
     }
 
     [Fact]
-    public void ADisabledSubscription_DoesNotCount()
+    public void ADisabledSubscription_IsNotReplaced()
     {
         var action = SimpleConnectPolicy.DecideSubscriptionInput("https://sub.example/c/1", new[] { Sub("https://sub.example/c/1", 13, enabled: false) });
 
-        Assert.Equal(SubscriptionInputAction.Replace, action);
+        Assert.Equal(SubscriptionInputAction.Disabled, action);
     }
 
     [Fact]
