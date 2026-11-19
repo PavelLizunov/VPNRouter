@@ -109,11 +109,7 @@ public partial class BusinessWindow : Window
         {
             var snapshot = _metadata.LastSnapshot;
             foreach (var choice in _health.Choices)
-            {
-                BusinessNodeMetadata? row = null;
-                if (snapshot != null && snapshot.TryGetNode(choice.Server.Server, out var matched)) row = matched;
-                choice.UpdateMetadata(snapshot, row);
-            }
+                choice.UpdateMetadata(snapshot);
         }
         _syncingSelection = true;
         try

@@ -21,6 +21,7 @@ internal sealed record BusinessNodeMetadata(
     BusinessNodeFreshness Freshness)
 {
     internal BusinessNodeActivityLevel ActivityLevel { get; init; }
+    internal string? DnsttDomain { get; init; }
 
     // Unix load average is deliberately separate from this RAM percentage.
     internal double? MemoryUsedPercent =>
@@ -54,6 +55,13 @@ internal sealed class BusinessNodeSnapshot
     {
         node = null!;
         return TryNormalizeHost(endpointHost, out var normalized) && Nodes.TryGetValue(normalized, out node!);
+    }
+
+    internal BusinessNodeMetadata? FindDnsttNode(string domain)
+    {
+        if (!TryNormalizeHost(domain, out var normalized)) return null;
+        var matches = Nodes.Values.Where(node => node.DnsttDomain == normalized).Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
     }
 
     internal ulong? GetAgeSeconds(BusinessNodeMetadata node) => GetAgeSeconds(node, Stopwatch.GetTimestamp());
@@ -120,8 +128,12 @@ internal sealed class BusinessNodeSnapshot
                 else if (freshness == BusinessNodeFreshness.Fresh && age > maxAge)
                     freshness = BusinessNodeFreshness.Stale;
 
+                var dnsttDomain = row.TryGetProperty("dnstt_domain", out var domain)
+                    && domain.ValueKind == JsonValueKind.String
+                    && TryNormalizeHost(domain.GetString(), out var normalizedDomain)
+                    ? normalizedDomain : null;
                 if (!nodes.TryAdd(host, new(host, country, total, available, load, observed, age, freshness)
-                    { ActivityLevel = Activity(row) }))
+                    { ActivityLevel = Activity(row), DnsttDomain = dnsttDomain }))
                     throw InvalidSnapshot();
             }
             return new(nodes, generatedAt, maxAge);

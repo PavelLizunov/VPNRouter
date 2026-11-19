@@ -8,6 +8,7 @@ namespace VPNRouter.App.ViewModels.Internals;
 public sealed class BusinessServerChoiceViewModel : ViewModelBase
 {
     internal ServerViewModel Server { get; }
+    internal bool SupportsTcpProbe => Server.SourceEntry.Dnstt == null;
     public string DisplayName => Server.SourceEntry.Dnstt != null &&
         !Server.DisplayName.Contains("DNSTT", StringComparison.OrdinalIgnoreCase)
         ? $"{Server.DisplayName} · DNSTT" : Server.DisplayName;
@@ -15,7 +16,7 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
     private BusinessNodeMetadata? _metadata;
     public bool HasMetadata { get; private set; }
     public string CountryCode => _metadata != null ? _metadata.CountryIso ?? string.Empty
-        : BusinessServerCountry.Code(Server.Name);
+        : Server.SourceEntry.Dnstt == null ? BusinessServerCountry.Code(Server.Name) : string.Empty;
     public string CountryName => Strings.BusinessCountryName(CountryCode);
     public bool HasCountry => CountryCode.Length != 0;
     public Avalonia.Media.IImage? CountryFlag => BusinessServerCountry.Flag(CountryCode);
@@ -82,6 +83,17 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         _metadataSnapshot = snapshot;
         _metadata = snapshot == null ? null : row;
         RefreshMetadata();
+    }
+
+    internal void UpdateMetadata(BusinessNodeSnapshot? snapshot)
+    {
+        BusinessNodeMetadata? row = null;
+        if (snapshot != null)
+        {
+            if (Server.SourceEntry.Dnstt is { } dnstt) row = snapshot.FindDnsttNode(dnstt.Domain);
+            else if (snapshot.TryGetNode(Server.Server, out var endpoint)) row = endpoint;
+        }
+        UpdateMetadata(snapshot, row);
     }
 
     private void RefreshMetadata()
