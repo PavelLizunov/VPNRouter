@@ -71,7 +71,7 @@ public sealed class StartupPipelineTests : IDisposable
     [InlineData("localhost", true, false)]
     [InlineData("localhost", false, false)]
     [InlineData("127.0.0.1", false, true)]
-    public async Task GeneratedStartupProbes_UseAcceptedControllerForSingleOutboundWarmupAndDelay(
+    public async Task StartupProbes_UseAcceptedControllerForSingleOutboundWarmupAndDelay(
         string bind, bool ipv6, bool dnstt)
     {
         Assert.SkipUnless(!ipv6 || Socket.OSSupportsIPv6, "IPv6 loopback is required.");
@@ -138,7 +138,7 @@ public sealed class StartupPipelineTests : IDisposable
             Assert.NotNull(host.PostStartProbe);
             var delayed = host.PostStartProbe(ct);
             if (dnstt) await ServeDelayAsync(DeepVerifyConstants.ProbeUrl, timeoutMs: 8000, fail: true);
-            await ServeDelayAsync(googleProbe, timeoutMs: dnstt ? 8000 : 5000);
+            await ServeDelayAsync(googleProbe, timeoutMs: dnstt ? 6000 : 5000);
             var result = await delayed;
             Assert.False(result.IsDead);
             Assert.Equal(23, result.LastDelayMs);

@@ -29,10 +29,16 @@ controller, authorization, cancellation, deadlines and positive-delay guard.
 
 The Business Core change is equivalent to Standard. The controller fixture
 exercises the first target and the alternate target after an HTTP 504, with
-eight seconds per native request. A positive delay from the exact proxy remains
+native budgets of eight and six seconds. A positive delay from the exact proxy remains
 mandatory. Native isolated tests on the affected Windows host established that
 both destinations can succeed and that fresh sessions can time out. The change
 addresses probe redundancy and budget. Transport reliability remains under test.
 
 Scoped diff checks passed. Exact-head CI and candidate TUN verification are
 pending.
+
+DeepSeek identified a tight deadline between the two probe attempts and the
+desktop startup window. The fallback now has a six-second native budget,
+leaving up to sixteen seconds for both requests with controller allowances.
+An additional fixture checks that HTTP 504 followed by zero delay does not
+confirm readiness. The previous head passed hosted CI.
