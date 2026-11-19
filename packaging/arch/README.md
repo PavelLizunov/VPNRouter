@@ -31,8 +31,8 @@ workflow runs or rerun attempts compare newer in pacman.
 `--work-dir` must be new and absolute. `--archive-cache` optionally reads an
 existing directory of verified archives.
 
-The core is sing-box-vpnctl 1.14.2-vpnctl.2 linux-amd64; the libcronet donor is
-SagerNet/sing-box 1.14.2 linux-amd64. Both archive hashes match
+The package uses sing-box-vpnctl 1.14.4-vpnctl.2 linux-amd64 and libcronet.so
+from its pinned cronet-go module (4ecba4761b20). Both payload hashes match
 [the desktop Linux workflow](../../.github/workflows/build-linux.yml).
 The [Arch CI workflow](../../.github/workflows/arch-headless.yml) builds from
 `github.sha`, installs and upgrades the result with pacman, verifies capabilities,
