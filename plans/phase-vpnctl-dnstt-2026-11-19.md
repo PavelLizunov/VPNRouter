@@ -20,7 +20,7 @@ Verify the release inputs and provenance. Match Linux to the fork's Cronet libra
 ## Verification
 
 1. Build: Pending exact-head desktop and Android CI.
-2. Tests: 49 targeted Arch download/notice tests passed. The upstream core passed offline DNSTT config checks on Linux x64, Windows x64 (local Omarchy guest), and macOS arm64. Matching Naive/Cronet config checks passed on Linux and Windows. Generated config tests are wired into CI.
+2. Tests: All 132 Arch packaging tests passed locally. The pin parity test now compares the immutable Cronet download URL and SHA-256 used by both Linux packages. The upstream core passed offline DNSTT config checks on Linux x64, Windows x64 (local Omarchy guest), and macOS arm64. Matching Naive/Cronet config checks passed on Linux and Windows. Generated config tests are wired into CI.
 3. Docs: Runtime pins, Custom JSON setup, and TCP limitation documented. Previous release history left intact.
 4. Review: Three independent source reviews. Fixed the missing explicit exclude list in the fixture, added a complete TUN/DNS example, and wired the Windows native check into the compiled Business run. Arch's existing catalog verification checks the final staged library.
 5. UI: N/A, no interface change. A live DNSTT tunnel and Android dataplane remain unverified.
