@@ -19,13 +19,16 @@ Verify the release inputs and provenance. Match Linux to the fork's Cronet libra
 
 ## Verification
 
-1. Build: Pending exact-head CI for desktop and Android.
-2. Tests: Pending custom JSON regression, native config validation, and packaging contracts.
-3. Docs: Pending current runtime references and DNSTT use instructions.
-4. Review: Pending independent review of routing selection and package inputs.
-5. UI: N/A, no interface change. Platform runtime acceptance remains separate.
-6. Characterization: Pending existing import and subscription tests. No mechanical extraction.
+1. Build: Pending exact-head desktop and Android CI.
+2. Tests: 49 targeted Arch download/notice tests passed. The upstream core passed offline DNSTT config checks on Linux x64, Windows x64 (local Omarchy guest), and macOS arm64. Matching Naive/Cronet config checks passed on Linux and Windows. Generated config tests are wired into CI.
+3. Docs: Runtime pins, Custom JSON setup, and TCP limitation documented. Previous release history left intact.
+4. Review: Three independent source reviews. Fixed the missing explicit exclude list in the fixture, added a complete TUN/DNS example, and wired the Windows native check into the compiled Business run. Arch's existing catalog verification checks the final staged library.
+5. UI: N/A, no interface change. A live DNSTT tunnel and Android dataplane remain unverified.
+6. Characterization: macOS shell, Python, release workflow YAML, catalog JSON and whitespace checked locally. Existing behavior suite runs on CI.
 
 ## Outcome
 
-- Status: Brief prepared; implementation pending baseline checks.
+- Four upstream runtime archive SHA-256 digests match SHA256SUMS and GitHub attestations for the exact upstream tag.
+- The bundled Windows DLL and Linux SO match the Cronet revision recorded in the new runtime.
+- The documented SSH final route is preserved for full routing and split excludes. Split includes send selected processes to SSH.
+- Scope remains native Custom JSON. Publication and live acceptance are separate.
