@@ -8,6 +8,7 @@ namespace VPNRouter.Core.Services;
 public sealed class ConfigSanityCheck
 {
     private const int DnsttProbeTimeoutMs = 8_000;
+    private const int DnsttFallbackTimeoutMs = 6_000;
     private const int ControllerResponseAllowanceMs = 1_000;
     private readonly ILogger? _logger;
     private readonly HttpClient _http;
@@ -164,7 +165,8 @@ public sealed class ConfigSanityCheck
             bool initialDnsttProbe = dnstt && attempt == 1;
             var target = initialDnsttProbe ? DeepVerifyConstants.ProbeUrl : defaultProbeUrl;
             // Leave room for a second destination inside the desktop warmup deadline.
-            var probeTimeoutMs = dnstt ? DnsttProbeTimeoutMs : 5_000;
+            var probeTimeoutMs = !dnstt ? 5_000 :
+                initialDnsttProbe ? DnsttProbeTimeoutMs : DnsttFallbackTimeoutMs;
             var url = new Uri(controller, "/proxies/proxy/delay" +
                 $"?url={Uri.EscapeDataString(target)}&timeout={probeTimeoutMs}");
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);

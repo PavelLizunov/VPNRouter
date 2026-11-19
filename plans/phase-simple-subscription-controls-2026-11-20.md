@@ -69,3 +69,10 @@ fixtures cover 380 px, cached and empty feeds, and busy controls. The command
 fixtures cover overlapping feeds and completed tunnel transitions.
 
 The previous head passed GitHub CI. The updated fixtures are pending CI.
+
+The previous CI failure was caused by older silent-refresh fixtures using a
+simulated Connect to suppress real reconnection. Those fixtures now use the
+existing reconnect seam and continue to assert the refreshed row order and hop.
+DNSTT review also identified a tight desktop deadline. The two canaries now
+have native budgets of eight and six seconds, with one second of controller
+allowance each. A two-failure test pins the absence of false readiness.

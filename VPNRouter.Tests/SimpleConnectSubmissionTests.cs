@@ -265,7 +265,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
             using (var running = new MainWindowViewModel(store))
             {
                 running.IsConnected = true;
-                running.IsConnecting = true;
+                running.SubscriptionRefreshReconnect = _ => Task.CompletedTask;
                 await running.RefreshSubscriptionSilentAsync();
                 Assert.Equal(new[] { b.Server, a.Server }, running.SubscriptionServers.Select(s => s.Server));
                 Assert.Equal(a.Server, running.SelectedSubscriptionServer?.Server);
@@ -425,7 +425,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
         using (var running = new MainWindowViewModel(store))
         {
             running.IsConnected = true;
-            running.IsConnecting = true;
+            running.SubscriptionRefreshReconnect = _ => Task.CompletedTask;
             await running.RefreshSubscriptionSilentAsync();
             Assert.Equal("new-hop", running.SelectedSubscriptionServer?.SourceEntry.DetourVia);
         }
