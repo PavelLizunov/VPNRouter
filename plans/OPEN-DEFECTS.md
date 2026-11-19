@@ -610,8 +610,8 @@ with that verified interface. Fixed in 4ad09f87: regression code is in LinuxDnsH
 
 ## Standard Simple subscription controls (2026-11-20)
 
-- [ ] **P2** - The Windows Simple server picker displays latency but does not offer a probe or manual refresh. Owner report on v2.50.6-r3. The expanded picker should expose the same checks and refresh as Advanced, respecting disabled feeds.
-- [ ] **P2** - Owner report on v2.50.6-r3: a selected DNSTT profile timed out during desktop startup. The previously verified loopback SOCKS test did not exercise the TUN or the app's controller readiness probe.
+- [x] **P2** - The expanded Simple server picker now exposes ping, deep verification and refresh for enabled feeds. The headless control fixture passed on Windows and Ubuntu. Release pending.
+- [ ] **P2** - Owner report on v2.50.6-r3: a selected DNSTT profile timed out during desktop startup. Affected Windows confirmed the readiness deadline after core startup. DNSTT now checks two destinations through the exact proxy with bounded budgets. Candidate validation on the affected host is pending.
 
 ## DNSTT subscription integration (2026-11-19)
 
