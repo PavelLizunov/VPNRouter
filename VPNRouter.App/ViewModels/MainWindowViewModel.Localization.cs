@@ -210,6 +210,8 @@ public partial class MainWindowViewModel
     public string L_SmpHomeButtonTip => Strings.SmpHomeButtonTip;
     public string L_SmpPickServerLabel => Strings.SmpPickServerLabel;
     public string L_SmpPickServerHint => Strings.SmpPickServerHint;
+    public string L_SmpRefreshSubscriptions => Core.Localization.Strings.SmpRefreshSubscriptions;
+    public string L_SubsRefreshing => Core.Localization.Strings.SubsRefreshing;
     public string L_SmpSetupCheckTitle => Strings.SmpSetupCheckTitle;
     public string L_SmpSetupCheckSubtitle => Strings.SmpSetupCheckSubtitle;
     public string L_SmpMenuResetWindowSize => Strings.SmpMenuResetWindowSize;

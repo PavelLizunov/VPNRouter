@@ -18,6 +18,44 @@ namespace VPNRouter.Tests;
 public sealed class SimpleConnectStatusTests
 {
     [AvaloniaFact]
+    public void ExpandedSimplePickerExposesSubscriptionChecksAndRefresh()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.UiMode = "simple";
+        settings.App.Subscriptions =
+        [
+            new() { Enabled = true, Url = "https://feed.invalid/simple", Servers = [Entry("test", "test.invalid")] }
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm);
+        vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var ping = view.Page.FindControl<Button>("SimplePing")!;
+        var deepCheck = view.Page.FindControl<Button>("SimpleDeepCheck")!;
+        var refresh = view.Page.FindControl<Button>("SimpleRefreshSubscriptions")!;
+        Assert.Same(vm.TestAllSubscriptionServersCommand, ping.Command);
+        Assert.Same(vm.DeepVerifyAllSubscriptionServersCommand, deepCheck.Command);
+        Assert.Same(vm.RefreshAllSubscriptionsCommand, refresh.Command);
+        Assert.True(ping.IsEffectivelyVisible);
+        Assert.True(deepCheck.IsEffectivelyVisible);
+        Assert.True(refresh.IsEffectivelyVisible);
+
+        vm.IsConnecting = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(refresh.IsEffectivelyEnabled);
+        vm.IsConnecting = false;
+        vm.Subscriptions.Single().Enabled = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(ping.IsEffectivelyVisible);
+        Assert.False(deepCheck.IsEffectivelyVisible);
+        Assert.False(refresh.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
     public async Task PendingRoutingAndServerEditsStayOutOfTheConnectedStatus()
     {
         var settings = new AppSettings();

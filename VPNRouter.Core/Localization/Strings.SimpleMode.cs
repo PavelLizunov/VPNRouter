@@ -129,6 +129,8 @@ public static partial class Strings
     public static string SmpPickServerHint          => Ru
         ? "Подключение берёт последний выбранный сервер, если он отвечает, иначе самый быстрый из рабочих."
         : "Connect uses the server you picked last if it answers, otherwise the fastest working one.";
+    public static string SmpCheckPing => Ru ? "Проверить пинг" : "Check ping";
+    public static string SmpRefreshSubscriptions => Ru ? "Обновить подписки" : "Refresh subscriptions";
     public static string SmpSetupCheckTitle         => Ru ? "Проверка настроек" : "Check my setup";
     public static string SmpSetupCheckSubtitle      => Ru
         ? "Маршрутизация, MTU и аварийное отключение, шаг за шагом"

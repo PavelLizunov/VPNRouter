@@ -637,6 +637,8 @@ public partial class MainWindowViewModel
 
     public bool SmpHasSubscriptionServers => SubscriptionServers.Count > 0;
 
+    public bool SmpHasRefreshableSubscriptions => Subscriptions.Any(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
+
     public bool SmpCanConnect => SmpHasConfig || !string.IsNullOrWhiteSpace(SmpInput);
 
     // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
@@ -733,6 +735,7 @@ public partial class MainWindowViewModel
     {
         nameof(SmpHasConfig), nameof(SmpNeedsConfig), nameof(SmpConfigEditorVisible), nameof(SmpCanConnect),
         nameof(SmpFirstRunEditorVisible), nameof(SmpPickerVisible), nameof(SmpHasSubscriptionServers),
+        nameof(SmpHasRefreshableSubscriptions),
         nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
         nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
         nameof(SmpConfigServer), nameof(SmpHasConfigServer), nameof(SimpleConfigModeSummary), nameof(SimplePendingSummary),

@@ -34,4 +34,20 @@ a cause.
 
 ## Outcome
 
-In progress.
+Implemented the expanded picker controls using the existing Advanced commands.
+Added an Avalonia regression for real bindings, disabled feeds and refresh
+availability during Connect. XML parsing and the scoped diff check passed.
+
+On the verified WINBRAT x64 worker, the published v2.50.6-r3 ZIP and SHA-256
+sidecar matched. A direct import of the DNSTT row from the reported subscription
+established the app's TUN. The lifecycle verifier saw CoreStarted, then TunReady
+1.714 seconds later, with zero classified errors. Stop retired the core and TUN.
+A manual refresh in Advanced added the DNSTT row to the cached feed.
+
+The live subscription response contains four direct VLESS routes, four VLESS
+routes with a detour, and one DNSTT route. The detour-only capability reproduces
+the extra VLESS rows independently of DNSTT. The quick ping deliberately skips
+these routes and DNSTT. A skipped probe does not establish reachability or
+retirement. No server inventory was changed.
+
+GitHub CI and exact subscription-row startup evidence are pending.

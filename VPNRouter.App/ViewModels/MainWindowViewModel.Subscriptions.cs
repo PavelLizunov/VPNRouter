@@ -16,6 +16,7 @@ public partial class MainWindowViewModel
     private SubscriptionViewModel CreateSubscriptionView(SubscriptionEntry entry) => new(entry, sub =>
     {
         if (_isLoadingUI || !Subscriptions.Contains(sub)) return;
+        OnPropertyChanged(nameof(SmpHasRefreshableSubscriptions));
         var replaceInput = !sub.Enabled && SimpleConnectPolicy.SameUrl(SmpInput, sub.Url);
         RebuildSubscriptionPool();
         if (replaceInput)

@@ -608,6 +608,11 @@ with that verified interface. Fixed in 4ad09f87: regression code is in LinuxDnsH
 - [ ] **P3** - The VLESS import form also deletes the selected server. Move deletion to the existing row button and preserve its command and persistence. Source change under review in #692.
 - [ ] **P3** - At 360 px the Russian protocol-use badge overlaps ping in the Standard server row (CI run 44194961677). The follow-up in #692 gives metadata its own row.
 
+## Standard Simple subscription controls (2026-11-20)
+
+- [ ] **P2** - The Windows Simple server picker displays latency but does not offer a probe or manual refresh. Owner report on v2.50.6-r3. The expanded picker should expose the same checks and refresh as Advanced, respecting disabled feeds.
+- [ ] **P2** - Owner report on v2.50.6-r3: a selected DNSTT profile timed out during desktop startup. The previously verified loopback SOCKS test did not exercise the TUN or the app's controller readiness probe.
+
 ## DNSTT subscription integration (2026-11-19)
 
 - [x] **P1** - #705 review: the generated SSH proxy was omitted by pre-start recognition. The generated-chain fixture now crosses the runtime sanity check.
