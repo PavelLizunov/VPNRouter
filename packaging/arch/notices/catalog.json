@@ -62,16 +62,16 @@
     },
     {
       "id": "sing-box-vpnctl",
-      "version": "1.14.2-vpnctl.2",
+      "version": "1.14.4-vpnctl.2",
       "repository_url": "https://github.com/PavelLizunov/sing-box-vpnctl",
-      "revision": "f62085aa7cc0f3ee665ac3043d35698760a386e9",
+      "revision": "c1868557243b1785c10212fbdc8e6278eda3934b",
       "license_expression": "GPL-3.0-or-later",
-      "payload_sha256": "c9c0e66020575b4eea57c2f77ad4df0a5bebee1d8500c715eb9430982638bea3",
+      "payload_sha256": "a934f40f4001a52c82a8e1b936d2709e49496555c5ca1c421369942ff455e789",
       "files": [
         {
           "path": "sing-box-vpnctl/LICENSE",
           "sha256": "650d5e3b99a446fb38e820fa87a49562e0c79eab868fff58618ac487a58e554c",
-          "source_url": "https://raw.githubusercontent.com/PavelLizunov/sing-box-vpnctl/f62085aa7cc0f3ee665ac3043d35698760a386e9/LICENSE"
+          "source_url": "https://raw.githubusercontent.com/PavelLizunov/sing-box-vpnctl/c1868557243b1785c10212fbdc8e6278eda3934b/LICENSE"
         }
       ],
       "coverage": "partial",
@@ -82,38 +82,37 @@
     },
     {
       "id": "Cronet",
-      "version": "1.14.2",
-      "repository_url": "https://github.com/SagerNet/sing-box",
-      "revision": "v1.14.2",
+      "version": "v0.0.0-20261118104455-4ecba4761b20",
+      "repository_url": "https://github.com/SagerNet/cronet-go",
+      "revision": "4ecba4761b201f6c552aabd0462a94fe2a8f833c",
       "license_expression": "BSD-3-Clause",
-      "payload_sha256": "23109c55b08829bb1a68682a61a64852b1bbf243753b153cbd8f6e4ea2c05294",
+      "payload_sha256": "99eb98eb47102c7418c7fed1e666d27e2bfb67c6b5517f7ae6b033748d657ed4",
       "provenance": {
         "repository_url": "https://github.com/SagerNet/naiveproxy",
-        "revision": "888e114241c89b05fac4e4ee01482d7bd89ca15a",
-        "chromium_version": "148.0.7778.96",
-        "fork_expected_lib_revision": "f80ef37265e5ae43b62021553a3bfc763414656d",
+        "revision": "7c64cae24cd7bae18d9c603fdddc73b623c04462",
+        "chromium_version": "154.0.8037.49",
+        "fork_expected_lib_revision": "4ecba4761b201f6c552aabd0462a94fe2a8f833c",
         "source_chain_unverified": true,
         "relationship": "candidate_upstream_source_superset",
-        "note": "Candidate notice source superset retained from the earlier donor; not verified against the 1.14.2 donor build"
+        "note": "The library matches the fork module. The retained notice superset has incomplete coverage of the linked Chromium build"
       },
       "coverage": "partial",
       "unresolved": [
         "linked-dependency-selection",
         "generated-Chromium-credits",
-        "fork-vs-donor-abi-mismatch",
         "source-chain-unverified"
       ],
       "files": [
         {
           "path": "Cronet/cronet-go/LICENSE",
           "sha256": "2f02b7486bcfa90d115c71a20437f3906b6fd5bef81c5dc0efd341399e89d0fd",
-          "source_url": "https://raw.githubusercontent.com/SagerNet/cronet-go/def9ff0fb992d0360f56ddbd4b43d65d29849771/LICENSE",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/cronet-go/4ecba4761b201f6c552aabd0462a94fe2a8f833c/LICENSE",
           "role": "wrapper"
         },
         {
           "path": "Cronet/naiveproxy/LICENSE",
           "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
-          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/888e114241c89b05fac4e4ee01482d7bd89ca15a/LICENSE",
+          "source_url": "https://raw.githubusercontent.com/SagerNet/naiveproxy/7c64cae24cd7bae18d9c603fdddc73b623c04462/LICENSE",
           "role": "source_superset"
         },
         {

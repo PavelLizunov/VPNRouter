@@ -19,15 +19,17 @@ public static partial class ConfigGenerator
                 StringComparison.OrdinalIgnoreCase));
         if (selected == null || servers.Count(s => string.Equals(s.Name, selected.Name,
                 StringComparison.OrdinalIgnoreCase)) != 1 || !IsBusinessPortalTransportAvailable(selected))
-            throw new InvalidOperationException("Business portal requires the selected direct VLESS choice to be available.");
+            throw new InvalidOperationException("Business portal requires the selected VLESS or DNSTT choice to be available.");
         BusinessDefaults.ValidateProtocolFields(selected);
 
-        config.Outbounds.Add(BuildVlessOutbound(selected, BusinessPortalOutbound));
+        var portalOutbound = selected.Dnstt == null ? BusinessPortalOutbound : "proxy";
+        if (selected.Dnstt == null)
+            config.Outbounds.Add(BuildVlessOutbound(selected, portalOutbound));
         // HTTPS keeps DNS on TCP through the same exit. Resolver/endpoint bootstrap
         // still uses local-dns, so resolving the proxy host cannot recurse.
         var dns = BuildVpnDnsServer(settings, proxyIsUdpNative: false);
         dns.Tag = BusinessPortalDns;
-        dns.Detour = BusinessPortalOutbound;
+        dns.Detour = portalOutbound;
         config.Dns.Servers.Add(dns);
         // Associate DNS replies with IP-addressed traffic for the portal UDP guard.
         config.Dns.ReverseMapping = true;
@@ -49,7 +51,7 @@ public static partial class ConfigGenerator
             new RouteRule
             {
                 DomainSuffix = [BusinessPolicyDomains.PortalDomain], Network = "tcp",
-                Action = "route", Outbound = BusinessPortalOutbound
+                Action = "route", Outbound = portalOutbound
             }
         ]);
         var dnsAt = config.Dns.Rules.FindIndex(r => r.QueryType == null);

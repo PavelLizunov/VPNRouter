@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using VPNRouter.Core.Json;
 using Serilog;
 using VPNRouter.Core.Models;
 
@@ -322,7 +324,13 @@ public sealed class VlessDeepVerifier
         JsonObject? outbound = null;
         JsonNode? awgEndpoint = null;
 
-        if (protocol is "amneziawg" or "awg" or "awg3" or "amneziawg3")
+        var outboundsArray = new JsonArray();
+        if (protocol == "dnstt")
+        {
+            foreach (var item in ConfigGenerator.BuildDnsttProxyPair(s))
+                outboundsArray.Add(JsonSerializer.SerializeToNode(item, AppJsonContext.Default.SingBoxOutbound));
+        }
+        else if (protocol is "amneziawg" or "awg" or "awg3" or "amneziawg3")
         {
             awgEndpoint = System.Text.Json.JsonSerializer.SerializeToNode(
                 ConfigGenerator.BuildAmneziaWgEndpoint(s, "proxy"));
@@ -339,7 +347,6 @@ public sealed class VlessDeepVerifier
             };
         }
 
-        var outboundsArray = new JsonArray();
         if (outbound != null)
         {
             outboundsArray.Add((JsonNode?)outbound);

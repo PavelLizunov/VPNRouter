@@ -94,9 +94,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           LIBBOX_SOURCE_REPO: "PavelLizunov/sing-box-vpnctl"
-          LIBBOX_RELEASE_TAG: "v1.14.2-vpnctl.2"
-          LIBBOX_ASSET: "libbox-legacy-1.14.2-vpnctl.2.aar"
-          LIBBOX_AAR_SHA256: "c09d4bbbe99cc1bf541dcd0b414f8b0edcf727c5a1cdbfe4b69e5aed12d13631"
+          LIBBOX_RELEASE_TAG: "v1.14.4-vpnctl.2"
+          LIBBOX_ASSET: "libbox-legacy-1.14.4-vpnctl.2.aar"
+          LIBBOX_AAR_SHA256: "4a058525f0235f4b3791ff636773911dc86b9069fa1fc898772f97392e0378a4"
         run: |
           set -euo pipefail
           mkdir -p VPNRouter.Android/Lib

@@ -31,6 +31,18 @@ public static partial class CustomConfigInjector
     {
         if (config["outbounds"] is JsonArray outbounds)
         {
+            // DNSTT dials a fixed backend. Route client connections through its SSH consumer.
+            var finalTag = StjNodeHelpers.AsString(config["route"]?["final"]);
+            if (!string.IsNullOrEmpty(finalTag))
+            {
+                var finalOutbound = outbounds.OfType<JsonObject>().FirstOrDefault(outbound =>
+                    StjNodeHelpers.AsString(outbound["tag"]) == finalTag);
+                var detour = StjNodeHelpers.AsString(finalOutbound?["detour"]);
+                if (StjNodeHelpers.AsString(finalOutbound?["type"]) == "ssh"
+                    && FindTypeByTag(outbounds, detour) == "dnstt")
+                    return finalTag;
+            }
+
             foreach (var ob in outbounds)
             {
                 if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "selector")

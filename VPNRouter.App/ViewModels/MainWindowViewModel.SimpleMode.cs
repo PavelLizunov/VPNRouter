@@ -321,6 +321,11 @@ public partial class MainWindowViewModel
             else if (kind == SmpInputKind.SubscriptionUrl)
             {
                 var action = ApplySimpleSubscriptionInput(input);
+                if (action == SubscriptionInputAction.Disabled)
+                {
+                    SmpErrorText = SubscriptionDisabledMessage;
+                    return;
+                }
                 refresh = action != SubscriptionInputAction.KeepCached;
             }
             else if (_settings.Vless.Servers is not { Count: > 0 } &&
@@ -382,7 +387,7 @@ public partial class MainWindowViewModel
 
                 var preferred = SubscriptionRefreshDiff.FindRegisteredServer(selectedSource, candidates,
                     selectedName, selectedKey, previous, previousRoute);
-                if (preferred == null && previous != null && !string.IsNullOrEmpty(previous.DetourVia))
+                if (preferred == null && previous != null && (previous.Dnstt != null || !string.IsNullOrEmpty(previous.DetourVia)))
                 {
                     SmpErrorText = Strings.SyncEmpty;
                     return;
@@ -390,8 +395,8 @@ public partial class MainWindowViewModel
                 preferred ??= candidates[0];
                 StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                 // A direct probe of an exit cannot judge the selected route through its required hop.
-                var chosen = !string.IsNullOrEmpty(preferred.DetourVia) ? preferred :
-                    await PickSimpleServerAsync(candidates, preferred, submitted.App.ConnectionIntent, Preparing);
+                var chosen = preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia) ? preferred :
+                    await PickSimpleServerAsync(candidates.Where(server => server.Dnstt == null).ToList(), preferred, submitted.App.ConnectionIntent, Preparing);
                 if (!Preparing()) return;
                 if (chosen == null)
                 {
@@ -403,7 +408,12 @@ public partial class MainWindowViewModel
 
                 var source = selectedSource != null && selectedSource.Servers.Contains(chosen)
                     ? selectedSource : submitted.App.Subscriptions.First(s => s.Enabled && s.Servers.Contains(chosen));
-                if (!string.IsNullOrEmpty(chosen.DetourVia) &&
+                if (Subscriptions.Any(s => !s.Enabled && s.Id == source.Id))
+                {
+                    SmpErrorText = SubscriptionDisabledMessage;
+                    return;
+                }
+                if ((chosen.Dnstt != null || !string.IsNullOrEmpty(chosen.DetourVia)) &&
                     new SubscriptionChainSelection(source.Id, source.Url, chosen, SubscriptionEntry.RouteKey(chosen, source.Servers))
                         .Match(source, candidates) != chosen)
                 {
@@ -492,6 +502,7 @@ public partial class MainWindowViewModel
     private SubscriptionInputAction ApplySimpleSubscriptionInput(string input)
     {
         var action = SimpleConnectPolicy.DecideSubscriptionInput(input, _settings.App.Subscriptions);
+        if (action == SubscriptionInputAction.Disabled) return action;
         if (action == SubscriptionInputAction.Replace)
         {
             var entry = new SubscriptionEntry
@@ -504,7 +515,7 @@ public partial class MainWindowViewModel
             _settings.App.Subscriptions = new List<SubscriptionEntry> { entry };
 
             Subscriptions.Clear();
-            Subscriptions.Add(new SubscriptionViewModel(entry));
+            Subscriptions.Add(CreateSubscriptionView(entry));
             RebuildSubscriptionPool();
         }
         else if (SelectedSubscriptionServer?.SubscriptionId is not { } id ||

@@ -63,7 +63,7 @@ internal static class BusinessDefaults
             servers.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != servers.Count)
             throw new InvalidDataException("Business server names must be nonempty and unique.");
         if (GetServerChoices(servers).Count == 0)
-            throw new InvalidDataException("Business pilot requires a usable VLESS connection.");
+            throw new InvalidDataException("Business pilot requires a usable VLESS or DNSTT connection.");
         foreach (var server in servers) ValidateProtocolFields(server);
         return servers;
     }
@@ -80,6 +80,7 @@ internal static class BusinessDefaults
                   VlessUriParser.IsValidRealityPublicKey(server.Reality?.PublicKey) &&
                   VlessUriParser.IsValidRealityShortId(server.Reality?.ShortId))),
             "hysteria2" => !string.IsNullOrWhiteSpace(server.Password),
+            "dnstt" => server.Dnstt != null,
             "tuic" => !string.IsNullOrWhiteSpace(server.Uuid),
             "shadowsocks" => !string.IsNullOrWhiteSpace(server.Method) && !string.IsNullOrWhiteSpace(server.Password) &&
                 (!server.Method.StartsWith("2022-blake3-", StringComparison.OrdinalIgnoreCase) ||
@@ -97,20 +98,30 @@ internal static class BusinessDefaults
     private static bool IsValid32ByteKey(string value) =>
         !string.IsNullOrEmpty(value) && VlessUriParser.TryDecodeBase64Url(value, out var bytes) && bytes.Length == 32;
 
-    internal static VlessConfig CreateServerPool(List<VlessServerEntry> servers, VlessConfig? previous)
+    internal static VlessConfig CreateServerPool(List<VlessServerEntry> servers, VlessConfig? previous,
+        bool requireSelectedDnstt = false)
     {
         var choices = GetServerChoices(servers);
         var first = choices.First();
         var savedName = previous?.ActiveServer;
-        var previousHost = previous?.Servers.FirstOrDefault(s =>
-            string.Equals(s.Name, savedName, StringComparison.OrdinalIgnoreCase))?.Server;
+        var previousServer = previous?.Servers.FirstOrDefault(s =>
+            string.Equals(s.Name, savedName, StringComparison.OrdinalIgnoreCase));
+        if (previousServer?.Dnstt != null)
+        {
+            var source = new SubscriptionEntry { Servers = servers };
+            var selection = new SubscriptionChainSelection(source.Id, source.Url, previousServer, null);
+            var pinned = selection.Match(source, servers);
+            if (pinned != null) return new VlessConfig { Servers = servers, ActiveServer = pinned.Name };
+            if (requireSelectedDnstt)
+                throw new InvalidDataException("The selected Business DNSTT route is no longer available.");
+        }
         var selected = choices.FirstOrDefault(s =>
-            string.Equals(s.Server, previousHost, StringComparison.OrdinalIgnoreCase));
+            s.Dnstt == null && string.Equals(s.Server, previousServer?.Server, StringComparison.OrdinalIgnoreCase));
         var saved = !string.IsNullOrWhiteSpace(savedName)
             ? servers.FirstOrDefault(s => string.Equals(s.Name, savedName, StringComparison.OrdinalIgnoreCase))
             : null;
         selected ??= saved == null ? null : choices.FirstOrDefault(s =>
-            string.Equals(s.Server, saved.Server, StringComparison.OrdinalIgnoreCase));
+            s.Dnstt == null && string.Equals(s.Server, saved.Server, StringComparison.OrdinalIgnoreCase));
         // Prefer the retained physical host even if another node reuses its label.
         return new VlessConfig { Servers = servers, ActiveServer = (selected ?? first).Name };
     }
@@ -119,7 +130,8 @@ internal static class BusinessDefaults
     // while retaining every bundled variant for its existing sibling logic.
     internal static List<VlessServerEntry> GetServerChoices(IEnumerable<VlessServerEntry> servers) =>
         servers.Where(s => s.Protocol == "vless" && string.IsNullOrEmpty(s.DetourVia))
-            .DistinctBy(s => s.Server, StringComparer.OrdinalIgnoreCase).ToList();
+            .DistinctBy(s => s.Server, StringComparer.OrdinalIgnoreCase)
+            .Concat(servers.Where(s => s.Dnstt != null)).ToList();
 
     internal static void ApplyDns(SingBoxConfig config, IEnumerable<CustomRule> rules, bool customFirst = true)
     {
@@ -161,11 +173,19 @@ internal static class BusinessDefaults
     internal static void ApplyDomainTransports(SingBoxConfig config, bool hasUdpProxy,
         bool proxyCarriesUdpNatively, bool blockQuicOnTcpProxy)
     {
+        var proxyIsDnstt = config.Outbounds.Any(o => o.Tag == "proxy" && o.Detour == "dnstt-transport");
         // Explicit domain and IP rules precede per-app/global transport guards.
         // Preserve the same transport decision for every explicit destination.
         for (var i = config.Route.Rules.Count - 1; i >= 0; i--)
         {
             var rule = config.Route.Rules[i];
+            if (proxyIsDnstt && rule.Outbound == "proxy" && (rule.Network is null or "udp"))
+            {
+                var reject = rule.RejectUdp();
+                if (rule.Network == "udp") config.Route.Rules[i] = reject;
+                else config.Route.Rules.Insert(i, reject);
+                continue;
+            }
             if (rule.Outbound != "proxy" || rule.Network != null ||
                 (rule.Domain == null && rule.DomainSuffix == null && rule.IpCidr == null)) continue;
 

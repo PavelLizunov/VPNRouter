@@ -81,9 +81,20 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(start, "start.prepareAndClaim(preflight, () -> {", "select.run();", "detachTunnel();",
                 "if (tunnelConfig == null)", "closeDetachedTunnel(previous, previousServer);", "if (!start.current()) return;",
                 "session = new AndroidTunnelSession();", "startSlipstreamIfNeeded();", "if (!start.current()) return;",
-                "startLibboxService(tunnelConfig);", "session.requireEstablishedTun();", "start.commit(() -> {",
+                "pendingProbeManagedDnstt ? DnsttReadyProbe.attach(tunnelConfig) : null;",
+                "startLibboxService(probe == null ? tunnelConfig : probe.config);",
+                "session.requireEstablishedTun();", "if (probe != null && (!start.current() || !probe.ready())) {",
+                "retireTunnel();", "reportFailure(\"proxy-unreachable\", false);", "start.commit(() -> {",
                 "persistLastGoodConfig();", "liveService = this;",
                 "writeVpnState(STATE_CONNECTED,", "setTunnelLive(true);", "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))");
+
+        requireOrdered(activity, "if (configMode == \"custom\")", "DispatchTunnelStart(command, configJson, coldStartOnly)",
+                "DispatchTunnelStart(command, configJson, coldStartOnly, entry)",
+                ".PutExtra(ExtraProbeManagedDnstt, dnsTunnelEntry?.Dnstt is not null)");
+        requireOrdered(source, "intent.getBooleanExtra(EXTRA_PROBE_MANAGED_DNSTT, false)",
+                "pendingProbeManagedDnstt = probeManagedDnstt;",
+                "editor.putBoolean(KEY_LAST_GOOD_PROBE_MANAGED_DNSTT, pendingProbeManagedDnstt);",
+                "pendingProbeManagedDnstt = prefs.getBoolean(KEY_LAST_GOOD_PROBE_MANAGED_DNSTT, false);");
 
         String stop = source.substring(source.indexOf("private void stopTunnel("),
                 source.indexOf("public synchronized void onRevoke("));

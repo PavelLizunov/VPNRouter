@@ -8,7 +8,9 @@ namespace VPNRouter.App.ViewModels.Internals;
 public sealed class BusinessServerChoiceViewModel : ViewModelBase
 {
     internal ServerViewModel Server { get; }
-    public string DisplayName => Server.DisplayName;
+    public string DisplayName => Server.SourceEntry.Dnstt != null &&
+        !Server.DisplayName.Contains("DNSTT", StringComparison.OrdinalIgnoreCase)
+        ? $"{Server.DisplayName} · DNSTT" : Server.DisplayName;
     private BusinessNodeSnapshot? _metadataSnapshot;
     private BusinessNodeMetadata? _metadata;
     public bool HasMetadata { get; private set; }

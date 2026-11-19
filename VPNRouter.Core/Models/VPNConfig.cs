@@ -326,6 +326,26 @@ public class SingBoxOutbound
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Detour { get; set; }
 
+    [JsonPropertyName("domain")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DnsttDomain { get; set; }
+
+    [JsonPropertyName("public_key")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DnsttPublicKey { get; set; }
+
+    [JsonPropertyName("user")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SshUser { get; set; }
+
+    [JsonPropertyName("private_key")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? SshPrivateKey { get; set; }
+
+    [JsonPropertyName("host_key")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? SshHostKey { get; set; }
+
     [JsonPropertyName("tls")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public TlsConfig? Tls { get; set; }
@@ -592,6 +612,15 @@ internal sealed class RouteNetworkConverter : JsonConverter<string>
 
 public class RouteRule
 {
+    internal RouteRule RejectUdp()
+    {
+        var rule = (RouteRule)MemberwiseClone();
+        rule.Network = "udp";
+        rule.Action = "reject";
+        rule.Outbound = null;
+        return rule;
+    }
+
     [JsonPropertyName("inbound")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Inbound { get; set; }

@@ -94,7 +94,7 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
                 }
 
                 var headers = CollectHeaders(httpResponse);
-                return new HttpResponse(statusCode, headers, body, duration);
+                return new HttpResponse(statusCode, headers, body, duration) { FinalUri = httpResponse.RequestMessage?.RequestUri };
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

@@ -10,7 +10,7 @@ public static partial class ConfigGenerator
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes, string tunAddress,
         string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
         bool blockQuicOnTcpProxy = true, bool isDnsTunnel = false,
-        List<string>? dnsTunnelResolverIps = null, bool proxyIsUdpNative = false)
+        List<string>? dnsTunnelResolverIps = null, bool proxyIsUdpNative = false, bool tcpOnlyProxy = false)
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
@@ -40,7 +40,13 @@ public static partial class ConfigGenerator
         if (blockQuicOnTcpProxy && !hasUdpProxy && !proxyIsUdpNative)
             AddQuicRejectRules(rules, processes, isFullTunnel, isExcludeMode);
 
+        if (tcpOnlyProxy && !isFullTunnel && !isExcludeMode && processes.Count > 0)
+            rules.Add(new RouteRule { Network = "udp", ProcessName = processes.ToList(), Action = "reject" });
+
         AddPerAppRoutingRules(rules, processes, isFullTunnel, isExcludeMode, hasUdpProxy);
+
+        if (tcpOnlyProxy && (isFullTunnel || isExcludeMode))
+            rules.Add(new RouteRule { Network = "udp", Action = "reject" });
 
         string finalOutbound;
         if (isFullTunnel)

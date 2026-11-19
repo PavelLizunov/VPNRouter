@@ -840,8 +840,10 @@ internal sealed class StartupPipeline
         _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
         Task<ProbeResult> ProbeProxy(CancellationToken probeToken) =>
             sanityCheck.ProbeAsync(controller.Endpoint, controller.Secret, probeToken);
-        bool singleOutbound = (settings.App.ConfigMode ?? "generated").Trim().Equals("generated", StringComparison.OrdinalIgnoreCase) &&
-            settings.Vless.GetActiveServers().FirstOrDefault()?.UseAsSingleOutbound == true;
+        var active = settings.Vless.GetActiveServers().FirstOrDefault();
+        bool singleOutbound = active?.Dnstt != null ||
+            ((settings.App.ConfigMode ?? "generated").Trim().Equals("generated", StringComparison.OrdinalIgnoreCase) &&
+             active?.UseAsSingleOutbound == true);
         var warmup = ScheduleWarmupProbe(pid, settings, singleOutbound ? ProbeProxy : null, token);
         _host.SchedulePostStartProbe(settings, sanityCheck, ProbeProxy, token);
         return warmup;

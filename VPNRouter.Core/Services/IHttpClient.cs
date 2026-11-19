@@ -54,7 +54,10 @@ public sealed record HttpResponse(
     int StatusCode,
     IReadOnlyDictionary<string, string> Headers,
     byte[] Body,
-    TimeSpan Duration);
+    TimeSpan Duration)
+{
+    public Uri? FinalUri { get; init; }
+}
 
 public static class HttpResponseExtensions
 {

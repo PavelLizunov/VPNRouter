@@ -930,7 +930,9 @@ public class VpnctlFakeIpMigrationTests
         Assert.SkipWhen(string.IsNullOrEmpty(coreExe), "VPNCTL_TEST_CORE environment variable not provided");
         Assert.True(File.Exists(coreExe), $"VPNCTL_TEST_CORE executable does not exist at {coreExe}");
 
-        var injectedJson = CustomConfigInjector.Inject(rawJson, Array.Empty<string>(), CreateSettings());
+        var settings = CreateSettings();
+        settings.App.BypassRussianTraffic = false;
+        var injectedJson = CustomConfigInjector.Inject(rawJson, Array.Empty<string>(), settings);
         var tempConfig = Path.Combine(Path.GetTempPath(), $"vpnrouter-native-fakeip-{Guid.NewGuid():N}.json");
 
         try

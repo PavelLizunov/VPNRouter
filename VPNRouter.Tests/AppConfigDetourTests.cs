@@ -77,7 +77,9 @@ public class AppConfigDetourTests
         const string subUrl = "https://provider.example/api/v1/app/config/test-device";
         var fake = new FakeHttpClient().Setup(subUrl, $"{OrdinaryUri}\n");
         var previous = SubscriptionFetcher.Http;
+        var previousCapability = SingBoxFeatures.OverrideDnstt;
         SubscriptionFetcher.Http = fake;
+        SingBoxFeatures.OverrideDnstt = false;
 
         try
         {
@@ -100,6 +102,7 @@ public class AppConfigDetourTests
         finally
         {
             SubscriptionFetcher.Http = previous;
+            SingBoxFeatures.OverrideDnstt = previousCapability;
         }
     }
 

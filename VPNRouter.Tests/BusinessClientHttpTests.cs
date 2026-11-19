@@ -13,7 +13,8 @@ public sealed class BusinessClientHttpTests
         {
             Assert.Equal(HttpMethod.Get, request.Method);
             Assert.Contains("VPNRouter", request.Headers.UserAgent.ToString());
-            Assert.Equal("detour-v1", Assert.Single(request.Headers.GetValues("X-VPNRouter-Capabilities")));
+            Assert.Equal(VPNRouter.Core.Services.SubscriptionFetcher.GetSubscriptionHeaders(secure: true)["X-VPNRouter-Capabilities"],
+                Assert.Single(request.Headers.GetValues("X-VPNRouter-Capabilities")));
             await Task.Yield();
             return new(HttpStatusCode.OK) { Content = new StringContent(BusinessClientConfigurationTests.Four) };
         }));
