@@ -1416,11 +1416,6 @@ public final class VpnRouterService extends VpnService {
         }
 
         @Override
-        public boolean useProcFS() {
-            return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q;
-        }
-
-        @Override
         public boolean usePlatformAutoDetectInterfaceControl() {
             return true;
         }

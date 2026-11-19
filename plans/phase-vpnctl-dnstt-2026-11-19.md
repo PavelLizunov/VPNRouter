@@ -32,3 +32,4 @@ Verify the release inputs and provenance. Match Linux to the fork's Cronet libra
 - The bundled Windows DLL and Linux SO match the Cronet revision recorded in the new runtime.
 - The documented SSH final route is preserved for full routing and split excludes. Split includes send selected processes to SSH.
 - Scope remains native Custom JSON. Publication and live acceptance are separate.
+- Android CI found that libbox removed `useProcFS()`. Removed both Java callbacks. The app still sets per-app VPN selection in Android's VpnService builder.
