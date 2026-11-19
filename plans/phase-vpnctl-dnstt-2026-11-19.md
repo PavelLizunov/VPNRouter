@@ -33,3 +33,4 @@ Verify the release inputs and provenance. Match Linux to the fork's Cronet libra
 - The documented SSH final route is preserved for full routing and split excludes. Split includes send selected processes to SSH.
 - Scope remains native Custom JSON. Publication and live acceptance are separate.
 - Android CI found that libbox removed `useProcFS()`. Removed both Java callbacks. The app still sets per-app VPN selection in Android's VpnService builder.
+- Windows native DNSTT and Android compile passed in the Business build. The FakeIP migration fixture now disables the separate geo-bypass feature so it can reach the pinned parser without installed geo data. Business Windows CI rerun pending.
