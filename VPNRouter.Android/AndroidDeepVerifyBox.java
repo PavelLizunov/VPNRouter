@@ -51,7 +51,6 @@ public final class AndroidDeepVerifyBox {
             throw new Exception("verify box has no TUN — openTun unexpected");
         }
 
-        @Override public boolean useProcFS() { return false; }
         @Override public boolean usePlatformAutoDetectInterfaceControl() { return false; }
         @Override public void autoDetectInterfaceControl(int fd) { }
         @Override public void clearDNSCache() { }

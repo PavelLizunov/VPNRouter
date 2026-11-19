@@ -11,6 +11,8 @@ public partial class CustomConfigViewModel : ViewModelBase
     [ObservableProperty] private string _server = "?";
     [ObservableProperty] private bool _isActive;
 
+    public bool UsesDnstt { get; }
+
     public CustomConfigViewModel() { }
 
     public CustomConfigViewModel(CustomConfigEntry entry, bool isActive = false)
@@ -26,7 +28,8 @@ public partial class CustomConfigViewModel : ViewModelBase
             {
                 var json = File.ReadAllText(resolvedPath);
                 var (protocols, server) = Core.Services.CustomConfigInjector.ParseConfigInfo(json);
-                Protocols = protocols;
+                UsesDnstt = Core.Services.CustomConfigInjector.HasDnsttSshRoute(json);
+                Protocols = UsesDnstt ? "DNSTT · SSH" : protocols;
                 Server = server;
             }
             catch { }

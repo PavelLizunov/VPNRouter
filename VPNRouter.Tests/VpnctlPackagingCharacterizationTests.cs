@@ -89,16 +89,13 @@ public sealed class VpnctlPackagingCharacterizationTests
         Assert.True(idx1 >= 0 && idx2 > idx1, "Could not locate libcronet bundling section in build.ps1.");
 
         var section = StripComments(script.Substring(idx1, idx2 - idx1));
-        var archiveHashIndex = section.IndexOf("Get-FileHash", StringComparison.Ordinal);
-        var expandIndex = section.IndexOf("Expand-Archive", StringComparison.Ordinal);
-        Assert.True(archiveHashIndex >= 0 && expandIndex > archiveHashIndex,
-            "Archive hash verification (Get-FileHash) must execute before Expand-Archive.");
-
-        var dllHashIndex = section.IndexOf("Get-FileHash", expandIndex, StringComparison.Ordinal);
-        Assert.True(dllHashIndex > expandIndex || section.Contains("3217c6260fbca5f16072e0b79735742f40109a63bb0ff88fd6b96dd6b54a2928"),
-            "libcronet.dll hash must be checked.");
-
-        Assert.Contains("libcronet.dll", section);
+        var downloadIndex = section.IndexOf("Invoke-WebRequest", StringComparison.Ordinal);
+        var hashIndex = section.IndexOf("Get-FileHash", StringComparison.Ordinal);
+        var rejectIndex = section.IndexOf("throw \"libcronet.dll SHA256 mismatch", StringComparison.Ordinal);
+        var copyIndex = section.IndexOf("Copy-Item", StringComparison.Ordinal);
+        Assert.True(downloadIndex >= 0 && hashIndex > downloadIndex && rejectIndex > hashIndex && copyIndex > rejectIndex,
+            "Downloaded and cached libraries must be verified before publication.");
+        Assert.Contains("4ecba4761b201f6c552aabd0462a94fe2a8f833c/lib/windows_amd64/libcronet.dll", section);
         Assert.DoesNotContain("sing-box.exe", section);
     }
 

@@ -56,7 +56,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: tools/singbox-cache/
-          key: singbox-1.14.2-vpnctl.2-${{ runner.os }}
+          key: singbox-1.14.4-vpnctl.2-${{ runner.os }}
 
       - name: Setup Go (for VPNRouter.GUI stub)
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
@@ -90,7 +90,7 @@ jobs:
         shell: pwsh
         run: |
           $ver = "${{ steps.ver.outputs.version }}"
-          $expectedCronetHash = "3217c6260fbca5f16072e0b79735742f40109a63bb0ff88fd6b96dd6b54a2928"
+          $expectedCronetHash = "683948ed11ad09b5ab75d49e171f25239977d79fc07c98d91809dffdb903f9b5"
           $installZipPath = (Resolve-Path "VPNRouter-v$ver-win.zip").Path
           $updateZipPath  = (Resolve-Path "VPNRouter-update-v$ver-win.zip").Path
 
@@ -198,9 +198,9 @@ jobs:
 
           $env:VPNCTL_TEST_CORE = $sbExe
           try {
-            dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter FullyQualifiedName~Native_MigratedFakeIp --logger 'console;verbosity=normal'
+            dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~Native_MigratedFakeIp|FullyQualifiedName~Native_DnsttImport" --logger 'console;verbosity=normal'
             if ($LASTEXITCODE -ne 0) {
-              throw "dotnet test Native_MigratedFakeIp failed with exit code $LASTEXITCODE"
+              throw "Native config checks failed with exit code $LASTEXITCODE"
             }
           } finally {
             $env:VPNCTL_TEST_CORE = $null

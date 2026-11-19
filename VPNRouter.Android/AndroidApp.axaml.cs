@@ -1469,6 +1469,7 @@ public partial class AndroidApp : Avalonia.Application
     {
         if (_configRowValue is null) return;
         var configMode = AndroidStorage.GetConfigMode();
+        var usesDnstt = configMode == "custom" && CustomConfigInjector.HasDnsttSshRoute(AndroidStorage.GetCustomConfigJson());
         if (_configRowIcon is not null && _configRowIconGlyph is not null)
         {
             var server = configMode != "custom" ? AndroidStorage.GetActiveServer() : null;
@@ -1482,15 +1483,23 @@ public partial class AndroidApp : Avalonia.Application
             }
             else
             {
-                _configRowIconGlyph.Icon = UiIcons.Flag;
+                _configRowIconGlyph.Icon = usesDnstt ? UiIcons.Link : UiIcons.Flag;
                 _configRowIconGlyph.BindToken(IconView.ForegroundProperty, "AccentFgBrush");
                 _configRowIcon.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
             }
         }
-        UpdatePerAppSummary(configMode);
+        var source = configMode switch
+        {
+            "subscribe" => Localization.SmpSourceSubscription,
+            "custom" when usesDnstt => "DNSTT · SSH",
+            "custom" => Localization.CcSourceCustom,
+            _ => Localization.SmpSourceManual,
+        };
+        if (_configRowLabel is not null) _configRowLabel.Text = $"{Localization.SmpConfigRowLabel} · {source}";
+        UpdatePerAppSummary();
     }
 
-    private void UpdatePerAppSummary(string? configMode = null)
+    private void UpdatePerAppSummary()
     {
         var savedMode = AndroidStorage.GetPerAppMode();
         var policy = VPNRouter.Core.Localization.Strings.PerAppPolicySummary(AndroidStorage.GetActivePerAppPolicy(),
@@ -1498,13 +1507,6 @@ public partial class AndroidApp : Avalonia.Application
         if (_appPickerModeHint is not null)
             _appPickerModeHint.Text = _appPickerMode == savedMode ? policy : policy + "\n" + Localization.PerAppSaveModeHint;
         if (_configRowValue is null) return;
-        var src = (configMode ?? AndroidStorage.GetConfigMode()) switch
-        {
-            "subscribe" => Localization.SmpSourceSubscription,
-            "custom" => Localization.CcSourceCustom,
-            _ => Localization.SmpSourceManual,
-        };
-        if (_configRowLabel is not null) _configRowLabel.Text = $"{Localization.SmpConfigRowLabel} · {src}";
         _configRowValue.Text = policy;
     }
 
