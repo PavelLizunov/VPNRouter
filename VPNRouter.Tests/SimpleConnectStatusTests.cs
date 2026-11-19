@@ -17,20 +17,22 @@ namespace VPNRouter.Tests;
 [Collection(SafeModeStateCollection.Name)]
 public sealed class SimpleConnectStatusTests
 {
-    [AvaloniaFact]
-    public void ExpandedSimplePickerExposesSubscriptionChecksAndRefresh()
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ExpandedSimplePickerExposesSubscriptionChecksAndRefresh(bool cached)
     {
         var settings = new AppSettings();
         settings.App.ConfigMode = "subscribe";
         settings.App.UiMode = "simple";
         settings.App.Subscriptions =
         [
-            new() { Enabled = true, Url = "https://feed.invalid/simple", Servers = [Entry("test", "test.invalid")] }
+            new() { Enabled = true, Url = "https://feed.invalid/simple", Servers = cached ? [Entry("test", "test.invalid")] : [] }
         ];
         var store = new InMemorySettingsStore();
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = CreateVm(store);
-        using var view = new OpenPage(vm);
+        using var view = new OpenPage(vm, width: 380);
         vm.OpenConfigPickerCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
@@ -40,14 +42,31 @@ public sealed class SimpleConnectStatusTests
         Assert.Same(vm.TestAllSubscriptionServersCommand, ping.Command);
         Assert.Same(vm.DeepVerifyAllSubscriptionServersCommand, deepCheck.Command);
         Assert.Same(vm.RefreshAllSubscriptionsCommand, refresh.Command);
-        Assert.True(ping.IsEffectivelyVisible);
-        Assert.True(deepCheck.IsEffectivelyVisible);
+        Assert.Equal(cached, ping.IsEffectivelyVisible);
+        Assert.Equal(cached, deepCheck.IsEffectivelyVisible);
         Assert.True(refresh.IsEffectivelyVisible);
+        Assert.True(refresh.IsEffectivelyEnabled);
+
+        vm.IsTestingServers = true;
+        vm.IsDeepTestingServers = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(Strings.ServerTestCancel, ping.Content);
+        Assert.Equal(Strings.ServerDeepStop, deepCheck.Content);
+        Assert.False(refresh.IsEffectivelyEnabled);
+        vm.IsTestingServers = false;
+        vm.IsDeepTestingServers = false;
 
         vm.IsConnecting = true;
         Dispatcher.UIThread.RunJobs();
         Assert.False(refresh.IsEffectivelyEnabled);
         vm.IsConnecting = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(refresh.IsEffectivelyEnabled);
+
+        vm.IsApplying = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(refresh.IsEffectivelyEnabled);
+        vm.IsApplying = false;
         vm.Subscriptions.Single().Enabled = false;
         Dispatcher.UIThread.RunJobs();
         Assert.False(ping.IsEffectivelyVisible);
@@ -252,10 +271,10 @@ public sealed class SimpleConnectStatusTests
         public SimplePage Page { get; }
         private readonly Window _window;
 
-        public OpenPage(MainWindowViewModel vm)
+        public OpenPage(MainWindowViewModel vm, int width = 520)
         {
             Page = new SimplePage { DataContext = vm };
-            _window = new Window { Content = Page, Width = 520, Height = 800 };
+            _window = new Window { Content = Page, Width = width, Height = 800 };
             _window.Show();
         }
 

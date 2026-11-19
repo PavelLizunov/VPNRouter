@@ -295,7 +295,7 @@ public partial class MainWindowViewModel
 
         _smpChoiceNote = null;
 
-        if (IsConnecting || IsApplying || _isReconnecting) return;
+        if (SmpHeroIsBusy || _isReconnecting || SimpleConnectRefreshPending) return;
         if (_engine.HasActiveTunnel)
         {
             AdoptRunningEngine();
@@ -357,6 +357,7 @@ public partial class MainWindowViewModel
                 var rows = submitted.App.Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url))
                     .Select(s => new SubscriptionViewModel(s)).ToList();
                 foreach (var row in liveRows) row.IsRefreshing = true;
+                NotifySubscriptionRefreshState();
                 try
                 {
                     var updates = await FetchSubscriptionRowsAsync(rows, CancellationToken.None);
@@ -367,7 +368,11 @@ public partial class MainWindowViewModel
                         return;
                     }
                 }
-                finally { foreach (var row in liveRows) row.IsRefreshing = false; }
+                finally
+                {
+                    foreach (var row in liveRows) row.IsRefreshing = false;
+                    NotifySubscriptionRefreshState();
+                }
                 if (!Preparing()) return;
                 if (choiceUnchanged())
                 {
@@ -639,7 +644,15 @@ public partial class MainWindowViewModel
 
     public bool SmpHasRefreshableSubscriptions => Subscriptions.Any(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
 
-    public bool SmpCanConnect => SmpHasConfig || !string.IsNullOrWhiteSpace(SmpInput);
+    public bool SmpSubscriptionsRefreshing => Subscriptions.Any(s => s.Enabled && s.IsRefreshing);
+
+    public bool SmpCanRefreshSubscriptions => !SmpHeroIsBusy && !IsTestingServers && !IsDeepTestingServers;
+
+    private bool SimpleConnectRefreshPending =>
+        SmpSubscriptionsRefreshing &&
+        SimpleConnectPolicy.DecideSubscriptionInput(SmpInput, _settings.App.Subscriptions) == SubscriptionInputAction.KeepAndRefresh;
+
+    public bool SmpCanConnect => !SimpleConnectRefreshPending && (SmpHasConfig || !string.IsNullOrWhiteSpace(SmpInput));
 
     // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
     // alert). On / busy / idle are the plain connection states.
@@ -735,7 +748,7 @@ public partial class MainWindowViewModel
     {
         nameof(SmpHasConfig), nameof(SmpNeedsConfig), nameof(SmpConfigEditorVisible), nameof(SmpCanConnect),
         nameof(SmpFirstRunEditorVisible), nameof(SmpPickerVisible), nameof(SmpHasSubscriptionServers),
-        nameof(SmpHasRefreshableSubscriptions),
+        nameof(SmpHasRefreshableSubscriptions), nameof(SmpSubscriptionsRefreshing), nameof(SmpCanRefreshSubscriptions),
         nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
         nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
         nameof(SmpConfigServer), nameof(SmpHasConfigServer), nameof(SimpleConfigModeSummary), nameof(SimplePendingSummary),
@@ -757,6 +770,8 @@ public partial class MainWindowViewModel
                 case nameof(IsConnected):
                 case nameof(IsConnecting):
                 case nameof(IsApplying):
+                case nameof(IsTestingServers):
+                case nameof(IsDeepTestingServers):
                 case nameof(HasPendingAppChanges):
                 case nameof(IsSplitTunnel):
                 case nameof(SimpleStatusTitle):

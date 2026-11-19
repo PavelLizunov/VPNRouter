@@ -678,19 +678,21 @@
                             <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
                                 <Button Name="SimplePing" Content="{Binding SmpPingButtonText}"
                                         Command="{Binding TestAllSubscriptionServersCommand}"
+                                        IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
                                         IsVisible="{Binding SmpHasSubscriptionServers}"
                                         ToolTip.Tip="{Binding L_TipTestAllServers}"/>
                                 <Button Name="SimpleDeepCheck" Content="{Binding ServerDeepButtonText}"
                                         Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
+                                        IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
                                         IsVisible="{Binding SmpHasSubscriptionServers}"
                                         ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
                                 <Button Name="SimpleRefreshSubscriptions" Content="{Binding L_SmpRefreshSubscriptions}"
                                         Command="{Binding RefreshAllSubscriptionsCommand}"
                                         IsVisible="{Binding SmpHasRefreshableSubscriptions}"
-                                        IsEnabled="{Binding !IsConnecting}"/>
+                                        IsEnabled="{Binding SmpCanRefreshSubscriptions}"/>
                             </WrapPanel>
                             <TextBlock Classes="hint" Text="{Binding L_SubsRefreshing}"
-                                       IsVisible="{Binding RefreshAllSubscriptionsCommand.IsRunning}"/>
+                                       IsVisible="{Binding SmpSubscriptionsRefreshing}"/>
                             <TextBlock Classes="hint" Text="{Binding SubscriptionTestProgressText}"
                                        IsVisible="{Binding SubscriptionTestProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                             <TextBlock Classes="hint" Text="{Binding SubscriptionTestImplausibleWarning}"
@@ -701,8 +703,11 @@
                                           IsVisible="{Binding SmpHasRefreshableSubscriptions}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:SubscriptionViewModel">
-                                        <TextBlock Classes="hint" Text="{Binding StatusBadge}"
-                                                   IsVisible="{Binding LastRefreshFailed}"/>
+                                        <Panel IsVisible="{Binding Enabled}">
+                                            <TextBlock Classes="hint" Text="{Binding StatusBadge}"
+                                                       IsVisible="{Binding LastRefreshFailed}"
+                                                       ToolTip.Tip="{Binding Name}"/>
+                                        </Panel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

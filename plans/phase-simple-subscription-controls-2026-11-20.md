@@ -48,6 +48,24 @@ The live subscription response contains four direct VLESS routes, four VLESS
 routes with a detour, and one DNSTT route. The detour-only capability reproduces
 the extra VLESS rows independently of DNSTT. The quick ping deliberately skips
 these routes and DNSTT. A skipped probe does not establish reachability or
-retirement. No server inventory was changed.
+retirement.
 
-GitHub CI and exact subscription-row startup evidence are pending.
+The cached DNSTT row also reached TunReady on WINBRAT in 2.416 seconds after
+CoreStarted in subscription mode, with the generated SSH-over-DNSTT outbound.
+The affected Windows host confirmed intermittent proxy readiness timeouts.
+Three cold checks of the two-destination sequence passed once and returned
+504 twice. The readiness change adds a second HTTPS destination and keeps
+confirmation mandatory. The affected host remains unverified with a new build.
+
+Two HTTPS tests found three unavailable chained routes for the affected
+subscription. The user-specific VLESS overrides removed those rows and the
+fresh response retained five VLESS routes and the identical DNSTT profile.
+
+DeepSeek found duplicate requests against an in-flight feed and refresh
+responses publishing across Connect or Apply. The shared refresh method now
+skips busy feeds and checks connection and Apply generations before publishing.
+Simple keeps an empty feed from starting an overlapping fetch. The picker
+fixtures cover 380 px, cached and empty feeds, and busy controls. The command
+fixtures cover overlapping feeds and completed tunnel transitions.
+
+The previous head passed GitHub CI. The updated fixtures are pending CI.

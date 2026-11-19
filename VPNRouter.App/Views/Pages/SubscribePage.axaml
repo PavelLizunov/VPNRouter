@@ -173,7 +173,7 @@
                    Foreground="{DynamicResource TextPrimaryBrush}"/>
         <Button Grid.Column="1"
                 Command="{Binding RefreshAllSubscriptionsCommand}"
-                IsEnabled="{Binding !!Subscriptions.Count}"
+                IsEnabled="{Binding SmpCanRefreshSubscriptions}"
                 FontSize="11" Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                 AutomationProperties.Name="{Binding L_RefreshAll}">
           <StackPanel Orientation="Horizontal" Spacing="5">

@@ -17,6 +17,7 @@ public partial class MainWindowViewModel
     {
         if (_isLoadingUI || !Subscriptions.Contains(sub)) return;
         OnPropertyChanged(nameof(SmpHasRefreshableSubscriptions));
+        NotifySubscriptionRefreshState();
         var replaceInput = !sub.Enabled && SimpleConnectPolicy.SameUrl(SmpInput, sub.Url);
         RebuildSubscriptionPool();
         if (replaceInput)
@@ -150,20 +151,42 @@ public partial class MainWindowViewModel
 
     internal Func<string, Task>? SubscriptionRefreshReconnect { get; set; }
 
+    private int _subscriptionRefreshApplyGeneration;
+
+    partial void OnIsApplyingChanged(bool value)
+    {
+        if (value) _subscriptionRefreshApplyGeneration++;
+    }
+
+    private void NotifySubscriptionRefreshState()
+    {
+        OnPropertyChanged(nameof(SmpSubscriptionsRefreshing));
+        OnPropertyChanged(nameof(SmpCanConnect));
+    }
+
     private async Task RefreshRegisteredSubscriptionsAsync(List<SubscriptionViewModel> targets, CancellationToken ct)
     {
+        if (_disposed || ct.IsCancellationRequested || !SmpCanRefreshSubscriptions || _isReconnecting) return;
+        targets.RemoveAll(row => row.IsRefreshing);
+        if (targets.Count == 0) return;
+
         var previous = SelectedSubscriptionServer;
         var previousRoute = SelectedSubscriptionRoute();
         var generation = _connectionGeneration;
+        var applyGeneration = _subscriptionRefreshApplyGeneration;
         foreach (var row in targets) row.IsRefreshing = true;
+        NotifySubscriptionRefreshState();
         try
         {
             var updates = await FetchSubscriptionRowsAsync(targets, ct);
-            if (_disposed || ct.IsCancellationRequested || !PublishSubscriptionRows(targets, updates)) return;
+            if (_disposed || ct.IsCancellationRequested || !SmpCanRefreshSubscriptions || _isReconnecting ||
+                generation != _connectionGeneration || applyGeneration != _subscriptionRefreshApplyGeneration) return;
+            if (!PublishSubscriptionRows(targets, updates)) return;
         }
         finally
         {
             foreach (var row in targets) row.IsRefreshing = false;
+            NotifySubscriptionRefreshState();
         }
 
         var sameSelection = ReferenceEquals(previous, SelectedSubscriptionServer);
@@ -317,15 +340,15 @@ public partial class MainWindowViewModel
 
     internal async Task RefreshSubscriptionSilentAsync()
     {
-        if (!IsConnected || !(_settings.App.ConfigMode ?? "generated")
+        if (!IsConnected || _subRefreshCts != null || !SmpCanRefreshSubscriptions || !(_settings.App.ConfigMode ?? "generated")
             .Equals("subscribe", StringComparison.OrdinalIgnoreCase)) return;
 
         var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
         if (enabled.Count == 0) return;
 
-        _subRefreshCts?.Cancel();
-        _subRefreshCts = new CancellationTokenSource();
-        var ct = _subRefreshCts.Token;
+        using var refresh = new CancellationTokenSource();
+        _subRefreshCts = refresh;
+        var ct = refresh.Token;
 
         try
         {
@@ -336,6 +359,10 @@ public partial class MainWindowViewModel
         catch (Exception)
         {
             _logger.Error("[SubRefresh] Auto-refresh failed");
+        }
+        finally
+        {
+            if (ReferenceEquals(_subRefreshCts, refresh)) _subRefreshCts = null;
         }
     }
 }
