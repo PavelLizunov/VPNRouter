@@ -25,9 +25,12 @@ snapshot.
 The baseline worker returned unavailable for the synthetic boundary fixture.
 The receiver now atomically writes the exact counted UTF-8 bytes. The fixture
 publishes the analysis, preserves mtime and restores the original result from the
-saved receipt. All 53 focused analyzer/receiver tests and the diff check passed.
+saved receipt. An independent DeepSeek Max review found no production blocker. The regression
+now has margin beyond the old bound, exercises actual UTF-8 quota accounting,
+and covers a lone surrogate in legacy metadata. All 54 focused analyzer/receiver
+tests and the diff check passed.
 
 The latest production report had a model response and no published analysis.
 A separate synthetic call to the configured provider passed validation. The
 original result was discarded, so its exact rejection reason is unavailable.
-Independent review, hosted CI and deployment are pending.
+The first implementation head passed hosted CI. Updated fixture CI and deployment are pending.

@@ -72,7 +72,7 @@ class WorkerTests(unittest.TestCase):
         return receipt
 
     def metadata(self):
-        return json.loads((self.root / (self.receipt['report_id'] + '.json')).read_text())
+        return json.loads((self.root / (self.receipt['report_id'] + '.json')).read_bytes())
 
     def test_ready_idempotent_preserves_original_fields_and_retention(self):
         path = self.root / (self.receipt['report_id'] + '.json')
@@ -93,14 +93,15 @@ class WorkerTests(unittest.TestCase):
 
     def test_large_valid_russian_result_fits_the_utf8_receipt(self):
         candidate = result()
-        statement = ('Для проверки нужно сопоставить время подключения и состояние туннеля. ' * 30)[:997]
+        statement = ('Для проверки нужно сопоставить время подключения и состояние туннеля. ' * 30)[:1016]
         candidate['unknown'] = [{
             'statement': statement,
             'time_scope': 'unknown',
             'evidence': [{'kind': 'packet', 'field': 'received_utc'}],
         } for _ in range(12)]
         self.assertLess(len(analyzer.encode(candidate)), analyzer.MAX_RESULT)
-        self.assertGreater(len(json.dumps(candidate, ensure_ascii=True).encode()), receiver.MAX_RECEIPT)
+        self.assertGreater(
+            len(json.dumps(candidate, ensure_ascii=True).encode()), receiver.MAX_RECEIPT + 1024)
 
         path = self.root / (self.receipt['report_id'] + '.json')
         before = path.stat().st_mtime_ns
@@ -111,6 +112,12 @@ class WorkerTests(unittest.TestCase):
         saved = receiver.load_receipt(self.root, self.receipt['report_id'], self.identity)
         self.assertEqual(saved['diagnosis']['result'], candidate)
         self.assertEqual(saved['analysis'], candidate['public_analysis'])
+
+    def test_legacy_receipt_with_surrogate_remains_readable(self):
+        receipt = dict(self.receipt, untouched_extension={'legacy': 'text\ud800'})
+        receiver.update_receipt(self.root, self.receipt['report_id'], receipt)
+        saved = receiver.load_receipt(self.root, self.receipt['report_id'], self.identity)
+        self.assertEqual(saved, receipt)
 
     def test_historical_crash_does_not_prove_current_runtime(self):
         packet, refs, names = analyzer.prepare(self.root, self.receipt, self.config)
@@ -508,9 +515,10 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(store.reserve(self.identity, receiver.MAX_BODY))
         incoming = self.root / 'incoming-aaaaaaaa'
         incoming.write_bytes(b'partial upload')
-        changed = dict(self.receipt, diagnosis={'state': 'pending', 'generation': 1})
+        changed = dict(self.receipt, employee='Тестовая запись',
+                       diagnosis={'state': 'pending', 'generation': 1})
         used = sum(p.stat().st_size for p in self.root.iterdir() if p.is_file())
-        required = len(json.dumps(changed, ensure_ascii=True).encode())
+        required = len(json.dumps(changed, ensure_ascii=False).encode("utf-8"))
         before = (self.root / (self.receipt['report_id'] + '.json')).read_bytes()
         try:
             with store.lock, self.assertRaises(OSError):
