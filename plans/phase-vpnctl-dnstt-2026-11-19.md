@@ -33,3 +33,12 @@ Verify the release inputs and provenance. Match Linux to the fork's Cronet libra
 - The documented SSH final route is preserved for full routing and split excludes. Split includes send selected processes to SSH.
 - Scope remains native Custom JSON. Publication and live acceptance are separate.
 - Android CI found that libbox removed `useProcFS()`. Removed both Java callbacks. The app still sets per-app VPN selection in Android's VpnService builder.
+
+## Standard prerelease follow-up
+
+Prepare Standard 2.50.6-r2 with a DNSTT profile glyph. Keep the existing icon
+weight and palette. Identify the documented SSH-to-DNSTT path from the final
+outbound and its detour. Show the icon for the saved profile, independently of
+the connection status. Cover alternate tags, unused nodes and invalid JSON.
+Run the desktop and Android CI gates and independently review before staging.
+The core P1 ledger, 18-asset release gate and post-ship procedure still apply.
