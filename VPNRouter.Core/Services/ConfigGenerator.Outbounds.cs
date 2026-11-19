@@ -4,6 +4,23 @@ namespace VPNRouter.Core.Services;
 
 public static partial class ConfigGenerator
 {
+    internal static IReadOnlyList<SingBoxOutbound> BuildDnsttProxyPair(VlessServerEntry server)
+    {
+        if (!SingBoxFeatures.DnsttAvailable || server.Dnstt is not { } profile ||
+            !string.Equals(server.Protocol, "dnstt", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("DNSTT requires a compatible core and a complete profile.");
+
+        return
+        [
+            new() { Type = "dnstt", Tag = "dnstt-transport", Server = server.Server, ServerPort = server.Port,
+                DnsttDomain = profile.Domain, DnsttPublicKey = profile.NoiseKey },
+            new() { Type = "ssh", Tag = "proxy", Server = "127.0.0.1", ServerPort = 22054,
+                Detour = "dnstt-transport", SshUser = "vpnctldnstt", SshHostKey = [profile.SshHostKey],
+                SshPrivateKey = profile.SshPrivateKey.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList(),
+                SourceServer = server },
+        ];
+    }
+
     private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy,
         out bool isDnsTunnel, out List<string> dnsTunnelResolverIps,
         out List<SingBoxEndpoint>? endpoints,
@@ -46,6 +63,22 @@ public static partial class ConfigGenerator
             endpoints = null;
             proxyIsUdpNativeOutbound = false;
             return chainedOutbounds;
+        }
+
+        if (servers.Any(server => server.Dnstt != null || string.Equals(server.Protocol, "dnstt", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (servers.Count != 1)
+                throw new InvalidOperationException("DNSTT requires one explicitly selected profile.");
+            hasUdpProxy = false;
+            isDnsTunnel = false;
+            dnsTunnelResolverIps = new List<string>();
+            endpoints = null;
+            return
+            [
+                .. BuildDnsttProxyPair(servers[0]),
+                new() { Type = "direct", Tag = "direct" },
+                new() { Type = "direct", Tag = "dns-direct", UdpFragment = true },
+            ];
         }
 
         var awgActiveEntry = PickActiveServer(servers, settings.Vless.ActiveServer, fallbackToFirstOnMiss: true);

@@ -25,7 +25,7 @@ internal static class SubscriptionRefreshDiff
     internal static VlessServerEntry? FindRegisteredServer(SubscriptionEntry? source, IEnumerable<VlessServerEntry> all,
         string? name, string? key, VlessServerEntry? previous, string? previousRoute)
     {
-        if (source != null && previous != null && !string.IsNullOrEmpty(previous.DetourVia))
+        if (source != null && previous != null && (previous.Dnstt != null || !string.IsNullOrEmpty(previous.DetourVia)))
             return new SubscriptionChainSelection(source.Id, source.Url, previous, previousRoute).Match(source, all);
         var pool = source?.Servers ?? all;
         var exact = source?.FindExactRow(name, key);

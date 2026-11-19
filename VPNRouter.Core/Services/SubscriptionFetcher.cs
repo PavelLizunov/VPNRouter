@@ -26,6 +26,11 @@ public static class SubscriptionFetcher
             ["X-VPNRouter-Capabilities"] = "detour-v1"
         };
 
+    private static IReadOnlyDictionary<string, string> GetSubscriptionHeaders(bool secure) =>
+        secure && SingBoxFeatures.DnsttAvailable
+            ? new Dictionary<string, string> { ["X-VPNRouter-Capabilities"] = "detour-v1, dnstt-v1" }
+            : SubscriptionHeaders;
+
     public static async Task<List<VlessServerEntry>> FetchAsync(string url, ILogger? logger = null, CancellationToken ct = default)
     {
         var result = await FetchWithDiagnosticsAsync(url, logger, ct);
@@ -51,13 +56,14 @@ public static class SubscriptionFetcher
             return (result, 0, userInfo, false);
         }
 
+        var secure = parsedUri.Scheme == Uri.UriSchemeHttps;
         try
         {
             logger?.Information("[Subscription] Fetching server list");
 
             var httpResp = await Http.SendAsync(
                 new HttpRequest(HttpMethod.Get, parsedUri,
-                    Headers: SubscriptionHeaders,
+                    Headers: GetSubscriptionHeaders(secure),
                     Timeout: TimeSpan.FromSeconds(15)),
                 ct);
             if (!httpResp.IsSuccess())
@@ -80,7 +86,8 @@ public static class SubscriptionFetcher
                 return (result, 0, userInfo, false);
             }
 
-            result = ParseBody(response, out droppedPlaceholders, out skippedChains, logger);
+            var allowDnstt = secure && (httpResp.FinalUri ?? parsedUri).Scheme == Uri.UriSchemeHttps;
+            result = ParseBody(response, out droppedPlaceholders, out skippedChains, logger, allowDnstt);
 
             if (droppedPlaceholders > 0)
             {
@@ -107,12 +114,12 @@ public static class SubscriptionFetcher
         ParseBody(responseBody, out droppedPlaceholders, out _, logger);
 
     private static List<VlessServerEntry> ParseBody(
-        string responseBody, out int droppedPlaceholders, out bool skippedChains, ILogger? logger)
+        string responseBody, out int droppedPlaceholders, out bool skippedChains, ILogger? logger, bool allowDnstt = true)
     {
         var lines = DecodeToShareUris(responseBody, logger, out skippedChains);
         if (skippedChains)
             logger?.Warning("[Subscription] Skipped entries with an unsupported proxy chain");
-        var result = DeduplicateServers(ParseShareUris(lines, logger, out droppedPlaceholders), logger);
+        var result = DeduplicateServers(ParseShareUris(lines, logger, out droppedPlaceholders, allowDnstt), logger);
 
         if (result.Count >= 500)
             logger?.Warning("[Subscription] Large subscription: {Count} servers — may impact performance", result.Count);
@@ -179,14 +186,15 @@ public static class SubscriptionFetcher
     }
 
     private static List<VlessServerEntry> ParseShareUris(
-        IEnumerable<string> lines, ILogger? logger, out int droppedPlaceholders)
+        IEnumerable<string> lines, ILogger? logger, out int droppedPlaceholders, bool allowDnstt)
     {
         droppedPlaceholders = 0;
         var result = new List<VlessServerEntry>();
 
         foreach (var line in lines)
         {
-            if (!ServerUriParser.IsSupportedScheme(line))
+            if ((!allowDnstt && line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+                || !ServerUriParser.IsSupportedScheme(line))
                 continue;
 
             try
@@ -217,7 +225,8 @@ public static class SubscriptionFetcher
     private static List<VlessServerEntry> DeduplicateServers(List<VlessServerEntry> result, ILogger? logger)
     {
         var deduped = result.DistinctBy(e =>
-            (e.Server, e.Port, e.Uuid, e.Flow, e.Username, e.Password, e.OutboundId, e.DetourVia)).ToList();
+            (e.Server, e.Port, e.Uuid, e.Flow, e.Username, e.Password, e.OutboundId, e.DetourVia,
+                e.Dnstt?.Domain, e.Dnstt?.NoiseKey, e.Dnstt?.SshHostKey, e.Dnstt?.SshPrivateKey)).ToList();
         if (deduped.Count < result.Count)
             logger?.Information("[Subscription] Deduplicated {Before}→{After} servers",
                 result.Count, deduped.Count);

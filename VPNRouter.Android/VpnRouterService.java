@@ -28,10 +28,17 @@ import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
 import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -39,6 +46,8 @@ import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+
+import org.json.JSONObject;
 
 import io.nekohasekai.libbox.CommandClient;
 import io.nekohasekai.libbox.CommandClientHandler;
@@ -66,6 +75,7 @@ public final class VpnRouterService extends VpnService {
     public static final String ACTION_RESTART = "com.ninitux.vpnrouter.RESTART";
     public static final String EXTRA_CONFIG_JSON = "config_json";
     public static final String EXTRA_COLD_START_ONLY = "cold_start_only";
+    private static final String EXTRA_PROBE_MANAGED_DNSTT = "probe_managed_dnstt";
     public static final String EXTRA_ALLOWED_PACKAGES = "allowed_packages";
     public static final String EXTRA_PER_APP_MODE = "per_app_mode";
     public static final String EXTRA_PER_APP_PACKAGES = "per_app_packages";
@@ -95,6 +105,7 @@ public final class VpnRouterService extends VpnService {
 
     private static final String PREFS_NAME = "vpnrouter_settings";
     private static final String KEY_LAST_GOOD_CONFIG = "last_good_config_json";
+    private static final String KEY_LAST_GOOD_PROBE_MANAGED_DNSTT = "last_good_probe_managed_dnstt";
     private static final String KEY_LAST_GOOD_PER_APP_MODE = "last_good_per_app_mode";
     private static final String KEY_LAST_GOOD_PER_APP_PACKAGES = "last_good_per_app_packages_lines";
     private static final String KEY_LAST_GOOD_PER_APP_PREFS = "last_good_per_app_source_prefs";
@@ -132,6 +143,7 @@ public final class VpnRouterService extends VpnService {
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "last_good_dns_tunnel_use_system_resolver";
 
     private String pendingConfigJson;
+    private boolean pendingProbeManagedDnstt;
     private String pendingPerAppMode;
     private String[] pendingPerAppPackages;
     private String pendingPerAppPrefs;
@@ -369,7 +381,7 @@ public final class VpnRouterService extends VpnService {
     private static String scrubSecrets(String s) {
         if (s == null || s.isEmpty()) return s;
         String out = s.replaceAll(
-                "(?i)\\b(vless|vmess|trojan|ss|hysteria2?|tuic|naive)://\\S+",
+                "(?i)\\b(vless|vmess|trojan|ss|hysteria2?|tuic|naive|dnstt)://\\S+",
                 "$1://[redacted]");
         out = out.replaceAll(
                 "(?i)(https?://[^\\s/?#]+)/\\S*",
@@ -417,6 +429,7 @@ public final class VpnRouterService extends VpnService {
             }
             final String cfg = intent.getStringExtra(EXTRA_CONFIG_JSON);
             final boolean coldStartOnly = intent.getBooleanExtra(EXTRA_COLD_START_ONLY, false);
+            final boolean probeManagedDnstt = intent.getBooleanExtra(EXTRA_PROBE_MANAGED_DNSTT, false);
             final String[] allowed = intent.getStringArrayExtra(EXTRA_ALLOWED_PACKAGES);
             final String perAppMode = intent.getStringExtra(EXTRA_PER_APP_MODE);
             final String[] perAppPkgs = intent.getStringArrayExtra(EXTRA_PER_APP_PACKAGES);
@@ -457,6 +470,7 @@ public final class VpnRouterService extends VpnService {
                     }
                     startTunnel(() -> prepareTunnelConfig(cfg, mode, packages, dnsDomain), () -> {
                         pendingConfigJson = cfg;
+                        pendingProbeManagedDnstt = probeManagedDnstt;
                         pendingPerAppMode = mode;
                         pendingPerAppPackages = packages;
                         pendingPerAppPrefs = sourcePrefs;
@@ -647,8 +661,14 @@ public final class VpnRouterService extends VpnService {
             if (!start.current()) return;
             startSlipstreamIfNeeded();
             if (!start.current()) return;
-            startLibboxService(tunnelConfig);
+            DnsttReadyProbe probe = pendingProbeManagedDnstt ? DnsttReadyProbe.attach(tunnelConfig) : null;
+            startLibboxService(probe == null ? tunnelConfig : probe.config);
             session.requireEstablishedTun();
+            if (probe != null && (!start.current() || !probe.ready())) {
+                retireTunnel();
+                if (start.current()) reportFailure("proxy-unreachable", false);
+                return;
+            }
             if (start.commit(() -> {
                 persistLastGoodConfig();
                 establishedStart = start;
@@ -677,6 +697,50 @@ public final class VpnRouterService extends VpnService {
                 }
             }
             releaseConnectWakeLock();
+        }
+    }
+
+    // The TUN becoming available does not cause a lazy SSH outbound to dial.
+    private static final class DnsttReadyProbe {
+        private final String config;
+        private final int port;
+        private final String secret;
+
+        private DnsttReadyProbe(String config, int port, String secret) {
+            this.config = config;
+            this.port = port;
+            this.secret = secret;
+        }
+
+        static DnsttReadyProbe attach(String config) throws Exception {
+            JSONObject root = new JSONObject(config);
+            int port;
+            try (ServerSocket reservation = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+                port = reservation.getLocalPort();
+            }
+            String secret = java.util.UUID.randomUUID().toString();
+            JSONObject clash = root.getJSONObject("experimental").getJSONObject("clash_api");
+            clash.put("external_controller", "127.0.0.1:" + port);
+            clash.put("secret", secret);
+            return new DnsttReadyProbe(root.toString(), port, secret);
+        }
+
+        boolean ready() {
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress("127.0.0.1", port), 1500);
+                socket.setSoTimeout(11000);
+                String request = "GET /proxies/proxy/delay"
+                        + "?url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=10000 HTTP/1.1\r\n"
+                        + "Host: 127.0.0.1:" + port + "\r\n"
+                        + "Authorization: Bearer " + secret + "\r\nConnection: close\r\n\r\n";
+                socket.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
+                BufferedReader response = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                String status = response.readLine();
+                return status != null && status.startsWith("HTTP/1.1 200 ");
+            } catch (java.io.IOException e) {
+                return false;
+            }
         }
     }
 
@@ -743,6 +807,7 @@ public final class VpnRouterService extends VpnService {
             SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putString(KEY_LAST_GOOD_CONFIG, pendingConfigJson);
+            editor.putBoolean(KEY_LAST_GOOD_PROBE_MANAGED_DNSTT, pendingProbeManagedDnstt);
             editor.putString(KEY_LAST_GOOD_PER_APP_PREFS, pendingPerAppPrefs);
             editor.putString(KEY_LAST_GOOD_PER_APP_MODE,
                     pendingPerAppMode != null ? pendingPerAppMode : "off");
@@ -806,6 +871,7 @@ public final class VpnRouterService extends VpnService {
             if (json == null || json.isEmpty()) return false;
 
             pendingConfigJson = json;
+            pendingProbeManagedDnstt = prefs.getBoolean(KEY_LAST_GOOD_PROBE_MANAGED_DNSTT, false);
             pendingPerAppMode = prefs.getString(KEY_LAST_GOOD_PER_APP_MODE, "off");
             String packed = prefs.getString(KEY_LAST_GOOD_PER_APP_PACKAGES, null);
             if (packed == null || packed.isEmpty()) {

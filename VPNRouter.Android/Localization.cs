@@ -137,6 +137,7 @@ internal static class Localization
             : "For per-app VPN, use a profile with one TUN inbound and no additional services or listeners.",
         "dns-unavailable" => Ru ? "Это устройство не поддерживает DNS-туннель." : "DNS tunnels are unavailable on this device.",
         "dns-invalid" => Ru ? "Проверьте режим DNS и адрес DNS-сервера в профиле VPN." : "Check the DNS mode and DNS server address in the VPN profile.",
+        "proxy-unreachable" => Ru ? "Не удалось подключиться через выбранный сервер." : "Could not connect through the selected server.",
         "config-invalid" => Ru ? "Проверьте профиль VPN и настройки выбора приложений." : "Check the VPN profile and app selection settings.",
         "command-unavailable" => Ru ? "Не удалось отправить команду подключения. Попробуйте ещё раз." : "Could not submit the connection request. Try again.",
         "tunnel-closing" => Ru ? "Прежний туннель ещё закрывается. Попробуйте подключиться позже." : "The previous tunnel is still closing. Try connecting again shortly.",

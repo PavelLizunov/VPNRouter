@@ -219,6 +219,7 @@ internal sealed class SingBoxRuntimePolicy
     /// </summary>
     public bool AwgAvailable => _isPackaged;
     public bool XhttpAvailable => _isPackaged;
+    public bool DnsttAvailable => _isPackaged;
 
     /// <summary>
     /// Availability indicates whether the runtime can be authorized for executable operations.

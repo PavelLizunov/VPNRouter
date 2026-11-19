@@ -28,7 +28,8 @@ public partial class MainWindowViewModel
             var entries = enabled.SelectMany(s => s.UnderlyingEntry.Servers);
             var selected = SubscriptionRefreshDiff.FindRegisteredServer(source?.UnderlyingEntry, entries, name, key,
                 previous?.SourceEntry, SelectedSubscriptionRoute()?.Route);
-            if (selected == null && source != null && !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia)) return;
+            if (selected == null && source != null &&
+                (previous?.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia))) return;
 
             SubscriptionServers.Clear();
             foreach (var feed in enabled)
@@ -166,7 +167,8 @@ public partial class MainWindowViewModel
     {
         var feeds = submission?.App.Subscriptions ?? Subscriptions.Select(s => s.ToEntry()).ToList();
         var chain = submission == null ? null : SubscriptionChainSelection.Capture(submission.App);
-        if (submission == null && SelectedSubscriptionServer is { } row && !string.IsNullOrEmpty(row.SourceEntry.DetourVia) &&
+        if (submission == null && SelectedSubscriptionServer is { } row &&
+            (row.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(row.SourceEntry.DetourVia)) &&
             feeds.FirstOrDefault(s => s.Id == row.SubscriptionId) is { } source)
             chain = new(source.Id, source.Url, row.SourceEntry, SelectedSubscriptionRoute()?.Route);
 
