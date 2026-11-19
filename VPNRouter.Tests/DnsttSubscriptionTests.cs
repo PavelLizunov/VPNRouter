@@ -179,6 +179,37 @@ public sealed class DnsttSubscriptionTests
     }
 
     [Fact]
+    public void BusinessPortalAndDestinationRulesUseSelectedTcpOnlyDnstt()
+    {
+        var previous = SingBoxFeatures.OverrideDnstt;
+        SingBoxFeatures.OverrideDnstt = true;
+        try
+        {
+            var entry = ServerUriParser.Parse(Link("pilot"));
+            var settings = new AppSettings { Vless = new VlessConfig { Servers = [entry], ActiveServer = entry.Name } };
+            settings.App.BlockQuicOnTcpProxy = false;
+            settings.App.CustomRules = [new() { Type = "domain_suffix", Value = "work.example.test", Action = "proxy", Enabled = true }];
+            var config = ConfigGenerator.Generate(new Profile { Name = "DNSTT", DnsMode = "vpn_only" }, [], settings);
+            if (!VPNRouter.Core.ProductEdition.IsBusiness)
+            {
+                BusinessDefaults.ApplyDomainTransports(config, false, false, false);
+                ConfigGenerator.ApplyBusinessPortal(config, settings);
+            }
+            var portal = Assert.Single(config.Route.Rules.Where(rule => rule.Network == "tcp" &&
+                rule.DomainSuffix?.Contains(BusinessPolicyDomains.PortalDomain) == true));
+            Assert.Equal("proxy", portal.Outbound);
+            Assert.Equal("ssh", Assert.Single(config.Outbounds.Where(outbound => outbound.Tag == "proxy")).Type);
+            Assert.Equal("proxy", Assert.Single(config.Dns.Servers.Where(dns => dns.Tag == ConfigGenerator.BusinessPortalDns)).Detour);
+            var rules = config.Route.Rules.Where(rule => rule.DomainSuffix?.Contains("work.example.test") == true).ToArray();
+            Assert.Equal("udp", rules[0].Network);
+            Assert.Equal("reject", rules[0].Action);
+            Assert.Null(rules[0].Port);
+            Assert.Equal("proxy", rules[1].Outbound);
+        }
+        finally { SingBoxFeatures.OverrideDnstt = previous; }
+    }
+
+    [Fact]
     public async Task Native_DnsttImport_ManagedProfile()
     {
         var runtime = Environment.GetEnvironmentVariable("VPNCTL_TEST_CORE")

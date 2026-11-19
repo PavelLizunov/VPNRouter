@@ -173,11 +173,19 @@ internal static class BusinessDefaults
     internal static void ApplyDomainTransports(SingBoxConfig config, bool hasUdpProxy,
         bool proxyCarriesUdpNatively, bool blockQuicOnTcpProxy)
     {
+        var proxyIsDnstt = config.Outbounds.Any(o => o.Tag == "proxy" && o.Detour == "dnstt-transport");
         // Explicit domain and IP rules precede per-app/global transport guards.
         // Preserve the same transport decision for every explicit destination.
         for (var i = config.Route.Rules.Count - 1; i >= 0; i--)
         {
             var rule = config.Route.Rules[i];
+            if (proxyIsDnstt && rule.Outbound == "proxy" && (rule.Network is null or "udp"))
+            {
+                var reject = rule.RejectUdp();
+                if (rule.Network == "udp") config.Route.Rules[i] = reject;
+                else config.Route.Rules.Insert(i, reject);
+                continue;
+            }
             if (rule.Outbound != "proxy" || rule.Network != null ||
                 (rule.Domain == null && rule.DomainSuffix == null && rule.IpCidr == null)) continue;
 

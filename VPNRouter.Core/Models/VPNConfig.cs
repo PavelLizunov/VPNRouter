@@ -612,6 +612,15 @@ internal sealed class RouteNetworkConverter : JsonConverter<string>
 
 public class RouteRule
 {
+    internal RouteRule RejectUdp()
+    {
+        var rule = (RouteRule)MemberwiseClone();
+        rule.Network = "udp";
+        rule.Action = "reject";
+        rule.Outbound = null;
+        return rule;
+    }
+
     [JsonPropertyName("inbound")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Inbound { get; set; }

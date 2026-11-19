@@ -45,7 +45,13 @@ public partial class MainWindowViewModel
             var selected = SubscriptionRefreshDiff.FindRegisteredServer(source?.UnderlyingEntry, entries, name, key,
                 previous?.SourceEntry, SelectedSubscriptionRoute()?.Route);
             if (selected == null && source != null &&
-                (previous?.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia))) return;
+                (previous?.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia)))
+            {
+                foreach (var row in SubscriptionServers.Where(row => enabled.All(feed => feed.Id != row.SubscriptionId)).ToArray())
+                    SubscriptionServers.Remove(row);
+                RefreshActiveIndicator();
+                return;
+            }
 
             SubscriptionServers.Clear();
             foreach (var feed in enabled)
