@@ -225,7 +225,8 @@ public static class SubscriptionFetcher
     private static List<VlessServerEntry> DeduplicateServers(List<VlessServerEntry> result, ILogger? logger)
     {
         var deduped = result.DistinctBy(e =>
-            (e.Server, e.Port, e.Uuid, e.Flow, e.Username, e.Password, e.OutboundId, e.DetourVia)).ToList();
+            (e.Server, e.Port, e.Uuid, e.Flow, e.Username, e.Password, e.OutboundId, e.DetourVia,
+                e.Dnstt?.Domain, e.Dnstt?.NoiseKey, e.Dnstt?.SshHostKey, e.Dnstt?.SshPrivateKey)).ToList();
         if (deduped.Count < result.Count)
             logger?.Information("[Subscription] Deduplicated {Before}→{After} servers",
                 result.Count, deduped.Count);

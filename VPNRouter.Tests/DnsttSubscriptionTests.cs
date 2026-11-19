@@ -22,11 +22,11 @@ public sealed class DnsttSubscriptionTests
     private const string FixturePrivateBlob =
         "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZWQyNTUxOQAAACDVP/hSZQ4M89s8jm3jqYMB6VaYZH/Z/0xW1hg0otsRRQAAAJg0xLT4NMS0+AAAAAtzc2gtZWQyNTUxOQAAACDVP/hSZQ4M89s8jm3jqYMB6VaYZH/Z/0xW1hg0otsRRQAAAECO5nXpiNySwNAh00detEjmri8plv0cJ+YYAD0Ynj2opNU/+FJlDgzz2zyObeOpgwHpVphkf9n/TFbWGDSi2xFFAAAAFHZwbnJvdXRlci1kbnN0dC10ZXN0AQ==";
 
-    private static string Link(string id, string resolver = "8.8.8.8")
+    private static string Link(string id, string resolver = "8.8.8.8", string domain = "t.example.test")
     {
         var encoded = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new
         {
-            id, resolver, port = 53, domain = "t.example.test", noise_key = new string('a', 64),
+            id, resolver, port = 53, domain, noise_key = new string('a', 64),
             ssh_host_key = "ssh-ed25519 " + FixturePublic,
             ssh_private_key = new string(PemEncoding.Write("OPENSSH PRIVATE KEY", Convert.FromBase64String(FixturePrivateBlob)))
         })).TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -64,6 +64,27 @@ public sealed class DnsttSubscriptionTests
             SingBoxFeatures.OverrideDnstt = previousCapability;
             SubscriptionFetcher.Http = previousHttp;
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReorderedFeedPreservesPinnedGrantWithSharedIdAndResolver(bool swap)
+    {
+        var previous = SingBoxFeatures.OverrideDnstt;
+        SingBoxFeatures.OverrideDnstt = true;
+        try
+        {
+            var pinned = Link("pilot");
+            var other = Link("pilot", domain: "other.example.test");
+            var entries = SubscriptionFetcher.ParseBody(string.Join('\n', swap ? other : pinned, swap ? pinned : other, pinned));
+            Assert.Equal(2, entries.Count);
+            var feed = new SubscriptionEntry { Url = "https://provider.example/sub", Servers = entries };
+            var selected = ServerUriParser.Parse(pinned);
+            var selection = new SubscriptionChainSelection(feed.Id, feed.Url, selected, null);
+            Assert.Equal("t.example.test", selection.Match(feed, entries)?.Dnstt?.Domain);
+        }
+        finally { SingBoxFeatures.OverrideDnstt = previous; }
     }
 
     [Theory]

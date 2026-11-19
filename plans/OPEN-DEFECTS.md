@@ -615,3 +615,5 @@ with that verified interface. Fixed in 4ad09f87: regression code is in LinuxDnsH
 - [x] **P1** - #705 review: a cleartext subscription could negotiate a profile containing an SSH private key. Both request origin and final response must use HTTPS.
 - [x] **P1** - #705 review: desktop warmup in subscription mode and Android TUN creation did not prove the selected proxy worked. Run a probe through the SSH proxy before reporting readiness on these paths, and preserve the selected DNSTT route on failure.
 - [x] **P2** - #705 review: diagnostic fallback could retain opaque DNSTT URI data. Redact the whole payload in URL layers and scrub the scheme in crash reports.
+- [x] **P2** - #705 merge review: subscription deduplication now keeps distinct DNSTT grants with the same ID and resolver. Refresh checks the pinned authority and prefers the selected grant when it is still present.
+- [x] **P2** - #705 merge review: Android now enables the readiness probe for managed profiles through launch and restore. Custom JSON retains its existing controller settings.

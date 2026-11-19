@@ -26,6 +26,12 @@ Add a narrowly validated parser and typed profile at the existing subscription a
 5. UI: verify one selectable route on the supported app. Use WINBRAT for desktop live verification after an authorized ship.
 6. Integration: the same subscription URL on old and new clients, plus HTTPS egress via the managed server.
 
+The merge review found two gaps in the same import and startup paths. Keep
+distinct DNSTT grants through deduplication, keep the selected grant across
+response reordering, and carry managed probe intent through Android start and
+last-good restore. Custom JSON must retain its existing controller settings.
+Verify both cases in the existing subscription and Android lifecycle suites.
+
 ## Outcome
 
 The implementation covers capability negotiation, parsing, selection, configuration,
@@ -34,3 +40,8 @@ reviews covered correctness, privacy, and lifecycle. Tests exercise old capabili
 headers, malformed or cleartext inputs, generated native configuration, and
 repeated refresh of a missing Android selection. Exact-SHA build, device acceptance,
 and production verification are tracked in PR #705.
+
+The merge review verified both import gaps in source. The follow-up adds
+a shared-ID feed reorder fixture and Android lifecycle assertions for managed
+start, custom start and last-good restore. The exact-head Actions checks and
+managed-node acceptance are tracked in PR #705.

@@ -33,8 +33,10 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
                 && SingBoxFeatures.DnsttAvailable && row.OutboundId == Target.OutboundId
                 && row.Server == Target.Server && row.Port == Target.Port
                 && next.Domain == authority.Domain && next.NoiseKey == authority.NoiseKey
-                && next.SshHostKey == authority.SshHostKey).Take(2).ToList();
-            return matches.Count == 1 ? matches[0] : null;
+                && next.SshHostKey == authority.SshHostKey).ToList();
+            if (matches.Count <= 1) return matches.FirstOrDefault();
+            var sameGrant = matches.Where(row => row.Dnstt!.SshPrivateKey == authority.SshPrivateKey).Take(2).ToArray();
+            return sameGrant.Length == 1 ? sameGrant[0] : null;
         }
         var byId = enabledRows.Where(s => !string.IsNullOrEmpty(s.OutboundId))
             .ToLookup(s => s.OutboundId, StringComparer.OrdinalIgnoreCase);

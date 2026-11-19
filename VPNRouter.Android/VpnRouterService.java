@@ -47,7 +47,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import io.nekohasekai.libbox.CommandClient;
@@ -76,6 +75,7 @@ public final class VpnRouterService extends VpnService {
     public static final String ACTION_RESTART = "com.ninitux.vpnrouter.RESTART";
     public static final String EXTRA_CONFIG_JSON = "config_json";
     public static final String EXTRA_COLD_START_ONLY = "cold_start_only";
+    private static final String EXTRA_PROBE_MANAGED_DNSTT = "probe_managed_dnstt";
     public static final String EXTRA_ALLOWED_PACKAGES = "allowed_packages";
     public static final String EXTRA_PER_APP_MODE = "per_app_mode";
     public static final String EXTRA_PER_APP_PACKAGES = "per_app_packages";
@@ -105,6 +105,7 @@ public final class VpnRouterService extends VpnService {
 
     private static final String PREFS_NAME = "vpnrouter_settings";
     private static final String KEY_LAST_GOOD_CONFIG = "last_good_config_json";
+    private static final String KEY_LAST_GOOD_PROBE_MANAGED_DNSTT = "last_good_probe_managed_dnstt";
     private static final String KEY_LAST_GOOD_PER_APP_MODE = "last_good_per_app_mode";
     private static final String KEY_LAST_GOOD_PER_APP_PACKAGES = "last_good_per_app_packages_lines";
     private static final String KEY_LAST_GOOD_PER_APP_PREFS = "last_good_per_app_source_prefs";
@@ -142,6 +143,7 @@ public final class VpnRouterService extends VpnService {
     private static final String KEY_LAST_GOOD_DNS_TUNNEL_USE_SYSTEM_RESOLVER = "last_good_dns_tunnel_use_system_resolver";
 
     private String pendingConfigJson;
+    private boolean pendingProbeManagedDnstt;
     private String pendingPerAppMode;
     private String[] pendingPerAppPackages;
     private String pendingPerAppPrefs;
@@ -427,6 +429,7 @@ public final class VpnRouterService extends VpnService {
             }
             final String cfg = intent.getStringExtra(EXTRA_CONFIG_JSON);
             final boolean coldStartOnly = intent.getBooleanExtra(EXTRA_COLD_START_ONLY, false);
+            final boolean probeManagedDnstt = intent.getBooleanExtra(EXTRA_PROBE_MANAGED_DNSTT, false);
             final String[] allowed = intent.getStringArrayExtra(EXTRA_ALLOWED_PACKAGES);
             final String perAppMode = intent.getStringExtra(EXTRA_PER_APP_MODE);
             final String[] perAppPkgs = intent.getStringArrayExtra(EXTRA_PER_APP_PACKAGES);
@@ -467,6 +470,7 @@ public final class VpnRouterService extends VpnService {
                     }
                     startTunnel(() -> prepareTunnelConfig(cfg, mode, packages, dnsDomain), () -> {
                         pendingConfigJson = cfg;
+                        pendingProbeManagedDnstt = probeManagedDnstt;
                         pendingPerAppMode = mode;
                         pendingPerAppPackages = packages;
                         pendingPerAppPrefs = sourcePrefs;
@@ -657,7 +661,7 @@ public final class VpnRouterService extends VpnService {
             if (!start.current()) return;
             startSlipstreamIfNeeded();
             if (!start.current()) return;
-            DnsttReadyProbe probe = DnsttReadyProbe.attach(tunnelConfig);
+            DnsttReadyProbe probe = pendingProbeManagedDnstt ? DnsttReadyProbe.attach(tunnelConfig) : null;
             startLibboxService(probe == null ? tunnelConfig : probe.config);
             session.requireEstablishedTun();
             if (probe != null && (!start.current() || !probe.ready())) {
@@ -710,17 +714,6 @@ public final class VpnRouterService extends VpnService {
 
         static DnsttReadyProbe attach(String config) throws Exception {
             JSONObject root = new JSONObject(config);
-            JSONArray outbounds = root.optJSONArray("outbounds");
-            JSONObject proxy = null;
-            for (int i = 0; outbounds != null && i < outbounds.length(); i++) {
-                JSONObject current = outbounds.getJSONObject(i);
-                if ("ssh".equals(current.optString("type")) && "proxy".equals(current.optString("tag"))) {
-                    proxy = current;
-                    break;
-                }
-            }
-            if (proxy == null || !"dnstt-transport".equals(proxy.optString("detour"))) return null;
-
             int port;
             try (ServerSocket reservation = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
                 port = reservation.getLocalPort();
@@ -814,6 +807,7 @@ public final class VpnRouterService extends VpnService {
             SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putString(KEY_LAST_GOOD_CONFIG, pendingConfigJson);
+            editor.putBoolean(KEY_LAST_GOOD_PROBE_MANAGED_DNSTT, pendingProbeManagedDnstt);
             editor.putString(KEY_LAST_GOOD_PER_APP_PREFS, pendingPerAppPrefs);
             editor.putString(KEY_LAST_GOOD_PER_APP_MODE,
                     pendingPerAppMode != null ? pendingPerAppMode : "off");
@@ -877,6 +871,7 @@ public final class VpnRouterService extends VpnService {
             if (json == null || json.isEmpty()) return false;
 
             pendingConfigJson = json;
+            pendingProbeManagedDnstt = prefs.getBoolean(KEY_LAST_GOOD_PROBE_MANAGED_DNSTT, false);
             pendingPerAppMode = prefs.getString(KEY_LAST_GOOD_PER_APP_MODE, "off");
             String packed = prefs.getString(KEY_LAST_GOOD_PER_APP_PACKAGES, null);
             if (packed == null || packed.isEmpty()) {
