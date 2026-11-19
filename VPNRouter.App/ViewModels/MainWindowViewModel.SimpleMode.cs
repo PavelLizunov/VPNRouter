@@ -321,6 +321,11 @@ public partial class MainWindowViewModel
             else if (kind == SmpInputKind.SubscriptionUrl)
             {
                 var action = ApplySimpleSubscriptionInput(input);
+                if (action == SubscriptionInputAction.Disabled)
+                {
+                    SmpErrorText = SubscriptionDisabledMessage;
+                    return;
+                }
                 refresh = action != SubscriptionInputAction.KeepCached;
             }
             else if (_settings.Vless.Servers is not { Count: > 0 } &&
@@ -492,6 +497,7 @@ public partial class MainWindowViewModel
     private SubscriptionInputAction ApplySimpleSubscriptionInput(string input)
     {
         var action = SimpleConnectPolicy.DecideSubscriptionInput(input, _settings.App.Subscriptions);
+        if (action == SubscriptionInputAction.Disabled) return action;
         if (action == SubscriptionInputAction.Replace)
         {
             var entry = new SubscriptionEntry
@@ -504,7 +510,7 @@ public partial class MainWindowViewModel
             _settings.App.Subscriptions = new List<SubscriptionEntry> { entry };
 
             Subscriptions.Clear();
-            Subscriptions.Add(new SubscriptionViewModel(entry));
+            Subscriptions.Add(CreateSubscriptionView(entry));
             RebuildSubscriptionPool();
         }
         else if (SelectedSubscriptionServer?.SubscriptionId is not { } id ||

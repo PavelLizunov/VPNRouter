@@ -7,6 +7,7 @@ namespace VPNRouter.App.ViewModels;
 public partial class SubscriptionViewModel : ObservableObject
 {
     private readonly SubscriptionEntry _entry;
+    private readonly Action<SubscriptionViewModel>? _enabledChanged;
 
     public string Id => _entry.Id;
 
@@ -60,14 +61,21 @@ public partial class SubscriptionViewModel : ObservableObject
 
     public bool HasUserInfo => UserInfoDisplay.Length > 0;
 
-    public SubscriptionViewModel(SubscriptionEntry entry)
+    public SubscriptionViewModel(SubscriptionEntry entry, Action<SubscriptionViewModel>? enabledChanged = null)
     {
         _entry = entry;
+        _enabledChanged = enabledChanged;
         _name = entry.Name;
         _url = entry.Url;
         _enabled = entry.Enabled;
         _lastRefreshedAt = entry.LastRefreshedAt;
         _lastServerCount = entry.LastServerCount;
+    }
+
+    partial void OnEnabledChanged(bool value)
+    {
+        _entry.Enabled = value;
+        _enabledChanged?.Invoke(this);
     }
 
     public SubscriptionEntry ToEntry()
