@@ -408,6 +408,11 @@ public partial class MainWindowViewModel
 
                 var source = selectedSource != null && selectedSource.Servers.Contains(chosen)
                     ? selectedSource : submitted.App.Subscriptions.First(s => s.Enabled && s.Servers.Contains(chosen));
+                if (Subscriptions.Any(s => !s.Enabled && s.Id == source.Id))
+                {
+                    SmpErrorText = SubscriptionDisabledMessage;
+                    return;
+                }
                 if ((chosen.Dnstt != null || !string.IsNullOrEmpty(chosen.DetourVia)) &&
                     new SubscriptionChainSelection(source.Id, source.Url, chosen, SubscriptionEntry.RouteKey(chosen, source.Servers))
                         .Match(source, candidates) != chosen)

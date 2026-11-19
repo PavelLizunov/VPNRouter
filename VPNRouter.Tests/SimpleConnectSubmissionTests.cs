@@ -68,6 +68,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
     [InlineData("refresh-url")]
     [InlineData("server-uri")]
     [InlineData("cached-choice")]
+    [InlineData("disable")]
     [InlineData("cancel")]
     [InlineData("busy")]
     public async Task SimpleConnectStartsTheSubmissionAndPreservesEditsDuringProbe(string edit)
@@ -130,6 +131,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
                         break;
                     case "server-uri": vm.SmpInput = Link("next"); break;
                     case "cancel": vm.IsConnecting = false; break;
+                    case "disable": vm.Subscriptions[0].Enabled = false; break;
                     case "busy": vm.IsConnected = true; break;
                 }
             }
@@ -148,10 +150,10 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
         Assert.True(vm.HasPendingAppChanges);
         var saved = store.Load(AppPaths.ConfigYamlPath);
         Assert.Equal("full", saved.App.RoutingMode);
-        if (edit is "cancel" or "busy")
+        if (edit is "cancel" or "busy" or "disable")
         {
             Assert.Null(started);
-            Assert.Single(probes);
+            if (edit != "disable") Assert.Single(probes);
             Assert.Equal(edit == "busy", vm.IsConnected);
             return;
         }
