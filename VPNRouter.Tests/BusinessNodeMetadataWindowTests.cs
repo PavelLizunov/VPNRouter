@@ -133,6 +133,47 @@ public sealed class BusinessNodeMetadataWindowTests
     }
 
     [AvaloniaFact]
+    public async Task DnsttChoiceUsesDelegatedDomainMetadataAndDoesNotProbeResolverTcp()
+    {
+        var tcpProbes = new List<string>();
+        using var fixture = new Fixture(includeDnstt: true, probe: (server, _) =>
+        {
+            tcpProbes.Add(server.Server);
+            return Task.FromResult(new ServerProbeResult(ServerProbeStatus.Ok, 23, null));
+        });
+        var choice = Assert.Single(fixture.Choices.Where(row => row.Server.SourceEntry.Dnstt != null));
+        var round = fixture.Controller!.RefreshAsync();
+        (await fixture.Fetch.NextAsync()).Result.SetResult(Snapshot(
+            Node("192.0.2.53", "US"), Node("tunnel.example.invalid", "GB"),
+            Node("node-tunnel.example.invalid", "NL", dnsttDomain: "TUNNEL.EXAMPLE.INVALID")));
+        await round.WaitAsync(Budget);
+        Flush(fixture.Window);
+
+        Assert.Equal("NL", choice.CountryCode);
+        Assert.NotNull(choice.CountryFlag);
+        Assert.Equal(Strings.BusinessServerNotChecked, choice.PingText);
+        Assert.False(choice.IsGood || choice.IsWarning || choice.IsBad);
+        Assert.NotEmpty(tcpProbes);
+        Assert.DoesNotContain("192.0.2.53", tcpProbes);
+
+        round = fixture.Controller.RefreshAsync();
+        (await fixture.Fetch.NextAsync()).Result.SetResult(Snapshot(
+            Node("192.0.2.53", "US"), Node("tunnel.example.invalid", "GB")));
+        await round.WaitAsync(Budget);
+        Flush(fixture.Window);
+        Assert.Empty(choice.CountryCode);
+        Assert.Null(choice.CountryFlag);
+
+        round = fixture.Controller.RefreshAsync();
+        (await fixture.Fetch.NextAsync()).Result.SetResult(Snapshot(
+            Node("first.example.invalid", "NL", dnsttDomain: "tunnel.example.invalid"),
+            Node("second.example.invalid", "US", dnsttDomain: "tunnel.example.invalid")));
+        await round.WaitAsync(Budget);
+        Flush(fixture.Window);
+        Assert.Empty(choice.CountryCode);
+    }
+
+    [AvaloniaFact]
     public async Task MetadataAndLanguageWhileConnected_PreserveConnectionStateSelectionServicesAndActiveDiagnostics()
     {
         using var fixture = new Fixture();
@@ -350,9 +391,11 @@ public sealed class BusinessNodeMetadataWindowTests
     }
 
     private static object Node(string host, string? country, long? total = 1024, long? available = 512,
-        uint? load = 125, long? observed = 1900, ulong? age = 100, string freshness = "fresh", string? activity = "low") => new
+        uint? load = 125, long? observed = 1900, ulong? age = 100, string freshness = "fresh", string? activity = "low",
+        string? dnsttDomain = null) => new
         { endpoint_host = host, country_iso = country, memory_total_mib = total, memory_available_mib = available,
-            load_1min_x100 = load, observed_at = observed, age_seconds = age, freshness, activity_level = activity };
+            load_1min_x100 = load, observed_at = observed, age_seconds = age, freshness, activity_level = activity,
+            dnstt_domain = dnsttDomain };
 
     private static BusinessNodeSnapshot Snapshot(params object[] rows) => BusinessNodeSnapshot.Parse(JsonSerializer.Serialize(new
         { schema = 1, generated_at = 2000, max_age_seconds = 1320, nodes = rows }));
@@ -399,15 +442,22 @@ public sealed class BusinessNodeMetadataWindowTests
         private readonly string _previousLanguage = Strings.Lang;
         private readonly HttpClient _http = new(new NoNetwork());
 
-        internal Fixture(bool metadata = true, int width = 420, string language = "en")
+        internal Fixture(bool metadata = true, int width = 420, string language = "en",
+            bool includeDnstt = false, Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>>? probe = null)
         {
             Vm = CreateViewModel(Store, language);
+            if (includeDnstt)
+                Vm.Servers.Add(new ServerViewModel(new VlessServerEntry
+                {
+                    Name = "Germany Fixture DNSTT", Server = "192.0.2.53", Port = 53, Protocol = "dnstt",
+                    Dnstt = new DnsttProfile { Domain = "tunnel.example.invalid" }
+                }));
             var configuration = BusinessClientConfiguration.Parse(JsonSerializer.Serialize(new
             {
                 config = Convert.ToBase64String(Encoding.UTF8.GetBytes(Connection)),
                 business = new { support = new { endpoint = "https://example.invalid/reports", token = "synthetic-fixture" } }
             }));
-            Window = new(static (_, _) => Task.FromResult(ServerProbeResult.Unknown),
+            Window = new(probe ?? (static (_, _) => Task.FromResult(ServerProbeResult.Unknown)),
                 (vm, changed) =>
                 {
                     RebuildPool = changed;

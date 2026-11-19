@@ -16,6 +16,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Business 2.50.13 looks up DNSTT country and activity by the recursive resolver and displays its TCP reachability as server health. Match the deployed node and skip the resolver TCP probe. See phase-business-dnstt-card-2026-11-19.md.
 - [x] **P1** - Validate rollback before promoting the snapshot and retain the previous live tree and marker on relaunch failure (#661). RESOLVED in source. Rollback and repair, verified at `c76a226a` in CI 44368009981.
 - [x] **P1** - Complete monitored startup before service acceptance, preserve native DNS rule fall-through, isolate the accepted import from edits, and retain explicit Stop ownership on refusal (#664). RESOLVED in source. Routing and service acceptance, verified at `c76a226a` in CI 44368009981.
 - [ ] **P2** - A stale Android alarm or prepared switch can reconnect after Disconnect, and a concurrent settings save can yield the wrong restore policy. Verify terminal status delivery after stops and rejected switches (#689).

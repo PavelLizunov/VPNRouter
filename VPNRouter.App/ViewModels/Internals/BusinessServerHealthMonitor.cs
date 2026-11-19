@@ -10,10 +10,11 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
 {
     private readonly MainWindowViewModel _vm;
     private readonly Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>> _probe;
+    private readonly BusinessServerChoiceViewModel[] _tcpChoices;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(30) };
     private Round? _round;
     private bool _visible, _enabled, _disposed;
-    private bool CanProbe => !_disposed && _visible && !_vm.IsConnecting &&
+    private bool CanProbe => _tcpChoices.Length > 0 && !_disposed && _visible && !_vm.IsConnecting &&
         (!_vm.IsConnected || _vm.IsSplitTunnel);
 
     internal IReadOnlyList<BusinessServerChoiceViewModel> Choices { get; }
@@ -24,6 +25,7 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
         _vm = vm;
         _probe = probe;
         Choices = vm.GetBusinessServerChoices().Select(s => new BusinessServerChoiceViewModel(s)).ToArray();
+        _tcpChoices = Choices.Where(choice => choice.SupportsTcpProbe).ToArray();
         _vm.PropertyChanged += OnVmPropertyChanged;
         _timer.Tick += OnTick;
     }
@@ -59,7 +61,7 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
         {
             _timer.Stop();
             _round?.Cancellation.Cancel();
-            foreach (var choice in Choices) choice.Update(ServerProbeResult.Unknown);
+            foreach (var choice in _tcpChoices) choice.Update(ServerProbeResult.Unknown);
         }
     }
 
@@ -72,7 +74,7 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
         if (_round != null) return _round.Completion.Task;
         var round = new Round();
         _round = round;
-        foreach (var choice in Choices) choice.Update(ServerProbeResult.Unknown, checking: true);
+        foreach (var choice in _tcpChoices) choice.Update(ServerProbeResult.Unknown, checking: true);
         _ = RunRoundAsync(round);
         return round.Completion.Task;
     }
@@ -81,7 +83,7 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
     {
         try
         {
-            await Task.WhenAll(Choices.Select(choice => ProbeOneAsync(choice, round))).ConfigureAwait(false);
+            await Task.WhenAll(_tcpChoices.Select(choice => ProbeOneAsync(choice, round))).ConfigureAwait(false);
         }
         finally
         {
