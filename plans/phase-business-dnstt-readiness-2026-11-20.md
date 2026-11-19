@@ -27,4 +27,12 @@ controller, authorization, cancellation, deadlines and positive-delay guard.
 
 ## Outcome
 
-Pending implementation verification.
+The Business Core change is equivalent to Standard. The controller fixture
+exercises the first target and the alternate target after an HTTP 504, with
+eight seconds per native request. A positive delay from the exact proxy remains
+mandatory. Native isolated tests on the affected Windows host established that
+both destinations can succeed and that fresh sessions can time out. The change
+addresses probe redundancy and budget. Transport reliability remains under test.
+
+Scoped diff checks passed. Exact-head CI and candidate TUN verification are
+pending.
