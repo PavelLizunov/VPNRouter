@@ -32,16 +32,8 @@ public static partial class CustomConfigInjector
         if (config["outbounds"] is JsonArray outbounds)
         {
             // DNSTT dials a fixed backend. Route client connections through its SSH consumer.
-            var finalTag = StjNodeHelpers.AsString(config["route"]?["final"]);
-            if (!string.IsNullOrEmpty(finalTag))
-            {
-                var finalOutbound = outbounds.OfType<JsonObject>().FirstOrDefault(outbound =>
-                    StjNodeHelpers.AsString(outbound["tag"]) == finalTag);
-                var detour = StjNodeHelpers.AsString(finalOutbound?["detour"]);
-                if (StjNodeHelpers.AsString(finalOutbound?["type"]) == "ssh"
-                    && FindTypeByTag(outbounds, detour) == "dnstt")
-                    return finalTag;
-            }
+            if (FindDnsttSshTag(config, outbounds) is { } sshTag)
+                return sshTag;
 
             foreach (var ob in outbounds)
             {
@@ -74,6 +66,38 @@ public static partial class CustomConfigInjector
         }
 
         return "custom-proxy";
+    }
+
+    internal static bool HasDnsttSshRoute(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            return JsonNode.Parse(json) is JsonObject config
+                && config["outbounds"] is JsonArray outbounds
+                && FindDnsttSshTag(config, outbounds) != null;
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static string? FindDnsttSshTag(JsonObject config, JsonArray outbounds)
+    {
+        static string? ReadString(JsonNode? node) =>
+            node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
+        var route = config["route"] as JsonObject;
+        var tag = ReadString(route?["final"]);
+        if (string.IsNullOrEmpty(tag)) return null;
+        var outbound = outbounds.OfType<JsonObject>().FirstOrDefault(o => ReadString(o["tag"]) == tag);
+        if (ReadString(outbound?["type"]) != "ssh") return null;
+
+        var detour = ReadString(outbound?["detour"]);
+        if (string.IsNullOrEmpty(detour)) return null;
+        var transport = outbounds.OfType<JsonObject>().FirstOrDefault(o => ReadString(o["tag"]) == detour);
+        return ReadString(transport?["type"]) == "dnstt" ? tag : null;
     }
 
     private static string ResolveOrAssignProxyTag(JsonObject outbound)
