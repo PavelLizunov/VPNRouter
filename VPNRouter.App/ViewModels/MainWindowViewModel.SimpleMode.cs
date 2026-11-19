@@ -382,7 +382,7 @@ public partial class MainWindowViewModel
 
                 var preferred = SubscriptionRefreshDiff.FindRegisteredServer(selectedSource, candidates,
                     selectedName, selectedKey, previous, previousRoute);
-                if (preferred == null && previous != null && !string.IsNullOrEmpty(previous.DetourVia))
+                if (preferred == null && previous != null && (previous.Dnstt != null || !string.IsNullOrEmpty(previous.DetourVia)))
                 {
                     SmpErrorText = Strings.SyncEmpty;
                     return;
@@ -390,8 +390,8 @@ public partial class MainWindowViewModel
                 preferred ??= candidates[0];
                 StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                 // A direct probe of an exit cannot judge the selected route through its required hop.
-                var chosen = !string.IsNullOrEmpty(preferred.DetourVia) ? preferred :
-                    await PickSimpleServerAsync(candidates, preferred, submitted.App.ConnectionIntent, Preparing);
+                var chosen = preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia) ? preferred :
+                    await PickSimpleServerAsync(candidates.Where(server => server.Dnstt == null).ToList(), preferred, submitted.App.ConnectionIntent, Preparing);
                 if (!Preparing()) return;
                 if (chosen == null)
                 {
@@ -403,7 +403,7 @@ public partial class MainWindowViewModel
 
                 var source = selectedSource != null && selectedSource.Servers.Contains(chosen)
                     ? selectedSource : submitted.App.Subscriptions.First(s => s.Enabled && s.Servers.Contains(chosen));
-                if (!string.IsNullOrEmpty(chosen.DetourVia) &&
+                if ((chosen.Dnstt != null || !string.IsNullOrEmpty(chosen.DetourVia)) &&
                     new SubscriptionChainSelection(source.Id, source.Url, chosen, SubscriptionEntry.RouteKey(chosen, source.Servers))
                         .Match(source, candidates) != chosen)
                 {

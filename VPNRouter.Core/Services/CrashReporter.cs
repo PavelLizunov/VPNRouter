@@ -104,7 +104,7 @@ public static class CrashReporter
 
     // Crash reports may be shared: proxy URIs, subscription URLs, UUIDs and keys must never appear verbatim.
     private static readonly Regex _proxyUriPattern = new(
-        @"\b(vless|vmess|trojan|tg|(?:ss|shadowsocks)(?:\+[a-z0-9_-]+)?|hysteria2?|hy2|tuic|naive(?:\+(?:https|quic))?|amneziawg|awg|wireguard|wgturn|socks[45]?a?h?|snell|shadowtls|ssh|dns-tunnel)://\S+",
+        @"\b(vless|vmess|trojan|tg|(?:ss|shadowsocks)(?:\+[a-z0-9_-]+)?|hysteria2?|hy2|tuic|naive(?:\+(?:https|quic))?|amneziawg|awg|wireguard|wgturn|socks[45]?a?h?|snell|shadowtls|ssh|dns-tunnel|dnstt)://\S+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex _httpUrlPattern = new(

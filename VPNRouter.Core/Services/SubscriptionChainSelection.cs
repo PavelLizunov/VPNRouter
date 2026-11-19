@@ -20,13 +20,22 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
                 string.Equals(s.Name, app.ActiveSubscriptionServer, StringComparison.OrdinalIgnoreCase)) ?? pool.FirstOrDefault();
             if (row != null) source ??= feeds.First(s => s.Servers.Contains(row));
         }
-        return source == null || row == null || string.IsNullOrEmpty(row.DetourVia) ? null :
+        return source == null || row == null || (row.Dnstt == null && string.IsNullOrEmpty(row.DetourVia)) ? null :
             new(source.Id, source.Url, row, SubscriptionEntry.RouteKey(row, source.Servers));
     }
 
     internal VlessServerEntry? Match(SubscriptionEntry? feed, IEnumerable<VlessServerEntry> enabledRows)
     {
         if (feed == null || !feed.Enabled || feed.Id != FeedId || feed.Url != Url) return null;
+        if (Target.Dnstt is { } authority)
+        {
+            var matches = feed.Servers.Where(row => row.Dnstt is { } next
+                && SingBoxFeatures.DnsttAvailable && row.OutboundId == Target.OutboundId
+                && row.Server == Target.Server && row.Port == Target.Port
+                && next.Domain == authority.Domain && next.NoiseKey == authority.NoiseKey
+                && next.SshHostKey == authority.SshHostKey).Take(2).ToList();
+            return matches.Count == 1 ? matches[0] : null;
+        }
         var byId = enabledRows.Where(s => !string.IsNullOrEmpty(s.OutboundId))
             .ToLookup(s => s.OutboundId, StringComparer.OrdinalIgnoreCase);
         var targetKey = SubscriptionEntry.OutboundKey(Target);

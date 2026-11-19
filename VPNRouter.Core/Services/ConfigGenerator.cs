@@ -112,7 +112,7 @@ public static partial class ConfigGenerator
             Inbounds = BuildInbounds(settings, proxyIsUdpNative),
             Outbounds = outbounds,
             Endpoints = endpoints,
-            Route = BuildRoute(profile, appsProcessList, settings.Tun.Ipv4Address, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: proxyCarriesUdpNatively),
+            Route = BuildRoute(profile, appsProcessList, settings.Tun.Ipv4Address, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy, isDnsTunnel, dnsTunnelResolverIps, proxyIsUdpNative: proxyCarriesUdpNatively, tcpOnlyProxy: outbounds.Any(outbound => outbound.Tag == "dnstt-transport")),
             Experimental = new SingBoxExperimental
             {
                 ClashApi = new ClashApi

@@ -227,6 +227,7 @@ public partial class AndroidApp : Avalonia.Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        SingBoxFeatures.SetEmbeddedCoreVersion(ReadEmbeddedCoreVersion());
         try { AndroidStorage.RepairAllOnLoad(); }
         catch (Exception ex)
         {

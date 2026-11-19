@@ -28,4 +28,9 @@ Add a narrowly validated parser and typed profile at the existing subscription a
 
 ## Outcome
 
-Pending implementation and verification.
+The implementation covers capability negotiation, parsing, selection, configuration,
+desktop and Android proxy readiness, and diagnostic redaction. Three independent
+reviews covered correctness, privacy, and lifecycle. Tests exercise old capability
+headers, malformed or cleartext inputs, generated native configuration, and
+repeated refresh of a missing Android selection. Exact-SHA build, device acceptance,
+and production verification are tracked in PR #705.

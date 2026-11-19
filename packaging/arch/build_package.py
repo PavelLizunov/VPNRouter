@@ -38,21 +38,21 @@ except ImportError as err:
 
 RUNTIME_URL: str = (
     "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/"
-    "v1.14.2-vpnctl.2/sing-box-1.14.2-vpnctl.2-linux-amd64.tar.gz"
+    "v1.14.4-vpnctl.2/sing-box-1.14.4-vpnctl.2-linux-amd64.tar.gz"
 )
-RUNTIME_SHA256: str = "095a575fb412e5520b5c16449002073a5ba587646b96e3dddd2c59473d5be2d8"
-RUNTIME_VERSION: str = "1.14.2-vpnctl.2"
+RUNTIME_SHA256: str = "cc0ea9a46498aaca9d283411ca1fb71c70693bb60c27ffca6832889ca3953c4e"
+RUNTIME_VERSION: str = "1.14.4-vpnctl.2"
 
 CRONET_URL: str = (
-    "https://github.com/SagerNet/sing-box/releases/download/"
-    "v1.14.2/sing-box-1.14.2-linux-amd64.tar.gz"
+    "https://raw.githubusercontent.com/SagerNet/cronet-go/4ecba4761b201f6c552aabd0462a94fe2a8f833c/"
+    "lib/linux_amd64/libcronet.so"
 )
-CRONET_SHA256: str = "a684484d7477d1437282ee411f4d131d0340aaad60a7868841ebd5d87dd8a0c6"
-CRONET_VERSION: str = "1.14.2"
+CRONET_SHA256: str = "99eb98eb47102c7418c7fed1e666d27e2bfb67c6b5517f7ae6b033748d657ed4"
+CRONET_VERSION: str = "v0.0.0-20261118104455-4ecba4761b20"
 
 ALLOWED_DOWNLOADS: dict[str, tuple[str, str]] = {
     RUNTIME_URL: (RUNTIME_SHA256, "runtime.tar.gz"),
-    CRONET_URL: (CRONET_SHA256, "cronet.tar.gz"),
+    CRONET_URL: (CRONET_SHA256, "libcronet.so"),
 }
 
 CHUNK_SIZE: int = 64 * 1024
@@ -711,9 +711,7 @@ def main(argv: list[str] | None = None) -> int:
     extracted_runtime = work_dir / "extracted_runtime"
     staging_tools.safe_extract(runtime_tar, extracted_runtime, RUNTIME_SHA256)
 
-    cronet_tar = acquire_archive(CRONET_URL, CRONET_SHA256, "cronet.tar.gz", work_dir, args.archive_cache)
-    extracted_cronet = work_dir / "extracted_cronet"
-    staging_tools.safe_extract(cronet_tar, extracted_cronet, CRONET_SHA256)
+    cronet = acquire_archive(CRONET_URL, CRONET_SHA256, "libcronet.so", work_dir, args.archive_cache)
 
     publish_dir = work_dir / "publish"
     dotnet_version = publish_headless(source_tree, publish_dir, work_dir)
@@ -748,14 +746,10 @@ def main(argv: list[str] | None = None) -> int:
 
     runtime_dest_dir = payload_dir / "runtime"
     runtime_dest_dir.mkdir(parents=True, mode=0o755)
-    for src_root, fname, dst_name in [
-        (extracted_runtime, "sing-box", "sing-box"),
-        (extracted_cronet, "libcronet.so", "libcronet.so"),
-    ]:
-        sf = find_file(src_root, fname)
-        df = runtime_dest_dir / dst_name
-        shutil.copy2(sf, df)
-        os.chmod(df, 0o755)
+    shutil.copy2(find_file(extracted_runtime, "sing-box"), runtime_dest_dir / "sing-box")
+    shutil.copy2(cronet, runtime_dest_dir / "libcronet.so")
+    for name in ("sing-box", "libcronet.so"):
+        os.chmod(runtime_dest_dir / name, 0o755)
 
     licenses_dest_dir = payload_dir / "licenses"
     licenses_dest_dir.mkdir(parents=True, mode=0o755)
@@ -765,7 +759,6 @@ def main(argv: list[str] | None = None) -> int:
     for src_root, fname, out_name in [
         (extracted_runtime, "LICENSE", "sing-box-vpnctl-LICENSE"),
         (extracted_runtime, "README.md", "sing-box-vpnctl-README.md"),
-        (extracted_cronet, "LICENSE", "cronet-sing-box-LICENSE"),
     ]:
         try:
             f = find_file(src_root, fname)

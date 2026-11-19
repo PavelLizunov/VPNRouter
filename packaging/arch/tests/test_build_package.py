@@ -176,7 +176,7 @@ prepare
     def test_runtime_pins_match_desktop_linux(self) -> None:
         desktop = (PROJECT_ROOT / ".github/workflows/build-linux.yml").read_text()
         for pin in (build_package.RUNTIME_VERSION, build_package.RUNTIME_SHA256,
-                    build_package.CRONET_VERSION, build_package.CRONET_SHA256):
+                    build_package.CRONET_URL, build_package.CRONET_SHA256):
             self.assertIn(pin, desktop)
 
     def test_pkgbuild_composite_licenses_and_dependencies(self) -> None:

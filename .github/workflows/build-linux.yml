@@ -93,8 +93,8 @@ jobs:
       - name: Bundle sing-box-vpnctl-linux-amd64 + libcronet
         run: |
           set -euo pipefail
-          SINGBOX_VPNCTL_VER="1.14.2-vpnctl.2"
-          SINGBOX_VPNCTL_SHA256="095a575fb412e5520b5c16449002073a5ba587646b96e3dddd2c59473d5be2d8"
+          SINGBOX_VPNCTL_VER="1.14.4-vpnctl.2"
+          SINGBOX_VPNCTL_SHA256="cc0ea9a46498aaca9d283411ca1fb71c70693bb60c27ffca6832889ca3953c4e"
           curl -sSL -o /tmp/singbox-vpnctl.tar.gz \
             "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v${SINGBOX_VPNCTL_VER}/sing-box-${SINGBOX_VPNCTL_VER}-linux-amd64.tar.gz"
           echo "${SINGBOX_VPNCTL_SHA256}  /tmp/singbox-vpnctl.tar.gz" | sha256sum -c -
@@ -102,13 +102,11 @@ jobs:
           cp "/tmp/sing-box-${SINGBOX_VPNCTL_VER}-linux-amd64/sing-box" publish/linux-x64/sing-box
           chmod +x publish/linux-x64/sing-box
 
-          SINGBOX_VER="1.14.2"
-          SINGBOX_SHA256="a684484d7477d1437282ee411f4d131d0340aaad60a7868841ebd5d87dd8a0c6"
-          curl -sSL -o /tmp/singbox.tar.gz \
-            "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
-          echo "${SINGBOX_SHA256}  /tmp/singbox.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/singbox.tar.gz -C /tmp
-          cp "/tmp/sing-box-${SINGBOX_VER}-linux-amd64/libcronet.so" publish/linux-x64/libcronet.so
+          curl -fsSL -o /tmp/libcronet.so \
+            "https://raw.githubusercontent.com/SagerNet/cronet-go/4ecba4761b201f6c552aabd0462a94fe2a8f833c/lib/linux_amd64/libcronet.so"
+          echo "99eb98eb47102c7418c7fed1e666d27e2bfb67c6b5517f7ae6b033748d657ed4  /tmp/libcronet.so" | sha256sum -c -
+          cp /tmp/libcronet.so publish/linux-x64/libcronet.so
+          cp packaging/arch/notices/Cronet/naiveproxy/LICENSE publish/linux-x64/LICENSE.libcronet
           ls -lh publish/linux-x64/sing-box publish/linux-x64/libcronet.so
 
           publish/linux-x64/sing-box version

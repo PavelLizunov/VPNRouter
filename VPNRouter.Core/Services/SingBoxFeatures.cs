@@ -11,6 +11,8 @@ public static class SingBoxFeatures
     private static bool _probed;
     private static bool _awg;
     private static bool _xhttp;
+    private static bool _dnstt;
+    private static bool _embeddedDnstt;
 
     internal static bool EmbeddedCore { get; set; } = OperatingSystem.IsAndroid();
 
@@ -34,6 +36,30 @@ public static class SingBoxFeatures
         }
     }
 
+    public static bool DnsttAvailable
+    {
+        get
+        {
+            if (OverrideDnstt is bool value) return value;
+            if (EmbeddedCore) return _embeddedDnstt;
+            if (SingBoxRuntimePolicy.Current is { } policy) return policy.DnsttAvailable;
+            _ = Probe();
+            return _dnstt;
+        }
+    }
+
+    public static void SetEmbeddedCoreVersion(string version) => _embeddedDnstt = HasDnsttVersion(version);
+
+    internal static bool HasDnsttVersion(string version)
+    {
+        var parts = version.Trim().Split("-vpnctl.", StringSplitOptions.None);
+        return parts.Length == 2 && Version.TryParse(parts[0], out var core)
+            && int.TryParse(parts[1], out int patch) && patch >= 1
+            && (core > new Version(1, 14, 4) || (core == new Version(1, 14, 4) && patch >= 2));
+    }
+
+    internal static bool? OverrideDnstt { get; set; }
+
     internal static bool? OverrideAwg { get; set; }
 
     internal static bool? OverrideXhttp { get; set; }
@@ -52,6 +78,9 @@ public static class SingBoxFeatures
             _probed = false;
             _awg = false;
             _xhttp = false;
+            _dnstt = false;
+            _embeddedDnstt = false;
+            OverrideDnstt = null;
             EmbeddedCore = OperatingSystem.IsAndroid();
             OverrideAwg = null;
             OverrideXhttp = null;
@@ -73,7 +102,12 @@ public static class SingBoxFeatures
                 var path = ResolveBinaryPath();
                 if (path != null && File.Exists(path))
                 {
-                    var tags = ReadTagsLine(path);
+                    var output = ReadVersionOutput(path);
+                    const string prefix = "sing-box version ";
+                    var lines = output.Split('\n');
+                    var tags = Array.Find(lines, line => line.TrimStart().StartsWith("Tags:", StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+                    var version = Array.Find(lines, line => line.StartsWith(prefix, StringComparison.Ordinal));
+                    _dnstt = version != null && HasDnsttVersion(version[prefix.Length..]);
                     _awg = tags.Contains("with_awg", StringComparison.Ordinal);
                     _xhttp = tags.Contains("with_xhttp", StringComparison.Ordinal);
                 }
@@ -83,6 +117,7 @@ public static class SingBoxFeatures
                 // Any probe failure keeps the safe default: fork protocols stay rejected.
                 _awg = false;
                 _xhttp = false;
+                _dnstt = false;
             }
             _probed = true;
             return (_awg, _xhttp);
@@ -101,7 +136,7 @@ public static class SingBoxFeatures
         return AppPaths.SingBoxExePath;
     }
 
-    private static string ReadTagsLine(string path)
+    private static string ReadVersionOutput(string path)
     {
         var psi = new ProcessStartInfo
         {
@@ -129,9 +164,6 @@ public static class SingBoxFeatures
             _ = errTask.GetAwaiter().GetResult();
         }
         catch { return string.Empty; }
-        foreach (var line in stdout.Split('\n'))
-            if (line.TrimStart().StartsWith("Tags:", StringComparison.OrdinalIgnoreCase))
-                return line;
-        return string.Empty;
+        return p.ExitCode == 0 ? stdout : string.Empty;
     }
 }

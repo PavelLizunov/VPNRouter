@@ -238,6 +238,11 @@ public static class DiagnosticsRedactor
     {
         if (string.IsNullOrEmpty(value)) return value;
 
+        if (value.AsSpan().TrimStart().StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+            || key?.Equals("sshPrivateKey", StringComparison.OrdinalIgnoreCase) == true
+            || key?.Equals("ssh_private_key", StringComparison.OrdinalIgnoreCase) == true)
+            return Redacted;
+
         if (key != null && SafeKeys.Contains(key))
             return value;
 
@@ -249,6 +254,8 @@ public static class DiagnosticsRedactor
 
     private static string RedactUrlKeepHost(string value)
     {
+        if (value.TrimStart(' ', '\t', '\'', '"').StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return Redacted;
         var m = _urlKeepHost.Match(value);
         return m.Success ? $"{m.Groups[1].Value}{m.Groups[2].Value}/{Redacted}" : Redacted;
     }

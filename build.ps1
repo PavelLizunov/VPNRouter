@@ -1,7 +1,7 @@
 param(
     [string]$Version = "1.0",
-    [string]$SingBoxVersion = "1.14.2-vpnctl.2",
-    [string]$SingBoxSha256 = "96cc8c5c586bbff482986572ff25e7a360a842492352df76b7113cc053be34ce",
+    [string]$SingBoxVersion = "1.14.4-vpnctl.2",
+    [string]$SingBoxSha256 = "07b4030ebc28f1797536a2cd1f050c852de04ac43a5948ddb28c7d7c546d2862",
     [string]$SingBoxPath = "",
     [string]$SlipstreamPath = "",
     [switch]$Upload,
@@ -284,49 +284,28 @@ if ($SingBoxPath) {
 if (-not $SingBoxPath) {
     $cronetCache = Join-Path $Root "tools\singbox-cache"
     New-Item -ItemType Directory -Force -Path $cronetCache | Out-Null
-    $cronetZipName = "sing-box-1.14.2-windows-amd64.zip"
-    $cronetZipPath = Join-Path $cronetCache $cronetZipName
-    $cronetArchiveSha256 = "c2d8bfff918755808781dfdeeb8581b6c91eb3a243d9a7b55483cfc0c0684d32"
-    $cronetDllSha256 = "3217c6260fbca5f16072e0b79735742f40109a63bb0ff88fd6b96dd6b54a2928"
-    $cronetExtractDir = Join-Path $cronetCache "sing-box-1.14.2-windows-amd64"
-    $cronetDll = Join-Path $cronetExtractDir "libcronet.dll"
-
-    if (-not (Test-Path $cronetZipPath)) {
-        $cronetUrl = "https://github.com/SagerNet/sing-box/releases/download/v1.14.2/$cronetZipName"
-        Write-Host "       Downloading SagerNet sing-box v1.14.2 for libcronet.dll from $cronetUrl..." -ForegroundColor Gray
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $cronetDll = Join-Path $cronetCache "libcronet-windows-amd64-4ecba4761b20.dll"
+    $cronetDllSha256 = "683948ed11ad09b5ab75d49e171f25239977d79fc07c98d91809dffdb903f9b5"
+    if (-not (Test-Path -LiteralPath $cronetDll)) {
+        $cronetUrl = "https://raw.githubusercontent.com/SagerNet/cronet-go/4ecba4761b201f6c552aabd0462a94fe2a8f833c/lib/windows_amd64/libcronet.dll"
         try {
-            Invoke-WebRequest -Uri $cronetUrl -OutFile $cronetZipPath -UseBasicParsing
+            Invoke-WebRequest -Uri $cronetUrl -OutFile $cronetDll -UseBasicParsing
         } catch {
-            Write-Host "       ERROR: Download failed: $_" -ForegroundColor Red
-            if (Test-Path $cronetZipPath) { Remove-Item $cronetZipPath -Force }
-            throw "SagerNet sing-box download failed. Check https://github.com/SagerNet/sing-box/releases/tag/v1.14.2"
+            if (Test-Path -LiteralPath $cronetDll) { Remove-Item -LiteralPath $cronetDll -Force }
+            throw
         }
     }
 
-    $actualArchiveHash = (Get-FileHash $cronetZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actualArchiveHash -ne $cronetArchiveSha256.ToLowerInvariant()) {
-        Remove-Item $cronetZipPath -Force
-        throw "SagerNet sing-box SHA256 mismatch: expected $cronetArchiveSha256 but got $actualArchiveHash"
-    }
-
-    if (Test-Path $cronetExtractDir) { Remove-Item -Recurse -Force $cronetExtractDir }
-    Expand-Archive -Path $cronetZipPath -DestinationPath $cronetCache -Force
-    if (-not (Test-Path $cronetDll)) {
-        throw "libcronet.dll not found inside $cronetZipName after extraction"
-    }
-
-    $actualDllHash = (Get-FileHash $cronetDll -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actualDllHash -ne $cronetDllSha256.ToLowerInvariant()) {
+    $actualDllHash = (Get-FileHash -LiteralPath $cronetDll -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualDllHash -ne $cronetDllSha256) {
+        Remove-Item -LiteralPath $cronetDll -Force
         throw "libcronet.dll SHA256 mismatch: expected $cronetDllSha256 but got $actualDllHash"
     }
 
-    Copy-Item $cronetDll (Join-Path $DistDir "libcronet.dll") -Force
-    $cronetLicense = Join-Path $cronetExtractDir "LICENSE"
-    if (Test-Path $cronetLicense) {
-        Copy-Item $cronetLicense (Join-Path $DistDir "LICENSE.libcronet") -Force
-    }
-    Write-Host "       Bundled libcronet.dll from SagerNet v1.14.2 (verified SHA256)" -ForegroundColor Green
+    Copy-Item -LiteralPath $cronetDll -Destination (Join-Path $DistDir "libcronet.dll") -Force
+    $cronetLicense = Join-Path $Root "packaging/arch/notices/Cronet/naiveproxy/LICENSE"
+    Copy-Item -LiteralPath $cronetLicense -Destination (Join-Path $DistDir "LICENSE.libcronet") -Force
+    Write-Host "       Bundled libcronet.dll from cronet-go 4ecba4761b20 (verified SHA256)" -ForegroundColor Green
 }
 
 Write-Host "[6b/9] Bundling slipstream-client.exe (DNS-tunnel)..." -ForegroundColor Yellow

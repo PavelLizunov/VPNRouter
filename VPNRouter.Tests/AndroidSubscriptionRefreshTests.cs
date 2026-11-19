@@ -731,6 +731,27 @@ public class AndroidSubscriptionRefreshTests
         Assert.Equal("fresh.invalid", prefs.GeneratePrimary(prefs.Resolve()!));
     }
 
+    [Fact]
+    public void RepeatedRefreshCannotReplaceAnUnavailableDnsttSelection()
+    {
+        var selected = new VlessServerEntry
+        {
+            Name = "DNSTT", Protocol = "dnstt", Server = "8.8.8.8", Port = 53,
+            OutboundId = "dnstt:node", Dnstt = new DnsttProfile { Domain = "tunnel.example.invalid" }
+        };
+        var original = new SubscriptionEntry { Id = "a", Url = Feed, Servers = [selected] };
+        using var prefs = new PreferenceFile(new() { ["subscriptions_json"] = JsonSerializer.Serialize(new[] { original }) });
+        prefs.Select(original, selected);
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var refreshed = new SubscriptionEntry { Id = original.Id, Url = Feed, Servers = [ServerUriParser.Parse(FreshUri)] };
+            Assert.False(AndroidSubscriptionRefresh.Save(refreshed, false, null, prefs.Read, prefs.Commit,
+                JsonSerializerOptions.Default, prefs.ImportRevision));
+            Assert.Null(AndroidSubscriptionRefresh.FindFeedRow(prefs.Feeds, prefs.Read));
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

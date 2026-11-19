@@ -29,9 +29,14 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import java.io.File;
+import java.net.HttpURLConnection;
 import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
+import java.net.Proxy;
+import java.net.ServerSocket;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -39,6 +44,9 @@ import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import io.nekohasekai.libbox.CommandClient;
 import io.nekohasekai.libbox.CommandClientHandler;
@@ -369,7 +377,7 @@ public final class VpnRouterService extends VpnService {
     private static String scrubSecrets(String s) {
         if (s == null || s.isEmpty()) return s;
         String out = s.replaceAll(
-                "(?i)\\b(vless|vmess|trojan|ss|hysteria2?|tuic|naive)://\\S+",
+                "(?i)\\b(vless|vmess|trojan|ss|hysteria2?|tuic|naive|dnstt)://\\S+",
                 "$1://[redacted]");
         out = out.replaceAll(
                 "(?i)(https?://[^\\s/?#]+)/\\S*",
@@ -647,8 +655,14 @@ public final class VpnRouterService extends VpnService {
             if (!start.current()) return;
             startSlipstreamIfNeeded();
             if (!start.current()) return;
-            startLibboxService(tunnelConfig);
+            DnsttReadyProbe probe = DnsttReadyProbe.attach(tunnelConfig);
+            startLibboxService(probe == null ? tunnelConfig : probe.config);
             session.requireEstablishedTun();
+            if (probe != null && (!start.current() || !probe.ready())) {
+                retireTunnel();
+                if (start.current()) reportFailure("proxy-unreachable", false);
+                return;
+            }
             if (start.commit(() -> {
                 persistLastGoodConfig();
                 establishedStart = start;
@@ -677,6 +691,61 @@ public final class VpnRouterService extends VpnService {
                 }
             }
             releaseConnectWakeLock();
+        }
+    }
+
+    // The TUN becoming available does not cause a lazy SSH outbound to dial.
+    private static final class DnsttReadyProbe {
+        private final String config;
+        private final int port;
+        private final String secret;
+
+        private DnsttReadyProbe(String config, int port, String secret) {
+            this.config = config;
+            this.port = port;
+            this.secret = secret;
+        }
+
+        static DnsttReadyProbe attach(String config) throws Exception {
+            JSONObject root = new JSONObject(config);
+            JSONArray outbounds = root.optJSONArray("outbounds");
+            JSONObject proxy = null;
+            for (int i = 0; outbounds != null && i < outbounds.length(); i++) {
+                JSONObject current = outbounds.getJSONObject(i);
+                if ("ssh".equals(current.optString("type")) && "proxy".equals(current.optString("tag"))) {
+                    proxy = current;
+                    break;
+                }
+            }
+            if (proxy == null || !"dnstt-transport".equals(proxy.optString("detour"))) return null;
+
+            int port;
+            try (ServerSocket reservation = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+                port = reservation.getLocalPort();
+            }
+            String secret = java.util.UUID.randomUUID().toString();
+            JSONObject clash = root.getJSONObject("experimental").getJSONObject("clash_api");
+            clash.put("external_controller", "127.0.0.1:" + port);
+            clash.put("secret", secret);
+            return new DnsttReadyProbe(root.toString(), port, secret);
+        }
+
+        boolean ready() {
+            HttpURLConnection connection = null;
+            try {
+                URL url = new URL("http://127.0.0.1:" + port + "/proxies/proxy/delay"
+                        + "?url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=10000");
+                connection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
+                connection.setInstanceFollowRedirects(false);
+                connection.setConnectTimeout(1500);
+                connection.setReadTimeout(11000);
+                connection.setRequestProperty("Authorization", "Bearer " + secret);
+                return connection.getResponseCode() == HttpURLConnection.HTTP_OK;
+            } catch (java.io.IOException e) {
+                return false;
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
         }
     }
 
@@ -1413,11 +1482,6 @@ public final class VpnRouterService extends VpnService {
             }, ParcelFileDescriptor::getFileDescriptor);
             service.requireMainStartPermitted(start);
             return pfd.getFd();
-        }
-
-        @Override
-        public boolean useProcFS() {
-            return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q;
         }
 
         @Override
