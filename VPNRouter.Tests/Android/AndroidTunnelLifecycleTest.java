@@ -81,7 +81,9 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(start, "start.prepareAndClaim(preflight, () -> {", "select.run();", "detachTunnel();",
                 "if (tunnelConfig == null)", "closeDetachedTunnel(previous, previousServer);", "if (!start.current()) return;",
                 "session = new AndroidTunnelSession();", "startSlipstreamIfNeeded();", "if (!start.current()) return;",
-                "startLibboxService(tunnelConfig);", "session.requireEstablishedTun();", "start.commit(() -> {",
+                "DnsttReadyProbe.attach(tunnelConfig);", "startLibboxService(probe == null ? tunnelConfig : probe.config);",
+                "session.requireEstablishedTun();", "if (probe != null && (!start.current() || !probe.ready())) {",
+                "retireTunnel();", "reportFailure(\"proxy-unreachable\", false);", "start.commit(() -> {",
                 "persistLastGoodConfig();", "liveService = this;",
                 "writeVpnState(STATE_CONNECTED,", "setTunnelLive(true);", "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))");
 

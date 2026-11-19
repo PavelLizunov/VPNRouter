@@ -28,15 +28,17 @@ import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 
+import java.io.BufferedReader;
 import java.io.File;
-import java.net.HttpURLConnection;
+import java.io.InputStreamReader;
 import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
-import java.net.Proxy;
 import java.net.ServerSocket;
-import java.net.URL;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -731,20 +733,20 @@ public final class VpnRouterService extends VpnService {
         }
 
         boolean ready() {
-            HttpURLConnection connection = null;
-            try {
-                URL url = new URL("http://127.0.0.1:" + port + "/proxies/proxy/delay"
-                        + "?url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=10000");
-                connection = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
-                connection.setInstanceFollowRedirects(false);
-                connection.setConnectTimeout(1500);
-                connection.setReadTimeout(11000);
-                connection.setRequestProperty("Authorization", "Bearer " + secret);
-                return connection.getResponseCode() == HttpURLConnection.HTTP_OK;
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress("127.0.0.1", port), 1500);
+                socket.setSoTimeout(11000);
+                String request = "GET /proxies/proxy/delay"
+                        + "?url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=10000 HTTP/1.1\r\n"
+                        + "Host: 127.0.0.1:" + port + "\r\n"
+                        + "Authorization: Bearer " + secret + "\r\nConnection: close\r\n\r\n";
+                socket.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
+                BufferedReader response = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                String status = response.readLine();
+                return status != null && status.startsWith("HTTP/1.1 200 ");
             } catch (java.io.IOException e) {
                 return false;
-            } finally {
-                if (connection != null) connection.disconnect();
             }
         }
     }
