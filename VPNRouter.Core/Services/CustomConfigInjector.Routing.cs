@@ -85,13 +85,19 @@ public static partial class CustomConfigInjector
 
     private static string? FindDnsttSshTag(JsonObject config, JsonArray outbounds)
     {
+        static string? ReadString(JsonNode? node) =>
+            node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
         var route = config["route"] as JsonObject;
-        var tag = StjNodeHelpers.AsString(route?["final"]);
+        var tag = ReadString(route?["final"]);
         if (string.IsNullOrEmpty(tag)) return null;
-        var outbound = outbounds.OfType<JsonObject>().FirstOrDefault(o => StjNodeHelpers.AsString(o["tag"]) == tag);
-        return StjNodeHelpers.AsString(outbound?["type"]) == "ssh"
-            && FindTypeByTag(outbounds, StjNodeHelpers.AsString(outbound?["detour"])) == "dnstt"
-            ? tag : null;
+        var outbound = outbounds.OfType<JsonObject>().FirstOrDefault(o => ReadString(o["tag"]) == tag);
+        if (ReadString(outbound?["type"]) != "ssh") return null;
+
+        var detour = ReadString(outbound?["detour"]);
+        if (string.IsNullOrEmpty(detour)) return null;
+        var transport = outbounds.OfType<JsonObject>().FirstOrDefault(o => ReadString(o["tag"]) == detour);
+        return ReadString(transport?["type"]) == "dnstt" ? tag : null;
     }
 
     private static string ResolveOrAssignProxyTag(JsonObject outbound)

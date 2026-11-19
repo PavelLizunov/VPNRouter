@@ -42,3 +42,4 @@ outbound and its detour. Show the icon for the saved profile, independently of
 the connection status. Cover alternate tags, unused nodes and invalid JSON.
 Run the desktop and Android CI gates and independently review before staging.
 The core P1 ledger, 18-asset release gate and post-ship procedure still apply.
+The prerelease review found string coercion in the icon classifier. Require actual JSON strings and cover numeric tags separately from numeric-looking strings.

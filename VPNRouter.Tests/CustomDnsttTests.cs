@@ -67,6 +67,26 @@ public sealed class CustomDnsttTests
     }
 
     [Fact]
+    public void DnsttProfileGlyphDoesNotCoerceNumericTags()
+    {
+        var config = JsonNode.Parse(Imported)!;
+        config["route"]!["final"] = 42;
+        config["outbounds"]![1]!["tag"] = "42";
+        Assert.False(CustomConfigInjector.HasDnsttSshRoute(config.ToJsonString()));
+
+        config["route"]!["final"] = "42";
+        config["outbounds"]![1]!["detour"] = 12;
+        config["outbounds"]![0]!["tag"] = "12";
+        Assert.False(CustomConfigInjector.HasDnsttSshRoute(config.ToJsonString()));
+
+        config["outbounds"]![1]!["detour"] = "12";
+        Assert.True(CustomConfigInjector.HasDnsttSshRoute(config.ToJsonString()));
+
+        config["outbounds"]![0]!["tag"] = 12;
+        Assert.False(CustomConfigInjector.HasDnsttSshRoute(config.ToJsonString()));
+    }
+
+    [Fact]
     public async Task Native_DnsttImport_Check()
     {
         var runtime = Environment.GetEnvironmentVariable("VPNCTL_TEST_CORE")
