@@ -304,7 +304,7 @@ public partial class MainWindowViewModel
     {
         if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting || _engine.IsRunning) return false;
         var entries = BusinessDefaults.ParseConnection(connection);
-        var next = BusinessDefaults.CreateServerPool(entries, _settings.Vless);
+        var next = BusinessDefaults.CreateServerPool(entries, _settings.Vless, requireSelectedDnstt: true);
         var rows = entries.Select(s => new ServerViewModel(s)).ToArray();
         ServerViewModel.RefreshUdpSiblingFlags(rows);
         ServerViewModel.RefreshProviderRiskFlags(rows);

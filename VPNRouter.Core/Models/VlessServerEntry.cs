@@ -24,6 +24,10 @@ public class VlessServerEntry
         || (DnsResolvers != null && DnsResolvers.Count > 0)
         || !string.IsNullOrWhiteSpace(DnsLeafCertPem);
 
+    [YamlMember(Alias = "dnstt", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DnsttProfile? Dnstt { get; set; }
+
     [YamlMember(Alias = "server")]
     public string Server { get; set; } = string.Empty;
 

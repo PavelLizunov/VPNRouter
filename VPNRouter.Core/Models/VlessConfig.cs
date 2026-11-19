@@ -89,14 +89,14 @@ public class VlessConfig
             return new List<VlessServerEntry> { active };
         }
 
-        if (active.UseAsSingleOutbound) return new List<VlessServerEntry> { active };
+        if (active.Dnstt != null || active.UseAsSingleOutbound) return new List<VlessServerEntry> { active };
         if (all.Count <= 1) return all;
 
         if (AutoSelectBestServer)
             return BuildAutoSelectPool(all, active);
 
         var activeIp = active.Server;
-        return all.Where(s => s.Server == activeIp && string.IsNullOrEmpty(s.DetourVia)).ToList();
+        return all.Where(s => s.Server == activeIp && s.Dnstt == null && string.IsNullOrEmpty(s.DetourVia)).ToList();
     }
 
     private List<VlessServerEntry> BuildAutoSelectPool(List<VlessServerEntry> all, VlessServerEntry active)

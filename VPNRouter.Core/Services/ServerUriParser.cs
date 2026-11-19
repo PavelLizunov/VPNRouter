@@ -33,6 +33,9 @@ public static class ServerUriParser
         if (uri.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
             return VlessUriParser.Parse(uri);
 
+        if (uri.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return DnsttUriParser.Parse(uri);
+
         VlessServerEntry entry;
         if (uri.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
             uri.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
@@ -125,6 +128,9 @@ public static class ServerUriParser
 
     public static bool IsSupportedScheme(ReadOnlySpan<char> line)
     {
+        if (line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return SingBoxFeatures.DnsttAvailable;
+
         if (line.StartsWith("naive://",       StringComparison.OrdinalIgnoreCase) ||
             line.StartsWith("naive+https://", StringComparison.OrdinalIgnoreCase) ||
             line.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase))

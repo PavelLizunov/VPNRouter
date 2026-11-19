@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.Services;
 
@@ -26,7 +27,8 @@ internal sealed class BusinessClientHttp : IDisposable
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
         using var request = new HttpRequestMessage(HttpMethod.Get, source);
         request.Headers.UserAgent.ParseAdd("VPNRouterBusiness");
-        request.Headers.Add("X-VPNRouter-Capabilities", "detour-v1");
+        foreach (var (name, value) in SubscriptionFetcher.GetSubscriptionHeaders(secure: true))
+            request.Headers.Add(name, value);
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) throw new IOException("Subscription not received.");
         const int limit = 1024 * 1024;

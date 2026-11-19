@@ -11,6 +11,8 @@ internal enum SubscriptionInputAction
     // We hold it but have no servers from it yet: refresh it (in place), do not replace the entry.
     KeepAndRefresh,
 
+    Disabled,
+
     // A URL we do not hold: it replaces the home screen's subscription and is fetched.
     Replace,
 }
@@ -24,14 +26,19 @@ internal static class SimpleConnectPolicy
         var url = Normalize(input);
         if (url.Length == 0 || existing is null) return SubscriptionInputAction.Replace;
 
+        var disabledMatch = false;
         foreach (var sub in existing)
         {
-            if (sub is null || !sub.Enabled) continue;
-            if (!string.Equals(Normalize(sub.Url), url, StringComparison.Ordinal)) continue;
+            if (sub is null || !string.Equals(Normalize(sub.Url), url, StringComparison.Ordinal)) continue;
+            if (!sub.Enabled)
+            {
+                disabledMatch = true;
+                continue;
+            }
             return sub.Servers is { Count: > 0 } ? SubscriptionInputAction.KeepCached : SubscriptionInputAction.KeepAndRefresh;
         }
 
-        return SubscriptionInputAction.Replace;
+        return disabledMatch ? SubscriptionInputAction.Disabled : SubscriptionInputAction.Replace;
     }
 
     internal static bool SameUrl(string? left, string? right) => Normalize(left) == Normalize(right);

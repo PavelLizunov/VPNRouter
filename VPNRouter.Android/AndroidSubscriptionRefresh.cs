@@ -21,6 +21,7 @@ internal static class AndroidSubscriptionRefresh
     internal const string ConfigMode = "config_mode";
     private const string ResolvedCommand = "vpn_resolved_server_command";
     private const string ResolvedSource = "vpn_resolved_feed_source";
+    private const string DnsttRowPrefix = "dnstt:";
     private const string ResolvedRoute = "vpn_resolved_feed_route";
     internal const string UiCommand = "vpn_ui_command";
     internal const string CustomJson = "custom_config_json";
@@ -130,11 +131,14 @@ internal static class AndroidSubscriptionRefresh
             {
                 var previous = identity == null ? null : previousRows.Find(row => row != null && RowIdentity(row) == identity);
                 var route = previous == null ? null : SubscriptionEntry.RouteKey(previous, previousRows);
-                var equivalent = route == null ? null :
-                    refreshed.Servers.FirstOrDefault(row => SubscriptionEntry.RouteKey(row, refreshed.Servers) == route);
+                var equivalent = previous?.Dnstt != null
+                    ? new SubscriptionChainSelection(affected[0].Id, affected[0].Url, previous, route)
+                        .Match(affected[0], refreshed.Servers)
+                    : route == null ? null : refreshed.Servers.FirstOrDefault(row => SubscriptionEntry.RouteKey(row, refreshed.Servers) == route);
                 if (equivalent != null)
                     BindFeed(updates, affected[0], equivalent);
-                else if (string.IsNullOrEmpty(previous?.DetourVia))
+                else if (identity?.StartsWith(DnsttRowPrefix, StringComparison.Ordinal) != true &&
+                    string.IsNullOrEmpty(previous?.DetourVia))
                 {
                     var name = read(SelectedName);
                     var matches = refreshed.Servers.Where(row =>
@@ -206,7 +210,8 @@ internal static class AndroidSubscriptionRefresh
     internal static bool IsCurrentSelection(string? command, Func<string, string?> read) =>
         command != null && command == read(UiCommand) && command != read(SupersededSelection);
 
-    internal static string RowIdentity(VlessServerEntry row) => SubscriptionEntry.RowKey(row);
+    internal static string RowIdentity(VlessServerEntry row) =>
+        (row.Dnstt == null ? string.Empty : DnsttRowPrefix) + SubscriptionEntry.RowKey(row);
 
     private static void BindFeed(Dictionary<string, string?> updates, SubscriptionEntry? feed, VlessServerEntry? row)
     {

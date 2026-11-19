@@ -29,6 +29,8 @@ public static class CanaryPolicy
     public static string RedactUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return "(none)";
+        if (url.AsSpan().TrimStart().StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return "dnstt://[redacted]";
         if (Uri.TryCreate(url, UriKind.Absolute, out var u))
             return $"{u.Scheme}://{u.Host}";
 

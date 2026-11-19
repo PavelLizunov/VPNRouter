@@ -54,6 +54,7 @@ public class MainActivity : AvaloniaMainActivity, ISharedPreferencesOnSharedPref
     private const string ActionStop = "com.ninitux.vpnrouter.STOP";
     private const string ExtraConfigJson = "config_json";
     private const string ExtraColdStartOnly = "cold_start_only";
+    private const string ExtraProbeManagedDnstt = "probe_managed_dnstt";
     private const string ExtraNotifText = "notif_text";
     private const string ExtraNotifDisconnect = "notif_disconnect";
     private const string ExtraDnsTunnelDomain = "dns_tunnel_domain";
@@ -1160,6 +1161,7 @@ public class MainActivity : AvaloniaMainActivity, ISharedPreferencesOnSharedPref
             .SetAction(ActionStart)
             .PutExtra(ExtraConfigJson, configJson)
             .PutExtra(ExtraColdStartOnly, coldStartOnly)
+            .PutExtra(ExtraProbeManagedDnstt, dnsTunnelEntry?.Dnstt is not null)
             .PutExtra(AndroidStorage.UiCommandKey, command)
             .PutExtra(ExtraNotifText, Localization.NotifTunnelActive)
             .PutExtra(ExtraNotifDisconnect, Localization.NotifDisconnect);

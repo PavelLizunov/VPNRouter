@@ -144,8 +144,9 @@ public sealed class AutoFailoverEngine
                 UserFacingMessage: Strings.FailoverCustomConfigUnusable);
         }
 
-        if (configMode == "generated" && IsSelectionConfirmed?.Invoke() != true &&
-            _settings.Vless.GetActiveServers().FirstOrDefault()?.UseAsSingleOutbound == true)
+        var active = _settings.Vless.GetActiveServers().FirstOrDefault();
+        if (active?.Dnstt != null ||
+            (configMode == "generated" && IsSelectionConfirmed?.Invoke() != true && active?.UseAsSingleOutbound == true))
             return new FailoverOutcome(false, null, null);
 
         var hasEnabledSub = _settings.App.Subscriptions?
@@ -235,7 +236,7 @@ public sealed class AutoFailoverEngine
         var entry = (_settings.Vless?.Servers ?? new())
             .FirstOrDefault(s => !string.IsNullOrEmpty(s?.Name)
                 && s.Name.Equals(active, StringComparison.OrdinalIgnoreCase));
-        if (entry == null) return false;
+        if (entry == null || entry.Dnstt != null) return false;
 
         return !VlessServersResolver.IsPlaceholderEntry(entry);
     }
