@@ -126,6 +126,7 @@ public sealed class DnsttSubscriptionTests
             Assert.Equal("dnstt://[redacted]", CanaryPolicy.RedactUrl(Link("pilot")));
             var alternative = new VlessServerEntry { Name = "Ordinary", Server = entry.Server };
             var settings = new AppSettings { Vless = new VlessConfig { Servers = [alternative, entry], ActiveServer = alternative.Name } };
+            settings.App.BypassRussianTraffic = false;
             Assert.Same(alternative, Assert.Single(settings.Vless.GetActiveServers()));
             settings.Vless.ActiveServer = entry.Name;
             settings.App.RoutingMode = "full";
@@ -187,6 +188,7 @@ public sealed class DnsttSubscriptionTests
         {
             var entry = ServerUriParser.Parse(Link("pilot"));
             var settings = new AppSettings { Vless = new VlessConfig { Servers = [entry], ActiveServer = entry.Name } };
+            settings.App.BypassRussianTraffic = false;
             settings.App.BlockQuicOnTcpProxy = false;
             settings.App.CustomRules = [new() { Type = "domain_suffix", Value = "work.example.test", Action = "proxy", Enabled = true }];
             var config = ConfigGenerator.Generate(new Profile { Name = "DNSTT", DnsMode = "vpn_only" }, [], settings);
@@ -222,6 +224,7 @@ public sealed class DnsttSubscriptionTests
         {
             var entry = ServerUriParser.Parse(Link("native"));
             var settings = new AppSettings { Vless = new VlessConfig { Servers = [entry], ActiveServer = entry.Name } };
+            settings.App.BypassRussianTraffic = false;
             settings.App.RoutingMode = "full";
             var config = ConfigGenerator.Serialize(
                 ConfigGenerator.Generate(new Profile { Name = "DNSTT", DnsMode = "vpn_only" }, [], settings));
