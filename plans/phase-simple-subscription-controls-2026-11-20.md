@@ -76,3 +76,7 @@ existing reconnect seam and continue to assert the refreshed row order and hop.
 DNSTT review also identified a tight desktop deadline. The two canaries now
 have native budgets of eight and six seconds, with one second of controller
 allowance each. A two-failure test pins the absence of false readiness.
+
+## Candidate delivery
+
+Prepare Standard `v2.50.6-r4` from the Simple subscription controls and DNSTT readiness changes. The preceding PR head passed all eight checks. Run CI again on the versioned source. The public prerelease requires the release gate decision for #689 and verified Windows, macOS, Linux, and Android artifacts from the accepted revision. The candidate has not been published.
