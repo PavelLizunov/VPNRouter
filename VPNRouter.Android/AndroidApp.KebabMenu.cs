@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
@@ -25,6 +26,12 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
+    private sealed class KebabMenuPopup : Popup
+    {
+        // Android already exposes the popup host through the visual overlay.
+        protected override AutomationPeer OnCreateAutomationPeer() => new ControlAutomationPeer(this);
+    }
+
     private readonly Dictionary<Avalonia.Controls.Button, string> _menuItemIcons = new();
 
     /// <summary>Sets the label of a menu item and keeps its icon (the label is replaced on language change and by the reset confirmation).</summary>

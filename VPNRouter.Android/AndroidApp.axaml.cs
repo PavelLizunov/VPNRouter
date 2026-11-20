@@ -783,13 +783,14 @@ public partial class AndroidApp : Avalonia.Application
                 Content = menuStack,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                IsScrollChainingEnabled = false,
             },
         };
         menuPanel.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
         menuPanel.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
         menuPanel.BindToken(Border.BoxShadowProperty, "ShadowMd");
 
-        _kebabPopup = new Popup
+        _kebabPopup = new KebabMenuPopup
         {
             PlacementTarget = _kebabMenuButton,
             Placement = PlacementMode.BottomEdgeAlignedRight,
@@ -1254,6 +1255,10 @@ public partial class AndroidApp : Avalonia.Application
         IPointer? activePointer = null;
         mainScroller.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
+            // Popup input routes through its logical parent in the Home header.
+            if (e.Source is not Visual source || (source != mainScroller && !mainScroller.IsVisualAncestorOf(source)))
+                return;
+
             var p = e.GetCurrentPoint(mainScroller);
             if (p.Pointer.Type != PointerType.Touch && p.Pointer.Type != PointerType.Pen)
                 return;
@@ -1264,10 +1269,10 @@ public partial class AndroidApp : Avalonia.Application
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
         mainScroller.AddHandler(InputElement.PointerMovedEvent, (_, e) =>
         {
-            var p = e.GetCurrentPoint(mainScroller);
-            if (p.Pointer.Type != PointerType.Touch && p.Pointer.Type != PointerType.Pen)
+            if (e.Pointer != activePointer)
                 return;
-            if (activePointer is null) return;
+
+            var p = e.GetCurrentPoint(mainScroller);
             var totalDeltaY = p.Position.Y - dragStartY;
             if (!isDragging)
             {
@@ -1299,6 +1304,9 @@ public partial class AndroidApp : Avalonia.Application
         }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
         mainScroller.AddHandler(InputElement.PointerReleasedEvent, (_, e) =>
         {
+            if (e.Pointer != activePointer)
+                return;
+
             if (isDragging)
             {
                 e.Pointer.Capture(null);

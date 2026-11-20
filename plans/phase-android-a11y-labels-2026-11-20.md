@@ -57,9 +57,10 @@ with their own changes.
 
 ## Invariants
 
-- Click and pointer behavior is unchanged: no handler, hit area or event is
-  moved or added; `LabeledBy` does not alter input.
-- Appearance is unchanged: no size, padding, color, brush or layout edit.
+- Menu actions, hit areas and dismissal retain their existing behavior.
+  Swipes inside a scrollable menu should move the menu without dragging Home.
+- Menu styling and content retain their existing appearance. Window insets
+  account for system bars and the keyboard.
 - Data, storage keys and localization refresh semantics are unchanged; the new
   strings follow the existing RU/EN switch and the existing language refresh.
 - The four direct Android Avalonia references move together. The assessed
@@ -203,10 +204,52 @@ origin below the system bar.
 [Avalonia Android coordinate conversion](https://github.com/AvaloniaUI/Avalonia/blob/12.1.6/src/Android/Avalonia.Android/Platform/SkiaPlatform/TopLevelImpl.cs#L102-L110)
 [Avalonia Android inset management](https://github.com/AvaloniaUI/Avalonia/blob/12.1.6/src/Android/Avalonia.Android/Platform/AndroidInsetsManager.cs#L50-L103)
 
-The next candidate requests edge-to-edge when it is inactive and applies
+The Android 14 dump places the native content frame at
+`[0,128][1080,2337]`. That screen origin equals the Connect and popup
+offset. Android's visible-host clipping explains why the Home header
+is omitted even though it is painted. Avalonia merged a coordinate
+conversion fix in `a096f9bbde` after 12.1.6.
+[Upstream Android offset fix](https://github.com/AvaloniaUI/Avalonia/commit/a096f9bbde86a0d7e1d3ee68262cec931fafa3d7)
+
+Candidate `66918dbe` requests edge-to-edge when it is inactive and applies
 safe area through the existing VPNRouter margins. On systems that already
 force edge-to-edge, the candidate leaves the window preference and padding
 unchanged. Compare Home, Advanced and the popup bounds again, including
 node-center activation. Check status/navigation bar clearance, keyboard
 resizing and rotation, and retain the Android 15/16 edge-to-edge checks
 and separate spoken TalkBack acceptance.
+
+The candidate addresses fullscreen windows by moving the view origin to
+zero. In split screen or a floating window, the native view can still have
+a nonzero screen origin. Verify those cases with the first published
+Avalonia package containing the coordinate fix before retiring the app
+workaround.
+
+### Android 14 fullscreen acceptance and menu follow-up
+
+Run `44785102902` produced artifact `14654570654` for `66918dbe`. The tested
+ARM64 APK and installed file both hashed to
+`f2d659fda212805762d63c2c6bc34c9b20a7333537379d37d18f3e95883fc8d4`.
+The Android 14 ARM64 clone exposed both localized menu openers. Their centers
+opened the popup, and the measured rectangles for Connect and the sampled
+popup items aligned within 1 px. The app survived 8 Home and 4 Advanced popup
+cycles. Portrait primary controls cleared both bars and the IME resized the
+page. TalkBack was absent. Evidence is in the owner bundle `715/66918dbe`.
+
+In the same run, UIAutomator reported the open menu twice, under the Home Popup
+placeholder and the visual overlay host. The placeholder's peer now uses
+ordinary visual children, so the overlay host supplies the menu nodes. In
+landscape, the reported swipe left the lower actions out of reach. Popup input
+can tunnel through the Home header even though the menu is painted in an
+overlay. Home's touch handler now starts a drag only for a press on its visual
+subtree. The popup keeps the Fluent scroll gesture with scroll chaining disabled.
+[Popup peer source](https://github.com/AvaloniaUI/Avalonia/blob/12.1.6/src/Avalonia.Controls/Automation/Peers/PopupAutomationPeer.cs)
+[Overlay event routing source](https://github.com/AvaloniaUI/Avalonia/blob/12.1.6/src/Avalonia.Controls/Primitives/OverlayPopupHost.cs)
+
+Acceptance for the follow-up uses the exact ARM64 APK. Count one copy per
+menu action when open and none when closed from Home and Advanced. In landscape
+swipe up inside the menu and verify that the lower actions scroll fully into
+view and can be activated by their reported centers. Swipe back to the top
+and check that the Home offset stays unchanged, then verify outside tap and
+Back dismissal and repeat in portrait. The Home scrollbar reaching into the
+system navigation inset and spoken TalkBack traversal remain open.
