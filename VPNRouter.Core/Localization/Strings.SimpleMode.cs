@@ -25,6 +25,8 @@ public static partial class Strings
     public static string SmpInputHint => Ru
         ? "Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive / dnstt) или URL подписки (http/https)."
         : "Accepts a server link (vless / hysteria2 / tuic / ss / naive / dnstt) or a subscription URL (http/https).";
+    public static string SmpInvalidServerLink => Ru ? "Некорректная ссылка на сервер. Проверьте её формат." : "Invalid server link. Check its format.";
+    public static string SmpDnsttCoreRequired => Ru ? "Для DNSTT нужна совместимая версия ядра sing-box-vpnctl." : "DNSTT requires a compatible sing-box-vpnctl core.";
     public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "Route through VPN";
     public static string SmpSplitOption => Ru
         ? "Выбранные приложения"

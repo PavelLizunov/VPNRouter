@@ -285,6 +285,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task SmpToggleConnectAsync()
     {
+        if (SimpleCtaIsConnecting || _isReconnecting) return;
         SmpErrorText = string.Empty;
 
         if (IsConnected)
@@ -295,7 +296,7 @@ public partial class MainWindowViewModel
 
         _smpChoiceNote = null;
 
-        if (SmpHeroIsBusy || _isReconnecting || SimpleConnectRefreshPending) return;
+        if (SimpleConnectRefreshPending) return;
         if (_engine.HasActiveTunnel)
         {
             AdoptRunningEngine();
@@ -600,6 +601,12 @@ public partial class MainWindowViewModel
                 return false;
             }
 
+            if (uri.StartsWith("dnstt://", StringComparison.OrdinalIgnoreCase) && !SingBoxFeatures.DnsttAvailable)
+            {
+                SmpErrorText = Strings.SmpDnsttCoreRequired;
+                return false;
+            }
+
             var entry = ServerUriParser.Parse(uri);
 
             _settings.Vless.Servers = new List<VlessServerEntry> { entry };
@@ -619,9 +626,7 @@ public partial class MainWindowViewModel
         catch (Exception)
         {
             _logger.Warning("[Simple] Server URI parse failed");
-            SmpErrorText = IsRussian
-                ? "Некорректная ссылка. Поддерживаются vless:// / hysteria2:// / tuic:// / ss:// / naive://, должна заканчиваться '#имя'."
-                : "Invalid server link. Supported: vless:// / hysteria2:// / tuic:// / ss:// / naive://, must end with '#name'.";
+            SmpErrorText = Strings.SmpInvalidServerLink;
             return false;
         }
     }
@@ -646,7 +651,7 @@ public partial class MainWindowViewModel
 
     public bool SmpSubscriptionsRefreshing => Subscriptions.Any(s => s.Enabled && s.IsRefreshing);
 
-    public bool SmpCanRefreshSubscriptions => !SmpHeroIsBusy && !IsTestingServers && !IsDeepTestingServers;
+    public bool SmpCanRefreshSubscriptions => !SimpleCtaIsConnecting && !IsTestingServers && !IsDeepTestingServers;
 
     private bool SimpleConnectRefreshPending =>
         SmpSubscriptionsRefreshing &&
@@ -656,7 +661,7 @@ public partial class MainWindowViewModel
 
     // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
     // alert). On / busy / idle are the plain connection states.
-    public bool SmpHeroIsError => !string.IsNullOrEmpty(SmpErrorText);
+    public bool SmpHeroIsError => !IsConnected && !string.IsNullOrEmpty(SmpErrorText);
     public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && HasConnectionAlert;
     public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
     public bool SmpHeroIsBusy => (IsConnecting || IsApplying) && !SmpHeroIsError;
@@ -674,7 +679,7 @@ public partial class MainWindowViewModel
     {
         get
         {
-            if (!string.IsNullOrEmpty(SmpErrorText)) return SmpErrorText;
+            if (SmpHeroIsError) return SmpErrorText;
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
             if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();

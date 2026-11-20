@@ -29,7 +29,9 @@ public static class SimpleInputDetector
             trimmed.StartsWith("dns-tunnel://",  StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("dnstt://",       StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("awg://",         StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("amneziawg://",   StringComparison.OrdinalIgnoreCase))
+            trimmed.StartsWith("amneziawg://",   StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("awg3://",        StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("amneziawg3://",  StringComparison.OrdinalIgnoreCase))
             return SmpInputKind.ServerUri;
 
         if (trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase) ||

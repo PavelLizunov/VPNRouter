@@ -59,7 +59,12 @@ public sealed class SimpleConnectStatusTests
         vm.IsConnecting = true;
         Dispatcher.UIThread.RunJobs();
         Assert.False(refresh.IsEffectivelyEnabled);
+        vm.SmpErrorText = Strings.StartTimeoutPhaseB;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(vm.SmpHeroIsBusy);
+        Assert.False(refresh.IsEffectivelyEnabled);
         vm.IsConnecting = false;
+        vm.SmpErrorText = string.Empty;
         Dispatcher.UIThread.RunJobs();
         Assert.True(refresh.IsEffectivelyEnabled);
 
