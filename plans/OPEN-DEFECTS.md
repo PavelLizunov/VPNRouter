@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** — The Linux .deb applies network capabilities to its packaged sing-box, but startup launches a user-directory copy that loses them and requires pkexec. Select the protected package runtime and retain portable behavior (audit F-02). [Verification plan](phase-linux-deb-runtime-2026-11-20.md).
+
 - [x] **P1** - Validate rollback before promoting the snapshot and retain the previous live tree and marker on relaunch failure (#661). RESOLVED in source. Rollback and repair, verified at `45a79762` in CI 44368002825.
 - [x] **P1** - Complete monitored startup before service acceptance, preserve native DNS rule fall-through, isolate the accepted import from edits, and retain explicit Stop ownership on refusal (#664). RESOLVED in source. Routing and service acceptance, verified at `45a79762` in CI 44368002825.
 - [ ] **P2** - A stale Android alarm or prepared switch can reconnect after Disconnect, and a concurrent settings save can yield the wrong restore policy. Verify terminal status delivery after stops and rejected switches (#689).
