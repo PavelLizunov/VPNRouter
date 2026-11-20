@@ -14,6 +14,10 @@ deferred, reached v2.44.0/.1 stable and bit a user (auto-failover teardown, diag
 Only the `## Open` section is gated; `## Resolved` is history. Keep entries to one
 line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target version>`.
 
+## Business DNSTT readiness (2026-11-20)
+
+- [ ] **P2** - The shared desktop readiness probe can time out at the single Google destination during DNSTT startup. Try the Cloudflare and Google destinations through the selected proxy. Verify the fixed application on the affected Windows path before claiming resolution.
+
 ## Open
 
 - [ ] **P2** - Business 2.50.13 looks up DNSTT country and activity by the recursive resolver and displays its TCP reachability as server health. Match the deployed node and skip the resolver TCP probe. See phase-business-dnstt-card-2026-11-19.md.
