@@ -50,7 +50,10 @@ public sealed class AndroidAccessibilityLabelsTests
         Assert.Contains("ApplyMenuButtonAccessibility(_advKebabMenuBtn)", menu, StringComparison.Ordinal);
         Assert.DoesNotContain("AccessibilityView.Raw", menu, StringComparison.Ordinal);
         Assert.Contains("KebabMenuPopup : Popup", menu, StringComparison.Ordinal);
-        Assert.Contains("OnCreateAutomationPeer() => new ControlAutomationPeer(this)", menu, StringComparison.Ordinal);
+        Assert.Contains("OnCreateAutomationPeer() => new KebabMenuPopupPeer(this)", menu, StringComparison.Ordinal);
+        Assert.Contains("GetChildrenCore() => null", menu, StringComparison.Ordinal);
+        Assert.Contains("IsControlElementCore() => false", menu, StringComparison.Ordinal);
+        Assert.Contains("IsContentElementCore() => false", menu, StringComparison.Ordinal);
 
         var header = Source("VPNRouter.Android", "AndroidApp.axaml.cs");
         Assert.Contains("_kebabPopup = new KebabMenuPopup", header, StringComparison.Ordinal);

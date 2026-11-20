@@ -237,8 +237,9 @@ cycles. Portrait primary controls cleared both bars and the IME resized the
 page. TalkBack was absent. Evidence is in the owner bundle `715/66918dbe`.
 
 In the same run, UIAutomator reported the open menu twice, under the Home Popup
-placeholder and the visual overlay host. The placeholder's peer now uses
-ordinary visual children, so the overlay host supplies the menu nodes. In
+placeholder and the visual overlay host. Only the overlay host now supplies
+menu nodes. The childless placeholder peer retains the original Popup peer's
+non-control and non-content classification for screen readers. In
 landscape, the reported swipe left the lower actions out of reach. Popup input
 can tunnel through the Home header even though the menu is painted in an
 overlay. Home's touch handler now starts a drag only for a press on its visual
@@ -251,5 +252,8 @@ menu action when open and none when closed from Home and Advanced. In landscape
 swipe up inside the menu and verify that the lower actions scroll fully into
 view and can be activated by their reported centers. Swipe back to the top
 and check that the Home offset stays unchanged, then verify outside tap and
-Back dismissal and repeat in portrait. The Home scrollbar reaching into the
-system navigation inset and spoken TalkBack traversal remain open.
+Back dismissal and repeat in portrait. With TalkBack, check that the Home
+header has no extra focus stop for the popup placeholder. UIAutomator omits
+the screen-reader focusability attribute used here. The Home scrollbar
+reaching into the system navigation inset and resizing a popup held open
+during rotation remain to be verified.

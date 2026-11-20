@@ -28,8 +28,15 @@ public partial class AndroidApp
 {
     private sealed class KebabMenuPopup : Popup
     {
-        // Android already exposes the popup host through the visual overlay.
-        protected override AutomationPeer OnCreateAutomationPeer() => new ControlAutomationPeer(this);
+        protected override AutomationPeer OnCreateAutomationPeer() => new KebabMenuPopupPeer(this);
+    }
+
+    private sealed class KebabMenuPopupPeer(KebabMenuPopup owner) : ControlAutomationPeer(owner)
+    {
+        // The visual overlay already exposes the menu. The placeholder has no accessible content.
+        protected override IReadOnlyList<AutomationPeer>? GetChildrenCore() => null;
+        protected override bool IsControlElementCore() => false;
+        protected override bool IsContentElementCore() => false;
     }
 
     private readonly Dictionary<Avalonia.Controls.Button, string> _menuItemIcons = new();
