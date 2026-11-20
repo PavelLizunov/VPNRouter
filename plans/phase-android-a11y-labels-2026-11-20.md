@@ -62,9 +62,9 @@ with their own changes.
 - Appearance is unchanged: no size, padding, color, brush or layout edit.
 - Data, storage keys and localization refresh semantics are unchanged; the new
   strings follow the existing RU/EN switch and the existing language refresh.
-- The follow-up changes only the Android Avalonia package versions.
-  The target framework, Android minimum API, desktop packages, and
-  application source remain unchanged.
+- The four direct Android Avalonia references move together. The assessed
+  graph resolves SkiaSharp 3.119.4 stable and adds AndroidX DocumentFile
+  1.1.0.3. The .NET 10/API 36 target and Android API 23 minimum are retained.
 - The Advanced shell and overlays keep their current background behavior
   (A11Y-04 is out of scope).
 
@@ -138,12 +138,10 @@ closing the corresponding entries.
 - The visible title `TextBlock` is still a separate node from the switch, so
   TalkBack can read the title again when swiping. Making the whole row one node
   belongs to A11Y-02/A11Y-03's row work, not here.
-- The same composite-content naming weakness exists on buttons whose content is
-  a layout outside the menu: the Home header button, the Advanced bottom tabs,
-  the Advanced footer Connect, the Settings Apply button and the autostart card.
-  They are not part of A11Y-01/03 as requested and were left for the follow-up;
-  the menu is corrected here because it would otherwise stay unintelligible
-  after the unhide.
+- The 12.1.6 composite-name fallback reads the first nonempty logical
+  descendant TextBlock. Recheck icon-only and multi-label controls separately
+  where this could produce an empty or misleading name. The menu keeps its
+  explicit localized names.
 
 ## Rollback
 
@@ -157,15 +155,58 @@ The first implementation is `b9531cd2` on PR #715. Review of the fallback at
 pinned dependency. Exact APK `58c39869` removes the obsolete workaround and
 the popup suppression. On Android 14 ARM64, the popup exposed 14 focusable
 items and 3 section headers and survived 8 Home and 4 Advanced open/close
-cycles. The Advanced opener was named in RU and EN. The Home opener remained
-absent from the node tree. The Connect and popup bounds were 128 px above
-the painted controls, and tapping the center of a reported popup row could
-activate a different action. UIAutomator supplied the evidence. TalkBack
-was absent, so spoken and touch-exploration acceptance remains open.
+cycles. The Advanced opener was named in RU and EN. The Home opener was
+painted and worked by touch; its node was absent. Connect bounds reported
+by UIAutomator were `[42,808][1038,945]`, versus the screenshot's
+`[42,936][1038,1073]`. That measures a 128 px vertical offset for Connect.
+A separate popup observation found that tapping the reported center of the
+Advanced row selected About. TalkBack was absent, so spoken and touch
+exploration acceptance remains open.
 
-For the 12.1.6 APK, compare the node bounds to the visual bounds on the same
-emulator and confirm coordinate activation, the Home opener's RU/EN name and
-role, the popup before/open/after-close states, and crash-free repeated use.
-If geometry recovers and the Home opener is still absent, keep A11Y-01
-open and inspect the Home header's clipping and traversal. Repeat spoken
-acceptance separately with TalkBack installed.
+The baseline CI run is `44764441089`, artifact `14642199610`, APK SHA-256
+`357b10be2acc0d70d39b4fb90ef4c73b277b0f435a4450711f6e9b54136da216`.
+The installed file had that same checksum. The `sdk_gphone64_arm64`
+Android 14 image used the `issue715-a11y-arm34b` clone at 1080x2400 and
+420 dpi. The owner acceptance bundle for `715/58c39869/a11y-recheck`
+retains the home-cold UIAutomator dump and final-home screenshot.
+The capture methods were `adb shell uiautomator dump` and
+`adb exec-out screencap -p`.
+
+Candidate `fc23a39e` passed eight CI checks. Run `44778679108` produced
+artifact `14651670947`, APK SHA-256
+`0d0036381140f14496f1d5b968fc7da5f1722c910c4d03943e38b13cad39ffd9`.
+
+For the 12.1.6 APK, compare the Connect rectangle with the painted button
+on the same emulator. Record the vertical difference; a difference within
+8 px allows the screenshot-edge tolerance at 420 dpi. A popup row's reported
+center must activate that row. Verify Home's RU/EN name and role separately,
+then check the popup before/open/after-close states and crash-free repetition.
+This comparison measures the overall dependency upgrade; several accessibility
+changes are included.
+The exact 12.1.6 APK was installed offline and verified by its on-device
+SHA-256 on Android 14 ARM64, 1080x2400 at 420 dpi, clone
+`issue715-a11y-fc23a39e`. The Home opener was still missing from UIAutomator
+in both languages. Connect repeated the exact baseline rectangles and
+128 px delta. The reported center of the RU popup item activated Light;
+the rendered RU target localized correctly. Advanced's opener was named
+and worked by visual coordinates only. There were no crashes over 8 Home
+and 4 Advanced menu cycles. TalkBack was absent. The owner receipt at
+`715/fc23a39e/a11y-recheck` retains the dumps, screenshot bounds, checksums
+and teardown.
+
+A11Y-01 remains open. The dependency update did not resolve this
+reproduction. Avalonia 12.1.6 converts Android accessibility bounds
+through `PointToScreen`, whose Android implementation only scales the
+point. The window defaults to decor fitting on Android 14. The measured
+offset across Home and both popups is consistent with a native view
+origin below the system bar.
+[Avalonia Android coordinate conversion](https://github.com/AvaloniaUI/Avalonia/blob/12.1.6/src/Android/Avalonia.Android/Platform/SkiaPlatform/TopLevelImpl.cs#L102-L110)
+[Avalonia Android inset management](https://github.com/AvaloniaUI/Avalonia/blob/12.1.6/src/Android/Avalonia.Android/Platform/AndroidInsetsManager.cs#L50-L103)
+
+The next candidate requests edge-to-edge when it is inactive and applies
+safe area through the existing VPNRouter margins. On systems that already
+force edge-to-edge, the candidate leaves the window preference and padding
+unchanged. Compare Home, Advanced and the popup bounds again, including
+node-center activation. Check status/navigation bar clearance, keyboard
+resizing and rotation, and retain the Android 15/16 edge-to-edge checks
+and separate spoken TalkBack acceptance.

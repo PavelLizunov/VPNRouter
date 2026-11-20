@@ -289,6 +289,13 @@ public partial class AndroidApp : Avalonia.Application
                         {
                             if (e.Property == TopLevel.ClientSizeProperty) Reapply();
                         };
+                        if (!insetsMgr.DisplaysEdgeToEdge)
+                        {
+                            // Android's PointToScreen scales coordinates without adding the native view offset.
+                            // Use a full-window origin and apply insets through the page margins.
+                            view.SetValue(TopLevel.AutoSafeAreaPaddingProperty, false);
+                            insetsMgr.DisplayEdgeToEdgePreference = true;
+                        }
                         Reapply();
                     }
                 }
