@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
@@ -700,6 +701,8 @@ public partial class AndroidApp
             Foreground = GetBrush("TextPrimaryBrush"),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
+        // The subscription name is the visible label of its enable switch.
+        AutomationProperties.SetLabeledBy(enabledChk, nameText);
         var metadataText = new TextBlock
         {
             Text = FormatSubMetadata(sub),

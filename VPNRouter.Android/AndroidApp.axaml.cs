@@ -649,6 +649,7 @@ public partial class AndroidApp : Avalonia.Application
         };
         _kebabMenuButton.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
         _kebabMenuButton.Click += OnKebabMenuClicked;
+        RefreshMenuButtonAccessibility();
 
         var isDark = AndroidStorage.GetTheme() == "dark";
         _menuThemeLight = MakeSegmentButton(Localization.MenuSegLight, !isDark, OnMenuThemeLightClicked);
@@ -720,6 +721,8 @@ public partial class AndroidApp : Avalonia.Application
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
         _menuVersionItem.Click += OnMenuAboutClicked;
+        // The About row is an icon, a label and a version pill in one grid; name the action, not the layout.
+        AutomationProperties.SetName(_menuVersionItem, Localization.SmpMenuAbout);
 
         var menuStack = new StackPanel
         {
@@ -786,8 +789,6 @@ public partial class AndroidApp : Avalonia.Application
             Child = menuPanel,
             IsLightDismissEnabled = true,
         };
-
-        HideSubtreeFromAccessibility(menuPanel);
 
         var headerRow = new Grid
         {
@@ -1679,6 +1680,7 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuResetSettingsItem is not null && !_resetConfirmPending)
             SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
         if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
+        if (_menuVersionItem is not null) AutomationProperties.SetName(_menuVersionItem, Localization.SmpMenuAbout);
         if (_menuAdvancedToggleBtn is not null)
             UpdateMenuAdvancedToggle();
         if (_autostartCardTitleText is not null)
@@ -1691,6 +1693,7 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;
         if (_menuSectionTroubleshooting is not null) _menuSectionTroubleshooting.Text = Localization.MenuSectionTroubleshooting;
         if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
+        RefreshMenuButtonAccessibility();
         RefreshAdvancedShellStrings();
         if (_menuCheckLeaksItem is not null) SetMenuItemText(_menuCheckLeaksItem, Localization.MenuItemCheckLeaks);
         if (_menuHealthCheckItem is not null) SetMenuItemText(_menuHealthCheckItem, Localization.MenuItemHealthCheck);

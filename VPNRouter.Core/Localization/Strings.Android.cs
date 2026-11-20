@@ -216,6 +216,12 @@ public static partial class Strings
     public static string MenuItemHealthCheck => SmpMenuHealthCheck;
     public static string MenuItemSafeMode => SmpMenuSafeMode;
 
+    public static string MenuButtonName => Ru ? "Меню" : "Menu";
+
+    public static string TipMenuButton => Ru
+        ? "Настройки, тема, язык и диагностика"
+        : "Settings, theme, language and diagnostics";
+
     public static string MenuItemAddTile => Ru
         ? "Добавить кнопку VPN в шторку"
         : "Add VPN button to the shade";
