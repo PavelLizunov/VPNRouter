@@ -586,6 +586,12 @@ public partial class AndroidApp : Avalonia.Application
         _pageRoot.BindToken(Grid.BackgroundProperty, "SurfaceAppBrush");
         // The popup host routes input through this placeholder. Keep it outside the page scrollers.
         _pageRoot.Children.Add(_kebabPopup!);
+        _pageRoot.SizeChanged += (_, e) =>
+        {
+            // Reopening computes a new anchor after rotation without closing on IME height changes.
+            if (e.WidthChanged && _kebabPopup is { IsOpen: true } popup)
+                popup.Close();
+        };
         return _pageRoot;
     }
 
@@ -1255,7 +1261,7 @@ public partial class AndroidApp : Avalonia.Application
         IPointer? activePointer = null;
         mainScroller.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
-            // Popup input routes through its logical parent in the Home header.
+            // An overlay can route input through a logical parent outside its visual tree.
             if (e.Source is not Visual source || (source != mainScroller && !mainScroller.IsVisualAncestorOf(source)))
                 return;
 

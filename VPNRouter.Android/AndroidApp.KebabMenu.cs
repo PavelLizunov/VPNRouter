@@ -238,6 +238,8 @@ public partial class AndroidApp
         {
             var bottom = _imeVisible ? 0.0 : _currentSafeArea.Bottom;
             panel.MaxHeight = Math.Max(120.0, _pageRoot.Bounds.Height - _currentSafeArea.Top - bottom - 16.0);
+            if (panel.Child is ScrollViewer scroller)
+                scroller.ScrollToHome();
         }
         UpdateMenuAdvancedToggle();
         _resetConfirmPending = false;

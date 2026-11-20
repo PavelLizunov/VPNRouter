@@ -252,11 +252,9 @@ menu action when open and none when closed from Home and Advanced. In landscape
 swipe up inside the menu and verify that the lower actions scroll fully into
 view and can be activated by their reported centers. Swipe back to the top
 and check that the Home offset stays unchanged, then verify outside tap and
-Back dismissal and repeat in portrait. With TalkBack, check that the Home
-header has no extra focus stop for the popup placeholder. UIAutomator omits
-the screen-reader focusability attribute used here. The Home scrollbar
-reaching into the system navigation inset and resizing a popup held open
-during rotation remain to be verified.
+Back dismissal and repeat in portrait. With TalkBack, check that the
+page-root popup placeholder adds no focus stop. UIAutomator omits
+the screen-reader focusability attribute used here.
 
 ### Landscape boundary follow-up
 
@@ -281,3 +279,21 @@ openers, verify the background does not move, and verify Home still scrolls
 after dismissing the menu. Measure scrollbar and IME clearance, landscape
 About Close after scrolling, and popup geometry when rotating with it open.
 The current ARM64 image has no spoken TalkBack evidence.
+
+Run `44803967947` produced artifact `14660454720` for `a471840d`. The tested
+APK and installed copy both hashed to
+`5c67b548f905a78b105b0792e332a176a897c5f6cebf4f8b637bf459c3150a19`.
+On Android 14 ARM64, repeat swipes past either boundary moved neither
+background scroller. Home scrolled normally after dismissal. Both portrait
+and landscape scrollbar controls cleared the system bars. In About, scrolling
+exposed Close fully and a tap at its reported center dismissed the screen.
+The portrait IME accepted and cleared the fixture text. The owner bundle
+`715/a471840d` includes the receipt and captures. All eight CI checks passed.
+
+Rotating from landscape to portrait with the menu open left a 64 px strip at
+the stale landscape position. Also, opening the shared menu from Advanced
+could retain the offset left by Home. Dismiss the popup when the page width
+changes and open each menu at the top. A keyboard-only height change does
+not dismiss it. Verify dismissal and reopening in both rotation directions,
+scroll to the bottom before switching modes, and check both reopeners start
+at the top. Retain the ordinary scrolling, dismissal and bounds checks.
