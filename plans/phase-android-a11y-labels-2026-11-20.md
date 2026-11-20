@@ -21,9 +21,10 @@ with their own changes.
 
 ## What
 
-1. Remove `HideSubtreeFromAccessibility(menuPanel)` and the helper itself. The
-   kebab popup stays in the control/content views, so its items are enumerated by
-   TalkBack again.
+1. Expose the kebab popup when the existing DEFCT-001 workaround confirms its
+   sentinel is installed. Preserve the original hide fallback when the private
+   Avalonia field cannot be patched. The fallback protected against a crash
+   reported on Android 12 with Avalonia 11.3.12.
 2. Give both kebab openers (`AndroidApp.axaml.cs` Home header,
    `AndroidApp.AdvancedShell.cs` Advanced header) `AutomationProperties.Name`
    from `Strings.MenuButtonName` and a tooltip from `Strings.TipMenuButton`, which
@@ -60,8 +61,10 @@ with their own changes.
 
 ## Verification
 
-Not run in this isolated worker, per the task constraints: no local build, no
-test run, no emulator/device, no push. Required before merge:
+Standard `b9531cd2` passed all eight PR checks. Android compile run
+`44756572341` produced an ARM64 APK signed with the CI debug key. The HomeLab
+x86_64 emulators cannot install that APK. Exact-build device verification
+remains required:
 
 | check | owner |
 |---|---|
@@ -69,13 +72,19 @@ test run, no emulator/device, no push. Required before merge:
 | Android Release APK build on the authorized worker | implementer/CI |
 | TalkBack acceptance checklist below on a real device or emulator with TalkBack | implementer |
 
-The source guards are static: they pin the naming calls and the absence of the
-hide workaround, not the spoken result.
+The source guards cover the naming calls, language refresh and conditional
+DEFCT-001 fallback. They do not establish TalkBack behavior.
 
 ## TalkBack acceptance checklist
 
 Preconditions: Android device or emulator, TalkBack on, app installed from the
 build under test, both RU and EN available in the menu.
+
+Confirm the startup `VpnRouter.A11y` patch result. With the popup open, check
+the UIAutomator dump and crash buffer for the historical toggle-peer failure.
+If the patch fails and the fallback hides the menu, keep A11Y-01 open. Record
+checked-state results separately from name and role. The sentinel can suppress
+the checked-state announcement even when the control's label is correct.
 
 1. Home header: focus the kebab with swipe navigation. TalkBack says the menu
    name (RU "Меню" / EN "Menu") and then the description, and announces a button.
@@ -92,29 +101,32 @@ build under test, both RU and EN available in the menu.
    the kebab: same name/description. Open it and confirm the items are announced.
 6. Settings tab, Routing: focus the split and full radio buttons. Each announces
    its visible title (for example RU "Раздельный туннель", EN "Split Tunnel"),
-   its checked state and radio role. Activate each by double tap and confirm the
+   and radio role. Activate each by double tap and confirm the
    selection changes as before.
 7. Settings tab, same section: focus the bypass control. It announces the visible
-   title and checkbox state; double tap toggles it.
-8. Settings tab, Content: the block-ads control announces its title and state.
+   title and checkbox role. Double tap toggles it.
+8. Settings tab, Content: the block-ads control announces its title and role.
    Settings tab, Reliability: auto-reconnect and external control do the same.
-9. Applications: focus a row checkbox. It announces the app name, role and
-   checked state. The row text is not announced as the checkbox name twice in a
+9. Applications: focus a row checkbox. It announces the app name and role.
+   The row text is not announced as the checkbox name twice in a
    row that would confuse the two. Double tap toggles only that app, as before.
 10. Subscribe: focus the enable checkbox of a subscription. It announces the
-    subscription name, role and checked state. Double tap enables/disables it and
+    subscription name and role. Double tap enables/disables it and
     the aggregated list refreshes as before.
 11. Regression: the visible layout, fonts, spacing and colors of the menu and
     these cards look identical to the build before the change.
 
-Record device, Android version, TalkBack version and the RU/EN results. A pass
-closes the corresponding ledger entries.
+Check focus entering the popup, background and closed-popup isolation, and
+scrolling to the last action at a small viewport. Activate the menu actions
+using isolated data, including the second-tap reset confirmation. Check all
+eight switch labels in both languages and record any duplicate focus targets.
+Record device, Android version, TalkBack version and the RU/EN results before
+closing the corresponding entries.
 
 ## Unknowns
 
-- Avalonia Android popup accessibility was not exercised; the audit's cause is
-  from source only. If TalkBack still skips the popup, the next step is a live
-  investigation of the popup host, not re-hiding the subtree.
+- Avalonia popup focus and enumeration still require live verification. The
+  DEFCT-001 log distinguishes the fallback case from a popup focus defect.
 - A `Name` change on an already focused node may not emit a property-change event
   in Avalonia 12.0.3. The label is refreshed for the next focus; step 4 checks it.
 - The visible title `TextBlock` is still a separate node from the switch, so
@@ -134,10 +146,7 @@ involved.
 
 ## Outcome
 
-Working diff on `t3/android-accessibility-labels`. No commit was made in this
-isolated worker because the workspace has no Git identity configured; the primary
-agent owns the commit, push and PR. The change touches eight Android/Core sources,
-one new test file, this record and the two `plans/OPEN-DEFECTS.md` entries. No
-build, test run or device run was executed here by task constraint; the focused
-test and the TalkBack checklist above are the gates before the ledger entries can
-be closed.
+The first implementation is `b9531cd2` on PR #715. Follow-up review found the
+original crash fallback must remain available and checked-state announcements
+must be assessed separately from labels. The revised source has both guards.
+Exact-head build and TalkBack acceptance remain pending for this follow-up.

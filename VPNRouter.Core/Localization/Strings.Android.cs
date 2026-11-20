@@ -217,6 +217,7 @@ public static partial class Strings
     public static string MenuItemSafeMode => SmpMenuSafeMode;
 
     public static string MenuButtonName => Ru ? "Меню" : "Menu";
+    public static string SubscriptionWithoutName => Ru ? "Подписка без названия" : "Unnamed subscription";
 
     public static string TipMenuButton => Ru
         ? "Настройки, тема, язык и диагностика"

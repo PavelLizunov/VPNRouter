@@ -7,6 +7,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -187,6 +188,17 @@ public partial class AndroidApp
         };
         divider.BindToken(Border.BackgroundProperty, "BorderSubtleBrush");
         stack.Children.Add(divider);
+    }
+
+    private static void HideSubtreeFromAccessibility(StyledElement element)
+    {
+        AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
+        if (element is not ILogical logical) return;
+        foreach (var child in logical.LogicalChildren)
+        {
+            if (child is StyledElement childElement)
+                HideSubtreeFromAccessibility(childElement);
+        }
     }
 
     /// <summary>

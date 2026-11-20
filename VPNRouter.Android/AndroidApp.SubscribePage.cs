@@ -694,7 +694,7 @@ public partial class AndroidApp
 
         var nameText = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(sub.Name) ? "(no name)" : sub.Name,
+            Text = string.IsNullOrWhiteSpace(sub.Name) ? Localization.SubscriptionWithoutName : sub.Name,
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             FontFamily = new FontFamily("monospace"),

@@ -6,12 +6,14 @@ namespace VPNRouter.Android;
 
 internal static class AvaloniaToggleNodeInfoProviderPatch
 {
-    private static bool _applied;
+    private static bool _attempted;
+
+    public static bool IsApplied { get; private set; }
 
     public static void Apply()
     {
-        if (_applied) return;
-        _applied = true;
+        if (_attempted) return;
+        _attempted = true;
 
         try
         {
@@ -44,6 +46,12 @@ internal static class AvaloniaToggleNodeInfoProviderPatch
 
             var previous = field.GetValue(null) as PropertyInfo;
             field.SetValue(null, sentinel);
+            IsApplied = object.Equals(field.GetValue(null), sentinel);
+            if (!IsApplied)
+            {
+                LogWarn("s_checkedProperty did not retain the sentinel");
+                return;
+            }
 
             global::Android.Util.Log.Info("VpnRouter.A11y",
                 "DEFCT-001: ToggleNodeInfoProvider.s_checkedProperty patched " +

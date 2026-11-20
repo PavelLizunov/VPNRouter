@@ -35,7 +35,7 @@ public sealed class AndroidAccessibilityLabelsTests
     }
 
     [Fact]
-    public void KebabButtons_AreNamedAndKeepTheMenuInTheAccessibilityTree()
+    public void KebabButtons_AreNamedAndKeepTheCrashFallback()
     {
         var menu = Source("VPNRouter.Android", "AndroidApp.KebabMenu.cs");
         Assert.Contains(
@@ -48,18 +48,29 @@ public sealed class AndroidAccessibilityLabelsTests
             StringComparison.Ordinal);
         Assert.Contains("ApplyMenuButtonAccessibility(_kebabMenuButton)", menu, StringComparison.Ordinal);
         Assert.Contains("ApplyMenuButtonAccessibility(_advKebabMenuBtn)", menu, StringComparison.Ordinal);
-        Assert.False(
-            menu.Contains("AccessibilityView.Raw", StringComparison.Ordinal),
-            "The kebab menu must stay in the control/content views; hiding it makes every item invisible to TalkBack.");
+        Assert.Contains("AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw)", menu, StringComparison.Ordinal);
 
         var header = Source("VPNRouter.Android", "AndroidApp.axaml.cs");
-        Assert.False(
-            header.Contains("HideSubtreeFromAccessibility", StringComparison.Ordinal),
-            "The kebab popup must not be removed from the accessibility tree.");
-        Assert.Contains("RefreshMenuButtonAccessibility();", header, StringComparison.Ordinal);
+        Assert.Matches(@"if \(!AvaloniaToggleNodeInfoProviderPatch\.IsApplied\)\s+HideSubtreeFromAccessibility\(menuPanel\);", header);
+        const string refresh = "RefreshMenuButtonAccessibility();";
+        var languageStart = header.IndexOf("private void ToggleLanguageAndRefresh()", StringComparison.Ordinal);
+        Assert.True(languageStart > 0);
+        Assert.Contains(refresh, header[..languageStart], StringComparison.Ordinal);
+        Assert.Contains(refresh, header[languageStart..], StringComparison.Ordinal);
+        var patch = Source("VPNRouter.Android", "AvaloniaToggleNodeInfoProviderPatch.cs");
+        Assert.Contains("IsApplied = object.Equals(field.GetValue(null), sentinel);", patch, StringComparison.Ordinal);
+        var activity = Source("VPNRouter.Android", "MainActivity.cs");
+        Assert.Matches(@"AvaloniaToggleNodeInfoProviderPatch\.Apply\(\);\s+SetupWindowInsetsAndEdgeToEdge\(\);\s+base\.OnCreate\(savedInstanceState\);", activity);
 
         var advanced = Source("VPNRouter.Android", "AndroidApp.AdvancedShell.cs");
         Assert.Contains("RefreshMenuButtonAccessibility();", advanced, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UnnamedSubscriptionLabel_IsLocalized()
+    {
+        Assert.Equal("Unnamed subscription", Lookup(ru: false, () => Strings.SubscriptionWithoutName));
+        Assert.Equal("Подписка без названия", Lookup(ru: true, () => Strings.SubscriptionWithoutName));
     }
 
     [Fact]
