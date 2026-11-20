@@ -23,7 +23,7 @@ with their own changes.
 
 1. Leave the kebab popup in the accessibility tree and retire the legacy
    DEFCT-001 workaround. The crash on Android 12 used the reflected checked
-   setter in Avalonia 11.3.12. The pinned Avalonia 12.0.3 writes the Android
+   setter in Avalonia 11.3.12. The 12.0.3 baseline writes the Android
    accessibility node directly and has no reflection field to patch.
    [Avalonia 11.3.12 provider](https://github.com/AvaloniaUI/Avalonia/blob/11.3.12/src/Android/Avalonia.Android/Automation/ToggleNodeInfoProvider.cs)
    [Avalonia 12.0.3 provider](https://github.com/AvaloniaUI/Avalonia/blob/12.0.3/src/Android/Avalonia.Android/Automation/ToggleNodeInfoProvider.cs)
@@ -49,6 +49,11 @@ with their own changes.
    through `VPNRouter.Android/Localization.cs`.
 7. Add `AndroidAccessibilityLabelsTests` as a source-level regression guard for
    the wiring above. It does not prove runtime announcements.
+8. Advance the Android package references together from Avalonia 12.0.3 to
+   12.1.6 in a separate commit. The 12.0.4 PointToScreen fix is included in
+   this release. Test geometry and Home-opener visibility against the exact
+   12.0.3 baseline before attributing either result to the dependency.
+   [Avalonia screen-coordinate fix](https://github.com/AvaloniaUI/Avalonia/pull/21402)
 
 ## Invariants
 
@@ -57,7 +62,9 @@ with their own changes.
 - Appearance is unchanged: no size, padding, color, brush or layout edit.
 - Data, storage keys and localization refresh semantics are unchanged; the new
   strings follow the existing RU/EN switch and the existing language refresh.
-- No new dependency, no project or build change.
+- The follow-up changes only the Android Avalonia package versions.
+  The target framework, Android minimum API, desktop packages, and
+  application source remain unchanged.
 - The Advanced shell and overlays keep their current background behavior
   (A11Y-04 is out of scope).
 
@@ -147,5 +154,18 @@ involved.
 
 The first implementation is `b9531cd2` on PR #715. Review of the fallback at
 `5ff368c1` found both a startup order problem and the absent field on the
-pinned dependency. The follow-up removes the obsolete workaround and the
-popup suppression. Exact-head build and TalkBack acceptance are pending.
+pinned dependency. Exact APK `58c39869` removes the obsolete workaround and
+the popup suppression. On Android 14 ARM64, the popup exposed 14 focusable
+items and 3 section headers and survived 8 Home and 4 Advanced open/close
+cycles. The Advanced opener was named in RU and EN. The Home opener remained
+absent from the node tree. The Connect and popup bounds were 128 px above
+the painted controls, and tapping the center of a reported popup row could
+activate a different action. UIAutomator supplied the evidence. TalkBack
+was absent, so spoken and touch-exploration acceptance remains open.
+
+For the 12.1.6 APK, compare the node bounds to the visual bounds on the same
+emulator and confirm coordinate activation, the Home opener's RU/EN name and
+role, the popup before/open/after-close states, and crash-free repeated use.
+If geometry recovers and the Home opener is still absent, keep A11Y-01
+open and inspect the Home header's clipping and traversal. Repeat spoken
+acceptance separately with TalkBack installed.
