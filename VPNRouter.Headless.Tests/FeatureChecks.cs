@@ -35,7 +35,7 @@ public static class FeatureChecks
             await CheckAllowlistedSettingsAsync(tempDir);
             await CheckAppRoutingPreservedCasingAsync(tempDir);
             await CheckServerImportSelectRemoveAsync(tempDir);
-            await CheckChainedServerVerificationAsync(tempDir);
+            await CheckServerProbesRespectRouteAsync(tempDir);
             await CheckSubscriptionsWriteOnlyUrlsAsync(tempDir);
             await CheckFreeConfigsVerifiedOnlyApplyAsync(tempDir);
             await CheckCustomConfigsValidationAndStorageAsync(tempDir);
@@ -74,7 +74,7 @@ public static class FeatureChecks
         }
     }
 
-    private static async Task CheckChainedServerVerificationAsync(string baseDir)
+    private static async Task CheckServerProbesRespectRouteAsync(string baseDir)
     {
         var storage = new ConfigStorage(Path.Combine(baseDir, "verify-detour"));
         var settings = storage.GetSettings();
@@ -83,9 +83,22 @@ public static class FeatureChecks
             Name = "Chained fixture", Server = "192.0.2.1", Port = 443,
             DetourVia = "upstream-fixture"
         });
+        settings.Vless.Servers.Add(new VlessServerEntry
+        {
+            Name = "DNSTT fixture", Server = "192.0.2.2", Port = 53,
+            Protocol = "dnstt", Dnstt = new DnsttProfile()
+        });
         storage.SaveSettings(settings, storage.CurrentRevision);
         var feature = new ServerFeature(storage);
         var page = JsonSerializer.SerializeToElement(feature.List(ToJsonElement(new { })));
+        foreach (var item in page.GetProperty("items").EnumerateArray())
+        {
+            var probe = JsonSerializer.SerializeToElement(await feature.TestAsync(
+                ToJsonElement(new { id = item.GetProperty("id").GetString() }), CancellationToken.None));
+            Assert(probe.GetProperty("requiresTunnel").GetBoolean(), "Quick test must explicitly skip routes that require a tunnel");
+            Assert(!probe.GetProperty("reachable").GetBoolean(), "Quick test must not assert reachability of a skipped route");
+            Assert(probe.GetProperty("latencyMs").ValueKind == JsonValueKind.Null, "Skipped routes must not have a latency");
+        }
         var id = page.GetProperty("items")[0].GetProperty("id").GetString();
         var progress = false;
         var result = JsonSerializer.SerializeToElement(await feature.VerifyAsync(

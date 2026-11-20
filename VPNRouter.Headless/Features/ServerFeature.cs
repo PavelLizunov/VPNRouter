@@ -263,6 +263,9 @@ public sealed class ServerFeature
             throw new RouterException("not_found", "Server not found");
 
         var server = match.Server;
+        if (!string.IsNullOrEmpty(server.DetourVia) || server.Dnstt != null)
+            return new { id, reachable = false, latencyMs = (int?)null, requiresTunnel = true };
+
         var probe = await TcpTlsProbe.ProbeServerAsync(server, ct);
         var reachable = probe.Status is ServerProbeStatus.Ok
                                       or ServerProbeStatus.Slow

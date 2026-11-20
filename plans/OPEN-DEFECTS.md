@@ -17,6 +17,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 ## Open
 
 - [ ] **P2** — Omarchy installed backend predates DNSTT subscription capability. Its packaged core is 1.14.4-vpnctl.2, but the same live feed returns a DNSTT profile only for the newer capability request. New package and live UI acceptance are pending. See [2.51 phase](phase-omarchy-dnstt-hop-2.51-2026-11-20.md).
+- [ ] **P2** — Omarchy's quick server test probes a chained exit directly and cannot validate the selected path. Report when the route needs a tunnel instead of probing the exit or reporting a DNSTT resolver's reachability as VPN reachability. See [2.51 phase](phase-omarchy-dnstt-hop-2.51-2026-11-20.md).
 
 - [x] **P1** - Validate rollback before promoting the snapshot and retain the previous live tree and marker on relaunch failure (#661). RESOLVED in source. Rollback and repair, verified at `45a79762` in CI 44368002825.
 - [x] **P1** - Complete monitored startup before service acceptance, preserve native DNS rule fall-through, isolate the accepted import from edits, and retain explicit Stop ownership on refusal (#664). RESOLVED in source. Routing and service acceptance, verified at `45a79762` in CI 44368002825.
