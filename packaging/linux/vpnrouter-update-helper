@@ -47,6 +47,11 @@ tree_is_valid() {
     find -P "$path" \( ! -type f ! -type d -o -perm /6000 "$@" \) -exec /bin/false {} + -quit
 }
 
+installed_tree_is_valid() {
+    tree_is_valid "$1" -o ! -uid 0 -o -perm /022 \
+        -o -type d ! -perm -0555 -o -type f ! -perm -0444
+}
+
 directory="$DST"
 if [[ ! -e "$DST" && ! -L "$DST" && "$#" -eq 2 ]]; then
     directory="${DST%/*}"
@@ -99,6 +104,11 @@ if ! tree_is_valid "$stage/payload" -o ! -uid 0 -o -perm /022; then
     echo "Staged payload contains unsupported entries or could not be verified" >&2
     exit 5
 fi
+chmod -R u=rwX,go=rX -- "$stage/payload"
+if ! installed_tree_is_valid "$stage/payload"; then
+    echo "Staged payload is not readable by the desktop user" >&2
+    exit 5
+fi
 
 if [ "$#" -eq 6 ]; then
     CURRENT_HOST="$DST/VPNRouter.App"
@@ -114,7 +124,7 @@ fi
 
 cp -rfT --remove-destination -- "$stage/payload" "$DST"
 
-if ! trusted_directory "$DST"; then
+if ! trusted_directory "$DST" || ! installed_tree_is_valid "$DST"; then
     echo "Updated directory does not match the protected installation layout: $DST" >&2
     exit 3
 fi

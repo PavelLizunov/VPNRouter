@@ -142,6 +142,10 @@ public partial class UpdateChecker
         {
             VerifyPrivilegedUpdateTree(sourceDir, installed: false);
             VerifyPrivilegedUpdateTree(installDir, installed: true);
+            var (modeExit, _, _) = RunWithCapture(
+                "/bin/chmod", ["-R", "u=rwX,go=rX", "--", sourceDir], 30_000);
+            if (modeExit != 0)
+                throw new InvalidOperationException("Could not set readable permissions on the staged update.");
 
             const string helper = "/usr/libexec/vpnrouter-update-helper";
             var helperSupportsExactSignal = HelperSupportsExactOwnedSignal(helper);
@@ -176,6 +180,7 @@ public partial class UpdateChecker
                     throw new InvalidOperationException(
                         $"Update helper failed (exit {hExit}){hint}: {Truncate(hErr, 200)}".Trim());
                 }
+                VerifyPrivilegedUpdateTree(installDir, installed: true, requireReadable: true);
             }
         }
         else
@@ -285,8 +290,10 @@ public partial class UpdateChecker
 
         {
             var cpCmd = needsRoot ? pkexec! : "/bin/cp";
+            // Keep the root copy's umask independent of the caller; paths are positional arguments.
             var cpArgs = needsRoot
-                ? new[] { "/bin/cp", "-rfT", "--remove-destination", "--", sourceDir, installDir }
+                ? new[] { "/bin/sh", "-c", "umask 022; exec /bin/cp -rfT --remove-destination -- \"$@\"", "vpnrouter-copy",
+                    sourceDir, installDir }
                 : new[] { "-rfT", "--", sourceDir, installDir };
             var (cpExit, _, cpErr) = RunWithCapture(cpCmd, cpArgs, 120_000);
             log($"cp exit={cpExit} stderr={Truncate(cpErr)}");
@@ -305,7 +312,7 @@ public partial class UpdateChecker
 
         if (needsRoot)
         {
-            VerifyPrivilegedUpdateTree(installDir, installed: true);
+            VerifyPrivilegedUpdateTree(installDir, installed: true, requireReadable: true);
             VerifyPrivilegedUpdateDestination(installDir, executablePaths);
         }
 
@@ -339,7 +346,7 @@ public partial class UpdateChecker
         }
     }
 
-    private static void VerifyPrivilegedUpdateTree(string directory, bool installed)
+    private static void VerifyPrivilegedUpdateTree(string directory, bool installed, bool requireReadable = false)
     {
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
         if (installed && !LinuxDesktopPackage.IsTrustedPackageDirectory(root))
@@ -349,6 +356,9 @@ public partial class UpdateChecker
             "-o", "-perm", "/6000" };
         if (installed)
             arguments.AddRange(["-o", "!", "-uid", "0", "-o", "-perm", "/022"]);
+        if (requireReadable)
+            arguments.AddRange(["-o", "-type", "d", "!", "-perm", "-0555",
+                "-o", "-type", "f", "!", "-perm", "-0444"]);
         arguments.AddRange([")", "-exec", "/bin/false", "{}", "+", "-quit"]);
 
         var (exit, _, _) = RunWithCapture("/usr/bin/find", arguments, 30_000);

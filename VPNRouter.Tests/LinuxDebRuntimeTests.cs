@@ -75,7 +75,7 @@ public sealed class LinuxDebRuntimeTests
         }
 
         var updater = ReadRepositoryFile("VPNRouter.Core/Services/UpdateChecker.Apply.cs");
-        Assert.Contains("new[] { \"/bin/cp\", \"-rfT\"", updater);
+        Assert.Contains("umask 022; exec /bin/cp -rfT --remove-destination --", updater);
         Assert.Contains("new[] { \"/bin/chmod\", \"+x\"", updater);
         Assert.Contains("cp -rfT --remove-destination -- \"$stage/payload\" \"$DST\"", helper);
         Assert.Contains("VerifyPrivilegedUpdateTree(sourceDir, installed: false)", updater);
@@ -105,6 +105,9 @@ public sealed class LinuxDebRuntimeTests
 
             File.CreateSymbolicLink(link, runtime);
             Assert.False(LinuxDesktopPackage.IsTrustedPackagePath(link, directory: false));
+            var directoryLink = Path.Combine(root, "directory-link");
+            Directory.CreateSymbolicLink(directoryLink, "/");
+            Assert.False(LinuxDesktopPackage.IsTrustedPackageDirectory(directoryLink + "/"));
             Assert.Null(LinuxDesktopPackage.TryGetProtectedRuntimePath(
                 root, root, LinuxDesktopPackage.IsTrustedPackagePath));
         }

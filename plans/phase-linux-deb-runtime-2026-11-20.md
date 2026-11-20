@@ -61,6 +61,17 @@ package-owned `/opt/vpnrouter/sing-box` directly.
   symlink rejection, FIFO rejection, writable-directory rejection, update
   with a valid payload, and private staging cleanup. The fixture ran without
   elevation or real capability changes.
+- Exact `40121a45` passed all nine PR checks. Its review found that updates
+  could copy private `0600` files as root and leave the relaunched desktop
+  application unable to read them. Normalize package and update modes, keep
+  executable bits, and check installed readability before declaring success.
+- The committed unprivileged helper fixture exercises `umask 077` with a
+  private source tree. It verifies `0644` data files, `0755` directories
+  and executables, link rejection, staged cleanup and stubbed capability
+  verification. Both fixture cases passed locally and run in PR CI.
+- The legacy inline copy still takes a same-user staging tree and replaces
+  individual files. Root-side verification of payload authenticity and
+  whole-install rollback are separate work.
 - Reviewed the separate ownership prototype `9633bdab`. Its receipt fallback
   reached the signal, cleanup and update paths even when the executable could
   not be independently identified. The prototype stays separate. Use the
