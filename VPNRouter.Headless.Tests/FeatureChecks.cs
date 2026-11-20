@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -76,30 +78,52 @@ public static class FeatureChecks
 
     private static async Task CheckServerProbesRespectRouteAsync(string baseDir)
     {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         var storage = new ConfigStorage(Path.Combine(baseDir, "verify-detour"));
         var settings = storage.GetSettings();
-        settings.Vless.Servers.Add(new VlessServerEntry
-        {
-            Name = "Chained fixture", Server = "192.0.2.1", Port = 443,
-            DetourVia = "upstream-fixture"
-        });
-        settings.Vless.Servers.Add(new VlessServerEntry
-        {
-            Name = "DNSTT fixture", Server = "192.0.2.2", Port = 53,
-            Protocol = "dnstt", Dnstt = new DnsttProfile()
-        });
+        settings.Vless.Servers.AddRange([
+            new() { Name = "Chained", Server = "127.0.0.1", Port = port, DetourVia = "upstream-fixture" },
+            new() { Name = "DNSTT", Server = "127.0.0.1", Port = port, Protocol = "dnstt" },
+            new() { Name = "Typed DNSTT", Server = "127.0.0.1", Port = port, Dnstt = new DnsttProfile() },
+            new() { Name = "Direct", Server = "127.0.0.1", Port = port }
+        ]);
         storage.SaveSettings(settings, storage.CurrentRevision);
         var feature = new ServerFeature(storage);
         var page = JsonSerializer.SerializeToElement(feature.List(ToJsonElement(new { })));
-        foreach (var item in page.GetProperty("items").EnumerateArray())
+        var ids = page.GetProperty("items").EnumerateArray()
+            .ToDictionary(item => item.GetProperty("name").GetString()!, item => item.GetProperty("id").GetString());
+        Assert(ids.Count == 4, "Every quick-test fixture must be listed");
+        foreach (var name in new[] { "Chained", "DNSTT", "Typed DNSTT" })
         {
             var probe = JsonSerializer.SerializeToElement(await feature.TestAsync(
-                ToJsonElement(new { id = item.GetProperty("id").GetString() }), CancellationToken.None));
+                ToJsonElement(new { id = ids[name] }), CancellationToken.None));
             Assert(probe.GetProperty("requiresTunnel").GetBoolean(), "Quick test must explicitly skip routes that require a tunnel");
             Assert(!probe.GetProperty("reachable").GetBoolean(), "Quick test must not assert reachability of a skipped route");
             Assert(probe.GetProperty("latencyMs").ValueKind == JsonValueKind.Null, "Skipped routes must not have a latency");
+            Assert(!listener.Pending(), "Quick test must not connect directly for a tunnel-dependent route");
         }
-        var id = page.GetProperty("items")[0].GetProperty("id").GetString();
+        var id = ids["Chained"];
+        var cancelled = false;
+        try
+        {
+            await feature.TestAsync(ToJsonElement(new { id }), new CancellationToken(canceled: true));
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+        }
+        Assert(cancelled, "Cancelled quick test must report cancellation even for a skipped route");
+
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var incoming = listener.AcceptTcpClientAsync(budget.Token);
+        var direct = JsonSerializer.SerializeToElement(await feature.TestAsync(
+            ToJsonElement(new { id = ids["Direct"] }), budget.Token));
+        using var connection = await incoming;
+        Assert(direct.GetProperty("reachable").GetBoolean(), "Ordinary quick test must still connect");
+        Assert(!direct.TryGetProperty("requiresTunnel", out _), "Ordinary quick test must retain its previous response fields");
+
         var progress = false;
         var result = JsonSerializer.SerializeToElement(await feature.VerifyAsync(
             ToJsonElement(new { id }), _ => progress = true, CancellationToken.None));

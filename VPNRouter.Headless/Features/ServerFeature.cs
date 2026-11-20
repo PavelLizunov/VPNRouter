@@ -262,8 +262,10 @@ public sealed class ServerFeature
         if (match.Server == null)
             throw new RouterException("not_found", "Server not found");
 
+        ct.ThrowIfCancellationRequested();
         var server = match.Server;
-        if (!string.IsNullOrEmpty(server.DetourVia) || server.Dnstt != null)
+        if (!string.IsNullOrEmpty(server.DetourVia) || server.Dnstt != null ||
+            string.Equals(server.Protocol, "dnstt", StringComparison.OrdinalIgnoreCase))
             return new { id, reachable = false, latencyMs = (int?)null, requiresTunnel = true };
 
         var probe = await TcpTlsProbe.ProbeServerAsync(server, ct);
