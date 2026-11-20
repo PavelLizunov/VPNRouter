@@ -77,6 +77,10 @@ builds that run outside that protected layout provision a copy into
 ~/.config/vpnrouter/bin/ on first run and use the pkexec fallback unless you
 apply the optional setcap command above.
 
+System-wide tar.gz installations require root-owned directories with no
+group or other write permission for in-app updates. If /usr/local permits
+staff group writes, update by reinstalling from the archive.
+
 
 What's not in this BETA
 -----------------------

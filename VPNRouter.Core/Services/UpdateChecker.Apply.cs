@@ -140,6 +140,9 @@ public partial class UpdateChecker
 
         if (needsRoot)
         {
+            VerifyPrivilegedUpdateTree(sourceDir, installed: false);
+            VerifyPrivilegedUpdateTree(installDir, installed: true);
+
             const string helper = "/usr/libexec/vpnrouter-update-helper";
             var helperSupportsExactSignal = HelperSupportsExactOwnedSignal(helper);
             if (!helperSupportsExactSignal)
@@ -166,7 +169,7 @@ public partial class UpdateChecker
                         2   => " (helper: bad arguments)",
                         3   => " (helper: refused destination for safety)",
                         4   => " (helper: staging dir missing or not a directory)",
-                        5   => " (helper: source missing VPNRouter.App)",
+                        5   => " (helper: update files missing or unsupported)",
                         6   => " (helper: exact owned sing-box stop failed)",
                         _   => ""
                     };
@@ -283,7 +286,7 @@ public partial class UpdateChecker
         {
             var cpCmd = needsRoot ? pkexec! : "/bin/cp";
             var cpArgs = needsRoot
-                ? new[] { "/bin/cp", "-rfT", "--", sourceDir, installDir }
+                ? new[] { "/bin/cp", "-rfT", "--remove-destination", "--", sourceDir, installDir }
                 : new[] { "-rfT", "--", sourceDir, installDir };
             var (cpExit, _, cpErr) = RunWithCapture(cpCmd, cpArgs, 120_000);
             log($"cp exit={cpExit} stderr={Truncate(cpErr)}");
@@ -301,7 +304,10 @@ public partial class UpdateChecker
         }
 
         if (needsRoot)
+        {
+            VerifyPrivilegedUpdateTree(installDir, installed: true);
             VerifyPrivilegedUpdateDestination(installDir, executablePaths);
+        }
 
         try
         {
@@ -331,6 +337,25 @@ public partial class UpdateChecker
                 log($"WARNING: could not verify package runtime capabilities: {ex.Message}");
             }
         }
+    }
+
+    private static void VerifyPrivilegedUpdateTree(string directory, bool installed)
+    {
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+        if (installed && !LinuxDesktopPackage.IsTrustedPackageDirectory(root))
+            throw new InvalidOperationException("The privileged update destination is not a protected directory.");
+
+        var arguments = new List<string> { "-P", root, "(", "!", "-type", "f", "!", "-type", "d",
+            "-o", "-perm", "/6000" };
+        if (installed)
+            arguments.AddRange(["-o", "!", "-uid", "0", "-o", "-perm", "/022"]);
+        arguments.AddRange([")", "-exec", "/bin/false", "{}", "+", "-quit"]);
+
+        var (exit, _, _) = RunWithCapture("/usr/bin/find", arguments, 30_000);
+        if (exit != 0)
+            throw new InvalidOperationException(installed
+                ? "The privileged update destination contains untrusted files."
+                : "The update payload contains unsupported files.");
     }
 
     private static void VerifyPrivilegedUpdateDestination(string installDir, IEnumerable<string> paths)

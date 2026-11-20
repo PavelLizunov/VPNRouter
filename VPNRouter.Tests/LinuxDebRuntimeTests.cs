@@ -77,6 +77,9 @@ public sealed class LinuxDebRuntimeTests
         var updater = ReadRepositoryFile("VPNRouter.Core/Services/UpdateChecker.Apply.cs");
         Assert.Contains("new[] { \"/bin/cp\", \"-rfT\"", updater);
         Assert.Contains("new[] { \"/bin/chmod\", \"+x\"", updater);
+        Assert.Contains("cp -rfT --remove-destination -- \"$stage/payload\" \"$DST\"", helper);
+        Assert.Contains("VerifyPrivilegedUpdateTree(sourceDir, installed: false)", updater);
+        Assert.Contains("VerifyPrivilegedUpdateTree(installDir, installed: true)", updater);
         Assert.Contains("needsRoot && LinuxDesktopPackage.TryGetProtectedRuntimePath(installDir)", updater);
         Assert.Contains("RunWithCapture(pkexec!, [setcap, caps, runtime]", updater);
         Assert.Contains("RunWithCapture(setcap, [\"-q\", \"-v\", caps, runtime]", updater);

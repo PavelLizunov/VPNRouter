@@ -19,7 +19,13 @@ package-owned `/opt/vpnrouter/sing-box` directly.
   package runtime. Existing capability grants are unchanged.
 - The package scripts verify root ownership, file type and permissions before
   privileged operations on the runtime. The inline updater uses absolute
-  program paths. The release build inspects the assembled Debian archive.
+  paths for privileged commands. The release build inspects the assembled
+  Debian archive.
+- The package updater rejects links and special files throughout the payload
+  and requires a protected installation tree. The installed helper validates
+  a private root-owned copy before it updates the installation. The inline
+  compatibility path checks the source and destination and replaces file
+  entries rather than writing through them.
 - Excludes Omarchy UI, DNSTT, macOS, deployment and builds.
 
 ## Invariants
@@ -46,6 +52,21 @@ package-owned `/opt/vpnrouter/sing-box` directly.
 - An offline shell fixture with inert files and a stub for `setcap` verified
   that both scripts accept a protected file and skip capability operations
   for symlinks, writable files, and writable parent directories.
+- Exact `d14be80d` passed all nine PR checks. The Debian package build and
+  installed-runtime checks are separate gates. Independent review confirmed
+  the path guards and recommended extending the checks to the full update
+  tree, correcting the source-rejection message, and documenting the
+  `/usr/local` directory requirement.
+- The follow-up offline helper fixture passed nested source and destination
+  symlink rejection, FIFO rejection, writable-directory rejection, update
+  with a valid payload, and private staging cleanup. The fixture ran without
+  elevation or real capability changes.
+- Reviewed the separate ownership prototype `9633bdab`. Its receipt fallback
+  reached the signal, cleanup and update paths even when the executable could
+  not be independently identified. The prototype stays separate. Use the
+  owning process handle for capability-mode stop and keep external signaling
+  dependent on a live image check. Any receipt-based status evidence must
+  remain display-only and scoped to the protected desktop package.
 - Build, full tests and live `.deb` acceptance must run on an authorized worker
   or CI; no local build was performed for this isolated task.
 

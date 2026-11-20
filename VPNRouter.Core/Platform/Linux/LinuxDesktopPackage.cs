@@ -54,7 +54,7 @@ internal static class LinuxDesktopPackage
             return false;
 
         isTrustedPath ??= IsTrustedPackagePath;
-        string? current = directory;
+        string? current = Path.TrimEndingDirectorySeparator(directory);
         while (!string.IsNullOrEmpty(current))
         {
             if (!isTrustedPath(current, true))

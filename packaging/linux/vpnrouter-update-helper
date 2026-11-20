@@ -25,6 +25,7 @@ case "$DST" in
         ;;
 esac
 DST="${DST%/}"
+SRC="${SRC%/}"
 
 root_owned_and_protected() {
     local metadata
@@ -38,6 +39,12 @@ trusted_directory() {
 
 trusted_file() {
     [[ ! -L "$1" && -f "$1" ]] && root_owned_and_protected "$1"
+}
+
+tree_is_valid() {
+    local path="$1"
+    shift
+    find -P "$path" \( ! -type f ! -type d -o -perm /6000 "$@" \) -exec /bin/false {} + -quit
 }
 
 directory="$DST"
@@ -54,9 +61,18 @@ while true; do
     directory="${directory:-/}"
 done
 
-if [[ ! -d "$SRC" || -L "${SRC%/}" ]]; then
+if [[ "$SRC" != /* || "$SRC" == */ || ! -d "$SRC" || -L "$SRC" ]]; then
     echo "Source is not a directory: $SRC" >&2
     exit 4
+fi
+
+if ! tree_is_valid "$SRC"; then
+    echo "Source contains unsupported entries or could not be verified" >&2
+    exit 5
+fi
+if [[ -d "$DST" ]] && ! tree_is_valid "$DST" -o ! -uid 0 -o -perm /022; then
+    echo "Refusing to update an untrusted installation tree" >&2
+    exit 3
 fi
 
 if [ ! -f "$SRC/VPNRouter.App" ] && [ ! -f "$SRC/VPNRouter.App.dll" ]; then
@@ -76,6 +92,14 @@ for filename in VPNRouter.App VPNRouter.App.dll sing-box; do
     fi
 done
 
+stage=$(mktemp -d "${DST%/*}/.vpnrouter-update.XXXXXXXX")
+trap 'rm -rf -- "$stage"' EXIT
+cp -rT -- "$SRC" "$stage/payload"
+if ! tree_is_valid "$stage/payload" -o ! -uid 0 -o -perm /022; then
+    echo "Staged payload contains unsupported entries or could not be verified" >&2
+    exit 5
+fi
+
 if [ "$#" -eq 6 ]; then
     CURRENT_HOST="$DST/VPNRouter.App"
     if ! trusted_file "$CURRENT_HOST" || [ ! -x "$CURRENT_HOST" ]; then
@@ -88,7 +112,7 @@ if [ "$#" -eq 6 ]; then
     fi
 fi
 
-cp -rfT -- "$SRC" "$DST"
+cp -rfT --remove-destination -- "$stage/payload" "$DST"
 
 if ! trusted_directory "$DST"; then
     echo "Updated directory does not match the protected installation layout: $DST" >&2
@@ -107,7 +131,7 @@ for filename in VPNRouter.App sing-box; do
 done
 
 CAPABILITIES=cap_net_admin,cap_net_bind_service=+eip
-if [ -f "$DST/sing-box" ]; then
+if trusted_file "$DST/sing-box"; then
     if ! setcap "$CAPABILITIES" "$DST/sing-box" || ! setcap -q -v "$CAPABILITIES" "$DST/sing-box"; then
         printf '%s\n' 'VPNRouter: could not verify sing-box capabilities. Connecting may require polkit authentication.' >&2
     fi
