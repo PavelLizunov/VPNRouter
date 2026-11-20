@@ -109,5 +109,7 @@ public static partial class Strings
         : "The selected server could not be saved. Check access to the settings folder.";
     public static string BusinessDiagnosticsReceived => Ru ? "Отчёт получен." : "Report received.";
     public static string BusinessDiagnosticsReplyPending => Ru ? "Отчёт получен. Получаем короткий ответ…" : "Report received. Getting a short reply…";
+    public static string BusinessDiagnosticsReplyQueued => Ru ? "Отчёт получен. Разбор ещё готовится." : "Report received. Analysis is still pending.";
+    public static string BusinessDiagnosticsReplyWaitCancelled => Ru ? "Отчёт получен. Ожидание разбора отменено." : "Report received. Waiting for analysis was cancelled.";
     public static string BusinessDiagnosticsReplyUnavailable => Ru ? "Отчёт получен. Краткий разбор сейчас недоступен." : "Report received. A short analysis is currently unavailable.";
 }

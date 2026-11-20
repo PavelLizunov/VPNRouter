@@ -72,7 +72,7 @@ class WorkerTests(unittest.TestCase):
         return receipt
 
     def metadata(self):
-        return json.loads((self.root / (self.receipt['report_id'] + '.json')).read_text())
+        return json.loads((self.root / (self.receipt['report_id'] + '.json')).read_bytes())
 
     def test_ready_idempotent_preserves_original_fields_and_retention(self):
         path = self.root / (self.receipt['report_id'] + '.json')
@@ -90,6 +90,49 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(metadata['diagnosis']['provenance']['returned_model'], 'synthetic-model-revision')
         self.assertEqual(analyzer.run_once(self.root, self.config, provider)['state'], 'idle')
         self.assertEqual(len(calls), 1)
+
+    def test_public_receipt_follows_the_worker_from_queue_to_ready(self):
+        store = receiver.Store(self.root, self.keys, "127.0.0.1")
+        report_id = self.receipt['report_id']
+        self.assertEqual(store.receipt(report_id, self.identity)['analysis']['state'], 'unavailable')
+        store.inbox = (self.identity, 'synthetic-service-token')
+        self.assertEqual(store.receipt(report_id, self.identity)['analysis']['state'], 'pending')
+        self.assertIsNone(store.receipt(report_id, 'b' * 64))
+
+        def provider(config, packet):
+            self.assertEqual(store.receipt(report_id, self.identity)['analysis']['state'], 'pending')
+            return result(), 'synthetic-model'
+
+        self.assertEqual(analyzer.run_once(self.root, self.config, provider)['state'], 'ready')
+        self.assertEqual(store.receipt(report_id, self.identity)['analysis'], result()['public_analysis'])
+
+    def test_large_valid_russian_result_fits_the_utf8_receipt(self):
+        candidate = result()
+        statement = ('Для проверки нужно сопоставить время подключения и состояние туннеля. ' * 30)[:1016]
+        candidate['unknown'] = [{
+            'statement': statement,
+            'time_scope': 'unknown',
+            'evidence': [{'kind': 'packet', 'field': 'received_utc'}],
+        } for _ in range(12)]
+        self.assertLess(len(analyzer.encode(candidate)), analyzer.MAX_RESULT)
+        self.assertGreater(
+            len(json.dumps(candidate, ensure_ascii=True).encode()), receiver.MAX_RECEIPT + 1024)
+
+        path = self.root / (self.receipt['report_id'] + '.json')
+        before = path.stat().st_mtime_ns
+        outcome = analyzer.run_once(self.root, self.config, lambda *_: (candidate, 'synthetic-model'))
+        self.assertEqual(outcome['state'], 'ready')
+        self.assertEqual(path.stat().st_mtime_ns, before)
+        self.assertLessEqual(path.stat().st_size, receiver.MAX_RECEIPT)
+        saved = receiver.load_receipt(self.root, self.receipt['report_id'], self.identity)
+        self.assertEqual(saved['diagnosis']['result'], candidate)
+        self.assertEqual(saved['analysis'], candidate['public_analysis'])
+
+    def test_legacy_receipt_with_surrogate_remains_readable(self):
+        receipt = dict(self.receipt, untouched_extension={'legacy': 'text\ud800'})
+        receiver.update_receipt(self.root, self.receipt['report_id'], receipt)
+        saved = receiver.load_receipt(self.root, self.receipt['report_id'], self.identity)
+        self.assertEqual(saved, receipt)
 
     def test_historical_crash_does_not_prove_current_runtime(self):
         packet, refs, names = analyzer.prepare(self.root, self.receipt, self.config)
@@ -487,9 +530,10 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(store.reserve(self.identity, receiver.MAX_BODY))
         incoming = self.root / 'incoming-aaaaaaaa'
         incoming.write_bytes(b'partial upload')
-        changed = dict(self.receipt, diagnosis={'state': 'pending', 'generation': 1})
+        changed = dict(self.receipt, employee='Тестовая запись',
+                       diagnosis={'state': 'pending', 'generation': 1})
         used = sum(p.stat().st_size for p in self.root.iterdir() if p.is_file())
-        required = len(json.dumps(changed, ensure_ascii=True).encode())
+        required = len(json.dumps(changed, ensure_ascii=False).encode("utf-8"))
         before = (self.root / (self.receipt['report_id'] + '.json')).read_bytes()
         try:
             with store.lock, self.assertRaises(OSError):

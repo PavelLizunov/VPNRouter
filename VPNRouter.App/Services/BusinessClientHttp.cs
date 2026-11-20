@@ -9,10 +9,12 @@ internal sealed class BusinessClientHttp : IDisposable
 {
     private readonly HttpClient _http;
     private readonly bool _ownsClient;
+    private readonly TimeProvider _timeProvider;
 
-    internal BusinessClientHttp(HttpClient? http = null)
+    internal BusinessClientHttp(HttpClient? http = null, TimeProvider? timeProvider = null)
     {
         _ownsClient = http == null;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _http = http ?? new HttpClient(new SocketsHttpHandler
         {
             AllowAutoRedirect = false, UseCookies = false,
@@ -67,23 +69,46 @@ internal sealed class BusinessClientHttp : IDisposable
         try
         {
             acknowledged?.Invoke();
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(8));
-            var reply = await ReadSupportReplyAsync(response, timeout.Token).ConfigureAwait(false);
+            BusinessSupportReply reply;
+            using (var receiptDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(8), _timeProvider))
+            using (var receipt = CancellationTokenSource.CreateLinkedTokenSource(ct, receiptDeadline.Token))
+                reply = await ReadSupportReplyAsync(response, receipt.Token).ConfigureAwait(false);
             if (reply.State != "pending") return reply;
             if (reply.ReportId == null) return BusinessSupportReply.Unavailable;
+
             // Only append a validated ID to the configured endpoint; never accept a server URL.
             var pollUri = new UriBuilder(endpoint) { Path = endpoint.AbsolutePath.TrimEnd('/') + "/" + reply.ReportId + "/analysis" }.Uri;
-            for (var attempt = 0; attempt < 3; attempt++)
+            using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2), _timeProvider);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
+            try
             {
-                await Task.Delay(TimeSpan.FromSeconds(1), timeout.Token).ConfigureAwait(false);
-                using var poll = new HttpRequestMessage(HttpMethod.Get, pollUri);
-                poll.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                using var result = await _http.SendAsync(poll, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
-                if (!result.IsSuccessStatusCode) break;
-                reply = await ReadSupportReplyAsync(result, timeout.Token).ConfigureAwait(false);
-                if (reply.State != "pending") return reply;
+                while (reply.State == "pending")
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), _timeProvider, timeout.Token).ConfigureAwait(false);
+                    using var poll = new HttpRequestMessage(HttpMethod.Get, pollUri);
+                    poll.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    try
+                    {
+                        using var result = await _http.SendAsync(poll, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+                        if ((int)result.StatusCode == 429 || (int)result.StatusCode >= 500) continue;
+                        if (!result.IsSuccessStatusCode) return BusinessSupportReply.Unavailable;
+                        reply = await ReadSupportReplyAsync(result, timeout.Token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (!timeout.IsCancellationRequested && ex is HttpRequestException or IOException)
+                    {
+                        // The next bounded poll can recover a transient transport failure.
+                    }
+                }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return reply with { State = "wait_cancelled" };
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                return reply with { State = "queued" };
+            }
+            return reply;
         }
         catch { /* Optional analysis must never reverse an acknowledged upload. */ }
         return BusinessSupportReply.Unavailable;

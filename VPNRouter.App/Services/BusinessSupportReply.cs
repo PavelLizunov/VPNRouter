@@ -13,7 +13,9 @@ internal sealed record BusinessSupportReply(string State, string? MessageRu = nu
     {
         "legacy" => Strings.BusinessDiagnosticsDelivered,
         "pending" => Strings.BusinessDiagnosticsReplyPending,
-        "ready" when (Strings.Lang.Equals("ru", StringComparison.OrdinalIgnoreCase) ? MessageRu : MessageEn) is { } text
+        "queued" => Strings.BusinessDiagnosticsReplyQueued,
+        "wait_cancelled" => Strings.BusinessDiagnosticsReplyWaitCancelled,
+        "ready" when (Strings.Lang.Equals("ru", StringComparison.OrdinalIgnoreCase) ? MessageRu ?? MessageEn : MessageEn ?? MessageRu) is { } text
             => Strings.BusinessDiagnosticsReceived + " " + text,
         _ => Strings.BusinessDiagnosticsReplyUnavailable
     };

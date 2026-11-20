@@ -209,7 +209,7 @@ def load_receipt(root, report_id, identity, now=None):
 def update_receipt(root, report_id, value, quota=QUOTA):
     path = Path(root) / (report_id + ".json")
     info = path.stat()
-    raw = json.dumps(value, ensure_ascii=True).encode()
+    raw = json.dumps(value, ensure_ascii=False).encode("utf-8", errors="backslashreplace")
     if len(raw) > MAX_RECEIPT:
         raise ValueError("receipt too large")
     used = sum(p.stat().st_size for p in Path(root).iterdir()
@@ -218,7 +218,7 @@ def update_receipt(root, report_id, value, quota=QUOTA):
     # Keep capacity for every bounded streaming request, including its metadata.
     if used + len(raw) + UPLOAD_HEADROOM > quota:
         raise OSError("storage quota")
-    atomic_json(path, value, preserved_ns=(info.st_atime_ns, info.st_mtime_ns))
+    atomic_bytes(path, raw, preserved_ns=(info.st_atime_ns, info.st_mtime_ns))
 
 
 def report_summary(receipt):
@@ -312,8 +312,14 @@ class Store:
             if (isinstance(receipt, dict) and receipt.get("identity") == identity and
                     receipt.get("report_id") == report_id and
                     not archive.is_symlink() and archive.is_file()):
+                analysis = receipt.get("analysis")
+                job = receipt.get("diagnosis")
+                state = job.get("state") if isinstance(job, dict) else None
+                if (analysis is None and self.inbox and identity == self.inbox[0] and
+                        state in (None, "received", "running", "pending")):
+                    analysis = {"version": 1, "state": "pending"}
                 return {"stored": True, "report_id": report_id,
-                        "analysis": public_analysis(receipt.get("analysis"))}
+                        "analysis": public_analysis(analysis)}
         except (OSError, ValueError, UnicodeError, RecursionError):
             pass
         return None
@@ -613,12 +619,16 @@ def sync_directory(path):
 
 
 def atomic_json(path, value, preserved_ns=None):
+    atomic_bytes(path, json.dumps(value).encode("utf-8"), preserved_ns)
+
+
+def atomic_bytes(path, raw, preserved_ns=None):
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+        with tempfile.NamedTemporaryFile(mode="wb", dir=path.parent,
                                          prefix="incoming-", delete=False) as stream:
             temporary = Path(stream.name)
-            json.dump(value, stream)
+            stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
         if preserved_ns is not None:
