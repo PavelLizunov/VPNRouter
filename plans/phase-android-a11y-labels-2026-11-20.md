@@ -297,3 +297,27 @@ changes and open each menu at the top. A keyboard-only height change does
 not dismiss it. Verify dismissal and reopening in both rotation directions,
 scroll to the bottom before switching modes, and check both reopeners start
 at the top. Retain the ordinary scrolling, dismissal and bounds checks.
+With TalkBack enabled, rotate with the menu open and verify that focus
+returns to a visible page control. Reopen from the menu button and verify
+that the menu items are announced.
+
+### Final ARM64 APK result
+
+All eight CI checks passed at `e406a566`. Android compile run `44812221490`
+produced artifact `14667646862`. The APK and installed `base.apk` both hashed
+to `85a56e061c22591e13338d3754c97f91b1c33f12d659f8c31ba5bf0e09132303`.
+On Android 14 (API 34), both rotation directions dismissed the popup from
+Home and Advanced in RU and EN without a stale host or action nodes. Each
+reopen started at the top, including after scrolling to the bottom and
+switching modes. The menu remained a single subtree inside the system bars.
+Boundary swipes left the background fixed. Back, outside taps and portrait
+IME input passed. The three corrected harness stages had zero failures.
+The test ran offline in an isolated ARM64 emulator clone. Teardown removed
+the clone and private ADB; the seven original AVD files kept their digests
+and mtimes. The owner bundle `715/e406a566` holds the receipt, harness runs,
+node dumps, screenshots and checksums.
+
+The image has no TalkBack service, so spoken labels, traversal and focus
+return remain open. These observations cover fullscreen Android 14; the
+upstream view-origin fix is still needed to retire the workaround and verify
+nonzero-origin windows.
