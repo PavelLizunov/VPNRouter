@@ -608,6 +608,11 @@ with that verified interface. Fixed in 4ad09f87: regression code is in LinuxDnsH
 - [ ] **P3** - The VLESS import form also deletes the selected server. Move deletion to the existing row button and preserve its command and persistence. Source change under review in #692.
 - [ ] **P3** - At 360 px the Russian protocol-use badge overlaps ping in the Standard server row (CI run 44194961677). The follow-up in #692 gives metadata its own row.
 
+## Standard Simple subscription controls (2026-11-20)
+
+- [x] **P2** - The expanded Simple server picker now exposes ping, deep verification and refresh for enabled feeds. The headless control fixture passed on Windows and Ubuntu. Release pending.
+- [ ] **P2** - Owner report on v2.50.6-r3: a selected DNSTT profile timed out during desktop startup. Affected Windows confirmed the readiness deadline after core startup. DNSTT now checks two destinations through the exact proxy with bounded budgets. Candidate validation on the affected host is pending.
+
 ## DNSTT subscription integration (2026-11-19)
 
 - [x] **P1** - #705 review: the generated SSH proxy was omitted by pre-start recognition. The generated-chain fixture now crosses the runtime sanity check.

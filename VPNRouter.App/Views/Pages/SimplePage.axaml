@@ -578,7 +578,8 @@
                             AutomationProperties.Name="{Binding L_SmpCtaWait}">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Arc Classes="spinner"
-                                 Classes.spin="{Binding SimpleCtaIsConnecting}"
+                                 Classes.spin="{Binding SmpHeroIsBusy}"
+                                 IsVisible="{Binding SmpHeroIsBusy}"
                                  Width="16" Height="16" StrokeThickness="2"
                                  VerticalAlignment="Center">
                                 <Arc.RenderTransform>
@@ -658,10 +659,13 @@
                                                 <icons:ProtocolDisc Width="22" Height="22" GlyphSize="13" CornerRadius="11"
                                                                     Group="{Binding ProtocolGroup}"
                                                                     ToolTip.Tip="{Binding ProtocolUseCaseTooltip}"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           VerticalAlignment="Center"
-                                                           ToolTip.Tip="{Binding DisplayName}"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                                               ToolTip.Tip="{Binding DisplayName}"/>
+                                                    <TextBlock Classes="hint" Text="{Binding HealthVerdictText}"
+                                                               IsVisible="{Binding HasHealthVerdict}"
+                                                               ToolTip.Tip="{Binding HealthTooltip}"/>
+                                                </StackPanel>
                                                 <TextBlock Grid.Column="2" Text="{Binding PingDisplay}"
                                                            FontSize="{StaticResource FsXs}"
                                                            VerticalAlignment="Center"
@@ -672,6 +676,42 @@
                                 </ListBox>
                                 <TextBlock Classes="hint" Text="{Binding L_SmpPickServerHint}"/>
                             </StackPanel>
+                            <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
+                                <Button Name="SimplePing" Content="{Binding SmpPingButtonText}"
+                                        Command="{Binding TestAllSubscriptionServersCommand}"
+                                        IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
+                                        IsVisible="{Binding SmpHasSubscriptionServers}"
+                                        ToolTip.Tip="{Binding L_TipTestAllServers}"/>
+                                <Button Name="SimpleDeepCheck" Content="{Binding ServerDeepButtonText}"
+                                        Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
+                                        IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
+                                        IsVisible="{Binding SmpHasSubscriptionServers}"
+                                        ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
+                                <Button Name="SimpleRefreshSubscriptions" Content="{Binding L_SmpRefreshSubscriptions}"
+                                        Command="{Binding RefreshAllSubscriptionsCommand}"
+                                        IsVisible="{Binding SmpHasRefreshableSubscriptions}"
+                                        IsEnabled="{Binding SmpCanRefreshSubscriptions}"/>
+                            </WrapPanel>
+                            <TextBlock Classes="hint" Text="{Binding L_SubsRefreshing}"
+                                       IsVisible="{Binding SmpSubscriptionsRefreshing}"/>
+                            <TextBlock Classes="hint" Text="{Binding SubscriptionTestProgressText}"
+                                       IsVisible="{Binding SubscriptionTestProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            <TextBlock Classes="hint" Text="{Binding SubscriptionTestImplausibleWarning}"
+                                       IsVisible="{Binding SubscriptionTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            <TextBlock Classes="hint" Text="{Binding SubscriptionDeepProgressText}"
+                                       IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            <ItemsControl ItemsSource="{Binding Subscriptions}"
+                                          IsVisible="{Binding SmpHasRefreshableSubscriptions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:SubscriptionViewModel">
+                                        <Panel IsVisible="{Binding Enabled}">
+                                            <TextBlock Classes="hint" Text="{Binding StatusBadge}"
+                                                       IsVisible="{Binding LastRefreshFailed}"
+                                                       ToolTip.Tip="{Binding Name}"/>
+                                        </Panel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" Margin="0,4,0,0"/>
                             <TextBox Text="{Binding SmpInput}"
                                      PlaceholderText="{Binding L_SmpInputWatermark}"

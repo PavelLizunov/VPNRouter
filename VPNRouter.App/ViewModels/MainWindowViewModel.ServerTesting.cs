@@ -27,7 +27,12 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ServerTestButtonText))]
+    [NotifyPropertyChangedFor(nameof(SmpPingButtonText))]
     private bool _isTestingServers;
+
+    public string SmpPingButtonText => IsTestingServers
+        ? Strings.ServerTestCancel
+        : Core.Localization.Strings.SmpCheckPing;
 
     public string ServerTestButtonText => IsTestingServers
         ? Strings.ServerTestCancel

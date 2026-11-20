@@ -212,6 +212,117 @@ public sealed class SubscriptionChainRefreshTests : IDisposable
         Assert.Equal(SubscriptionEntry.RowKey(ServerUriParser.Parse(Exit())), recovered.App.ActiveSubscriptionRow);
     }
 
+    [AvaloniaFact]
+    public async Task RefreshAllSkipsTheFeedAlreadyBeingRefreshedAndUpdatesTheOthers()
+    {
+        var settings = SavedChain();
+        settings.App.Subscriptions.Add(new SubscriptionEntry { Url = Other, Name = "other" });
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = Editor(store);
+        var source = vm.Subscriptions.Single(s => s.Url == Feed);
+        var other = vm.Subscriptions.Single(s => s.Url == Other);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var http = new FakeHttpClient().Setup(Feed, Body("changed")).Setup(Other, Hop("other", 9443));
+        SubscriptionFetcher.Http = new WaitForEdit(http, entered, release.Task);
+
+        var ct = TestContext.Current.CancellationToken;
+        var first = vm.RefreshSubscriptionCommand.ExecuteAsync(source);
+        Task all = Task.CompletedTask;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+            all = vm.RefreshAllSubscriptionsCommand.ExecuteAsync(null);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await Task.WhenAll(first, all).WaitAsync(TimeSpan.FromSeconds(5), ct);
+        }
+
+        Assert.Equal(1, http.SentRequests.Count(request => request.Uri.AbsoluteUri == Feed));
+        Assert.Equal(1, http.SentRequests.Count(request => request.Uri.AbsoluteUri == Other));
+        Assert.All(vm.Subscriptions, subscription => Assert.False(subscription.LastRefreshFailed));
+        Assert.Equal(9443, Assert.Single(other.UnderlyingEntry.Servers).Port);
+        CheckChain(Recovery(store), true);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RefreshCannotPublishAfterATunnelTransitionStarts(bool apply)
+    {
+        var store = new InMemorySettingsStore();
+        store.Save(SavedChain(), AppPaths.ConfigYamlPath);
+        using var vm = Editor(store);
+        var source = Assert.Single(vm.Subscriptions);
+        var original = source.UnderlyingEntry.Servers;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var http = new FakeHttpClient().Setup(Feed, Body("changed"));
+        SubscriptionFetcher.Http = new WaitForEdit(http, entered, release.Task);
+
+        var ct = TestContext.Current.CancellationToken;
+        var running = vm.RefreshSubscriptionCommand.ExecuteAsync(source);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+            if (apply) vm.IsApplying = true;
+            else vm.IsConnecting = true;
+            await vm.RefreshAllSubscriptionsCommand.ExecuteAsync(null).WaitAsync(TimeSpan.FromSeconds(5), ct);
+            vm.IsApplying = false;
+            vm.IsConnecting = false;
+        }
+        finally
+        {
+            release.TrySetResult();
+            await running.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        }
+
+        Assert.Single(http.SentRequests);
+        Assert.Same(original, source.UnderlyingEntry.Servers);
+        Assert.False(source.LastRefreshFailed);
+        Assert.False(source.IsRefreshing);
+        CheckChain(Recovery(store), false);
+    }
+
+    [AvaloniaFact]
+    public async Task SimpleConnectWithAnEmptyFeedDoesNotDuplicateItsManualRefresh()
+    {
+        var settings = SavedChain();
+        settings.App.Subscriptions.Single().Servers = [];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = Editor(store);
+        vm.SmpInput = Feed;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var http = new FakeHttpClient().Setup(Feed, Hop("fresh", 8443));
+        SubscriptionFetcher.Http = new WaitForEdit(http, entered, release.Task);
+
+        var ct = TestContext.Current.CancellationToken;
+        var refreshing = vm.RefreshAllSubscriptionsCommand.ExecuteAsync(null);
+        Task connecting = Task.CompletedTask;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+            Assert.False(vm.SmpCanConnect);
+            connecting = vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            Assert.False(vm.IsConnecting);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await Task.WhenAll(refreshing, connecting).WaitAsync(TimeSpan.FromSeconds(5), ct);
+        }
+
+        Assert.True(vm.SmpCanConnect);
+        Assert.False(vm.IsConnected);
+        Assert.Single(http.SentRequests);
+        Assert.Equal(8443, Assert.Single(vm.SubscriptionServers).SourceEntry.Port);
+    }
+
     private sealed class WaitForEdit(IHttpClient http, TaskCompletionSource entered, Task release) : IHttpClient
     {
         public async Task<HttpResponse> SendAsync(HttpRequest request, CancellationToken ct = default)

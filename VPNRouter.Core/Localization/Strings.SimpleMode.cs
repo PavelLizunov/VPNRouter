@@ -23,8 +23,10 @@ public static partial class Strings
         ? "vless:// / naive://... или https://..."
         : "vless:// / naive://... or https://...";
     public static string SmpInputHint => Ru
-        ? "Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive) или URL подписки (http/https)."
-        : "Accepts a server link (vless / hysteria2 / tuic / ss / naive) or a subscription URL (http/https).";
+        ? "Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive / dnstt) или URL подписки (http/https)."
+        : "Accepts a server link (vless / hysteria2 / tuic / ss / naive / dnstt) or a subscription URL (http/https).";
+    public static string SmpInvalidServerLink => Ru ? "Некорректная ссылка на сервер. Проверьте её формат." : "Invalid server link. Check its format.";
+    public static string SmpDnsttCoreRequired => Ru ? "Для DNSTT нужна совместимая версия ядра sing-box-vpnctl." : "DNSTT requires a compatible sing-box-vpnctl core.";
     public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "Route through VPN";
     public static string SmpSplitOption => Ru
         ? "Выбранные приложения"
@@ -129,6 +131,8 @@ public static partial class Strings
     public static string SmpPickServerHint          => Ru
         ? "Подключение берёт последний выбранный сервер, если он отвечает, иначе самый быстрый из рабочих."
         : "Connect uses the server you picked last if it answers, otherwise the fastest working one.";
+    public static string SmpCheckPing => Ru ? "Проверить пинг" : "Check ping";
+    public static string SmpRefreshSubscriptions => Ru ? "Обновить подписки" : "Refresh subscriptions";
     public static string SmpSetupCheckTitle         => Ru ? "Проверка настроек" : "Check my setup";
     public static string SmpSetupCheckSubtitle      => Ru
         ? "Маршрутизация, MTU и аварийное отключение, шаг за шагом"
@@ -144,8 +148,8 @@ public static partial class Strings
         ? "Переключаю маршрутизацию — несколько секунд."
         : "Switching routing — a few seconds.";
     public static string SmpStatusConnectingHint    => Ru
-        ? "Рукопожатие с сервером — пара секунд."
-        : "Handshaking with the server — a moment.";
+        ? "Проверяем готовность туннеля…"
+        : "Checking tunnel readiness…";
     public static string SmpStatusDisconnectedHint  => Ru
         ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
         : "Traffic goes straight — pick a config and start the tunnel.";

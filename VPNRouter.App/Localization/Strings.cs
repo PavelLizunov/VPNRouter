@@ -826,6 +826,8 @@ public static class Strings
     public static string SmpInputLabel => global::VPNRouter.Core.Localization.Strings.SmpInputLabel;
     public static string SmpInputWatermark => global::VPNRouter.Core.Localization.Strings.SmpInputWatermark;
     public static string SmpInputHint => global::VPNRouter.Core.Localization.Strings.SmpInputHint;
+    public static string SmpInvalidServerLink => global::VPNRouter.Core.Localization.Strings.SmpInvalidServerLink;
+    public static string SmpDnsttCoreRequired => global::VPNRouter.Core.Localization.Strings.SmpDnsttCoreRequired;
     public static string SmpTunnelModeLabel => global::VPNRouter.Core.Localization.Strings.SmpTunnelModeLabel;
     public static string SmpSplitOption => global::VPNRouter.Core.Localization.Strings.SmpSplitOption;
     public static string SmpSplitHint => global::VPNRouter.Core.Localization.Strings.SmpSplitHint;

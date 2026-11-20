@@ -66,11 +66,13 @@ public sealed class StartupPipelineTests : IDisposable
         };
 
     [Theory]
-    [InlineData("[::1]", true)]
-    [InlineData("[::]", true)]
-    [InlineData("localhost", true)]
-    [InlineData("localhost", false)]
-    public async Task GeneratedStartupProbes_UseAcceptedControllerForSingleOutboundWarmupAndDelay(string bind, bool ipv6)
+    [InlineData("[::1]", true, false)]
+    [InlineData("[::]", true, false)]
+    [InlineData("localhost", true, false)]
+    [InlineData("localhost", false, false)]
+    [InlineData("127.0.0.1", false, true)]
+    public async Task StartupProbes_UseAcceptedControllerForSingleOutboundWarmupAndDelay(
+        string bind, bool ipv6, bool dnstt)
     {
         Assert.SkipUnless(!ipv6 || Socket.OSSupportsIPv6, "IPv6 loopback is required.");
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
@@ -88,26 +90,37 @@ public sealed class StartupPipelineTests : IDisposable
             } }
         });
         var controller = ClashSingBoxApi.ReadLocalController(config);
-        async Task ServeDelayAsync()
+        const string googleProbe = "http://www.gstatic.com/generate_204";
+        async Task ServeDelayAsync(string target, int timeoutMs = 5000, bool fail = false)
         {
             using var client = await server.AcceptTcpClientAsync(ct);
             using var stream = client.GetStream();
             using var reader = new StreamReader(stream, leaveOpen: true);
-            Assert.StartsWith("GET /proxies/proxy/delay?", await reader.ReadLineAsync(ct));
+            var request = await reader.ReadLineAsync(ct);
+            Assert.StartsWith("GET /proxies/proxy/delay?", request);
+            Assert.Contains("url=" + Uri.EscapeDataString(target), request);
+            Assert.Contains($"&timeout={timeoutMs} ", request);
             var headers = new List<string>();
             while (await reader.ReadLineAsync(ct) is { Length: > 0 } header) headers.Add(header);
             Assert.Contains($"Host: {controller.Endpoint.Authority}", headers);
             Assert.Contains("Authorization: Bearer delay-fixture", headers);
             const string body = """{"delay":23}""";
+            var status = fail ? "504 Gateway Timeout" : "200 OK";
             await stream.WriteAsync(System.Text.Encoding.ASCII.GetBytes(
-                $"HTTP/1.1 200 OK\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}"), ct);
+                $"HTTP/1.1 {status}\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}"), ct);
         }
 
         var settings = BuildBaseSettings(configMode: ipv6 ? "generated" : "Generated");
         settings.SingBox.ClashApi = "127.0.0.1:0";
         settings.SingBox.ClashApiSecret = "unused-edit";
         var active = MakeServer("active", "active.invalid");
-        active.UseAsSingleOutbound = true;
+        active.UseAsSingleOutbound = !dnstt;
+        if (dnstt)
+        {
+            settings.App.ConfigMode = "subscribe";
+            active.Protocol = "dnstt";
+            active.Dnstt = new DnsttProfile();
+        }
         settings.Vless.Servers = [active];
         settings.Vless.ActiveServer = active.Name;
         var host = new TestStartupHost();
@@ -117,13 +130,15 @@ public sealed class StartupPipelineTests : IDisposable
         try
         {
             var warmup = pipeline.ScheduleStartupProbes(401, settings, false, controller, ct);
-            await ServeDelayAsync();
+            if (dnstt) await ServeDelayAsync(DeepVerifyConstants.ProbeUrl, timeoutMs: 8000);
+            else await ServeDelayAsync(googleProbe);
             await warmup.WaitAsync(ct);
             Assert.Equal(401, Assert.Single(host.ConnectedPids));
 
             Assert.NotNull(host.PostStartProbe);
             var delayed = host.PostStartProbe(ct);
-            await ServeDelayAsync();
+            if (dnstt) await ServeDelayAsync(DeepVerifyConstants.ProbeUrl, timeoutMs: 8000, fail: true);
+            await ServeDelayAsync(googleProbe, timeoutMs: dnstt ? 6000 : 5000);
             var result = await delayed;
             Assert.False(result.IsDead);
             Assert.Equal(23, result.LastDelayMs);

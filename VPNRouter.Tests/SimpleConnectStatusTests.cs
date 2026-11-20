@@ -17,6 +17,96 @@ namespace VPNRouter.Tests;
 [Collection(SafeModeStateCollection.Name)]
 public sealed class SimpleConnectStatusTests
 {
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ExpandedSimplePickerExposesSubscriptionChecksAndRefresh(bool cached)
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.UiMode = "simple";
+        settings.App.Subscriptions =
+        [
+            new() { Enabled = true, Url = "https://feed.invalid/simple", Servers = cached ? [Entry("test", "test.invalid")] : [] }
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm, width: 380);
+        vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var ping = view.Page.FindControl<Button>("SimplePing")!;
+        var deepCheck = view.Page.FindControl<Button>("SimpleDeepCheck")!;
+        var refresh = view.Page.FindControl<Button>("SimpleRefreshSubscriptions")!;
+        Assert.Same(vm.TestAllSubscriptionServersCommand, ping.Command);
+        Assert.Same(vm.DeepVerifyAllSubscriptionServersCommand, deepCheck.Command);
+        Assert.Same(vm.RefreshAllSubscriptionsCommand, refresh.Command);
+        Assert.Equal(cached, ping.IsEffectivelyVisible);
+        Assert.Equal(cached, deepCheck.IsEffectivelyVisible);
+        Assert.True(refresh.IsEffectivelyVisible);
+        Assert.True(refresh.IsEffectivelyEnabled);
+
+        vm.IsTestingServers = true;
+        vm.IsDeepTestingServers = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(Strings.ServerTestCancel, ping.Content);
+        Assert.Equal(Strings.ServerDeepStop, deepCheck.Content);
+        Assert.False(refresh.IsEffectivelyEnabled);
+        vm.IsTestingServers = false;
+        vm.IsDeepTestingServers = false;
+
+        vm.IsConnecting = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(refresh.IsEffectivelyEnabled);
+        vm.SmpErrorText = Strings.StartTimeoutPhaseB;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(vm.SmpHeroIsBusy);
+        Assert.False(refresh.IsEffectivelyEnabled);
+        vm.IsConnecting = false;
+        vm.SmpErrorText = string.Empty;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(refresh.IsEffectivelyEnabled);
+
+        vm.IsApplying = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(refresh.IsEffectivelyEnabled);
+        vm.IsApplying = false;
+        vm.Subscriptions.Single().Enabled = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(ping.IsEffectivelyVisible);
+        Assert.False(deepCheck.IsEffectivelyVisible);
+        Assert.False(refresh.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task PhaseBTimeoutAppearsOnTheSimplePage()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.App.UiMode = "simple";
+        settings.Vless.Servers = [Entry("fixture", "test.invalid")];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm);
+        var started = false;
+        vm.SimpleTunnelStart = (_, _, _) =>
+        {
+            started = true;
+            return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.PhaseBTimeout));
+        };
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(started);
+        Assert.Equal(Strings.StartTimeoutPhaseB, BoundText(view.Page, "ConnectionDetails"));
+        Assert.False(vm.SmpHeroIsBusy);
+        Assert.False(vm.IsConnecting);
+        Assert.False(vm.IsConnected);
+    }
+
     [AvaloniaFact]
     public async Task PendingRoutingAndServerEditsStayOutOfTheConnectedStatus()
     {
@@ -214,10 +304,10 @@ public sealed class SimpleConnectStatusTests
         public SimplePage Page { get; }
         private readonly Window _window;
 
-        public OpenPage(MainWindowViewModel vm)
+        public OpenPage(MainWindowViewModel vm, int width = 520)
         {
             Page = new SimplePage { DataContext = vm };
-            _window = new Window { Content = Page, Width = 520, Height = 800 };
+            _window = new Window { Content = Page, Width = width, Height = 800 };
             _window.Show();
         }
 
