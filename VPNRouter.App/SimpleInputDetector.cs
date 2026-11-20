@@ -27,6 +27,7 @@ public static class SimpleInputDetector
             trimmed.StartsWith("naive+https://", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("dns-tunnel://",  StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("dnstt://",       StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("awg://",         StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("amneziawg://",   StringComparison.OrdinalIgnoreCase))
             return SmpInputKind.ServerUri;

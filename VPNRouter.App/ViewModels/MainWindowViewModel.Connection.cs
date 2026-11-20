@@ -238,6 +238,7 @@ public partial class MainWindowViewModel
 #endif
 
         {
+            SmpErrorText = string.Empty;
             IsConnecting = true;
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
@@ -421,6 +422,8 @@ public partial class MainWindowViewModel
 
     private async Task AbortStartAsync(string statusText)
     {
+        SmpErrorText = statusText;
+        StatusText = statusText;
         try { await Task.Run(() => _engine.Stop()); } catch { }
         IsConnecting = false;
         IsConnected = false;

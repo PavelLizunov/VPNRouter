@@ -578,7 +578,8 @@
                             AutomationProperties.Name="{Binding L_SmpCtaWait}">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Arc Classes="spinner"
-                                 Classes.spin="{Binding SimpleCtaIsConnecting}"
+                                 Classes.spin="{Binding SmpHeroIsBusy}"
+                                 IsVisible="{Binding SmpHeroIsBusy}"
                                  Width="16" Height="16" StrokeThickness="2"
                                  VerticalAlignment="Center">
                                 <Arc.RenderTransform>

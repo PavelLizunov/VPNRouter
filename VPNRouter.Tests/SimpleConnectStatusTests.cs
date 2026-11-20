@@ -75,6 +75,34 @@ public sealed class SimpleConnectStatusTests
     }
 
     [AvaloniaFact]
+    public async Task PhaseBTimeoutAppearsOnTheSimplePage()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.App.UiMode = "simple";
+        settings.Vless.Servers = [Entry("fixture", "test.invalid")];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm);
+        var started = false;
+        vm.SimpleTunnelStart = (_, _, _) =>
+        {
+            started = true;
+            return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.PhaseBTimeout));
+        };
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(started);
+        Assert.Equal(Strings.StartTimeoutPhaseB, BoundText(view.Page, "ConnectionDetails"));
+        Assert.False(vm.SmpHeroIsBusy);
+        Assert.False(vm.IsConnecting);
+        Assert.False(vm.IsConnected);
+    }
+
+    [AvaloniaFact]
     public async Task PendingRoutingAndServerEditsStayOutOfTheConnectedStatus()
     {
         var settings = new AppSettings();

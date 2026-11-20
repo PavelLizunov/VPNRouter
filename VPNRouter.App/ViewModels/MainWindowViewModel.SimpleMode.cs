@@ -656,10 +656,10 @@ public partial class MainWindowViewModel
 
     // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
     // alert). On / busy / idle are the plain connection states.
-    public bool SmpHeroIsError => !IsConnecting && !string.IsNullOrEmpty(SmpErrorText);
+    public bool SmpHeroIsError => !string.IsNullOrEmpty(SmpErrorText);
     public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && HasConnectionAlert;
     public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
-    public bool SmpHeroIsBusy => IsConnecting || IsApplying;
+    public bool SmpHeroIsBusy => (IsConnecting || IsApplying) && !SmpHeroIsError;
     public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError && !SmpHeroIsWarn;
 
     public string SmpHomeTitle => SmpHeroIsError
@@ -674,9 +674,9 @@ public partial class MainWindowViewModel
     {
         get
         {
+            if (!string.IsNullOrEmpty(SmpErrorText)) return SmpErrorText;
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
             if (IsApplying) return Strings.SmpStatusApplyingHint;
-            if (!string.IsNullOrEmpty(SmpErrorText)) return SmpErrorText;
             if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();
             if (SmpNeedsConfig) return Strings.SmpHeroAddConfigHint;
             return SimpleStatusDescription;
