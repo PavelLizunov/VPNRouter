@@ -14,6 +14,10 @@ deferred, reached v2.44.0/.1 stable and bit a user (auto-failover teardown, diag
 Only the `## Open` section is gated; `## Resolved` is history. Keep entries to one
 line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target version>`.
 
+## Business DNSTT readiness (2026-11-20)
+
+- [ ] **P2** - The shared desktop readiness probe can time out at the single Google destination during DNSTT startup. Try the Cloudflare and Google destinations through the selected proxy. Verify the fixed application on the affected Windows path before claiming resolution.
+
 ## Business diagnostics delivery (2026-11-20)
 
 - [x] **P2** - A validated Russian result within the 24 KiB limit could expand past the 64 KiB receipt limit when written with ASCII escapes. The receiver now counts and atomically writes the same UTF-8 bytes. The synthetic worker regression covers publication and the unchanged retention timestamp. Deployment is pending.

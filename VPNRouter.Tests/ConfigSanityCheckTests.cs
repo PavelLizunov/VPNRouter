@@ -199,12 +199,13 @@ public class ConfigSanityCheckTests
             _responses = new Queue<Func<HttpResponseMessage>>(responses);
         }
 
-        public int Calls { get; private set; }
+        public List<Uri> Requests { get; } = [];
+        public int Calls => Requests.Count;
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Calls++;
+            Requests.Add(request.RequestUri!);
             if (_responses.Count == 0)
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)
@@ -251,6 +252,28 @@ public class ConfigSanityCheckTests
             Assert.Equal("504", e.Properties["Status"].ToString());
         });
         sink.AssertExcludes(responseBody);
+    }
+
+    [Fact]
+    public async Task DnsttProbe_WhenBothDestinationsFail_DoesNotConfirmReadiness()
+    {
+        var handler = new MockHandler([
+            () => new HttpResponseMessage(HttpStatusCode.GatewayTimeout),
+            () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"delay":0}""") }
+        ]);
+        using var http = new HttpClient(handler);
+        var check = new ConfigSanityCheck(httpClient: http);
+
+        var result = await check.ProbeAsync(new Uri("http://127.0.0.1:9090"), null,
+            TestContext.Current.CancellationToken, dnstt: true);
+
+        Assert.True(result.IsDead);
+        Assert.Equal(0, result.LastDelayMs);
+        Assert.Collection(handler.Requests,
+            request => Assert.Equal("http://127.0.0.1:9090/proxies/proxy/delay?url=" +
+                Uri.EscapeDataString(DeepVerifyConstants.ProbeUrl) + "&timeout=8000", request.AbsoluteUri),
+            request => Assert.Equal("http://127.0.0.1:9090/proxies/proxy/delay?url=" +
+                Uri.EscapeDataString("http://www.gstatic.com/generate_204") + "&timeout=6000", request.AbsoluteUri));
     }
 
     [Fact]

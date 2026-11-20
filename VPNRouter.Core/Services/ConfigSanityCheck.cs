@@ -7,13 +7,19 @@ namespace VPNRouter.Core.Services;
 
 public sealed class ConfigSanityCheck
 {
+    private const int DnsttProbeTimeoutMs = 8_000;
+    private const int DnsttFallbackTimeoutMs = 6_000;
+    private const int ControllerResponseAllowanceMs = 1_000;
     private readonly ILogger? _logger;
     private readonly HttpClient _http;
 
     public ConfigSanityCheck(ILogger? logger = null, HttpClient? httpClient = null)
     {
         _logger = logger;
-        _http = httpClient ?? new HttpClient(ClashSingBoxApi.CreateControllerHandler()) { Timeout = TimeSpan.FromSeconds(8) };
+        _http = httpClient ?? new HttpClient(ClashSingBoxApi.CreateControllerHandler())
+        {
+            Timeout = TimeSpan.FromMilliseconds(DnsttProbeTimeoutMs + ControllerResponseAllowanceMs)
+        };
     }
 
     public PreStartCheckResult CheckBeforeStart(JsonObject singboxConfig)
@@ -145,11 +151,10 @@ public sealed class ConfigSanityCheck
         return await ProbeAsync(new Uri($"http://127.0.0.1:{clashApiPort}"), clashApiSecret, ct).ConfigureAwait(false);
     }
 
-    internal async Task<ProbeResult> ProbeAsync(Uri controller, string? clashApiSecret, CancellationToken ct)
+    internal async Task<ProbeResult> ProbeAsync(Uri controller, string? clashApiSecret, CancellationToken ct,
+        bool dnstt = false)
     {
-        var url = new Uri(controller, "/proxies/proxy/delay" +
-            $"?url={Uri.EscapeDataString("http://www.gstatic.com/generate_204")}&timeout=5000");
-
+        const string defaultProbeUrl = "http://www.gstatic.com/generate_204";
         int lastDelay = 0;
         string? lastError = null;
 
@@ -157,6 +162,16 @@ public sealed class ConfigSanityCheck
         {
             ct.ThrowIfCancellationRequested();
 
+            bool initialDnsttProbe = dnstt && attempt == 1;
+            var target = initialDnsttProbe ? DeepVerifyConstants.ProbeUrl : defaultProbeUrl;
+            // Leave room for a second destination inside the desktop warmup deadline.
+            var probeTimeoutMs = !dnstt ? 5_000 :
+                initialDnsttProbe ? DnsttProbeTimeoutMs : DnsttFallbackTimeoutMs;
+            var url = new Uri(controller, "/proxies/proxy/delay" +
+                $"?url={Uri.EscapeDataString(target)}&timeout={probeTimeoutMs}");
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromMilliseconds(dnstt
+                ? probeTimeoutMs + ControllerResponseAllowanceMs : 8_000));
             ProbeFailure failure;
             int? status = null;
             try
@@ -165,9 +180,9 @@ public sealed class ConfigSanityCheck
                 if (!string.IsNullOrEmpty(clashApiSecret))
                     req.Headers.Authorization =
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", clashApiSecret);
-                using var resp = await _http.SendAsync(req, ct);
+                using var resp = await _http.SendAsync(req, deadline.Token);
                 status = (int)resp.StatusCode;
-                var body = await resp.Content.ReadAsStringAsync(ct);
+                var body = await resp.Content.ReadAsStringAsync(deadline.Token);
 
                 if (resp.IsSuccessStatusCode)
                 {
@@ -213,7 +228,7 @@ public sealed class ConfigSanityCheck
                 "[ConfigSanityCheck] Probe attempt {Attempt} failed ({ReasonCode}, HTTP {Status})",
                 attempt, failure, status);
 
-            if (attempt < 2)
+            if (attempt < 2 && !dnstt)
             {
                 try { await Task.Delay(TimeSpan.FromSeconds(3), ct); }
                 catch (OperationCanceledException) { throw; }
