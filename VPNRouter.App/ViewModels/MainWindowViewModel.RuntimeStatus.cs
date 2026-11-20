@@ -162,6 +162,7 @@ public partial class MainWindowViewModel
                 MarkConnectedViaService();
                 return;
             case RuntimeSyncAction.MarkDisconnected:
+                SmpStopUnconfirmed = false;
                 IsConnected = false;
                 ConnectButtonText = Strings.StartVPN;
                 StatusText = Strings.NotConnected;

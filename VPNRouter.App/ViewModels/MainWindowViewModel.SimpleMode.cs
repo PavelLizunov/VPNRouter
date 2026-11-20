@@ -14,6 +14,7 @@ public partial class MainWindowViewModel
     [ObservableProperty] private string _smpInput = string.Empty;
 
     [ObservableProperty] private string _smpErrorText = string.Empty;
+    [ObservableProperty] private bool _smpStopUnconfirmed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(L_SmpConfigRowToggle))]
@@ -662,8 +663,8 @@ public partial class MainWindowViewModel
     // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
     // alert). On / busy / idle are the plain connection states.
     public bool SmpHeroIsError => !IsConnected && !string.IsNullOrEmpty(SmpErrorText);
-    public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && HasConnectionAlert;
-    public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
+    public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && (SmpStopUnconfirmed || HasConnectionAlert);
+    public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError && !SmpStopUnconfirmed;
     public bool SmpHeroIsBusy => (IsConnecting || IsApplying) && !SmpHeroIsError;
     public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError && !SmpHeroIsWarn;
 
@@ -679,7 +680,8 @@ public partial class MainWindowViewModel
     {
         get
         {
-            if (SmpHeroIsError || SmpErrorText == Strings.TunnelStopUnconfirmed) return SmpErrorText;
+            if (SmpHeroIsError) return SmpErrorText;
+            if (SmpStopUnconfirmed) return Strings.TunnelStopUnconfirmed;
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
             if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();
@@ -782,6 +784,7 @@ public partial class MainWindowViewModel
                 case nameof(SimpleStatusTitle):
                 case nameof(SimpleStatusDescription):
                 case nameof(SmpErrorText):
+                case nameof(SmpStopUnconfirmed):
                 case nameof(SmpInput):
                 case nameof(SmpFormExpanded):
                 case nameof(SelectedServer):

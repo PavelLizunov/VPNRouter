@@ -107,10 +107,8 @@ public sealed class SimpleConnectStatusTests
         Assert.False(vm.IsConnected);
     }
 
-    [AvaloniaTheory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void UnconfirmedStopRemainsVisibleOnSimplePage(bool tunnelStillActive)
+    [AvaloniaFact]
+    public async Task UnconfirmedStopStaysLocalizedUntilTheTunnelStops()
     {
         var settings = new AppSettings();
         settings.App.UiMode = "simple";
@@ -120,12 +118,41 @@ public sealed class SimpleConnectStatusTests
         using var vm = CreateVm(store);
         using var view = new OpenPage(vm);
 
-        vm.IsConnected = tunnelStillActive;
-        vm.SmpErrorText = Strings.TunnelStopUnconfirmed;
-        Dispatcher.UIThread.RunJobs();
+        var engine = Engine(vm);
+        using var manager = new SingBoxManager(new SingBoxSettings(), http: new FakeHttpClient(), runner: new FakeProcessRunner());
+        var managerField = typeof(VpnEngine).GetField("_singBox", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var identity = new FakeProcessHandle { ExitQueryUnavailable = true };
+        typeof(SingBoxManager).GetField("_handle", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(manager, identity);
+        typeof(SingBoxManager).GetField("_exactStopUnconfirmed", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(manager, true);
+        var originalLanguage = Strings.Lang;
+        managerField.SetValue(engine, manager);
+        try
+        {
+            vm.IsConnected = true;
+            await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            var firstWarning = BoundText(view.Page, "ConnectionDetails");
+            Assert.Equal(Strings.TunnelStopUnconfirmed, firstWarning);
+            Assert.True(vm.SimpleCtaIsConnected);
+            Assert.True(vm.SmpHeroIsWarn);
+            Assert.False(vm.SmpHeroIsOn);
 
-        Assert.Equal(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
-        Assert.Equal(tunnelStillActive, vm.IsConnected);
+            vm.ToggleLanguageCommand.Execute(null);
+            Assert.Equal(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
+            Assert.NotEqual(firstWarning, BoundText(view.Page, "ConnectionDetails"));
+
+            managerField.SetValue(engine, null);
+            ReportStatus(engine, "Stopped");
+            Assert.False(vm.IsConnected);
+            Assert.False(vm.SmpHeroIsWarn);
+            Assert.NotEqual(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
+        }
+        finally
+        {
+            managerField.SetValue(engine, null);
+            identity.ExitQueryUnavailable = false;
+            identity.SignalExit(0);
+            Strings.Lang = originalLanguage;
+        }
     }
 
     [AvaloniaFact]

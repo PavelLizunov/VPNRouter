@@ -6,6 +6,7 @@ import base64
 import json
 import os
 from pathlib import Path
+import pwd
 import select
 import subprocess
 import tempfile
@@ -16,9 +17,12 @@ RUNTIME = ROOT / 'runtime/sing-box'
 
 
 class Backend:
-    def __init__(self):
+    def __init__(self, data_dir=None):
+        command = ['runuser', '-u', 'builder', '--', str(ROOT / 'VPNRouter.Headless'), '--stdio']
+        if data_dir is not None:
+            command.extend(['--data-dir', data_dir])
         self.process = subprocess.Popen(
-            ['runuser', '-u', 'builder', '--', str(ROOT / 'VPNRouter.Headless'), '--stdio'],
+            command,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None, bufsize=0,
             env={key: value for key, value in os.environ.items()
                  if not key.startswith('DOTNET_ROOT')},
@@ -114,9 +118,16 @@ def main():
         assert all(set(app) == {'name', 'displayName', 'icon', 'desktopId', 'hasWindow'}
                    for app in apps['runningApps'])
         assert any(item['status'] == 'info' for item in backend.call('diagnostics.check')['items'])
-        verify_dnstt_import(backend)
     finally:
         backend.close()
+    with tempfile.TemporaryDirectory(prefix='arch-dnstt-import-') as data_dir:
+        builder = pwd.getpwnam('builder')
+        os.chown(data_dir, builder.pw_uid, builder.pw_gid)
+        backend = Backend(data_dir)
+        try:
+            verify_dnstt_import(backend)
+        finally:
+            backend.close()
 
     # Exercise the real policy through the normal-user installed backend.
     subprocess.run(['setcap', '-r', str(RUNTIME)], check=True)

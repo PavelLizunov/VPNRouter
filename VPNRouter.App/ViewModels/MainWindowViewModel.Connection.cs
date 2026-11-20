@@ -81,6 +81,7 @@ public partial class MainWindowViewModel
             {
                 if (IsConnecting) return;
 
+                SmpStopUnconfirmed = false;
                 IsConnected = false;
                 IsConnecting = false;
                 ConnectButtonText = Strings.StartVPN;
@@ -190,6 +191,7 @@ public partial class MainWindowViewModel
         {
             if (submitted != null) return;
             SmpErrorText = string.Empty;
+            SmpStopUnconfirmed = false;
             IsConnecting = true;
             StatusText = Strings.Stopping;
             try
@@ -214,7 +216,7 @@ public partial class MainWindowViewModel
                 IsConnected = _engine.HasActiveTunnel;
                 ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
                 StatusText = Strings.TunnelStopUnconfirmed;
-                SmpErrorText = Strings.TunnelStopUnconfirmed;
+                SmpStopUnconfirmed = true;
                 return;
             }
             IsConnected = false;
@@ -241,6 +243,7 @@ public partial class MainWindowViewModel
 
         {
             SmpErrorText = string.Empty;
+            SmpStopUnconfirmed = false;
             IsConnecting = true;
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
