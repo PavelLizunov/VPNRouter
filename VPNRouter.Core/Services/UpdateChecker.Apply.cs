@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using VPNRouter.Core.Platform.Linux;
 
 namespace VPNRouter.Core.Services;
 
@@ -303,6 +304,24 @@ public partial class UpdateChecker
             log($"chmod exit={chExit} stderr={Truncate(chErr)}");
         }
         catch (Exception ex) { log($"chmod threw: {ex.Message}"); }
+
+        if (needsRoot && LinuxDesktopPackage.TryGetProtectedRuntimePath(installDir) is { } runtime)
+        {
+            try
+            {
+                var setcap = File.Exists("/usr/sbin/setcap") ? "/usr/sbin/setcap" : "/sbin/setcap";
+                var caps = LinuxDesktopPackage.RuntimeCapabilities;
+                var (exit, _, error) = RunWithCapture(pkexec!, [setcap, caps, runtime], 30_000);
+                if (exit == 0)
+                    (exit, _, error) = RunWithCapture(setcap, ["-q", "-v", caps, runtime], 10_000);
+                if (exit != 0)
+                    log($"WARNING: could not verify package runtime capabilities (exit {exit}): {Truncate(error)}");
+            }
+            catch (Exception ex)
+            {
+                log($"WARNING: could not verify package runtime capabilities: {ex.Message}");
+            }
+        }
     }
 
     internal static bool HelperSupportsExactOwnedSignal(string path)

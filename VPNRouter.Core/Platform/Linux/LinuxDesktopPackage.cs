@@ -9,6 +9,7 @@ internal static class LinuxDesktopPackage
 {
     internal const string InstallRoot = "/opt/vpnrouter";
     internal const string SingBoxFileName = "sing-box";
+    internal const string RuntimeCapabilities = "cap_net_admin,cap_net_bind_service=+eip";
 
     internal static string? TryGetProtectedRuntimePath(string appBaseDirectory)
         => TryGetProtectedRuntimePath(appBaseDirectory, InstallRoot, IsTrustedPackagePath);

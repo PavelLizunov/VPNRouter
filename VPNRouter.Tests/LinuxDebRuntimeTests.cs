@@ -36,12 +36,28 @@ public sealed class LinuxDebRuntimeTests
     }
 
     [Fact]
-    public void DebianPostInstallTargetsTheProtectedRuntime()
+    public void DebianPackageInstallsAndVerifiesCapabilitiesForTheProtectedRuntime()
     {
-        Assert.Equal("/opt/vpnrouter", LinuxDesktopPackage.InstallRoot);
-        Assert.Contains(
-            $"SINGBOX={LinuxDesktopPackage.InstallRoot}/sing-box",
-            ReadRepositoryFile("packaging/linux/postinst"));
+        var workflow = ReadRepositoryFile(".github/workflows/build-linux.yml");
+        var root = LinuxDesktopPackage.InstallRoot;
+        Assert.Contains($"mkdir -p \"$PKG{root}\"", workflow);
+        Assert.Contains($"exec {root}/VPNRouter.App", workflow);
+        Assert.Matches(@"Depends:[^\r\n]*\blibcap2-bin\b", workflow);
+
+        var postinstall = ReadRepositoryFile("packaging/linux/postinst");
+        Assert.Contains($"SINGBOX={root}/{LinuxDesktopPackage.SingBoxFileName}", postinstall);
+        var helper = ReadRepositoryFile("packaging/linux/vpnrouter-update-helper");
+        foreach (var script in new[] { postinstall, helper })
+        {
+            Assert.Contains($"CAPABILITIES={LinuxDesktopPackage.RuntimeCapabilities}", script);
+            Assert.Contains("setcap \"$CAPABILITIES\"", script);
+            Assert.Contains("setcap -q -v \"$CAPABILITIES\"", script);
+        }
+
+        var updater = ReadRepositoryFile("VPNRouter.Core/Services/UpdateChecker.Apply.cs");
+        Assert.Contains("needsRoot && LinuxDesktopPackage.TryGetProtectedRuntimePath(installDir)", updater);
+        Assert.Contains("RunWithCapture(pkexec!, [setcap, caps, runtime]", updater);
+        Assert.Contains("RunWithCapture(setcap, [\"-q\", \"-v\", caps, runtime]", updater);
     }
 
     [Fact]

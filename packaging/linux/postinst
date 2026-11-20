@@ -3,10 +3,11 @@
 set -e
 
 SINGBOX=/opt/vpnrouter/sing-box
+CAPABILITIES=cap_net_admin,cap_net_bind_service=+eip
 
 if [ -x "$SINGBOX" ]; then
-    if command -v setcap >/dev/null 2>&1; then
-        setcap cap_net_admin,cap_net_bind_service=+eip "$SINGBOX" 2>/dev/null || true
+    if ! setcap "$CAPABILITIES" "$SINGBOX" || ! setcap -q -v "$CAPABILITIES" "$SINGBOX"; then
+        printf '%s\n' 'VPNRouter: could not verify sing-box capabilities. Connecting may require polkit authentication.' >&2
     fi
 fi
 

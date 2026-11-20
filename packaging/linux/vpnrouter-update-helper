@@ -49,8 +49,11 @@ cp -rfT "$SRC" "$DST"
 [ -f "$DST/VPNRouter.App" ] && chmod +x "$DST/VPNRouter.App"
 [ -f "$DST/sing-box" ]       && chmod +x "$DST/sing-box"
 
-if [ -f "$DST/sing-box" ] && command -v setcap >/dev/null 2>&1; then
-    setcap cap_net_admin,cap_net_bind_service=+eip "$DST/sing-box" 2>/dev/null || true
+CAPABILITIES=cap_net_admin,cap_net_bind_service=+eip
+if [ -f "$DST/sing-box" ]; then
+    if ! setcap "$CAPABILITIES" "$DST/sing-box" || ! setcap -q -v "$CAPABILITIES" "$DST/sing-box"; then
+        printf '%s\n' 'VPNRouter: could not verify sing-box capabilities. Connecting may require polkit authentication.' >&2
+    fi
 fi
 
 exit 0

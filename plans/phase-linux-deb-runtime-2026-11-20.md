@@ -14,6 +14,9 @@ package-owned `/opt/vpnrouter/sing-box` directly.
   the bundled file. Process ownership still requires the existing owner record
   for executable paths outside the user's runtime directory.
 - Narrow tests and the Linux packaging README.
+- Package installation and self-update verify the same capability set and
+  report errors. The legacy updater reapplies capabilities only to the trusted
+  package runtime. Existing capability grants are unchanged.
 - Excludes Omarchy UI, DNSTT, macOS, deployment and builds.
 
 ## Invariants
@@ -31,6 +34,9 @@ package-owned `/opt/vpnrouter/sing-box` directly.
 - `LinuxDebRuntimeTests` covers exact-layout selection, writable/symlink
   rejection, and the post-install path contract.
 - Existing `PackagedRuntimePolicyTests` covers the root-owned metadata predicate.
+- Exact `133305cb` passed the PR checks. DeepSeek found the existing ownership
+  monitor cannot identify some capable Linux children through `/proc/PID/exe`.
+  Durable ownership and orphan recovery need a separate exact-child check.
 - Build, full tests and live `.deb` acceptance must run on an authorized worker
   or CI; no local build was performed for this isolated task.
 
@@ -42,3 +48,8 @@ the app, and connect without a polkit password prompt. The running process must
 be `/opt/vpnrouter/sing-box`; no `~/.config/vpnrouter/bin/sing-box` copy may be
 used. A portable tar.gz run must still deploy to the user directory and use the
 existing pkexec fallback.
+
+Verify runtime status and orphan handling with a non-dumpable capable child,
+normal and legacy upgrade paths, and a supported custom config with an
+interface binding. The current capability set remains scoped to the existing
+.deb behavior until the custom-config acceptance is verified.
