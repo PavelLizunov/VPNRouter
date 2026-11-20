@@ -22,6 +22,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 - [x] **P2** - A validated Russian result within the 24 KiB limit could expand past the 64 KiB receipt limit when written with ASCII escapes. The receiver now counts and atomically writes the same UTF-8 bytes. The synthetic worker regression covers publication and the unchanged retention timestamp. Deployment is pending.
 
+- [ ] **P2** - Business reported an acknowledged diagnostic analysis unavailable after three one-second polls. The affected Windows report reached ready after 47 seconds. Extend the bounded wait and verify that the desktop renders the actual summary. See phase-business-diagnostics-result-size-2026-11-20.md.
+
 ## Open
 
 - [ ] **P2** - Business 2.50.13 looks up DNSTT country and activity by the recursive resolver and displays its TCP reachability as server health. Match the deployed node and skip the resolver TCP probe. See phase-business-dnstt-card-2026-11-19.md.

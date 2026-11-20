@@ -34,3 +34,19 @@ The latest production report had a model response and no published analysis.
 A separate synthetic call to the configured provider passed validation. The
 original result was discarded, so its exact rejection reason is unavailable.
 The first implementation head passed hosted CI. Updated fixture CI and deployment are pending.
+
+## Client receipt follow-up
+
+The affected Windows upload was received at 11:18:17 UTC and the deployed
+server published its analysis at 11:19:04 UTC. The client polled three times
+at one-second intervals, then displayed unavailable while the result was
+still pending.
+
+Keep one upload and the existing HTTPS, authorization, content and JSON
+limits. Poll the same receipt every three seconds for up to two minutes.
+Display pending when this wait ends with the server still pending. Preserve
+terminal responses. A deterministic clock fixture covers readiness after
+48 seconds and expiry with a pending receipt. Run the exact-head Business
+suite and review. The runtime gate is a real Business menu send through
+ready and the visible summary on Windows. Rollback is the scoped client
+commit and leaves accepted uploads intact.
