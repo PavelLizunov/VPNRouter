@@ -116,6 +116,7 @@ public sealed class BusinessClientHttpTests
                     Assert.Equal($"https://example.invalid/api/reports/{id}/analysis", request.RequestUri!.AbsoluteUri);
                     polls++;
                     if (polls == 1) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+                    if (polls == 2) throw new OperationCanceledException("Simulated per-request HTTP timeout");
                 }
 
                 var ready = !deadlineExpires && polls == 16;
