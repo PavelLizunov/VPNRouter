@@ -42,3 +42,7 @@ desktop startup window. The fallback now has a six-second native budget,
 leaving up to sixteen seconds for both requests with controller allowances.
 An additional fixture checks that HTTP 504 followed by zero delay does not
 confirm readiness. The previous head passed hosted CI.
+
+## Candidate delivery
+
+Prepare Business `2.50.15-r1` from the DNSTT readiness changes. The preceding PR head completed its checks successfully. Run CI and build a credential-free Windows x64 package from the exact versioned source. Deliver the candidate through a versioned preview path. The production client rejects prerelease identifiers in its update feed. The candidate has not been published.
