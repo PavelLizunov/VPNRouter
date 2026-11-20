@@ -7,7 +7,6 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
-using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -190,21 +189,6 @@ public partial class AndroidApp
         stack.Children.Add(divider);
     }
 
-    private static void HideSubtreeFromAccessibility(StyledElement element)
-    {
-        AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
-        if (element is not ILogical logical) return;
-        foreach (var child in logical.LogicalChildren)
-        {
-            if (child is StyledElement childElement)
-                HideSubtreeFromAccessibility(childElement);
-        }
-    }
-
-    /// <summary>
-    /// Names a kebab button for screen readers (an icon-only button has no text of its own) and repeats the
-    /// name as its tooltip, which Android exposes as the node description.
-    /// </summary>
     private static void ApplyMenuButtonAccessibility(Avalonia.Controls.Button? button)
     {
         if (button is null) return;

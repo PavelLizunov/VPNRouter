@@ -35,7 +35,7 @@ public sealed class AndroidAccessibilityLabelsTests
     }
 
     [Fact]
-    public void KebabButtons_AreNamedAndKeepTheCrashFallback()
+    public void KebabButtons_AreNamedAndKeepTheMenuAccessible()
     {
         var menu = Source("VPNRouter.Android", "AndroidApp.KebabMenu.cs");
         Assert.Contains(
@@ -48,20 +48,15 @@ public sealed class AndroidAccessibilityLabelsTests
             StringComparison.Ordinal);
         Assert.Contains("ApplyMenuButtonAccessibility(_kebabMenuButton)", menu, StringComparison.Ordinal);
         Assert.Contains("ApplyMenuButtonAccessibility(_advKebabMenuBtn)", menu, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw)", menu, StringComparison.Ordinal);
+        Assert.DoesNotContain("AccessibilityView.Raw", menu, StringComparison.Ordinal);
 
         var header = Source("VPNRouter.Android", "AndroidApp.axaml.cs");
-        Assert.Matches(@"if \(!AvaloniaToggleNodeInfoProviderPatch\.IsApplied\)\s+HideSubtreeFromAccessibility\(menuPanel\);", header);
+        Assert.DoesNotContain("HideSubtreeFromAccessibility(menuPanel)", header, StringComparison.Ordinal);
         const string refresh = "RefreshMenuButtonAccessibility();";
         var languageStart = header.IndexOf("private void ToggleLanguageAndRefresh()", StringComparison.Ordinal);
         Assert.True(languageStart > 0);
         Assert.Contains(refresh, header[..languageStart], StringComparison.Ordinal);
         Assert.Contains(refresh, header[languageStart..], StringComparison.Ordinal);
-        var patch = Source("VPNRouter.Android", "AvaloniaToggleNodeInfoProviderPatch.cs");
-        Assert.Contains("IsApplied = object.Equals(field.GetValue(null), sentinel);", patch, StringComparison.Ordinal);
-        var activity = Source("VPNRouter.Android", "MainActivity.cs");
-        Assert.Matches(@"AvaloniaToggleNodeInfoProviderPatch\.Apply\(\);\s+SetupWindowInsetsAndEdgeToEdge\(\);\s+base\.OnCreate\(savedInstanceState\);", activity);
-
         var advanced = Source("VPNRouter.Android", "AndroidApp.AdvancedShell.cs");
         Assert.Contains("RefreshMenuButtonAccessibility();", advanced, StringComparison.Ordinal);
     }

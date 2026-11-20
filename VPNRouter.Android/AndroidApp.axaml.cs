@@ -790,9 +790,6 @@ public partial class AndroidApp : Avalonia.Application
             IsLightDismissEnabled = true,
         };
 
-        if (!AvaloniaToggleNodeInfoProviderPatch.IsApplied)
-            HideSubtreeFromAccessibility(menuPanel);
-
         var headerRow = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("28,*,Auto"),

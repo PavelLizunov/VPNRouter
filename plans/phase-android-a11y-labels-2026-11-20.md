@@ -21,10 +21,12 @@ with their own changes.
 
 ## What
 
-1. Expose the kebab popup when the existing DEFCT-001 workaround confirms its
-   sentinel is installed. Preserve the original hide fallback when the private
-   Avalonia field cannot be patched. The fallback protected against a crash
-   reported on Android 12 with Avalonia 11.3.12.
+1. Leave the kebab popup in the accessibility tree and retire the legacy
+   DEFCT-001 workaround. The crash on Android 12 used the reflected checked
+   setter in Avalonia 11.3.12. The pinned Avalonia 12.0.3 writes the Android
+   accessibility node directly and has no reflection field to patch.
+   [Avalonia 11.3.12 provider](https://github.com/AvaloniaUI/Avalonia/blob/11.3.12/src/Android/Avalonia.Android/Automation/ToggleNodeInfoProvider.cs)
+   [Avalonia 12.0.3 provider](https://github.com/AvaloniaUI/Avalonia/blob/12.0.3/src/Android/Avalonia.Android/Automation/ToggleNodeInfoProvider.cs)
 2. Give both kebab openers (`AndroidApp.axaml.cs` Home header,
    `AndroidApp.AdvancedShell.cs` Advanced header) `AutomationProperties.Name`
    from `Strings.MenuButtonName` and a tooltip from `Strings.TipMenuButton`, which
@@ -63,8 +65,8 @@ with their own changes.
 
 Standard `b9531cd2` passed all eight PR checks. Android compile run
 `44756572341` produced an ARM64 APK signed with the CI debug key. The HomeLab
-x86_64 emulators cannot install that APK. Exact-build device verification
-remains required:
+x86_64 emulators cannot install that APK. The existing ARM64 emulator on mm4
+can run the exact-build device verification:
 
 | check | owner |
 |---|---|
@@ -72,19 +74,17 @@ remains required:
 | Android Release APK build on the authorized worker | implementer/CI |
 | TalkBack acceptance checklist below on a real device or emulator with TalkBack | implementer |
 
-The source guards cover the naming calls, language refresh and conditional
-DEFCT-001 fallback. They do not establish TalkBack behavior.
+The source guards cover the naming calls, language refresh and the accessible
+popup. TalkBack behavior still needs device verification.
 
 ## TalkBack acceptance checklist
 
 Preconditions: Android device or emulator, TalkBack on, app installed from the
 build under test, both RU and EN available in the menu.
 
-Confirm the startup `VpnRouter.A11y` patch result. With the popup open, check
-the UIAutomator dump and crash buffer for the historical toggle-peer failure.
-If the patch fails and the fallback hides the menu, keep A11Y-01 open. Record
-checked-state results separately from name and role. The sentinel can suppress
-the checked-state announcement even when the control's label is correct.
+Check the UIAutomator dump and crash buffer while repeatedly opening and
+traversing the popup. Look for the historical toggle-peer crash. Record
+checked-state results separately from name and role.
 
 1. Home header: focus the kebab with swipe navigation. TalkBack says the menu
    name (RU "Меню" / EN "Menu") and then the description, and announces a button.
@@ -125,8 +125,7 @@ closing the corresponding entries.
 
 ## Unknowns
 
-- Avalonia popup focus and enumeration still require live verification. The
-  DEFCT-001 log distinguishes the fallback case from a popup focus defect.
+- Avalonia popup focus and enumeration still require live verification.
 - A `Name` change on an already focused node may not emit a property-change event
   in Avalonia 12.0.3. The label is refreshed for the next focus; step 4 checks it.
 - The visible title `TextBlock` is still a separate node from the switch, so
@@ -146,7 +145,7 @@ involved.
 
 ## Outcome
 
-The first implementation is `b9531cd2` on PR #715. Follow-up review found the
-original crash fallback must remain available and checked-state announcements
-must be assessed separately from labels. The revised source has both guards.
-Exact-head build and TalkBack acceptance remain pending for this follow-up.
+The first implementation is `b9531cd2` on PR #715. Review of the fallback at
+`5ff368c1` found both a startup order problem and the absent field on the
+pinned dependency. The follow-up removes the obsolete workaround and the
+popup suppression. Exact-head build and TalkBack acceptance are pending.
