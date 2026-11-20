@@ -679,7 +679,7 @@ public partial class MainWindowViewModel
     {
         get
         {
-            if (SmpHeroIsError) return SmpErrorText;
+            if (SmpHeroIsError || SmpErrorText == Strings.TunnelStopUnconfirmed) return SmpErrorText;
             if (IsConnecting) return Strings.SmpStatusConnectingHint;
             if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();

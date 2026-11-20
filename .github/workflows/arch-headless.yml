@@ -19,7 +19,7 @@ jobs:
       DOTNET_INSTALL_DIR: /opt/vpnrouter-dotnet
     steps:
       - name: Install build and runtime tools
-        run: pacman -Syu --noconfirm --needed base-devel git python dotnet-sdk-10.0 libcap libarchive iproute2
+        run: pacman -Syu --noconfirm --needed base-devel git python dotnet-sdk-10.0 libcap libarchive iproute2 openssh
       - name: Checkout exact source commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:

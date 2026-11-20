@@ -25,3 +25,14 @@ The installed Arch backend predates DNSTT capability negotiation even though its
 6. Characterization: no mechanical split planned.
 
 The live feed returns five VLESS rows including one chained target. With DNSTT capability it also returns one DNSTT row. No profile contents are stored in Git.
+
+The exact packaged core returned HTTP 204 through both the first hop and the
+complete chain on the independent Omarchy worker. The owner's Omarchy timed
+out through the same profile, including with a physical-interface binding.
+The provider's chain and the client-side route must remain intact while the
+owner-machine failure is diagnosed.
+
+The existing Simple start-timeout fix was already verified on WINBRAT.
+This candidate also surfaces an unconfirmed Stop from audit AUD-01, including
+when the engine still reports a live tunnel. The installed Arch smoke test
+now imports and lists a synthetic DNSTT profile without starting a connection.

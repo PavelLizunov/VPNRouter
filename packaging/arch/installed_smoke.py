@@ -2,11 +2,13 @@
 """CI-only installed package acceptance in an isolated Arch network namespace."""
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
 import select
 import subprocess
+import tempfile
 import time
 
 ROOT = Path('/usr/lib/vpnrouter-headless')
@@ -76,6 +78,26 @@ def snapshot(expected, reason=None):
         backend.close()
 
 
+def verify_dnstt_import(backend):
+    # A fresh test-only key exercises the installed parser without contacting a resolver.
+    with tempfile.TemporaryDirectory() as directory:
+        key = Path(directory) / 'fixture'
+        subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key)], check=True)
+        profile = {
+            'id': 'arch-fixture', 'resolver': '8.8.8.8', 'port': 53,
+            'domain': 'dnstt.example.test', 'noise_key': 'a' * 64,
+            'ssh_host_key': ' '.join(key.with_suffix('.pub').read_text().split()[:2]),
+            'ssh_private_key': key.read_text(),
+        }
+        encoded = base64.urlsafe_b64encode(json.dumps(profile).encode()).decode().rstrip('=')
+        revision = backend.call('snapshot')['revision']
+        backend.call('servers.import', {'revision': revision, 'text': 'dnstt://' + encoded + '#Arch-DNSTT'})
+    rows = backend.call('servers.list')['items']
+    assert len(rows) == 1
+    assert (rows[0]['name'], rows[0]['protocol']) == ('Arch-DNSTT', 'dnstt')
+    print('Installed backend imported and listed a DNSTT profile', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-sha', required=True)
@@ -92,6 +114,7 @@ def main():
         assert all(set(app) == {'name', 'displayName', 'icon', 'desktopId', 'hasWindow'}
                    for app in apps['runningApps'])
         assert any(item['status'] == 'info' for item in backend.call('diagnostics.check')['items'])
+        verify_dnstt_import(backend)
     finally:
         backend.close()
 

@@ -189,6 +189,7 @@ public partial class MainWindowViewModel
         if (toggle == ToggleAction.Stop)
         {
             if (submitted != null) return;
+            SmpErrorText = string.Empty;
             IsConnecting = true;
             StatusText = Strings.Stopping;
             try
@@ -213,6 +214,7 @@ public partial class MainWindowViewModel
                 IsConnected = _engine.HasActiveTunnel;
                 ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
                 StatusText = Strings.TunnelStopUnconfirmed;
+                SmpErrorText = Strings.TunnelStopUnconfirmed;
                 return;
             }
             IsConnected = false;

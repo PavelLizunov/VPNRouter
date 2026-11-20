@@ -107,6 +107,27 @@ public sealed class SimpleConnectStatusTests
         Assert.False(vm.IsConnected);
     }
 
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UnconfirmedStopRemainsVisibleOnSimplePage(bool tunnelStillActive)
+    {
+        var settings = new AppSettings();
+        settings.App.UiMode = "simple";
+        settings.Vless.Servers = [Entry("fixture", "test.invalid")];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm);
+
+        vm.IsConnected = tunnelStillActive;
+        vm.SmpErrorText = Strings.TunnelStopUnconfirmed;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
+        Assert.Equal(tunnelStillActive, vm.IsConnected);
+    }
+
     [AvaloniaFact]
     public async Task PendingRoutingAndServerEditsStayOutOfTheConnectedStatus()
     {
