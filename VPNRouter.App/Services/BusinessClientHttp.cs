@@ -94,7 +94,8 @@ internal sealed class BusinessClientHttp : IDisposable
                         if (!result.IsSuccessStatusCode) return BusinessSupportReply.Unavailable;
                         reply = await ReadSupportReplyAsync(result, timeout.Token).ConfigureAwait(false);
                     }
-                    catch (Exception ex) when (!timeout.IsCancellationRequested && ex is HttpRequestException or IOException)
+                    catch (Exception ex) when (!timeout.IsCancellationRequested &&
+                        ex is (HttpRequestException or IOException or OperationCanceledException))
                     {
                         // The next bounded poll can recover a transient transport failure.
                     }
@@ -109,6 +110,10 @@ internal sealed class BusinessClientHttp : IDisposable
                 return reply with { State = "queued" };
             }
             return reply;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return BusinessSupportReply.Pending with { State = "wait_cancelled" };
         }
         catch { /* Optional analysis must never reverse an acknowledged upload. */ }
         return BusinessSupportReply.Unavailable;
