@@ -36,13 +36,33 @@ public sealed class LinuxDebRuntimeTests
     }
 
     [Fact]
-    public void DebianPackageInstallsAndVerifiesCapabilitiesForTheProtectedRuntime()
+    public void ProtectedRuntime_RejectsAnUntrustedParentDirectory()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var visited = new List<string>();
+        var trusted = LinuxDesktopPackage.IsTrustedPackageDirectory("/opt/vpnrouter", (path, directory) =>
+        {
+            Assert.True(directory);
+            visited.Add(path);
+            return path != "/opt";
+        });
+
+        Assert.False(trusted);
+        Assert.Equal(new[] { "/opt/vpnrouter", "/opt" }, visited);
+    }
+
+    [Fact]
+    public void DebianPackageDeclaresCapabilitiesForTheProtectedRuntime()
     {
         var workflow = ReadRepositoryFile(".github/workflows/build-linux.yml");
         var root = LinuxDesktopPackage.InstallRoot;
         Assert.Contains($"mkdir -p \"$PKG{root}\"", workflow);
         Assert.Contains($"exec {root}/VPNRouter.App", workflow);
-        Assert.Matches(@"Depends:[^\r\n]*\blibcap2-bin\b", workflow);
+        Assert.Matches(@"(?m)^ *Depends:[^\r\n]*\blibcap2-bin\b", workflow);
+        Assert.Contains("$PKG/DEBIAN/postinst", workflow);
+        Assert.Contains("$PKG/usr/libexec/vpnrouter-update-helper", workflow);
+        Assert.Contains("dpkg-deb --raw-extract", workflow);
 
         var postinstall = ReadRepositoryFile("packaging/linux/postinst");
         Assert.Contains($"SINGBOX={root}/{LinuxDesktopPackage.SingBoxFileName}", postinstall);
@@ -55,6 +75,8 @@ public sealed class LinuxDebRuntimeTests
         }
 
         var updater = ReadRepositoryFile("VPNRouter.Core/Services/UpdateChecker.Apply.cs");
+        Assert.Contains("new[] { \"/bin/cp\", \"-rfT\"", updater);
+        Assert.Contains("new[] { \"/bin/chmod\", \"+x\"", updater);
         Assert.Contains("needsRoot && LinuxDesktopPackage.TryGetProtectedRuntimePath(installDir)", updater);
         Assert.Contains("RunWithCapture(pkexec!, [setcap, caps, runtime]", updater);
         Assert.Contains("RunWithCapture(setcap, [\"-q\", \"-v\", caps, runtime]", updater);

@@ -211,8 +211,19 @@ jobs:
           CTRL
 
           dpkg-deb --build --root-owner-group "$PKG"
-          mv "${PKG}.deb" "VPNRouter-v${VER}-linux-amd64.deb"
-          ls -lh "VPNRouter-v${VER}-linux-amd64.deb"
+          DEB="VPNRouter-v${VER}-linux-amd64.deb"
+          mv "${PKG}.deb" "$DEB"
+
+          dpkg-deb --field "$DEB" Depends | grep -Eq '(^|, )libcap2-bin(,|$)'
+          VERIFY=$(mktemp -d)
+          trap 'rm -rf -- "$VERIFY"' EXIT
+          dpkg-deb --raw-extract "$DEB" "$VERIFY"
+          test -x "$VERIFY/DEBIAN/postinst"
+          test -x "$VERIFY/usr/libexec/vpnrouter-update-helper"
+          test -x "$VERIFY/opt/vpnrouter/sing-box"
+          cmp "$PKG/DEBIAN/postinst" "$VERIFY/DEBIAN/postinst"
+          cmp "$PKG/usr/libexec/vpnrouter-update-helper" "$VERIFY/usr/libexec/vpnrouter-update-helper"
+          ls -lh "$DEB"
 
       - name: Build tar.gz
         run: |

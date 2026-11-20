@@ -65,11 +65,13 @@ Published version tags are permanent source references; older candidate download
 | `VPNRouter-*-win.zip.sha256` | Windows | SHA256 companion file — auto-updater verifies the download against this before extracting (v2.15.8+) |
 | `VPNRouter-v{version}-mac.dmg` | macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
 | `VPNRouter-v{version}-mac.zip` | macOS | Raw `.app` bundle (for manual install) |
-| `VPNRouter-v{version}-linux-amd64.deb` | Linux | Debian/Ubuntu package (desktop entry + `setcap` for passwordless TUN; no systemd service). Install: `sudo dpkg -i <file>.deb` |
+| `VPNRouter-v{version}-linux-amd64.deb` | Linux | Debian/Ubuntu package with a desktop entry and `setcap` for passwordless TUN. Install with `sudo apt install ./VPNRouter-v{version}-linux-amd64.deb`. |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | Linux | Portable single-file build. `chmod +x`, run, no install needed |
 | `VPNRouter-v{version}-linux.tar.gz` | Linux | Raw tarball (for manual install or packaging into other formats) |
 | `VPNRouter-v{version}-android-arm64.apk` | Android | Signed ARM64 APK, API 23+. Built and signed by `build-android.yml` for every release tag, then published at Releases and [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). An in-app updater delivers future APKs. |
 | `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip` + `*-Setup-*.exe`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Compare `sha256sum <file>` on Linux, `shasum -a 256 <file>` on macOS, or `Get-FileHash -Algorithm SHA256 <file>` on Windows with the 64-character hash in its sidecar. Some sidecars contain only the hash and cannot be used directly with `sha256sum -c`. |
+
+For the first upgrade from an older `.deb`, run the same `apt install` command with the new file. APT installs the `libcap2-bin` dependency and runs the post-install hook that applies the runtime capability.
 
 The scheduled pool job publishes this separate artifact when it succeeds:
 

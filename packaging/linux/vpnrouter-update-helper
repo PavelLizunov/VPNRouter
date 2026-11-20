@@ -1,5 +1,8 @@
 #!/bin/bash
 set -e
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+umask 022
 
 SRC="${1:-}"
 DST="${2:-}"
@@ -21,8 +24,37 @@ case "$DST" in
         exit 3
         ;;
 esac
+DST="${DST%/}"
 
-if [ ! -d "$SRC" ]; then
+root_owned_and_protected() {
+    local metadata
+    metadata=$(stat -c '%u:%a' -- "$1") || return 1
+    [[ "${metadata%%:*}" = 0 ]] && (( (0${metadata#*:} & 022) == 0 ))
+}
+
+trusted_directory() {
+    [[ ! -L "$1" && -d "$1" ]] && root_owned_and_protected "$1"
+}
+
+trusted_file() {
+    [[ ! -L "$1" && -f "$1" ]] && root_owned_and_protected "$1"
+}
+
+directory="$DST"
+if [[ ! -e "$DST" && ! -L "$DST" && "$#" -eq 2 ]]; then
+    directory="${DST%/*}"
+fi
+while true; do
+    if ! trusted_directory "$directory"; then
+        echo "Refusing to update through an untrusted directory: $directory" >&2
+        exit 3
+    fi
+    [[ "$directory" != / ]] || break
+    directory="${directory%/*}"
+    directory="${directory:-/}"
+done
+
+if [[ ! -d "$SRC" || -L "${SRC%/}" ]]; then
     echo "Source is not a directory: $SRC" >&2
     exit 4
 fi
@@ -32,9 +64,21 @@ if [ ! -f "$SRC/VPNRouter.App" ] && [ ! -f "$SRC/VPNRouter.App.dll" ]; then
     exit 5
 fi
 
+for filename in VPNRouter.App VPNRouter.App.dll sing-box; do
+    if [[ -e "$SRC/$filename" || -L "$SRC/$filename" ]] &&
+        [[ -L "$SRC/$filename" || ! -f "$SRC/$filename" ]]; then
+        echo "Source does not contain a regular $filename file" >&2
+        exit 5
+    fi
+    if [[ -e "$DST/$filename" || -L "$DST/$filename" ]] && ! trusted_file "$DST/$filename"; then
+        echo "Refusing to replace an untrusted file: $DST/$filename" >&2
+        exit 3
+    fi
+done
+
 if [ "$#" -eq 6 ]; then
     CURRENT_HOST="$DST/VPNRouter.App"
-    if [ ! -x "$CURRENT_HOST" ]; then
+    if ! trusted_file "$CURRENT_HOST" || [ ! -x "$CURRENT_HOST" ]; then
         echo "Current VPNRouter helper executable is unavailable: $CURRENT_HOST" >&2
         exit 6
     fi
@@ -44,10 +88,23 @@ if [ "$#" -eq 6 ]; then
     fi
 fi
 
-cp -rfT "$SRC" "$DST"
+cp -rfT -- "$SRC" "$DST"
 
-[ -f "$DST/VPNRouter.App" ] && chmod +x "$DST/VPNRouter.App"
-[ -f "$DST/sing-box" ]       && chmod +x "$DST/sing-box"
+if ! trusted_directory "$DST"; then
+    echo "Updated directory does not match the protected installation layout: $DST" >&2
+    exit 3
+fi
+for filename in VPNRouter.App sing-box; do
+    target="$DST/$filename"
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
+        continue
+    fi
+    if ! trusted_file "$target"; then
+        echo "Refusing to chmod an untrusted file: $target" >&2
+        exit 3
+    fi
+    chmod +x -- "$target"
+done
 
 CAPABILITIES=cap_net_admin,cap_net_bind_service=+eip
 if [ -f "$DST/sing-box" ]; then

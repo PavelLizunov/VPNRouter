@@ -40,16 +40,29 @@ internal static class LinuxDesktopPackage
         if (!string.Equals(appRoot, packageRoot, StringComparison.Ordinal))
             return null;
 
-        string? current = packageRoot;
-        while (!string.IsNullOrEmpty(current))
-        {
-            if (!isTrustedPath(current, true))
-                return null;
-            current = Path.GetDirectoryName(current);
-        }
+        if (!IsTrustedPackageDirectory(packageRoot, isTrustedPath))
+            return null;
 
         var runtime = Path.Combine(packageRoot, SingBoxFileName);
         return isTrustedPath(runtime, false) ? runtime : null;
+    }
+
+    internal static bool IsTrustedPackageDirectory(
+        string directory, Func<string, bool, bool>? isTrustedPath = null)
+    {
+        if (!Path.IsPathFullyQualified(directory))
+            return false;
+
+        isTrustedPath ??= IsTrustedPackagePath;
+        string? current = directory;
+        while (!string.IsNullOrEmpty(current))
+        {
+            if (!isTrustedPath(current, true))
+                return false;
+            current = Path.GetDirectoryName(current);
+        }
+
+        return true;
     }
 
     internal static bool IsTrustedPackagePath(string path, bool directory)

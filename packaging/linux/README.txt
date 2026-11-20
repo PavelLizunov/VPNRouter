@@ -67,11 +67,15 @@ sing-box-linux-amd64 ships bundled next to VPNRouter.App (and inside the
 .deb), so there is no first-connect download. The .deb runs the
 package-owned /opt/vpnrouter/sing-box directly, so the post-install file
 capabilities stay attached. The .deb requires libcap2-bin and checks those
-capabilities on installation. If an older app updater has already removed them,
-reinstall the .deb to reapply them. tar.gz and AppImage builds that run outside
-that protected layout provision a copy into ~/.config/vpnrouter/bin/ on
-first run and use the pkexec fallback unless you apply the optional
-setcap command above.
+capabilities on installation. For the first upgrade from an older .deb, or to
+restore capabilities after an older in-app update, install the new package:
+
+    sudo apt install ./VPNRouter-v{VERSION}-linux-amd64.deb
+
+APT installs libcap2-bin and runs the post-install hook. tar.gz and AppImage
+builds that run outside that protected layout provision a copy into
+~/.config/vpnrouter/bin/ on first run and use the pkexec fallback unless you
+apply the optional setcap command above.
 
 
 What's not in this BETA
