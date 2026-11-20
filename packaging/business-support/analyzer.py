@@ -550,8 +550,14 @@ def run_once(root, config, model_request=bounded_request_model):
         try:
             packet, refs, names = prepare(root, receipt, config)
             candidate, returned = model_request(config, packet)
-            result = validate_result(candidate, packet, refs, names)
-            state = 'ready'
+            try:
+                result = validate_result(candidate, packet, refs, names)
+            except Invalid:
+                if claim.get('result') is not None or claim['attempts'] >= min(2, config['max_attempts']):
+                    raise
+                state = 'pending'
+            else:
+                state = 'ready'
         except Transient:
             state = 'pending' if claim['attempts'] < config['max_attempts'] else 'failed'
         except (Invalid, ValueError, TypeError, KeyError, AttributeError, UnicodeError, zipfile.BadZipFile, EOFError, RecursionError):

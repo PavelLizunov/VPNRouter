@@ -67,8 +67,12 @@ and `ready`; optional `message_ru` and `message_en` contain plain text. Each
 message is nonempty and limited to 300 Unicode characters and 300 UTF-16 code
 units, with no control, format or surrogate characters, markup, URL or shell
 command syntax. Only these fields are exposed. `ready` requires a valid message;
-absent or invalid analysis becomes `unavailable` without changing `stored:true`.
-The receiver provides compatibility only and does not invoke an analyzer.
+the configured diagnostics identity receives `pending` for an accepted report
+while the worker has no terminal result. A failed or invalid terminal result
+becomes `unavailable` without changing `stored:true`. The receiver does not
+invoke the analyzer. If the worker rejects its first model result and has no
+previously published result, it may retry once within the configured attempt
+limit. The retry uses the same validation rules.
 
 GET accepts the same currently enabled Bearer upload identity through the trusted
 ingress. The receipt ID is exactly 64 lowercase hexadecimal characters. It

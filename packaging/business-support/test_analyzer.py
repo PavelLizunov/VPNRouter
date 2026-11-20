@@ -193,6 +193,27 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(outcome['state'], 'failed')
         self.assertEqual(analyzer.run_once(self.root, self.config, timeout)['state'], 'idle')
 
+    def test_first_invalid_model_result_gets_one_validated_retry(self):
+        config = dict(self.config, retry_seconds=0)
+        calls = []
+        def provider(*_):
+            calls.append(True)
+            return ({'schema': 'invalid'} if len(calls) == 1 else result(), 'synthetic-model')
+        self.assertEqual(analyzer.run_once(self.root, config, provider)['state'], 'pending')
+        self.assertNotIn('analysis', self.metadata())
+        self.assertEqual(analyzer.run_once(self.root, config, provider)['state'], 'ready')
+        self.assertEqual(self.metadata()['analysis'], result()['public_analysis'])
+        self.assertEqual(analyzer.run_once(self.root, config, provider)['state'], 'idle')
+        self.assertEqual(len(calls), 2)
+
+    def test_two_invalid_model_results_stay_unavailable(self):
+        config = dict(self.config, retry_seconds=0)
+        provider = lambda *_: ({'schema': 'invalid'}, 'synthetic-model')
+        self.assertEqual(analyzer.run_once(self.root, config, provider)['state'], 'pending')
+        self.assertEqual(analyzer.run_once(self.root, config, provider)['state'], 'unavailable')
+        self.assertEqual(analyzer.run_once(self.root, config, provider)['state'], 'idle')
+        self.assertNotIn('analysis', self.metadata())
+
     def test_failed_retry_retains_result_and_its_original_provenance(self):
         self.assertEqual(analyzer.run_once(self.root, self.config, lambda *args: (result(), 'original-model'))['state'], 'ready')
         before = self.metadata()
