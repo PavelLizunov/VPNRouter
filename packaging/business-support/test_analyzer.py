@@ -91,6 +91,21 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(analyzer.run_once(self.root, self.config, provider)['state'], 'idle')
         self.assertEqual(len(calls), 1)
 
+    def test_public_receipt_follows_the_worker_from_queue_to_ready(self):
+        store = receiver.Store(self.root, self.keys, "127.0.0.1")
+        report_id = self.receipt['report_id']
+        self.assertEqual(store.receipt(report_id, self.identity)['analysis']['state'], 'unavailable')
+        store.inbox = (self.identity, 'synthetic-service-token')
+        self.assertEqual(store.receipt(report_id, self.identity)['analysis']['state'], 'pending')
+        self.assertIsNone(store.receipt(report_id, 'b' * 64))
+
+        def provider(config, packet):
+            self.assertEqual(store.receipt(report_id, self.identity)['analysis']['state'], 'pending')
+            return result(), 'synthetic-model'
+
+        self.assertEqual(analyzer.run_once(self.root, self.config, provider)['state'], 'ready')
+        self.assertEqual(store.receipt(report_id, self.identity)['analysis'], result()['public_analysis'])
+
     def test_large_valid_russian_result_fits_the_utf8_receipt(self):
         candidate = result()
         statement = ('Для проверки нужно сопоставить время подключения и состояние туннеля. ' * 30)[:1016]

@@ -264,8 +264,9 @@ The app advertises support-analysis-v1 with the existing explicit report POST.
 Any durable2xx acknowledgement remains received even if optional analysis fails.
 A version1 reply may contain bounded plaintext message_ru/message_en; pending
 results are polled only under the original trusted HTTPS report endpoint and
-individual upload identity, for at most eight seconds. Missing/older404/invalid
-results use a receipt-confirmed fallback. No arbitrary URL, executable module,
+individual upload identity, for up to two minutes after the initial receipt.
+An unfinished analysis remains queued after that wait. Missing, unauthorized
+or invalid results use a receipt-confirmed fallback. No arbitrary URL, executable module,
 command or provider credential is accepted from a reply. The intake GET exposes
 only that identity's sanitized analysis, never archives or employee metadata.
 Server analysis/prompt/model/text can evolve behind this stable protocol without

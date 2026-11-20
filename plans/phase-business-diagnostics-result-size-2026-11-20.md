@@ -50,3 +50,10 @@ terminal responses. A deterministic clock fixture covers readiness after
 suite and review. The runtime gate is a real Business menu send through
 ready and the visible summary on Windows. Rollback is the scoped client
 commit and leaves accepted uploads intact.
+
+The receiver also returned unavailable before the worker populated analysis.
+An opted-in upload for the configured analysis identity now returns pending
+while queued, running or retrying, and unavailable on terminal failure.
+The receiver/worker fixture observes pending before and during analysis and
+the sanitized ready result afterward. The client distinguishes a wait that
+ended from a terminal server failure and retries transient poll errors.

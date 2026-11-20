@@ -313,6 +313,19 @@ class InboxTests(unittest.TestCase):
     def enable(self):
         self.store.inbox = (hashlib.sha256(self.token.encode()).hexdigest(), 's' * 32)
 
+    def test_opted_in_post_reports_pending_only_while_analysis_is_queued(self):
+        self.enable()
+        capabilities = {"X-VPNRouter-Capabilities": "support-analysis-v1"}
+        status, receipt = self.post(report(), headers=capabilities)
+        self.assertEqual(status, 201)
+        self.assertEqual(receipt["analysis"], {"version": 1, "state": "pending"})
+        self.assertNotIn("analysis", self.post(report())[1])
+        report_id = receipt["report_id"]
+        metadata = json.loads((self.store.root / (report_id + ".json")).read_bytes())
+        metadata["diagnosis"] = {"state": "failed"}
+        receiver.update_receipt(self.store.root, report_id, metadata)
+        self.assertEqual(self.post(report(), headers=capabilities)[1]["analysis"]["state"], "unavailable")
+
     def test_capability_is_distinct_from_upload_and_revocation_is_live(self):
         self.assertEqual(self.internal()[0], 404)
         self.enable()

@@ -312,8 +312,14 @@ class Store:
             if (isinstance(receipt, dict) and receipt.get("identity") == identity and
                     receipt.get("report_id") == report_id and
                     not archive.is_symlink() and archive.is_file()):
+                analysis = receipt.get("analysis")
+                job = receipt.get("diagnosis")
+                state = job.get("state") if isinstance(job, dict) else None
+                if (analysis is None and self.inbox and identity == self.inbox[0] and
+                        state in (None, "received", "running", "pending")):
+                    analysis = {"version": 1, "state": "pending"}
                 return {"stored": True, "report_id": report_id,
-                        "analysis": public_analysis(receipt.get("analysis"))}
+                        "analysis": public_analysis(analysis)}
         except (OSError, ValueError, UnicodeError, RecursionError):
             pass
         return None

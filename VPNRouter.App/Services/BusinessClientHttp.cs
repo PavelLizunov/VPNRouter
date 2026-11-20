@@ -87,14 +87,26 @@ internal sealed class BusinessClientHttp : IDisposable
                     await Task.Delay(TimeSpan.FromSeconds(3), _timeProvider, timeout.Token).ConfigureAwait(false);
                     using var poll = new HttpRequestMessage(HttpMethod.Get, pollUri);
                     poll.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                    using var result = await _http.SendAsync(poll, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
-                    if (!result.IsSuccessStatusCode) return BusinessSupportReply.Unavailable;
-                    reply = await ReadSupportReplyAsync(result, timeout.Token).ConfigureAwait(false);
+                    try
+                    {
+                        using var result = await _http.SendAsync(poll, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+                        if ((int)result.StatusCode == 429 || (int)result.StatusCode >= 500) continue;
+                        if (!result.IsSuccessStatusCode) return BusinessSupportReply.Unavailable;
+                        reply = await ReadSupportReplyAsync(result, timeout.Token).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (!timeout.IsCancellationRequested && ex is HttpRequestException or IOException)
+                    {
+                        // The next bounded poll can recover a transient transport failure.
+                    }
                 }
             }
-            catch (OperationCanceledException) when (deadline.IsCancellationRequested && !ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // The upload is acknowledged and the last receipt still says pending.
+                return reply with { State = "wait_cancelled" };
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+                return reply with { State = "queued" };
             }
             return reply;
         }

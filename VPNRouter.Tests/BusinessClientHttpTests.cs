@@ -115,6 +115,7 @@ public sealed class BusinessClientHttpTests
                     Assert.Equal(HttpMethod.Get, request.Method);
                     Assert.Equal($"https://example.invalid/api/reports/{id}/analysis", request.RequestUri!.AbsoluteUri);
                     polls++;
+                    if (polls == 1) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
                 }
 
                 var ready = !deadlineExpires && polls == 16;
@@ -150,7 +151,7 @@ public sealed class BusinessClientHttpTests
             Assert.Equal(1, posts);
             Assert.Equal(deadlineExpires ? 3 : 16, polls);
             Assert.Equal(id, reply.ReportId);
-            Assert.Equal(deadlineExpires ? "pending" : "ready", reply.State);
+            Assert.Equal(deadlineExpires ? "queued" : "ready", reply.State);
             Assert.Equal(deadlineExpires ? null : "Verified summary", reply.MessageEn);
         }
         finally { Directory.Delete(directory, true); }
