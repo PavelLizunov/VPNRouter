@@ -75,8 +75,8 @@ public sealed class LinuxDebRuntimeTests
         }
 
         var updater = ReadRepositoryFile("VPNRouter.Core/Services/UpdateChecker.Apply.cs");
-        Assert.Contains("umask 022; exec /bin/cp -rfT --remove-destination --", updater);
-        Assert.Contains("new[] { \"/bin/chmod\", \"+x\"", updater);
+        Assert.Contains("umask 022; exec /bin/cp -rfT --remove-destination -- \\\"$@\\\"\", \"vpnrouter-copy\",", updater);
+        Assert.Contains("new[] { \"/bin/chmod\", \"0755\"", updater);
         Assert.Contains("cp -rfT --remove-destination -- \"$stage/payload\" \"$DST\"", helper);
         Assert.Contains("VerifyPrivilegedUpdateTree(sourceDir, installed: false)", updater);
         Assert.Contains("VerifyPrivilegedUpdateTree(installDir, installed: true)", updater);

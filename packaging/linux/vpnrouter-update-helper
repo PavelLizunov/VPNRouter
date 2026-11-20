@@ -75,8 +75,8 @@ if ! tree_is_valid "$SRC"; then
     echo "Source contains unsupported entries or could not be verified" >&2
     exit 5
 fi
-if [[ -d "$DST" ]] && ! tree_is_valid "$DST" -o ! -uid 0 -o -perm /022; then
-    echo "Refusing to update an untrusted installation tree" >&2
+if [[ -d "$DST" ]] && ! installed_tree_is_valid "$DST"; then
+    echo "Refusing to update an untrusted or unreadable installation tree" >&2
     exit 3
 fi
 
@@ -137,7 +137,7 @@ for filename in VPNRouter.App sing-box; do
         echo "Refusing to chmod an untrusted file: $target" >&2
         exit 3
     fi
-    chmod +x -- "$target"
+    chmod 0755 -- "$target"
 done
 
 CAPABILITIES=cap_net_admin,cap_net_bind_service=+eip

@@ -80,6 +80,8 @@ apply the optional setcap command above.
 System-wide tar.gz installations require root-owned directories with no
 group or other write permission for in-app updates. If /usr/local permits
 staff group writes, update by reinstalling from the archive.
+The updater also checks that installed files can be read before replacing
+them. Reinstall the package if an older update left restrictive permissions.
 
 
 What's not in this BETA

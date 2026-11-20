@@ -69,6 +69,10 @@ package-owned `/opt/vpnrouter/sing-box` directly.
   private source tree. It verifies `0644` data files, `0755` directories
   and executables, link rejection, staged cleanup and stubbed capability
   verification. Both fixture cases passed locally and run in PR CI.
+- Exact `f7d5c26e` passed all nine PR checks and independent review. The
+  follow-up uses explicit executable modes and checks existing readability
+  before the privileged copy. A package reinstall can recover an old tree
+  with restrictive modes. All four unprivileged helper tests pass locally.
 - The legacy inline copy still takes a same-user staging tree and replaces
   individual files. Root-side verification of payload authenticity and
   whole-install rollback are separate work.

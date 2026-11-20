@@ -180,7 +180,7 @@ public partial class UpdateChecker
                     throw new InvalidOperationException(
                         $"Update helper failed (exit {hExit}){hint}: {Truncate(hErr, 200)}".Trim());
                 }
-                VerifyPrivilegedUpdateTree(installDir, installed: true, requireReadable: true);
+                VerifyPrivilegedUpdateTree(installDir, installed: true);
             }
         }
         else
@@ -312,7 +312,7 @@ public partial class UpdateChecker
 
         if (needsRoot)
         {
-            VerifyPrivilegedUpdateTree(installDir, installed: true, requireReadable: true);
+            VerifyPrivilegedUpdateTree(installDir, installed: true);
             VerifyPrivilegedUpdateDestination(installDir, executablePaths);
         }
 
@@ -320,12 +320,14 @@ public partial class UpdateChecker
         {
             var chmodCmd = needsRoot ? pkexec! : "/bin/chmod";
             var chmodArgs = needsRoot
-                ? new[] { "/bin/chmod", "+x", "--", executablePaths[0], executablePaths[1] }
+                ? new[] { "/bin/chmod", "0755", "--", executablePaths[0], executablePaths[1] }
                 : new[] { "+x", "--", executablePaths[0], executablePaths[1] };
             var (chExit, _, chErr) = RunWithCapture(chmodCmd, chmodArgs, 10_000);
             log($"chmod exit={chExit} stderr={Truncate(chErr)}");
+            if (needsRoot && chExit != 0)
+                throw new InvalidOperationException("Could not set executable permissions on the updated runtime.");
         }
-        catch (Exception ex) { log($"chmod threw: {ex.Message}"); }
+        catch (Exception ex) when (!needsRoot) { log($"chmod threw: {ex.Message}"); }
 
         if (needsRoot && LinuxDesktopPackage.TryGetProtectedRuntimePath(installDir) is { } runtime)
         {
@@ -346,7 +348,7 @@ public partial class UpdateChecker
         }
     }
 
-    private static void VerifyPrivilegedUpdateTree(string directory, bool installed, bool requireReadable = false)
+    private static void VerifyPrivilegedUpdateTree(string directory, bool installed)
     {
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
         if (installed && !LinuxDesktopPackage.IsTrustedPackageDirectory(root))
@@ -355,16 +357,15 @@ public partial class UpdateChecker
         var arguments = new List<string> { "-P", root, "(", "!", "-type", "f", "!", "-type", "d",
             "-o", "-perm", "/6000" };
         if (installed)
-            arguments.AddRange(["-o", "!", "-uid", "0", "-o", "-perm", "/022"]);
-        if (requireReadable)
-            arguments.AddRange(["-o", "-type", "d", "!", "-perm", "-0555",
+            arguments.AddRange(["-o", "!", "-uid", "0", "-o", "-perm", "/022",
+                "-o", "-type", "d", "!", "-perm", "-0555",
                 "-o", "-type", "f", "!", "-perm", "-0444"]);
         arguments.AddRange([")", "-exec", "/bin/false", "{}", "+", "-quit"]);
 
         var (exit, _, _) = RunWithCapture("/usr/bin/find", arguments, 30_000);
         if (exit != 0)
             throw new InvalidOperationException(installed
-                ? "The privileged update destination contains untrusted files."
+                ? "The privileged update destination contains untrusted or unreadable files."
                 : "The update payload contains unsupported files.");
     }
 

@@ -63,8 +63,12 @@ printf '%s\n' "$*" >> "$VPNROUTER_TEST_CAPABILITIES"
         return result
 
     def test_private_payload_modes_are_normalized(self):
+        for name in ("VPNRouter.App", "sing-box"):
+            (self.source / name).chmod(0o600)
         result = self.apply()
         self.assertEqual(0, result.returncode, result.stderr)
+        for name in ("VPNRouter.App", "sing-box"):
+            self.assertEqual(0o755, (self.install / name).stat().st_mode & 0o777)
         nested = self.install / "deps"
         self.assertEqual("new", (nested / "library.dll").read_text())
         self.assertEqual(0o755, nested.stat().st_mode & 0o777)
@@ -84,3 +88,20 @@ printf '%s\n' "$*" >> "$VPNROUTER_TEST_CAPABILITIES"
                 self.assertEqual("old", (self.install / "deps" / "library.dll").read_text())
                 self.assertFalse(self.capabilities.exists())
                 entry.unlink()
+
+    def test_rejects_fifo_before_copy(self):
+        os.mkfifo(self.source / "deps" / "unexpected")
+        result = self.apply()
+        self.assertEqual(5, result.returncode, result.stderr)
+        self.assertEqual("old", (self.install / "deps" / "library.dll").read_text())
+        self.assertFalse(self.capabilities.exists())
+
+    def test_rejects_unreadable_existing_file_before_copy(self):
+        stale = self.install / "deps" / "old-library.dll"
+        stale.write_text("old")
+        stale.chmod(0o600)
+        result = self.apply()
+        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertIn("unreadable installation tree", result.stderr)
+        self.assertEqual("old", (self.install / "deps" / "library.dll").read_text())
+        self.assertFalse(self.capabilities.exists())
