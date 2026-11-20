@@ -80,3 +80,14 @@ allowance each. A two-failure test pins the absence of false readiness.
 ## Candidate delivery
 
 Prepare Standard `v2.50.6-r4` from the Simple subscription controls and DNSTT readiness changes. The preceding PR head passed all eight checks. Run CI again on the versioned source. The public prerelease requires the release gate decision for #689 and verified Windows, macOS, Linux, and Android artifacts from the accepted revision. The candidate has not been published.
+
+## Windows runtime follow-up
+
+Omarchy Windows reproduced a phase B timeout on the selected DNSTT route.
+WINBRAT exposed a separate issue: entering a direct DNSTT link in Simple
+could start the previously saved VLESS route because the input classifier did
+not recognize the scheme. Accept that scheme through the normal parser and
+show the existing timeout on the Simple page as soon as retirement starts.
+Retain the transition guard until cleanup completes. Verify both regressions
+in exact-head CI and repeat the real selected-route Windows scenario. The
+transport timeout remains open pending verification and root cause.
