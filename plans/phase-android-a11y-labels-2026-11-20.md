@@ -257,3 +257,27 @@ header has no extra focus stop for the popup placeholder. UIAutomator omits
 the screen-reader focusability attribute used here. The Home scrollbar
 reaching into the system navigation inset and resizing a popup held open
 during rotation remain to be verified.
+
+### Landscape boundary follow-up
+
+The exact `77a877eb` ARM64 APK passed menu node counts, both openers, ordinary
+landscape scrolling and activation, scrollbar drag, dismissal and IME resize.
+The same run found that a second swipe at the bottom moved Home's scrollbar
+thumb by 543 px. The owner's `715/77a877eb` receipt contains the before/after
+tree and pixels. The popup's Fluent recognizer yields before a scroll event
+can be handled at an exhausted edge. Because the host routes input through
+the popup's logical parent, Home's Fluent recognizer can then acquire the
+gesture. Move the popup declaration out of the scrolled region, preserving
+its explicit placement targets and visual overlay.
+
+The main Home scroller's viewport also needs to account for the status and
+navigation insets so its scrollbar controls remain reachable. Keep the
+existing content spacing and background while moving the insets to the
+viewport. The About screen has a separate scrollable viewport; exercise
+scrolling to its Close button before changing its layout.
+
+Repeat at the exact new head. Swipe twice past each menu boundary from both
+openers, verify the background does not move, and verify Home still scrolls
+after dismissing the menu. Measure scrollbar and IME clearance, landscape
+About Close after scrolling, and popup geometry when rotating with it open.
+The current ARM64 image has no spoken TalkBack evidence.

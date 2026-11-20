@@ -366,12 +366,11 @@ public partial class AndroidApp : Avalonia.Application
     {
         _currentSafeArea = rawInsets;
         var insets = new Thickness(rawInsets.Left, rawInsets.Top, rawInsets.Right, _imeVisible ? 0.0 : rawInsets.Bottom);
+        if (_mainScroller is not null)
+            _mainScroller.Margin = new Thickness(0, insets.Top, 0, insets.Bottom);
+
         if (_mainContentGrid is not null)
-        {
-            var top = Math.Max(12.0, insets.Top + 6.0);
-            var bottom = Math.Max(16.0, insets.Bottom + 16.0);
-            _mainContentGrid.Margin = new Thickness(16, top, 16, bottom);
-        }
+            _mainContentGrid.Margin = new Thickness(16, Math.Max(6.0, 12.0 - insets.Top), 16, 16);
 
         if (_updateBannerFloating is not null)
         {
@@ -527,9 +526,7 @@ public partial class AndroidApp : Avalonia.Application
             Children = { innerStack }
         };
 
-        // The vertical room for the system bars is a margin of the content, not the ScrollViewer's Padding: the
-        // scroll extent includes a child's margin but not the viewer's padding, so with Padding the last cards could
-        // not be scrolled into view.
+        // Keep the page spacing inside the viewport. ApplySafeArea insets the scroller and its scrollbar.
         var outerGrid = new Grid
         {
             Margin = new Thickness(16, 12, 16, 16),
@@ -545,7 +542,6 @@ public partial class AndroidApp : Avalonia.Application
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Focusable = true,
         };
-        _mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
         var mainScroller = _mainScroller;
 
         mainScroller.SizeChanged += (_, _) => RevealHomeFocusedTextBox();
@@ -587,6 +583,9 @@ public partial class AndroidApp : Avalonia.Application
                          _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
                          updateBannerFloating, _menuFeedbackFloating }
         };
+        _pageRoot.BindToken(Grid.BackgroundProperty, "SurfaceAppBrush");
+        // The popup host routes input through this placeholder. Keep it outside the page scrollers.
+        _pageRoot.Children.Add(_kebabPopup!);
         return _pageRoot;
     }
 
@@ -794,6 +793,8 @@ public partial class AndroidApp : Avalonia.Application
         {
             PlacementTarget = _kebabMenuButton,
             Placement = PlacementMode.BottomEdgeAlignedRight,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
             Child = menuPanel,
             IsLightDismissEnabled = true,
         };
@@ -809,7 +810,6 @@ public partial class AndroidApp : Avalonia.Application
         headerRow.Children.Add(mascot);
         headerRow.Children.Add(brandStack);
         headerRow.Children.Add(_kebabMenuButton);
-        headerRow.Children.Add(_kebabPopup);
 
         return headerRow;
     }
