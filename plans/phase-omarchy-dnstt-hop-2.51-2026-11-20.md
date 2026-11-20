@@ -17,11 +17,11 @@ The installed Arch backend predates DNSTT capability negotiation even though its
 
 ## Verification and outcome
 
-1. Build: exact Arch package at `54f3ac43` passed Actions run `44755989344`.
+1. Build: exact Arch package at `a97808f9` passed Actions run `44759765274`. The isolated import smoke also passed at `e8c75e20` in run `44758035353`.
 2. Tests: the installed package imported DNSTT and ran both selected routes on `omarchytest`. Both connected, returned valid HTTPS probe results, and removed the TUN on Stop. The quick test now reports that a real tunnel is needed for both.
 3. Documentation: this brief records the observed installation and feed results.
 4. Independent review: DeepSeek confirmed the missing capability in the old package and the direct-probe mismatch. Follow-up reviews cover the exact patches.
-5. Actual client: the Omarchy validator and bundled-backend check passed at plugin commit `e050e3dd`. The owner's network and live popup have separate acceptance.
+5. Actual client: the Omarchy validator and bundled-backend check passed with the r86 bundle. An offscreen check rendered the real DNSTT row and localized quick-test feedback. The owner's network and live popup have separate acceptance.
 6. Characterization: no mechanical split planned.
 
 The live feed returns five VLESS rows including one chained target. With DNSTT capability it also returns one DNSTT row. No profile contents are stored in Git.
@@ -35,5 +35,7 @@ owner-machine failure is diagnosed.
 The existing Simple start-timeout fix was already verified on WINBRAT.
 This candidate also surfaces an unconfirmed Stop from audit AUD-01, including
 when the engine still reports a live tunnel. The warning follows the selected
-language and clears on a confirmed stop. The installed Arch smoke test imports
-and lists a synthetic DNSTT profile in a disposable data directory.
+language, survives a poll after the process exits while the manager still
+holds ownership, and clears on a confirmed stop. Live desktop acceptance is
+pending. The installed Arch smoke test imports and lists a synthetic DNSTT
+profile in a disposable data directory.

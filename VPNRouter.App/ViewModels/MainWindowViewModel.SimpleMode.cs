@@ -660,8 +660,7 @@ public partial class MainWindowViewModel
 
     public bool SmpCanConnect => !SimpleConnectRefreshPending && (SmpHasConfig || !string.IsNullOrWhiteSpace(SmpInput));
 
-    // Error: the last connect attempt failed (SmpErrorText). Warn: the tunnel reported a problem while up (failover
-    // alert). On / busy / idle are the plain connection states.
+    // Error represents a failed start. Warn covers a connection alert or an unconfirmed stop.
     public bool SmpHeroIsError => !IsConnected && !string.IsNullOrEmpty(SmpErrorText);
     public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && (SmpStopUnconfirmed || HasConnectionAlert);
     public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError && !SmpStopUnconfirmed;

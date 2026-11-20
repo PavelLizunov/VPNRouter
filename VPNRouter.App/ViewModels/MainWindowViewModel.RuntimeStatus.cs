@@ -140,6 +140,9 @@ public partial class MainWindowViewModel
 
     internal void SyncConnectedWithVpnRuntime(bool vpnRunning)
     {
+        if (SmpStopUnconfirmed && _engine.HasActiveTunnel)
+            return;
+
         var action = ConnectionSyncPolicy.DecideRuntimeSync(
             vpnRunning,
             IsConnected,

@@ -140,6 +140,14 @@ public sealed class SimpleConnectStatusTests
             Assert.Equal(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
             Assert.NotEqual(firstWarning, BoundText(view.Page, "ConnectionDetails"));
 
+            identity.ExitQueryUnavailable = false;
+            identity.SignalExit(0);
+            Assert.True(engine.HasActiveTunnel, "The manager still retains ownership after the process exits");
+            vm.SyncConnectedWithVpnRuntime(vpnRunning: false);
+            Assert.True(vm.SimpleCtaIsConnected);
+            Assert.False(vm.SimpleCtaIsDisconnected);
+            Assert.Equal(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
+
             managerField.SetValue(engine, null);
             ReportStatus(engine, "Stopped");
             Assert.False(vm.IsConnected);
