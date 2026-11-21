@@ -3,6 +3,7 @@ using System.IO;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -256,6 +257,8 @@ internal sealed class StartupPipeline
         ct.ThrowIfCancellationRequested();
 
         var firewall = (_host as StartupHostInternal)?.Firewall;
+        if (firewall is MacFirewallManager macFirewall)
+            macFirewall.BindToCurrentSession();
         if (firewall is ICommittedFirewallConfig committedFirewall)
         {
             var isFullTunnel = (settings.App.RoutingMode ?? "split")

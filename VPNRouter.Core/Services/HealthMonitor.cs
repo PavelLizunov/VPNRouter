@@ -1,6 +1,7 @@
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -300,6 +301,8 @@ public class HealthMonitor : IDisposable
                 {
                     try
                     {
+                        if (_firewall is MacFirewallManager macFirewall)
+                            macFirewall.BindToCurrentSession();
                         _firewall.DisableBlockRules();
                         _logger.Information(
                             "[HealthMonitor] Kill-switch block rules lifted after restart — TUN serving confirmed (clashApi={Clash}, fallback={Fallback}, +{Secs:F0}s)",

@@ -5,7 +5,9 @@ on:
     paths:
       - "packaging/macos/**"
       - "VPNRouter.Core/Platform/macOS/**"
-      - "VPNRouter.Core/Services/ConfigGenerator.cs"
+      - "VPNRouter.Core/Services/ConfigGenerator*.cs"
+      - "VPNRouter.Core/Services/ConfigPipeline*.cs"
+      - "VPNRouter.Core/Services/CustomConfigInjector*.cs"
       - "VPNRouter.Core/AppVersion.cs"
       - "build-mac.sh"
       - "global.json"

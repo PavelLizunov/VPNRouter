@@ -247,6 +247,23 @@ live acceptance.
   tree `44fd9811e7c376ae59ba69f222137e6735d20d87`. Shell syntax and
   the non-hosted refusal passed. The ordinary macOS worker was not
   used for a live network mutation.
+- Hosted macOS 26.7.2 accepted the isolated service in run 44869123893
+  at `388e2138cf76aa6f90e9b48e8c53651770c16114`. Job 136739429721
+  built an 82,010,342-byte candidate ZIP with SHA-256
+  `165a720da71b57182b67fee060787fa5a22f7877cfdbf510299c3242cbbc1369`.
+  After helper migration it set the fixture DNS to the TUN address under
+  the standard user and restored the original address after Stop. The
+  populated default route was unchanged and the fixture address stayed
+  out of the active DNS resolver configuration.
+- Independent DNS review accepted the caller and ownership model at
+  `b6aad387` with no P0 or P1 confirmed in that slice. The hosted positive
+  fixture now covers actual system writes. Recovery remains untested for
+  a renamed or deleted network service, a corrupt root snapshot, and a
+  root runtime left running after a desktop crash. Retaining a stable
+  service ID would allow renamed service recovery without applying a
+  user-supplied path or treating a rename as deletion. Recovery of a
+  surviving root runtime must distinguish a dead owner from another live
+  desktop instance. Legacy user-owned DNS files remain untrusted.
 - Native compilation with warnings as errors and all native fixtures
   passed for `packaging/macos` from tree
   `e886872b51a10cd285dc90c8a29bf1c6757c96e4`. A static comparison of
@@ -382,3 +399,45 @@ live acceptance.
   path is not implemented; CLI/Headless entry points do not run the one-time
   installer prompt and fail closed until the desktop app installs the helper;
   live migration and standard-user acceptance are unproven.
+
+## Host firewall ownership
+
+- Record one host runtime owner in the protected run directory before exec.
+  Serialize claim, Stop and firewall transitions under the existing host lock.
+  Preserve an owned policy across same-user runtime restart and refuse a
+  competing user's Start while that policy needs recovery.
+- Persist the actual PF release mode and enable reference under root. Replace
+  caller-selected flush/disable and user-marker interpretation with one release
+  operation. Allow explicit recovery for the recorded user after the runtime
+  exits. Preserve state on a failed release for retry.
+- Extend the disposable hosted system test with an isolated PF anchor and a
+  non-blocking loopback rule, verifying the anchor and its release while
+  keeping the DNS and default route checks. Expand the generated-config
+  workflow triggers. Keep full production auto-route, admin prompt, and
+  desktop acceptance distinct in the evidence.
+
+- Hosted and managed checks passed nine of nine at `388e2138`. The
+  earlier review of `c16feb63` corroborated the failed setup. The present
+  fixture uses an enabled service with both IP protocols disabled. Generated
+  config path triggers now include the partial generator, pipeline and import
+  files. If the fixture cannot confirm Stop, it keeps its records for
+  disposal of the runner instead of removing the helper under a live process.
+- PF requests carry the live host runtime's PID and start time. The desktop
+  binds on Start, Apply and confirmed health restart. An explicit owner
+  recovery request can reclaim policy only after the runtime exits. The
+  root state records the release mode before loading rules. Stop and restart
+  keep the enable reference until release. The app no longer interprets
+  a user-owned PF marker. Post-Stop recovery handles a replacement that
+  ended before the app could bind to it.
+- Native worker preflight: macOS 26.5.2, ten logical CPUs, load 1.71,
+  16 GiB RAM (14,222 free and 288,631 inactive 16 KiB pages), 1,174 MiB
+  free swap, 80 GiB free disk, no compiler jobs, and Command Line Tools
+  clang available. The helper compiled with warnings as errors and the
+  native contract and eight installer fixtures passed for tree
+  `8a579ba12cb51105222db920ac97705bb98e86b3`. The isolated DNS fixture
+  compiled and the system test passed shell syntax validation. The exact
+  native code and system fixture are unchanged by the final evidence edits.
+- The shared worker did not change PF, system DNS, or TUN state. The
+  disposable hosted check will verify active-session rejection and
+  stopped-session recovery against real PF. Full desktop and admin-prompt
+  acceptance remain open.

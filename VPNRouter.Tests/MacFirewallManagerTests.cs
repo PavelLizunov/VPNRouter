@@ -18,8 +18,6 @@ public class MacFirewallManagerTests : IDisposable
 
     private readonly string _cfg =
         Path.Combine(Path.GetTempPath(), "vpnrouter-fw-cfg-" + Guid.NewGuid().ToString("N") + ".json");
-    private readonly string _marker =
-        Path.Combine(Path.GetTempPath(), "vpnrouter-fw-marker-" + Guid.NewGuid().ToString("N") + ".marker");
     private readonly string _pfconf =
         Path.Combine(Path.GetTempPath(), "vpnrouter-fw-pfconf-" + Guid.NewGuid().ToString("N") + ".conf");
     private readonly string _rules =
@@ -40,7 +38,6 @@ public class MacFirewallManagerTests : IDisposable
     public void Dispose()
     {
         try { if (File.Exists(_cfg)) File.Delete(_cfg); } catch { }
-        try { if (File.Exists(_marker)) File.Delete(_marker); } catch { }
         try { if (File.Exists(_pfconf)) File.Delete(_pfconf); } catch { }
         try { if (File.Exists(_rules)) File.Delete(_rules); } catch { }
         try { if (File.Exists(_mainConf)) File.Delete(_mainConf); } catch { }
@@ -80,7 +77,7 @@ public class MacFirewallManagerTests : IDisposable
     private static bool IsPfApply(ProcessRequest call, string mode) =>
         IsHelper(call, "pf_apply") && Mode(call) == mode;
 
-    private static bool IsAnchorFlush(ProcessRequest call) => IsHelper(call, "pf_flush");
+    private static bool IsRelease(ProcessRequest call) => IsHelper(call, "pf_release");
 
     private void WriteConfig(string serverIp) =>
         File.WriteAllText(_cfg, $@"{{ ""outbounds"": [
@@ -96,20 +93,18 @@ public class MacFirewallManagerTests : IDisposable
                 : "scrub-anchor \"com.apple/*\" all fragment reassemble\nanchor \"com.apple/*\" all\n"));
         f.OnRun(c => IsHelper(c, "pf_enable"), Ok());
         f.OnRun(c => IsHelper(c, "pf_apply"), Ok());
-        f.OnRun(c => IsHelper(c, "pf_flush"), Ok());
-        f.OnRun(c => IsHelper(c, "pf_disable"), Ok());
-        f.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
+        f.OnRun(IsRelease, Ok());
         return f;
     }
 
     private MacFirewallManager Sut(FakeProcessRunner fake, string? pfconf = null, string? rulesPath = null, string? mainConfPath = null, Func<string, IReadOnlyList<string>>? hostResolver = null) =>
-        new MacFirewallManager(null, fake, _cfg, _marker, hostResolver: hostResolver, pfConfPath: pfconf ?? _pfconf, rulesPath: rulesPath ?? _rules, mainConfPath: mainConfPath ?? _mainConf);
+        new MacFirewallManager(null, fake, _cfg, hostResolver: hostResolver, pfConfPath: pfconf ?? _pfconf, rulesPath: rulesPath ?? _rules, mainConfPath: mainConfPath ?? _mainConf);
 
-    private static bool GetArmed(MacFirewallManager sut) =>
-        (bool)typeof(MacFirewallManager).GetField("_armed", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(sut)!;
-
-    private static bool GetLoaded(MacFirewallManager sut) =>
-        (bool)typeof(MacFirewallManager).GetField("_loaded", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(sut)!;
+    private static void Bind(MacFirewallManager manager, FakeProcessRunner runner)
+    {
+        runner.OnRun(c => IsHelper(c, "pf_session"), Ok(stdout: """{"pid":391,"start_time":3000}"""));
+        manager.BindToCurrentSession();
+    }
 
     [Fact]
     public void SplitTunnel_disarms_and_Enable_is_noop()
@@ -144,6 +139,7 @@ public class MacFirewallManagerTests : IDisposable
         var fake = OkRunner(carrierPresent: true);
         var sut = Sut(fake);
 
+        Bind(sut, fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
@@ -152,34 +148,34 @@ public class MacFirewallManagerTests : IDisposable
     }
 
     [Fact]
-    public void Disable_after_load_flushes_anchor_and_releases_enable_no_main_reload()
+    public void Disable_after_load_requests_typed_release()
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner(carrierPresent: true);
         var sut = Sut(fake);
+        Bind(sut, fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
         sut.DisableBlockRules();
 
-        Assert.Contains(fake.RunCalls, IsAnchorFlush);
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
+        Assert.Single(fake.RunCalls.Where(IsRelease));
         Assert.DoesNotContain(fake.RunCalls, c => IsPfApply(c, "main"));
     }
 
     [Fact]
-    public void DeleteAllRules_flushes_anchor_and_releases_enable()
+    public void DeleteAllRules_requests_typed_release()
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner(carrierPresent: true);
         var sut = Sut(fake);
+        Bind(sut, fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
         sut.DeleteAllRules();
 
-        Assert.Contains(fake.RunCalls, IsAnchorFlush);
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
+        Assert.Single(fake.RunCalls.Where(IsRelease));
     }
 
     [Fact]
@@ -196,17 +192,18 @@ public class MacFirewallManagerTests : IDisposable
     }
 
     [Fact]
-    public void Dispose_after_load_flushes_anchor_antibrick()
+    public void Dispose_after_load_requests_typed_release()
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner(carrierPresent: true);
         var sut = Sut(fake);
+        Bind(sut, fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
         sut.Dispose();
 
-        Assert.Contains(fake.RunCalls, IsAnchorFlush);
+        Assert.Single(fake.RunCalls.Where(IsRelease));
         Assert.DoesNotContain(fake.RunCalls, c => IsPfApply(c, "main"));
     }
 
@@ -218,14 +215,15 @@ public class MacFirewallManagerTests : IDisposable
         fake.OnRun(c => IsHelper(c, "pf_enable"), Ok());
         fake.OnRun(c => IsHelper(c, "pf_status"), Fail());
         fake.OnRun(c => IsHelper(c, "pf_apply"), Fail());
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
+        fake.OnRun(IsRelease, Ok());
         var sut = Sut(fake);
 
+        Bind(sut, fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
-        Assert.False(File.Exists(_marker));
+        Assert.Single(fake.RunCalls.Where(IsRelease));
+        Assert.False(sut.IsLoaded);
 
         var before = fake.RunCalls.Count;
         sut.DisableBlockRules();
@@ -240,14 +238,15 @@ public class MacFirewallManagerTests : IDisposable
         fake.OnRun(c => IsHelper(c, "pf_enable"), Ok());
         fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
         fake.OnRun(c => IsPfApply(c, "anchor"), Fail());
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
+        fake.OnRun(IsRelease, Ok());
         var sut = Sut(fake);
 
+        Bind(sut, fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
-        Assert.False(File.Exists(_marker));
+        Assert.Single(fake.RunCalls.Where(IsRelease));
+        Assert.False(sut.IsLoaded);
     }
 
     [Fact]
@@ -278,54 +277,17 @@ public class MacFirewallManagerTests : IDisposable
     }
 
     [Fact]
-    public void CleanupOrphanedRules_with_anchorV1_marker_flushes_anchor_only()
-    {
-        File.WriteAllText(_marker, "anchor-v1");
-        var fake = OkRunner();
-        var sut = Sut(fake);
-
-        sut.CleanupOrphanedRules(null);
-
-        Assert.Contains(fake.RunCalls, IsAnchorFlush);
-        Assert.DoesNotContain(fake.RunCalls, c => IsPfApply(c, "main"));
-        Assert.False(File.Exists(_marker));
-    }
-
-    [Fact]
-    public void CleanupOrphanedRules_with_legacy_marker_restores_default_and_clears_marker()
-    {
-        File.WriteAllText(_marker, "engaged");
-        var fake = OkRunner();
-        var sut = Sut(fake);
-
-        sut.CleanupOrphanedRules(null);
-
-        Assert.Contains(fake.RunCalls, c => IsPfApply(c, "main"));
-        Assert.False(File.Exists(_marker));
-    }
-
-    [Fact]
-    public void CleanupOrphanedRules_without_marker_is_noop()
-    {
-        var fake = OkRunner();
-        var sut = Sut(fake);
-
-        sut.CleanupOrphanedRules(null);
-
-        Assert.Empty(fake.RunCalls);
-    }
-
-    [Fact]
     public void Enable_WritesRulesToConfiguredPath_NotSharedTemp()
     {
         WriteConfig("9.9.9.9");
         var customRules = Path.Combine(Path.GetTempPath(), "custom-mac-rules-" + Guid.NewGuid().ToString("N") + ".conf");
         var customMain = Path.Combine(Path.GetTempPath(), "custom-mac-main-" + Guid.NewGuid().ToString("N") + ".conf");
         var fake = OkRunner();
-        var sut = new MacFirewallManager(null, fake, _cfg, _marker, null, _pfconf, rulesPath: customRules, mainConfPath: customMain);
+        var sut = new MacFirewallManager(null, fake, _cfg, pfConfPath: _pfconf, rulesPath: customRules, mainConfPath: customMain);
 
         try
         {
+            Bind(sut, fake);
             sut.CreateBlockRules(Array.Empty<string>());
             sut.EnableBlockRules();
 
@@ -343,279 +305,86 @@ public class MacFirewallManagerTests : IDisposable
         }
     }
 
-    [Fact]
-    public void Disable_WhenFlushAnchorFails_RetainsLoadedStateAndMarker_AndSubsequentRetryClears()
+    [Theory]
+    [InlineData("disable")]
+    [InlineData("delete")]
+    [InlineData("dispose")]
+    public void Release_failure_remains_retryable(string action)
     {
-        WriteConfig("9.9.9.9");
-        var flushFails = false;
         var fake = new FakeProcessRunner();
-        fake.OnRun(c => IsHelper(c, "pf_enable"), Ok());
-        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
-        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
-        fake.OnRun(c => IsHelper(c, "pf_disable"), Ok());
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
+        var fails = true;
+        fake.OnRun(IsRelease, _ => Task.FromResult(fails ? Fail() : Ok()));
+        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: $"anchor \"{Anchor}\" all\n"));
+        fake.OnRun(c => IsHelper(c, "pf_enable") || IsHelper(c, "pf_apply"), Ok());
         var sut = Sut(fake);
-
+        Bind(sut, fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
-        Assert.True(File.Exists(_marker));
+        Assert.True(sut.IsLoaded);
 
-        flushFails = true;
-        sut.DisableBlockRules();
-        Assert.True(File.Exists(_marker));
-        Assert.DoesNotContain(fake.RunCalls, c => IsHelper(c, "pf_disable"));
+        Action release = action switch
+        {
+            "disable" => sut.DisableBlockRules,
+            "delete" => sut.DeleteAllRules,
+            _ => sut.Dispose
+        };
+        release();
+        fails = false;
+        release();
+        release();
 
-        flushFails = false;
-        sut.DisableBlockRules();
-        Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
+        Assert.Equal(2, fake.RunCalls.Count(IsRelease));
+        Assert.DoesNotContain(fake.RunCalls, c => IsPfApply(c, "main"));
     }
 
     [Fact]
-    public void DeleteAllRules_WhenFlushAnchorFails_RetainsLoadedStateAndMarker_AndSubsequentRetryClears()
+    public void Release_after_confirmed_restart_uses_replacement_identity()
     {
-        WriteConfig("9.9.9.9");
-        var flushFails = false;
-        var fake = new FakeProcessRunner();
-        fake.OnRun(c => IsHelper(c, "pf_enable"), Ok());
-        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
-        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
-        fake.OnRun(c => IsHelper(c, "pf_disable"), Ok());
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
+        var fake = OkRunner(carrierPresent: true);
         var sut = Sut(fake);
-
+        var identities = new Queue<ProcessResult>(new[]
+        {
+            Ok(stdout: """{"pid":391,"start_time":3000}"""),
+            Ok(stdout: """{"pid":405,"start_time":4000}""")
+        });
+        fake.OnRun(c => IsHelper(c, "pf_session"), _ => Task.FromResult(identities.Dequeue()));
+        sut.BindToCurrentSession();
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
-        Assert.True(File.Exists(_marker));
+        sut.BindToCurrentSession();
 
-        flushFails = true;
-        sut.DeleteAllRules();
-        Assert.True(File.Exists(_marker));
-        Assert.DoesNotContain(fake.RunCalls, c => IsHelper(c, "pf_disable"));
+        sut.DisableBlockRules();
 
-        flushFails = false;
-        sut.DeleteAllRules();
-        Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
+        using var release = JsonDocument.Parse(Assert.Single(fake.RunCalls.Where(IsRelease)).StdinInput!);
+        Assert.Equal(405, release.RootElement.GetProperty("pid").GetInt32());
+        Assert.Equal(4000, release.RootElement.GetProperty("start_time").GetInt64());
     }
 
     [Fact]
-    public void DeleteAllRules_WhenArmedButUnloaded_FailedFlushAnchorRetainsArmedState_AndRetryClears()
+    public void Armed_firewall_without_confirmed_session_cannot_change_pf()
     {
-        WriteConfig("9.9.9.9");
-        var flushFails = false;
-        var fake = new FakeProcessRunner();
-        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail("flush failed") : Ok()));
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
-
+        var fake = OkRunner();
         var sut = Sut(fake);
-        sut.CreateBlockRules(Array.Empty<string>(), isFullTunnel: true);
-        Assert.True(GetArmed(sut));
-        Assert.False(GetLoaded(sut));
-
-        flushFails = true;
-        sut.DeleteAllRules();
-        Assert.True(GetArmed(sut));
-
-        flushFails = false;
-        sut.DeleteAllRules();
-        Assert.False(GetArmed(sut));
-
-        sut.EnableBlockRules();
-        Assert.DoesNotContain(fake.RunCalls, c => IsHelper(c, "pf_enable"));
-    }
-
-    [Fact]
-    public void CleanupOrphanedRules_WhenAnchorFlushFails_PreservesMarker_AndSubsequentRetryClears()
-    {
-        File.WriteAllText(_marker, "anchor-v1");
-        var flushFails = true;
-        var fake = new FakeProcessRunner();
-        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail() : Ok()));
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
-        var sut = Sut(fake);
-
-        sut.CleanupOrphanedRules(null);
-        Assert.True(File.Exists(_marker));
-
-        flushFails = false;
-        sut.CleanupOrphanedRules(null);
-        Assert.False(File.Exists(_marker));
-    }
-
-    [Fact]
-    public void CleanupOrphanedRules_WhenLegacyRestoreFails_PreservesMarker_AndSubsequentRetryClears()
-    {
-        File.WriteAllText(_marker, "engaged");
-        var restoreFails = true;
-        var fake = new FakeProcessRunner();
-        fake.OnRun(c => IsPfApply(c, "main"),
-            _ => Task.FromResult(restoreFails ? Fail() : Ok()));
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
-        var sut = Sut(fake);
-
-        sut.CleanupOrphanedRules(null);
-        Assert.True(File.Exists(_marker));
-
-        restoreFails = false;
-        sut.CleanupOrphanedRules(null);
-        Assert.False(File.Exists(_marker));
-    }
-
-    [Fact]
-    public void TokenRelease_WhenReleaseFails_PreservesStateForRetry_AndDoesNotAcquireDoubleEnable()
-    {
-        WriteConfig("9.9.9.9");
-        var releaseFails = false;
-        var fake = new FakeProcessRunner();
-        fake.OnRun(c => IsHelper(c, "pf_enable"), Ok());
-        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
-        fake.OnRun(c => IsHelper(c, "pf_disable"),
-            _ => Task.FromResult(releaseFails ? Fail("release failed") : Ok()));
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
-        var sut = Sut(fake);
-
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
-        Assert.True(File.Exists(_marker));
-
-        releaseFails = true;
-        sut.DisableBlockRules();
-        Assert.False(File.Exists(_marker));
-
-        sut.EnableBlockRules();
-        Assert.True(File.Exists(_marker));
-        var enableCalls = fake.RunCalls.Count(c => IsHelper(c, "pf_enable"));
-        Assert.Equal(1, enableCalls);
-
-        releaseFails = false;
-        sut.DisableBlockRules();
-        Assert.False(File.Exists(_marker));
-
-        var countBefore = fake.RunCalls.Count;
-        sut.DisableBlockRules();
-        Assert.Equal(countBefore, fake.RunCalls.Count);
+        Assert.Empty(fake.RunCalls);
     }
 
     [Fact]
-    public void Dispose_WhenFlushOrReleaseFails_RetriesOnSubsequentDispose()
+    public void Apply_timeout_releases_the_same_session_without_claiming_rules_loaded()
     {
-        WriteConfig("9.9.9.9");
-        var flushFails = false;
-        var releaseFails = false;
         var fake = new FakeProcessRunner();
         fake.OnRun(c => IsHelper(c, "pf_enable"), Ok());
-        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
-        fake.OnRun(IsAnchorFlush, _ => Task.FromResult(flushFails ? Fail() : Ok()));
-        fake.OnRun(c => IsHelper(c, "pf_disable"),
-            _ => Task.FromResult(releaseFails ? Fail() : Ok()));
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
-        var sut = Sut(fake);
-
-        sut.CreateBlockRules(Array.Empty<string>());
-        sut.EnableBlockRules();
-        Assert.True(File.Exists(_marker));
-
-        flushFails = true;
-        releaseFails = true;
-        sut.Dispose();
-        Assert.True(File.Exists(_marker));
-
-        flushFails = false;
-        sut.Dispose();
-        Assert.False(File.Exists(_marker));
-
-        releaseFails = false;
-        sut.Dispose();
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
-
-        var countBefore = fake.RunCalls.Count;
-        sut.Dispose();
-        Assert.Equal(countBefore, fake.RunCalls.Count);
-    }
-
-    [Fact]
-    public void HelperTimeout_IsTreatedAsFailure()
-    {
-        WriteConfig("9.9.9.9");
-        var fake = new FakeProcessRunner();
-        fake.OnRun(c => IsHelper(c, "pf_enable"), Ok());
-        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
+        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: $"anchor \"{Anchor}\" all\n"));
         fake.OnRun(c => IsPfApply(c, "anchor"),
             new ProcessResult(0, "", "timed out", TimeSpan.FromSeconds(10), TimedOut: true));
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
+        fake.OnRun(IsRelease, Ok());
         var sut = Sut(fake);
-
+        Bind(sut, fake);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
-        Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
-
-        File.WriteAllText(_marker, "anchor-v1");
-        var orphanFake = new FakeProcessRunner();
-        orphanFake.OnRun(IsAnchorFlush,
-            new ProcessResult(0, "", "", TimeSpan.FromSeconds(10), TimedOut: true));
-        orphanFake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
-        var orphanSut = Sut(orphanFake);
-
-        orphanSut.CleanupOrphanedRules(null);
-        Assert.True(File.Exists(_marker));
-    }
-
-    [Fact]
-    public void Disable_WhenReleaseFails_DirectRetryReleasesWithoutTouchingRules()
-    {
-        WriteConfig("9.9.9.9");
-        var releaseFails = false;
-        var fake = new FakeProcessRunner();
-        fake.OnRun(c => IsHelper(c, "pf_enable"), Ok());
-        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: "anchor \"com.apple/*\" all\n"));
-        fake.OnRun(c => IsHelper(c, "pf_disable"),
-            _ => Task.FromResult(releaseFails ? Fail("release failed") : Ok()));
-        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
-        var sut = Sut(fake);
-
-        sut.CreateBlockRules(Array.Empty<string>());
-        sut.EnableBlockRules();
-        Assert.True(File.Exists(_marker));
-
-        releaseFails = true;
-        sut.DisableBlockRules();
-        Assert.False(File.Exists(_marker));
-        Assert.Contains(fake.RunCalls, c => IsHelper(c, "pf_disable"));
-
-        var flushCountBefore = fake.RunCalls.Count(IsAnchorFlush);
-        releaseFails = false;
-        sut.DisableBlockRules();
-        var flushCountAfter = fake.RunCalls.Count(IsAnchorFlush);
-        Assert.Equal(flushCountBefore, flushCountAfter);
-
-        var totalCallsBefore = fake.RunCalls.Count;
-        sut.DisableBlockRules();
-        Assert.Equal(totalCallsBefore, fake.RunCalls.Count);
-    }
-
-    [Theory]
-    [InlineData("anchor-v1", "Anchor")]
-    [InlineData("  anchor-v1 \n", "Anchor")]
-    [InlineData("engaged", "Legacy")]
-    [InlineData(" engaged \r\n", "Legacy")]
-    [InlineData("unknown", "Unknown")]
-    [InlineData("engaged-v2", "Unknown")]
-    [InlineData("", "Unknown")]
-    public void InspectMarker_ClassifiesKnownAndUnknownMarkers(string content, string expected)
-    {
-        File.WriteAllText(_marker, content);
-        var sut = Sut(OkRunner());
-        Assert.Equal(expected, sut.InspectMarker().ToString());
-    }
-
-    [Fact]
-    public void InspectMarker_WhenMarkerMissing_ReturnsMissing()
-    {
-        var sut = Sut(OkRunner());
-        Assert.False(File.Exists(_marker));
-        Assert.Equal(MacFirewallManager.MarkerState.Missing, sut.InspectMarker());
+        Assert.False(sut.IsLoaded);
+        Assert.Single(fake.RunCalls.Where(IsRelease));
     }
 }

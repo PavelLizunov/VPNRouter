@@ -25,7 +25,10 @@ public static class MacPrivilegedSetup
         var client = new MacPrivilegedClient(logger: logger);
         var state = client.Probe();
         if (IsCurrent(state, out var helperHash, out var singboxHash))
+        {
+            _ = client.PfRecover();
             return MacPrivilegeSetupResult.Ready;
+        }
         if (state.LegacyProcess)
         {
             logger.Error("[MacPrivilege] Stop the previous VPNRouter session before migrating the helper");
@@ -70,6 +73,7 @@ public static class MacPrivilegedSetup
                 return MacPrivilegeSetupResult.LegacySessionActive;
             if (!IsCurrent(after, out _, out _))
                 return MacPrivilegeSetupResult.NotReady;
+            _ = client.PfRecover();
             logger.Information("[MacPrivilege] Managed helper installed or refreshed");
             return MacPrivilegeSetupResult.Ready;
         }
@@ -84,7 +88,8 @@ public static class MacPrivilegedSetup
     {
         helperHash = string.Empty;
         singboxHash = string.Empty;
-        if (!state.Ready || state.Policy != MacPrivilegePaths.PolicyVersion) return false;
+        if (!state.Ready || state.Legacy || state.LegacyProcess ||
+            state.Policy != MacPrivilegePaths.PolicyVersion) return false;
 
         var helperPath = Path.Combine(AppContext.BaseDirectory, MacPrivilegePaths.HelperBundleName);
         var singboxPath = AppPaths.BundledSingBoxExePath;

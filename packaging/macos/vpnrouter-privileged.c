@@ -13,6 +13,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/sysctl.h>
 #include <sys/proc_info.h>
 #include <sys/wait.h>
@@ -55,6 +56,8 @@
 #define SESSION_LOCK_FMT ROOT_RUN "/%u/session.lock"
 #define STATE_LOCK_FMT ROOT_RUN "/%u/state.lock"
 #define HOST_NETWORK_LOCK_PATH ROOT_RUN "/host-network.lock"
+#define HOST_SESSION_PATH ROOT_RUN "/host-session"
+#define HOST_SESSION_VERSION 1
 #define DNS_STATE_PATH ROOT_RUN "/dns-state"
 #define DNS_SNAPSHOT_VERSION 1
 #define MAX_DNS_SERVERS 8
@@ -81,6 +84,21 @@ struct doc {
     size_t json_len;
     jsmntok_t *tokens;
     int count;
+};
+
+enum pf_release_mode {
+    PF_RELEASE_NONE,
+    PF_RELEASE_ANCHOR,
+    PF_RELEASE_DEFAULT,
+};
+
+struct host_session {
+    uint32_t version;
+    uint32_t uid;
+    uint64_t start_time;
+    uint64_t boot_time;
+    int32_t pid;
+    uint32_t pf_mode;
 };
 
 enum legacy_policy_state {
@@ -1653,6 +1671,70 @@ static int delete_session_record(uid_t uid)
     return 0;
 }
 
+/* All readers and writers hold the host transition lock. */
+static int read_host_session(struct host_session *session)
+{
+    struct stat st;
+    if (lstat(HOST_SESSION_PATH, &st) != 0)
+        return errno == ENOENT ? 0 : -1;
+    char buffer[sizeof(*session) + 1];
+    size_t length = 0;
+    if (read_file_checked(HOST_SESSION_PATH, 0, 0077, sizeof(buffer), buffer, &length) != 0 ||
+        length != sizeof(*session))
+        return -1;
+    memcpy(session, buffer, sizeof(*session));
+    if (session->version != HOST_SESSION_VERSION || session->uid == 0 ||
+        session->pid <= 1 || session->start_time == 0 || session->boot_time == 0 ||
+        session->pf_mode > PF_RELEASE_DEFAULT)
+        return -1;
+    return 1;
+}
+
+static int write_host_session(const struct host_session *session)
+{
+    return write_root_file(HOST_SESSION_PATH, session, sizeof(*session), 0600);
+}
+
+/* A process which cannot be inspected must not be treated as exited. */
+static int host_session_may_be_live(const struct host_session *session)
+{
+    struct proc_bsdinfo info = {0};
+    if (proc_pidinfo(session->pid, PROC_PIDTBSDINFO, 0, &info,
+                     sizeof(info)) == (int)sizeof(info))
+        return (uint64_t)info.pbi_start_tvsec == session->start_time;
+    return kill(session->pid, 0) == 0 || errno != ESRCH;
+}
+
+static int pf_token_exists(void)
+{
+    struct stat st;
+    if (lstat(PF_TOKEN_PATH, &st) == 0)
+        return S_ISREG(st.st_mode) && st.st_uid == 0 && (st.st_mode & 07777) == 0600 ? 1 : -1;
+    return errno == ENOENT ? 0 : -1;
+}
+
+static int load_host_session(struct host_session *host, uint64_t *boot_time)
+{
+    struct timeval boot = {0};
+    size_t length = sizeof(boot);
+    if (sysctlbyname("kern.boottime", &boot, &length, NULL, 0) != 0 ||
+        length != sizeof(boot) || boot.tv_sec <= 0)
+        return -1;
+    *boot_time = (uint64_t)boot.tv_sec;
+
+    int loaded = read_host_session(host);
+    if (loaded != 1 || host->boot_time == *boot_time)
+        return loaded;
+
+    /* PF rules and enable references from a previous boot no longer exist. */
+    if (unlink(PF_TOKEN_PATH) != 0 && errno != ENOENT)
+        return -1;
+    if (unlink(HOST_SESSION_PATH) != 0)
+        return -1;
+    memset(host, 0, sizeof(*host));
+    return 0;
+}
+
 static int command_start(const char *request_json, size_t request_length,
                          uid_t uid, const char *home)
 {
@@ -1670,6 +1752,20 @@ static int command_start(const char *request_json, size_t request_length,
     if (verify_runtime_artifact() != 0)
         fail(EXIT_STATE, "root-owned runtime artifact is missing or untrusted");
     require_no_legacy_runtime(home);
+
+    struct host_session host = {0};
+    uint64_t boot_time = 0;
+    int host_loaded = load_host_session(&host, &boot_time);
+    int token_exists = pf_token_exists();
+    if (host_loaded < 0 || token_exists < 0 || (host_loaded == 0 && token_exists > 0))
+        fail(EXIT_STATE, "host network ownership is invalid");
+    if (host_loaded > 0) {
+        if (host_session_may_be_live(&host))
+            fail(EXIT_STATE, "a privileged runtime already owns the host network");
+        if (host.uid != (uint32_t)uid && (host.pf_mode != PF_RELEASE_NONE || token_exists > 0))
+            fail(EXIT_STATE, "the previous owner must release the host firewall");
+    }
+
     int state_lock = acquire_state_lock(uid);
     if (state_lock < 0)
         fail(EXIT_STATE, "could not serialize privileged state");
@@ -1754,9 +1850,15 @@ static int command_start(const char *request_json, size_t request_length,
     memset(&self_info, 0, sizeof(self_info));
     if (proc_pidinfo(getpid(), PROC_PIDTBSDINFO, 0, &self_info,
                      sizeof(self_info)) != (int)sizeof(self_info) ||
-        self_info.pbi_start_tvsec <= 0 ||
-        write_session_record(uid, getpid(),
-                             (uint64_t)self_info.pbi_start_tvsec) != 0)
+        self_info.pbi_start_tvsec <= 0)
+        fail(EXIT_STATE, "could not identify the privileged session");
+    host.version = HOST_SESSION_VERSION;
+    host.uid = (uint32_t)uid;
+    host.pid = getpid();
+    host.start_time = (uint64_t)self_info.pbi_start_tvsec;
+    host.boot_time = boot_time;
+    if (write_host_session(&host) != 0 ||
+        write_session_record(uid, host.pid, host.start_time) != 0)
         fail(EXIT_STATE, "could not bind the privileged session to the invoking user");
 
     execve(ROOT_BIN, argv, envp);
@@ -2263,21 +2365,13 @@ static int command_dns_flush(void)
     return 0;
 }
 
-static int command_pf_apply(const char *request_json, size_t request_length, uid_t uid)
+static int command_pf_apply(const struct doc *request, struct host_session *host)
 {
-    struct doc request;
-    if (parse_doc((char *)request_json, request_length, &request) != 0)
-        return EXIT_INPUT;
-    if (ensure_root_layout(uid) != 0)
+    if (pf_token_exists() != 1)
         return EXIT_STATE;
     char mode[32];
-    if (json_string(&request, 0, "mode", mode, sizeof(mode)) != 0)
+    if (json_string(request, 0, "mode", mode, sizeof(mode)) != 0)
         return EXIT_INPUT;
-
-    char staged[PATH_MAX];
-    int written = snprintf(staged, sizeof(staged), "%s", PF_RULES_STAGED);
-    if (written < 0 || (size_t)written >= sizeof(staged))
-        return EXIT_STATE;
 
     if (strcmp(mode, "main") == 0) {
         char *main_conf = xcalloc(MAX_CONFIG_BYTES, 1);
@@ -2303,34 +2397,42 @@ static int command_pf_apply(const char *request_json, size_t request_length, uid
         return run_checked("/sbin/pfctl", argv) == 0 ? 0 : EXIT_COMMAND;
     }
 
+    int anchor = strcmp(mode, "anchor") == 0;
+    if (!anchor && strcmp(mode, "legacy") != 0)
+        return EXIT_INPUT;
     char rules[MAX_PF_RULES_BYTES];
-    if (json_string(&request, 0, "rules", rules, sizeof(rules)) != 0 ||
+    if (json_string(request, 0, "rules", rules, sizeof(rules)) != 0 ||
         validate_pf_rules(rules) != 0)
         return EXIT_INPUT;
-    if (write_root_file(staged, rules, strlen(rules), 0600) != 0)
+    if (write_root_file(PF_RULES_STAGED, rules, strlen(rules), 0600) != 0)
         return EXIT_STATE;
 
-    if (strcmp(mode, "anchor") == 0) {
-        char *const argv[] = { "/sbin/pfctl", "-a", PF_ANCHOR, "-f", staged, NULL };
+    /* Journal before changing PF so a killed helper still leaves a recovery path. */
+    if (!anchor || host->pf_mode == PF_RELEASE_NONE) {
+        host->pf_mode = anchor ? PF_RELEASE_ANCHOR : PF_RELEASE_DEFAULT;
+        if (write_host_session(host) != 0)
+            return EXIT_STATE;
+    }
+    if (anchor) {
+        char *const argv[] = { "/sbin/pfctl", "-a", PF_ANCHOR, "-f", PF_RULES_STAGED, NULL };
         return run_checked("/sbin/pfctl", argv) == 0 ? 0 : EXIT_COMMAND;
     }
-    if (strcmp(mode, "legacy") == 0) {
-        char *const argv[] = { "/sbin/pfctl", "-f", staged, NULL };
-        return run_checked("/sbin/pfctl", argv) == 0 ? 0 : EXIT_COMMAND;
-    }
-    return EXIT_INPUT;
-}
-
-static int command_pf_flush(void)
-{
-    char *const argv[] = { "/sbin/pfctl", "-a", PF_ANCHOR, "-F", "rules", NULL };
+    char *const argv[] = { "/sbin/pfctl", "-f", PF_RULES_STAGED, NULL };
     return run_checked("/sbin/pfctl", argv) == 0 ? 0 : EXIT_COMMAND;
 }
 
-static int command_pf_enable(uid_t uid)
+static int release_pf_token(char *token)
 {
-    if (ensure_root_layout(uid) != 0)
-        return EXIT_STATE;
+    char *const argv[] = { "/sbin/pfctl", "-X", token, NULL };
+    return run_checked("/sbin/pfctl", argv);
+}
+
+static int command_pf_enable(void)
+{
+    int stored = pf_token_exists();
+    if (stored != 0)
+        return stored > 0 ? 0 : EXIT_STATE;
+
     char out[8192];
     char err[8192];
     int code = -1;
@@ -2351,27 +2453,49 @@ static int command_pf_enable(uid_t uid)
     while (*token >= '0' && *token <= '9' && used + 1 < sizeof(digits))
         digits[used++] = *token++;
     digits[used] = '\0';
-    if (used == 0)
+    if (used == 0 || (*token >= '0' && *token <= '9'))
         return EXIT_COMMAND;
-    return write_root_file(PF_TOKEN_PATH, digits, used, 0600) == 0 ? 0 : EXIT_STATE;
+    if (write_root_file(PF_TOKEN_PATH, digits, used, 0600) != 0) {
+        (void)release_pf_token(digits);
+        return EXIT_STATE;
+    }
+    return 0;
 }
 
-static int command_pf_disable(void)
+static int command_pf_release(struct host_session *host)
 {
+    int stored = pf_token_exists();
+    if (stored < 0)
+        return EXIT_STATE;
+    if (host->pf_mode == PF_RELEASE_DEFAULT) {
+        char *const argv[] = { "/sbin/pfctl", "-f", PF_MAIN_CONF, NULL };
+        if (run_checked("/sbin/pfctl", argv) != 0)
+            return EXIT_COMMAND;
+    }
+    if (host->pf_mode != PF_RELEASE_NONE) {
+        char *const argv[] = { "/sbin/pfctl", "-a", PF_ANCHOR, "-F", "rules", NULL };
+        if (run_checked("/sbin/pfctl", argv) != 0)
+            return EXIT_COMMAND;
+    }
+    if (host->pf_mode != PF_RELEASE_NONE) {
+        host->pf_mode = PF_RELEASE_NONE;
+        if (write_host_session(host) != 0)
+            return EXIT_STATE;
+    }
+    if (stored == 0)
+        return 0;
+
     char token[32];
     size_t length = 0;
-    if (read_file_checked(PF_TOKEN_PATH, 0, 0077, sizeof(token), token, &length) != 0)
-        return 0;
-    if (length == 0 || length >= sizeof(token))
+    if (read_file_checked(PF_TOKEN_PATH, 0, 0077, sizeof(token), token, &length) != 0 ||
+        length == 0 || length >= sizeof(token))
         return EXIT_STATE;
     for (size_t i = 0; i < length; i++)
         if (token[i] < '0' || token[i] > '9')
             return EXIT_STATE;
-    char *const argv[] = { "/sbin/pfctl", "-X", token, NULL };
-    if (run_checked("/sbin/pfctl", argv) != 0)
+    if (release_pf_token(token) != 0)
         return EXIT_COMMAND;
-    unlink(PF_TOKEN_PATH);
-    return 0;
+    return unlink(PF_TOKEN_PATH) == 0 ? 0 : EXIT_STATE;
 }
 
 static int command_pf_status(void)
@@ -2435,7 +2559,10 @@ int main(void)
         require_no_legacy_runtime(pw->pw_dir);
         return 0;
     }
-    if (strcmp(op, "start") == 0 || strcmp(op, "stop") == 0 ||
+    int pf_session_operation = strcmp(op, "pf_apply") == 0 || strcmp(op, "pf_enable") == 0 ||
+                               strcmp(op, "pf_release") == 0 || strcmp(op, "pf_recover") == 0 ||
+                               strcmp(op, "pf_session") == 0;
+    if (pf_session_operation || strcmp(op, "start") == 0 || strcmp(op, "stop") == 0 ||
         strcmp(op, "dns_apply") == 0 || strcmp(op, "dns_restore") == 0 ||
         strcmp(op, "dns_flush") == 0) {
         if (ensure_root_layout(uid) != 0 || acquire_transition_lock(HOST_NETWORK_LOCK_PATH) < 0)
@@ -2456,14 +2583,36 @@ int main(void)
         return command_dns_restore(uid);
     if (strcmp(op, "dns_flush") == 0)
         return has_live_session(uid) ? command_dns_flush() : EXIT_STATE;
-    if (strcmp(op, "pf_apply") == 0)
-        return command_pf_apply(request_json, request_length, uid);
-    if (strcmp(op, "pf_flush") == 0)
-        return command_pf_flush();
-    if (strcmp(op, "pf_enable") == 0)
-        return command_pf_enable(uid);
-    if (strcmp(op, "pf_disable") == 0)
-        return command_pf_disable();
+    if (pf_session_operation) {
+        struct host_session host = {0};
+        uint64_t boot_time = 0;
+        int loaded = load_host_session(&host, &boot_time);
+        int recover = strcmp(op, "pf_recover") == 0;
+        if (loaded == 0 && recover && pf_token_exists() == 0)
+            return 0;
+        if (loaded != 1 || host.uid != (uint32_t)uid)
+            return EXIT_STATE;
+        if (strcmp(op, "pf_session") == 0) {
+            if (!process_is_root_runtime(host.pid, host.start_time))
+                return EXIT_STATE;
+            printf("{\"pid\":%d,\"start_time\":%llu}\n",
+                   host.pid, (unsigned long long)host.start_time);
+            return 0;
+        }
+        if (recover)
+            return host_session_may_be_live(&host) ? EXIT_STATE : command_pf_release(&host);
+
+        int pid;
+        uint64_t start_time;
+        if (parse_stop_identity(request_json, request_length, &pid, &start_time) != 0 ||
+            pid != host.pid || start_time != host.start_time)
+            return EXIT_STATE;
+        if (strcmp(op, "pf_apply") == 0)
+            return command_pf_apply(&request, &host);
+        if (strcmp(op, "pf_enable") == 0)
+            return command_pf_enable();
+        return command_pf_release(&host);
+    }
     if (strcmp(op, "pf_status") == 0)
         return command_pf_status();
 

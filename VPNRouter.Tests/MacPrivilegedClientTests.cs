@@ -151,11 +151,12 @@ public class MacPrivilegedClientTests : IDisposable
         fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath, Ok());
         var client = new MacPrivilegedClient(fake);
 
-        Assert.True(client.PfApplyAnchor("block drop out all\npass out quick on lo0 all\n"));
-        Assert.True(client.PfApplyMain());
-        Assert.True(client.PfFlush());
-        Assert.True(client.PfEnable());
-        Assert.True(client.PfDisable());
+        var session = new MacFirewallSession(103, 1700000000);
+        Assert.True(client.PfApplyAnchor(session, "block drop out all\npass out quick on lo0 all\n"));
+        Assert.True(client.PfApplyMain(session));
+        Assert.True(client.PfRelease(session));
+        Assert.True(client.PfEnable(session));
+        Assert.True(client.PfRecover());
 
         using var anchor = JsonDocument.Parse(fake.RunCalls[0].StdinInput!);
         Assert.Equal("pf_apply", anchor.RootElement.GetProperty("op").GetString());
@@ -166,6 +167,11 @@ public class MacPrivilegedClientTests : IDisposable
         using var main = JsonDocument.Parse(fake.RunCalls[1].StdinInput!);
         Assert.Equal("main", main.RootElement.GetProperty("mode").GetString());
         Assert.False(main.RootElement.TryGetProperty("rules", out _));
+        using var release = JsonDocument.Parse(fake.RunCalls[2].StdinInput!);
+        Assert.Equal("pf_release", release.RootElement.GetProperty("op").GetString());
+        Assert.Equal(103, release.RootElement.GetProperty("pid").GetInt32());
+        Assert.Equal(1700000000L, release.RootElement.GetProperty("start_time").GetInt64());
+        Assert.False(release.RootElement.TryGetProperty("mode", out _));
     }
 
     [Fact]

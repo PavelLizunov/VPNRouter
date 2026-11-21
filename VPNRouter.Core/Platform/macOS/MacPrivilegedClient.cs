@@ -22,6 +22,8 @@ public sealed record MacPrivilegeState(
         new(false, false, false, 0, 0, reason, null, null, null, null);
 }
 
+internal readonly record struct MacFirewallSession(int Pid, long StartTime);
+
 /// <summary>
 /// Thin client for the one authorized privileged helper. Every operation is a
 /// typed JSON request on stdin; the helper path is the only sudoers command and
@@ -138,37 +140,47 @@ public sealed class MacPrivilegedClient
             TimeSpan.FromSeconds(15));
     }
 
-    public bool PfApplyAnchor(string rules) => PfApply("anchor", rules);
-
-    public bool PfApplyLegacy(string rules) => PfApply("legacy", rules);
-
-    public bool PfApplyMain()
+    internal MacFirewallSession? ReadPfSession()
     {
-        return RunOk(new JsonObject
+        var result = Run(new JsonObject { ["version"] = JsonValue.Create(1), ["op"] = "pf_session" },
+            TimeSpan.FromSeconds(10));
+        if (result.ExitCode != 0 || result.TimedOut)
+            return null;
+
+        try
         {
-            ["version"] = JsonValue.Create(1),
-            ["op"] = "pf_apply",
-            ["mode"] = "main",
-        }, TimeSpan.FromSeconds(15));
+            using var document = JsonDocument.Parse(result.Stdout);
+            var root = document.RootElement;
+            if (root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("pid", out var pid) && pid.TryGetInt32(out var processId) &&
+                root.TryGetProperty("start_time", out var start) && start.TryGetInt64(out var startTime) &&
+                processId > 1 && startTime > 0)
+                return new MacFirewallSession(processId, startTime);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            _logger?.Debug(ex, "[MacPrivilege] Invalid firewall session identity");
+        }
+        return null;
     }
 
-    public bool PfFlush()
-    {
-        return RunOk(new JsonObject { ["version"] = JsonValue.Create(1), ["op"] = "pf_flush" },
-            TimeSpan.FromSeconds(10));
-    }
+    internal bool PfApplyAnchor(MacFirewallSession session, string rules) =>
+        PfApply(session, "anchor", rules);
 
-    public bool PfEnable()
-    {
-        return RunOk(new JsonObject { ["version"] = JsonValue.Create(1), ["op"] = "pf_enable" },
-            TimeSpan.FromSeconds(10));
-    }
+    internal bool PfApplyLegacy(MacFirewallSession session, string rules) =>
+        PfApply(session, "legacy", rules);
 
-    public bool PfDisable()
-    {
-        return RunOk(new JsonObject { ["version"] = JsonValue.Create(1), ["op"] = "pf_disable" },
-            TimeSpan.FromSeconds(10));
-    }
+    internal bool PfApplyMain(MacFirewallSession session) => PfApply(session, "main");
+
+    internal bool PfEnable(MacFirewallSession session) =>
+        RunOk(PfRequest("pf_enable", session), TimeSpan.FromSeconds(10));
+
+    internal bool PfRelease(MacFirewallSession session) =>
+        RunOk(PfRequest("pf_release", session), TimeSpan.FromSeconds(15));
+
+    internal bool PfRecover() =>
+        RunOk(new JsonObject { ["version"] = JsonValue.Create(1), ["op"] = "pf_recover" },
+            TimeSpan.FromSeconds(15));
 
     public bool TryGetPfStatus(out string output)
     {
@@ -201,16 +213,22 @@ public sealed class MacPrivilegedClient
         }
     }
 
-    private bool PfApply(string mode, string rules)
+    private bool PfApply(MacFirewallSession session, string mode, string? rules = null)
     {
-        return RunOk(new JsonObject
-        {
-            ["version"] = JsonValue.Create(1),
-            ["op"] = "pf_apply",
-            ["mode"] = mode,
-            ["rules"] = rules,
-        }, TimeSpan.FromSeconds(15));
+        var request = PfRequest("pf_apply", session);
+        request["mode"] = mode;
+        if (rules != null)
+            request["rules"] = rules;
+        return RunOk(request, TimeSpan.FromSeconds(15));
     }
+
+    private static JsonObject PfRequest(string operation, MacFirewallSession session) => new()
+    {
+        ["version"] = JsonValue.Create(1),
+        ["op"] = operation,
+        ["pid"] = JsonValue.Create(session.Pid),
+        ["start_time"] = JsonValue.Create(session.StartTime),
+    };
 
     private bool RunOk(JsonObject request, TimeSpan timeout)
     {

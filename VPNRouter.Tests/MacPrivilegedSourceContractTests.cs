@@ -115,10 +115,11 @@ public class MacPrivilegedSourceContractTests
         var lease = helper.IndexOf("acquire_session_lease(uid)", stateLock, StringComparison.Ordinal);
         var assets = helper.IndexOf("sync_assets(uid, home)", lease, StringComparison.Ordinal);
         var staged = helper.IndexOf("write_root_file(staged", assets, StringComparison.Ordinal);
-        var record = helper.IndexOf("write_session_record(uid, getpid()", staged, StringComparison.Ordinal);
+        var host = helper.IndexOf("write_host_session(&host)", staged, StringComparison.Ordinal);
+        var record = helper.IndexOf("write_session_record(uid, host.pid, host.start_time)", host, StringComparison.Ordinal);
         var exec = helper.IndexOf("execve(ROOT_BIN", record, StringComparison.Ordinal);
         Assert.True(start >= 0 && stateLock > start && lease > stateLock &&
-                    assets > lease && staged > assets && record > staged && exec > record,
+                    assets > lease && staged > assets && host > staged && record > host && exec > record,
             "start must hold both locks before syncing assets, staging config or publishing ownership");
 
         var stop = helper.IndexOf("static int command_stop", StringComparison.Ordinal);

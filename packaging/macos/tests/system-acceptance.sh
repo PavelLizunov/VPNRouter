@@ -67,8 +67,17 @@ dns_service_exists() {
 cleanup() {
     local result=$?
     trap - EXIT
-    if sudo -n /bin/test -f "$record"; then
-        stop_fixture || result=1
+    trap '' INT TERM
+    if sudo -n /bin/test -f "$record" && ! stop_fixture; then
+        echo "exact fixture stop failed; preserving system state until runner disposal" >&2
+        tail -25 "$fixture_dir/runtime.log" >&2 || true
+        exit 1
+    fi
+    if sudo -n /bin/test -f "$root_dir/run/host-session"; then
+        if ! printf '%s' '{"version":1,"op":"pf_recover"}' | as_fixture; then
+            echo "fixture firewall recovery failed; preserving the helper state for runner disposal" >&2
+            exit 1
+        fi
     fi
     if [ "$dns_service_prepared" -eq 1 ] && dns_service_exists; then
         printf '%s' '{"version":1,"op":"dns_restore"}' | as_fixture || result=1
@@ -222,6 +231,36 @@ jq -cn --arg service "$dns_service" \
 verify_fixture_dns 198.18.230.1
 echo "DNS changed on the isolated fixture service while the session was active"
 
+identity="$(printf '%s' '{"version":1,"op":"pf_session"}' | as_fixture)"
+expected_identity="$(sudo -n /bin/cat "$record" | jq -ce '{pid,start_time}')"
+[ "$(jq -ce '{pid,start_time}' <<< "$identity")" = "$expected_identity" ]
+
+pf_request() {
+    jq -c --arg operation "$1" '. + {version:1, op:$operation}' <<< "$identity" | as_fixture
+}
+
+pf_request pf_enable
+pf_token="$root_dir/run/pf.token"
+first_ref="$(sudo -n /usr/bin/shasum -a 256 "$pf_token")"
+pf_request pf_enable
+[ "$(sudo -n /usr/bin/shasum -a 256 "$pf_token")" = "$first_ref" ]
+jq -c '. + {version:1, op:"pf_apply", mode:"anchor", rules:"pass out quick on lo0 all\n"}' \
+    <<< "$identity" | as_fixture
+sudo -n /sbin/pfctl -a com.vpnrouter/killswitch -sr | grep -q 'pass out quick on lo0'
+
+if printf '%s' '{"version":1,"op":"pf_recover"}' | as_fixture; then
+    echo "firewall recovery unexpectedly released an active session" >&2
+    exit 66
+fi
+jq -c '. + {version:1, op:"pf_release", start_time:(.start_time + 1)}' \
+    <<< "$identity" > "$fixture_dir/stale-pf-request.json"
+if as_fixture < "$fixture_dir/stale-pf-request.json"; then
+    echo "firewall release unexpectedly accepted a different session identity" >&2
+    exit 66
+fi
+sudo -n /sbin/pfctl -a com.vpnrouter/killswitch -sr | grep -q 'pass out quick on lo0'
+[ "$(default_route)" = "$baseline_route" ]
+
 stop_fixture
 wait "$launcher_pid" || true
 sudo -n /bin/test ! -e "$record"
@@ -231,5 +270,8 @@ if /sbin/ifconfig "$tun" >/dev/null 2>&1; then
 fi
 printf '%s' '{"version":1,"op":"dns_restore"}' | as_fixture
 verify_fixture_dns 192.0.2.17
+printf '%s' '{"version":1,"op":"pf_recover"}' | as_fixture
+[ -z "$(sudo -n /sbin/pfctl -a com.vpnrouter/killswitch -sr)" ]
+sudo -n /bin/test ! -e "$pf_token"
 [ "$(default_route)" = "$baseline_route" ]
-echo "System migration, standard-user TUN, and isolated-service DNS restore passed"
+echo "System migration, standard-user TUN, isolated-service DNS restore, and anchor recovery passed"
