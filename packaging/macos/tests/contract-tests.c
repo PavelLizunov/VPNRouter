@@ -100,6 +100,7 @@ static void test_stop_request_identity(void)
         "{\"pid\":4321,\"start_time\":0}",
         "{\"pid\":4321,\"start_time\":-1}",
         "{\"pid\":4321,\"start_time\":\"1234\"}",
+        "{\"pid\":4321,\"start_time\":1234,\"pid\":4321}",
     };
     int pid;
     uint64_t start_time;
@@ -167,6 +168,59 @@ static void test_root_directory_metadata(void)
     st.st_uid = 501;
     expect(!root_directory_stat_is_valid(&st, 0755, 0),
            "a user-owned system directory is rejected");
+}
+
+static void test_session_locks(void)
+{
+    char path[PATH_MAX];
+    expect(session_lock_path(path, sizeof(path), 501) == 0 &&
+               strcmp(path, ROOT_RUN "/501/session.lock") == 0,
+           "session lease path is per-uid");
+    expect(state_lock_path(path, sizeof(path), 501) == 0 &&
+               strcmp(path, ROOT_RUN "/501/state.lock") == 0,
+           "state lock path is per-uid");
+
+    char template[] = "/tmp/vpnrouter-lock-XXXXXX";
+    int first = mkstemp(template);
+    expect(first >= 0, "synthetic lock file is available");
+    if (first < 0)
+        return;
+    int second = open(template, O_RDWR);
+    expect(second >= 0, "second synthetic lock handle is available");
+    if (second < 0) {
+        close(first);
+        unlink(template);
+        return;
+    }
+
+    expect(try_lock_exclusive(first) == 0,
+           "first exclusive kernel lock succeeds");
+    errno = 0;
+    expect(try_lock_exclusive(second) != 0 && errno == EWOULDBLOCK,
+           "a concurrent exclusive start cannot enter the state lock");
+    close(first);
+    expect(try_lock_exclusive(second) == 0,
+           "the kernel lock is released when the owner closes or exits");
+    close(second);
+    unlink(template);
+}
+
+static void test_legacy_process_detection(void)
+{
+    char path[PATH_MAX];
+    expect(legacy_runtime_path("/Users/alice", path, sizeof(path)) == 0 &&
+               strcmp(path, "/Users/alice/Library/Application Support/VPNRouter/bin/sing-box") == 0,
+           "legacy runtime path is derived from the exact user home");
+    expect(legacy_process_identity(0, path, path) == 1,
+           "root-owned exact legacy runtime is detected");
+    expect(legacy_process_identity(501, path, path) == 0,
+           "user-owned exact path is not a privileged legacy process");
+    expect(legacy_process_identity(0, "/Users/alice/other/sing-box", path) == 0,
+           "a different executable is not a legacy runtime match");
+    expect(find_legacy_runtime_process(NULL) < 0,
+           "missing home is not treated as legacy absence");
+    expect(find_legacy_runtime_process("/nonexistent-vpnrouter-home") >= 0,
+           "passive process scan returns a known result");
 }
 
 static void test_controller_secret(void)
@@ -315,6 +369,8 @@ int main(void)
     test_json_structure();
     test_stop_request_identity();
     test_legacy_policy_state();
+    test_session_locks();
+    test_legacy_process_detection();
     test_root_directory_metadata();
     test_controller_secret();
     test_wide_object_keys();

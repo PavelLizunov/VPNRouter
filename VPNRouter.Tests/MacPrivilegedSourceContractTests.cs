@@ -106,6 +106,29 @@ public class MacPrivilegedSourceContractTests
     }
 
     [Fact]
+    public void Start_and_stop_serialize_state_before_staging_or_signaling()
+    {
+        var helper = Read("packaging", "macos", "vpnrouter-privileged.c");
+
+        var start = helper.IndexOf("static int command_start", StringComparison.Ordinal);
+        var stateLock = helper.IndexOf("acquire_state_lock(uid)", start, StringComparison.Ordinal);
+        var lease = helper.IndexOf("acquire_session_lease(uid)", stateLock, StringComparison.Ordinal);
+        var assets = helper.IndexOf("sync_assets(uid, home)", lease, StringComparison.Ordinal);
+        var staged = helper.IndexOf("write_root_file(staged", assets, StringComparison.Ordinal);
+        var record = helper.IndexOf("write_session_record(uid, getpid()", staged, StringComparison.Ordinal);
+        var exec = helper.IndexOf("execve(ROOT_BIN", record, StringComparison.Ordinal);
+        Assert.True(start >= 0 && stateLock > start && lease > stateLock &&
+                    assets > lease && staged > assets && record > staged && exec > record,
+            "start must hold both locks before syncing assets, staging config or publishing ownership");
+
+        var stop = helper.IndexOf("static int command_stop", StringComparison.Ordinal);
+        var stopLock = helper.IndexOf("acquire_state_lock(uid)", stop, StringComparison.Ordinal);
+        var stopSignal = helper.IndexOf("kill(pid, SIGKILL)", stopLock, StringComparison.Ordinal);
+        Assert.True(stop >= 0 && stopLock > stop && stopSignal > stopLock,
+            "stop must serialize state before the exact signal");
+    }
+
+    [Fact]
     public void Helper_source_uses_typed_validation_and_no_shell()
     {
         var source = Read("packaging", "macos", "vpnrouter-privileged.c");

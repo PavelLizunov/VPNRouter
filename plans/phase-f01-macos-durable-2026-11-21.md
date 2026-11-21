@@ -177,6 +177,29 @@ live acceptance.
   10 logical CPUs, load 1.80, 16 GiB RAM (14,964 free and 286,836 inactive
   16 KiB pages), 1,174 MiB free swap, 86 GiB available on the internal disk,
   and no compiler jobs. The Command Line Tools clang is available.
+- At `dcd39bd2`, the native helper compiled and its contract fixtures
+  passed on the worker and under sanitizers in run 44861491261. Android
+  compile passed in run 44861491242. All six managed CI jobs passed in
+  run 44861518880.
+- The native session code now takes a per-user transition lock and a
+  runtime lifetime lease before changing assets, staging config or
+  publishing the session record. Stop uses the same transition lock and
+  confirms process identity before signaling. The runtime starts with a
+  private root-owned working directory and temporary directory.
+- The root helper checks the legacy grant and passively looks for a root
+  process at the invoking user's old runtime path before start. Probe
+  reports this process separately. The app surfaces the dependency on
+  stopping the old process when an installed helper detects it. Installer
+  policy publication and host-wide DNS and pf ownership remain separate
+  gates. The new fixtures cover the identity parser, exact legacy path,
+  and kernel lock behavior on temporary files.
+- Native session test preflight: macOS 26.5.2, 10 logical CPUs, load
+  1.76, 16 GiB RAM (43,815 free and 285,954 inactive 16 KiB pages),
+  1,174 MiB free swap, 86 GiB free disk, no active compiler jobs,
+  and the Command Line Tools clang available.
+- Native production compilation with warnings as errors, installer shell
+  syntax, and all contract fixtures passed on the macOS worker for
+  `packaging/macos` from tree `2bdfa17e724d6bedc8c08ed84d10c539d421ee59`.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

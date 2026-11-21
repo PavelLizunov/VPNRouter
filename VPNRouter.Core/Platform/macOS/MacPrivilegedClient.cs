@@ -9,6 +9,7 @@ namespace VPNRouter.Core.Platform.macOS;
 public sealed record MacPrivilegeState(
     bool Ready,
     bool Legacy,
+    bool LegacyProcess,
     int Policy,
     int Uid,
     string? Reason,
@@ -18,7 +19,7 @@ public sealed record MacPrivilegeState(
     string? LegacyState)
 {
     public static MacPrivilegeState Unavailable(string reason) =>
-        new(false, false, 0, 0, reason, null, null, null, null);
+        new(false, false, false, 0, 0, reason, null, null, null, null);
 }
 
 /// <summary>
@@ -56,6 +57,8 @@ public sealed class MacPrivilegedClient
             var root = document.RootElement;
             var ready = root.TryGetProperty("ready", out var readyElement) && readyElement.GetBoolean();
             var legacy = root.TryGetProperty("legacy", out var legacyElement) && legacyElement.GetBoolean();
+            var legacyProcess = root.TryGetProperty("legacy_process", out var legacyProcessElement) &&
+                                legacyProcessElement.GetBoolean();
             var policy = 0;
             if (root.TryGetProperty("policy", out var policyElement))
                 policyElement.TryGetInt32(out policy);
@@ -65,6 +68,7 @@ public sealed class MacPrivilegedClient
             return new MacPrivilegeState(
                 Ready: ready,
                 Legacy: legacy,
+                LegacyProcess: legacyProcess,
                 Policy: policy,
                 Uid: uid,
                 Reason: root.TryGetProperty("reason", out var reason) ? reason.GetString() : null,

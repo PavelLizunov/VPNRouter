@@ -19,6 +19,11 @@ public static class MacPrivilegedSetup
         var state = client.Probe();
         if (IsCurrent(state, out var helperHash, out var singboxHash))
             return true;
+        if (state.LegacyProcess)
+        {
+            logger.Error("[MacPrivilege] Stop the previous VPNRouter session before migrating the helper");
+            return false;
+        }
 
         var helperPath = Path.Combine(AppContext.BaseDirectory, MacPrivilegePaths.HelperBundleName);
         var templatePath = Path.Combine(AppContext.BaseDirectory, MacPrivilegePolicy.TemplateFileName);

@@ -16,6 +16,7 @@
 #include <sys/sysctl.h>
 #include <sys/proc_info.h>
 #include <sys/wait.h>
+#include <sys/file.h>
 
 #include <CommonCrypto/CommonDigest.h>
 #include <arpa/inet.h>
@@ -51,6 +52,11 @@
 #define PF_RULES_STAGED ROOT_RUN "/pf.rules"
 #define PF_TOKEN_PATH ROOT_RUN "/pf.token"
 #define SESSION_PATH_FMT ROOT_RUN "/%u/session.json"
+#define SESSION_LOCK_FMT ROOT_RUN "/%u/session.lock"
+#define STATE_LOCK_FMT ROOT_RUN "/%u/state.lock"
+#define MAX_PROCESSES 16384
+#define STATE_LOCK_WAIT_STEPS 500
+#define STATE_LOCK_WAIT_USEC 10000
 
 #define MAX_REQUEST_BYTES (1024u * 1024u)
 #define MAX_CONFIG_BYTES (1024u * 1024u)
@@ -85,6 +91,17 @@ static int process_is_root_runtime(int pid, uint64_t start_time);
 static int read_session_record(uid_t uid, int *pid, uint64_t *start_time);
 static int write_session_record(uid_t uid, int pid, uint64_t start_time);
 static int delete_session_record(uid_t uid);
+static int parse_stop_identity(const char *json, size_t length, int *pid,
+                               uint64_t *start_time);
+static int session_lock_path(char *path, size_t capacity, uid_t uid);
+static int state_lock_path(char *path, size_t capacity, uid_t uid);
+static int try_lock_exclusive(int fd);
+static int acquire_state_lock(uid_t uid);
+static int acquire_session_lease(uid_t uid);
+static int legacy_runtime_path(const char *home, char *path, size_t capacity);
+static int legacy_process_identity(uid_t owner, const char *executable,
+                                   const char *expected_path);
+static int find_legacy_runtime_process(const char *home);
 
 static void fail(int code, const char *message) __attribute__((noreturn));
 
@@ -219,16 +236,16 @@ static int verify_fixed_chain(void)
 static int ensure_root_dir(const char *path, mode_t mode)
 {
     struct stat st;
-    if (lstat(path, &st) == 0) {
-        if (!S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode) || st.st_uid != 0 ||
-            st.st_gid != 0)
+    if (lstat(path, &st) != 0) {
+        if (errno != ENOENT)
             return -1;
-    } else {
         if (mkdir(path, mode) != 0 && errno != EEXIST)
             return -1;
-        if (lstat(path, &st) != 0 || !S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))
+        if (lstat(path, &st) != 0)
             return -1;
     }
+    if (!S_ISDIR(st.st_mode) || st.st_uid != 0 || st.st_gid != 0)
+        return -1;
     if (chown(path, 0, 0) != 0)
         return -1;
     if (chmod(path, mode) != 0)
@@ -1512,6 +1529,87 @@ static int session_path(char *path, size_t capacity, uid_t uid)
     return written > 0 && (size_t)written < capacity ? 0 : -1;
 }
 
+static int session_lock_path(char *path, size_t capacity, uid_t uid)
+{
+    int written = snprintf(path, capacity, SESSION_LOCK_FMT, (unsigned)uid);
+    return written > 0 && (size_t)written < capacity ? 0 : -1;
+}
+
+static int state_lock_path(char *path, size_t capacity, uid_t uid)
+{
+    int written = snprintf(path, capacity, STATE_LOCK_FMT, (unsigned)uid);
+    return written > 0 && (size_t)written < capacity ? 0 : -1;
+}
+
+static int open_root_lock(const char *path, int close_on_exec)
+{
+    int flags = O_RDWR | O_CREAT | O_NOFOLLOW;
+    if (close_on_exec)
+        flags |= O_CLOEXEC;
+    int fd = open(path, flags, 0600);
+    if (fd < 0)
+        return -1;
+
+    struct stat st;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_uid != 0 ||
+        st.st_gid != 0 || (st.st_mode & 0077) != 0) {
+        close(fd);
+        return -1;
+    }
+    if (fchown(fd, 0, 0) != 0 || fchmod(fd, 0600) != 0) {
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+static int try_lock_exclusive(int fd)
+{
+    int result;
+    do {
+        result = flock(fd, LOCK_EX | LOCK_NB);
+    } while (result != 0 && errno == EINTR);
+    return result;
+}
+
+static int acquire_state_lock(uid_t uid)
+{
+    char path[PATH_MAX];
+    if (state_lock_path(path, sizeof(path), uid) != 0)
+        return -1;
+    int fd = open_root_lock(path, 1);
+    if (fd < 0)
+        return -1;
+    for (int step = 0; step < STATE_LOCK_WAIT_STEPS; step++) {
+        if (try_lock_exclusive(fd) == 0)
+            return fd;
+        if (errno != EWOULDBLOCK) {
+            close(fd);
+            return -1;
+        }
+        usleep(STATE_LOCK_WAIT_USEC);
+    }
+    close(fd);
+    errno = EWOULDBLOCK;
+    return -1;
+}
+
+static int acquire_session_lease(uid_t uid)
+{
+    char path[PATH_MAX];
+    if (session_lock_path(path, sizeof(path), uid) != 0)
+        return -1;
+    int fd = open_root_lock(path, 0);
+    if (fd < 0)
+        return -1;
+    if (try_lock_exclusive(fd) == 0)
+        return fd;
+    int saved = errno;
+    close(fd);
+    errno = saved;
+    return -1;
+}
+
 static int read_session_record(uid_t uid, int *pid, uint64_t *start_time)
 {
     char path[PATH_MAX];
@@ -1520,82 +1618,21 @@ static int read_session_record(uid_t uid, int *pid, uint64_t *start_time)
     if (session_path(path, sizeof(path), uid) != 0 ||
         read_file_checked(path, 0, 0077, sizeof(buffer), buffer, &length) != 0)
         return -1;
-
-    struct doc document = { 0 };
-    if (parse_doc(buffer, length, &document) != 0 ||
-        validate_unique_keys(&document, 0) != 0) {
-        free(document.tokens);
-        return -1;
-    }
-    long pid_value = 0;
-    long start_value = 0;
-    int valid = json_int(&document, 0, "pid", &pid_value) == 0 &&
-                pid_value > 1 && pid_value <= INT_MAX &&
-                json_int(&document, 0, "start_time", &start_value) == 0 &&
-                start_value > 0;
-    free(document.tokens);
-    if (!valid)
-        return -1;
-    *pid = (int)pid_value;
-    *start_time = (uint64_t)start_value;
-    return 0;
+    return parse_stop_identity(buffer, length, pid, start_time) == 0 ? 0 : -1;
 }
 
 static int write_session_record(uid_t uid, int pid, uint64_t start_time)
 {
     char path[PATH_MAX];
     char json[128];
-    int written = snprintf(path, sizeof(path), SESSION_PATH_FMT, (unsigned)uid);
-    if (written < 0 || (size_t)written >= sizeof(path))
+    if (session_path(path, sizeof(path), uid) != 0)
         return -1;
-    written = snprintf(json, sizeof(json),
-                       "{\"pid\":%d,\"start_time\":%llu}", pid,
-                       (unsigned long long)start_time);
+    int written = snprintf(json, sizeof(json),
+                           "{\"pid\":%d,\"start_time\":%llu}", pid,
+                           (unsigned long long)start_time);
     if (written < 0 || (size_t)written >= sizeof(json))
         return -1;
-
-    for (int attempt = 0; attempt < 2; attempt++) {
-        int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
-                      0600);
-        if (fd < 0) {
-            if (errno != EEXIST)
-                return -1;
-            int old_pid = 0;
-            uint64_t old_start = 0;
-            if (read_session_record(uid, &old_pid, &old_start) == 0 &&
-                process_is_root_runtime(old_pid, old_start))
-                return -1;
-            if (unlink(path) != 0 && errno != ENOENT)
-                return -1;
-            continue;
-        }
-
-        if (fchown(fd, 0, 0) != 0 || fchmod(fd, 0600) != 0) {
-            close(fd);
-            unlink(path);
-            return -1;
-        }
-        size_t offset = 0;
-        while (offset < (size_t)written) {
-            ssize_t n = write(fd, json + offset, (size_t)written - offset);
-            if (n < 0) {
-                if (errno == EINTR)
-                    continue;
-                close(fd);
-                unlink(path);
-                return -1;
-            }
-            offset += (size_t)n;
-        }
-        int sync_result = fsync(fd);
-        int close_result = close(fd);
-        if (sync_result != 0 || close_result != 0) {
-            unlink(path);
-            return -1;
-        }
-        return 0;
-    }
-    return -1;
+    return write_root_file(path, json, (size_t)written, 0600);
 }
 
 static int delete_session_record(uid_t uid)
@@ -1622,18 +1659,46 @@ static int command_start(const char *request_json, size_t request_length,
 
     if (ensure_root_layout(uid) != 0)
         fail(EXIT_STATE, "root runtime layout is unavailable");
-    if (verify_fixed_chain() != 0)
-        fail(EXIT_STATE, "protected system directory chain is not root-owned");
+    if (legacy_policy_state_path(LEGACY_POLICY_PATH) != LEGACY_ABSENT)
+        fail(EXIT_STATE, "legacy policy removal is unconfirmed");
     if (verify_runtime_artifact() != 0)
         fail(EXIT_STATE, "root-owned runtime artifact is missing or untrusted");
-    if (sync_assets(uid, home) != 0)
-        fail(EXIT_STATE, "asset sync failed");
+    int legacy_process_state = find_legacy_runtime_process(home);
+    if (legacy_process_state != 0)
+        fail(EXIT_STATE,
+             legacy_process_state > 0
+                 ? "legacy user-runtime process is still running"
+                 : "legacy user-runtime process state is unknown");
+    int state_lock = acquire_state_lock(uid);
+    if (state_lock < 0)
+        fail(EXIT_STATE, "could not serialize privileged state");
+    int lease_fd = acquire_session_lease(uid);
+    if (lease_fd < 0) {
+        if (errno == EWOULDBLOCK) {
+            int recorded_pid = 0;
+            uint64_t recorded_start = 0;
+            if (read_session_record(uid, &recorded_pid, &recorded_start) == 0 &&
+                process_is_root_runtime(recorded_pid, recorded_start))
+                fail(EXIT_STATE,
+                     "a privileged session is already running for this user");
+            fail(EXIT_STATE,
+                 "session lease is held by an unrecorded process");
+        }
+        fail(EXIT_STATE, "could not acquire the session lease");
+    }
 
     int previous_pid = 0;
     uint64_t previous_start = 0;
-    if (read_session_record(uid, &previous_pid, &previous_start) == 0 &&
-        process_is_root_runtime(previous_pid, previous_start))
-        fail(EXIT_STATE, "a privileged session is already running for this user");
+    if (read_session_record(uid, &previous_pid, &previous_start) == 0) {
+        if (process_is_root_runtime(previous_pid, previous_start))
+            fail(EXIT_STATE,
+                 "session record names a live privileged process without the session lease");
+        if (delete_session_record(uid) != 0)
+            fail(EXIT_STATE, "could not remove stale session record");
+    }
+    /* State lock closes at exec. The runtime keeps the session lease. */
+    (void)state_lock;
+    (void)lease_fd;
 
     char config_path[PATH_MAX];
     int written = snprintf(config_path, sizeof(config_path),
@@ -1653,20 +1718,31 @@ static int command_start(const char *request_json, size_t request_length,
     if (!constant_time_equal(expected_hash, actual_hash, 64))
         fail(EXIT_INPUT, "config hash does not match the request");
 
+    if (sync_assets(uid, home) != 0)
+        fail(EXIT_STATE, "asset sync failed");
+
     struct doc config_doc;
     if (parse_doc(config, config_length, &config_doc) != 0 ||
         validate_config(&config_doc, uid) != 0)
         fail(EXIT_INPUT, "config violates the privileged runtime contract");
 
+    char working_dir[PATH_MAX];
+    written = snprintf(working_dir, sizeof(working_dir), ROOT_RUN "/%u", (unsigned)uid);
+    if (written < 0 || (size_t)written >= sizeof(working_dir) || chdir(working_dir) != 0)
+        return EXIT_STATE;
     char staged[PATH_MAX];
-    written = snprintf(staged, sizeof(staged), ROOT_RUN "/%u/current.json", (unsigned)uid);
+    written = snprintf(staged, sizeof(staged), "%s/current.json", working_dir);
     if (written < 0 || (size_t)written >= sizeof(staged))
         return EXIT_STATE;
     if (write_root_file(staged, config, config_length, 0600) != 0)
         fail(EXIT_STATE, "could not stage the validated config");
 
     char *const argv[] = { ROOT_BIN, "run", "-c", staged, NULL };
-    char *const envp[] = { "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "HOME=/var/root", NULL };
+    char tmp_environment[sizeof(working_dir) + sizeof("TMPDIR=")];
+    snprintf(tmp_environment, sizeof(tmp_environment), "TMPDIR=%s", working_dir);
+    char *const envp[] = {
+        "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "HOME=/var/root", tmp_environment, NULL
+    };
     int devnull = open("/dev/null", O_RDONLY);
     if (devnull >= 0) {
         dup2(devnull, STDIN_FILENO);
@@ -1695,6 +1771,7 @@ static int parse_stop_identity(const char *json, size_t length,
     long pid_value = 0;
     long start_value = 0;
     int valid = parse_doc((char *)json, length, &request) == 0 &&
+                validate_unique_keys(&request, 0) == 0 &&
                 json_int(&request, 0, "pid", &pid_value) == 0 &&
                 pid_value > 1 && pid_value <= INT_MAX &&
                 json_int(&request, 0, "start_time", &start_value) == 0 &&
@@ -1716,14 +1793,25 @@ static int command_stop(const char *request_json, size_t request_length, uid_t u
     if (pid == getpid() || pid == getppid())
         return EXIT_INPUT;
 
+    if (ensure_root_layout(uid) != 0)
+        return EXIT_STATE;
+
+    int state_lock = acquire_state_lock(uid);
+    if (state_lock < 0)
+        return EXIT_STATE;
+    (void)state_lock;
+
     int session_pid = 0;
     uint64_t session_start = 0;
     if (read_session_record(uid, &session_pid, &session_start) != 0 ||
         session_pid != pid || session_start != start_time)
         return EXIT_INPUT;
 
-    if (!process_is_root_runtime(pid, start_time))
+    if (!process_is_root_runtime(pid, start_time)) {
+        if (kill(pid, 0) != 0 && errno == ESRCH)
+            return delete_session_record(uid) == 0 ? 0 : EXIT_STATE;
         return EXIT_INPUT;
+    }
 
     if (kill(pid, SIGKILL) != 0 && errno != ESRCH)
         fail(EXIT_COMMAND, "exact signal failed");
@@ -1781,11 +1869,71 @@ static int verify_runtime_artifact(void)
     return valid ? 0 : -1;
 }
 
-static int command_probe(uid_t uid)
+static int legacy_runtime_path(const char *home, char *path, size_t capacity)
+{
+    if (home == NULL || home[0] != '/')
+        return -1;
+    int written = snprintf(path, capacity,
+                           "%s/Library/Application Support/VPNRouter/bin/sing-box",
+                           home);
+    return written > 0 && (size_t)written < capacity ? 0 : -1;
+}
+
+static int legacy_process_identity(uid_t owner, const char *executable,
+                                   const char *expected_path)
+{
+    return owner == 0 && executable != NULL && expected_path != NULL &&
+           strcmp(executable, expected_path) == 0;
+}
+
+/* Passive exact scan: never signals or otherwise touches a candidate. */
+static int find_legacy_runtime_process(const char *home)
+{
+    char expected[PATH_MAX];
+    if (legacy_runtime_path(home, expected, sizeof(expected)) != 0)
+        return -1;
+
+    int count = proc_listallpids(NULL, 0);
+    if (count <= 0 || count > MAX_PROCESSES)
+        return -1;
+
+    int capacity = count + 16;
+    pid_t *pids = xcalloc((size_t)capacity, sizeof(pid_t));
+    int used = proc_listallpids(pids, capacity * (int)sizeof(pid_t));
+    if (used <= 0 || used >= capacity) {
+        free(pids);
+        return -1;
+    }
+
+    int found = 0;
+    for (int i = 0; i < used; i++) {
+        pid_t pid = pids[i];
+        if (pid <= 1)
+            continue;
+        char executable[PATH_MAX];
+        if (proc_pidpath(pid, executable, sizeof(executable)) <= 0)
+            continue;
+        struct proc_bsdinfo info;
+        memset(&info, 0, sizeof(info));
+        if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) !=
+            (int)sizeof(info))
+            continue;
+        if (legacy_process_identity(info.pbi_uid, executable, expected)) {
+            found = 1;
+            break;
+        }
+    }
+    free(pids);
+    return found;
+}
+
+static int command_probe(uid_t uid, const char *home)
 {
     int ready = 1;
     int legacy_state = legacy_policy_state_path(LEGACY_POLICY_PATH);
     int legacy = legacy_state == LEGACY_PRESENT;
+    int legacy_process = 0;
+    int legacy_process_state = find_legacy_runtime_process(home);
     const char *reason = NULL;
     char helper_actual[65] = {0};
     char singbox_actual[65] = {0};
@@ -1796,6 +1944,15 @@ static int command_probe(uid_t uid)
     if (legacy_state == LEGACY_UNKNOWN) {
         ready = 0;
         reason = "legacy_unknown";
+    }
+    if (legacy_process_state < 0) {
+        ready = 0;
+        if (reason == NULL)
+            reason = "legacy_process_unknown";
+    } else if (legacy_process_state > 0) {
+        ready = 0;
+        legacy_process = 1;
+        reason = "legacy_process";
     }
     if (ready && verify_fixed_chain() != 0) {
         ready = 0;
@@ -1888,9 +2045,9 @@ static int command_probe(uid_t uid)
     const char *legacy_text = legacy_state == LEGACY_PRESENT ? "present" :
                               legacy_state == LEGACY_ABSENT ? "absent" : "unknown";
     printf("{\"ready\":%s,\"legacy\":%s,\"legacy_state\":\"%s\","
-           "\"policy\":%d,\"uid\":%u",
+           "\"legacy_process\":%s,\"policy\":%d,\"uid\":%u",
            ready ? "true" : "false", legacy ? "true" : "false", legacy_text,
-           2, (unsigned)uid);
+           legacy_process ? "true" : "false", 2, (unsigned)uid);
     if (helper_actual[0] != '\0') {
         printf(",\"helper_sha256\":\"");
         for (int i = 0; i < 64; i++)
@@ -2181,7 +2338,7 @@ int main(void)
         fail(EXIT_INPUT, "missing operation");
 
     if (strcmp(op, "probe") == 0)
-        return command_probe(uid);
+        return command_probe(uid, pw->pw_dir);
     if (strcmp(op, "start") == 0)
         return command_start(request_json, request_length, uid, pw->pw_dir);
     if (strcmp(op, "stop") == 0)

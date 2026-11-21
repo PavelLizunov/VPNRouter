@@ -33,12 +33,14 @@ public class MacPrivilegedClientTests : IDisposable
     {
         var fake = new FakeProcessRunner();
         fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath,
-            Ok("{\"ready\":true,\"legacy\":false,\"legacy_state\":\"absent\",\"policy\":2,\"uid\":501," +
+            Ok("{\"ready\":true,\"legacy\":false,\"legacy_state\":\"absent\"," +
+               "\"legacy_process\":false,\"policy\":2,\"uid\":501," +
                "\"helper_sha256\":\"aaaa\",\"singbox_sha256\":\"bbbb\",\"app_version\":\"2.50.6\"}"));
         var state = new MacPrivilegedClient(fake).Probe();
 
         Assert.True(state.Ready);
         Assert.False(state.Legacy);
+        Assert.False(state.LegacyProcess);
         Assert.Equal("absent", state.LegacyState);
         Assert.Equal(2, state.Policy);
         Assert.Equal(501, state.Uid);
@@ -62,14 +64,31 @@ public class MacPrivilegedClientTests : IDisposable
         var fake = new FakeProcessRunner();
         fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath,
             Ok("{\"ready\":false,\"legacy\":false,\"legacy_state\":\"unknown\"," +
-               "\"policy\":2,\"uid\":501,\"reason\":\"legacy_unknown\"}"));
+               "\"legacy_process\":false,\"policy\":2,\"uid\":501,\"reason\":\"legacy_unknown\"}"));
 
         var state = new MacPrivilegedClient(fake).Probe();
 
         Assert.False(state.Ready);
         Assert.False(state.Legacy);
+        Assert.False(state.LegacyProcess);
         Assert.Equal("unknown", state.LegacyState);
         Assert.Equal("legacy_unknown", state.Reason);
+    }
+
+    [Fact]
+    public void Probe_reports_a_legacy_root_process_as_a_distinct_blocker()
+    {
+        var fake = new FakeProcessRunner();
+        fake.OnRun(c => c.ExecutablePath == MacPrivilegePaths.SudoPath,
+            Ok("{\"ready\":false,\"legacy\":false,\"legacy_state\":\"absent\"," +
+               "\"legacy_process\":true,\"policy\":2,\"uid\":501," +
+               "\"reason\":\"legacy_process\"}"));
+
+        var state = new MacPrivilegedClient(fake).Probe();
+
+        Assert.False(state.Ready);
+        Assert.True(state.LegacyProcess);
+        Assert.Equal("legacy_process", state.Reason);
     }
 
     [Fact]
