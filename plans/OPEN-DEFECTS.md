@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Desktop manual server selection leaves the subscription auto-select flag enabled. Selection and reconnect save the chosen row, but the generated cross-host `urltest` group can choose another host every three minutes. Confirmed in the Standard 2.51.0-r1 source. See [manual server selection](phase-manual-server-selection-2026-11-22.md).
+
 - [x] **P1** - Arch source export omitted the macOS installer script embedded by VPNRouter.Core. The exact-main Arch build at `60c65c72` failed with CS1566 in run 44910872465. RESOLVED in source by including the tracked installer script. The export fixture and a real Git archive check passed for all five external Core resources. Hosted package confirmation is pending.
 
 - [ ] **P2** - F-01 custom import: macOS runtime restrictions are checked at Connect. Adding an import can accept a profile that later fails those restrictions. Any import preflight must account for compatibility transformations applied before the final config is prepared. See `plans/phase-f01-macos-durable-2026-11-21.md`.
