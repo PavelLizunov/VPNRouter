@@ -28,26 +28,20 @@ import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.InputStreamReader;
 import java.net.Inet6Address;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
-import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
-import org.json.JSONObject;
 
 import io.nekohasekai.libbox.CommandClient;
 import io.nekohasekai.libbox.CommandClientHandler;
@@ -56,6 +50,7 @@ import io.nekohasekai.libbox.CommandServer;
 import io.nekohasekai.libbox.ConnectionEvents;
 import io.nekohasekai.libbox.LogIterator;
 import io.nekohasekai.libbox.OutboundGroupIterator;
+import io.nekohasekai.libbox.OutboundGroupItem;
 import io.nekohasekai.libbox.OutboundGroupItemIterator;
 import io.nekohasekai.libbox.StatusMessage;
 import io.nekohasekai.libbox.InterfaceUpdateListener;
@@ -654,22 +649,24 @@ public final class VpnRouterService extends VpnService {
                 reportFailure("tunnel-closing", false);
                 return;
             }
-            session = new AndroidTunnelSession();
+            AndroidTunnelSession attempt = new AndroidTunnelSession();
+            session = attempt;
             tunnelSessionId = java.util.UUID.randomUUID().toString();
             establishedAppPolicy = null;
             acquireConnectWakeLock();
             if (!start.current()) return;
             startSlipstreamIfNeeded();
             if (!start.current()) return;
-            DnsttReadyProbe probe = pendingProbeManagedDnstt ? DnsttReadyProbe.attach(tunnelConfig) : null;
-            startLibboxService(probe == null ? tunnelConfig : probe.config);
-            session.requireEstablishedTun();
-            if (probe != null && (!start.current() || !probe.ready())) {
+            startLibboxService(tunnelConfig);
+            attempt.requireEstablishedTun();
+            if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start)) {
                 retireTunnel();
                 if (start.current()) reportFailure("proxy-unreachable", false);
                 return;
             }
             if (start.commit(() -> {
+                if (session != attempt) throw new IllegalStateException("tunnel-closing");
+                attempt.requireEstablishedTun();
                 persistLastGoodConfig();
                 establishedStart = start;
                 liveService = this;
@@ -700,48 +697,95 @@ public final class VpnRouterService extends VpnService {
         }
     }
 
-    // The TUN becoming available does not cause a lazy SSH outbound to dial.
-    private static final class DnsttReadyProbe {
-        private final String config;
-        private final int port;
-        private final String secret;
+    // The freshly started native instance owns its URL-test history and the private command socket.
+    private static final class DnsttReadyProbe implements CommandClientHandler {
+        private final CountDownLatch finished = new CountDownLatch(1);
+        private volatile String commandStage = "connecting";
+        private volatile String outboundStage = "no-snapshot";
+        private boolean passed;
 
-        private DnsttReadyProbe(String config, int port, String secret) {
-            this.config = config;
-            this.port = port;
-            this.secret = secret;
+        private synchronized void complete(boolean success) {
+            if (finished.getCount() == 0) return;
+            passed = success;
+            finished.countDown();
         }
 
-        static DnsttReadyProbe attach(String config) throws Exception {
-            JSONObject root = new JSONObject(config);
-            int port;
-            try (ServerSocket reservation = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
-                port = reservation.getLocalPort();
-            }
-            String secret = java.util.UUID.randomUUID().toString();
-            JSONObject clash = root.getJSONObject("experimental").getJSONObject("clash_api");
-            clash.put("external_controller", "127.0.0.1:" + port);
-            clash.put("secret", secret);
-            return new DnsttReadyProbe(root.toString(), port, secret);
-        }
-
-        boolean ready() {
-            try (Socket socket = new Socket()) {
-                socket.connect(new InetSocketAddress("127.0.0.1", port), 1500);
-                socket.setSoTimeout(11000);
-                String request = "GET /proxies/proxy/delay"
-                        + "?url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=10000 HTTP/1.1\r\n"
-                        + "Host: 127.0.0.1:" + port + "\r\n"
-                        + "Authorization: Bearer " + secret + "\r\nConnection: close\r\n\r\n";
-                socket.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
-                BufferedReader response = new BufferedReader(
-                        new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
-                String status = response.readLine();
-                return status != null && status.startsWith("HTTP/1.1 200 ");
-            } catch (java.io.IOException e) {
+        static boolean ready(AndroidTunnelStart start) {
+            if (!start.current()) return false;
+            DnsttReadyProbe probe = new DnsttReadyProbe();
+            Thread worker = new Thread(() -> probe.run(start), "dnstt-ready");
+            worker.setDaemon(true);
+            long startedAt = SystemClock.elapsedRealtime();
+            try {
+                worker.start();
+                return start.awaitDnsttReadiness(startedAt, SystemClock::elapsedRealtime,
+                        timeout -> probe.finished.await(timeout, TimeUnit.MILLISECONDS), () -> probe.passed);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 return false;
+            } finally {
+                probe.complete(false);
+                Log.i(LOG_TAG, "DNSTT readiness: command=" + probe.commandStage
+                        + " outbounds=" + probe.outboundStage
+                        + " positiveCallback=" + probe.passed
+                        + " elapsedMs=" + (SystemClock.elapsedRealtime() - startedAt));
             }
         }
+
+        // Keep the connection and its cleanup on the same worker, including a late connect
+        // that returns after the service stopped waiting for the result.
+        private void run(AndroidTunnelStart start) {
+            CommandClient client = null;
+            try {
+                if (finished.getCount() == 0 || !start.current()) return;
+                CommandClientOptions options = new CommandClientOptions();
+                options.addCommand(Libbox.CommandOutbounds);
+                client = Libbox.newCommandClient(this, options);
+                client.connect();
+                commandStage = "connected";
+                if (finished.getCount() == 0 || !start.current()) return;
+                commandStage = "requesting-test";
+                client.urlTest("proxy");
+                commandStage = "test-requested";
+                finished.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception | LinkageError e) {
+                Log.w(LOG_TAG, "DNSTT readiness command failed");
+            } finally {
+                complete(false);
+                if (client != null) {
+                    try { client.disconnect(); }
+                    catch (Exception | LinkageError e) { Log.w(LOG_TAG, "DNSTT readiness client disconnect failed"); }
+                }
+            }
+        }
+
+        public void writeOutbounds(OutboundGroupItemIterator items) {
+            boolean hasProxy = false;
+            while (items != null && items.hasNext()) {
+                OutboundGroupItem item = items.next();
+                if (item == null || !"proxy".equals(item.getTag()) || !"ssh".equals(item.getType())) continue;
+                hasProxy = true;
+                if (item.getURLTestDelay() > 0) {
+                    outboundStage = "proxy-available";
+                    complete(true);
+                    return;
+                }
+            }
+            outboundStage = hasProxy ? "proxy-pending" : "proxy-missing";
+        }
+
+        public void connected() { }
+        public void disconnected(String message) { complete(false); }
+        public void setDefaultLogLevel(int level) { }
+        public void clearLogs() { }
+        public void writeLogs(LogIterator logs) { }
+        public void writeStatus(StatusMessage status) { }
+        public void writeGroups(OutboundGroupIterator groups) { }
+        public void initializeClashMode(StringIterator modes, String currentMode) { }
+        public void updateClashMode(String mode) { }
+        public void writeConnectionEvents(ConnectionEvents events) { }
     }
 
     private void reportStartFailure(Throwable error, boolean previousTunnelActive) {

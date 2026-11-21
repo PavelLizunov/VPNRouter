@@ -54,7 +54,6 @@ public sealed class CommittedFirewallConfigTests
             logger: null,
             runner: fake,
             currentConfigPath: nonExistentPath,
-            markerPath: Path.Combine(Path.GetTempPath(), $"marker-{Guid.NewGuid():N}.marker"),
             hostResolver: null,
             pfConfPath: Path.Combine(Path.GetTempPath(), $"pf-{Guid.NewGuid():N}.conf"),
             rulesPath: Path.Combine(Path.GetTempPath(), $"rules-{Guid.NewGuid():N}.conf"),

@@ -1,7 +1,10 @@
 using System;
 using System.Diagnostics;
+using System.Text.Json;
 using VPNRouter.Core;
+using VPNRouter.Core.Platform.macOS;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -32,11 +35,22 @@ public sealed class UnixOwnedProcessSignalTests
     }
 
     [Fact]
-    public void MacKillArguments_TargetOnlyOnePositivePid()
+    public void MacStop_UsesManagedHelperTypedRequestWithoutSignalArguments()
     {
-        Assert.Equal(
-            new[] { "-n", "/bin/kill", "-KILL", "--", "4321" },
-            SingBoxManager.BuildMacExactKillArguments(4321));
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == MacPrivilegePaths.SudoPath,
+            new ProcessResult(0, "", "", TimeSpan.Zero, false));
+        var client = new MacPrivilegedClient(fake);
+
+        Assert.True(client.Stop(4321, 1234));
+
+        var call = Assert.Single(fake.RunCalls);
+        Assert.Equal(new[] { "-n", MacPrivilegePaths.HelperPath }, call.Arguments);
+        Assert.DoesNotContain("/bin/kill", call.Arguments);
+        using var document = JsonDocument.Parse(call.StdinInput!);
+        Assert.Equal("stop", document.RootElement.GetProperty("op").GetString());
+        Assert.Equal(4321, document.RootElement.GetProperty("pid").GetInt32());
+        Assert.Equal(1234, document.RootElement.GetProperty("start_time").GetInt64());
     }
 
     [Fact]

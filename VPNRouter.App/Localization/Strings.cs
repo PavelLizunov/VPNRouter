@@ -272,6 +272,8 @@ public static class Strings
     public static string SmpAutostartCardOff => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOff;
 
     public static string FailedStartVpn => global::VPNRouter.Core.Localization.Strings.FailedStartVpn;
+    public static string MacPrivilegeSetupRunning => global::VPNRouter.Core.Localization.Strings.MacPrivilegeSetupRunning;
+    public static string MacPrivilegeSetupRequired => global::VPNRouter.Core.Localization.Strings.MacPrivilegeSetupRequired;
     public static string AddServerFirst => global::VPNRouter.Core.Localization.Strings.AddServerFirst;
     public static string SelectSingBoxConfig => global::VPNRouter.Core.Localization.Strings.SelectSingBoxConfig;
     public static string InvalidConfig => global::VPNRouter.Core.Localization.Strings.InvalidConfig;

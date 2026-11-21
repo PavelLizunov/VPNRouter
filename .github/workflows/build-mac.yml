@@ -84,6 +84,11 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Test macOS privileged helper contract
+        run: |
+          chmod +x packaging/macos/tests/run-tests.sh
+          packaging/macos/tests/run-tests.sh
+
       - name: Build macOS DMG + ZIP
         run: |
           chmod +x ./build-mac.sh

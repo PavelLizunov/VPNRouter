@@ -722,7 +722,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try { _engine.StopOwnedSession(); }
         catch (InvalidOperationException)
         {
-            StatusText = Strings.TunnelStopUnconfirmed;
+            ShowUnconfirmedStop();
             return false;
         }
 
@@ -907,7 +907,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         ThemeToggleText = IsDarkTheme ? Strings.ThemeLight : Strings.ThemeDark;
         ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
-        if (!IsConnected && !IsConnecting)
+        if (SmpStopUnconfirmed)
+            StatusText = Strings.TunnelStopUnconfirmed;
+        else if (!IsConnected && !IsConnecting)
             StatusText = Strings.NotConnected;
 
         OnPropertyChanged(string.Empty);

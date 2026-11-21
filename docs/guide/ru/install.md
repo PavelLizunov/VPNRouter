@@ -22,7 +22,7 @@ Debian / Ubuntu / Mint / Pop / elementary. Добавляет подписанн
 ```bash
 brew install --cask pavellizunov/vpnrouter/vpnrouter
 ```
-Apple Silicon. Авто-снимает Gatekeeper quarantine. При первом запуске однократно просит пароль для sudoers, дальше passwordless. Обновление: `brew upgrade --cask vpnrouter`.
+Apple Silicon. Авто-снимает Gatekeeper quarantine. При первом Connect однократно предлагает установить привилегированный helper; Terminal не нужен, дальше passwordless. Обновление: `brew upgrade --cask vpnrouter`.
 </td>
 </tr>
 <tr>
@@ -63,7 +63,7 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 | `VPNRouter-update-v{version}-win.zip` | Windows | Обновление только DLL (если уже на свежей версии) |
 | `VPNRouter-Setup-v{version}.exe` | Windows | Мастер установки (Inno Setup, без цифровой подписи): ставит те же файлы, что и install-zip, с деинсталлятором и необязательными галочками автозапуска и службы |
 | `VPNRouter-*-win.zip.sha256` | Windows | Компаньон-файл SHA256 — автоапдейтер проверяет хеш перед распаковкой (v2.15.8+) |
-| `VPNRouter-v{version}-mac.dmg` | macOS | Drag-install DMG (Apple Silicon) с `InstallGuide.html` для одноразовой настройки sudoers |
+| `VPNRouter-v{version}-mac.dmg` | macOS | Drag-install DMG (Apple Silicon) с `InstallGuide.html` для одноразовой настройки привилегированного helper |
 | `VPNRouter-v{version}-mac.zip` | macOS | Сырой `.app`-бандл (для ручной установки) |
 | `VPNRouter-v{version}-linux-amd64.deb` | Linux | Пакет для Debian/Ubuntu (desktop entry + `setcap` для passwordless TUN; systemd-сервиса нет). Установка: `sudo dpkg -i <file>.deb` |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | Linux | Портативный single-file билд. `chmod +x`, запуск, установка не нужна |
@@ -77,12 +77,12 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 |---|---|
 | [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Публичные VLESS-конфигурации и GeoIP-метаданные; размер пула меняется. Потребляется вкладкой Free Configs. |
 
-Запускать `VPNRouter.App.exe` от имени Администратора на Windows (нужно для TUN-адаптера + ETW мониторинга процессов + Firewall-правил). На macOS следуйте инструкции `InstallGuide.html` внутри DMG для одноразовой настройки sudoers, чтобы TUN поднимался без ввода пароля каждый раз. На Linux `.deb` применяет `setcap cap_net_admin,cap_net_bind_service` к встроенному sing-box, чтобы TUN поднимался без root и без пароля (systemd-сервис не ставится); AppImage без песочницы использует системный `pkexec` с запросом пароля. AppImage, обёрнутый в bubblewrap или user namespace (включая NixOS `appimageTools.wrapType2`), не может получить право создать системный TUN-интерфейс, даже если `getcap` показывает capability файла. Используйте нативный пакет дистрибутива вне этой песочницы.
+Запускать `VPNRouter.App.exe` от имени Администратора на Windows (нужно для TUN-адаптера + ETW мониторинга процессов + Firewall-правил). На macOS откройте приложение и нажмите Connect; подтвердите однократную установку привилегированного helper, чтобы TUN поднимался без ввода пароля каждый раз. На Linux `.deb` применяет `setcap cap_net_admin,cap_net_bind_service` к встроенному sing-box, чтобы TUN поднимался без root и без пароля (systemd-сервис не ставится); AppImage без песочницы использует системный `pkexec` с запросом пароля. AppImage, обёрнутый в bubblewrap или user namespace (включая NixOS `appimageTools.wrapType2`), не может получить право создать системный TUN-интерфейс, даже если `getcap` показывает capability файла. Используйте нативный пакет дистрибутива вне этой песочницы.
 
 ## Требования
 
 - **Windows 10/11 x64** — права Администратора (TUN, firewall, ETW)
-- **macOS 12+** — Apple Silicon (arm64). Intel пока не собирается. Нужна одноразовая настройка sudoers при первом запуске (с подсказкой)
+- **macOS 12+** — Apple Silicon (arm64). Intel пока не собирается. Нужна одноразовая настройка привилегированного helper при первом запуске (с подсказкой в приложении)
 - **Linux x86_64** — ядро 5.6+ (TUN/wireguard), `glibc` 2.31+. Протестировано на Ubuntu 22.04 / 24.04 и Debian 12. `nftables` (`nft`) для kill switch.
 - **Android 6.0+** (API 23+), ARM64 — использует `VpnService`, root не требуется. Камера запрашивается только для сканирования QR-кода.
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) — включён в установщик

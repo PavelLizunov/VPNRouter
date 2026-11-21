@@ -123,6 +123,7 @@ public sealed class ProcessRunner : IProcessRunner
             CreateNoWindow = true,
             RedirectStandardOutput = r.CaptureStdout,
             RedirectStandardError = r.CaptureStderr,
+            RedirectStandardInput = r.StdinInput != null,
             WorkingDirectory = r.WorkingDirectory ?? string.Empty,
         };
         foreach (var arg in r.Arguments) psi.ArgumentList.Add(arg);
@@ -189,6 +190,20 @@ internal sealed class ProcessHandle : IProcessHandle
                 $"Process.Start returned false for '{_request.ExecutablePath}'.");
 
         Pid = _process.Id;
+
+        if (_request.StdinInput != null)
+        {
+            try
+            {
+                _process.StandardInput.Write(_request.StdinInput);
+                _process.StandardInput.Close();
+            }
+            catch (IOException)
+            {
+                // The child may reject the request and exit before reading all
+                // of stdin. Its exit code and stderr remain the result.
+            }
+        }
 
         if (_request.CaptureStdout) _process.BeginOutputReadLine();
         if (_request.CaptureStderr) _process.BeginErrorReadLine();

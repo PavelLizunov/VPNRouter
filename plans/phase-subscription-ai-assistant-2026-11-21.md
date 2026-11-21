@@ -58,3 +58,9 @@ The lifecycle fixture covers an obsolete session, a replacement before
 offline Undo, a save failure with the original session live, and an
 offline restoration after Stop. CI and live desktop acceptance are
 pending for this change.
+
+At `49140059` all eight checks passed. The targeted Windows
+headless fixture passed in run 44905729899 and produced the 360 x 340
+panel screenshot. It exercises panel initialization, opening the
+form and subscription eligibility. Live Chrome/control-app traffic,
+a deployed model reply and live Undo remain pending.

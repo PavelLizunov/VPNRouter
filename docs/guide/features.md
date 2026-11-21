@@ -20,7 +20,7 @@ Routes application traffic through a proxy using [sing-box](https://github.com/S
 ### Platform specifics
 
 - **Windows** — UAC elevation; optional Windows Service for boot-time autostart that survives user logoff.
-- **macOS** — Apple Silicon native; one-time sudoers setup from the DMG gives passwordless TUN afterwards.
+- **macOS** — Apple Silicon native; one-time in-app privileged-helper setup gives passwordless TUN afterwards.
 - **Linux** — POSIX capabilities (`cap_net_admin`, `cap_net_bind_service`) for passwordless TUN, applied by the `.deb` postinst (`setcap`); session autostart via the `.desktop` entry. No systemd service / boot-time daemon yet.
 
 ### Windows-only add-ons *(optional)*

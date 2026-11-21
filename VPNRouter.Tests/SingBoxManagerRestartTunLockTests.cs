@@ -505,7 +505,13 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
 
         try
         {
-            if (escalated)
+            if (OperatingSystem.IsMacOS())
+            {
+                SetField(manager, "_macLaunchPending", true);
+                SetField(manager, "_macPrivilegeLaunchId", Guid.NewGuid().ToString("N"));
+                runner.OnRun(_ => true, new ProcessResult(66, "", "", TimeSpan.Zero, false));
+            }
+            else if (escalated)
             {
                 SetField(manager, "_linuxUsedPkexec", true);
                 // The isolated record points at an absent child. Exact stop refuses before sending a signal.
@@ -513,8 +519,15 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
                     new OwnedProcessIdentity(int.MaxValue, 1, Path.Combine(tempDir, "fixture-sing-box")));
             }
             const string previous = """{"route":{"final":"proxy"}}""";
+            const string replacement = """
+                {
+                    "inbounds": [{"type": "tun", "tag": "tun-in"}],
+                    "outbounds": [{"type": "direct", "tag": "direct"}],
+                    "route": {"final": "direct"}
+                }
+                """;
             var configPath = manager.WriteConfigToDisk(previous);
-            var result = manager.ReloadConfigJsonWithResult("{}", forceRestart: true);
+            var result = manager.ReloadConfigJsonWithResult(replacement, forceRestart: true);
 
             Assert.Equal(previous, File.ReadAllText(configPath));
             Assert.Empty(Directory.EnumerateFiles(VPNRouter.Core.AppPaths.ConfigDir, "current-*.tmp"));
@@ -526,6 +539,8 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             Assert.False(handle.DisposeCalled);
             Assert.True((bool)GetField(manager, "_exactStopUnconfirmed")!);
             Assert.True(IsLockOwned(lockInstance));
+            if (OperatingSystem.IsMacOS())
+                Assert.Single(runner.RunCalls);
         }
         finally
         {
@@ -537,6 +552,29 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             RestoreAppPathsDataDir(priorDataDir);
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void MacStop_NeverSpawnedLauncher_ReleasesLockWithoutCallingHelper()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "Exercises the managed macOS stop path.");
+
+        var runner = new FakeProcessRunner();
+        using var manager = new SingBoxManager(DefaultSettings(), null, new FakeHttpClient(), runner);
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+        var launcher = new FakeProcessHandle(pid: 0);
+        SetField(manager, "_handle", launcher);
+        SetField(manager, "_macLaunchPending", true);
+        SetField(manager, "_macPrivilegeLaunchId", Guid.NewGuid().ToString("N"));
+
+        manager.Stop();
+
+        Assert.Equal(SingBoxState.Stopped, manager.State);
+        Assert.False(IsLockOwned(lockInstance));
+        Assert.Empty(runner.RunCalls);
+        Assert.Equal(0, launcher.KillCallCount);
+        Assert.Equal(1, launcher.DisposeCallCount);
     }
 
     [Fact]

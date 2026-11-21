@@ -78,6 +78,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="../packaging/macos/install-privileged.sh" LogicalName="VPNRouter.MacPrivilege.install-privileged.sh" />
     <EmbeddedResource Include="../packaging/windows/installer/publish-windows-update.ps1" LogicalName="VPNRouter.Update.publish-windows-update.ps1" />
     <EmbeddedResource Include="../packaging/windows/installer/zapret-maintenance.ps1" LogicalName="VPNRouter.Update.zapret-maintenance.ps1" />
     <EmbeddedResource Include="../packaging/windows/installer/repair-environment.ps1" LogicalName="VPNRouter.Update.repair-environment.ps1" />

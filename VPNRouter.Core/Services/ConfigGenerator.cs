@@ -91,7 +91,9 @@ public static partial class ConfigGenerator
         if (OperatingSystem.IsMacOS())
             appsProcessList = ExpandMacHelperNames(appsProcessList);
 
-        var logPath = AppPaths.SingBoxLogPath;
+        // Root must not open a user-controlled log path on macOS. The app drains
+        // stderr instead; the privileged config contract also enforces this.
+        var logPath = OperatingSystem.IsMacOS() ? string.Empty : AppPaths.SingBoxLogPath;
 
         var outbounds = BuildOutbounds(settings, out bool hasUdpProxy,
             out bool isDnsTunnel, out var dnsTunnelResolverIps, out var endpoints,

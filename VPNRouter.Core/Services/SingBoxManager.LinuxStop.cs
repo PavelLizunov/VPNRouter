@@ -106,30 +106,6 @@ public partial class SingBoxManager
                 5_000,
                 "sudo -n exact pidfd SIGKILL");
         }
-        else if (OperatingSystem.IsMacOS())
-        {
-            var state = InspectOwnedTarget(owned);
-            if (state == OwnedTargetState.GoneOrReplaced)
-                return true;
-            if (state == OwnedTargetState.IdentityUnavailable)
-                return RefuseUnknownIdentity(owned.Pid);
-
-            var policy = EffectivePolicy;
-            if (policy != null)
-            {
-                _logger.Information("[SingBoxManager] macOS stop: under runtime policy, avoiding sudo escalation");
-                return false;
-            }
-
-            _logger.Warning(
-                "[SingBoxManager] macOS has no pidfd; signaling freshly validated exact PID {Pid}",
-                owned.Pid);
-            _ = TrySpawnAndWait(
-                "/usr/bin/sudo",
-                BuildMacExactKillArguments(owned.Pid),
-                5_000,
-                "sudo -n exact PID SIGKILL");
-        }
         else
         {
             return false;
@@ -148,16 +124,12 @@ public partial class SingBoxManager
         if (finalState == OwnedTargetState.IdentityUnavailable)
             return RefuseUnknownIdentity(owned.Pid);
 
-        var causes = OperatingSystem.IsMacOS()
-            ? "sudoers NOPASSWD exact-kill grant is missing or invalid"
-            : "pkexec/polkit agent is unavailable and sudo NOPASSWD is not configured";
         _logger.Error(
             "[SingBoxManager] Unix stop failed: exact VPNRouter-owned PID {Pid} remains alive. " +
             "Manual intervention: verify that PID's start time and executable path, then run `sudo /bin/kill -KILL -- {Pid}`. " +
-            "Possible cause: {Cause}.",
+            "Possible cause: pkexec/polkit agent is unavailable and sudo NOPASSWD is not configured.",
             owned.Pid,
-            owned.Pid,
-            causes);
+            owned.Pid);
         return false;
     }
 
@@ -211,9 +183,6 @@ public partial class SingBoxManager
         args.Add(signal.ToString(CultureInfo.InvariantCulture));
         return args;
     }
-
-    internal static IReadOnlyList<string> BuildMacExactKillArguments(int pid)
-        => new[] { "-n", "/bin/kill", "-KILL", "--", pid.ToString(CultureInfo.InvariantCulture) };
 
     private static string? ResolveSignalHelperHost()
     {
