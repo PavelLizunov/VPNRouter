@@ -2083,8 +2083,11 @@ static int command_stop_launch(const struct doc *request, uid_t uid)
     int loaded = read_host_session(&host);
     if (read_host_boot_time(&boot_time) != 0 || loaded < 0)
         return EXIT_STATE;
-    if (loaded == 0 || host.boot_time != boot_time || host.uid != (uint32_t)uid ||
+    int current_owner = loaded == 1 && host.boot_time == boot_time && host.uid == (uint32_t)uid;
+    if (!current_owner ||
         !constant_time_equal(host.launch_id, launch_id, LAUNCH_ID_SIZE - 1)) {
+        if (current_owner && host_session_may_be_live(&host))
+            fail(EXIT_STATE, "a different launch still owns the caller's runtime");
         puts("not_registered");
         return 0;
     }

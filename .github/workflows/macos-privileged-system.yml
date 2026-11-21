@@ -9,9 +9,12 @@ on:
       - "VPNRouter.Core/Services/ConfigPipeline*.cs"
       - "VPNRouter.Core/Services/CustomConfigInjector*.cs"
       - "VPNRouter.Core/Services/HealthMonitor.cs"
+      - "VPNRouter.Core/Services/SingBoxManager*.cs"
       - "VPNRouter.Core/Services/StartupPipeline.cs"
       - "VPNRouter.Core/Services/VpnEngine.cs"
       - "VPNRouter.Core/AppVersion.cs"
+      - "VPNRouter.Tests/SingBoxManagerRestartTunLockTests.cs"
+      - "VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs"
       - "build-mac.sh"
       - "global.json"
       - ".github/workflows/macos-privileged-system.yml"
@@ -50,6 +53,12 @@ jobs:
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
         with:
           global-json-file: global.json
+
+      - name: Check managed macOS stop lifecycle
+        run: >-
+          dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release
+          --filter "FullyQualifiedName~MacStop_NeverSpawnedLauncher|FullyQualifiedName~ReloadConfigJsonWithResult_UnixFailedExactStop|(FullyQualifiedName~ApplyAsync_FailedGenerationOrReload_PreservesActiveTunnel&DisplayName~failover-unix-stop-refused)"
+          --logger "console;verbosity=normal"
 
       - name: Build the macOS package locally
         id: package

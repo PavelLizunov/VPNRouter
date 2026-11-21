@@ -296,12 +296,13 @@ public partial class SingBoxManager
 
     private bool StopMacLaunch(IProcessHandle? launcher)
     {
-        if (!_macLaunchPending)
+        // An already-stopped launch or a launcher that never spawned has no runtime to stop.
+        if (!_macLaunchPending || launcher is { Pid: 0 })
             return true;
         if (MacPrivilegeLaunchId is not { } launchId || EffectivePolicy != null)
             return false;
 
-        var launcherExited = launcher is { Pid: 0 } || launcher?.QueryHasExited() == true;
+        var launcherExited = launcher?.QueryHasExited() == true;
         launcher?.SuppressExitedEvent();
         return new MacPrivilegedClient(_runner, _logger).StopLaunch(launchId, launcherExited);
     }

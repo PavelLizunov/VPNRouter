@@ -289,7 +289,10 @@ fi
 sudo -n /sbin/pfctl -a com.vpnrouter/killswitch -sr | grep -q 'pass out quick on lo0'
 [ "$(default_route)" = "$baseline_route" ]
 
-[ "$(stop_launch 1f23456789abcdef0123456789abcdef)" = not_registered ]
+if stop_launch 1f23456789abcdef0123456789abcdef; then
+    echo "stop unexpectedly accepted a different launch while the caller still owns a runtime" >&2
+    exit 66
+fi
 sudo -n /bin/kill -0 "$pid"
 /sbin/ifconfig "$tun" | grep -q 'inet 198\.18\.230\.1 '
 [ "$(stop_launch "$launch_id")" = stopped ]
@@ -315,6 +318,7 @@ if pf_session "$launch_id"; then
     echo "the recovered launch still returned a session identity" >&2
     exit 66
 fi
+[ "$(stop_launch "$launch_id")" = not_registered ]
 if pf_request pf_enable; then
     echo "the recovered session unexpectedly armed PF again" >&2
     exit 66

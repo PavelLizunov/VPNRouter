@@ -127,11 +127,14 @@ public sealed class MacPrivilegedClient
             ["op"] = "stop_launch",
             ["launch_id"] = launchId,
         }, TimeSpan.FromSeconds(10));
-        if (result.ExitCode != 0 || result.TimedOut)
-            return false;
-
         var outcome = result.Stdout.Trim();
-        return outcome == "stopped" || (outcome == "not_registered" && launcherExited);
+        var unregistered = outcome == "not_registered";
+        var stopped = result.ExitCode == 0 && !result.TimedOut &&
+            (outcome == "stopped" || (unregistered && launcherExited));
+        if (!stopped)
+            _logger?.Debug("[MacPrivilege] Launch stop unconfirmed exit={Exit} timedOut={TimedOut} unregistered={Unregistered} launcherExited={LauncherExited}",
+                result.ExitCode, result.TimedOut, unregistered, launcherExited);
+        return stopped;
     }
 
     public bool DnsApply(string service, string server)

@@ -583,3 +583,11 @@ warm-up cleanup and ordinary Connect/Stop over a working guest network.
 No visual change or mechanical characterization is involved. If a
 regression is found, hold the candidate and revert this launch-stop delta
 without reverting the root-owned helper migration.
+
+Review found two Stop edge cases. The helper now refuses an unregistered
+request when a different live launch still belongs to the caller. A
+launcher that never spawned has no runtime and must release the app's
+lease even if the helper is unavailable. Failed helper responses log
+only stop status, timeout and whether the launcher was known to exit.
+The managed fixtures model the launch ID and test both refusal and
+pre-spawn cleanup on a hosted macOS runner.
