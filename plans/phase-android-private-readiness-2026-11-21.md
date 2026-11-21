@@ -272,3 +272,10 @@ selection. The current ARM64 traffic and Stop evidence supplements the
 earlier active socket snapshots. This closes the reported local-control
 surface for the candidate at the tested scope. Other Android versions
 and independent reporter confirmation remain follow-ups.
+
+The locator for live socket evidence is `include-https.txt:6-7` and
+`exclude-https.txt:12-13` in the `d8675207` evidence directory.
+The exact `7ed65aba` Exclude run retained the zero-listener snapshot
+after Stop. It provides current traffic and teardown evidence. The
+active-session inventory comes from the earlier run with the same
+listener and private-socket configuration.
