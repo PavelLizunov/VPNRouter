@@ -636,3 +636,19 @@ release status. No production behavior is changed.
 Shell syntax and six inert cases passed for released, retained,
 initially absent and unreadable kernel references. Hosted validation
 is still pending.
+
+Hosted run 44906184467 at `fd5801d1` verified that the initial PF
+reference persisted across repeated Enable. The kernel then reported
+the first reference absent after external release (pfctl exit 0) and
+verified a replacement. Migration, isolated DNS restoration and
+stopped-runtime PF cleanup passed. The six jobs of run 44906189745
+also passed on that commit. The previously silent fixture failure did
+not repeat, so its exact cause is still unknown.
+
+The old writable NOPASSWD grant is resolved in the candidate. The
+reviewed implementation and hosted grant migration cover the authority
+boundary. The exact product build at `7ed65aba` supplied the
+administrator-prompt, failed-Start and Connect/Stop desktop evidence.
+Only the system-test script and plans changed through `fd5801d1`.
+The publisher-signing and same-user controller exposure are separate
+limitations already documented in the macOS trust contract.

@@ -255,3 +255,20 @@ other Android versions. The broader local-control assurance for #689
 remains tracked separately in the defect ledger.
 
 Evidence: `~/Documents/VPNRouter/acceptance/689/standard-7ed65aba/exclude-final/`.
+
+## Release disposition for the reported local control surface
+
+The retained `d8675207` report records ordinary HTTPS with different
+egress in Include and the same direct egress in Exclude as without VPN.
+Both active sessions had zero VPNRouter TCP listeners and one private
+Unix command socket. Empty Include did not create a tunnel or socket.
+The report is retained at
+`~/Documents/VPNRouter/acceptance/689/standard-d8675207/report.md`.
+
+The Android source delta from that baseline to `fd5801d1` changes
+readiness timing and adds bounded diagnostic labels. It preserves the
+listener/config checks, command transport, controller setup and package
+selection. The current ARM64 traffic and Stop evidence supplements the
+earlier active socket snapshots. This closes the reported local-control
+surface for the candidate at the tested scope. Other Android versions
+and independent reporter confirmation remain follow-ups.
