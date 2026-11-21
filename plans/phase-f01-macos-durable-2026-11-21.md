@@ -437,7 +437,48 @@ live acceptance.
   `8a579ba12cb51105222db920ac97705bb98e86b3`. The isolated DNS fixture
   compiled and the system test passed shell syntax validation. The exact
   native code and system fixture are unchanged by the final evidence edits.
-- The shared worker did not change PF, system DNS, or TUN state. The
-  disposable hosted check will verify active-session rejection and
-  stopped-session recovery against real PF. Full desktop and admin-prompt
-  acceptance remain open.
+- The shared worker did not change PF, system DNS, or TUN state.
+- All nine checks passed at `77cd29af25318b904f4760b06aa03557bcce45a3`.
+  Managed run 44870659628 passed. Hosted macOS system run 44870653983
+  (job 136744184755, macOS 26.7.2) built an 82,011,472-byte ZIP with
+  SHA-256 `b55abcdd8f5dbf27c39e5d6a3bb49a91721c14f3f299e5f254393b45d3aa733d`.
+  The fixture migrated the helper, ran an isolated TUN, applied and
+  restored fixture-service DNS, and left the default route unchanged.
+  Visible PF assertions passed: repeated enable retained the same
+  reference, active recovery and mismatched session release preserved
+  the test anchor, and stopped recovery cleared the anchor and reference.
+  The test uses a non-blocking loopback rule. Full desktop kill-switch,
+  production auto-route and interactive admin-prompt acceptance remain open.
+
+### PF review follow-up
+
+- Store the PF reference in the atomically replaced root host record. Import
+  the previous development record under the host lock. Retire an unowned
+  legacy token only after the kernel confirms it is no longer held.
+- Check the kernel's PF status and reference list before claiming the filter
+  is enabled. Release only the stored reference. Make a retry safe when a
+  previous attempt already released it.
+- Retire the stopped owner's identity after recovery. Allow the active
+  monitor to arm policy after a crash until release finishes. Retain the
+  app's potential rules-loaded state after a failed release and retry.
+- Extend the disposable system test with an already-released reference,
+  old token-only metadata and a delayed request after stopped recovery.
+  Keep shared workers unprivileged and use the disposable runner for PF.
+
+- Review of `77cd29af` identified two conditional P1 cases: an orphaned
+  token file and a recorded reference with non-running PF. Both are covered
+  by the revised root record and kernel checks. The new hosted fixture
+  will verify reacquisition after releasing its own reference, clearance
+  of unowned legacy metadata, rejection after stopped recovery, and removal
+  of an old-boot record. A corrupt root record still fails closed with
+  an administrator-recovery diagnostic. An older unattached reference
+  that the kernel still holds requires a restart, with no caller-directed
+  global PF reset.
+- Shared-worker preflight: macOS 26.5.2, ten logical CPUs, load 1.79,
+  16 GiB RAM (54,530 free and 291,377 inactive 16 KiB pages), 1,174 MiB
+  free swap, 79 GiB free disk, no compiler jobs, and Command Line Tools
+  clang available. The production helper compiled with warnings as errors,
+  and the native contracts and eight installer cases passed for tree
+  `0223406d0af43dad527d378a0a322465836f5884`. The final test-only
+  past-boot scenario passed shell syntax validation. The shared worker
+  did not change PF, DNS, TUN state or privileged files.

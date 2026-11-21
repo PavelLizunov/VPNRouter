@@ -240,10 +240,23 @@ pf_request() {
 }
 
 pf_request pf_enable
-pf_token="$root_dir/run/pf.token"
-first_ref="$(sudo -n /usr/bin/shasum -a 256 "$pf_token")"
+host_state="$root_dir/run/host-session"
+old_token="$root_dir/run/pf.token"
+first_state="$(sudo -n /usr/bin/shasum -a 256 "$host_state")"
 pf_request pf_enable
-[ "$(sudo -n /usr/bin/shasum -a 256 "$pf_token")" = "$first_ref" ]
+[ "$(sudo -n /usr/bin/shasum -a 256 "$host_state")" = "$first_state" ]
+sudo -n /sbin/pfctl -s info | grep '^Status: Enabled' >/dev/null
+
+# The v2 record stores its uint64 PF reference after the 32-byte owner record.
+# Release only the fixture reference; leave its stale owner record in place.
+first_reference="$(sudo -n /usr/bin/od -An -t u8 -j 32 -N 8 "$host_state" | tr -d '[:space:]')"
+[[ "$first_reference" =~ ^[1-9][0-9]*$ ]]
+sudo -n /sbin/pfctl -X "$first_reference" >/dev/null 2>&1
+pf_request pf_enable
+[ "$(sudo -n /usr/bin/shasum -a 256 "$host_state")" != "$first_state" ]
+sudo -n /sbin/pfctl -s info | grep '^Status: Enabled' >/dev/null
+echo "PF enable verified a replacement for the released kernel reference"
+sudo -n /usr/bin/install -o root -g wheel -m 0600 "$host_state" "$fixture_dir/pf-prior-boot"
 jq -c '. + {version:1, op:"pf_apply", mode:"anchor", rules:"pass out quick on lo0 all\n"}' \
     <<< "$identity" | as_fixture
 sudo -n /sbin/pfctl -a com.vpnrouter/killswitch -sr | grep -q 'pass out quick on lo0'
@@ -272,6 +285,24 @@ printf '%s' '{"version":1,"op":"dns_restore"}' | as_fixture
 verify_fixture_dns 192.0.2.17
 printf '%s' '{"version":1,"op":"pf_recover"}' | as_fixture
 [ -z "$(sudo -n /sbin/pfctl -a com.vpnrouter/killswitch -sr)" ]
-sudo -n /bin/test ! -e "$pf_token"
+sudo -n /bin/test ! -e "$host_state"
+if pf_request pf_enable; then
+    echo "the recovered session unexpectedly armed PF again" >&2
+    exit 66
+fi
+# Model a leftover token-only record from the old helper. The kernel has
+# already released this specific fixture reference.
+sudo -n /usr/bin/install -o root -g wheel -m 0600 /dev/null "$old_token"
+printf '%s' "$first_reference" | sudo -n /usr/bin/tee "$old_token" >/dev/null
+printf '%s' '{"version":1,"op":"pf_recover"}' | as_fixture
+sudo -n /bin/test ! -e "$old_token"
+
+# Reuse the stopped fixture's record with a past boot timestamp. Both
+# reference releases above have already taken effect in the real kernel.
+sudo -n /usr/bin/install -o root -g wheel -m 0600 "$fixture_dir/pf-prior-boot" "$host_state"
+printf '\001\000\000\000\000\000\000\000' |
+    sudo -n /bin/dd of="$host_state" bs=1 seek=16 conv=notrunc 2>/dev/null
+printf '%s' '{"version":1,"op":"pf_recover"}' | as_fixture
+sudo -n /bin/test ! -e "$host_state"
 [ "$(default_route)" = "$baseline_route" ]
 echo "System migration, standard-user TUN, isolated-service DNS restore, and anchor recovery passed"

@@ -404,6 +404,27 @@ static void test_dns_snapshot_parsing(void)
            "system readback compares addresses independently of their text format");
 }
 
+static void test_pf_reference_list(void)
+{
+    char entries[512];
+    snprintf(entries, sizeof(entries),
+             "TOKENS:\n%-8s %-28s %-24s %-s\n"
+             "%-8d %-28s %-24llu 0 days 00:00:01\n"
+             "%-8d %-28s %-24llu 0 days 00:00:01\n",
+             "PID", "Process Name", "TOKEN", "TIMESTAMP",
+             123, "other service", 5678ULL,
+             456, "pfctl", 18446744073709551615ULL);
+    char copy[sizeof(entries)];
+    strcpy(copy, entries);
+    expect(parse_pf_reference_list(copy, UINT64_MAX) == 1, "a full-width reference is found");
+    strcpy(copy, entries);
+    expect(parse_pf_reference_list(copy, 123) == 0, "a PID is not an enable reference");
+    char missing[] = "No pf starter references held\n";
+    expect(parse_pf_reference_list(missing, 5678) == 0, "no kernel references exist");
+    char malformed[] = "unexpected output\n";
+    expect(parse_pf_reference_list(malformed, 5678) == -1, "unknown output is not proof of absence");
+}
+
 int main(void)
 {
     test_json_structure();
@@ -417,6 +438,7 @@ int main(void)
     test_structural_key_casing();
     test_runtime_components();
     test_dns_snapshot_parsing();
+    test_pf_reference_list();
 
     const char *valid =
         "{\"log\":{\"output\":\"\"},"

@@ -26,7 +26,8 @@ public static class MacPrivilegedSetup
         var state = client.Probe();
         if (IsCurrent(state, out var helperHash, out var singboxHash))
         {
-            _ = client.PfRecover();
+            if (!client.PfRecover())
+                logger.Warning("[MacPrivilege] Inactive firewall recovery did not complete");
             return MacPrivilegeSetupResult.Ready;
         }
         if (state.LegacyProcess)
@@ -73,7 +74,8 @@ public static class MacPrivilegedSetup
                 return MacPrivilegeSetupResult.LegacySessionActive;
             if (!IsCurrent(after, out _, out _))
                 return MacPrivilegeSetupResult.NotReady;
-            _ = client.PfRecover();
+            if (!client.PfRecover())
+                logger.Warning("[MacPrivilege] Inactive firewall recovery did not complete");
             logger.Information("[MacPrivilege] Managed helper installed or refreshed");
             return MacPrivilegeSetupResult.Ready;
         }

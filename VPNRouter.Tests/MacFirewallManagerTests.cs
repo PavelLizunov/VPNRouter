@@ -329,12 +329,34 @@ public class MacFirewallManagerTests : IDisposable
             _ => sut.Dispose
         };
         release();
+        Assert.True(sut.IsLoaded);
         fails = false;
         release();
         release();
 
         Assert.Equal(2, fake.RunCalls.Count(IsRelease));
         Assert.DoesNotContain(fake.RunCalls, c => IsPfApply(c, "main"));
+    }
+
+    [Fact]
+    public void FailedReleaseKeepsRulesEligibleForCommittedRefresh()
+    {
+        var fake = new FakeProcessRunner();
+        fake.OnRun(c => IsHelper(c, "pf_enable") || IsPfApply(c, "anchor"), Ok());
+        fake.OnRun(c => IsHelper(c, "pf_status"), Ok(stdout: $"anchor \"{Anchor}\" all\n"));
+        fake.OnRun(IsRelease, Fail());
+        var sut = Sut(fake);
+        Bind(sut, fake);
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+        Assert.False(sut.TryDisableBlockRules());
+
+        sut.UpdateCommittedConfig(
+            """{"outbounds":[{"tag":"proxy","type":"vless","server":"192.0.2.25"}]}""", true);
+
+        var apply = fake.RunCalls.Where(call => IsPfApply(call, "anchor")).ToArray();
+        Assert.Equal(2, apply.Length);
+        Assert.Contains("192.0.2.25", Rules(apply[1]) ?? string.Empty);
     }
 
     [Fact]

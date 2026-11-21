@@ -301,12 +301,21 @@ public class HealthMonitor : IDisposable
                 {
                     try
                     {
+                        var released = true;
                         if (_firewall is MacFirewallManager macFirewall)
+                        {
                             macFirewall.BindToCurrentSession();
-                        _firewall.DisableBlockRules();
-                        _logger.Information(
-                            "[HealthMonitor] Kill-switch block rules lifted after restart — TUN serving confirmed (clashApi={Clash}, fallback={Fallback}, +{Secs:F0}s)",
-                            clashServing, fallbackElapsed, sinceRestart.TotalSeconds);
+                            released = macFirewall.TryDisableBlockRules();
+                        }
+                        else
+                            _firewall.DisableBlockRules();
+
+                        if (released)
+                            _logger.Information(
+                                "[HealthMonitor] Kill-switch block rules lifted after restart — TUN serving confirmed (clashApi={Clash}, fallback={Fallback}, +{Secs:F0}s)",
+                                clashServing, fallbackElapsed, sinceRestart.TotalSeconds);
+                        else
+                            Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
                     }
                     catch (Exception fwEx)
                     {

@@ -13,8 +13,7 @@ path.
 | Manifest | `/Library/Application Support/VPNRouter/install.json` | `root:wheel 0600` |
 | Staged config | `/Library/Application Support/VPNRouter/run/<uid>/current.json` | `root:wheel 0600` |
 | Session record | `/Library/Application Support/VPNRouter/run/<uid>/session.json` | `root:wheel 0600` |
-| Host firewall owner and release mode | `/Library/Application Support/VPNRouter/run/host-session` | `root:wheel 0600` |
-| PF enable reference | `/Library/Application Support/VPNRouter/run/pf.token` | `root:wheel 0600` |
+| Host firewall owner, mode and enable reference | `/Library/Application Support/VPNRouter/run/host-session` | `root:wheel 0600` |
 | Original DNS | `/Library/Application Support/VPNRouter/run/dns-state` | `root:wheel 0600` |
 | Rule-set assets | `/Library/Application Support/VPNRouter/assets/<uid>/*.srs` | `root:wheel 0600` |
 | Policy | `/etc/sudoers.d/vpnrouter-<uid>` | `root:wheel 0440` |
@@ -47,7 +46,7 @@ or a missing `SUDO_UID`.
 | `dns_flush` | none | Flushes the DNS cache for an active session owned by the caller. |
 | `pf_session` | none | Returns the invoking user's active host runtime PID and start time so the app can bind firewall requests to it. |
 | `pf_apply` | `pid`, `start_time`, `mode` (`anchor`, `legacy`, `main`), `rules` for anchor/legacy | `main` reads `/etc/pf.conf` itself and appends the fixed anchor. `anchor`/`legacy` accepts only the fixed `block`/`lo0`/CIDR `pass` grammar. The helper records the disengagement mode. |
-| `pf_enable` | `pid`, `start_time` | Acquires and stores one root-owned enable reference for the owned policy. Repeated calls reuse it. |
+| `pf_enable` | `pid`, `start_time` | Acquires and stores one root-owned enable reference for the owned policy. Repeated calls reuse it while the kernel holds it and PF is running. |
 | `pf_release` | `pid`, `start_time` | Clears the rules according to the recorded mode and releases the stored enable reference. |
 | `pf_recover` | none | Releases the recorded policy of the calling user's stopped runtime. Refuses a live runtime. |
 | `pf_status` | none | Returns `pfctl -sr` output. |
@@ -55,8 +54,11 @@ or a missing `SUDO_UID`.
 Start, Stop, DNS and PF transitions share the host network lock. The helper
 keeps the firewall policy and enable reference across a same-user runtime
 replacement. It rejects delayed PF requests carrying the replaced identity.
-A past boot's PF reference is discarded because the rules and reference live
-in the kernel. DNS snapshots remain available after reboot.
+The enable reference and release mode are stored in the same root record as
+the owner. A past boot's PF state is discarded because the rules and reference
+live in the kernel. An old token-only file is removed after the kernel confirms
+its reference is gone. Restarting macOS releases an unattributed old reference.
+DNS snapshots remain available after reboot.
 
 ## Config contract
 
@@ -137,7 +139,7 @@ test applies and restores DNS on a fixture network service with IPv4 and
 IPv6 disabled. It checks that the fixture resolver stays out of the active
 DNS configuration and that the default route stays unchanged. It also
 exercises a non-blocking PF anchor, checks that a stale identity or active
-recovery request leaves it in place, and checks stopped-runtime recovery.
+recovery request leaves it in place, and checks reference reacquisition and stopped-runtime recovery.
 Interactive administrator approval, production auto-routing and the
 desktop kill-switch flow require separate live verification.
 

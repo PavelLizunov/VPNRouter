@@ -25,6 +25,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
     private bool _anchorMode;
     private MacFirewallSession? _session;
     private bool _releasePending;
+    private bool _releaseUnconfirmed;
     private List<string> _serverIps = new();
     private bool _disposed;
 
@@ -87,7 +88,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                     "NOT blocking; traffic follows normal routing");
                 return;
             }
-            if (_loaded) return;
+            if (_loaded && !_releaseUnconfirmed) return;
 
             var rules = BuildRules(_serverIps);
             try
@@ -118,11 +119,15 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             }
 
             _anchorMode = EnsureCarrier(session);
-            _loaded = _anchorMode
+            var applied = _anchorMode
                 ? _privileged.PfApplyAnchor(session, rules)
                 : _privileged.PfApplyLegacy(session, rules);
-            if (_loaded)
+            if (applied)
+            {
+                _loaded = true;
+                _releaseUnconfirmed = false;
                 _logger.Information("[MacFirewall] pf kill-switch engaged ({Mode})", _anchorMode ? "anchor" : "legacy");
+            }
             else
             {
                 _logger.Warning("[MacFirewall] Failed to load the pf kill switch");
@@ -131,10 +136,12 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    public void DisableBlockRules()
+    public void DisableBlockRules() => TryDisableBlockRules();
+
+    internal bool TryDisableBlockRules()
     {
         lock (_gate)
-            ReleasePolicy();
+            return ReleasePolicy();
     }
 
     public void DeleteAllRules()
@@ -217,12 +224,15 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 return;
             }
 
-            var load = _session is { } session && (_anchorMode
-                ? _privileged.PfApplyAnchor(session, newRules)
-                : _privileged.PfApplyLegacy(session, newRules));
+            var load = _session is { } session &&
+                (!_releaseUnconfirmed || _privileged.PfEnable(session)) &&
+                (_anchorMode
+                    ? _privileged.PfApplyAnchor(session, newRules)
+                    : _privileged.PfApplyLegacy(session, newRules));
 
             if (load)
             {
+                _releaseUnconfirmed = false;
                 _serverIps = candidateIps;
                 _logger.Information(
                     "[MacFirewall] Refreshed live pf kill-switch ({Mode}) with {Count} server IP(s)",
@@ -266,21 +276,23 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         return load;
     }
 
-    private void ReleasePolicy()
+    private bool ReleasePolicy()
     {
-        if (!_releasePending || _session is not { } session)
-            return;
+        if (!_releasePending)
+            return true;
 
-        // A partial release may already have cleared the rules. Permit an
-        // explicit enable to apply them again while keeping release retryable.
-        _loaded = false;
-        if (_privileged.PfRelease(session))
+        if (_session is not { } session || !_privileged.PfRelease(session))
         {
-            _releasePending = false;
-            _logger.Information("[MacFirewall] pf kill-switch released");
+            _releaseUnconfirmed = true;
+            _logger.Warning("[MacFirewall] Could not confirm pf policy release");
+            return false;
         }
-        else
-            _logger.Warning("[MacFirewall] Could not release pf policy; the helper retained its recovery state");
+
+        _loaded = false;
+        _releasePending = false;
+        _releaseUnconfirmed = false;
+        _logger.Information("[MacFirewall] pf kill-switch released");
+        return true;
     }
 
     internal static string BuildRules(List<string> serverIps)
@@ -331,7 +343,10 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             {
                 _loaded = false;
                 _releasePending = false;
+                _releaseUnconfirmed = false;
             }
+            else
+                _logger.Warning("[MacFirewall] Could not recover inactive pf policy");
         }
     }
 
