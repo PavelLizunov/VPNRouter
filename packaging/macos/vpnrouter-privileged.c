@@ -1824,7 +1824,7 @@ static int read_legacy_pf_reference(uint64_t *reference)
     return 1;
 }
 
-static int load_host_session(struct host_session *host, uint64_t *boot_time)
+static int read_host_boot_time(uint64_t *boot_time)
 {
     struct timeval boot = {0};
     size_t length = sizeof(boot);
@@ -1832,7 +1832,13 @@ static int load_host_session(struct host_session *host, uint64_t *boot_time)
         length != sizeof(boot) || boot.tv_sec <= 0)
         return -1;
     *boot_time = (uint64_t)boot.tv_sec;
+    return 0;
+}
 
+static int load_host_session(struct host_session *host, uint64_t *boot_time)
+{
+    if (read_host_boot_time(boot_time) != 0)
+        return -1;
     int loaded = read_host_session(host);
     if (loaded < 0)
         fail(EXIT_STATE, "host ownership record is unreadable; administrator recovery is required");
@@ -2017,12 +2023,8 @@ static int parse_stop_identity(const char *json, size_t length,
     return 0;
 }
 
-static int command_stop(const char *request_json, size_t request_length, uid_t uid)
+static int stop_recorded_runtime(uid_t uid, int pid, uint64_t start_time)
 {
-    int pid;
-    uint64_t start_time;
-    if (parse_stop_identity(request_json, request_length, &pid, &start_time) != 0)
-        return EXIT_INPUT;
     if (pid == getpid() || pid == getppid())
         return EXIT_INPUT;
 
@@ -2058,6 +2060,40 @@ static int command_stop(const char *request_json, size_t request_length, uid_t u
         return 0;
     }
     return EXIT_COMMAND;
+}
+
+static int command_stop(const char *request_json, size_t request_length, uid_t uid)
+{
+    int pid;
+    uint64_t start_time;
+    if (parse_stop_identity(request_json, request_length, &pid, &start_time) != 0)
+        return EXIT_INPUT;
+    return stop_recorded_runtime(uid, pid, start_time);
+}
+
+static int command_stop_launch(const struct doc *request, uid_t uid)
+{
+    char launch_id[LAUNCH_ID_SIZE];
+    if (json_string(request, 0, "launch_id", launch_id, sizeof(launch_id)) != 0 ||
+        !valid_launch_id(launch_id))
+        return EXIT_INPUT;
+
+    struct host_session host = {0};
+    uint64_t boot_time = 0;
+    int loaded = read_host_session(&host);
+    if (read_host_boot_time(&boot_time) != 0 || loaded < 0)
+        return EXIT_STATE;
+    if (loaded == 0 || host.boot_time != boot_time || host.uid != (uint32_t)uid ||
+        !constant_time_equal(host.launch_id, launch_id, LAUNCH_ID_SIZE - 1)) {
+        puts("not_registered");
+        return 0;
+    }
+
+    int result = stop_recorded_runtime(uid, host.pid, host.start_time);
+    if (result != 0 && host_session_may_be_live(&host))
+        return result;
+    puts("stopped");
+    return 0;
 }
 
 static int read_manifest(char *buffer, size_t capacity, size_t *length)
@@ -2697,6 +2733,7 @@ int main(void)
                                strcmp(op, "pf_release") == 0 || strcmp(op, "pf_recover") == 0 ||
                                strcmp(op, "pf_session") == 0;
     if (pf_session_operation || strcmp(op, "start") == 0 || strcmp(op, "stop") == 0 ||
+        strcmp(op, "stop_launch") == 0 ||
         strcmp(op, "dns_apply") == 0 || strcmp(op, "dns_restore") == 0 ||
         strcmp(op, "dns_flush") == 0) {
         if (ensure_root_layout(uid) != 0 || acquire_transition_lock(HOST_NETWORK_LOCK_PATH) < 0)
@@ -2711,6 +2748,8 @@ int main(void)
     }
     if (strcmp(op, "stop") == 0)
         return command_stop(request_json, request_length, uid);
+    if (strcmp(op, "stop_launch") == 0)
+        return command_stop_launch(&request, uid);
     if (strcmp(op, "dns_apply") == 0)
         return command_dns_apply(&request, uid);
     if (strcmp(op, "dns_restore") == 0)

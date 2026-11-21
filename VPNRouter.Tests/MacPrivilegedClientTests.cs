@@ -146,6 +146,32 @@ public class MacPrivilegedClientTests : IDisposable
         Assert.Empty(fake.RunCalls);
     }
 
+    [Theory]
+    [InlineData("stopped\n", false, 0, false, true)]
+    [InlineData("not_registered\n", true, 0, false, true)]
+    [InlineData("not_registered\n", false, 0, false, false)]
+    [InlineData("", true, 0, false, false)]
+    [InlineData("stopped\n", true, 1, false, false)]
+    [InlineData("stopped\n", true, 0, true, false)]
+    public void Launch_stop_requires_helper_confirmation_or_an_exited_unregistered_launcher(
+        string stdout, bool launcherExited, int exitCode, bool timedOut, bool expected)
+    {
+        const string launch = "0123456789abcdef0123456789abcdef";
+        var fake = new FakeProcessRunner();
+        fake.OnRun(c => Op(c) == "stop_launch",
+            new ProcessResult(exitCode, stdout, "", TimeSpan.Zero, timedOut));
+        var client = new MacPrivilegedClient(fake);
+
+        Assert.Equal(expected, client.StopLaunch(launch, launcherExited));
+
+        var request = Assert.Single(fake.RunCalls);
+        Assert.Equal(new[] { "-n", MacPrivilegePaths.HelperPath }, request.Arguments);
+        using var json = JsonDocument.Parse(request.StdinInput!);
+        Assert.Equal(new[] { "version", "op", "launch_id" },
+            json.RootElement.EnumerateObject().Select(property => property.Name));
+        Assert.Equal(launch, json.RootElement.GetProperty("launch_id").GetString());
+    }
+
     [Fact]
     public void Pf_requests_carry_only_the_typed_rule_grammar()
     {

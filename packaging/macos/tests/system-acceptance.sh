@@ -59,6 +59,10 @@ stop_fixture() {
     printf '%s' "$identity" | as_fixture
 }
 
+stop_launch() {
+    jq -cn --arg launch "$1" '{version:1, op:"stop_launch", launch_id:$launch}' | as_fixture
+}
+
 dns_service_exists() {
     /usr/sbin/networksetup -listallnetworkservices |
         sed 's/^\*[[:space:]]*//' | grep -Fxq "$dns_service"
@@ -285,8 +289,12 @@ fi
 sudo -n /sbin/pfctl -a com.vpnrouter/killswitch -sr | grep -q 'pass out quick on lo0'
 [ "$(default_route)" = "$baseline_route" ]
 
-stop_fixture
+[ "$(stop_launch 1f23456789abcdef0123456789abcdef)" = not_registered ]
+sudo -n /bin/kill -0 "$pid"
+/sbin/ifconfig "$tun" | grep -q 'inet 198\.18\.230\.1 '
+[ "$(stop_launch "$launch_id")" = stopped ]
 wait "$launcher_pid" || true
+[ "$(stop_launch "$launch_id")" = stopped ]
 sudo -n /bin/test ! -e "$record"
 if /sbin/ifconfig "$tun" >/dev/null 2>&1; then
     echo "fixture TUN remained after stop" >&2

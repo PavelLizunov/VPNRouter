@@ -41,6 +41,7 @@ or a missing `SUDO_UID`.
 | `migration_check` | none | Verifies the system directory chain and checks for the old root runtime of the invoking user. The installer calls this read-only operation before and after legacy grant removal. |
 | `start` | `config_sha256`, `launch_id` (32 lowercase hex characters) | Syncs user `.srs` files into root-owned assets, validates the per-user config against the typed contract, stages it root-owned, claims the shared host network owner and writes the per-uid session record, then `execve`s the root-owned sing-box with `run -c <staged>`. |
 | `stop` | `pid`, positive Unix `start_time` in seconds | Signals a root-owned sing-box only when its executable path, PID and start time match, and the request matches the root-owned per-uid session record. |
+| `stop_launch` | `launch_id` from `start` | Resolves the runtime from the root-owned launch record under the host transition lock, then uses the exact Stop check. Returns `stopped` for a confirmed exit and `not_registered` when the requested launch has no matching record. |
 | `dns_apply` | `service`, `server` | Requires an active session owned by the caller, saves the system's original DNS in a root-owned snapshot, then applies and verifies one IPv4 or IPv6 resolver. |
 | `dns_restore` | none | Restores and verifies the snapshot of the caller's stopped session. The helper retains it if restoration fails. |
 | `dns_flush` | none | Flushes the DNS cache for an active session owned by the caller. |

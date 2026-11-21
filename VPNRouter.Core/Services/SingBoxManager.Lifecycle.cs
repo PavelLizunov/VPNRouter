@@ -80,22 +80,23 @@ public partial class SingBoxManager
         }
         catch
         {
-            KillLaunchedProcessBestEffort();
+            CleanupAfterLaunchFailure();
             State = SingBoxState.Failed;
-            ReleaseTunOwnership();
             throw;
         }
     }
 
-    // A start failure after the process was spawned (for example a Started subscriber that throws) must not
-    // release the TUN lease while sing-box is still running, or another instance could start a second one.
-    private void KillLaunchedProcessBestEffort()
+    private void CleanupAfterLaunchFailure()
     {
-        var handle = _handle;
-        if (handle is null) return;
+        if (OperatingSystem.IsMacOS() && _macLaunchPending)
+        {
+            StopInternal(releaseLock: true);
+            return;
+        }
+
         try
         {
-            if (!handle.HasExited)
+            if (_handle is { HasExited: false } handle)
             {
                 handle.SuppressExitedEvent();
                 handle.Kill(entireProcessTree: true);
@@ -105,6 +106,7 @@ public partial class SingBoxManager
         {
             _logger.Warning(ex, "[SingBoxManager] Could not stop the process launched before a start failure");
         }
+        ReleaseTunOwnership();
     }
 
     private bool TryAcquireTunOwnership()
@@ -261,7 +263,9 @@ public partial class SingBoxManager
         var unixStopped = false;
         try
         {
-            unixStopped = LinuxStopEscalationChain();
+            unixStopped = OperatingSystem.IsMacOS()
+                ? StopMacLaunch(targetHandle)
+                : LinuxStopEscalationChain();
         }
         catch (Exception ex)
         {
@@ -273,8 +277,12 @@ public partial class SingBoxManager
                 unixStopped = false;
             if (unixStopped)
             {
-                targetHandle?.Dispose();
+                if (OperatingSystem.IsMacOS())
+                    targetHandle?.DisposeAfterExit();
+                else
+                    targetHandle?.Dispose();
                 _handle = null;
+                _macLaunchPending = false;
             }
             _exactStopUnconfirmed = !unixStopped;
             State = unixStopped ? SingBoxState.Stopped : SingBoxState.Failed;
@@ -284,6 +292,18 @@ public partial class SingBoxManager
                 unixStopped);
         }
         
+    }
+
+    private bool StopMacLaunch(IProcessHandle? launcher)
+    {
+        if (!_macLaunchPending)
+            return true;
+        if (MacPrivilegeLaunchId is not { } launchId || EffectivePolicy != null)
+            return false;
+
+        var launcherExited = launcher is { Pid: 0 } || launcher?.QueryHasExited() == true;
+        launcher?.SuppressExitedEvent();
+        return new MacPrivilegedClient(_runner, _logger).StopLaunch(launchId, launcherExited);
     }
 
     private void StopWindows(bool releaseLock)
@@ -577,9 +597,8 @@ public partial class SingBoxManager
         }
         catch
         {
-            KillLaunchedProcessBestEffort();
+            CleanupAfterLaunchFailure();
             State = SingBoxState.Failed;
-            ReleaseTunOwnership();
             throw;
         }
         finally
@@ -673,14 +692,14 @@ public partial class SingBoxManager
         }
 
         ProcessRequest request;
+        string? macLaunchId = null;
         if (OperatingSystem.IsMacOS())
         {
             // The only authorized macOS command is the root-owned helper. It
             // receives a typed request on stdin and execs the root-owned runtime.
-            var launchId = Guid.NewGuid().ToString("N");
-            _macPrivilegeLaunchId = launchId;
+            macLaunchId = Guid.NewGuid().ToString("N");
             request = new MacPrivilegedClient(_runner, _logger)
-                .CreateStartRequest(_currentConfigPath, launchId);
+                .CreateStartRequest(_currentConfigPath, macLaunchId);
         }
         else
         {
@@ -742,7 +761,17 @@ public partial class SingBoxManager
             return;
         }
 
-        _handle = _runner.Start(request);
+        if (macLaunchId != null)
+        {
+            _handle = _runner.Start(request, launcher =>
+            {
+                _macPrivilegeLaunchId = macLaunchId;
+                _macLaunchPending = true;
+                _handle = launcher;
+            });
+        }
+        else
+            _handle = _runner.Start(request);
 
         var startedHandle = _handle;
         startedHandle.OutputLine += (_, line) =>

@@ -18,6 +18,7 @@ public partial class SingBoxManager : IDisposable
     private IProcessHandle? _handle;
     private string _currentConfigPath = string.Empty;
     private volatile string? _macPrivilegeLaunchId;
+    private bool _macLaunchPending;
     internal string? MacPrivilegeLaunchId => _macPrivilegeLaunchId;
     private int _disposed;
     private TunOwnershipLock _tunLock;
@@ -53,6 +54,7 @@ public partial class SingBoxManager : IDisposable
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
     public int? Pid => _handle is { HasExited: false } handle ? handle.Pid : null;
     internal bool HasActiveTunnel => Pid.HasValue ||
+        (OperatingSystem.IsMacOS() && _exactStopUnconfirmed) ||
         (_ownsTunLock && (OperatingSystem.IsMacOS() || _linuxUsedPkexec) &&
             ProcessOwnership.FindOwnedSingBox(ProcessOwnership.ConfiguredExePath) != null) ||
         IsRunning();

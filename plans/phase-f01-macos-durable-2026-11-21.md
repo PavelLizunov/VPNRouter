@@ -555,3 +555,31 @@ live acceptance.
   disposable desktop and avoids an early release tag or a rebuild on
   the shared physical Mac. No release asset or repository write token
   is involved.
+
+### Bind desktop Stop to the privileged launch
+
+Standard-user desktop acceptance at `65c76913` displayed the system
+authorization dialog, installed the root-owned helper and opened the TUN.
+The guest could not reach the warm-up HTTPS target. On that Start failure,
+the app could not stop its own runtime: its handle named the sudo launcher,
+while the root-owned record identified the runtime under a different PID.
+The helper stopped the recorded runtime and removed the guest TUN during
+cleanup. Desktop acceptance remains open.
+
+Use the existing launch ID for managed Stop and failed-Start cleanup. The
+helper must resolve it under the host transition lock, require the recorded
+owner, and reuse exact runtime-stop verification. A foreign or missing
+launch cannot signal a PID. A launch that was never registered can release
+the app's TUN lease only after the launcher has exited. Unknown state must
+retain the lease for a Stop retry. Preserve the root-owned launch record
+until PF recovery so firewall teardown keeps its existing ownership check.
+
+Run the managed build and full suite in CI, including typed helper-response
+fixtures, and run native contracts and the hosted macOS system scenario.
+Cover a wrong launch ID while the TUN is live, an exact Stop, a repeat Stop,
+and DNS/PF restoration. Review the exact diff independently. Repeat the
+isolated desktop run with the exact package after CI. Exercise failed
+warm-up cleanup and ordinary Connect/Stop over a working guest network.
+No visual change or mechanical characterization is involved. If a
+regression is found, hold the candidate and revert this launch-stop delta
+without reverting the root-owned helper migration.

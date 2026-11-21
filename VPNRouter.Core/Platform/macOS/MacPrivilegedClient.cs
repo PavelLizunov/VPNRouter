@@ -119,6 +119,21 @@ public sealed class MacPrivilegedClient
         return RunOk(request, TimeSpan.FromSeconds(10));
     }
 
+    internal bool StopLaunch(string launchId, bool launcherExited)
+    {
+        var result = Run(new JsonObject
+        {
+            ["version"] = JsonValue.Create(1),
+            ["op"] = "stop_launch",
+            ["launch_id"] = launchId,
+        }, TimeSpan.FromSeconds(10));
+        if (result.ExitCode != 0 || result.TimedOut)
+            return false;
+
+        var outcome = result.Stdout.Trim();
+        return outcome == "stopped" || (outcome == "not_registered" && launcherExited);
+    }
+
     public bool DnsApply(string service, string server)
     {
         var request = new JsonObject
