@@ -303,10 +303,7 @@ public class HealthMonitor : IDisposable
                     {
                         var released = true;
                         if (_firewall is MacFirewallManager macFirewall)
-                        {
-                            macFirewall.BindToCurrentSession();
                             released = macFirewall.TryDisableBlockRules();
-                        }
                         else
                             _firewall.DisableBlockRules();
 
@@ -319,6 +316,8 @@ public class HealthMonitor : IDisposable
                     }
                     catch (Exception fwEx)
                     {
+                        if (_firewall is MacFirewallManager)
+                            Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
                         _logger.Error(fwEx, "[HealthMonitor] Failed to lift firewall block rules on deferred-disable");
                     }
                 }
@@ -622,6 +621,8 @@ public class HealthMonitor : IDisposable
                 if (!hotReloaded)
                 {
                     _logger.Warning("[HealthMonitor] Hot-reload unavailable on restart attempt — performing full restart");
+                    if (_firewall is MacFirewallManager macFirewall)
+                        macFirewall.EnableBlockRules();
                     try
                     {
                         var freshScan = _scanner.ScanForProfile(_activeProfile);

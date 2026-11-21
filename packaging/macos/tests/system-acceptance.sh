@@ -210,7 +210,8 @@ sudo -n /usr/bin/install -o "$fixture_user" -g staff -m 0600 \
     "$fixture_dir/settings.json" "$config_dir/current.json"
 config_sha="$(shasum -a 256 "$fixture_dir/settings.json" | awk '{print $1}')"
 
-printf '{"version":1,"op":"start","config_sha256":"%s"}' "$config_sha" |
+launch_id=0123456789abcdef0123456789abcdef
+printf '{"version":1,"op":"start","config_sha256":"%s","launch_id":"%s"}' "$config_sha" "$launch_id" |
     as_fixture > "$fixture_dir/runtime.log" 2>&1 &
 launcher_pid=$!
 for attempt in {1..30}; do
@@ -231,7 +232,14 @@ jq -cn --arg service "$dns_service" \
 verify_fixture_dns 198.18.230.1
 echo "DNS changed on the isolated fixture service while the session was active"
 
-identity="$(printf '%s' '{"version":1,"op":"pf_session"}' | as_fixture)"
+pf_session() {
+    jq -cn --arg launch "$1" '{version:1, op:"pf_session", launch_id:$launch}' | as_fixture
+}
+identity="$(pf_session "$launch_id")"
+if pf_session 1f23456789abcdef0123456789abcdef; then
+    echo "the helper returned an identity for a different launch" >&2
+    exit 66
+fi
 expected_identity="$(sudo -n /bin/cat "$record" | jq -ce '{pid,start_time}')"
 [ "$(jq -ce '{pid,start_time}' <<< "$identity")" = "$expected_identity" ]
 
@@ -247,7 +255,7 @@ pf_request pf_enable
 [ "$(sudo -n /usr/bin/shasum -a 256 "$host_state")" = "$first_state" ]
 sudo -n /sbin/pfctl -s info | grep '^Status: Enabled' >/dev/null
 
-# The v2 record stores its uint64 PF reference after the 32-byte owner record.
+# The record stores its uint64 PF reference after the 32-byte owner prefix.
 # Release only the fixture reference; leave its stale owner record in place.
 first_reference="$(sudo -n /usr/bin/od -An -t u8 -j 32 -N 8 "$host_state" | tr -d '[:space:]')"
 [[ "$first_reference" =~ ^[1-9][0-9]*$ ]]
@@ -255,6 +263,9 @@ sudo -n /sbin/pfctl -X "$first_reference" >/dev/null 2>&1
 pf_request pf_enable
 [ "$(sudo -n /usr/bin/shasum -a 256 "$host_state")" != "$first_state" ]
 sudo -n /sbin/pfctl -s info | grep '^Status: Enabled' >/dev/null
+replacement_reference="$(sudo -n /usr/bin/od -An -t u8 -j 32 -N 8 "$host_state" | tr -d '[:space:]')"
+[[ "$replacement_reference" =~ ^[1-9][0-9]*$ ]]
+[ "$replacement_reference" != "$first_reference" ]
 echo "PF enable verified a replacement for the released kernel reference"
 sudo -n /usr/bin/install -o root -g wheel -m 0600 "$host_state" "$fixture_dir/pf-prior-boot"
 jq -c '. + {version:1, op:"pf_apply", mode:"anchor", rules:"pass out quick on lo0 all\n"}' \
@@ -283,9 +294,19 @@ if /sbin/ifconfig "$tun" >/dev/null 2>&1; then
 fi
 printf '%s' '{"version":1,"op":"dns_restore"}' | as_fixture
 verify_fixture_dns 192.0.2.17
+[ "$(pf_session "$launch_id")" = "$identity" ]
 printf '%s' '{"version":1,"op":"pf_recover"}' | as_fixture
 [ -z "$(sudo -n /sbin/pfctl -a com.vpnrouter/killswitch -sr)" ]
 sudo -n /bin/test ! -e "$host_state"
+kernel_references="$(sudo -n /sbin/pfctl -s References)"
+if grep -qw "$replacement_reference" <<< "$kernel_references"; then
+    echo "the released fixture reference remained registered in the kernel" >&2
+    exit 66
+fi
+if pf_session "$launch_id"; then
+    echo "the recovered launch still returned a session identity" >&2
+    exit 66
+fi
 if pf_request pf_enable; then
     echo "the recovered session unexpectedly armed PF again" >&2
     exit 66

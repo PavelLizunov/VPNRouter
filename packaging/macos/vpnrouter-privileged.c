@@ -58,7 +58,8 @@
 #define STATE_LOCK_FMT ROOT_RUN "/%u/state.lock"
 #define HOST_NETWORK_LOCK_PATH ROOT_RUN "/host-network.lock"
 #define HOST_SESSION_PATH ROOT_RUN "/host-session"
-#define HOST_SESSION_VERSION 2
+#define HOST_SESSION_VERSION 3
+#define LAUNCH_ID_SIZE 33
 #define DNS_STATE_PATH ROOT_RUN "/dns-state"
 #define DNS_SNAPSHOT_VERSION 1
 #define MAX_DNS_SERVERS 8
@@ -101,6 +102,7 @@ struct host_session {
     int32_t pid;
     uint32_t pf_mode;
     uint64_t pf_reference;
+    char launch_id[LAUNCH_ID_SIZE];
 };
 
 enum legacy_policy_state {
@@ -1673,6 +1675,33 @@ static int delete_session_record(uid_t uid)
     return 0;
 }
 
+static int valid_launch_id(const char *id)
+{
+    for (size_t i = 0; i < LAUNCH_ID_SIZE - 1; i++) {
+        if (!((id[i] >= '0' && id[i] <= '9') || (id[i] >= 'a' && id[i] <= 'f')))
+            return 0;
+    }
+    return id[LAUNCH_ID_SIZE - 1] == '\0';
+}
+
+static int parse_host_session(const char *buffer, size_t length, struct host_session *session)
+{
+    if (length != sizeof(*session) &&
+        length != offsetof(struct host_session, launch_id) &&
+        length != offsetof(struct host_session, pf_reference))
+        return -1;
+    memset(session, 0, sizeof(*session));
+    memcpy(session, buffer, length);
+    uint32_t expected_version = length == sizeof(*session) ? HOST_SESSION_VERSION :
+        length == offsetof(struct host_session, launch_id) ? 2 : 1;
+    if (session->version != expected_version || session->uid == 0 ||
+        session->pid <= 1 || session->start_time == 0 || session->boot_time == 0 ||
+        session->pf_mode > PF_RELEASE_DEFAULT ||
+        (session->launch_id[0] != '\0' && !valid_launch_id(session->launch_id)))
+        return -1;
+    return 0;
+}
+
 /* All readers and writers hold the host transition lock. */
 static int read_host_session(struct host_session *session)
 {
@@ -1683,17 +1712,7 @@ static int read_host_session(struct host_session *session)
     size_t length = 0;
     if (read_file_checked(HOST_SESSION_PATH, 0, 0077, sizeof(buffer), buffer, &length) != 0)
         return -1;
-    if (length != sizeof(*session) && length != offsetof(struct host_session, pf_reference))
-        return -1;
-    memset(session, 0, sizeof(*session));
-    memcpy(session, buffer, length);
-    if ((length == sizeof(*session) && session->version != HOST_SESSION_VERSION) ||
-        (length == offsetof(struct host_session, pf_reference) && session->version != 1) ||
-        session->uid == 0 ||
-        session->pid <= 1 || session->start_time == 0 || session->boot_time == 0 ||
-        session->pf_mode > PF_RELEASE_DEFAULT)
-        return -1;
-    return 1;
+    return parse_host_session(buffer, length, session) == 0 ? 1 : -1;
 }
 
 static int write_host_session(const struct host_session *session)
@@ -1829,14 +1848,15 @@ static int load_host_session(struct host_session *host, uint64_t *boot_time)
     int legacy = read_legacy_pf_reference(&previous_reference);
     if (legacy < 0)
         fail(EXIT_STATE, "previous PF reference record is unreadable; administrator recovery is required");
-    if (loaded == 1 && host->version == 1) {
-        host->version = HOST_SESSION_VERSION;
+    if (loaded == 1 && host->version == 1)
         host->pf_reference = previous_reference;
+    else if (legacy > 0 && host->pf_reference != previous_reference &&
+             pf_reference_held(previous_reference) != 0)
+        fail(EXIT_STATE, "cannot confirm that the unowned legacy PF reference is gone; restart macOS");
+    if (loaded == 1 && host->version != HOST_SESSION_VERSION) {
+        host->version = HOST_SESSION_VERSION;
         if (write_host_session(host) != 0)
             return -1;
-    } else if (legacy > 0 && host->pf_reference != previous_reference) {
-        if (pf_reference_held(previous_reference) != 0)
-            fail(EXIT_STATE, "cannot confirm that the unowned legacy PF reference is gone; restart macOS");
     }
     if (legacy > 0 && unlink(PF_TOKEN_PATH) != 0)
         return -1;
@@ -1850,9 +1870,11 @@ static int command_start(const char *request_json, size_t request_length,
     if (parse_doc((char *)request_json, request_length, &request) != 0)
         return EXIT_INPUT;
     char expected_hash[65];
+    char launch_id[LAUNCH_ID_SIZE];
     if (json_string(&request, 0, "config_sha256", expected_hash,
-                    sizeof(expected_hash)) != 0 ||
-        strlen(expected_hash) != 64)
+                    sizeof(expected_hash)) != 0 || strlen(expected_hash) != 64 ||
+        json_string(&request, 0, "launch_id", launch_id, sizeof(launch_id)) != 0 ||
+        !valid_launch_id(launch_id))
         return EXIT_INPUT;
 
     if (legacy_policy_state_path(LEGACY_POLICY_PATH) != LEGACY_ABSENT)
@@ -1964,6 +1986,7 @@ static int command_start(const char *request_json, size_t request_length,
     host.pid = getpid();
     host.start_time = (uint64_t)self_info.pbi_start_tvsec;
     host.boot_time = boot_time;
+    memcpy(host.launch_id, launch_id, sizeof(host.launch_id));
     if (write_host_session(&host) != 0 ||
         write_session_record(uid, host.pid, host.start_time) != 0)
         fail(EXIT_STATE, "could not bind the privileged session to the invoking user");
@@ -2533,7 +2556,8 @@ static int release_pf_reference(uint64_t reference)
     char token[32];
     snprintf(token, sizeof(token), "%llu", (unsigned long long)reference);
     char *const argv[] = { "/sbin/pfctl", "-X", token, NULL };
-    return run_checked("/sbin/pfctl", argv) == 0 || pf_reference_held(reference) == 0 ? 0 : -1;
+    (void)run_checked("/sbin/pfctl", argv);
+    return pf_reference_held(reference) == 0 ? 0 : -1;
 }
 
 static int command_pf_enable(struct host_session *host)
@@ -2572,7 +2596,13 @@ static int command_pf_enable(struct host_session *host)
         (void)release_pf_reference(reference);
         return EXIT_STATE;
     }
-    return pf_reference_held(reference) == 1 && pf_running() == 1 ? 0 : EXIT_COMMAND;
+    if (pf_reference_held(reference) == 1 && pf_running() == 1)
+        return 0;
+    if (release_pf_reference(reference) == 0) {
+        host->pf_reference = 0;
+        (void)write_host_session(host);
+    }
+    return EXIT_COMMAND;
 }
 
 static int command_pf_release(struct host_session *host)
@@ -2697,7 +2727,10 @@ int main(void)
         if (loaded != 1 || host.uid != (uint32_t)uid)
             return EXIT_STATE;
         if (strcmp(op, "pf_session") == 0) {
-            if (!process_is_root_runtime(host.pid, host.start_time))
+            char launch_id[LAUNCH_ID_SIZE];
+            if (json_string(&request, 0, "launch_id", launch_id, sizeof(launch_id)) != 0 ||
+                !valid_launch_id(launch_id) ||
+                !constant_time_equal(host.launch_id, launch_id, LAUNCH_ID_SIZE - 1))
                 return EXIT_STATE;
             printf("{\"pid\":%d,\"start_time\":%llu}\n",
                    host.pid, (unsigned long long)host.start_time);

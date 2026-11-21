@@ -256,9 +256,10 @@ internal sealed class StartupPipeline
 
         ct.ThrowIfCancellationRequested();
 
-        var firewall = (_host as StartupHostInternal)?.Firewall;
-        if (firewall is MacFirewallManager macFirewall)
-            macFirewall.BindToCurrentSession();
+        var runtimeHost = _host as StartupHostInternal;
+        var firewall = runtimeHost?.Firewall;
+        if (firewall is MacFirewallManager macFirewall && runtimeHost?.SingBox is { } runtime)
+            macFirewall.TrackRuntimeLaunch(() => runtime.MacPrivilegeLaunchId);
         if (firewall is ICommittedFirewallConfig committedFirewall)
         {
             var isFullTunnel = (settings.App.RoutingMode ?? "split")

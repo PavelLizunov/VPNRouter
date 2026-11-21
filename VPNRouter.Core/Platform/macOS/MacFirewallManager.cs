@@ -23,9 +23,10 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
     private bool _armed;
     private bool _loaded;
     private bool _anchorMode;
+    private Func<string?>? _currentLaunch;
+    private string? _boundLaunch;
     private MacFirewallSession? _session;
     private bool _releasePending;
-    private bool _releaseUnconfirmed;
     private List<string> _serverIps = new();
     private bool _disposed;
 
@@ -88,7 +89,11 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                     "NOT blocking; traffic follows normal routing");
                 return;
             }
-            if (_loaded && !_releaseUnconfirmed) return;
+            if (ResolveSession() is not { } session)
+            {
+                _logger.Warning("[MacFirewall] No confirmed runtime session for the kill switch");
+                return;
+            }
 
             var rules = BuildRules(_serverIps);
             try
@@ -101,12 +106,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             catch (Exception ex)
             {
                 _logger.Warning(ex, "[MacFirewall] failed to write pf rules file — NOT blocking");
-                return;
-            }
-
-            if (_session is not { } session)
-            {
-                _logger.Warning("[MacFirewall] No confirmed runtime session for the kill switch");
                 return;
             }
 
@@ -125,7 +124,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             if (applied)
             {
                 _loaded = true;
-                _releaseUnconfirmed = false;
                 _logger.Information("[MacFirewall] pf kill-switch engaged ({Mode})", _anchorMode ? "anchor" : "legacy");
             }
             else
@@ -163,15 +161,24 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         }
     }
 
-    internal void BindToCurrentSession()
+    internal void TrackRuntimeLaunch(Func<string?> currentLaunch)
     {
         lock (_gate)
+            _currentLaunch = currentLaunch;
+    }
+
+    private MacFirewallSession? ResolveSession()
+    {
+        var launch = _currentLaunch?.Invoke();
+        if (launch == null)
+            return null;
+        if (_boundLaunch != launch || !_session.HasValue)
         {
-            if (_privileged.ReadPfSession() is { } session)
-                _session = session;
-            else
-                _logger.Warning("[MacFirewall] Could not read the confirmed firewall session");
+            _session = _privileged.ReadPfSession(launch);
+            if (_session.HasValue)
+                _boundLaunch = launch;
         }
+        return _session;
     }
 
     void ICommittedFirewallConfig.UpdateCommittedConfig(string configJson, bool enabledForFullTunnel)
@@ -203,7 +210,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
 
             _armed = true;
 
-            if (!_loaded)
+            if (!_releasePending)
             {
                 _serverIps = candidateIps;
                 _logger.Information("[MacFirewall] Updated committed server IP cache ({Count} IPs; ruleset not loaded)", _serverIps.Count);
@@ -224,15 +231,15 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 return;
             }
 
-            var load = _session is { } session &&
-                (!_releaseUnconfirmed || _privileged.PfEnable(session)) &&
+            var load = ResolveSession() is { } session &&
+                _privileged.PfEnable(session) &&
                 (_anchorMode
                     ? _privileged.PfApplyAnchor(session, newRules)
                     : _privileged.PfApplyLegacy(session, newRules));
 
             if (load)
             {
-                _releaseUnconfirmed = false;
+                _loaded = true;
                 _serverIps = candidateIps;
                 _logger.Information(
                     "[MacFirewall] Refreshed live pf kill-switch ({Mode}) with {Count} server IP(s)",
@@ -281,16 +288,14 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         if (!_releasePending)
             return true;
 
-        if (_session is not { } session || !_privileged.PfRelease(session))
+        if (ResolveSession() is not { } session || !_privileged.PfRelease(session))
         {
-            _releaseUnconfirmed = true;
             _logger.Warning("[MacFirewall] Could not confirm pf policy release");
             return false;
         }
 
         _loaded = false;
         _releasePending = false;
-        _releaseUnconfirmed = false;
         _logger.Information("[MacFirewall] pf kill-switch released");
         return true;
     }
@@ -343,7 +348,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             {
                 _loaded = false;
                 _releasePending = false;
-                _releaseUnconfirmed = false;
             }
             else
                 _logger.Warning("[MacFirewall] Could not recover inactive pf policy");

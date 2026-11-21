@@ -67,7 +67,7 @@ public class MacPrivilegedSourceContractTests
 
         Assert.Contains("new MacPrivilegedClient", lifecycle, StringComparison.Ordinal);
         Assert.DoesNotContain("spawnExe = \"/usr/bin/sudo\"", lifecycle, StringComparison.Ordinal);
-        Assert.Contains("CreateStartRequest(_currentConfigPath)", lifecycle, StringComparison.Ordinal);
+        Assert.Contains("CreateStartRequest(_currentConfigPath, launchId)", lifecycle, StringComparison.Ordinal);
     }
 
     [Fact]

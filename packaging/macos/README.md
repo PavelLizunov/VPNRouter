@@ -39,12 +39,12 @@ or a missing `SUDO_UID`.
 |---|---|---|
 | `probe` | none | Reports `ready`, `legacy`, `legacy_state` (`absent`, `present` or `unknown`), policy version, artifact hashes and the app version. An unknown or present legacy path blocks readiness; readiness is decided here, never by a user-writable marker. |
 | `migration_check` | none | Verifies the system directory chain and checks for the old root runtime of the invoking user. The installer calls this read-only operation before and after legacy grant removal. |
-| `start` | `config_sha256` | Syncs user `.srs` files into root-owned assets, validates the per-user config against the typed contract, stages it root-owned, claims the shared host network owner and writes the per-uid session record, then `execve`s the root-owned sing-box with `run -c <staged>`. |
+| `start` | `config_sha256`, `launch_id` (32 lowercase hex characters) | Syncs user `.srs` files into root-owned assets, validates the per-user config against the typed contract, stages it root-owned, claims the shared host network owner and writes the per-uid session record, then `execve`s the root-owned sing-box with `run -c <staged>`. |
 | `stop` | `pid`, positive Unix `start_time` in seconds | Signals a root-owned sing-box only when its executable path, PID and start time match, and the request matches the root-owned per-uid session record. |
 | `dns_apply` | `service`, `server` | Requires an active session owned by the caller, saves the system's original DNS in a root-owned snapshot, then applies and verifies one IPv4 or IPv6 resolver. |
 | `dns_restore` | none | Restores and verifies the snapshot of the caller's stopped session. The helper retains it if restoration fails. |
 | `dns_flush` | none | Flushes the DNS cache for an active session owned by the caller. |
-| `pf_session` | none | Returns the invoking user's active host runtime PID and start time so the app can bind firewall requests to it. |
+| `pf_session` | `launch_id` | Returns the calling user's PID and start time for that exact launch, including after a runtime exit until policy recovery retires it. |
 | `pf_apply` | `pid`, `start_time`, `mode` (`anchor`, `legacy`, `main`), `rules` for anchor/legacy | `main` reads `/etc/pf.conf` itself and appends the fixed anchor. `anchor`/`legacy` accepts only the fixed `block`/`lo0`/CIDR `pass` grammar. The helper records the disengagement mode. |
 | `pf_enable` | `pid`, `start_time` | Acquires and stores one root-owned enable reference for the owned policy. Repeated calls reuse it while the kernel holds it and PF is running. |
 | `pf_release` | `pid`, `start_time` | Clears the rules according to the recorded mode and releases the stored enable reference. |
@@ -53,7 +53,9 @@ or a missing `SUDO_UID`.
 
 Start, Stop, DNS and PF transitions share the host network lock. The helper
 keeps the firewall policy and enable reference across a same-user runtime
-replacement. It rejects delayed PF requests carrying the replaced identity.
+replacement. The app resolves the current launch through the private ID it
+sent on startup and rechecks PF whenever it arms. The helper rejects delayed
+requests carrying the replaced or recovered identity.
 The enable reference and release mode are stored in the same root record as
 the owner. A past boot's PF state is discarded because the rules and reference
 live in the kernel. An old token-only file is removed after the kernel confirms

@@ -560,8 +560,6 @@ public partial class VpnEngine : IDisposable
             if (newConfigMode == "generated") TryStartConnectionHealthStream(settings);
             // Restart replaces the link and resolved drops its per-link settings.
             ApplyUnixDnsSettings(settings);
-            if (_firewall is MacFirewallManager macFirewall)
-                macFirewall.BindToCurrentSession();
             UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 

@@ -17,6 +17,8 @@ public partial class SingBoxManager : IDisposable
     private readonly IProcessRunner _runner;
     private IProcessHandle? _handle;
     private string _currentConfigPath = string.Empty;
+    private volatile string? _macPrivilegeLaunchId;
+    internal string? MacPrivilegeLaunchId => _macPrivilegeLaunchId;
     private int _disposed;
     private TunOwnershipLock _tunLock;
 

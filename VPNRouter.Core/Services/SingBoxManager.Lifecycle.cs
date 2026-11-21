@@ -677,8 +677,10 @@ public partial class SingBoxManager
         {
             // The only authorized macOS command is the root-owned helper. It
             // receives a typed request on stdin and execs the root-owned runtime.
+            var launchId = Guid.NewGuid().ToString("N");
+            _macPrivilegeLaunchId = launchId;
             request = new MacPrivilegedClient(_runner, _logger)
-                .CreateStartRequest(_currentConfigPath);
+                .CreateStartRequest(_currentConfigPath, launchId);
         }
         else
         {

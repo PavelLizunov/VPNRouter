@@ -103,7 +103,7 @@ public class MacFirewallManagerTests : IDisposable
     private static void Bind(MacFirewallManager manager, FakeProcessRunner runner)
     {
         runner.OnRun(c => IsHelper(c, "pf_session"), Ok(stdout: """{"pid":391,"start_time":3000}"""));
-        manager.BindToCurrentSession();
+        manager.TrackRuntimeLaunch(() => "0123456789abcdef0123456789abcdef");
     }
 
     [Fact]
@@ -370,16 +370,67 @@ public class MacFirewallManagerTests : IDisposable
             Ok(stdout: """{"pid":405,"start_time":4000}""")
         });
         fake.OnRun(c => IsHelper(c, "pf_session"), _ => Task.FromResult(identities.Dequeue()));
-        sut.BindToCurrentSession();
+        var launchId = Guid.NewGuid().ToString("N");
+        sut.TrackRuntimeLaunch(() => launchId);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
-        sut.BindToCurrentSession();
+        launchId = Guid.NewGuid().ToString("N");
 
         sut.DisableBlockRules();
 
         using var release = JsonDocument.Parse(Assert.Single(fake.RunCalls.Where(IsRelease)).StdinInput!);
         Assert.Equal(405, release.RootElement.GetProperty("pid").GetInt32());
         Assert.Equal(4000, release.RootElement.GetProperty("start_time").GetInt64());
+    }
+
+    [Fact]
+    public void RepeatedEnableChecksKernelAndReappliesEvenWithLoadedRules()
+    {
+        var fake = OkRunner(carrierPresent: true);
+        var sut = Sut(fake);
+        Bind(sut, fake);
+        sut.CreateBlockRules(Array.Empty<string>());
+
+        sut.EnableBlockRules();
+        Assert.True(sut.IsLoaded);
+        sut.EnableBlockRules();
+
+        Assert.Equal(2, fake.RunCalls.Count(c => IsHelper(c, "pf_enable")));
+        Assert.Equal(2, fake.RunCalls.Count(c => IsPfApply(c, "anchor")));
+    }
+
+    [Fact]
+    public void ReplacementLookupRetriesWithoutSendingPreviousIdentity()
+    {
+        var fake = OkRunner(carrierPresent: true);
+        var replies = new Queue<ProcessResult>(new[]
+        {
+            Ok(stdout: """{"pid":391,"start_time":3000}"""),
+            Fail("replacement still starting"),
+            Ok(stdout: """{"pid":405,"start_time":4000}""")
+        });
+        fake.OnRun(c => IsHelper(c, "pf_session"), _ => Task.FromResult(replies.Dequeue()));
+        var launchId = Guid.NewGuid().ToString("N");
+        var sut = Sut(fake);
+        sut.TrackRuntimeLaunch(() => launchId);
+        sut.CreateBlockRules(Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        launchId = Guid.NewGuid().ToString("N");
+        sut.EnableBlockRules();
+        sut.EnableBlockRules();
+
+        var enables = fake.RunCalls.Where(c => IsHelper(c, "pf_enable")).ToArray();
+        Assert.Equal(2, enables.Length);
+        using var replacement = JsonDocument.Parse(enables[1].StdinInput!);
+        Assert.Equal(405, replacement.RootElement.GetProperty("pid").GetInt32());
+        var lookups = fake.RunCalls.Where(c => IsHelper(c, "pf_session")).ToArray();
+        Assert.Equal(3, lookups.Length);
+        foreach (var lookup in lookups.Skip(1))
+        {
+            using var document = JsonDocument.Parse(lookup.StdinInput!);
+            Assert.Equal(launchId, document.RootElement.GetProperty("launch_id").GetString());
+        }
     }
 
     [Fact]

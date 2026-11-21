@@ -404,6 +404,35 @@ static void test_dns_snapshot_parsing(void)
            "system readback compares addresses independently of their text format");
 }
 
+static void test_host_session_versions(void)
+{
+    struct host_session saved = {
+        .version = 1, .uid = 600, .start_time = 3000, .boot_time = 1000,
+        .pid = 391, .pf_mode = PF_RELEASE_ANCHOR
+    };
+    struct host_session parsed = {0};
+    expect(parse_host_session((const char *)&saved, offsetof(struct host_session, pf_reference), &parsed) == 0 &&
+           parsed.pf_reference == 0 && parsed.launch_id[0] == '\0',
+           "v1 record can carry its owner and mode forward without a launch ID");
+
+    saved.version = 2;
+    saved.pf_reference = 1234;
+    expect(parse_host_session((const char *)&saved, offsetof(struct host_session, launch_id), &parsed) == 0 &&
+           parsed.pf_reference == 1234 && parsed.launch_id[0] == '\0',
+           "v2 record keeps its kernel reference without a launch ID");
+
+    saved.version = HOST_SESSION_VERSION;
+    strcpy(saved.launch_id, "0123456789abcdef0123456789abcdef");
+    expect(parse_host_session((const char *)&saved, sizeof(saved), &parsed) == 0 &&
+           strcmp(parsed.launch_id, saved.launch_id) == 0,
+           "current record preserves the exact launch identity");
+    expect(parse_host_session((const char *)&saved, sizeof(saved) - 1, &parsed) != 0,
+           "truncated current record is rejected");
+    saved.launch_id[0] = 'X';
+    expect(parse_host_session((const char *)&saved, sizeof(saved), &parsed) != 0,
+           "malformed launch identity is rejected");
+}
+
 static void test_pf_reference_list(void)
 {
     char entries[512];
@@ -439,6 +468,7 @@ int main(void)
     test_runtime_components();
     test_dns_snapshot_parsing();
     test_pf_reference_list();
+    test_host_session_versions();
 
     const char *valid =
         "{\"log\":{\"output\":\"\"},"

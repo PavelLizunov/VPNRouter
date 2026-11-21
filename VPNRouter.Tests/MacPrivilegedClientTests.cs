@@ -94,7 +94,8 @@ public class MacPrivilegedClientTests : IDisposable
     [Fact]
     public void Start_request_uses_hash_and_helper_without_user_path_arguments()
     {
-        var request = new MacPrivilegedClient().CreateStartRequest(_config);
+        const string launchId = "0123456789abcdef0123456789abcdef";
+        var request = new MacPrivilegedClient().CreateStartRequest(_config, launchId);
 
         Assert.Equal(MacPrivilegePaths.SudoPath, request.ExecutablePath);
         Assert.Equal(new[] { "-n", MacPrivilegePaths.HelperPath }, request.Arguments);
@@ -104,6 +105,7 @@ public class MacPrivilegedClientTests : IDisposable
         var expected = Convert.ToHexString(
             SHA256.HashData(File.ReadAllBytes(_config))).ToLowerInvariant();
         Assert.Equal(expected, document.RootElement.GetProperty("config_sha256").GetString());
+        Assert.Equal(launchId, document.RootElement.GetProperty("launch_id").GetString());
     }
 
     [Fact]

@@ -482,3 +482,44 @@ live acceptance.
   `0223406d0af43dad527d378a0a322465836f5884`. The final test-only
   past-boot scenario passed shell syntax validation. The shared worker
   did not change PF, DNS, TUN state or privileged files.
+- All nine checks passed at `9a5e4124cab004b1ff5b7900b0f21f67642d517e`.
+  Managed run 44872682446 and system run 44872676308 passed. The hosted
+  macOS 26.7.2 job 136750470869 built an 82,012,546-byte ZIP with SHA-256
+  `ddb0dd0fafe8bc4e46d6937d6e085b72ac6d2bd582638cd429beeb2e832f14e1`.
+  PF stayed enabled after acquiring a replacement for the fixture's released
+  reference. The same run asserted stopped-session rejection, removal of
+  released token-only metadata and removal of simulated old-boot state.
+  Migration, isolated TUN, isolated DNS restoration and the default-route
+  check also passed. The desktop authorization prompt was outside this run.
+
+### Desktop re-arm and restart
+
+- Recheck the kernel on every armed Enable request. Reapply the committed
+  rules after a renewed enable reference. A managed loaded flag is bookkeeping
+  for refresh and teardown and cannot establish enforcement.
+- Assign each macOS launch a private correlation ID. The helper records it
+  with the root-owned session identity. The same manager can recover that
+  identity after an immediate exit, until stopped-session recovery retires it.
+  A previous manager must not get a replacement launch's identity.
+- Cover two managed regressions with fake runners: re-arm after a failed
+  refresh and rebinding after a failed lookup on replacement. Extend the
+  isolated system fixture to check lookup after Stop and reference release.
+  Continue to track full desktop/admin-prompt acceptance separately.
+
+- The exact reviewer found two desktop gaps despite the green kernel
+  fixture: re-arm trusted a managed loaded flag, and the first crash
+  after a restart could use the retired launch identity. The app now
+  obtains the helper identity for the manager's current launch on
+  demand, retries a transient lookup, and reapplies verified policy
+  whenever asked to arm. Health recovery arms the old launch before
+  its full restart. The isolated fixture now checks lookup by exact
+  launch, retrieval after runtime exit, retirement after recovery,
+  and actual disappearance of the fixture reference from the kernel.
+- Native preflight: macOS 26.5.2, ten logical CPUs, load 2.03,
+  16 GiB RAM (7,606 free, 304,159 inactive and 87,206 speculative
+  16 KiB pages), 1,174 MiB free swap, 75 GiB free disk, no compile
+  jobs or Android emulator, and Command Line Tools clang available.
+  The production helper compiled with warnings as errors. Contract
+  tests and eight installer cases passed at tree
+  `12770dc375e525eb1a10be071c7203b7ecfd5a86`. Shell syntax passed
+  for the hosted fixture. No live PF or DNS was changed on the worker.

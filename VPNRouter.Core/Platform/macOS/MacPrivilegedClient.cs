@@ -86,7 +86,7 @@ public sealed class MacPrivilegedClient
         }
     }
 
-    public ProcessRequest CreateStartRequest(string configPath)
+    public ProcessRequest CreateStartRequest(string configPath, string launchId)
     {
         var hash = ComputeFileSha256(configPath);
         var request = new JsonObject
@@ -94,6 +94,7 @@ public sealed class MacPrivilegedClient
             ["version"] = JsonValue.Create(1),
             ["op"] = "start",
             ["config_sha256"] = hash,
+            ["launch_id"] = launchId,
         };
         return new ProcessRequest(
             MacPrivilegePaths.SudoPath,
@@ -140,10 +141,14 @@ public sealed class MacPrivilegedClient
             TimeSpan.FromSeconds(15));
     }
 
-    internal MacFirewallSession? ReadPfSession()
+    internal MacFirewallSession? ReadPfSession(string launchId)
     {
-        var result = Run(new JsonObject { ["version"] = JsonValue.Create(1), ["op"] = "pf_session" },
-            TimeSpan.FromSeconds(10));
+        var result = Run(new JsonObject
+        {
+            ["version"] = JsonValue.Create(1),
+            ["op"] = "pf_session",
+            ["launch_id"] = launchId,
+        }, TimeSpan.FromSeconds(10));
         if (result.ExitCode != 0 || result.TimedOut)
             return null;
 
