@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
@@ -7,7 +8,6 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
-using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -26,12 +26,27 @@ namespace VPNRouter.Android;
 
 public partial class AndroidApp
 {
+    private sealed class KebabMenuPopup : Popup
+    {
+        protected override AutomationPeer OnCreateAutomationPeer() => new KebabMenuPopupPeer(this);
+    }
+
+    private sealed class KebabMenuPopupPeer(KebabMenuPopup owner) : ControlAutomationPeer(owner)
+    {
+        // The visual overlay already exposes the menu. The placeholder has no accessible content.
+        protected override IReadOnlyList<AutomationPeer>? GetChildrenCore() => null;
+        protected override bool IsControlElementCore() => false;
+        protected override bool IsContentElementCore() => false;
+    }
+
     private readonly Dictionary<Avalonia.Controls.Button, string> _menuItemIcons = new();
 
     /// <summary>Sets the label of a menu item and keeps its icon (the label is replaced on language change and by the reset confirmation).</summary>
     private void SetMenuItemText(Avalonia.Controls.Button? btn, string text)
     {
         if (btn is null) return;
+        // The icon sits beside the text in a grid, so the automation peer cannot read the label from the content.
+        AutomationProperties.SetName(btn, text);
         if (!_menuItemIcons.TryGetValue(btn, out var icon)) { btn.Content = text; return; }
         if (btn.Tag is TextBlock existing) { existing.Text = text; return; }
 
@@ -188,26 +203,31 @@ public partial class AndroidApp
         stack.Children.Add(divider);
     }
 
-    private static void HideSubtreeFromAccessibility(StyledElement element)
+    private static void ApplyMenuButtonAccessibility(Avalonia.Controls.Button? button)
     {
-        AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
-        if (element is ILogical logical)
-        {
-            foreach (var child in logical.LogicalChildren)
-            {
-                if (child is StyledElement childElement)
-                    HideSubtreeFromAccessibility(childElement);
-            }
-        }
+        if (button is null) return;
+        AutomationProperties.SetName(button, Localization.MenuButtonName);
+        ToolTip.SetTip(button, Localization.TipMenuButton);
+    }
+
+    /// <summary>Re-labels both menu buttons after a language switch; the headers are patched, not rebuilt.</summary>
+    private void RefreshMenuButtonAccessibility()
+    {
+        ApplyMenuButtonAccessibility(_kebabMenuButton);
+        ApplyMenuButtonAccessibility(_advKebabMenuBtn);
     }
 
     /// <summary>The big menu button goes to the other mode: "Advanced" on the main screen, "Simple" inside the Advanced screens.</summary>
     private void UpdateMenuAdvancedToggle()
     {
         if (_menuAdvancedToggleBtn is null) return;
-        _menuAdvancedToggleBtn.Content = _advShellOverlay is { IsVisible: true }
+        var toSimple = _advShellOverlay is { IsVisible: true };
+        _menuAdvancedToggleBtn.Content = toSimple
             ? IconText(UiIcons.ChevronLeft, Localization.SmpToggleToSimple, 14)
             : IconText(UiIcons.ChevronRight, Localization.SmpToggleToAdvanced, 14, iconAfter: true);
+        // Icon plus text content has no readable name of its own; name the action it performs.
+        AutomationProperties.SetName(_menuAdvancedToggleBtn,
+            toSimple ? Localization.SmpToggleToSimple : Localization.SmpToggleToAdvanced);
     }
 
     private void PrepareKebabMenu(Control? target)
@@ -218,6 +238,8 @@ public partial class AndroidApp
         {
             var bottom = _imeVisible ? 0.0 : _currentSafeArea.Bottom;
             panel.MaxHeight = Math.Max(120.0, _pageRoot.Bounds.Height - _currentSafeArea.Top - bottom - 16.0);
+            if (panel.Child is ScrollViewer scroller)
+                scroller.ScrollToHome();
         }
         UpdateMenuAdvancedToggle();
         _resetConfirmPending = false;

@@ -321,6 +321,8 @@ public partial class AndroidApp
             MinHeight = 0,
             Padding = new Thickness(0),
         };
+        // The app name is the visible label of the row's switch.
+        AutomationProperties.SetLabeledBy(checkbox, label);
         checkbox.IsCheckedChanged += (_, __) =>
         {
             if (checkbox.IsChecked == true)

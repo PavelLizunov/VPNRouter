@@ -246,6 +246,7 @@ public partial class AndroidApp
         };
         _advKebabMenuBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
         _advKebabMenuBtn.Click += OnAdvancedKebabClicked;
+        RefreshMenuButtonAccessibility();
 
         var headerGrid = new Grid
         {

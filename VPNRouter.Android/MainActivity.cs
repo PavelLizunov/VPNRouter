@@ -192,8 +192,6 @@ public class MainActivity : AvaloniaMainActivity, ISharedPreferencesOnSharedPref
             catch { }
         }
 
-        AvaloniaToggleNodeInfoProviderPatch.Apply();
-
         SetupWindowInsetsAndEdgeToEdge();
 
         base.OnCreate(savedInstanceState);
