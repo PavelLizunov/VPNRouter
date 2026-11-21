@@ -5,6 +5,7 @@ using System.Text;
 using Serilog;
 using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -66,6 +67,8 @@ public partial class SingBoxManager
         {
             ProcessOwnership.ConfiguredExePath = exePath;
             RotateSingBoxLog();
+            if (OperatingSystem.IsMacOS())
+                configJson = MacPrivilegedConfigContract.Prepare(configJson);
             _currentConfigPath = WriteJsonToDisk(configJson);
             _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
             LaunchProcess(exePath);
@@ -669,60 +672,66 @@ public partial class SingBoxManager
                 .GetAwaiter().GetResult();
         }
 
-        string spawnExe;
-        IReadOnlyList<string> spawnArgs;
-
+        ProcessRequest request;
         if (OperatingSystem.IsMacOS())
         {
-            spawnExe = "/usr/bin/sudo";
-            spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
-        }
-        else if (OperatingSystem.IsLinux())
-        {
-            var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
-            if (blocker != null)
-            {
-                _linuxUsedPkexec = false;
-                throw new InvalidOperationException(
-                    $"{Strings.LinuxTunSandboxUnsupported} ({blocker})");
-            }
-
-            if (HasNetCapability(exePath))
-            {
-                _logger.Information("[SingBoxManager] Linux: launching as user (CAP_NET_ADMIN present, no pkexec needed)");
-                _linuxUsedPkexec = false;
-                spawnExe = exePath;
-                spawnArgs = new[] { "run", "-c", _currentConfigPath };
-            }
-            else if (EffectivePolicy != null)
-            {
-                // A selected runtime is never escalated. Missing capability fails closed.
-                _linuxUsedPkexec = false;
-                throw new SingBoxRuntimePolicyException(
-                    SingBoxRuntimeOperation.Start,
-                    SingBoxRuntimeFailure.PrerequisiteUnavailable);
-            }
-            else
-            {
-                _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_raw+ep {Exe}' once)",
-                    exePath);
-                _linuxUsedPkexec = true;
-                spawnExe = LinuxRuntimeEnvironment.ResolvePkexec()
-                    ?? throw new InvalidOperationException(Strings.LinuxPkexecUnavailable);
-                spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
-            }
+            // The only authorized macOS command is the root-owned helper. It
+            // receives a typed request on stdin and execs the root-owned runtime.
+            request = new MacPrivilegedClient(_runner, _logger)
+                .CreateStartRequest(_currentConfigPath);
         }
         else
         {
-            spawnExe = exePath;
-            spawnArgs = new[] { "run", "-c", _currentConfigPath };
-        }
+            string spawnExe;
+            IReadOnlyList<string> spawnArgs;
 
-        var request = new ProcessRequest(
-            ExecutablePath: spawnExe,
-            Arguments: spawnArgs,
-            CaptureStdout: true,
-            CaptureStderr: true);
+            if (OperatingSystem.IsLinux())
+            {
+                var blocker = LinuxRuntimeEnvironment.GetTunPrivilegeBlocker();
+                if (blocker != null)
+                {
+                    _linuxUsedPkexec = false;
+                    throw new InvalidOperationException(
+                        $"{Strings.LinuxTunSandboxUnsupported} ({blocker})");
+                }
+
+                if (HasNetCapability(exePath))
+                {
+                    _logger.Information("[SingBoxManager] Linux: launching as user (CAP_NET_ADMIN present, no pkexec needed)");
+                    _linuxUsedPkexec = false;
+                    spawnExe = exePath;
+                    spawnArgs = new[] { "run", "-c", _currentConfigPath };
+                }
+                else if (EffectivePolicy != null)
+                {
+                    // A selected runtime is never escalated. Missing capability fails closed.
+                    _linuxUsedPkexec = false;
+                    throw new SingBoxRuntimePolicyException(
+                        SingBoxRuntimeOperation.Start,
+                        SingBoxRuntimeFailure.PrerequisiteUnavailable);
+                }
+                else
+                {
+                    _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_raw+ep {Exe}' once)",
+                        exePath);
+                    _linuxUsedPkexec = true;
+                    spawnExe = LinuxRuntimeEnvironment.ResolvePkexec()
+                        ?? throw new InvalidOperationException(Strings.LinuxPkexecUnavailable);
+                    spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
+                }
+            }
+            else
+            {
+                spawnExe = exePath;
+                spawnArgs = new[] { "run", "-c", _currentConfigPath };
+            }
+
+            request = new ProcessRequest(
+                ExecutablePath: spawnExe,
+                Arguments: spawnArgs,
+                CaptureStdout: true,
+                CaptureStderr: true);
+        }
 
         // Last-moment disposal re-check at the spawn point: Dispose can race past the entry guard.
         if (Volatile.Read(ref _disposed) != 0)

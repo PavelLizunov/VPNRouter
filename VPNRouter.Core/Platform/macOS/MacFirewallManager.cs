@@ -1,7 +1,4 @@
-using System.Net;
-using System.Net.Sockets;
 using System.Text;
-using System.Text.Json;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Services;
@@ -11,14 +8,13 @@ namespace VPNRouter.Core.Platform.macOS;
 public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallConfig
 {
     private const string DefaultPfConf = "/etc/pf.conf";
-    private const string PfCtl = "/sbin/pfctl";
 
     internal const string Anchor = "com.vpnrouter/killswitch";
     internal const string AnchorMarker = "anchor-v1";
     internal const string LegacyMarker = "engaged";
 
     private readonly object _gate = new();
-    private readonly IProcessRunner _runner;
+    private readonly MacPrivilegedClient _privileged;
     private readonly ILogger _logger;
     private readonly string _currentConfigPath;
     private readonly string _markerPath;
@@ -30,7 +26,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
     private bool _armed;
     private bool _loaded;
     private bool _anchorMode;
-    private string? _enableToken;
+    private bool _pfEnabled;
     private List<string> _serverIps = new();
     private bool _disposed;
 
@@ -50,7 +46,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         string? mainConfPath = null)
     {
         _logger = logger ?? Log.Logger;
-        _runner = runner ?? new ProcessRunner();
+        _privileged = new MacPrivilegedClient(runner ?? new ProcessRunner(), _logger);
         _currentConfigPath = currentConfigPath ?? AppPaths.CurrentConfigPath;
         _markerPath = markerPath ?? System.IO.Path.Combine(AppPaths.DataDir, "pf-killswitch-engaged.marker");
         _pfConfPath = pfConfPath ?? DefaultPfConf;
@@ -111,16 +107,20 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                 return;
             }
 
-            if (string.IsNullOrEmpty(_enableToken))
+            if (!_pfEnabled)
             {
-                var en = RunSudo(new[] { "-n", PfCtl, "-E" });
-                if (en.ok) _enableToken = ParsePfToken(en.stderr);
+                if (!_privileged.PfEnable())
+                {
+                    _logger.Warning(
+                        "[MacFirewall] FAILED to enable pf through the privileged helper — NOT blocking");
+                    return;
+                }
+                _pfEnabled = true;
             }
 
             if (EnsureCarrier())
             {
-                var load = RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-f", _rulesPath });
-                if (load.ok)
+                if (_privileged.PfApplyAnchor(rules))
                 {
                     _loaded = true;
                     _anchorMode = true;
@@ -130,15 +130,14 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                     return;
                 }
                 _logger.Warning(
-                    "[MacFirewall] FAILED to load anchor ruleset (pfctl sudoers grant missing or malformed rule " +
-                    "(wrong inet/inet6 family)? {Err}) — NOT blocking; releasing pf-enable ref", load.stderr?.Trim());
+                    "[MacFirewall] FAILED to load anchor ruleset (privileged helper unavailable or rejected the typed " +
+                    "rules; wrong inet/inet6 family?) — NOT blocking; releasing pf-enable ref");
                 ReleaseEnable();
                 return;
             }
 
             _logger.Warning("[MacFirewall] anchor carrier unavailable — falling back to legacy broad pf load");
-            var legacy = RunSudo(new[] { "-n", PfCtl, "-f", _rulesPath });
-            if (legacy.ok)
+            if (_privileged.PfApplyLegacy(rules))
             {
                 _loaded = true;
                 _anchorMode = false;
@@ -148,8 +147,8 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             else
             {
                 _logger.Warning(
-                    "[MacFirewall] FAILED to load pf ruleset (pfctl sudoers grant missing or malformed rule " +
-                    "(wrong inet/inet6 family)? {Err}) — NOT blocking; releasing pf-enable ref", legacy.stderr?.Trim());
+                    "[MacFirewall] FAILED to load pf ruleset (privileged helper unavailable or rejected the typed " +
+                    "rules; wrong inet/inet6 family?) — NOT blocking; releasing pf-enable ref");
                 ReleaseEnable();
             }
         }
@@ -159,7 +158,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
     {
         lock (_gate)
         {
-            if (!_loaded && string.IsNullOrEmpty(_enableToken)) return;
+            if (!_loaded && !_pfEnabled) return;
 
             if (_loaded)
             {
@@ -235,7 +234,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
     {
         lock (_gate)
         {
-            if (_disposed && !_loaded && string.IsNullOrEmpty(_enableToken)) return;
+            if (_disposed && !_loaded && !_pfEnabled) return;
 
             try
             {
@@ -256,7 +255,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             }
             catch { }
 
-            if (!_loaded && string.IsNullOrEmpty(_enableToken))
+            if (!_loaded && !_pfEnabled)
             {
                 _disposed = true;
             }
@@ -314,10 +313,10 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             }
 
             var load = _anchorMode
-                ? RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-f", _rulesPath })
-                : RunSudo(new[] { "-n", PfCtl, "-f", _rulesPath });
+                ? _privileged.PfApplyAnchor(newRules)
+                : _privileged.PfApplyLegacy(newRules);
 
-            if (load.ok)
+            if (load)
             {
                 _serverIps = candidateIps;
                 _logger.Information(
@@ -328,65 +327,53 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
             else
             {
                 _logger.Warning(
-                    "[MacFirewall] Failed to refresh live pf ruleset ({Err}) — retaining prior firewall pass-list; live config already committed, cannot rollback",
-                    load.stderr?.Trim());
+                    "[MacFirewall] Failed to refresh live pf ruleset (privileged helper unavailable) — retaining prior firewall pass-list; live config already committed, cannot rollback");
             }
         }
     }
 
-    private bool RestoreDefaultRuleset()
-        => RunSudo(new[] { "-n", PfCtl, "-f", DefaultPfConf }).ok;
+    private bool RestoreDefaultRuleset() => _privileged.PfApplyMain();
 
-    private bool FlushAnchor()
-        => RunSudo(new[] { "-n", PfCtl, "-a", Anchor, "-F", "rules" }).ok;
+    private bool FlushAnchor() => _privileged.PfFlush();
 
     private bool EnsureCarrier()
     {
-        var sr = RunSudo(new[] { "-n", PfCtl, "-sr" });
-        if (sr.ok && sr.stdout.Contains(Anchor, StringComparison.Ordinal))
+        if (_privileged.TryGetPfStatus(out var status) &&
+            status.Contains(Anchor, StringComparison.Ordinal))
             return true;
 
-        string conf;
+        // Keep the merged main ruleset as a user-visible diagnostic. Root reads
+        // /etc/pf.conf itself through the helper; this file is never passed to
+        // pfctl and is not part of the privilege boundary.
         try
         {
-            conf = System.IO.File.ReadAllText(_pfConfPath);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[MacFirewall] cannot read {PfConf} to add the anchor carrier", _pfConfPath);
-            return false;
-        }
-
-        try
-        {
+            var conf = System.IO.File.ReadAllText(_pfConfPath);
             var dir = System.IO.Path.GetDirectoryName(_mainConfPath);
             if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
                 System.IO.Directory.CreateDirectory(dir);
             if (!conf.EndsWith('\n')) conf += "\n";
             AppPaths.WritePrivateText(_mainConfPath, conf + $"anchor \"{Anchor}\"\n");
-
-            var load = RunSudo(new[] { "-n", PfCtl, "-f", _mainConfPath });
-            if (!load.ok)
-                _logger.Warning("[MacFirewall] failed to load main ruleset with anchor carrier: {Err}", load.stderr?.Trim());
-            return load.ok;
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[MacFirewall] failed to write merged pf main ruleset");
-            return false;
+            _logger.Debug(ex, "[MacFirewall] could not write the merged pf diagnostics file");
         }
+
+        var load = _privileged.PfApplyMain();
+        if (!load)
+            _logger.Warning("[MacFirewall] failed to load main ruleset with anchor carrier through the privileged helper");
+        return load;
     }
 
     private bool ReleaseEnable()
     {
-        if (string.IsNullOrEmpty(_enableToken)) return true;
-        var r = RunSudo(new[] { "-n", PfCtl, "-X", _enableToken });
-        if (r.ok)
+        if (!_pfEnabled) return true;
+        if (_privileged.PfDisable())
         {
-            _enableToken = null;
+            _pfEnabled = false;
             return true;
         }
-        _logger.Warning("[MacFirewall] failed to release pf enable token {Token} — retaining token for retry", _enableToken);
+        _logger.Warning("[MacFirewall] failed to release the pf enable reference — retaining state for retry");
         return false;
     }
 
@@ -505,7 +492,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                         }
                         else
                         {
-                            log.Warning("[MacFirewall] orphan cleanup: pfctl failed (sudoers grant missing?) — if the internet is blocked, run: sudo pfctl -a {Anchor} -F rules; sudo pfctl -f /etc/pf.conf", Anchor);
+                            log.Warning("[MacFirewall] orphan cleanup: pfctl failed (privileged helper unavailable?) — if the internet is blocked, run: sudo pfctl -a {Anchor} -F rules; sudo pfctl -f /etc/pf.conf", Anchor);
                         }
                         break;
                     }
@@ -521,7 +508,7 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
                         }
                         else
                         {
-                            log.Warning("[MacFirewall] orphan cleanup: pfctl failed (sudoers grant missing?) — if the internet is blocked, run: sudo pfctl -a {Anchor} -F rules; sudo pfctl -f /etc/pf.conf", Anchor);
+                            log.Warning("[MacFirewall] orphan cleanup: pfctl failed (privileged helper unavailable?) — if the internet is blocked, run: sudo pfctl -a {Anchor} -F rules; sudo pfctl -f /etc/pf.conf", Anchor);
                         }
                         break;
                     }
@@ -541,30 +528,4 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
         try { new MacFirewallManager(logger).CleanupOrphanedRules(logger); } catch { }
     }
 
-    internal static string? ParsePfToken(string? stderr)
-    {
-        if (string.IsNullOrEmpty(stderr)) return null;
-        var m = System.Text.RegularExpressions.Regex.Match(stderr, @"Token\s*:\s*(\d+)");
-        return m.Success ? m.Groups[1].Value : null;
-    }
-
-    private (bool ok, string stdout, string stderr) RunSudo(string[] args)
-    {
-        try
-        {
-            var req = new ProcessRequest("/usr/bin/sudo", args, CaptureStdout: true, CaptureStderr: true);
-            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
-            var r = _runner.RunAsync(req, cts.Token).GetAwaiter().GetResult();
-            var ok = r.ExitCode == 0 && !r.TimedOut;
-            if (!ok)
-                _logger.Debug("[MacFirewall] sudo {Args} failed (exit {Code}, timedOut {TimedOut}): {Err}",
-                    string.Join(' ', args), r.ExitCode, r.TimedOut, r.Stderr?.Trim());
-            return (ok, r.Stdout ?? string.Empty, r.Stderr ?? string.Empty);
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug(ex, "[MacFirewall] sudo run failed");
-            return (false, string.Empty, string.Empty);
-        }
-    }
 }

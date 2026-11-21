@@ -1,0 +1,254 @@
+#!/bin/bash
+#
+# VPNRouter macOS privileged installation and migration.
+#
+# This script is executed once by the app through an administrator-approved
+# osascript prompt. It installs the root-owned helper and runtime, removes the
+# legacy shared sudoers file, and writes one per-user policy line. It never
+# copies a user-writable script into a privileged location and never uses eval.
+#
+# Contract: packaging/macos/README.md.
+
+set -euo pipefail
+umask 077
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+HELPER_DEST="/Library/PrivilegedHelperTools/com.vpnrouter.privileged"
+ROOT_DIR="/Library/Application Support/VPNRouter"
+ROOT_BIN="$ROOT_DIR/bin/sing-box"
+MANIFEST="$ROOT_DIR/install.json"
+SUDOERS_DIR="/private/etc/sudoers.d"
+LEGACY_POLICY="$SUDOERS_DIR/vpnrouter"
+
+policy_template=""
+helper_source=""
+singbox_source=""
+helper_sha256=""
+singbox_sha256=""
+app_version=""
+user_name=""
+
+usage() {
+    echo "usage: install-privileged.sh --policy-template PATH --helper PATH --singbox PATH --helper-sha256 HEX --singbox-sha256 HEX --app-version VERSION --user NAME" >&2
+    exit 64
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --policy-template) policy_template="${2:-}"; shift 2 ;;
+        --helper) helper_source="${2:-}"; shift 2 ;;
+        --singbox) singbox_source="${2:-}"; shift 2 ;;
+        --helper-sha256) helper_sha256="${2:-}"; shift 2 ;;
+        --singbox-sha256) singbox_sha256="${2:-}"; shift 2 ;;
+        --app-version) app_version="${2:-}"; shift 2 ;;
+        --user) user_name="${2:-}"; shift 2 ;;
+        *) usage ;;
+    esac
+done
+
+[ "$(id -u)" -eq 0 ] || { echo "install-privileged: administrator rights are required" >&2; exit 77; }
+[ -n "$policy_template" ] && [ -n "$helper_source" ] && [ -n "$singbox_source" ] || usage
+[ -n "$app_version" ] && [ -n "$user_name" ] || usage
+[[ "$user_name" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "install-privileged: invalid user name" >&2; exit 65; }
+[[ "$helper_sha256" =~ ^[0-9a-f]{64}$ ]] || { echo "install-privileged: invalid helper hash" >&2; exit 65; }
+[[ "$singbox_sha256" =~ ^[0-9a-f]{64}$ ]] || { echo "install-privileged: invalid sing-box hash" >&2; exit 65; }
+[[ "$app_version" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "install-privileged: invalid version" >&2; exit 65; }
+
+uid="$(id -u "$user_name")"
+case "$uid" in
+    ''|0|*[!0-9]*) echo "install-privileged: invalid uid" >&2; exit 65 ;;
+esac
+[ "$uid" -gt 0 ] || { echo "install-privileged: refusing root as the invoking user" >&2; exit 65; }
+
+check_source() {
+    local path="$1"
+    case "$path" in
+        /*) ;;
+        *) echo "install-privileged: source path must be absolute" >&2; exit 66 ;;
+    esac
+    [ -f "$path" ] || { echo "install-privileged: missing source file" >&2; exit 66; }
+    [ ! -L "$path" ] || { echo "install-privileged: source is a symlink" >&2; exit 66; }
+    local mode
+    mode="$(stat -f '%Lp' "$path")"
+    [ $((0$mode & 0022)) -eq 0 ] || { echo "install-privileged: source is group/world writable" >&2; exit 66; }
+    local owner
+    owner="$(stat -f '%u' "$path")"
+    [ "$owner" = "0" ] || [ "$owner" = "$uid" ] || {
+        echo "install-privileged: source is not owned by root or the invoking user" >&2
+        exit 66
+    }
+}
+
+check_source_chain() {
+    local path="$1"
+    local directory
+    directory="$(dirname "$path")"
+    while [ "$directory" != "/" ]; do
+        [ -d "$directory" ] && [ ! -L "$directory" ] || {
+            echo "install-privileged: source directory is not a real directory" >&2
+            exit 66
+        }
+        local mode
+        mode="$(stat -f '%Lp' "$directory")"
+        [ $((0$mode & 0002)) -eq 0 ] || {
+            echo "install-privileged: source directory is world writable" >&2
+            exit 66
+        }
+        local owner
+        owner="$(stat -f '%u' "$directory")"
+        [ "$owner" = "0" ] || [ "$owner" = "$uid" ] || {
+            echo "install-privileged: source directory is not owned by root or the invoking user" >&2
+            exit 66
+        }
+        directory="$(dirname "$directory")"
+    done
+}
+
+check_root_dir() {
+    local path="$1"
+    local expected="$2"
+    local group="${3:-0}"
+    [ -d "$path" ] && [ ! -L "$path" ] || {
+        echo "install-privileged: protected directory is missing or linked: $path" >&2
+        exit 66
+    }
+    if [ "$(stat -f '%u' "$path")" != "0" ] ||
+        { [ "$group" != "-" ] && [ "$(stat -f '%g' "$path")" != "$group" ]; }; then
+        echo "install-privileged: protected directory has unexpected ownership: $path" >&2
+        exit 66
+    fi
+    local mode
+    mode=$((0$(stat -f '%Lp' "$path")))
+    local expected_value
+    expected_value=$((0$expected))
+    [ "$mode" -eq "$expected_value" ] || {
+        echo "install-privileged: protected directory has an unexpected mode: $path" >&2
+        exit 66
+    }
+}
+
+ensure_root_dir() {
+    local path="$1"
+    local mode="$2"
+    if [ ! -e "$path" ] && [ ! -L "$path" ]; then
+        install -d -o root -g wheel -m "$mode" "$path"
+    fi
+    check_root_dir "$path" "$mode"
+}
+
+check_source "$policy_template"
+check_source "$helper_source"
+check_source "$singbox_source"
+check_source_chain "$policy_template"
+check_source_chain "$helper_source"
+check_source_chain "$singbox_source"
+
+actual_helper_sha="$(shasum -a 256 "$helper_source" | awk '{print $1}')"
+actual_singbox_sha="$(shasum -a 256 "$singbox_source" | awk '{print $1}')"
+[ "$actual_helper_sha" = "$helper_sha256" ] || { echo "install-privileged: helper hash mismatch" >&2; exit 66; }
+[ "$actual_singbox_sha" = "$singbox_sha256" ] || { echo "install-privileged: sing-box hash mismatch" >&2; exit 66; }
+
+policy_path="$SUDOERS_DIR/vpnrouter-$uid"
+policy_tmp="$SUDOERS_DIR/.vpnrouter-$uid.tmp"
+manifest_tmp="$MANIFEST.tmp"
+lock_dir="$ROOT_DIR/.install.lock"
+helper_tmp="$HELPER_DEST.tmp"
+singbox_tmp="$ROOT_BIN.tmp"
+
+cleanup() {
+    rm -f "$policy_tmp" "$manifest_tmp" "$helper_tmp" "$singbox_tmp" 2>/dev/null || true
+    rmdir "$lock_dir" 2>/dev/null || true
+}
+
+# The lock is a root-owned directory, so a concurrent install cannot interleave.
+check_root_dir /Library 0755
+# Application Support may be root:admin. Mode 0755 denies group writes.
+check_root_dir "/Library/Application Support" 0755 -
+check_root_dir /private 0755
+check_root_dir /private/etc 0755
+check_root_dir "$SUDOERS_DIR" 0755
+ensure_root_dir /Library/PrivilegedHelperTools 0755
+ensure_root_dir "$ROOT_DIR" 0755
+if ! mkdir "$lock_dir" 2>/dev/null; then
+    echo "install-privileged: another installation is in progress" >&2
+    exit 75
+fi
+trap cleanup EXIT
+chown root:wheel "$lock_dir"
+chmod 0700 "$lock_dir"
+
+# Remove the legacy grant first. If a later step fails, the app fails closed
+# instead of silently keeping the old user-writable NOPASSWD path.
+if [ -e "$LEGACY_POLICY" ] || [ -L "$LEGACY_POLICY" ]; then
+    rm -f "$LEGACY_POLICY"
+fi
+if [ -e "$LEGACY_POLICY" ] || [ -L "$LEGACY_POLICY" ]; then
+    echo "install-privileged: legacy policy is still present after removal" >&2
+    exit 66
+fi
+
+ensure_root_dir "$ROOT_DIR/bin" 0755
+ensure_root_dir "$ROOT_DIR/run" 0700
+ensure_root_dir "$ROOT_DIR/assets" 0700
+
+# Replace by temp-plus-rename so a running process never observes a partial file.
+rm -f "$helper_tmp" "$singbox_tmp"
+install -o root -g wheel -m 0755 "$helper_source" "$helper_tmp"
+install -o root -g wheel -m 0755 "$singbox_source" "$singbox_tmp"
+[ "$(shasum -a 256 "$helper_tmp" | awk '{print $1}')" = "$helper_sha256" ] || {
+    echo "install-privileged: staged helper hash mismatch" >&2
+    exit 66
+}
+[ "$(shasum -a 256 "$singbox_tmp" | awk '{print $1}')" = "$singbox_sha256" ] || {
+    echo "install-privileged: staged sing-box hash mismatch" >&2
+    exit 66
+}
+mv -f "$helper_tmp" "$HELPER_DEST"
+mv -f "$singbox_tmp" "$ROOT_BIN"
+
+cat > "$manifest_tmp" <<EOF
+{"schema_version":1,"policy_version":2,"app_version":"$app_version","helper_sha256":"$helper_sha256","singbox_sha256":"$singbox_sha256"}
+EOF
+chown root:wheel "$manifest_tmp"
+chmod 0600 "$manifest_tmp"
+mv -f "$manifest_tmp" "$MANIFEST"
+
+# The template is the single tested source of truth; the app renders the same
+# text and a contract test fails if the two drift. The user name is validated
+# above, so it is safe as a sed replacement.
+sed "s/{{USER}}/$user_name/g" "$policy_template" > "$policy_tmp"
+expected_rule="$user_name ALL=(root) NOPASSWD: $HELPER_DEST"
+awk -v expected="$expected_rule" '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    {
+        if ($0 != expected)
+            exit 1
+        count++
+    }
+    END {
+        if (count != 1)
+            exit 1
+    }
+' "$policy_tmp" || {
+    echo "install-privileged: policy template must render exactly the managed helper rule" >&2
+    exit 65
+}
+chown root:wheel "$policy_tmp"
+chmod 0440 "$policy_tmp"
+visudo -cf "$policy_tmp" >/dev/null
+mv -f "$policy_tmp" "$policy_path"
+chown root:wheel "$policy_path"
+chmod 0440 "$policy_path"
+
+# Probe is the only readiness authority. A failed probe leaves no ready state.
+probe_output="$(printf '%s' '{"version":1,"op":"probe"}' | env SUDO_UID="$uid" "$HELPER_DEST")" || {
+    echo "install-privileged: installed helper probe failed" >&2
+    exit 78
+}
+case "$probe_output" in
+    *'"ready":true'*) ;;
+    *) echo "install-privileged: helper is not ready after installation" >&2; exit 78 ;;
+esac
+
+echo "install-privileged: managed policy=2 uid=$uid"

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -122,13 +123,12 @@ public partial class SingBoxManager
             }
 
             _logger.Warning(
-                "[SingBoxManager] macOS has no pidfd; signaling freshly validated exact PID {Pid}",
+                "[SingBoxManager] macOS has no pidfd; asking the privileged helper to stop validated PID {Pid}",
                 owned.Pid);
-            _ = TrySpawnAndWait(
-                "/usr/bin/sudo",
-                BuildMacExactKillArguments(owned.Pid),
-                5_000,
-                "sudo -n exact PID SIGKILL");
+            var startTime = new DateTimeOffset(owned.StartedAtUtcTicks, TimeSpan.Zero)
+                .ToUnixTimeSeconds();
+            var client = new MacPrivilegedClient(_runner, _logger);
+            _ = client.Stop(owned.Pid, startTime);
         }
         else
         {
@@ -149,7 +149,7 @@ public partial class SingBoxManager
             return RefuseUnknownIdentity(owned.Pid);
 
         var causes = OperatingSystem.IsMacOS()
-            ? "sudoers NOPASSWD exact-kill grant is missing or invalid"
+            ? "the managed privileged helper or its exact-stop request is unavailable"
             : "pkexec/polkit agent is unavailable and sudo NOPASSWD is not configured";
         _logger.Error(
             "[SingBoxManager] Unix stop failed: exact VPNRouter-owned PID {Pid} remains alive. " +
@@ -211,9 +211,6 @@ public partial class SingBoxManager
         args.Add(signal.ToString(CultureInfo.InvariantCulture));
         return args;
     }
-
-    internal static IReadOnlyList<string> BuildMacExactKillArguments(int pid)
-        => new[] { "-n", "/bin/kill", "-KILL", "--", pid.ToString(CultureInfo.InvariantCulture) };
 
     private static string? ResolveSignalHelperHost()
     {

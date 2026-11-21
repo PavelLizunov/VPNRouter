@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using VPNRouter.Core.Platform.macOS;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -20,6 +21,24 @@ public class MacDnsHardeningTests : IDisposable
 
     private static ProcessResult Ok(string stdout = "") =>
         new ProcessResult(0, stdout, "", TimeSpan.Zero, false);
+
+    private static string? Op(ProcessRequest call)
+    {
+        if (call.StdinInput is null) return null;
+        using var document = JsonDocument.Parse(call.StdinInput);
+        return document.RootElement.GetProperty("op").GetString();
+    }
+
+    private static bool IsHelperOp(ProcessRequest call, string op) =>
+        call.ExecutablePath == MacPrivilegePaths.SudoPath
+        && call.Arguments.SequenceEqual(new[] { "-n", MacPrivilegePaths.HelperPath })
+        && Op(call) == op;
+
+    private static JsonElement DnsRequest(ProcessRequest call)
+    {
+        using var document = JsonDocument.Parse(call.StdinInput!);
+        return document.RootElement.Clone();
+    }
 
     private const string RouteOut = "   route to: default\n    gateway: 192.168.0.1\n  interface: en0\n";
     private const string ListOrderOut =
@@ -45,12 +64,12 @@ public class MacDnsHardeningTests : IDisposable
 
         sut.Apply("172.19.0.1", null);
 
-        var set = fake.RunCalls.FirstOrDefault(c =>
-            c.ExecutablePath == "/usr/bin/sudo" &&
-            c.Arguments.Contains("-setdnsservers"));
+        var set = fake.RunCalls.FirstOrDefault(c => IsHelperOp(c, "dns_set"));
         Assert.NotNull(set);
-        Assert.Equal(new[] { "-n", "/usr/sbin/networksetup", "-setdnsservers", "Wi-Fi", "172.19.0.1" },
-            set!.Arguments.ToArray());
+        var request = DnsRequest(set!);
+        Assert.Equal("Wi-Fi", request.GetProperty("service").GetString());
+        Assert.Equal(new[] { "172.19.0.1" },
+            request.GetProperty("servers").EnumerateArray().Select(v => v.GetString()).ToArray());
     }
 
     [Fact]
@@ -61,8 +80,7 @@ public class MacDnsHardeningTests : IDisposable
 
         sut.Apply("172.19.0.1", null);
 
-        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("/usr/bin/dscacheutil"));
-        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("mDNSResponder"));
+        Assert.Contains(fake.RunCalls, c => IsHelperOp(c, "dns_flush"));
     }
 
     [Fact]
@@ -74,10 +92,11 @@ public class MacDnsHardeningTests : IDisposable
 
         sut.Restore(null);
 
-        var restore = fake.RunCalls.Last(c =>
-            c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("-setdnsservers"));
-        Assert.Equal(new[] { "-n", "/usr/sbin/networksetup", "-setdnsservers", "Wi-Fi", "8.8.8.8", "1.1.1.1" },
-            restore.Arguments.ToArray());
+        var restoreCall = fake.RunCalls.Last(c => IsHelperOp(c, "dns_set"));
+        var restore = DnsRequest(restoreCall);
+        Assert.Equal("Wi-Fi", restore.GetProperty("service").GetString());
+        Assert.Equal(new[] { "8.8.8.8", "1.1.1.1" },
+            restore.GetProperty("servers").EnumerateArray().Select(v => v.GetString()).ToArray());
         Assert.False(File.Exists(_statePath));
     }
 
@@ -90,10 +109,10 @@ public class MacDnsHardeningTests : IDisposable
 
         sut.Restore(null);
 
-        var restore = fake.RunCalls.Last(c =>
-            c.ExecutablePath == "/usr/bin/sudo" && c.Arguments.Contains("-setdnsservers"));
-        Assert.Equal(new[] { "-n", "/usr/sbin/networksetup", "-setdnsservers", "Wi-Fi", "empty" },
-            restore.Arguments.ToArray());
+        var restoreCall = fake.RunCalls.Last(c => IsHelperOp(c, "dns_set"));
+        var restore = DnsRequest(restoreCall);
+        Assert.Equal(new[] { "empty" },
+            restore.GetProperty("servers").EnumerateArray().Select(v => v.GetString()).ToArray());
     }
 
     [Fact]
@@ -104,7 +123,7 @@ public class MacDnsHardeningTests : IDisposable
 
         sut.Restore(null);
 
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("-setdnsservers"));
+        Assert.DoesNotContain(fake.RunCalls, c => IsHelperOp(c, "dns_set"));
     }
 
     [Fact]
@@ -130,7 +149,7 @@ public class MacDnsHardeningTests : IDisposable
             Ok(ListOrderOut));
         fake.OnRun(r => r.ExecutablePath == "/usr/sbin/networksetup" && r.Arguments[0] == "-getdnsservers",
             Ok(getDnsOut));
-        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-setdnsservers"), Fail());
+        fake.OnRun(r => IsHelperOp(r, "dns_set"), Fail());
         fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
         return fake;
     }
@@ -144,8 +163,7 @@ public class MacDnsHardeningTests : IDisposable
         sut.Apply("172.19.0.1", null);
 
         Assert.True(File.Exists(_statePath));
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("/usr/bin/dscacheutil"));
-        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("mDNSResponder"));
+        Assert.DoesNotContain(fake.RunCalls, c => IsHelperOp(c, "dns_flush"));
     }
 
     [Fact]

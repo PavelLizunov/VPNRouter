@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using Serilog;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -101,7 +102,10 @@ public partial class SingBoxManager : IDisposable
     private const long MaxLogSizeBytes = 10 * 1024 * 1024;
 
     private string RuntimeExecutablePath => Path.GetFullPath(
-        EffectivePolicy?.SelectedExecutablePath ?? AppPaths.DeployedSingBoxExePath(_settings));
+        EffectivePolicy?.SelectedExecutablePath ??
+        (OperatingSystem.IsMacOS()
+            ? MacPrivilegePaths.RootSingBoxPath
+            : AppPaths.DeployedSingBoxExePath(_settings)));
 
     internal Task<bool> CheckRuleSetAsync(string path, CancellationToken ct) =>
         CheckCandidateAsync(RuleSetFile.BuildCheckConfig(path), ct);
@@ -145,6 +149,15 @@ public partial class SingBoxManager : IDisposable
                 forceRestart = true;
             }
 
+            if (OperatingSystem.IsMacOS())
+            {
+                // The privileged helper stages the config root-owned before it
+                // starts sing-box. A hot reload would hand the user-writable path
+                // back to root, so privileged macOS always restarts.
+                configJson = MacPrivilegedConfigContract.Prepare(configJson);
+                forceRestart = true;
+            }
+
             _logger.Information("[SingBoxManager] Reloading config{Mode}",
                 forceRestart ? " (force restart, no hot-reload attempt)" : "");
             if (forceRestart) return RestartWithConfig(configJson);
@@ -169,6 +182,13 @@ public partial class SingBoxManager : IDisposable
             if (!_ownsTunLock || _exactStopUnconfirmed)
             {
                 _logger.Warning("[SingBoxManager] TryReloadConfigJson ignored — manager does not own valid TUN lease");
+                return false;
+            }
+
+            if (OperatingSystem.IsMacOS())
+            {
+                _logger.Information(
+                    "[SingBoxManager] Hot-reload is disabled on privileged macOS; a restart is required");
                 return false;
             }
 

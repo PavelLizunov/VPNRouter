@@ -20,7 +20,7 @@ files rather than treating this map as an exhaustive API inventory.
   rules editor. [MainWindowViewModel.Apps.cs](MainWindowViewModel.Apps.cs) holds the
   routing-apps mode and per-app checks, [MainWindowViewModel.ServerList.cs](MainWindowViewModel.ServerList.cs)
   server and custom-config add/remove/selection, and
-  [MainWindowViewModel.MacSudo.cs](MainWindowViewModel.MacSudo.cs) the macOS sudoers setup.
+  [MainWindowViewModel.MacSudo.cs](MainWindowViewModel.MacSudo.cs) delegates to the managed macOS privileged-helper setup; it must not write sudoers.
   Settings load/save, conflicting-VPN and reconnect handling, and theme wiring live in the
   existing Settings, Connection and ThemeAndLogo partials. `MainWindowViewModel.cs` keeps
   the fields, constructor, tab state and `Dispose`.

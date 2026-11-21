@@ -50,6 +50,17 @@ chmod +x "$APP/Contents/MacOS/sing-box"
 xattr -d com.apple.quarantine "$APP/Contents/MacOS/sing-box" 2>/dev/null || true
 echo "    sing-box-vpnctl bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev/null || stat -c%s "$APP/Contents/MacOS/sing-box") bytes)"
 
+echo "    vpnrouter-privileged: compiling managed helper..."
+clang -std=c11 -O2 -Wall -Wextra -Werror \
+    -D_FORTIFY_SOURCE=2 -fstack-protector-strong \
+    -I "$REPO_DIR/packaging/macos" \
+    -o "$APP/Contents/MacOS/vpnrouter-privileged" \
+    "$REPO_DIR/packaging/macos/vpnrouter-privileged.c"
+chmod +x "$APP/Contents/MacOS/vpnrouter-privileged"
+cp "$REPO_DIR/packaging/macos/install-privileged.sh" "$APP/Contents/MacOS/install-privileged.sh"
+cp "$REPO_DIR/packaging/macos/sudoers.template" "$APP/Contents/MacOS/sudoers.template"
+chmod +x "$APP/Contents/MacOS/install-privileged.sh"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -81,8 +92,6 @@ if [ ! -f "$REPO_DIR/VPNRouter.App/Assets/InstallGuide.html" ]; then
     exit 2
 fi
 cp "$REPO_DIR/VPNRouter.App/Assets/InstallGuide.html" "$STAGE/InstallGuide.html"
-
-ln -s /System/Applications/Utilities/Terminal.app "$STAGE/Terminal"
 
 echo "    Contents:"
 ls -la "$STAGE"

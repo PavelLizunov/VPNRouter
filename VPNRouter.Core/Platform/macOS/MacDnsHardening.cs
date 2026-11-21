@@ -57,8 +57,8 @@ public sealed class MacDnsHardening : IUnixDnsHardening
             else
             {
                 logger?.Warning(
-                    "[MacDnsHardening] FAILED to pin {Service} DNS -> {Target} (networksetup non-zero — " +
-                    "sudoers grant missing? DNS is NOT hardened and may leak)", service, dnsTarget);
+                    "[MacDnsHardening] FAILED to pin {Service} DNS -> {Target} (privileged helper " +
+                    "not ready? DNS is NOT hardened and may leak)", service, dnsTarget);
             }
         }
         catch (Exception ex)
@@ -136,19 +136,18 @@ public sealed class MacDnsHardening : IUnixDnsHardening
 
     private bool SetDnsServers(string service, string[] servers, ILogger? logger)
     {
-        var args = new List<string> { "-n", "/usr/sbin/networksetup", "-setdnsservers", service };
-        args.AddRange(servers);
-        return RunSudoChecked(args, logger);
+        var client = new MacPrivilegedClient(_runner);
+        var ok = client.DnsSet(service, servers);
+        if (!ok)
+            logger?.Debug("[MacDnsHardening] privileged dns_set failed for {Service}", service);
+        return ok;
     }
 
     private void FlushDnsCache(ILogger? logger)
     {
-        RunSudoChecked(new[] { "-n", "/usr/bin/dscacheutil", "-flushcache" }, logger);
-        RunSudoChecked(new[] { "-n", "/usr/bin/killall", "-HUP", "mDNSResponder" }, logger);
+        if (!new MacPrivilegedClient(_runner).DnsFlush())
+            logger?.Debug("[MacDnsHardening] privileged dns_flush failed");
     }
-
-    private bool RunSudoChecked(IEnumerable<string> sudoArgs, ILogger? logger)
-        => RunResult("/usr/bin/sudo", sudoArgs.ToArray(), logger).ok;
 
     private string Run(string exe, string[] args, ILogger? logger)
         => RunResult(exe, args, logger).stdout;

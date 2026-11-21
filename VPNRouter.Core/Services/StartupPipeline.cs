@@ -182,6 +182,10 @@ internal sealed class StartupPipeline
             ct.ThrowIfCancellationRequested();
         }
 
+        if (OperatingSystem.IsMacOS())
+            configJson = VPNRouter.Core.Platform.macOS.MacPrivilegedConfigContract
+                .EnsureControllerSecret(configJson);
+
         var monitorController = context.Mode == StartupMode.HotReload ? default :
             ClashSingBoxApi.ReadLocalController(configJson);
         if (context.Mode != StartupMode.HotReload)

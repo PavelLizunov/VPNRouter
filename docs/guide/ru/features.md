@@ -20,7 +20,7 @@
 ### Платформенные детали
 
 - **Windows** — UAC-elevation; опциональный Windows Service для boot-time автозапуска, переживающий logoff пользователя.
-- **macOS** — нативный Apple Silicon; одноразовая настройка sudoers из DMG даёт passwordless TUN после.
+- **macOS** — нативный Apple Silicon; одноразовая настройка привилегированного helper в приложении даёт passwordless TUN после.
 - **Linux** — POSIX capabilities (`cap_net_admin`, `cap_net_bind_service`) для passwordless TUN, применяются postinst-хуком `.deb` (`setcap`); session-автозапуск через `.desktop`-запись. systemd-сервиса / boot-time демона пока нет.
 
 ### Windows-only дополнения *(опционально)*

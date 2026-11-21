@@ -275,6 +275,12 @@ public partial class MainWindowViewModel
             {
                 var capturedSettings = submitted ?? CaptureConnectionSettings();
                 var skipConflictCheck = _skipVpnConflictThisSession;
+                if (OperatingSystem.IsMacOS())
+                {
+                    var ready = await Task.Run(EnsureMacPrivilege);
+                    if (!ready)
+                        throw new InvalidOperationException(Strings.MacPrivilegeSetupRequired);
+                }
                 if (startOverride == null)
                     await PrepareColdStartAsync();
 
@@ -389,10 +395,10 @@ public partial class MainWindowViewModel
     }
 #endif
 
-    private async Task PrepareColdStartAsync()
+    private Task PrepareColdStartAsync()
     {
 #if PLATFORM_WINDOWS
-        await Task.Run(() =>
+        return Task.Run(() =>
         {
             // A cold start may clean up processes only while the TUN is unclaimed.
             if (TunOwnershipLock.ProbeOwnership() != TunOwnershipStatus.Free) return;
@@ -400,9 +406,9 @@ public partial class MainWindowViewModel
             try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
             catch { }
         });
+#else
+        return Task.CompletedTask;
 #endif
-        if (OperatingSystem.IsMacOS())
-            await Task.Run(EnsureMacSudoAccess);
     }
 
     private async Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)> RunTwoPhaseStartAsync(
