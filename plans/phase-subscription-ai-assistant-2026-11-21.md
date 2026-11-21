@@ -1,49 +1,43 @@
-# Phase - DeepSeek assistant for VPN subscribers
+# Phase - DeepSeek setup and repair agent
 
 - Branch: `dsh/subscription-ai-assistant-20261121`
 - Base: `f08258c431f2e21591e13ff174f023803b728c76`
-- Risk: MEDIUM. The feature uses subscriber credentials and a metered upstream API.
-- Rollback: Disable the new vpnctl route and revert the client feature. The VPN connection and subscription contracts stay compatible.
+- Risk: MEDIUM. The agent applies live routing settings and uses a metered upstream API.
+- Rollback: Restore the routed-app settings and live session captured before execution. Roll back the feature by disabling its vpnctl route and reverting the client change.
 
-## Why
+## Intent
 
-A VPNRouter subscriber should be able to ask the app to explain a connection problem in plain language, using the subscription already saved in the app. NINA's diagnosis flow provides the reference.
+A VPNRouter subscriber gives the app a goal in everyday language. The agent reads relevant local state, applies the changes through VPNRouter's own operations, and checks the result. One user request authorizes the reversible steps needed to reach that goal. The user can stop the run and undo its changes.
 
-## Initial scope
+## First working scenario
 
-- Add **Explain with AI** to VPNRouter Standard desktop diagnostics. Display the results of local checks immediately. On request, show the DeepSeek explanation alongside those results.
-- With one enabled, eligible vpnctl source, use that source. With multiple eligible sources, use the active source or offer a choice by its display name. Continue to support ordinary diagnostics for every source.
-- In vpnctl, reuse NINA's first-party credential lookup, server-configured model client and rate-limiting pattern. Define a separate VPNRouter endpoint and a typed diagnostic report. Preserve NINA's deployed request and response schema.
-- Validate the subscription against the server's current record at each call. Key the per-user limit by the resolved account across token and device identities. Make limits and rollout eligibility server-controlled. Confirm how the allowed plans map to that record before enabling subscriber access.
-- Keep the model key on the server. Send the VPN credential only to the fixed vpnctl HTTPS origin in the authorization header. The model receives a small allowlisted report containing platform, current connection state and results of named checks. Display what will be sent before the request.
-- Reach the control service using the app's normal network policy, including when the tunnel is down and the service is reachable. Treat entitlement, rate limit, outage and cancellation as assistant states independent of VPN state.
-- Decide the production usage allowance and gateway configuration before rollout. Android can reuse the same API. A later phase can let the assistant propose a typed settings change, preview it and apply it on explicit user action through existing validation and rollback.
+In Standard desktop, the user enters **Route Chrome through the VPN and leave the other apps direct** and submits once. VPNRouter resolves the installed app, sets split mode with Chrome in the include list, applies or starts the VPN when the goal requires it, and checks the effective routing and connection. Use the same app-selection mapping, routing fields and lifecycle as the existing controls. A second run with the same goal leaves the effective state unchanged.
 
-## Initial API contract
+Use the same execution path for future repair operations. The next target is **Fix my connection**. Start with repairs that the existing problem detector and lifecycle can check. Add operations for the rest of the app as their inputs, verification and undo behavior become available.
 
-Use `POST /api/v1/assistant/vpnrouter/diagnose` on the official first-party vpnctl HTTPS origin. Keep the deployed NINA endpoint stable. vpnctld continues to obtain its public origin from operator configuration. The first VPNRouter rollout trusts the same `https://ninitux.com` origin as NINA.
+## Execution
 
-Use `X-Vpnctl-Identity: device` for an `/api/v1/app/config/<32 lowercase hex digits>` URL and `subscription` for `/sub/<token>` or `/api/v1/sub/<token>`. Accept documented format parameters on the saved URL and extract the credential from the path only. Match the origin, path shape and credential alphabet. Build the request URL independently. Send the credential once as HTTPS Bearer authentication with redirects disabled. An eligible-looking URL only makes the feature available for an attempt. vpnctl determines access from the current user record even when the app has a cached VPN configuration.
+1. Collect current connection state, applicable checks and candidate application IDs. Resolve names locally from the user's request. Supply the model with the relevant subset of supported operations and compact state.
+2. Use DeepSeek to return a validated operation with typed arguments or a clarification for an ambiguous target. Expand one logical operation into local setting changes and a single coordinated Apply. Keep a revision of the settings and a snapshot of the fields the operation owns.
+3. Dispatch through the existing settings and tunnel lifecycle. Reuse app routing selection, `ApplyPendingChangesInternalAsync` and `VpnEngine.ApplyAsync` where they satisfy the operation. Verify committed routing and current runtime readiness. Confirm the old session retired before relying on a replacement.
+4. If validation, Apply or a required postcondition fails, restore the previous persisted settings and live state in the same work flow. If a concurrent edit wins, retain it and report the conflict. On cancellation, stop issuing actions and complete recovery of any partial change. Keep Undo available after a successful change.
+5. Show the outcome and verification, for example **Chrome is set to use VPN; the tunnel is connected**. Distinguish applied policy and tunnel readiness from traffic actually observed. Ask only when there is an ambiguous target or a system authorization the app requires.
 
-The version 1 report contains platform, UI locale, connection state and check outcomes. Use explicit checked, failed and unknown outcome values. Map existing typed observations for configuration and core readiness. Include network check outcomes only when measured for that report. `HealthCheck.Result.Message` and the exported report remain local. Render the explanation as plain text. Include a description of the transmitted fields in the UI and update `PRIVACY.md`.
+## API and data
 
-Return `schema` and `explanation` with `Cache-Control: no-store`. Keep NINA's limits of 2 KiB for the incoming report and 4 KiB of explanation as initial bounds. The client sends one request per click and cancels obsolete requests. Map unauthorized or revoked access, rate limiting with `Retry-After`, and upstream failure to distinct assistant states. Apply per-account and source limits before inference and configure a separate rollout budget. The six-per-minute NINA limit is a reference for testing the mechanism.
+Use a separate `POST /api/v1/assistant/vpnrouter/plan` route. Reuse vpnctl's deployed NINA credential lookup, provider client and rate-limiting pattern. Preserve the NINA route and payload. In the initial first-party rollout, trust `https://ninitux.com` and build the request URL independently from the saved subscription URL. Use `device` for `/api/v1/app/config/<32 lowercase hex digits>` and `subscription` for `/sub/<token>` or `/api/v1/sub/<token>`. Send the credential once as HTTPS Bearer authentication with redirects disabled. vpnctl resolves a current enabled account, applies an account-level quota across both credential forms and uses its server-side model key.
 
-## Implementation order
-
-1. Specify the VPNRouter diagnostic report and eligibility contract in vpnctl. Add a fixture model, then share the existing gateway and authorization code where their contracts match.
-2. Add the typed VPNRouter client and expose the action on desktop. Keep network calls cancellable when the report or subscription changes.
-3. Exercise the full click-to-explanation flow in staging against the configured DeepSeek model.
+The request carries the user's goal, UI locale, supported operation IDs and relevant typed state. Show the scope of the shared data in the action UI and update `PRIVACY.md`. Keep subscription details, local paths, app inventories and raw diagnostics local. Translate any opaque target ID back to a local selection. Accept only known operation IDs with validated arguments, eligible targets and a matching settings revision. A bounded reply supplies an operation or a specific clarification. Return `Cache-Control: no-store`. Treat a service outage as an agent-run failure and preserve the existing VPN state.
 
 ## Verification
 
-1. Build vpnctl and the Release desktop solution in CI or on prepared workers.
-2. Test recognized token and device identities, disabled or revoked identities, unsupported feeds, shared quotas and provider errors. Assert that only report fields reach the model and that redirects cannot carry credentials away from vpnctl.
-3. Document the feature, response states and rollout controls. Record the final revision and outcomes here.
-4. Review the client-to-vpnctl trust boundary and model quotas independently. Preserve deployed NINA fixtures.
-5. Verify desktop diagnostics, entitlement errors, cancellation and local diagnosis during a model outage in the approved UI environment.
-6. Verify standard subscription refresh and Connect/Stop with the assistant route enabled and disabled.
+1. Build the modified desktop and vpnctl components in CI or on prepared workers.
+2. Exercise entitlement, quotas, unknown operation, ambiguous target, obsolete settings revision, repeated request, apply failure, cancellation and rollback. Verify that a malformed model response cannot change settings. Check both restored configuration and restored session.
+3. Document the actual agent operation, end state, undo behavior and data sent. Preserve the original subscription and NINA contracts.
+4. Independently review the model-to-operation validation and recovery from partial changes.
+5. In the approved desktop environment, start with a different routing mode and submit the natural-language request once. Observe Chrome traffic through the VPN and a control app's traffic direct. Inject an Apply or verification failure and prove the previous settings and session return. Record configured-only status when traffic evidence is unavailable.
+6. Test normal manual Apply, subscription refresh and Connect/Stop with the route enabled and disabled. Confirm the agent uses the same routing semantics as the existing controls.
 
 ## Outcome
 
-Planning. Confirmed that vpnctl main includes NINA's deployed diagnostic endpoint and recognizes both credential forms. Reviewed the subscription resolver, HTTP client, diagnostics and privacy contract at the desktop base. NINA's draft action schema is a separate worktree change. Product implementation and verification are pending.
+Revised the product goal to execution, verification and undo. Confirmed that VPNRouter has a shared Apply path for its desktop and service modes. The current Fix Problems action provides a local snapshot pattern and retries with the old MTU; the agent needs to verify and restore the whole change it owns. Product implementation and verification are pending.
