@@ -253,10 +253,10 @@ public static partial class ConfigGenerator
             !string.IsNullOrEmpty(s.OutboundId) &&
             string.Equals(s.OutboundId, target.DetourVia, StringComparison.OrdinalIgnoreCase)).ToList();
 
-        if (upstreams.Count != 1 || !SubscriptionChainSelection.IsUsableChainUpstream(upstreams[0]))
+        if (upstreams.Count != 1)
         {
             throw new InvalidOperationException(
-                "ConfigGenerator: chained target references an absent, non-unique, or unusable upstream in active servers.");
+                "ConfigGenerator: chained target references an absent or non-unique upstream in active servers.");
         }
 
         var upstream = upstreams[0];
@@ -265,6 +265,12 @@ public static partial class ConfigGenerator
         {
             throw new InvalidOperationException(
                 "ConfigGenerator: chained upstream uses unsupported protocol/transport — only VLESS is supported.");
+        }
+
+        if (targetProto == "vmess" && !SubscriptionChainSelection.IsUsableChainUpstream(upstream))
+        {
+            throw new InvalidOperationException(
+                "ConfigGenerator: chained VMess target references an unusable upstream.");
         }
 
         var upstreamOutbound = BuildVlessOutbound(upstream, "chain-entry");

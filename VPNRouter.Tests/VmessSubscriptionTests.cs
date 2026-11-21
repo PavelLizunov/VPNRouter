@@ -349,6 +349,22 @@ public sealed class VmessSubscriptionTests
     }
 
     [Fact]
+    public void Generate_ChainedVmessTargetWithInvalidRealityEntry_FailsClosed()
+    {
+        var entry = ServerUriParser.Parse(VlessUri("203.0.113.9", "entry-node-1"));
+        entry.Reality.PublicKey = "invalid";
+        var target = ServerUriParser.Parse(VmessUri(StandardPayload(
+            outbound: "target-node-1", detour: "entry-node-1"), "VMess Exit"));
+        var settings = CreateSettings(entry, target);
+        settings.Vless.ActiveServer = target.Name;
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ConfigGenerator.Generate(CreateProfile(), new[] { "Discord.exe" }, settings));
+
+        Assert.Contains("unusable upstream", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ChainSelection_RefreshWithNewOpaqueIds_KeepsVmessTarget()
     {
         var oldEntry = ServerUriParser.Parse(VlessUri("203.0.113.9", "entry-old"));
