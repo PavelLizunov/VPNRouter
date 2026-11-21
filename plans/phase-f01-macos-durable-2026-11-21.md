@@ -302,6 +302,40 @@ live acceptance.
   teardown. It has read-only repository access and publishes no assets.
 - The native contract and all six managed checks passed at `74c0dd4f`
   before the live test was added. Managed run 44865608490 passed.
+- The independent review accepted the localized legacy-process error,
+  readiness check, staged-file sync and transaction fixture at `74c0dd4f`.
+  Non-blocking notes cover checking both legacy flags again in managed
+  readiness and extending coverage of the exact fsync argument list.
+- The real system acceptance job passed on macOS 26.7.2 in run
+  44866723437 at `34cccce6569294e3d8144d9159fcf1ff45b986b5`. Job
+  136731927636 recorded three logical CPUs, 7 GiB RAM, 97 GiB free
+  disk, no swap use, and initial hosted-image load 107.11. The built
+  `VPNRouter-v2.51.0-r1-mac.zip` was 82,009,149 bytes with SHA-256
+  `4598e10ced274bb4b9f755e20ac69bbe9dc8d02d1b4cbd882545720125a8f4ed`.
+  The fixture installed the packaged root helper and runtime, removed
+  the benign legacy grant, verified the new exact per-user grant and
+  probe, created and removed the TUN under standard user UID 600, and
+  confirmed the default route was unchanged. The hosted job made no
+  release or tag. Interactive administrator approval and host DNS/pf
+  recovery were not in that test.
+- DNS ownership change: the native helper captures the system's pre-change
+  DNS in a root-owned 0600 snapshot. It allows DNS apply for the invoking
+  user's live runtime and restore for that user's stopped runtime. Start,
+  Stop and DNS changes share a host transition lock. A pending snapshot of
+  another uid blocks Start so the old owner can restore it. Restore
+  requests carry no service or server data. User-owned snapshots from
+  earlier versions are ignored. Firewall ownership needs a separate
+  change and live acceptance.
+- DNS snapshot test preflight: macOS 26.5.2, 10 logical CPUs, load
+  1.78, 16 GiB RAM (44,955 free and 281,399 inactive 16 KiB pages),
+  1,174 MiB free swap, 82 GiB free disk, no compiler jobs, and Command
+  Line Tools clang available. All six managed jobs passed at `34cccce6`
+  in run 44866739967.
+- Native helper compilation with warnings as errors, DNS contract
+  fixtures and the installer cases passed for `packaging/macos` from
+  tree `6c7211e7875b77eb3bb145f92c3c544fe7c26596`. These cases check
+  manual and automatic system DNS responses and reject ambiguous
+  output. No real network service was changed in this test.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

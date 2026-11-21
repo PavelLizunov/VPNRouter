@@ -114,7 +114,8 @@ public class MacPrivilegedClientTests : IDisposable
         var client = new MacPrivilegedClient(fake);
 
         Assert.True(client.Stop(4321, 1234));
-        Assert.True(client.DnsSet("Wi-Fi", new[] { "1.1.1.1", "empty" }));
+        Assert.True(client.DnsApply("Wi-Fi", "172.19.0.1"));
+        Assert.True(client.DnsRestore());
 
         Assert.Equal(new[] { "-n", MacPrivilegePaths.HelperPath }, fake.RunCalls[0].Arguments);
         using var stop = JsonDocument.Parse(fake.RunCalls[0].StdinInput!);
@@ -123,11 +124,13 @@ public class MacPrivilegedClientTests : IDisposable
         Assert.Equal(1234, stop.RootElement.GetProperty("start_time").GetInt64());
 
         using var dns = JsonDocument.Parse(fake.RunCalls[1].StdinInput!);
-        Assert.Equal("dns_set", dns.RootElement.GetProperty("op").GetString());
+        Assert.Equal("dns_apply", dns.RootElement.GetProperty("op").GetString());
         Assert.Equal("Wi-Fi", dns.RootElement.GetProperty("service").GetString());
-        Assert.Equal(new[] { "1.1.1.1", "empty" },
-            dns.RootElement.GetProperty("servers").EnumerateArray()
-                .Select(value => value.GetString()).ToArray());
+        Assert.Equal("172.19.0.1", dns.RootElement.GetProperty("server").GetString());
+        using var restore = JsonDocument.Parse(fake.RunCalls[2].StdinInput!);
+        Assert.Equal(new[] { "version", "op" },
+            restore.RootElement.EnumerateObject().Select(property => property.Name));
+        Assert.Equal("dns_restore", restore.RootElement.GetProperty("op").GetString());
     }
 
     [Fact]

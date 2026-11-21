@@ -379,6 +379,31 @@ static int request_op(const char *json, char *out, size_t capacity)
     return result;
 }
 
+static void test_dns_snapshot_parsing(void)
+{
+    struct dns_snapshot snapshot = {0};
+    char manual[] = "192.0.2.1\r\n2001:db8::1\n";
+    expect(parse_dns_servers(manual, &snapshot) == 0 && snapshot.count == 2 &&
+           strcmp(snapshot.servers[0], "192.0.2.1") == 0 &&
+           strcmp(snapshot.servers[1], "2001:db8::1") == 0,
+           "the helper snapshots the system IPv4 and IPv6 DNS list");
+
+    char automatic[] = "There aren't any DNS Servers set on Fixture.\n";
+    expect(parse_dns_servers(automatic, &snapshot) == 0 && snapshot.count == 0,
+           "the helper snapshots the system response for automatic DNS");
+    char ambiguous[] = "unknown service\n";
+    expect(parse_dns_servers(ambiguous, &snapshot) != 0,
+           "an unexpected system response is rejected");
+    char blank[] = "";
+    expect(parse_dns_servers(blank, &snapshot) != 0,
+           "empty output does not authorize replacing resolver settings");
+    expect(valid_dns_service("Fixture Wi-Fi") && !valid_dns_service("-fixture") &&
+           !valid_dns_service("fixture\nservice"), "network service names are bounded");
+    expect(equal_dns_address("2001:db8::1", "2001:0db8::0001") &&
+           !equal_dns_address("192.0.2.1", "192.0.2.2"),
+           "system readback compares addresses independently of their text format");
+}
+
 int main(void)
 {
     test_json_structure();
@@ -391,6 +416,7 @@ int main(void)
     test_wide_object_keys();
     test_structural_key_casing();
     test_runtime_components();
+    test_dns_snapshot_parsing();
 
     const char *valid =
         "{\"log\":{\"output\":\"\"},"

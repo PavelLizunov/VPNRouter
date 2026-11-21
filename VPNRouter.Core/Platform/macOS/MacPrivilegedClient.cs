@@ -116,19 +116,21 @@ public sealed class MacPrivilegedClient
         return RunOk(request, TimeSpan.FromSeconds(10));
     }
 
-    public bool DnsSet(string service, IReadOnlyList<string> servers)
+    public bool DnsApply(string service, string server)
     {
         var request = new JsonObject
         {
             ["version"] = JsonValue.Create(1),
-            ["op"] = "dns_set",
+            ["op"] = "dns_apply",
             ["service"] = service,
-            ["servers"] = new JsonArray(servers
-                .Select(server => (JsonNode?)JsonValue.Create(server))
-                .ToArray()),
+            ["server"] = server,
         };
         return RunOk(request, TimeSpan.FromSeconds(15));
     }
+
+    public bool DnsRestore() =>
+        RunOk(new JsonObject { ["version"] = JsonValue.Create(1), ["op"] = "dns_restore" },
+            TimeSpan.FromSeconds(15));
 
     public bool DnsFlush()
     {

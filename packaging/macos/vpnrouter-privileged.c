@@ -54,6 +54,10 @@
 #define SESSION_PATH_FMT ROOT_RUN "/%u/session.json"
 #define SESSION_LOCK_FMT ROOT_RUN "/%u/session.lock"
 #define STATE_LOCK_FMT ROOT_RUN "/%u/state.lock"
+#define HOST_NETWORK_LOCK_PATH ROOT_RUN "/host-network.lock"
+#define DNS_STATE_PATH ROOT_RUN "/dns-state"
+#define DNS_SNAPSHOT_VERSION 1
+#define MAX_DNS_SERVERS 8
 #define MAX_PROCESSES 16384
 #define STATE_LOCK_WAIT_STEPS 500
 #define STATE_LOCK_WAIT_USEC 10000
@@ -91,6 +95,7 @@ static int process_is_root_runtime(int pid, uint64_t start_time);
 static int read_session_record(uid_t uid, int *pid, uint64_t *start_time);
 static int write_session_record(uid_t uid, int pid, uint64_t start_time);
 static int delete_session_record(uid_t uid);
+static int command_dns_flush(void);
 static int parse_stop_identity(const char *json, size_t length, int *pid,
                                uint64_t *start_time);
 static int session_lock_path(char *path, size_t capacity, uid_t uid);
@@ -1570,11 +1575,8 @@ static int try_lock_exclusive(int fd)
     return result;
 }
 
-static int acquire_state_lock(uid_t uid)
+static int acquire_transition_lock(const char *path)
 {
-    char path[PATH_MAX];
-    if (state_lock_path(path, sizeof(path), uid) != 0)
-        return -1;
     int fd = open_root_lock(path, 1);
     if (fd < 0)
         return -1;
@@ -1590,6 +1592,14 @@ static int acquire_state_lock(uid_t uid)
     close(fd);
     errno = EWOULDBLOCK;
     return -1;
+}
+
+static int acquire_state_lock(uid_t uid)
+{
+    char path[PATH_MAX];
+    if (state_lock_path(path, sizeof(path), uid) != 0)
+        return -1;
+    return acquire_transition_lock(path);
 }
 
 static int acquire_session_lease(uid_t uid)
@@ -1655,8 +1665,6 @@ static int command_start(const char *request_json, size_t request_length,
         strlen(expected_hash) != 64)
         return EXIT_INPUT;
 
-    if (ensure_root_layout(uid) != 0)
-        fail(EXIT_STATE, "root runtime layout is unavailable");
     if (legacy_policy_state_path(LEGACY_POLICY_PATH) != LEGACY_ABSENT)
         fail(EXIT_STATE, "legacy policy removal is unconfirmed");
     if (verify_runtime_artifact() != 0)
@@ -1785,9 +1793,6 @@ static int command_stop(const char *request_json, size_t request_length, uid_t u
         return EXIT_INPUT;
     if (pid == getpid() || pid == getppid())
         return EXIT_INPUT;
-
-    if (ensure_root_layout(uid) != 0)
-        return EXIT_STATE;
 
     int state_lock = acquire_state_lock(uid);
     if (state_lock < 0)
@@ -2075,93 +2080,176 @@ static int command_probe(uid_t uid, const char *home)
     return 0;
 }
 
-static int command_dns_set(const char *request_json, size_t request_length)
-{
-    struct doc request;
-    if (parse_doc((char *)request_json, request_length, &request) != 0)
-        return EXIT_INPUT;
+struct dns_snapshot {
+    uint32_t version;
+    uint32_t owner;
+    uint32_t count;
     char service[128];
-    if (json_string(&request, 0, "service", service, sizeof(service)) != 0 ||
-        service[0] == '\0' || strlen(service) > 100)
-        return EXIT_INPUT;
-    for (const char *p = service; *p != '\0'; p++)
-        if ((unsigned char)*p < 0x20 || *p == 0x7f)
-            return EXIT_INPUT;
+    char servers[MAX_DNS_SERVERS][INET6_ADDRSTRLEN];
+};
 
-    int servers = object_get(&request, 0, "servers");
-    if (servers < 0 || request.tokens[servers].type != JSMN_ARRAY ||
-        request.tokens[servers].size < 1 || request.tokens[servers].size > 8)
-        return EXIT_INPUT;
+static int is_dns_address(const char *value)
+{
+    unsigned char address[16];
+    return inet_pton(AF_INET, value, address) == 1 ||
+           inet_pton(AF_INET6, value, address) == 1;
+}
 
-    char out[65536];
+static int equal_dns_address(const char *left, const char *right)
+{
+    unsigned char first[16];
+    unsigned char second[16];
+    if (inet_pton(AF_INET, left, first) == 1)
+        return inet_pton(AF_INET, right, second) == 1 && memcmp(first, second, 4) == 0;
+    return inet_pton(AF_INET6, left, first) == 1 &&
+           inet_pton(AF_INET6, right, second) == 1 &&
+           memcmp(first, second, sizeof(first)) == 0;
+}
+
+static int valid_dns_service(const char *service)
+{
+    size_t length = strnlen(service, 128);
+    if (length == 0 || length > 100 || service[0] == '-')
+        return 0;
+    for (size_t i = 0; i < length; i++) {
+        unsigned char c = (unsigned char)service[i];
+        if (c < 0x20 || c == 0x7f)
+            return 0;
+    }
+    return 1;
+}
+
+static int parse_dns_servers(char *output, struct dns_snapshot *snapshot)
+{
+    snapshot->count = 0;
+    char *save = NULL;
+    for (char *line = strtok_r(output, "\r\n", &save); line != NULL;
+         line = strtok_r(NULL, "\r\n", &save)) {
+        static const char no_dns[] = "There aren't any DNS Servers set on ";
+        if (strncmp(line, no_dns, sizeof(no_dns) - 1) == 0 &&
+            snapshot->count == 0 && strtok_r(NULL, "\r\n", &save) == NULL)
+            return 0;
+        if (snapshot->count >= MAX_DNS_SERVERS || !is_dns_address(line))
+            return -1;
+        strcpy(snapshot->servers[snapshot->count++], line);
+    }
+    return snapshot->count > 0 ? 0 : -1;
+}
+
+static int read_dns_snapshot(struct dns_snapshot *snapshot)
+{
+    struct stat st;
+    if (lstat(DNS_STATE_PATH, &st) != 0)
+        return errno == ENOENT ? 0 : -1;
+    char buffer[sizeof(*snapshot) + 1];
+    size_t length = 0;
+    if (read_file_checked(DNS_STATE_PATH, 0, 0077, sizeof(buffer), buffer, &length) != 0)
+        return -1;
+    if (length != sizeof(*snapshot))
+        return -1;
+
+    memcpy(snapshot, buffer, sizeof(*snapshot));
+    if (snapshot->version != DNS_SNAPSHOT_VERSION || snapshot->owner == 0 ||
+        snapshot->count > MAX_DNS_SERVERS ||
+        !valid_dns_service(snapshot->service))
+        return -1;
+    for (uint32_t i = 0; i < snapshot->count; i++) {
+        if (memchr(snapshot->servers[i], '\0', sizeof(snapshot->servers[i])) == NULL ||
+            !is_dns_address(snapshot->servers[i]))
+            return -1;
+    }
+    return 1;
+}
+
+static int read_service_dns(struct dns_snapshot *snapshot)
+{
+    char out[8192];
     char err[8192];
     int code = -1;
-    char *const list_argv[] = { "/usr/sbin/networksetup", "-listallnetworkservices", NULL };
-    if (run_capture("/usr/sbin/networksetup", list_argv, out, sizeof(out), err,
-                    sizeof(err), &code) != 0 || code != 0)
-        return EXIT_COMMAND;
+    char *const args[] = {
+        "/usr/sbin/networksetup", "-getdnsservers", snapshot->service, NULL
+    };
+    if (run_capture(args[0], args, out, sizeof(out), err, sizeof(err), &code) != 0 ||
+        code != 0)
+        return -1;
+    return parse_dns_servers(out, snapshot);
+}
 
-    int found = 0;
-    char *save = NULL;
-    for (char *line = strtok_r(out, "\n", &save); line != NULL;
-         line = strtok_r(NULL, "\n", &save)) {
-        while (*line == ' ' || *line == '\t')
-            line++;
-        if (*line == '*')
-            line++;
-        while (*line == ' ' || *line == '\t')
-            line++;
-        size_t length = strlen(line);
-        while (length > 0 && (line[length - 1] == '\r' || line[length - 1] == ' '))
-            line[--length] = '\0';
-        if (strcmp(line, service) == 0) {
-            found = 1;
-            break;
-        }
+static int apply_service_dns(struct dns_snapshot *snapshot)
+{
+    char *args[4 + MAX_DNS_SERVERS];
+    args[0] = "/usr/sbin/networksetup";
+    args[1] = "-setdnsservers";
+    args[2] = snapshot->service;
+    if (snapshot->count == 0) {
+        args[3] = "empty";
+        args[4] = NULL;
+    } else {
+        for (uint32_t i = 0; i < snapshot->count; i++)
+            args[3 + i] = snapshot->servers[i];
+        args[3 + snapshot->count] = NULL;
     }
-    if (!found)
+    if (run_checked(args[0], args) != 0)
+        return -1;
+    struct dns_snapshot actual = *snapshot;
+    if (read_service_dns(&actual) != 0 || actual.count != snapshot->count)
+        return -1;
+    for (uint32_t i = 0; i < actual.count; i++) {
+        if (!equal_dns_address(actual.servers[i], snapshot->servers[i]))
+            return -1;
+    }
+    return 0;
+}
+
+static int has_live_session(uid_t uid)
+{
+    int pid;
+    uint64_t start_time;
+    return read_session_record(uid, &pid, &start_time) == 0 &&
+           process_is_root_runtime(pid, start_time);
+}
+
+static int command_dns_apply(const struct doc *request, uid_t uid)
+{
+    if (!has_live_session(uid))
+        return EXIT_STATE;
+    struct dns_snapshot requested = { .owner = (uint32_t)uid, .count = 1 };
+    if (json_string(request, 0, "service", requested.service,
+                    sizeof(requested.service)) != 0 ||
+        !valid_dns_service(requested.service) ||
+        json_string(request, 0, "server", requested.servers[0],
+                    sizeof(requested.servers[0])) != 0 ||
+        !is_dns_address(requested.servers[0]))
         return EXIT_INPUT;
 
-    char *argv[16];
-    int argc = 0;
-    argv[argc++] = "/usr/sbin/networksetup";
-    argv[argc++] = "-setdnsservers";
-    argv[argc++] = service;
-
-    int index = servers + 1;
-    int elements = request.tokens[servers].size;
-    for (int element = 0; element < elements; element++) {
-        if (index >= request.count)
-            return EXIT_INPUT;
-        char value[128];
-        if (json_unescape(&request, index, value, sizeof(value)) != 0)
-            return EXIT_INPUT;
-        unsigned char address[16];
-        if (strcmp(value, "empty") != 0 &&
-            inet_pton(AF_INET, value, address) != 1 &&
-            inet_pton(AF_INET6, value, address) != 1)
-            return EXIT_INPUT;
-        if (argc >= (int)(sizeof(argv) / sizeof(argv[0])) - 1)
-            return EXIT_INPUT;
-        argv[argc++] = strdup(value);
-        if (argv[argc - 1] == NULL)
+    struct dns_snapshot original = { .version = DNS_SNAPSHOT_VERSION, .owner = (uint32_t)uid };
+    int loaded = read_dns_snapshot(&original);
+    if (loaded < 0 || (loaded > 0 && original.owner != (uint32_t)uid))
+        return EXIT_STATE;
+    if (loaded == 0 || strcmp(original.service, requested.service) != 0) {
+        if (loaded > 0 && apply_service_dns(&original) != 0)
+            return EXIT_COMMAND;
+        strcpy(original.service, requested.service);
+        if (read_service_dns(&original) != 0)
+            return EXIT_COMMAND;
+        if (write_root_file(DNS_STATE_PATH, &original, sizeof(original), 0600) != 0)
             return EXIT_STATE;
-        index = token_skip(&request, index);
-        if (index < 0)
-            return EXIT_INPUT;
     }
-    argv[argc] = NULL;
+    return apply_service_dns(&requested) == 0 ? 0 : EXIT_COMMAND;
+}
 
-    char out2[8192];
-    char err2[8192];
-    int set_code = -1;
-    int result = run_capture("/usr/sbin/networksetup", (char *const *)argv,
-                             out2, sizeof(out2), err2, sizeof(err2), &set_code);
-    for (int i = 3; i < argc; i++)
-        free(argv[i]);
-    if (result != 0 || set_code != 0)
+static int command_dns_restore(uid_t uid)
+{
+    struct dns_snapshot original = {0};
+    int loaded = read_dns_snapshot(&original);
+    if (loaded == 0)
+        return 0;
+    if (loaded < 0 || original.owner != (uint32_t)uid || has_live_session(uid))
+        return EXIT_STATE;
+    if (apply_service_dns(&original) != 0)
         return EXIT_COMMAND;
-    return 0;
+    (void)command_dns_flush();
+    return unlink(DNS_STATE_PATH) == 0 ? 0 : EXIT_STATE;
 }
 
 static int command_dns_flush(void)
@@ -2347,14 +2435,27 @@ int main(void)
         require_no_legacy_runtime(pw->pw_dir);
         return 0;
     }
-    if (strcmp(op, "start") == 0)
+    if (strcmp(op, "start") == 0 || strcmp(op, "stop") == 0 ||
+        strcmp(op, "dns_apply") == 0 || strcmp(op, "dns_restore") == 0 ||
+        strcmp(op, "dns_flush") == 0) {
+        if (ensure_root_layout(uid) != 0 || acquire_transition_lock(HOST_NETWORK_LOCK_PATH) < 0)
+            fail(EXIT_STATE, "could not acquire the host network transition lock");
+    }
+    if (strcmp(op, "start") == 0) {
+        struct dns_snapshot snapshot = {0};
+        int loaded = read_dns_snapshot(&snapshot);
+        if (loaded < 0 || (loaded > 0 && snapshot.owner != (uint32_t)uid))
+            fail(EXIT_STATE, "another user's network settings must be restored before starting");
         return command_start(request_json, request_length, uid, pw->pw_dir);
+    }
     if (strcmp(op, "stop") == 0)
         return command_stop(request_json, request_length, uid);
-    if (strcmp(op, "dns_set") == 0)
-        return command_dns_set(request_json, request_length);
+    if (strcmp(op, "dns_apply") == 0)
+        return command_dns_apply(&request, uid);
+    if (strcmp(op, "dns_restore") == 0)
+        return command_dns_restore(uid);
     if (strcmp(op, "dns_flush") == 0)
-        return command_dns_flush();
+        return has_live_session(uid) ? command_dns_flush() : EXIT_STATE;
     if (strcmp(op, "pf_apply") == 0)
         return command_pf_apply(request_json, request_length, uid);
     if (strcmp(op, "pf_flush") == 0)
