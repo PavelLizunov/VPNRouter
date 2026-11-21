@@ -10,14 +10,16 @@ public partial class MainWindowViewModel
     /// helper's probe is the only readiness authority; no user-writable marker
     /// or direct sudoers write exists here.
     /// </summary>
-    private bool EnsureMacPrivilege()
+    private string? EnsureMacPrivilege()
     {
         StatusText = Strings.MacPrivilegeSetupRunning;
-        var ready = MacPrivilegedSetup.EnsureInstalled(_logger);
-        if (ready) return true;
+        var result = MacPrivilegedSetup.EnsureInstalled(_logger);
+        if (result == MacPrivilegeSetupResult.Ready)
+            return null;
 
-        _logger.Error("[VM] macOS privileged helper is not ready; blocking Connect");
-        StatusText = Strings.MacPrivilegeSetupRequired;
-        return false;
+        _logger.Error("[VM] macOS privileged helper setup blocked Connect ({Result})", result);
+        return result == MacPrivilegeSetupResult.LegacySessionActive
+            ? Strings.MacPrivilegeLegacySessionActive
+            : Strings.MacPrivilegeSetupRequired;
     }
 }

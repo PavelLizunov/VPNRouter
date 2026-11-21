@@ -4,25 +4,32 @@ using Serilog;
 
 namespace VPNRouter.Core.Platform.macOS;
 
+public enum MacPrivilegeSetupResult
+{
+    NotReady,
+    Ready,
+    LegacySessionActive,
+}
+
 /// <summary>
 /// Managed install/migration state machine for the macOS privileged helper.
 /// The helper probe is authoritative; a user-writable marker is never used.
 /// </summary>
 public static class MacPrivilegedSetup
 {
-    public static bool EnsureInstalled(ILogger logger)
+    public static MacPrivilegeSetupResult EnsureInstalled(ILogger logger)
     {
         if (!OperatingSystem.IsMacOS())
-            return false;
+            return MacPrivilegeSetupResult.NotReady;
 
         var client = new MacPrivilegedClient(logger: logger);
         var state = client.Probe();
         if (IsCurrent(state, out var helperHash, out var singboxHash))
-            return true;
+            return MacPrivilegeSetupResult.Ready;
         if (state.LegacyProcess)
         {
             logger.Error("[MacPrivilege] Stop the previous VPNRouter session before migrating the helper");
-            return false;
+            return MacPrivilegeSetupResult.LegacySessionActive;
         }
 
         var helperPath = Path.Combine(AppContext.BaseDirectory, MacPrivilegePaths.HelperBundleName);
@@ -35,7 +42,7 @@ public static class MacPrivilegedSetup
                 "[MacPrivilege] Bundled privileged artifacts are missing, linked, or in a writable directory; Connect is blocked " +
                 "(helper={Helper}, template={Template}, singbox={SingBox})",
                 File.Exists(helperPath), File.Exists(templatePath), File.Exists(singboxPath));
-            return false;
+            return MacPrivilegeSetupResult.NotReady;
         }
 
         try
@@ -46,7 +53,7 @@ public static class MacPrivilegedSetup
             {
                 logger.Error(
                     "[MacPrivilege] Bundled sudoers template does not render exactly one managed helper rule; Connect is blocked");
-                return false;
+                return MacPrivilegeSetupResult.NotReady;
             }
 
             helperHash = MacPrivilegedClient.ComputeFileSha256(helperPath);
@@ -55,19 +62,21 @@ public static class MacPrivilegedSetup
                 ReadInstallerScript(), rendered, helperPath, singboxPath, helperHash, singboxHash,
                 AppVersion.Version, Environment.UserName);
             var result = RunElevated(command, logger);
-            if (!result)
-                return false;
+            if (result != MacPrivilegeSetupResult.Ready)
+                return result;
 
             var after = client.Probe();
+            if (after.LegacyProcess)
+                return MacPrivilegeSetupResult.LegacySessionActive;
             if (!IsCurrent(after, out _, out _))
-                return false;
+                return MacPrivilegeSetupResult.NotReady;
             logger.Information("[MacPrivilege] Managed helper installed or refreshed");
-            return true;
+            return MacPrivilegeSetupResult.Ready;
         }
         catch (Exception ex)
         {
             logger.Error(ex, "[MacPrivilege] Managed installation failed; Connect is blocked");
-            return false;
+            return MacPrivilegeSetupResult.NotReady;
         }
     }
 
@@ -167,7 +176,16 @@ public static class MacPrivilegedSetup
         }
     }
 
-    private static bool RunElevated(string shellCommand, ILogger logger)
+    internal static MacPrivilegeSetupResult ReadInstallerResult(int exitCode, string stdout, string stderr)
+    {
+        if (exitCode == 0 && stdout.Contains("install-privileged: managed policy=2 uid=", StringComparison.Ordinal))
+            return MacPrivilegeSetupResult.Ready;
+        if (exitCode != 0 && stderr.Contains("vpnrouter-legacy-runtime-active", StringComparison.Ordinal))
+            return MacPrivilegeSetupResult.LegacySessionActive;
+        return MacPrivilegeSetupResult.NotReady;
+    }
+
+    private static MacPrivilegeSetupResult RunElevated(string shellCommand, ILogger logger)
     {
         var psi = new ProcessStartInfo("/usr/bin/osascript")
         {
@@ -183,7 +201,7 @@ public static class MacPrivilegedSetup
         if (process is null)
         {
             logger.Error("[MacPrivilege] Could not start osascript");
-            return false;
+            return MacPrivilegeSetupResult.NotReady;
         }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
@@ -192,20 +210,16 @@ public static class MacPrivilegedSetup
         {
             try { process.Kill(entireProcessTree: true); } catch { }
             logger.Error("[MacPrivilege] Administrator installation timed out");
-            return false;
+            return MacPrivilegeSetupResult.NotReady;
         }
 
         var stdout = stdoutTask.GetAwaiter().GetResult();
         var stderr = stderrTask.GetAwaiter().GetResult();
-        if (process.ExitCode != 0 ||
-            !stdout.Contains("install-privileged: managed policy=2 uid=", StringComparison.Ordinal))
-        {
+        var result = ReadInstallerResult(process.ExitCode, stdout, stderr);
+        if (result != MacPrivilegeSetupResult.Ready)
             logger.Warning(
                 "[MacPrivilege] Administrator installation exit={Exit} stdout={Out} stderr={Err}",
                 process.ExitCode, stdout.Trim(), stderr.Trim());
-            return false;
-        }
-
-        return true;
+        return result;
     }
 }

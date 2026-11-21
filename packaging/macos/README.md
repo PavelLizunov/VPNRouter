@@ -107,10 +107,13 @@ the hashes of the source and staged artifacts. It validates the exact policy
 with `visudo -cf` and checks for the old root runtime before and after removing
 `/private/etc/sudoers.d/vpnrouter`.
 
-The installer verifies the ownership, modes and hashes of the installed
+The installer flushes the staged files before publishing them and verifies
+the ownership, modes and hashes of the installed
 helper, runtime and manifest before publishing the per-user rule. It removes
 the new rule if the installed helper fails its readiness probe. The app
 allows Connect after its own probe confirms readiness and the artifact hashes.
+When migration detects an active legacy instance, Connect reports the old
+session and how to stop it. The installer never restores the legacy grant.
 
 An open descriptor holds the kernel installation lock until the shell exits.
 The lock file stays in the protected directory. The kernel releases the lock

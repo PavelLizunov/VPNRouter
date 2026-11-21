@@ -1925,7 +1925,7 @@ static void require_no_legacy_runtime(const char *home)
     int state = find_legacy_runtime_process(home);
     if (state != 0)
         fail(EXIT_STATE, state > 0
-            ? "legacy user-runtime process is still running"
+            ? "legacy user-runtime process is still running [vpnrouter-legacy-runtime-active]"
             : "legacy user-runtime process state is unknown");
 }
 
@@ -2343,7 +2343,7 @@ int main(void)
         return command_probe(uid, pw->pw_dir);
     if (strcmp(op, "migration_check") == 0) {
         if (verify_fixed_chain() != 0)
-            return EXIT_STATE;
+            fail(EXIT_STATE, "protected system directory chain is invalid");
         require_no_legacy_runtime(pw->pw_dir);
         return 0;
     }

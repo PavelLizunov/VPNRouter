@@ -68,4 +68,17 @@ public class MacPrivilegedSetupContractTests
         Assert.Empty(helper);
         Assert.Empty(singbox);
     }
+
+    [Theory]
+    [InlineData(0, "install-privileged: managed policy=2 uid=501", "", MacPrivilegeSetupResult.Ready)]
+    [InlineData(0, "", "", MacPrivilegeSetupResult.NotReady)]
+    [InlineData(1, "", "user cancelled", MacPrivilegeSetupResult.NotReady)]
+    [InlineData(1, "install-privileged: managed policy=2 uid=501", "", MacPrivilegeSetupResult.NotReady)]
+    [InlineData(1, "", "execution error: vpnrouter-legacy-runtime-active (66)", MacPrivilegeSetupResult.LegacySessionActive)]
+    [InlineData(1, "", "execution error: vpnrouter-legacy-runtime-active (78)", MacPrivilegeSetupResult.LegacySessionActive)]
+    public void Installer_result_reports_a_legacy_session_without_claiming_readiness(
+        int exitCode, string stdout, string stderr, MacPrivilegeSetupResult expected)
+    {
+        Assert.Equal(expected, MacPrivilegedSetup.ReadInstallerResult(exitCode, stdout, stderr));
+    }
 }

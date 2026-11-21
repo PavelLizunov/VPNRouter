@@ -467,6 +467,9 @@ public static partial class Strings
     public static string MacPrivilegeSetupRequired => Ru
         ? "Не удалось установить защищённый компонент macOS. Подключение остановлено; повторите и подтвердите запрос администратора."
         : "The macOS privileged helper is not ready. Connect was stopped; retry and approve the administrator prompt.";
+    public static string MacPrivilegeLegacySessionActive => Ru
+        ? "Предыдущая сессия VPNRouter ещё активна. Отключите VPN в предыдущей версии и повторите подключение. Если отключение недоступно, перезагрузите Mac."
+        : "A previous VPNRouter session is still active. Disconnect in the previous version and try again. If you cannot disconnect, restart your Mac.";
     public static string LinuxTunSandboxUnsupported => Ru
         ? "Эта песочница не позволяет sing-box создать системный TUN-интерфейс. Запустите VPNRouter вне AppImage/bubblewrap, например из нативного пакета дистрибутива."
         : "This sandbox cannot let sing-box create the host TUN interface. Run VPNRouter outside AppImage/bubblewrap, for example from a native distro package.";

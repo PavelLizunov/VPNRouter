@@ -261,12 +261,30 @@ verify_root_artifact "$helper_tmp" 0755 "$helper_sha256"
 verify_root_artifact "$singbox_tmp" 0755 "$singbox_sha256"
 
 check_legacy_runtime() {
-    printf '%s' '{"version":1,"op":"migration_check"}' |
-        env -i SUDO_UID="$uid" "$helper_tmp" 9>&-
+    if ! printf '%s' '{"version":1,"op":"migration_check"}' |
+        env -i SUDO_UID="$uid" "$helper_tmp" 9>&-; then
+        echo "install-privileged: legacy runtime check failed ($1)" >&2
+        exit 66
+    fi
 }
 
 # Check before removal so an active legacy instance can still be stopped.
-check_legacy_runtime
+check_legacy_runtime before-grant-removal
+
+cat > "$manifest_tmp" <<EOF
+{"schema_version":1,"policy_version":2,"app_version":"$app_version","helper_sha256":"$helper_sha256","singbox_sha256":"$singbox_sha256"}
+EOF
+chown root:wheel "$manifest_tmp"
+chmod 0600 "$manifest_tmp"
+manifest_sha256="$(file_sha256 "$manifest_tmp")"
+
+# Flush the complete staged files before any of the final names are replaced.
+/usr/bin/perl -MIO::Handle -e '
+    for my $path (@ARGV) {
+        open my $file, "<", $path or die "open $path: $!\n";
+        $file->sync or die "sync $path: $!\n";
+    }
+' "$helper_tmp" "$singbox_tmp" "$manifest_tmp" "$policy_tmp" 9>&-
 
 # Remove the legacy grant before replacing executable artifacts.
 if [ -e "$LEGACY_POLICY" ] || [ -L "$LEGACY_POLICY" ]; then
@@ -277,14 +295,7 @@ if [ -e "$LEGACY_POLICY" ] || [ -L "$LEGACY_POLICY" ]; then
     exit 66
 fi
 
-check_legacy_runtime
-
-cat > "$manifest_tmp" <<EOF
-{"schema_version":1,"policy_version":2,"app_version":"$app_version","helper_sha256":"$helper_sha256","singbox_sha256":"$singbox_sha256"}
-EOF
-chown root:wheel "$manifest_tmp"
-chmod 0600 "$manifest_tmp"
-manifest_sha256="$(file_sha256 "$manifest_tmp")"
+check_legacy_runtime after-grant-removal
 
 # Publish the rule only after independently checking the installed set.
 mv -f "$helper_tmp" "$HELPER_DEST"
@@ -308,6 +319,10 @@ probe_output="$(printf '%s' '{"version":1,"op":"probe"}' | env -i SUDO_UID="$uid
 }
 case "$probe_output" in
     *'"ready":true'*) ;;
+    *'"legacy_process":true'*)
+        echo "install-privileged: vpnrouter-legacy-runtime-active" >&2
+        exit 78
+        ;;
     *) echo "install-privileged: helper is not ready after installation" >&2; exit 78 ;;
 esac
 

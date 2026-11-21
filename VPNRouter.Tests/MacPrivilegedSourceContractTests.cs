@@ -270,15 +270,16 @@ public class MacPrivilegedSourceContractTests
     public void Installer_checks_legacy_runtime_and_artifacts_before_publishing_the_rule()
     {
         var script = Read("packaging", "macos", "install-privileged.sh");
-        const string migrationCheck = "check_legacy_runtime\n";
-        var firstCheck = script.IndexOf(migrationCheck, StringComparison.Ordinal);
+        var firstCheck = script.IndexOf("check_legacy_runtime before-grant-removal", StringComparison.Ordinal);
+        var stagedFlush = script.IndexOf("$file->sync", StringComparison.Ordinal);
         var legacyRemoval = script.IndexOf("rm -f \"$LEGACY_POLICY\"", StringComparison.Ordinal);
-        var secondCheck = script.LastIndexOf(migrationCheck, StringComparison.Ordinal);
+        var secondCheck = script.IndexOf("check_legacy_runtime after-grant-removal", StringComparison.Ordinal);
         var replaceHelper = script.IndexOf("mv -f \"$helper_tmp\" \"$HELPER_DEST\"", StringComparison.Ordinal);
         var publishRule = script.IndexOf("mv -f \"$policy_tmp\" \"$policy_path\"", StringComparison.Ordinal);
-        Assert.True(firstCheck >= 0 && legacyRemoval > firstCheck && secondCheck > legacyRemoval &&
+        Assert.True(firstCheck >= 0 && stagedFlush > firstCheck && legacyRemoval > stagedFlush &&
+                    secondCheck > legacyRemoval &&
                     replaceHelper > secondCheck && publishRule > replaceHelper,
-            "The installer must check for the old runtime around legacy rule removal.");
+            "The installer must check for the old runtime and flush staged files around legacy rule removal.");
 
         foreach (var path in new[] { "HELPER_DEST", "ROOT_BIN", "MANIFEST" })
         {

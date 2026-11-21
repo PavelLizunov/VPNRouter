@@ -277,9 +277,9 @@ public partial class MainWindowViewModel
                 var skipConflictCheck = _skipVpnConflictThisSession;
                 if (OperatingSystem.IsMacOS())
                 {
-                    var ready = await Task.Run(EnsureMacPrivilege);
-                    if (!ready)
-                        throw new InvalidOperationException(Strings.MacPrivilegeSetupRequired);
+                    var setupError = await Task.Run(EnsureMacPrivilege);
+                    if (setupError != null)
+                        throw new InvalidOperationException(setupError);
                 }
                 if (startOverride == null)
                     await PrepareColdStartAsync();

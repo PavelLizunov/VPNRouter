@@ -16,3 +16,4 @@ clang -std=c11 -O1 -g -Wall -Wextra -Werror -Wno-unused-function \
     "$ROOT/tests/contract-tests.c"
 
 ASAN_OPTIONS=detect_leaks=0 "$TMP/contract-tests"
+bash "$ROOT/tests/installer-transaction.sh"

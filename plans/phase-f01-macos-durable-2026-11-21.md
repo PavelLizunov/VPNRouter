@@ -248,6 +248,36 @@ live acceptance.
   `e886872b51a10cd285dc90c8a29bf1c6757c96e4`. A static comparison of
   the four component lists and the reserved-key list matched both
   implementations. Managed execution and live acceptance are pending.
+- Independent installer review of `51793ef9` accepted staged and
+  installed artifact checks and grant rollback. An old process can still
+  appear between the first scan and legacy grant removal. The installer
+  refuses it on the second scan or readiness probe, and leaves the
+  unsafe grant removed. The app needs to report the resulting migration
+  reason through the Connect error path.
+- Installer review follow-ups: the process scan is limited to the
+  invoking user's exact legacy path and can miss an uninspectable
+  process. A directory-chain failure needs its own diagnostic. Policy
+  publication needs a pre-rename file flush and a repeatable CI fixture.
+  On the macOS worker, the system Perl IO::Handle sync operation passed
+  on a disposable file. This verifies the primitive only.
+- The installer now carries the active-legacy reason from the native
+  scan or final probe through the localized Connect error. It logs a
+  protected-directory failure separately and flushes all staged files
+  before publishing them. The new CI fixture runs the production
+  publication and cleanup code on temporary files with simulated ownership.
+  The exact-path process scan and live first-install behavior still need
+  acceptance on macOS.
+- Migration diagnostic preflight: macOS 26.5.2, 10 logical CPUs, load
+  1.80, 16 GiB RAM (36,134 free and 285,434 inactive 16 KiB pages),
+  1,174 MiB free swap, 84 GiB free disk, no compiler jobs, and Command
+  Line Tools clang available. All eight checks passed at `747100f0`,
+  including managed run 44864672980.
+- On the macOS worker, native compilation and contract tests passed for
+  `packaging/macos` from tree `35c868c60789b38bfc7faa6dd1cf0c05c70a5bb3`.
+  All eight transaction cases passed, including legacy detection by the
+  final probe, rollback and preserving an existing rule if rename fails.
+  The staged-file flush passed on a temporary file. No live installer
+  or privilege changes were made.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time
