@@ -1,0 +1,3 @@
+# vpnrouter policy v2 (managed; do not edit)
+# Root-owned launcher; no user-writable executables or wildcard arguments.
+{{USER}} ALL=(root) NOPASSWD: /Library/PrivilegedHelperTools/com.vpnrouter.privileged

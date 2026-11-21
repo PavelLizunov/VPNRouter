@@ -252,7 +252,7 @@ jobs:
 
           <h2>macOS <span class="plat">(Apple Silicon, via Homebrew Cask)</span></h2>
           <pre>brew install --cask pavellizunov/vpnrouter/vpnrouter</pre>
-          <p>Installs to <code>/Applications/VPNRouter.app</code>. First launch prompts once for sudoers setup, then passwordless. Updates: <code>brew upgrade --cask vpnrouter</code>.</p>
+          <p>Installs to <code>/Applications/VPNRouter.app</code>. First Connect offers a one-time privileged-helper setup in the app, then passwordless. Updates: <code>brew upgrade --cask vpnrouter</code>.</p>
 
           <h2>Windows <span class="plat">(10 / 11, x64)</span></h2>
           <p>Run in PowerShell (auto-elevates via UAC):</p>

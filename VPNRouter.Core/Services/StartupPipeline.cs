@@ -3,6 +3,7 @@ using System.IO;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -182,6 +183,10 @@ internal sealed class StartupPipeline
             ct.ThrowIfCancellationRequested();
         }
 
+        if (OperatingSystem.IsMacOS())
+            configJson = VPNRouter.Core.Platform.macOS.MacPrivilegedConfigContract
+                .EnsureControllerSecret(configJson);
+
         var monitorController = context.Mode == StartupMode.HotReload ? default :
             ClashSingBoxApi.ReadLocalController(configJson);
         if (context.Mode != StartupMode.HotReload)
@@ -251,7 +256,10 @@ internal sealed class StartupPipeline
 
         ct.ThrowIfCancellationRequested();
 
-        var firewall = (_host as StartupHostInternal)?.Firewall;
+        var runtimeHost = _host as StartupHostInternal;
+        var firewall = runtimeHost?.Firewall;
+        if (firewall is MacFirewallManager macFirewall && runtimeHost?.SingBox is { } runtime)
+            macFirewall.TrackRuntimeLaunch(() => runtime.MacPrivilegeLaunchId);
         if (firewall is ICommittedFirewallConfig committedFirewall)
         {
             var isFullTunnel = (settings.App.RoutingMode ?? "split")

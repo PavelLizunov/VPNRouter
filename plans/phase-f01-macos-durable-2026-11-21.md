@@ -1,0 +1,654 @@
+# F-01 macOS durable privileged helper adaptation (2026-11-21)
+
+- Owner: implementation sub-agent for the Standard 2.51.0-r1 F-01 task
+- Base: `d8675207093b748cb015b919787bcad426637482` (PR #713 head)
+- Imported prototype: `/home/slovn/Work/VPNRouter-f01-defensive-20261120`,
+  base `6066dd593f47f82a45eae4d55be0d5e4ca429a28`, working diff
+  `git diff --binary` SHA-256
+  `c8ffa9656223f9469947d8e056d6b110306a2884ea304093a7a9238b1fe799d3`.
+- Worktree: `/home/slovn/Work/_worktrees/VPNRouter/f01-durable-20261121`
+- Risk: HIGH. This owns the macOS root boundary, first-install migration and
+  the privileged runtime contract.
+- Rollback: revert the task branch. No tag, release or public artifact is
+  created by this change.
+
+## Why
+
+The prior askpass patch was rejected as closure: it left the invoking user
+handling the password, blocked standard accounts without a sudoers grant, and
+still executed user-writable code/config as root. The prototype already has the
+right shape: one root-owned helper, one exact sudoers rule, root-owned runtime
+and staged config. This task imports that shape on the current #713 tree and
+closes the decisive authority gaps found in review.
+
+## What
+
+Imported from the prototype (strict JSON parser included):
+
+- `packaging/macos/vpnrouter-privileged.c`, `jsmn.h`, installer and template.
+- `MacPrivilegePaths`, `MacPrivilegePolicy`, `MacPrivilegedClient`,
+  `MacPrivilegedConfigContract`, `MacPrivilegedSetup`.
+- macOS DNS, pf, DNS flush, sing-box launch/stop integration.
+- Root-owned config staging and exact-PID stop request.
+
+Adaptations in this task:
+
+1. Protected directory chain: the installer and helper verify root ownership,
+   non-symlink status and exact modes for `/Library`,
+   `/Library/Application Support`, `/Library/PrivilegedHelperTools`, `/etc` and
+   `/etc/sudoers.d`; the installer also rejects linked/group-writable source
+   files and source directory chains.
+2. Exact session ownership: `start` writes a root-owned per-uid session record
+   (`pid` + Unix start seconds) after validating the config and before
+   `execve`; `stop` requires that record, the invoking `SUDO_UID`, the root
+   runtime path, root ownership and the exact start time. A live session cannot
+   be replaced by a concurrent start.
+3. Legacy migration is tri-state: `probe` reports `legacy_state` as `absent`,
+   `present` or `unknown`; `unknown` and `present` are not ready. The installer
+   removes the legacy file and verifies its absence before publishing the new
+   policy.
+4. Policy publication is exact: the installer accepts only one non-comment line
+   equal to `<user> ALL=(root) NOPASSWD: /Library/PrivilegedHelperTools/com.vpnrouter.privileged`;
+   the app renders and validates the same template before elevation.
+5. Root artifact provenance: the helper verifies the root-owned runtime against
+   the root-owned manifest before `start`; `probe` already verifies helper,
+   runtime, manifest and policy.
+6. Controller narrowing: the config contract adds a validated per-config Clash
+   secret before the app reads the endpoint; the helper requires it. Hot reload
+   remains disabled on privileged macOS. `v2ray_api`, external-UI download keys
+   and Clash cache mode keys are forbidden.
+7. Native PR CI: `.github/workflows/macos-privileged.yml` compiles the helper and
+   runs the typed C contract tests on `macos-latest` without tags or artifacts.
+
+Preserved from #713: Android private readiness, desktop Simple/Stop status and
+all existing platform behavior outside the macOS privilege boundary.
+
+## Invariants
+
+1. The only sudoers command is the root-owned helper path with no arguments.
+2. Root executes only a root-owned runtime and a root-owned staged config that
+   the helper validated from a private user-owned file.
+3. Stop requires the per-uid session record, not only a PID/start-time guess.
+4. An unknown legacy path blocks readiness; absence and presence are distinct.
+5. Every controller key is loopback-only and secret-protected.
+6. A failed install, migration, validation or authorization blocks Connect.
+7. The app bundle is unsigned; the one-time administrator prompt remains the
+   installer trust anchor.
+
+## Verification
+
+Record PASS, FAIL, BLOCKED or N/A with evidence. Do not run builds, privileged
+commands or live-host tests on the development workstation.
+
+1. Build: macOS hosted workflow compiles the helper and the app; full solution
+   build on an authorized worker.
+2. Tests: `packaging/macos/tests/run-tests.sh`; `MacPrivilege*`,
+   `MacPrivileged*`, `MacDnsHardeningTests`, `MacFirewallManagerTests`,
+   `SingBoxManagerProcessRunnerTests`, `UnixOwnedProcessSignalTests`; full
+   applicable suite.
+3. Docs: `packaging/macos/README.md`, `packaging/AGENTS.md`, platform map and the
+   user guide describe the helper, migration and secret.
+4. Review: independent review of this exact diff; F-01 stays open until then.
+5. Live: disposable macOS 12+ standard-user Connect/Stop, legacy fixture,
+   cancellation, DNS/pf restore. Not run here.
+6. Characterization: no public ViewModel surface split; #713 desktop/Android
+   tests remain the baseline.
+
+## Evidence and limits
+
+- Source import and static checks were performed in the isolated worktree.
+- The pinned core release asset
+  `sing-box-1.14.4-vpnctl.2-darwin-universal.zip` has GitHub digest
+  `c3f7efa244d376017fb346c0bb8ffcfc77be36cdba170efc42dc9cd84d57a6f0`,
+  matching `build-mac.sh`.
+- Tag source `experimental/clashapi/configs.go` was read: `PUT /configs` is a
+  no-op; `PATCH /configs` only changes mode. The other registered handlers do
+  not accept a config path or reload a caller file.
+- No local C/.NET build, no root install, no live macOS test, no tag, no push
+  and no public artifact. These remain evidence limits.
+
+## Outcome
+
+The review of the original staged tree found a blocking gap in validation
+of privileged runtime capabilities. The pinned core can register outbound
+types outside the managed client profile. The helper must allow only reviewed
+outbound, endpoint and DNS types, reject caller-directed execution and file
+options, and reject noncanonical spellings of the structural keys. Match the
+managed validator to the native boundary and use inert synthetic tests.
+
+The same review identified outstanding session and installation work. The
+installer now verifies copied artifacts before replacement and binds the
+approved script and policy to the prompt. Publishing a managed grant still
+needs an independent installed-state check and failure handling. The
+installation authorization does not establish publisher identity for an
+unsigned bundle. Concurrent start/stop, legacy process readiness, and
+session ownership of host-global DNS/pf require additional changes before
+live acceptance.
+
+- Status: PARTIAL. Source adaptation complete; build, tests, independent
+  review and live macOS acceptance are pending.
+- Integration preflight observed `/etc` as a symlink to `private/etc` and
+  `/Library/Application Support` as root:admin, mode 0755. The installer and
+  helper now validate the real sudoers path and accept that protected
+  Application Support directory. Installer cleanup is registered only after
+  lock acquisition, and copied binaries are checked before publication.
+- The app embeds the installer and sends its bytes in the authorization
+  request. The elevated shell starts with an empty environment.
+- On `mac-worker`, the native helper compiled under production warning flags
+  and the unsanitized native contract tests passed for `ac9bb52f`. The
+  sanitizer run was terminated after it stalled initializing shadow memory
+  before test entry. Hosted sanitizer results and managed .NET tests remain
+  pending. The worker only has .NET 8.
+- Hosted native tests with sanitizers passed at `0de7b32` in run
+  44858184386. The separately dispatched .NET run 44858134050 found one
+  failure on both Linux and Windows. The managed controller check
+  rejected the bracketed IPv6 loopback value `[::1]:9090`. The fix
+  normalizes the parsed host using the same approach as `ClashSingBoxApi`.
+- Exact-head .NET tests passed on Linux and Windows at `94754f0` in
+  run 44859003172. IPv6 loopback passed on both platforms. The native and
+  Android checks also passed.
+- Follow-up review confirmed the canonical macOS paths, installer script
+  snapshot, staging hashes, and lock ownership. It found that the policy
+  template could still be reopened after approval and that a process killed
+  during installation could leave a stale lock directory. The app now sends
+  policy bytes in the authorization request. The installer accepts exactly
+  the managed comments and rule and locks a file descriptor. A non-root
+  macOS fixture confirmed that a concurrent process is refused and that
+  another process can acquire the lock after the holder is killed.
+- Read-only worker check on macOS 26.5.2 reported `root:wheel 0755` for
+  `/Library`, `/private`, `/private/etc`, and `/private/etc/sudoers.d`.
+  `/Library/Application Support` was `root:admin 0755`. `ls -lde` reported
+  the sticky bit on `/Library/PrivilegedHelperTools` and no extended ACLs
+  on the inspected directories. Native tests pin the uid, group, mode and
+  sticky-bit acceptance logic. The checks assume no write-granting ACL
+  on these system directories. Live installer and Connect/Stop tests are
+  still pending.
+- The C helper and managed contract now allow only the generated root sections
+  plus `$schema`, with explicit outbound, endpoint and DNS server types.
+  Canonical key checks guard the new selectors and reject privileged file
+  or process options. The macOS import path refuses unsupported sections
+  and types. Added inert fixtures for both validators, including the
+  generated DNSTT and WireGuard components.
+- On the macOS worker, BSD stat confirmed `%Lp` returns `755` for the
+  sticky helper directory, while `%Op` returns `41755`. The installer now
+  checks the full mode with the same mask as the helper. Native fixtures
+  cover acceptance of sticky and rejection of setuid and setgid bits.
+- Native worker preflight for the component validation delta: macOS 26.5.2,
+  10 logical CPUs, load 1.80, 16 GiB RAM (14,964 free and 286,836 inactive
+  16 KiB pages), 1,174 MiB free swap, 86 GiB available on the internal disk,
+  and no compiler jobs. The Command Line Tools clang is available.
+- At `dcd39bd2`, the native helper compiled and its contract fixtures
+  passed on the worker and under sanitizers in run 44861491261. Android
+  compile passed in run 44861491242. All six managed CI jobs passed in
+  run 44861518880.
+- The native session code now takes a per-user transition lock and a
+  runtime lifetime lease before changing assets, staging config or
+  publishing the session record. Stop uses the same transition lock and
+  confirms process identity before signaling. The runtime starts with a
+  private root-owned working directory and temporary directory.
+- The root helper checks the legacy grant and passively looks for a root
+  process at the invoking user's old runtime path before start. Probe
+  reports this process separately. The app surfaces the dependency on
+  stopping the old process when an installed helper detects it. Installer
+  policy publication and host-wide DNS and pf ownership remain separate
+  gates. The new fixtures cover the identity parser, exact legacy path,
+  and kernel lock behavior on temporary files.
+- Native session test preflight: macOS 26.5.2, 10 logical CPUs, load
+  1.76, 16 GiB RAM (43,815 free and 285,954 inactive 16 KiB pages),
+  1,174 MiB free swap, 86 GiB free disk, no active compiler jobs,
+  and the Command Line Tools clang available.
+- Native production compilation with warnings as errors, installer shell
+  syntax, and all contract fixtures passed on the macOS worker for
+  `packaging/macos` from tree `2bdfa17e724d6bedc8c08ed84d10c539d421ee59`.
+- Installer transaction follow-up: check for a running legacy instance
+  before removing its grant, verify the installed bytes and permissions
+  against the authorization before publishing the policy, and remove the
+  new grant on a failed readiness probe. Verify this on inert fixtures
+  and keep the live macOS migration gate open.
+- Installer verification preflight: macOS 26.5.2, 10 logical CPUs, load
+  2.26, 16 GiB RAM (40,721 free and 285,958 inactive 16 KiB pages), 1,174
+  MiB free swap, 86 GiB free disk, no compiler jobs, and Command Line
+  Tools clang available. Checks and managed CI passed on `dca7329c` before
+  this change, including run 44862528652.
+- Worker native compile and contract tests passed with `packaging/macos`
+  from tree `26449dd6bd578f1ea0d6e6ff6ddd501c4b242674`. An unprivileged
+  shell fixture exercised those transaction functions with temporary
+  files, real modes and link counts, simulated installed ownership and
+  a fake helper probe. A failed probe and a simulated interruption after
+  rename removed the new rule. Artifact hash, mode and hard-link failures
+  prevented publication. A failed rename preserved the existing rule.
+  No system paths or installed sudoers state were changed.
+- Independent review of `dcd39bd2` confirmed the matching component
+  allowlists. It found that the allowed Shadowsocks outbound accepts
+  plugin options with privileged file-loading behavior. The tagged
+  `v1.14.4-vpnctl.2` SIP003 and TLS source confirms this capability.
+  Both validators now deny the plugin keys, including case variants,
+  and accept plain Shadowsocks. Inert fixtures cover both outcomes.
+- The review also found that imports reach the macOS contract after
+  compatibility conversion at Connect, and noted differences in
+  deprecated Clash cache fields and null objects. The import preflight
+  needs to preserve conversion of legacy DNS and route entries.
+- The validators reject unmanaged cache file and cache ID fields and the
+  pinned spelling of the legacy FakeIP store option. Managed preparation
+  also rejects explicitly null log, route and rule-set nodes, consistent with
+  the helper. The component allowlists have a parity test.
+- All eight checks passed at `51793ef9`, including managed run 44863698961.
+- The independent lifecycle review of `dca7329c` accepted per-user lock
+  ordering and the record identity checks. Its legacy removal ordering
+  finding is addressed by the pre-removal check in `51793ef9`. First-install
+  failure still lacks a distinct localized reason, and the passive scan
+  covers the exact legacy path for the invoking user. The real runtime's
+  lock inheritance and live start and stop remain unverified.
+- Plugin restriction test preflight: macOS 26.5.2, 10 logical CPUs, load
+  2.36, 16 GiB RAM (38,283 free and 285,086 inactive 16 KiB pages),
+  1,174 MiB free swap, 85 GiB free disk, no compiler jobs, and Command
+  Line Tools clang available.
+- The isolated-service fixture compiled with warnings as errors for
+  tree `44fd9811e7c376ae59ba69f222137e6735d20d87`. Shell syntax and
+  the non-hosted refusal passed. The ordinary macOS worker was not
+  used for a live network mutation.
+- Hosted macOS 26.7.2 accepted the isolated service in run 44869123893
+  at `388e2138cf76aa6f90e9b48e8c53651770c16114`. Job 136739429721
+  built an 82,010,342-byte candidate ZIP with SHA-256
+  `165a720da71b57182b67fee060787fa5a22f7877cfdbf510299c3242cbbc1369`.
+  After helper migration it set the fixture DNS to the TUN address under
+  the standard user and restored the original address after Stop. The
+  populated default route was unchanged and the fixture address stayed
+  out of the active DNS resolver configuration.
+- Independent DNS review accepted the caller and ownership model at
+  `b6aad387` with no P0 or P1 confirmed in that slice. The hosted positive
+  fixture now covers actual system writes. Recovery remains untested for
+  a renamed or deleted network service, a corrupt root snapshot, and a
+  root runtime left running after a desktop crash. Retaining a stable
+  service ID would allow renamed service recovery without applying a
+  user-supplied path or treating a rename as deletion. Recovery of a
+  surviving root runtime must distinguish a dead owner from another live
+  desktop instance. Legacy user-owned DNS files remain untrusted.
+- Native compilation with warnings as errors and all native fixtures
+  passed for `packaging/macos` from tree
+  `e886872b51a10cd285dc90c8a29bf1c6757c96e4`. A static comparison of
+  the four component lists and the reserved-key list matched both
+  implementations. Managed execution and live acceptance are pending.
+- Independent installer review of `51793ef9` accepted staged and
+  installed artifact checks and grant rollback. An old process can still
+  appear between the first scan and legacy grant removal. The installer
+  refuses it on the second scan or readiness probe, and leaves the
+  unsafe grant removed. The app needs to report the resulting migration
+  reason through the Connect error path.
+- Installer review follow-ups: the process scan is limited to the
+  invoking user's exact legacy path and can miss an uninspectable
+  process. A directory-chain failure needs its own diagnostic. Policy
+  publication needs a pre-rename file flush and a repeatable CI fixture.
+  On the macOS worker, the system Perl IO::Handle sync operation passed
+  on a disposable file. This verifies the primitive only.
+- The installer now carries the active-legacy reason from the native
+  scan or final probe through the localized Connect error. It logs a
+  protected-directory failure separately and flushes all staged files
+  before publishing them. The new CI fixture runs the production
+  publication and cleanup code on temporary files with simulated ownership.
+  The exact-path process scan and live first-install behavior still need
+  acceptance on macOS.
+- Migration diagnostic preflight: macOS 26.5.2, 10 logical CPUs, load
+  1.80, 16 GiB RAM (36,134 free and 285,434 inactive 16 KiB pages),
+  1,174 MiB free swap, 84 GiB free disk, no compiler jobs, and Command
+  Line Tools clang available. All eight checks passed at `747100f0`,
+  including managed run 44864672980.
+- On the macOS worker, native compilation and contract tests passed for
+  `packaging/macos` from tree `35c868c60789b38bfc7faa6dd1cf0c05c70a5bb3`.
+  All eight transaction cases passed, including legacy detection by the
+  final probe, rollback and preserving an existing rule if rename fails.
+  The staged-file flush passed on a temporary file. No live installer
+  or privilege changes were made.
+- Independent review accepted the Shadowsocks restriction at `747100f0`
+  and confirmed that plain generated profiles omit both plugin keys. The
+  managed run 44864672980 and the native and Android checks passed on that
+  commit. The specific plugin P0 is closed in code and CI. Imported
+  profiles that explicitly serialize empty plugin fields still fail at
+  Connect. Live migration remains open under the F-01 P1.
+- An unprivileged macOS AppleScript fixture verified that a shell failure
+  passes the legacy-process marker to osascript stderr for status 66 and
+  78. This confirms error transport without exercising an admin prompt.
+- The release DMG workflow requires an immutable version tag even when
+  uploads are disabled. Use a disposable GitHub-hosted macOS job at an
+  exact commit for pre-release installation acceptance. Exercise the
+  packaged helper with a dedicated standard-user fixture account, an
+  inert legacy policy, real installed ownership, the helper probe and an
+  isolated TUN start and stop with no default route changes. This can
+  validate the system boundary without publishing a tag. Interactive
+  administrator approval and live DNS and firewall coverage remain needed.
+- Live system acceptance will run as a separate check for macOS changes on
+  a same-repository PR. It checks out the exact source head, builds a local
+  package on the disposable hosted runner, migrates a benign legacy rule for
+  a fixture account, and checks the real standard-user helper, TUN, and
+  teardown. It has read-only repository access and publishes no assets.
+- The native contract and all six managed checks passed at `74c0dd4f`
+  before the live test was added. Managed run 44865608490 passed.
+- The independent review accepted the localized legacy-process error,
+  readiness check, staged-file sync and transaction fixture at `74c0dd4f`.
+  Non-blocking notes cover checking both legacy flags again in managed
+  readiness and extending coverage of the exact fsync argument list.
+- The real system acceptance job passed on macOS 26.7.2 in run
+  44866723437 at `34cccce6569294e3d8144d9159fcf1ff45b986b5`. Job
+  136731927636 recorded three logical CPUs, 7 GiB RAM, 97 GiB free
+  disk, no swap use, and initial hosted-image load 107.11. The built
+  `VPNRouter-v2.51.0-r1-mac.zip` was 82,009,149 bytes with SHA-256
+  `4598e10ced274bb4b9f755e20ac69bbe9dc8d02d1b4cbd882545720125a8f4ed`.
+  The fixture installed the packaged root helper and runtime, removed
+  the benign legacy grant, verified the new exact per-user grant and
+  probe, created and removed the TUN under standard user UID 600, and
+  confirmed the default route was unchanged. The hosted job made no
+  release or tag. Interactive administrator approval and host DNS/pf
+  recovery were not in that test.
+- DNS ownership change: the native helper captures the system's pre-change
+  DNS in a root-owned 0600 snapshot. It allows DNS apply for the invoking
+  user's live runtime and restore for that user's stopped runtime. Start,
+  Stop and DNS changes share a host transition lock. A pending snapshot of
+  another uid blocks Start so the old owner can restore it. Restore
+  requests carry no service or server data. User-owned snapshots from
+  earlier versions are ignored. Firewall ownership needs a separate
+  change and live acceptance.
+- DNS snapshot test preflight: macOS 26.5.2, 10 logical CPUs, load
+  1.78, 16 GiB RAM (44,955 free and 281,399 inactive 16 KiB pages),
+  1,174 MiB free swap, 82 GiB free disk, no compiler jobs, and Command
+  Line Tools clang available. All six managed jobs passed at `34cccce6`
+  in run 44866739967.
+- Native helper compilation with warnings as errors, DNS contract
+  fixtures and the installer cases passed for `packaging/macos` from
+  tree `6c7211e7875b77eb3bb145f92c3c544fe7c26596`. These cases check
+  manual and automatic system DNS responses and reject ambiguous
+  output. No real network service was changed in this test.
+- The disposable system check passed at `b6aad387` in run 44867905717.
+  The new DNS code leaves the tested migration and isolated TUN
+  start and stop working. The fixture does not apply system DNS.
+- Host firewall follow-up: the C helper must serialize pf changes with
+  Start, Stop and DNS. Its root-owned record must identify the host session
+  and the applied anchor or legacy mode. Recovery should use that record
+  and the stored pf token. A user-owned marker can log diagnostic state
+  but cannot authorize a root ruleset reload. An active owner prevents
+  cross-user cleanup. The kill switch must remain armed during an owned
+  crash and restart. Refresh the client identity after a confirmed
+  restart before attempting to release the new session's policy.
+- System acceptance review accepted the workflow and identified an
+  empty-route evidence gap and missing signal teardown. The fixture
+  now requires both default-route fields and traps INT and TERM. It
+  adds a disabled network service in a single SystemConfiguration
+  commit, then applies and restores DNS through the actual helper
+  with no changes to the active service. The system check reruns
+  on SDK, app version and generated-config changes.
+- The DNS commit `b6aad387` passed all nine checks, including
+  44867924231 and 44867905717. Test-fixture compile preflight: macOS
+  26.5.2, 10 logical CPUs, load 2.01, 16 GiB RAM (42,594 free and
+  281,378 inactive 16 KiB pages), 1,174 MiB free swap, 82 GiB free
+  disk, no compiler jobs, and Command Line Tools clang available.
+- The test-only SystemConfiguration helper compiled with warnings as
+  errors for tree `0030e550e42c6694adbbb9f8c8aa21f023bddc47`. The shell
+  syntax passed and the non-hosted invocation exited before privileged
+  work. The system test must still run on the disposable hosted image.
+- Live run 44868793106 at `c16feb63` installed the helper and passed
+  the standard-user probe. It stopped while configuring the DNS fixture:
+  `networksetup` reported the service disabled before TUN start. The
+  fixture now keeps the service enabled with both IP protocols disabled,
+  checks the DNS readback after each operation, and verifies that neither
+  fixture resolver is active. The production DNS contract is unchanged.
+- Retest fixture compile preflight: macOS 26.5.2, 10 logical CPUs, load
+  2.30, 16 GiB RAM (14,294 free and 282,946 inactive 16 KiB pages),
+  1,174 MiB free swap, 82 GiB free disk, no compiler jobs, and Command
+  Line Tools clang available.
+- Remaining defects: same-user access to the secret-protected Clash controller;
+  app-bundle authenticity remains unsigned; the durable read-only typed status
+  path is not implemented; CLI/Headless entry points do not run the one-time
+  installer prompt and fail closed until the desktop app installs the helper;
+  live migration and standard-user acceptance are unproven.
+
+## Host firewall ownership
+
+- Record one host runtime owner in the protected run directory before exec.
+  Serialize claim, Stop and firewall transitions under the existing host lock.
+  Preserve an owned policy across same-user runtime restart and refuse a
+  competing user's Start while that policy needs recovery.
+- Persist the actual PF release mode and enable reference under root. Replace
+  caller-selected flush/disable and user-marker interpretation with one release
+  operation. Allow explicit recovery for the recorded user after the runtime
+  exits. Preserve state on a failed release for retry.
+- Extend the disposable hosted system test with an isolated PF anchor and a
+  non-blocking loopback rule, verifying the anchor and its release while
+  keeping the DNS and default route checks. Expand the generated-config
+  workflow triggers. Keep full production auto-route, admin prompt, and
+  desktop acceptance distinct in the evidence.
+
+- Hosted and managed checks passed nine of nine at `388e2138`. The
+  earlier review of `c16feb63` corroborated the failed setup. The present
+  fixture uses an enabled service with both IP protocols disabled. Generated
+  config path triggers now include the partial generator, pipeline and import
+  files. If the fixture cannot confirm Stop, it keeps its records for
+  disposal of the runner instead of removing the helper under a live process.
+- PF requests carry the live host runtime's PID and start time. The desktop
+  binds on Start, Apply and confirmed health restart. An explicit owner
+  recovery request can reclaim policy only after the runtime exits. The
+  root state records the release mode before loading rules. Stop and restart
+  keep the enable reference until release. The app no longer interprets
+  a user-owned PF marker. Post-Stop recovery handles a replacement that
+  ended before the app could bind to it.
+- Native worker preflight: macOS 26.5.2, ten logical CPUs, load 1.71,
+  16 GiB RAM (14,222 free and 288,631 inactive 16 KiB pages), 1,174 MiB
+  free swap, 80 GiB free disk, no compiler jobs, and Command Line Tools
+  clang available. The helper compiled with warnings as errors and the
+  native contract and eight installer fixtures passed for tree
+  `8a579ba12cb51105222db920ac97705bb98e86b3`. The isolated DNS fixture
+  compiled and the system test passed shell syntax validation. The exact
+  native code and system fixture are unchanged by the final evidence edits.
+- The shared worker did not change PF, system DNS, or TUN state.
+- All nine checks passed at `77cd29af25318b904f4760b06aa03557bcce45a3`.
+  Managed run 44870659628 passed. Hosted macOS system run 44870653983
+  (job 136744184755, macOS 26.7.2) built an 82,011,472-byte ZIP with
+  SHA-256 `b55abcdd8f5dbf27c39e5d6a3bb49a91721c14f3f299e5f254393b45d3aa733d`.
+  The fixture migrated the helper, ran an isolated TUN, applied and
+  restored fixture-service DNS, and left the default route unchanged.
+  Visible PF assertions passed: repeated enable retained the same
+  reference, active recovery and mismatched session release preserved
+  the test anchor, and stopped recovery cleared the anchor and reference.
+  The test uses a non-blocking loopback rule. Full desktop kill-switch,
+  production auto-route and interactive admin-prompt acceptance remain open.
+
+### PF review follow-up
+
+- Store the PF reference in the atomically replaced root host record. Import
+  the previous development record under the host lock. Retire an unowned
+  legacy token only after the kernel confirms it is no longer held.
+- Check the kernel's PF status and reference list before claiming the filter
+  is enabled. Release only the stored reference. Make a retry safe when a
+  previous attempt already released it.
+- Retire the stopped owner's identity after recovery. Allow the active
+  monitor to arm policy after a crash until release finishes. Retain the
+  app's potential rules-loaded state after a failed release and retry.
+- Extend the disposable system test with an already-released reference,
+  old token-only metadata and a delayed request after stopped recovery.
+  Keep shared workers unprivileged and use the disposable runner for PF.
+
+- Review of `77cd29af` identified two conditional P1 cases: an orphaned
+  token file and a recorded reference with non-running PF. Both are covered
+  by the revised root record and kernel checks. The new hosted fixture
+  will verify reacquisition after releasing its own reference, clearance
+  of unowned legacy metadata, rejection after stopped recovery, and removal
+  of an old-boot record. A corrupt root record still fails closed with
+  an administrator-recovery diagnostic. An older unattached reference
+  that the kernel still holds requires a restart, with no caller-directed
+  global PF reset.
+- Shared-worker preflight: macOS 26.5.2, ten logical CPUs, load 1.79,
+  16 GiB RAM (54,530 free and 291,377 inactive 16 KiB pages), 1,174 MiB
+  free swap, 79 GiB free disk, no compiler jobs, and Command Line Tools
+  clang available. The production helper compiled with warnings as errors,
+  and the native contracts and eight installer cases passed for tree
+  `0223406d0af43dad527d378a0a322465836f5884`. The final test-only
+  past-boot scenario passed shell syntax validation. The shared worker
+  did not change PF, DNS, TUN state or privileged files.
+- All nine checks passed at `9a5e4124cab004b1ff5b7900b0f21f67642d517e`.
+  Managed run 44872682446 and system run 44872676308 passed. The hosted
+  macOS 26.7.2 job 136750470869 built an 82,012,546-byte ZIP with SHA-256
+  `ddb0dd0fafe8bc4e46d6937d6e085b72ac6d2bd582638cd429beeb2e832f14e1`.
+  PF stayed enabled after acquiring a replacement for the fixture's released
+  reference. The same run asserted stopped-session rejection, removal of
+  released token-only metadata and removal of simulated old-boot state.
+  Migration, isolated TUN, isolated DNS restoration and the default-route
+  check also passed. The desktop authorization prompt was outside this run.
+
+### Desktop re-arm and restart
+
+- Recheck the kernel on every armed Enable request. Reapply the committed
+  rules after a renewed enable reference. A managed loaded flag is bookkeeping
+  for refresh and teardown and cannot establish enforcement.
+- Assign each macOS launch a private correlation ID. The helper records it
+  with the root-owned session identity. The same manager can recover that
+  identity after an immediate exit, until stopped-session recovery retires it.
+  A previous manager must not get a replacement launch's identity.
+- Cover two managed regressions with fake runners: re-arm after a failed
+  refresh and rebinding after a failed lookup on replacement. Extend the
+  isolated system fixture to check lookup after Stop and reference release.
+  Continue to track full desktop/admin-prompt acceptance separately.
+
+- The exact reviewer found two desktop gaps despite the green kernel
+  fixture: re-arm trusted a managed loaded flag, and the first crash
+  after a restart could use the retired launch identity. The app now
+  obtains the helper identity for the manager's current launch on
+  demand, retries a transient lookup, and reapplies verified policy
+  whenever asked to arm. Health recovery arms the old launch before
+  its full restart. The isolated fixture now checks lookup by exact
+  launch, retrieval after runtime exit, retirement after recovery,
+  and actual disappearance of the fixture reference from the kernel.
+- Native preflight: macOS 26.5.2, ten logical CPUs, load 2.03,
+  16 GiB RAM (7,606 free, 304,159 inactive and 87,206 speculative
+  16 KiB pages), 1,174 MiB free swap, 75 GiB free disk, no compile
+  jobs or Android emulator, and Command Line Tools clang available.
+  The production helper compiled with warnings as errors. Contract
+  tests and eight installer cases passed at tree
+  `12770dc375e525eb1a10be071c7203b7ecfd5a86`. Shell syntax passed
+  for the hosted fixture. No live PF or DNS was changed on the worker.
+- All nine checks passed at `a87bd99b676dbac4bab5f9f7ab7a6a659a454ba8`.
+  Managed run 44874450904 and macOS system run 44874439931 passed.
+  Job 136755907871 built the 82,013,248-byte ZIP on macOS 26.7.2,
+  SHA-256 `ea8e23720e62ee66961a0569bf2cf7b18c904d5419c6873c2c656e8c47781f41`.
+  The standard-user helper fixture passed exact-launch lookup, rejected
+  a different launch ID, preserved lookup after exit until recovery,
+  verified removal of the fixture PF reference from the kernel, and
+  rejected lookup after recovery. The isolated DNS and route checks
+  passed. Real desktop UI and administrator authorization remain open.
+- Independent review confirmed both managed recovery fixes at
+  `a87bd99b`. It found no new confirmed blocker in the launch-binding
+  or PF re-arm delta. The old-session callback is filtered before work
+  and the helper matches the launch against root-owned state.
+  The review's residual coverage gaps are a full desktop restart,
+  real v1/v2 file migration and carrier refresh after outside mutation.
+  These do not contradict the isolated helper run. Checking available
+  isolated macOS desktops and administrator authorization is the remaining
+  acceptance work for F-01.
+
+### Transfer the hosted build to an isolated desktop
+
+- The HomeLab inventory has one physical Apple Silicon worker and no
+  existing macOS GUI guest. The shared host was running the Android
+  acceptance scenario when inspected. Keep the two scenarios serialized.
+  A logged-in standard-user session and a real administrator prompt are
+  required for desktop acceptance.
+- Retain the exact ZIP from the existing same-repository hosted system
+  job as a short-lived Actions artifact after the system checks pass.
+  Include the ZIP SHA-256. This supplies the tested bundle for a
+  disposable desktop and avoids an early release tag or a rebuild on
+  the shared physical Mac. No release asset or repository write token
+  is involved.
+
+### Bind desktop Stop to the privileged launch
+
+Standard-user desktop acceptance at `65c76913` displayed the system
+authorization dialog, installed the root-owned helper and opened the TUN.
+The guest could not reach the warm-up HTTPS target. On that Start failure,
+the app could not stop its own runtime: its handle named the sudo launcher,
+while the root-owned record identified the runtime under a different PID.
+The helper stopped the recorded runtime and removed the guest TUN during
+cleanup. Desktop acceptance remains open.
+
+Use the existing launch ID for managed Stop and failed-Start cleanup. The
+helper must resolve it under the host transition lock, require the recorded
+owner, and reuse exact runtime-stop verification. A foreign or missing
+launch cannot signal a PID. A launch that was never registered can release
+the app's TUN lease only after the launcher has exited. Unknown state must
+retain the lease for a Stop retry. Preserve the root-owned launch record
+until PF recovery so firewall teardown keeps its existing ownership check.
+
+Run the managed build and full suite in CI, including typed helper-response
+fixtures, and run native contracts and the hosted macOS system scenario.
+Cover a wrong launch ID while the TUN is live, an exact Stop, a repeat Stop,
+and DNS/PF restoration. Review the exact diff independently. Repeat the
+isolated desktop run with the exact package after CI. Exercise failed
+warm-up cleanup and ordinary Connect/Stop over a working guest network.
+No visual change or mechanical characterization is involved. If a
+regression is found, hold the candidate and revert this launch-stop delta
+without reverting the root-owned helper migration.
+
+Review found two Stop edge cases. The helper now refuses an unregistered
+request when a different live launch still belongs to the caller. A
+launcher that never spawned has no runtime and must release the app's
+lease even if the helper is unavailable. Failed helper responses log
+only stop status, timeout and whether the launcher was known to exit.
+The managed fixtures model the launch ID and test both refusal and
+pre-spawn cleanup on a hosted macOS runner.
+
+The first hosted managed macOS run passed the never-spawned cleanup and
+failover Stop refusal. The reload refusal fixture supplied an empty
+replacement config and exited at TUN validation before reaching Stop.
+The replacement now has an inert TUN and direct outbound. The fixture
+still requires Stop refusal to retain the original file, handle and
+TUN lease.
+
+At `7ed65abaa0da5019ce8ed6bad46a6ea3d1a36120`, all nine checks
+passed. Hosted macOS run 44893982376, attempt 2, job 136817083187
+passed managed Stop cases, exact Stop, isolated DNS restoration and
+PF reference recovery.
+
+The exact hosted ZIP passed the standard-user desktop lifecycle in an
+isolated macOS 15.7.7 guest. The app showed the actual administrator
+prompt and installed the helper after approval. Failed warm-up stopped
+the recorded root runtime and removed the TUN and session on both
+attempts. Two subsequent Connect/Stop cycles completed, each removing
+the root runtime and TUN. The guest used a per-app HTTPS proxy for the
+warm-up probe with normal TLS verification. This proves the desktop
+lifecycle. The hosted fixture supplies DNS/PF evidence, and the desktop
+run leaves DNS and PF unchanged in split/custom mode. The ZIP SHA-256
+was `909dc90f4ef0aea7b130c6552ed9801745a490265461b8248f8948d7e96f86fe`.
+
+Independent review accepted `9a316671..7ed65aba` for launch-bound
+Stop. It confirmed that a different live launch is left alone and that
+a launcher which never spawned can release its lease. Production logging
+still shows a generic unconfirmed Stop unless debug details are enabled.
+The never-spawned fixture exercises the manager with a fake handle.
+The broader signing and same-user trust questions remain tracked separately.
+
+### Hosted PF reacquisition follow-up
+
+Run 44905496602 at documentation-only `55e3b9ec` passed the managed Stop
+cases, helper migration, fixture TUN and DNS apply. It stopped before
+the PF reference replacement checkpoint, matching the first attempt at
+`7ed65aba`. The old fixture suppressed the output of the external
+release and did not report the failing line. The fixture now requires
+the recorded reference in the kernel before release and its absence
+afterward, matching the helper's release verification. It retains the
+replacement and teardown assertions and reports the failing line and
+release status. No production behavior is changed.
+Shell syntax and six inert cases passed for released, retained,
+initially absent and unreadable kernel references. Hosted validation
+is still pending.
+
+Hosted run 44906184467 at `fd5801d1` verified that the initial PF
+reference persisted across repeated Enable. The kernel then reported
+the first reference absent after external release (pfctl exit 0) and
+verified a replacement. Migration, isolated DNS restoration and
+stopped-runtime PF cleanup passed. The six jobs of run 44906189745
+also passed on that commit. The previously silent fixture failure did
+not repeat, so its exact cause is still unknown.
+
+The old writable NOPASSWD grant is resolved in the candidate. The
+reviewed implementation and hosted grant migration cover the authority
+boundary. The exact product build at `7ed65aba` supplied the
+administrator-prompt, failed-Start and Connect/Stop desktop evidence.
+Only the system-test script and plans changed through `fd5801d1`.
+The publisher-signing and same-user controller exposure are separate
+limitations already documented in the macOS trust contract.

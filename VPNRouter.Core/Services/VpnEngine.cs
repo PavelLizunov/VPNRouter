@@ -3,6 +3,7 @@ using System.Text.Json;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -687,6 +688,10 @@ public partial class VpnEngine : IDisposable
         }
 
         try { _firewall?.Dispose(); } catch { }
+        // Stop may follow a replacement before the health monitor can bind its
+        // new identity. The helper can recover only this user's inactive policy.
+        if (_firewall is MacFirewallManager macFirewall)
+            macFirewall.RecoverInactivePolicy();
 
         Volatile.Write(ref _acceptedTunnel, null);
         _singBox = null;

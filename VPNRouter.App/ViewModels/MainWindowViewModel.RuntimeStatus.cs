@@ -43,7 +43,9 @@ public partial class MainWindowViewModel
     public IBrush ZapretBadgeBrush  => BadgeBrush(ZapretRuntimeStatus);
     public IBrush TgProxyBadgeBrush => BadgeBrush(TgProxyRuntimeStatus);
 
-    public string VpnBadgeTooltip     => FormatTooltip(Strings.BadgeTooltipVpn, VpnRuntimeStatus);
+    public string VpnBadgeTooltip     => SmpStopUnconfirmed
+        ? Strings.TunnelStopUnconfirmed
+        : FormatTooltip(Strings.BadgeTooltipVpn, VpnRuntimeStatus);
     public string ZapretBadgeTooltip  => FormatTooltip(Strings.BadgeTooltipZapret, ZapretRuntimeStatus);
     public string TgProxyBadgeTooltip => FormatTooltip(Strings.BadgeTooltipTgProxy, TgProxyRuntimeStatus);
 
@@ -140,6 +142,9 @@ public partial class MainWindowViewModel
 
     internal void SyncConnectedWithVpnRuntime(bool vpnRunning)
     {
+        if (SmpStopUnconfirmed && _engine.HasActiveTunnel)
+            return;
+
         var action = ConnectionSyncPolicy.DecideRuntimeSync(
             vpnRunning,
             IsConnected,
@@ -162,6 +167,7 @@ public partial class MainWindowViewModel
                 MarkConnectedViaService();
                 return;
             case RuntimeSyncAction.MarkDisconnected:
+                SmpStopUnconfirmed = false;
                 IsConnected = false;
                 ConnectButtonText = Strings.StartVPN;
                 StatusText = Strings.NotConnected;
