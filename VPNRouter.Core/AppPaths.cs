@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using VPNRouter.Core.Platform.Linux;
 
 namespace VPNRouter.Core;
 
@@ -36,8 +37,9 @@ public static class AppPaths
     public static string SingBoxLogPath => Path.Combine(LogsDir, "singbox.log");
     public static string StatePath => Path.Combine(DataDir, "state.json");
     public static string ConfigYamlPath => Path.Combine(DataDir, "config.yaml");
-    public static string SingBoxExePath => Path.Combine(BinDir,
-        OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
+    public static string SingBoxExePath =>
+        LinuxDesktopPackage.TryGetProtectedRuntimePath(AppContext.BaseDirectory)
+        ?? Path.Combine(BinDir, OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
 
     internal static string BundledSingBoxExePath => Path.Combine(AppContext.BaseDirectory,
         OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");

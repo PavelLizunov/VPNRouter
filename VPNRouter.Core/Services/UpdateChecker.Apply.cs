@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using VPNRouter.Core.Platform.Linux;
 
 namespace VPNRouter.Core.Services;
 
@@ -139,6 +140,13 @@ public partial class UpdateChecker
 
         if (needsRoot)
         {
+            VerifyPrivilegedUpdateTree(sourceDir, installed: false);
+            VerifyPrivilegedUpdateTree(installDir, installed: true);
+            var (modeExit, _, _) = RunWithCapture(
+                "/bin/chmod", ["-R", "u=rwX,go=rX", "--", sourceDir], 30_000);
+            if (modeExit != 0)
+                throw new InvalidOperationException("Could not set readable permissions on the staged update.");
+
             const string helper = "/usr/libexec/vpnrouter-update-helper";
             var helperSupportsExactSignal = HelperSupportsExactOwnedSignal(helper);
             if (!helperSupportsExactSignal)
@@ -165,13 +173,14 @@ public partial class UpdateChecker
                         2   => " (helper: bad arguments)",
                         3   => " (helper: refused destination for safety)",
                         4   => " (helper: staging dir missing or not a directory)",
-                        5   => " (helper: source missing VPNRouter.App)",
+                        5   => " (helper: update files missing or unsupported)",
                         6   => " (helper: exact owned sing-box stop failed)",
                         _   => ""
                     };
                     throw new InvalidOperationException(
                         $"Update helper failed (exit {hExit}){hint}: {Truncate(hErr, 200)}".Trim());
                 }
+                VerifyPrivilegedUpdateTree(installDir, installed: true);
             }
         }
         else
@@ -247,11 +256,17 @@ public partial class UpdateChecker
     {
         var needsRoot = installDir.StartsWith("/opt/", StringComparison.OrdinalIgnoreCase) ||
                         installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
+        string[] executablePaths = [Path.Combine(installDir, "VPNRouter.App"),
+            Path.Combine(installDir, LinuxDesktopPackage.SingBoxFileName)];
+
+        if (needsRoot)
+            VerifyPrivilegedUpdateDestination(installDir, executablePaths);
 
         if (ownedTarget is { } target)
         {
             var hostPath = Environment.ProcessPath;
-            if (string.IsNullOrWhiteSpace(hostPath) || !Path.IsPathFullyQualified(hostPath))
+            if (string.IsNullOrWhiteSpace(hostPath) || !Path.IsPathFullyQualified(hostPath) ||
+                (needsRoot && !string.Equals(hostPath, executablePaths[0], StringComparison.Ordinal)))
                 throw new InvalidOperationException("Current VPNRouter helper executable is unavailable.");
 
             var helperArgs = SingBoxManager.BuildLinuxOwnedSignalHelperArguments(
@@ -275,9 +290,11 @@ public partial class UpdateChecker
 
         {
             var cpCmd = needsRoot ? pkexec! : "/bin/cp";
+            // Keep the root copy's umask independent of the caller; paths are positional arguments.
             var cpArgs = needsRoot
-                ? new[] { "cp", "-rfT", sourceDir, installDir }
-                : new[] { "-rfT", sourceDir, installDir };
+                ? new[] { "/bin/sh", "-c", "umask 022; exec /bin/cp -rfT --remove-destination -- \"$@\"", "vpnrouter-copy",
+                    sourceDir, installDir }
+                : new[] { "-rfT", "--", sourceDir, installDir };
             var (cpExit, _, cpErr) = RunWithCapture(cpCmd, cpArgs, 120_000);
             log($"cp exit={cpExit} stderr={Truncate(cpErr)}");
             if (cpExit != 0)
@@ -293,16 +310,76 @@ public partial class UpdateChecker
             }
         }
 
+        if (needsRoot)
+        {
+            VerifyPrivilegedUpdateTree(installDir, installed: true);
+            VerifyPrivilegedUpdateDestination(installDir, executablePaths);
+        }
+
         try
         {
             var chmodCmd = needsRoot ? pkexec! : "/bin/chmod";
             var chmodArgs = needsRoot
-                ? new[] { "chmod", "+x", $"{installDir}/VPNRouter.App", $"{installDir}/sing-box" }
-                : new[] { "+x", $"{installDir}/VPNRouter.App", $"{installDir}/sing-box" };
+                ? new[] { "/bin/chmod", "0755", "--", executablePaths[0], executablePaths[1] }
+                : new[] { "+x", "--", executablePaths[0], executablePaths[1] };
             var (chExit, _, chErr) = RunWithCapture(chmodCmd, chmodArgs, 10_000);
             log($"chmod exit={chExit} stderr={Truncate(chErr)}");
+            if (needsRoot && chExit != 0)
+                throw new InvalidOperationException("Could not set executable permissions on the updated runtime.");
         }
-        catch (Exception ex) { log($"chmod threw: {ex.Message}"); }
+        catch (Exception ex) when (!needsRoot) { log($"chmod threw: {ex.Message}"); }
+
+        if (needsRoot && LinuxDesktopPackage.TryGetProtectedRuntimePath(installDir) is { } runtime)
+        {
+            try
+            {
+                var setcap = File.Exists("/usr/sbin/setcap") ? "/usr/sbin/setcap" : "/sbin/setcap";
+                var caps = LinuxDesktopPackage.RuntimeCapabilities;
+                var (exit, _, error) = RunWithCapture(pkexec!, [setcap, caps, runtime], 30_000);
+                if (exit == 0)
+                    (exit, _, error) = RunWithCapture(setcap, ["-q", "-v", caps, runtime], 10_000);
+                if (exit != 0)
+                    log($"WARNING: could not verify package runtime capabilities (exit {exit}): {Truncate(error)}");
+            }
+            catch (Exception ex)
+            {
+                log($"WARNING: could not verify package runtime capabilities: {ex.Message}");
+            }
+        }
+    }
+
+    private static void VerifyPrivilegedUpdateTree(string directory, bool installed)
+    {
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+        if (installed && !LinuxDesktopPackage.IsTrustedPackageDirectory(root))
+            throw new InvalidOperationException("The privileged update destination is not a protected directory.");
+
+        var arguments = new List<string> { "-P", root, "(", "!", "-type", "f", "!", "-type", "d",
+            "-o", "-perm", "/6000" };
+        if (installed)
+            arguments.AddRange(["-o", "!", "-uid", "0", "-o", "-perm", "/022",
+                "-o", "-type", "d", "!", "-perm", "-0555",
+                "-o", "-type", "f", "!", "-perm", "-0444"]);
+        arguments.AddRange([")", "-exec", "/bin/false", "{}", "+", "-quit"]);
+
+        var (exit, _, _) = RunWithCapture("/usr/bin/find", arguments, 30_000);
+        if (exit != 0)
+            throw new InvalidOperationException(installed
+                ? "The privileged update destination contains untrusted or unreadable files."
+                : "The update payload contains unsupported files.");
+    }
+
+    private static void VerifyPrivilegedUpdateDestination(string installDir, IEnumerable<string> paths)
+    {
+        if (!LinuxDesktopPackage.IsTrustedPackageDirectory(installDir))
+            throw new InvalidOperationException("The privileged update destination is not a protected directory.");
+
+        foreach (var path in paths)
+        {
+            if ((File.Exists(path) || Directory.Exists(path) || new FileInfo(path).LinkTarget is not null) &&
+                !LinuxDesktopPackage.IsTrustedPackagePath(path, directory: false))
+                throw new InvalidOperationException($"The privileged update destination contains an untrusted executable: {path}");
+        }
     }
 
     internal static bool HelperSupportsExactOwnedSignal(string path)

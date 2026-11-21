@@ -1,13 +1,33 @@
 #!/bin/sh
 
 set -e
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
 
 SINGBOX=/opt/vpnrouter/sing-box
+CAPABILITIES=cap_net_admin,cap_net_bind_service=+eip
 
-if [ -x "$SINGBOX" ]; then
-    if command -v setcap >/dev/null 2>&1; then
-        setcap cap_net_admin,cap_net_bind_service=+eip "$SINGBOX" 2>/dev/null || true
+root_owned_and_protected() {
+    metadata=$(stat -c '%u:%a' -- "$1") || return 1
+    [ "${metadata%%:*}" = 0 ] && [ "$((0${metadata#*:} & 022))" -eq 0 ]
+}
+
+trusted_runtime() {
+    [ ! -L "$SINGBOX" ] && [ -f "$SINGBOX" ] && [ -x "$SINGBOX" ] &&
+        root_owned_and_protected "$SINGBOX" || return 1
+
+    for directory in / /opt /opt/vpnrouter; do
+        [ ! -L "$directory" ] && [ -d "$directory" ] &&
+            root_owned_and_protected "$directory" || return 1
+    done
+}
+
+if trusted_runtime; then
+    if ! setcap "$CAPABILITIES" "$SINGBOX" || ! setcap -q -v "$CAPABILITIES" "$SINGBOX"; then
+        printf '%s\n' 'VPNRouter: could not verify sing-box capabilities. Connecting may require polkit authentication.' >&2
     fi
+else
+    printf '%s\n' 'VPNRouter: sing-box is missing or outside the protected package layout. File capabilities were skipped.' >&2
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
