@@ -1229,7 +1229,7 @@ class TestBuildPackageCliAndExport(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 build_package.main(["--repo", str(self.tmp), "--work-dir", str(self.tmp / "w"), "--skip-makepkg"])
 
-    def test_export_source_includes_build_inputs_and_embedded_updater_resources(self) -> None:
+    def test_export_source_includes_build_inputs_and_embedded_resources(self) -> None:
         """Include Core resource inputs alongside the project and root build configuration."""
         tracked_output = "\n".join([
             "Directory.Build.props",
@@ -1246,6 +1246,7 @@ class TestBuildPackageCliAndExport(unittest.TestCase):
             "VPNRouter.Headless/Program.cs",
             "profiles/default.json",
             "packaging/windows/installer/publish-windows-update.ps1",
+            "packaging/macos/install-privileged.sh",
             "unrelated/file.txt",
         ])
 
@@ -1265,6 +1266,7 @@ class TestBuildPackageCliAndExport(unittest.TestCase):
             build_package.export_source(self.tmp, "dummy_commit", self.tmp)
 
         self.assertIn("packaging/windows/installer", archive_args)
+        self.assertIn("packaging/macos/install-privileged.sh", archive_args)
         self.assertIn("Version.props", archive_args)
         self.assertIn("Directory.Build.props", archive_args)
         self.assertIn("Directory.Build.targets", archive_args)
