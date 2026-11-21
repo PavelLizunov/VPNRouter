@@ -339,8 +339,8 @@ public partial class MainWindowViewModel
                 _settings.App.Subscriptions?.Any(s => s.Enabled && s.Servers.Count > 0) != true)
             {
                 SmpErrorText = IsRussian
-                    ? "Вставь ссылку (vless:// / hysteria2:// / tuic:// / ss:// / naive://) или URL подписки (http:// / https://)."
-                    : "Paste a server link (vless:// / hysteria2:// / tuic:// / ss:// / naive://) or a subscription URL (http:// / https://).";
+                    ? "Вставь ссылку (vless:// / vmess:// / hysteria2:// / tuic:// / ss:// / naive://) или URL подписки (http:// / https://)."
+                    : "Paste a server link (vless:// / vmess:// / hysteria2:// / tuic:// / ss:// / naive://) or a subscription URL (http:// / https://).";
                 return;
             }
 

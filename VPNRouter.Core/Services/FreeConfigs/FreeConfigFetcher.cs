@@ -110,6 +110,7 @@ public sealed class FreeConfigFetcher
     private static bool IsSupportedScheme(ReadOnlySpan<char> span)
     {
         return span.StartsWith("vless://", StringComparison.OrdinalIgnoreCase) ||
+               span.StartsWith("vmess://", StringComparison.OrdinalIgnoreCase) ||
                span.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
                span.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase) ||
                span.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase) ||
@@ -121,6 +122,7 @@ public sealed class FreeConfigFetcher
     private static bool ContainsSupportedScheme(string text)
     {
         return text.Contains("vless://", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("vmess://", StringComparison.OrdinalIgnoreCase) ||
                text.Contains("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
                text.Contains("hy2://", StringComparison.OrdinalIgnoreCase) ||
                text.Contains("tuic://", StringComparison.OrdinalIgnoreCase) ||

@@ -233,10 +233,19 @@ public static partial class ConfigGenerator
 
         var target = chainedTargets[0];
         var targetProto = (target.Protocol ?? "vless").ToLowerInvariant();
-        if (targetProto != "vless" || "xhttp".Equals(target.Transport?.Type, StringComparison.OrdinalIgnoreCase))
+        if ((targetProto != "vless" && targetProto != "vmess")
+            || "xhttp".Equals(target.Transport?.Type, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "ConfigGenerator: chained target uses unsupported protocol/transport — only VLESS is supported.");
+                "ConfigGenerator: chained target uses unsupported protocol/transport — use VLESS or VMess.");
+        }
+
+        var targetTls = target.Tls;
+        if (targetProto == "vmess"
+            && (targetTls is null || !targetTls.Enabled || string.IsNullOrWhiteSpace(targetTls.ServerName)))
+        {
+            throw new InvalidOperationException(
+                "ConfigGenerator: chained VMess target requires TLS with a server name.");
         }
 
         var upstreams = servers.Where(s =>
@@ -244,10 +253,10 @@ public static partial class ConfigGenerator
             !string.IsNullOrEmpty(s.OutboundId) &&
             string.Equals(s.OutboundId, target.DetourVia, StringComparison.OrdinalIgnoreCase)).ToList();
 
-        if (upstreams.Count != 1)
+        if (upstreams.Count != 1 || !SubscriptionChainSelection.IsUsableChainUpstream(upstreams[0]))
         {
             throw new InvalidOperationException(
-                "ConfigGenerator: chained target references an absent or non-unique upstream in active servers.");
+                "ConfigGenerator: chained target references an absent, non-unique, or unusable upstream in active servers.");
         }
 
         var upstream = upstreams[0];

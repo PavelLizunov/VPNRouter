@@ -40,6 +40,17 @@ public sealed class SingBoxJsonSubscriptionTests : IDisposable
         "\"reality\":{\"enabled\":true,\"public_key\":\"" + FakePbk + "\",\"short_id\":\"0123abcd\"}}" +
         (transport.Length == 0 ? string.Empty : ",\"transport\":" + transport) + "}";
 
+    private static string Vmess(
+        string tag = "Node VMess ~probe", string server = "203.0.113.50", string port = "443",
+        string uuid = Uuid1, string security = "aes-128-gcm", int alterId = 0, string extra = "") =>
+        "{\"type\":\"vmess\",\"tag\":\"" + tag + "\",\"server\":\"" + server +
+        "\",\"server_port\":" + port + ",\"uuid\":\"" + uuid +
+        "\",\"security\":\"" + security + "\",\"alter_id\":" +
+        alterId.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+        ",\"tls\":{\"enabled\":true,\"server_name\":\"cdn.example.com\"}," +
+        "\"transport\":{\"type\":\"ws\",\"path\":\"/vm\",\"headers\":{\"Host\":\"cdn.example.com\"}}" +
+        extra + "}";
+
     private static string XhttpTransport =>
         "{\"type\":\"xhttp\",\"mode\":\"packet-up\",\"path\":\"/p\",\"host\":\"cdn.example.com\",\"x_padding_bytes\":\"100-1000\"}";
 
@@ -108,7 +119,6 @@ public sealed class SingBoxJsonSubscriptionTests : IDisposable
         var body = Config(
             Selector, UrlTest, Direct, Block, DnsOut,
             "{\"type\":\"trojan\",\"tag\":\"t\",\"server\":\"203.0.113.30\",\"server_port\":443,\"password\":\"x\"}",
-            "{\"type\":\"vmess\",\"tag\":\"v\",\"server\":\"203.0.113.31\",\"server_port\":443,\"uuid\":\"" + Uuid1 + "\"}",
             "{\"type\":\"wireguard\",\"tag\":\"w\",\"server\":\"203.0.113.32\",\"server_port\":51820}");
 
         Assert.Empty(SubscriptionFetcher.ParseBody(body));
@@ -131,6 +141,58 @@ public sealed class SingBoxJsonSubscriptionTests : IDisposable
         Assert.Equal("ws.example.com", result[0].Transport.Headers["Host"]);
         Assert.Equal("/ws2", result[1].Transport.Path);
         Assert.Equal("ws2.example.com", result[1].Transport.Headers["Host"]);
+    }
+
+    [Fact]
+    public void ParseBody_VmessAeadTlsWs_MapsStandardFields()
+    {
+        var body = Config(Vmess());
+
+        var e = Assert.Single(SubscriptionFetcher.ParseBody(body));
+
+        Assert.Equal("vmess", e.Protocol);
+        Assert.Equal("Node VMess ~probe", e.Name);
+        Assert.Equal("203.0.113.50", e.Server);
+        Assert.Equal(443, e.Port);
+        Assert.Equal(Uuid1, e.Uuid);
+        Assert.Equal("aes-128-gcm", e.VmessSecurity ?? string.Empty);
+        Assert.Equal(0, e.AlterId);
+        Assert.Equal("tls", e.Security);
+        Assert.True(e.Tls.Enabled);
+        Assert.Equal("cdn.example.com", e.Tls.ServerName);
+        Assert.Equal("ws", e.Transport.Type);
+        Assert.Equal("/vm", e.Transport.Path);
+        Assert.Equal("cdn.example.com", e.Transport.Headers["Host"]);
+    }
+
+    [Theory]
+    [InlineData("none", 0)]
+    [InlineData("zero", 0)]
+    [InlineData("aes-128-ctr", 0)]
+    [InlineData("aes-128-gcm", 1)]
+    public void ParseBody_LegacyOrNonAeadVmess_IsSkipped(string security, int alterId)
+    {
+        var body = Config(Vmess(security: security, alterId: alterId));
+
+        Assert.Empty(SubscriptionFetcher.ParseBody(body));
+    }
+
+    [Fact]
+    public void ParseBody_VmessChainTarget_KeepsDetourToDirectVlessEntry()
+    {
+        var entry = VlessReality("entry", "203.0.113.60", "443", Uuid2);
+        var target = Vmess("target", "203.0.113.61", "443", Uuid1, extra: ",\"detour\":\"entry\"");
+        var body = Config(target, entry);
+
+        var rows = SubscriptionFetcher.ParseBody(body);
+
+        Assert.Equal(2, rows.Count);
+        var targetRow = Assert.Single(rows, row => row.Protocol == "vmess");
+        var entryRow = Assert.Single(rows, row => row.Protocol == "vless");
+        Assert.False(string.IsNullOrEmpty(targetRow.OutboundId));
+        Assert.False(string.IsNullOrEmpty(entryRow.OutboundId));
+        Assert.Equal(entryRow.OutboundId, targetRow.DetourVia);
+        Assert.Empty(entryRow.DetourVia);
     }
 
     [Fact]

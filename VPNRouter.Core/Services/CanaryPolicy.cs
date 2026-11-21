@@ -31,6 +31,9 @@ public static class CanaryPolicy
         if (string.IsNullOrWhiteSpace(url)) return "(none)";
         if (url.AsSpan().TrimStart().StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return "dnstt://[redacted]";
+        // A VMess payload is base64, not a URI authority; never echo it because it carries the user UUID.
+        if (url.AsSpan().TrimStart().StartsWith(VmessUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return "vmess://[redacted]";
         if (Uri.TryCreate(url, UriKind.Absolute, out var u))
             return $"{u.Scheme}://{u.Host}";
 

@@ -116,6 +116,7 @@ public class ServerUriParserTests
     public void IsSupportedScheme_AcceptsAllSupportedSchemes()
     {
         Assert.True(VPNRouter.Core.Services.ServerUriParser.IsSupportedScheme("vless://x"));
+        Assert.True(VPNRouter.Core.Services.ServerUriParser.IsSupportedScheme("vmess://x"));
         Assert.True(VPNRouter.Core.Services.ServerUriParser.IsSupportedScheme("hysteria2://x"));
         Assert.True(VPNRouter.Core.Services.ServerUriParser.IsSupportedScheme("hy2://x"));
         Assert.True(VPNRouter.Core.Services.ServerUriParser.IsSupportedScheme("tuic://x"));

@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Serilog;
+using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
@@ -51,7 +52,9 @@ internal static class SingBoxJsonSubscription
                     if (uri is null)
                         logger?.Information("[SingBox] Skipped outbound ({Reason})", skipReason);
                     else
-                        canChain = type == "vless" && CanChainVless(ob);
+                        canChain = type == "vless"
+                            ? CanChainVless(ob)
+                            : type == "vmess" && IsMappableVmess(ob);
                 }
             }
             catch (Exception)
@@ -179,6 +182,7 @@ internal static class SingBoxJsonSubscription
         return type switch
         {
             "vless" => MapVless(ob, hostPort, name, out skipReason),
+            "vmess" => MapVmess(ob, server, port, name, out skipReason),
             "hysteria2" => MapHysteria2(ob, hostPort, name, out skipReason),
             "tuic" => MapTuic(ob, hostPort, name, out skipReason),
             "shadowsocks" => MapShadowsocks(ob, hostPort, name, out skipReason),
@@ -259,6 +263,140 @@ internal static class SingBoxJsonSubscription
         q.Add(("flow", Str(ob, "flow")));
 
         return $"vless://{Enc(uuid)}@{hostPort}{Query(q)}#{Enc(name)}";
+    }
+
+    private static string? MapVmess(
+        JsonElement ob, string server, int port, string name, out string? skipReason)
+    {
+        skipReason = null;
+        if (!IsMappableVmess(ob))
+        {
+            skipReason = "unsupported VMess option";
+            return null;
+        }
+
+        var uuid = Str(ob, "uuid");
+        if (!Guid.TryParse(uuid, out _)) { skipReason = "invalid uuid"; return null; }
+        if (!VmessUriParser.TryNormalizeAeadSecurity(Str(ob, "security"), out var security))
+        {
+            skipReason = "non-AEAD VMess security";
+            return null;
+        }
+
+        var transport = Obj(ob, "transport") ?? default;
+        var transportType = Str(transport, "type")?.ToLowerInvariant();
+        var net = "tcp";
+        var path = string.Empty;
+        var host = string.Empty;
+        if (transportType is "ws")
+        {
+            net = "ws";
+            path = Str(transport, "path") ?? "/";
+            host = HeaderValue(Obj(transport, "headers"), "Host") ?? string.Empty;
+        }
+
+        var tls = Obj(ob, "tls") ?? default;
+        var tlsEnabled = Bool(tls, "enabled");
+        var sni = Str(tls, "server_name") ?? string.Empty;
+        if (string.IsNullOrEmpty(host) && tlsEnabled) host = sni;
+
+        var entry = new VlessServerEntry
+        {
+            Name = name,
+            Protocol = "vmess",
+            Server = server,
+            Port = port,
+            Uuid = uuid!,
+            Security = tlsEnabled ? "tls" : "none",
+            VmessSecurity = security,
+            AlterId = 0,
+            Tls = new VlessTlsConfig
+            {
+                Enabled = tlsEnabled,
+                ServerName = tlsEnabled
+                    ? (string.IsNullOrEmpty(sni) ? server : sni)
+                    : string.Empty,
+                Insecure = tlsEnabled && Bool(tls, "insecure"),
+                Fingerprint = Str(Obj(tls, "utls") ?? default, "fingerprint") ?? string.Empty,
+                Alpn = StrList(tls, "alpn") ?? string.Empty,
+            },
+            Transport = new VlessTransportConfig
+            {
+                Type = net,
+                Path = net == "ws" ? (string.IsNullOrEmpty(path) ? "/" : path) : string.Empty,
+                Headers = net == "ws" && !string.IsNullOrEmpty(host)
+                    ? new Dictionary<string, string> { ["Host"] = host }
+                    : new Dictionary<string, string>(),
+            },
+        };
+
+        return VmessUriParser.BuildShareUri(entry);
+    }
+
+    private static bool IsMappableVmess(JsonElement ob) =>
+        ob.EnumerateObject().All(p => p.Name switch
+        {
+            "type" or "tag" or "server" or "server_port" or "uuid" or "detour" => true,
+            "security" => p.Value.ValueKind == JsonValueKind.String &&
+                VmessUriParser.TryNormalizeAeadSecurity(p.Value.GetString(), out _),
+            "alter_id" => IsZero(p.Value),
+            "global_padding" => p.Value.ValueKind == JsonValueKind.False,
+            "authenticated_length" => p.Value.ValueKind == JsonValueKind.False,
+            "domain_resolver" => p.Value.ValueKind == JsonValueKind.String &&
+                p.Value.GetString() == "local-dns",
+            "packet_encoding" => p.Value.ValueKind == JsonValueKind.String &&
+                string.IsNullOrEmpty(p.Value.GetString()),
+            "tcp_keep_alive" or "tcp_keep_alive_interval" =>
+                p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() == "30s",
+            "tls" => CanMapVmessTls(p.Value),
+            "transport" => CanMapVmessTransport(p.Value),
+            _ => false,
+        });
+
+    private static bool IsZero(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n)) return n == 0;
+        return value.ValueKind == JsonValueKind.String && value.GetString() == "0";
+    }
+
+    private static bool CanMapVmessTls(JsonElement tls)
+    {
+        if (tls.ValueKind == JsonValueKind.Null) return true;
+        if (tls.ValueKind != JsonValueKind.Object) return false;
+        return tls.EnumerateObject().All(p => p.Name switch
+        {
+            "enabled" => p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            "server_name" => p.Value.ValueKind == JsonValueKind.String,
+            "insecure" => p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            "alpn" => p.Value.ValueKind == JsonValueKind.String ||
+                (p.Value.ValueKind == JsonValueKind.Array &&
+                    p.Value.EnumerateArray().All(item => item.ValueKind == JsonValueKind.String)),
+            "utls" => p.Value.ValueKind == JsonValueKind.Object &&
+                p.Value.EnumerateObject().All(field =>
+                    (field.Name == "fingerprint" && field.Value.ValueKind == JsonValueKind.String) ||
+                    (field.Name == "enabled" && field.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)) &&
+                Bool(p.Value, "enabled") == !string.IsNullOrEmpty(Str(p.Value, "fingerprint")),
+            _ => false,
+        });
+    }
+
+    private static bool CanMapVmessTransport(JsonElement transport)
+    {
+        if (transport.ValueKind == JsonValueKind.Null) return true;
+        if (transport.ValueKind != JsonValueKind.Object) return false;
+        return Str(transport, "type")?.ToLowerInvariant() switch
+        {
+            null or "" or "tcp" => transport.EnumerateObject().All(p =>
+                p.Name == "type" && p.Value.ValueKind == JsonValueKind.String),
+            "ws" => transport.EnumerateObject().All(p => p.Name switch
+            {
+                "type" or "path" => p.Value.ValueKind == JsonValueKind.String,
+                "headers" => CanChainWsHeaders(p.Value),
+                "max_early_data" => IsZero(p.Value),
+                _ => false,
+            }),
+            _ => false,
+        };
     }
 
     private static string? MapHysteria2(JsonElement ob, string hostPort, string name, out string? skipReason)

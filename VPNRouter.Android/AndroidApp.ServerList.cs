@@ -959,6 +959,14 @@ public partial class AndroidApp
                 parts.Add("amneziawg");
                 break;
 
+            case "vmess":
+                parts.Add("vmess");
+                if (!string.IsNullOrWhiteSpace(srv.Transport?.Type))
+                    parts.Add(srv.Transport!.Type.ToLowerInvariant());
+                if (srv.Tls?.Enabled == true)
+                    parts.Add("tls");
+                break;
+
             case "shadowsocks":
             case "ss":
                 parts.Add("ss");

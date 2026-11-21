@@ -447,6 +447,16 @@ public static class TcpTlsProbe
                 break;
             }
 
+            case "vmess":
+            {
+                var tlsEnabled = server.Tls?.Enabled == true
+                    || string.Equals(server.Security, "tls", StringComparison.OrdinalIgnoreCase);
+                result = tlsEnabled
+                    ? await ProbeAsync(host, port, ResolveSni(server, host), requireTls: true, ct)
+                    : await ProbeTcpOnlyAsync(host, port, ct);
+                break;
+            }
+
             case "shadowsocks":
             case "ss":
                 result = await ProbeTcpOnlyAsync(host, port, ct);
