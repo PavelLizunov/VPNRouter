@@ -16,7 +16,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P2** - Desktop manual server selection leaves the subscription auto-select flag enabled. Selection and reconnect save the chosen row, but the generated cross-host `urltest` group can choose another host every three minutes. Confirmed in the Standard 2.51.0-r1 source. See [manual server selection](phase-manual-server-selection-2026-11-22.md).
+- [x] **P2** - Desktop manual server selection left auto-select enabled, so the cross-host `urltest` group could choose another host every three minutes. Confirmed in Standard 2.51.0-r1 and fixed in source by saving explicit row activations with auto-select off. Review caught keyboard navigation disabling auto-select before confirmation. The follow-up uses Avalonia's row activation path and covers navigation, an active row and the service Apply path. See [manual server selection](phase-manual-server-selection-2026-11-22.md).
 
 - [x] **P1** - Arch source export omitted the macOS installer script embedded by VPNRouter.Core. The exact-main Arch build at `60c65c72` failed with CS1566 in run 44910872465. RESOLVED in source by including the tracked installer script. The export fixture and a real Git archive check passed for all five external Core resources. Hosted package confirmation is pending.
 

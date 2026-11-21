@@ -17,16 +17,6 @@ public sealed class ServerPickerListBox : ListBox
         return base.UpdateSelectionFromEvent(container, e);
     }
 
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        var previous = SelectedItem;
-        SelectFromInput(() =>
-        {
-            base.OnKeyDown(e);
-            return e.Handled && !ReferenceEquals(previous, SelectedItem);
-        });
-    }
-
     private bool SelectFromInput(Func<bool> select) => DataContext is MainWindowViewModel vm
         ? vm.SelectServerFromPicker(select, () => SelectedItem as ServerViewModel)
         : select();

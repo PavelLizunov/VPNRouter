@@ -260,6 +260,7 @@ public sealed class SimpleConnectStatusTests
         var subscription = mode == "subscribe";
         var settings = new AppSettings();
         settings.App.ConfigMode = mode;
+        settings.App.Language = "en";
         settings.Vless.AutoSelectBestServer = true;
         settings.Vless.ActiveServer = first.Name;
         if (subscription) settings.App.Subscriptions = [new() { Servers = [first, chosen] }];
@@ -282,15 +283,37 @@ public sealed class SimpleConnectStatusTests
             Dispatcher.UIThread.RunJobs();
             var picker = page.FindControl<ServerPickerListBox>(subscription ? "SubList" : "ServerList")!;
             Assert.Equal(selectAgain, ReferenceEquals(row, picker.SelectedItem));
-            var item = Assert.IsType<ListBoxItem>(picker.ContainerFromIndex(1));
-            Assert.True(picker.UpdateSelectionFromEvent(item, new KeyEventArgs
+
+            if (selectAgain)
             {
-                Source = item,
-                RoutedEvent = InputElement.KeyDownEvent,
-                Key = Key.Enter
-            }));
+                // Model a service-managed connection with this row already active.
+                vm.IsConnected = true;
+                row.IsActive = true;
+            }
+            else
+            {
+                var firstItem = Assert.IsType<ListBoxItem>(picker.ContainerFromIndex(0));
+                firstItem.Focus();
+                var beforeNavigation = store.SaveCount;
+                PressPickerKey(firstItem, Key.Down);
+                Assert.Same(row, picker.SelectedItem);
+                Assert.True(vm.AutoSelectBestServer);
+                Assert.Equal(beforeNavigation, store.SaveCount);
+                vm.SelectedServer = vm.Servers[0];
+                Assert.NotSame(row, picker.SelectedItem);
+            }
+
+            var beforeConfirmation = store.SaveCount;
+            var item = Assert.IsType<ListBoxItem>(picker.ContainerFromIndex(1));
+            PressPickerKey(item, Key.Enter);
             Assert.Same(row, picker.SelectedItem);
             Assert.False(vm.AutoSelectBestServer);
+            Assert.Equal(beforeConfirmation + 1, store.SaveCount);
+            if (selectAgain)
+            {
+                Assert.True(vm.HasPendingAppChanges);
+                Assert.Contains("Click Apply", vm.StatusText);
+            }
 
             var saved = store.Load(AppPaths.ConfigYamlPath);
             Assert.False(saved.Vless.AutoSelectBestServer);
@@ -300,6 +323,13 @@ public sealed class SimpleConnectStatusTests
         }
         finally { window.Close(); }
     }
+
+    private static void PressPickerKey(ListBoxItem item, Key key) => item.RaiseEvent(new KeyEventArgs
+    {
+        Source = item,
+        RoutedEvent = InputElement.KeyDownEvent,
+        Key = key
+    });
 
     [AvaloniaTheory]
     [InlineData("generated", true)]
