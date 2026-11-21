@@ -36,6 +36,7 @@ public class MacPrivilegePolicyTests
     [Theory]
     [InlineData("")]
     [InlineData("alice bob")]
+    [InlineData("alice\n")]
     [InlineData("alice\nroot ALL=(root) NOPASSWD: ALL")]
     [InlineData("alice:root")]
     [InlineData("alice,root")]
@@ -58,7 +59,7 @@ public class MacPrivilegePolicyTests
     [Fact]
     public void PolicyPath_is_per_uid()
     {
-        Assert.Equal("/etc/sudoers.d/vpnrouter-501", MacPrivilegePaths.PolicyPath(501));
+        Assert.Equal("/private/etc/sudoers.d/vpnrouter-501", MacPrivilegePaths.PolicyPath(501));
         Assert.Equal("/Library/Application Support/VPNRouter/assets/501/geo.srs",
             MacPrivilegePaths.UserAssetPath(501, "geo.srs"));
         Assert.True(MacPrivilegePaths.IsRootAssetPath(
@@ -75,6 +76,7 @@ public class MacPrivilegePolicyTests
         Assert.False(MacPrivilegePolicy.IsManagedPolicy(alice, "bob"));
         Assert.False(MacPrivilegePolicy.IsManagedPolicy(
             alice + "%admin ALL=(ALL) NOPASSWD: ALL\n", "alice"));
+        Assert.False(MacPrivilegePolicy.IsManagedPolicy(alice + "#include /invalid-fixture\n", "alice"));
         Assert.True(MacPrivilegePolicy.IsManagedPolicy(alice, "alice"));
     }
 }

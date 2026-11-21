@@ -128,6 +128,25 @@ commands or live-host tests on the development workstation.
   failure on both Linux and Windows. The managed controller check
   rejected the bracketed IPv6 loopback value `[::1]:9090`. The fix
   normalizes the parsed host using the same approach as `ClashSingBoxApi`.
+- Exact-head .NET tests passed on Linux and Windows at `94754f0` in
+  run 44859003172. IPv6 loopback passed on both platforms. The native and
+  Android checks also passed.
+- Follow-up review confirmed the canonical macOS paths, installer script
+  snapshot, staging hashes, and lock ownership. It found that the policy
+  template could still be reopened after approval and that a process killed
+  during installation could leave a stale lock directory. The app now sends
+  policy bytes in the authorization request. The installer accepts exactly
+  the managed comments and rule and locks a file descriptor. A non-root
+  macOS fixture confirmed that a concurrent process is refused and that
+  another process can acquire the lock after the holder is killed.
+- Read-only worker check on macOS 26.5.2 reported `root:wheel 0755` for
+  `/Library`, `/private`, `/private/etc`, and `/private/etc/sudoers.d`.
+  `/Library/Application Support` was `root:admin 0755`. `ls -lde` reported
+  the sticky bit on `/Library/PrivilegedHelperTools` and no extended ACLs
+  on the inspected directories. Native tests pin the uid, group, mode and
+  sticky-bit acceptance logic. The checks assume no write-granting ACL
+  on these system directories. Live installer and Connect/Stop tests are
+  still pending.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

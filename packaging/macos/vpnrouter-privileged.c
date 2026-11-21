@@ -174,22 +174,39 @@ static int legacy_policy_state_path(const char *path)
     return LEGACY_UNKNOWN;
 }
 
+static int root_directory_stat_is_valid(const struct stat *st, mode_t expected_mode,
+                                        int require_wheel)
+{
+    /* macOS may set the sticky bit on PrivilegedHelperTools. */
+    return S_ISDIR(st->st_mode) && st->st_uid == 0 &&
+           (!require_wheel || st->st_gid == 0) &&
+           (st->st_mode & (07777 & ~S_ISVTX)) == expected_mode;
+}
+
 static int verify_root_dir(const char *path, mode_t expected_mode, int require_wheel)
 {
     struct stat st;
-    if (lstat(path, &st) != 0 || !S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))
+    return lstat(path, &st) == 0 &&
+           root_directory_stat_is_valid(&st, expected_mode, require_wheel) ? 0 : -1;
+}
+
+static int verify_etc_alias(void)
+{
+    struct stat st;
+    if (lstat("/etc", &st) != 0 || !S_ISLNK(st.st_mode) || st.st_uid != 0)
         return -1;
-    if (st.st_uid != 0 || (require_wheel && st.st_gid != 0))
+    char target[32];
+    ssize_t length = readlink("/etc", target, sizeof(target) - 1);
+    if (length < 0)
         return -1;
-    if ((st.st_mode & 0022) != 0 ||
-        (st.st_mode & 07777) != expected_mode)
-        return -1;
-    return 0;
+    target[length] = '\0';
+    return strcmp(target, "private/etc") == 0 || strcmp(target, "/private/etc") == 0 ? 0 : -1;
 }
 
 static int verify_fixed_chain(void)
 {
-    return verify_root_dir("/Library", 0755, 1) == 0 &&
+    return verify_etc_alias() == 0 &&
+           verify_root_dir("/Library", 0755, 1) == 0 &&
            verify_root_dir("/Library/Application Support", 0755, 0) == 0 &&
            verify_root_dir("/Library/PrivilegedHelperTools", 0755, 1) == 0 &&
            verify_root_dir("/private", 0755, 1) == 0 &&

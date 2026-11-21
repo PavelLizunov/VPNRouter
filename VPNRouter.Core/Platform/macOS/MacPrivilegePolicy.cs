@@ -16,7 +16,7 @@ public static partial class MacPrivilegePolicy
         "{{USER}} ALL=(root) NOPASSWD: " + MacPrivilegePaths.HelperPath + "\n";
 
     private static readonly Regex UserNamePattern = new(
-        "^[A-Za-z0-9._-]+$",
+        "\\A[A-Za-z0-9._-]+\\z",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     public static string Render(string userName) => RenderFromTemplate(DefaultTemplate, userName);
@@ -50,31 +50,19 @@ public static partial class MacPrivilegePolicy
     public static bool IsManagedPolicy(string policy, string? userName)
     {
         if (string.IsNullOrWhiteSpace(policy)) return false;
-        if (!policy.Contains(MacPrivilegePaths.PolicyHeader, StringComparison.Ordinal))
-            return false;
-
-        var lines = policy.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        var rules = lines.Where(line => !line.StartsWith('#')).ToArray();
-        if (rules.Length != 1) return false;
-
-        var rule = rules[0];
-        if (userName is not null)
+        policy = policy.Replace("\r\n", "\n", StringComparison.Ordinal);
+        if (userName is null)
         {
-            ValidateUserName(userName);
-            if (!string.Equals(
-                    rule,
-                    $"{userName} ALL=(root) NOPASSWD: {MacPrivilegePaths.HelperPath}",
-                    StringComparison.Ordinal))
+            var lines = policy.Split('\n');
+            if (lines.Length != 4)
                 return false;
+            var separator = lines[2].IndexOf(' ');
+            if (separator <= 0)
+                return false;
+            userName = lines[2][..separator];
         }
-
-        return rule.EndsWith(" ALL=(root) NOPASSWD: " + MacPrivilegePaths.HelperPath,
-                   StringComparison.Ordinal)
-               && !rule.Contains('*')
-               && !rule.Contains("/Users/", StringComparison.Ordinal)
-               && !rule.Contains("sing-box", StringComparison.Ordinal)
-               && !rule.Contains("pfctl", StringComparison.Ordinal)
-               && !rule.Contains("/bin/kill", StringComparison.Ordinal);
+        return UserNamePattern.IsMatch(userName) &&
+               string.Equals(policy, Render(userName), StringComparison.Ordinal);
     }
 
     /// <summary>

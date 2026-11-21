@@ -77,7 +77,7 @@ public class MacPrivilegedSourceContractTests
 
         Assert.Contains("vpnrouter-privileged.c", build, StringComparison.Ordinal);
         Assert.Contains("clang -std=c11", build, StringComparison.Ordinal);
-        Assert.Contains("install-privileged.sh", build, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Contents/MacOS/install-privileged.sh", build, StringComparison.Ordinal);
         Assert.DoesNotContain("Terminal.app", build, StringComparison.Ordinal);
 
         var workflow = Read(".github", "workflows", "build-mac.yml");
@@ -88,6 +88,21 @@ public class MacPrivilegedSourceContractTests
         Assert.Contains("packaging/macos/tests/run-tests.sh", prWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("upload-artifact", prWorkflow, StringComparison.Ordinal);
         Assert.DoesNotContain("tags:", prWorkflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Embedded_installer_matches_the_source_and_is_frozen_in_the_command()
+    {
+        var script = MacPrivilegedSetup.ReadInstallerScript();
+        Assert.Equal(
+            Read("packaging", "macos", "install-privileged.sh").Replace("\r\n", "\n", StringComparison.Ordinal),
+            script.Replace("\r\n", "\n", StringComparison.Ordinal));
+
+        var command = MacPrivilegedSetup.BuildInstallerCommand(script, MacPrivilegePolicy.Render("alice"),
+            "/Applications/fixture/helper", "/Applications/fixture/sing-box",
+            new string('a', 64), new string('b', 64), "2.51.0-r1", "alice");
+        var payload = command.Split('\'')[1];
+        Assert.Equal(script, System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
     }
 
     [Fact]
@@ -171,13 +186,13 @@ public class MacPrivilegedSourceContractTests
     }
 
     [Fact]
-    public void Installer_consumes_the_template_and_validates_it()
+    public void Installer_validates_the_policy_bytes_bound_to_the_request()
     {
         var script = Read("packaging", "macos", "install-privileged.sh");
 
-        Assert.Contains("--policy-template", script, StringComparison.Ordinal);
-        Assert.Contains("sed \"s/{{USER}}/$user_name/g\" \"$policy_template\"", script,
-            StringComparison.Ordinal);
+        Assert.Contains("--policy-base64", script, StringComparison.Ordinal);
+        Assert.Contains("base64 -D > \"$policy_tmp\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("--policy-template", script, StringComparison.Ordinal);
         Assert.Contains("visudo -cf", script, StringComparison.Ordinal);
         Assert.Contains("chmod 0440", script, StringComparison.Ordinal);
         Assert.Contains("rm -f \"$LEGACY_POLICY\"", script, StringComparison.Ordinal);
@@ -200,7 +215,7 @@ public class MacPrivilegedSourceContractTests
         Assert.True(legacyIndex >= 0 && installIndex > legacyIndex,
             "Legacy policy must be removed before the new helper is installed.");
 
-        var lockIndex = script.IndexOf("if ! mkdir \"$lock_dir\"", StringComparison.Ordinal);
+        var lockIndex = script.IndexOf("flock(STDIN, LOCK_EX | LOCK_NB)", StringComparison.Ordinal);
         var cleanupTrapIndex = script.IndexOf("trap cleanup EXIT", StringComparison.Ordinal);
         Assert.True(lockIndex >= 0 && cleanupTrapIndex > lockIndex,
             "Only the installer holding the lock may clean shared staging paths.");
@@ -216,6 +231,7 @@ public class MacPrivilegedSourceContractTests
         Assert.Contains("verify_root_dir(\"/Library/Application Support\", 0755, 0)", helper,
             StringComparison.Ordinal);
         Assert.Contains("verify_root_dir(\"/private/etc\", 0755, 1)", helper, StringComparison.Ordinal);
+        Assert.Contains("verify_etc_alias() == 0", helper, StringComparison.Ordinal);
         Assert.DoesNotContain("verify_root_dir(\"/etc\",", helper, StringComparison.Ordinal);
     }
 }

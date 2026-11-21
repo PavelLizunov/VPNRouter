@@ -46,19 +46,18 @@ public static class MacPrivilegedSetup
 
             helperHash = MacPrivilegedClient.ComputeFileSha256(helperPath);
             singboxHash = MacPrivilegedClient.ComputeFileSha256(singboxPath);
-            using var installer = typeof(MacPrivilegedSetup).Assembly.GetManifestResourceStream(
-                "VPNRouter.MacPrivilege.install-privileged.sh")
-                ?? throw new InvalidOperationException("The macOS privileged installer is missing.");
-            using var script = new StreamReader(installer);
             var command = BuildInstallerCommand(
-                script.ReadToEnd(), templatePath, helperPath, singboxPath, helperHash, singboxHash,
+                ReadInstallerScript(), rendered, helperPath, singboxPath, helperHash, singboxHash,
                 AppVersion.Version, Environment.UserName);
             var result = RunElevated(command, logger);
             if (!result)
                 return false;
 
             var after = client.Probe();
-            return IsCurrent(after, out _, out _);
+            if (!IsCurrent(after, out _, out _))
+                return false;
+            logger.Information("[MacPrivilege] Managed helper installed or refreshed");
+            return true;
         }
         catch (Exception ex)
         {
@@ -83,9 +82,18 @@ public static class MacPrivilegedSetup
                && string.Equals(state.SingBoxSha256, singboxHash, StringComparison.Ordinal);
     }
 
+    internal static string ReadInstallerScript()
+    {
+        using var installer = typeof(MacPrivilegedSetup).Assembly.GetManifestResourceStream(
+            "VPNRouter.MacPrivilege.install-privileged.sh")
+            ?? throw new InvalidOperationException("The macOS privileged installer is missing.");
+        using var script = new StreamReader(installer);
+        return script.ReadToEnd();
+    }
+
     internal static string BuildInstallerCommand(
         string installerScript,
-        string policyTemplatePath,
+        string policy,
         string helperPath,
         string singboxPath,
         string helperHash,
@@ -94,13 +102,17 @@ public static class MacPrivilegedSetup
         string userName)
     {
         MacPrivilegePolicy.ValidateUserName(userName);
+        if (!MacPrivilegePolicy.IsManagedPolicy(policy, userName))
+            throw new ArgumentException("The managed macOS privilege policy is invalid.", nameof(policy));
         // Freeze the approved script before the admin prompt. The elevated shell
         // must not open a script from the user-owned app bundle after approval.
         var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(installerScript));
+        var policyPayload = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes(policy.Replace("\r\n", "\n", StringComparison.Ordinal)));
         return
             $"/usr/bin/printf %s {Quote(payload)} | /usr/bin/base64 -D | " +
             "/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -s -- " +
-            $"--policy-template {Quote(policyTemplatePath)} " +
+            $"--policy-base64 {Quote(policyPayload)} " +
             $"--helper {Quote(helperPath)} " +
             $"--singbox {Quote(singboxPath)} " +
             $"--helper-sha256 {Quote(helperHash)} " +
@@ -180,7 +192,8 @@ public static class MacPrivilegedSetup
 
         var stdout = stdoutTask.GetAwaiter().GetResult();
         var stderr = stderrTask.GetAwaiter().GetResult();
-        if (process.ExitCode != 0)
+        if (process.ExitCode != 0 ||
+            !stdout.Contains("install-privileged: managed policy=2 uid=", StringComparison.Ordinal))
         {
             logger.Warning(
                 "[MacPrivilege] Administrator installation exit={Exit} stdout={Out} stderr={Err}",
@@ -188,7 +201,6 @@ public static class MacPrivilegedSetup
             return false;
         }
 
-        logger.Information("[MacPrivilege] Managed helper installed or refreshed");
         return true;
     }
 }

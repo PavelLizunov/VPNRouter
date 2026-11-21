@@ -143,6 +143,26 @@ static void test_legacy_policy_state(void)
     rmdir(directory);
 }
 
+static void test_root_directory_metadata(void)
+{
+    struct stat st = {0};
+    st.st_mode = S_IFDIR | 0755 | S_ISVTX;
+    expect(root_directory_stat_is_valid(&st, 0755, 1),
+           "the protected helper directory may have the sticky bit");
+    st.st_gid = 80;
+    expect(root_directory_stat_is_valid(&st, 0755, 0),
+           "root:admin Application Support is accepted with protected modes");
+    expect(!root_directory_stat_is_valid(&st, 0755, 1),
+           "directories requiring wheel still reject a different group");
+    st.st_mode = S_IFDIR | 0775;
+    expect(!root_directory_stat_is_valid(&st, 0755, 0),
+           "a group-writable system directory is rejected");
+    st.st_mode = S_IFDIR | 0755;
+    st.st_uid = 501;
+    expect(!root_directory_stat_is_valid(&st, 0755, 0),
+           "a user-owned system directory is rejected");
+}
+
 static void test_controller_secret(void)
 {
     const char *secret = "0123456789abcdef0123456789abcdef";
@@ -255,6 +275,7 @@ int main(void)
     test_json_structure();
     test_stop_request_identity();
     test_legacy_policy_state();
+    test_root_directory_metadata();
     test_controller_secret();
     test_wide_object_keys();
     test_structural_key_casing();

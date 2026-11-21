@@ -16,8 +16,8 @@ public static class MacPrivilegePaths
     public const string RunDir = RootDir + "/run";
     public const string AssetRoot = RootDir + "/assets";
     public const string InstallLockPath = RootDir + "/.install.lock";
-    public const string PolicyDirectory = "/etc/sudoers.d";
-    public const string LegacyPolicyPath = "/etc/sudoers.d/vpnrouter";
+    public const string PolicyDirectory = "/private/etc/sudoers.d";
+    public const string LegacyPolicyPath = PolicyDirectory + "/vpnrouter";
     public const string SudoPath = "/usr/bin/sudo";
     public const string HelperBundleName = "vpnrouter-privileged";
     public const int PolicyVersion = 2;

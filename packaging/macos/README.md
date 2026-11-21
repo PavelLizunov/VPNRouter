@@ -89,17 +89,21 @@ trust the app-side result.
 ## Installation and migration
 
 `install-privileged.sh` is embedded in the app assembly. The app sends the
-script bytes to the elevated shell as part of the one-time administrator
-request. This binds the script to the request before approval. The installer
+script and the rendered sudoers policy in the one-time administrator request.
+The installer
 rejects linked, group/world-writable or foreign-owned source files and
 world-writable or foreign-owned source directories, verifies the root-owned `/Library`, `/Library/Application Support`,
 `/Library/PrivilegedHelperTools` and `/private/etc/sudoers.d` chains, validates
 source and staged artifact hashes, removes `/etc/sudoers.d/vpnrouter` first and verifies its absence,
-installs root-owned artifacts with temp-plus-rename, renders the per-uid policy
-from `sudoers.template`, rejects any non-comment line other than the single
-managed helper rule, validates it with `visudo -cf`, and accepts only a
+and installs root-owned artifacts with temp-plus-rename. The installer verifies
+that `/etc` points to `/private/etc`. It accepts the exact two managed policy
+comments and one helper rule, runs `visudo -cf`, and accepts only a
 successful `probe` as ready. If installation is cancelled or fails, no ready
 state is written and the app blocks Connect.
+
+An open descriptor holds the kernel installation lock until the shell exits.
+The lock file stays in the protected directory. The kernel releases the lock
+when an interrupted installer exits.
 
 The app re-runs the installer when the bundled helper or sing-box hash differs
 from the manifest, so a release that changes either artifact costs one

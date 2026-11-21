@@ -20,7 +20,7 @@ MANIFEST="$ROOT_DIR/install.json"
 SUDOERS_DIR="/private/etc/sudoers.d"
 LEGACY_POLICY="$SUDOERS_DIR/vpnrouter"
 
-policy_template=""
+policy_base64=""
 helper_source=""
 singbox_source=""
 helper_sha256=""
@@ -29,13 +29,13 @@ app_version=""
 user_name=""
 
 usage() {
-    echo "usage: install-privileged.sh --policy-template PATH --helper PATH --singbox PATH --helper-sha256 HEX --singbox-sha256 HEX --app-version VERSION --user NAME" >&2
+    echo "usage: install-privileged.sh --policy-base64 DATA --helper PATH --singbox PATH --helper-sha256 HEX --singbox-sha256 HEX --app-version VERSION --user NAME" >&2
     exit 64
 }
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --policy-template) policy_template="${2:-}"; shift 2 ;;
+        --policy-base64) policy_base64="${2:-}"; shift 2 ;;
         --helper) helper_source="${2:-}"; shift 2 ;;
         --singbox) singbox_source="${2:-}"; shift 2 ;;
         --helper-sha256) helper_sha256="${2:-}"; shift 2 ;;
@@ -47,7 +47,8 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ "$(id -u)" -eq 0 ] || { echo "install-privileged: administrator rights are required" >&2; exit 77; }
-[ -n "$policy_template" ] && [ -n "$helper_source" ] && [ -n "$singbox_source" ] || usage
+[ -n "$policy_base64" ] && [ -n "$helper_source" ] && [ -n "$singbox_source" ] || usage
+[ "${#policy_base64}" -le 4096 ] || usage
 [ -n "$app_version" ] && [ -n "$user_name" ] || usage
 [[ "$user_name" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "install-privileged: invalid user name" >&2; exit 65; }
 [[ "$helper_sha256" =~ ^[0-9a-f]{64}$ ]] || { echo "install-privileged: invalid helper hash" >&2; exit 65; }
@@ -136,10 +137,8 @@ ensure_root_dir() {
     check_root_dir "$path" "$mode"
 }
 
-check_source "$policy_template"
 check_source "$helper_source"
 check_source "$singbox_source"
-check_source_chain "$policy_template"
 check_source_chain "$helper_source"
 check_source_chain "$singbox_source"
 
@@ -151,16 +150,19 @@ actual_singbox_sha="$(shasum -a 256 "$singbox_source" | awk '{print $1}')"
 policy_path="$SUDOERS_DIR/vpnrouter-$uid"
 policy_tmp="$SUDOERS_DIR/.vpnrouter-$uid.tmp"
 manifest_tmp="$MANIFEST.tmp"
-lock_dir="$ROOT_DIR/.install.lock"
+lock_path="$ROOT_DIR/.install.lock"
 helper_tmp="$HELPER_DEST.tmp"
 singbox_tmp="$ROOT_BIN.tmp"
 
 cleanup() {
     rm -f "$policy_tmp" "$manifest_tmp" "$helper_tmp" "$singbox_tmp" 2>/dev/null || true
-    rmdir "$lock_dir" 2>/dev/null || true
 }
 
-# The lock is a root-owned directory, so a concurrent install cannot interleave.
+case "$(readlink /etc)" in
+    private/etc|/private/etc) ;;
+    *) echo "install-privileged: unexpected /etc target" >&2; exit 66 ;;
+esac
+
 check_root_dir /Library 0755
 # Application Support may be root:admin. Mode 0755 denies group writes.
 check_root_dir "/Library/Application Support" 0755 -
@@ -169,13 +171,36 @@ check_root_dir /private/etc 0755
 check_root_dir "$SUDOERS_DIR" 0755
 ensure_root_dir /Library/PrivilegedHelperTools 0755
 ensure_root_dir "$ROOT_DIR" 0755
-if ! mkdir "$lock_dir" 2>/dev/null; then
+# Keep the descriptor open until this shell exits. The kernel releases its
+# lock even if the installer is interrupted before the cleanup trap can run.
+if [ -L "$lock_path" ] || { [ -e "$lock_path" ] &&
+    { [ ! -f "$lock_path" ] || [ "$(stat -f '%u:%g %Lp' "$lock_path")" != "0:0 600" ]; }; }; then
+    echo "install-privileged: invalid installation lock: $lock_path" >&2
+    exit 66
+fi
+exec 9>>"$lock_path"
+if ! /usr/bin/perl -MFcntl=:flock -e 'flock(STDIN, LOCK_EX | LOCK_NB) or exit 75' <&9; then
     echo "install-privileged: another installation is in progress" >&2
     exit 75
 fi
 trap cleanup EXIT
-chown root:wheel "$lock_dir"
-chmod 0700 "$lock_dir"
+
+# Only the two managed comments and the exact helper rule may enter sudoers.
+printf '%s' "$policy_base64" | /usr/bin/base64 -D > "$policy_tmp"
+expected_rule="$user_name ALL=(root) NOPASSWD: $HELPER_DEST"
+awk -v expected="$expected_rule" '
+    NR == 1 && $0 == "# vpnrouter policy v2 (managed; do not edit)" { next }
+    NR == 2 && $0 == "# Root-owned launcher; no user-writable executables or wildcard arguments." { next }
+    NR == 3 && $0 == expected { next }
+    { invalid = 1 }
+    END { if (invalid || NR != 3) exit 1 }
+' "$policy_tmp" || {
+    echo "install-privileged: policy must contain exactly the managed helper rule" >&2
+    exit 65
+}
+chown root:wheel "$policy_tmp"
+chmod 0440 "$policy_tmp"
+visudo -cf "$policy_tmp" >/dev/null
 
 # Remove the legacy grant first. If a later step fails, the app fails closed
 # instead of silently keeping the old user-writable NOPASSWD path.
@@ -213,30 +238,6 @@ chown root:wheel "$manifest_tmp"
 chmod 0600 "$manifest_tmp"
 mv -f "$manifest_tmp" "$MANIFEST"
 
-# The template is the single tested source of truth; the app renders the same
-# text and a contract test fails if the two drift. The user name is validated
-# above, so it is safe as a sed replacement.
-sed "s/{{USER}}/$user_name/g" "$policy_template" > "$policy_tmp"
-expected_rule="$user_name ALL=(root) NOPASSWD: $HELPER_DEST"
-awk -v expected="$expected_rule" '
-    /^[[:space:]]*#/ { next }
-    /^[[:space:]]*$/ { next }
-    {
-        if ($0 != expected)
-            exit 1
-        count++
-    }
-    END {
-        if (count != 1)
-            exit 1
-    }
-' "$policy_tmp" || {
-    echo "install-privileged: policy template must render exactly the managed helper rule" >&2
-    exit 65
-}
-chown root:wheel "$policy_tmp"
-chmod 0440 "$policy_tmp"
-visudo -cf "$policy_tmp" >/dev/null
 mv -f "$policy_tmp" "$policy_path"
 chown root:wheel "$policy_path"
 chmod 0440 "$policy_path"

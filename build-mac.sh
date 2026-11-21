@@ -57,9 +57,7 @@ clang -std=c11 -O2 -Wall -Wextra -Werror \
     -o "$APP/Contents/MacOS/vpnrouter-privileged" \
     "$REPO_DIR/packaging/macos/vpnrouter-privileged.c"
 chmod +x "$APP/Contents/MacOS/vpnrouter-privileged"
-cp "$REPO_DIR/packaging/macos/install-privileged.sh" "$APP/Contents/MacOS/install-privileged.sh"
 cp "$REPO_DIR/packaging/macos/sudoers.template" "$APP/Contents/MacOS/sudoers.template"
-chmod +x "$APP/Contents/MacOS/install-privileged.sh"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
