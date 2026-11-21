@@ -150,7 +150,7 @@ public sealed class PerformanceShareLinkTests
     [InlineData("tuic://test", true)]
     [InlineData("ss://test", true)]
     [InlineData("http://test", false)]
-    [InlineData("vmess://test", false)]
+    [InlineData("vmess://test", true)]
     [InlineData("unsupported://test", false)]
     [InlineData(" vless://test", false)]
     [InlineData("", false)]

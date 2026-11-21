@@ -270,6 +270,9 @@ public static class LeakProtection
             case "vless":
                 ValidateVlessOutbound(o, errors);
                 break;
+            case "vmess":
+                ValidateVmessOutbound(o, errors);
+                break;
             case "hysteria2":
                 ValidateHysteria2Outbound(o, errors);
                 break;
@@ -300,6 +303,21 @@ public static class LeakProtection
         if (vless.Tls?.Reality?.Enabled == true
             && !VlessUriParser.IsValidRealityPublicKey(vless.Tls.Reality.PublicKey))
             errors.Add($"{label}: reality public_key is missing or not a 32-byte base64url key");
+    }
+
+    private static void ValidateVmessOutbound(SingBoxOutbound vmess, List<string> errors)
+    {
+        var label = $"VMess outbound '{vmess.Tag}'";
+        if (string.IsNullOrWhiteSpace(vmess.Server))
+            errors.Add($"{label}: server is empty");
+        if (!Guid.TryParse(vmess.Uuid, out _))
+            errors.Add($"{label}: uuid is invalid");
+        if (vmess.ServerPort is null or <= 0 or > 65535)
+            errors.Add($"{label}: server_port is invalid");
+        if (vmess.AlterId is int alterId && alterId != 0)
+            errors.Add($"{label}: alter_id must be 0 (AEAD only)");
+        if (!VmessUriParser.TryNormalizeAeadSecurity(vmess.VmessSecurity, out _))
+            errors.Add($"{label}: security must be an AEAD cipher");
     }
 
     private static void ValidateHysteria2Outbound(SingBoxOutbound hy2, List<string> errors)

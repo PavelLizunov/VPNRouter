@@ -44,10 +44,11 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
         var candidates = feed.Servers.Where(row =>
         {
             if (string.IsNullOrEmpty(row.DetourVia) || row.Port != Target.Port ||
-                row.Server != Target.Server || !UsableVless(row) || SubscriptionEntry.OutboundKey(row) != targetKey) return false;
+                row.Server != Target.Server || !IsUsableChainTarget(row) ||
+                SubscriptionEntry.OutboundKey(row) != targetKey) return false;
             var hops = byId[row.DetourVia].Take(2).ToArray();
             return hops.Length == 1 && feed.Servers.Contains(hops[0]) &&
-                string.IsNullOrEmpty(hops[0].DetourVia) && UsableVless(hops[0]);
+                string.IsNullOrEmpty(hops[0].DetourVia) && IsUsableChainUpstream(hops[0]);
         }).ToList();
         if (candidates.Count <= 1) return candidates.FirstOrDefault();
 
@@ -58,7 +59,12 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
         return exact.Length == 1 ? exact[0] : null;
     }
 
-    private static bool UsableVless(VlessServerEntry row) =>
+    // One direct VLESS entry is the only accepted upstream. A VMess exit is a valid
+    // target when the app feed marks it as chained; it never becomes an entry.
+    internal static bool IsUsableChainTarget(VlessServerEntry row) =>
+        IsUsableChainUpstream(row) || IsUsableVmessTarget(row);
+
+    internal static bool IsUsableChainUpstream(VlessServerEntry row) =>
         string.Equals(row.Protocol ?? "vless", "vless", StringComparison.OrdinalIgnoreCase) &&
         !string.Equals(row.Transport?.Type, "xhttp", StringComparison.OrdinalIgnoreCase) &&
         row.Awg == null && !row.IsDnsTunnel && !string.IsNullOrWhiteSpace(row.Server) &&
@@ -66,4 +72,19 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
         !VlessServersResolver.IsPlaceholderEntry(row) &&
         (!string.Equals(row.Security, "reality", StringComparison.OrdinalIgnoreCase) ||
             VlessUriParser.IsValidRealityPublicKey(row.Reality?.PublicKey));
+
+    private static bool IsUsableVmessTarget(VlessServerEntry row)
+    {
+        var transport = row.Transport?.Type;
+        var tls = row.Tls;
+        return string.Equals(row.Protocol ?? "vless", "vmess", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(row.Server) && row.Server != "your.server.com" &&
+            row.Port is > 0 and <= 65535 && !string.IsNullOrWhiteSpace(row.Uuid) &&
+            row.AlterId == 0 && VmessUriParser.TryNormalizeAeadSecurity(row.VmessSecurity, out _) &&
+            tls is not null && tls.Enabled && !string.IsNullOrWhiteSpace(tls.ServerName) &&
+            !VlessServersResolver.IsPlaceholderEntry(row) &&
+            (string.IsNullOrEmpty(transport) ||
+                transport.Equals("tcp", StringComparison.OrdinalIgnoreCase) ||
+                transport.Equals("ws", StringComparison.OrdinalIgnoreCase));
+    }
 }

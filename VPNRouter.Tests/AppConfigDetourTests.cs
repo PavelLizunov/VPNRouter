@@ -97,7 +97,7 @@ public class AppConfigDetourTests
                 string.Equals(h.Key, "X-VPNRouter-Capabilities", StringComparison.OrdinalIgnoreCase));
 
             Assert.NotNull(capHeader.Key);
-            Assert.Equal("detour-v1", capHeader.Value);
+            Assert.Equal("detour-v1, vmess-v1", capHeader.Value);
         }
         finally
         {

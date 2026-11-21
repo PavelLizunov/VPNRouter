@@ -40,6 +40,17 @@ public class VlessServerEntry
     [YamlMember(Alias = "flow")]
     public string Flow { get; set; } = string.Empty;
 
+    // VMess AEAD cipher. Null on non-VMess rows so existing serialized rows keep
+    // their exact shape; VMess rows default to aes-128-gcm when the field is absent.
+    [YamlMember(Alias = "vmess_security", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? VmessSecurity { get; set; }
+
+    // VMess legacy alter_id. Only 0 (AEAD) is accepted; the default stays omitted.
+    [YamlMember(Alias = "alter_id", DefaultValuesHandling = DefaultValuesHandling.OmitDefaults)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AlterId { get; set; }
+
     [YamlMember(Alias = "security")]
     public string Security { get; set; } = "reality";
 

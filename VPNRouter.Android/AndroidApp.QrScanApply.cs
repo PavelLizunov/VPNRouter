@@ -26,6 +26,7 @@ public partial class AndroidApp
         }
 
         if (lowered.StartsWith("vless://") ||
+            lowered.StartsWith("vmess://") ||
             lowered.StartsWith("hy2://") ||
             lowered.StartsWith("hysteria2://") ||
             lowered.StartsWith("tuic://") ||

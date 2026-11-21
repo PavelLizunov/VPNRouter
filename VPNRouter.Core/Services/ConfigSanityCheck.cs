@@ -56,13 +56,33 @@ public sealed class ConfigSanityCheck
                 "outbound.server_port");
 
         var proxyType = StjNodeHelpers.AsString(proxy["type"])?.ToLowerInvariant() ?? "";
-        if (proxyType == "vless")
+        if (proxyType == "vless" || proxyType == "vmess")
         {
             var uuid = StjNodeHelpers.AsString(proxy["uuid"]);
             if (string.IsNullOrWhiteSpace(uuid))
                 return new PreStartCheckResult(true,
-                    "VLESS proxy outbound has empty 'uuid' — handshake would fail",
+                    $"{proxyType.ToUpperInvariant()} proxy outbound has empty 'uuid' — handshake would fail",
                     "outbound.uuid");
+        }
+
+        if (proxyType == "vmess")
+        {
+            if (!Guid.TryParse(StjNodeHelpers.AsString(proxy["uuid"]), out _))
+                return new PreStartCheckResult(true,
+                    "VMess proxy outbound has an invalid UUID",
+                    "outbound.uuid");
+
+            var alterId = StjNodeHelpers.AsInt(proxy["alter_id"]) ?? 0;
+            if (alterId != 0)
+                return new PreStartCheckResult(true,
+                    "VMess proxy outbound uses legacy alter_id — only AEAD is supported",
+                    "outbound.alter_id");
+
+            var security = StjNodeHelpers.AsString(proxy["security"]);
+            if (!VmessUriParser.TryNormalizeAeadSecurity(security, out _))
+                return new PreStartCheckResult(true,
+                    "VMess proxy outbound uses a non-AEAD cipher",
+                    "outbound.security");
         }
 
         var offendingField = InspectOutbound(proxy);

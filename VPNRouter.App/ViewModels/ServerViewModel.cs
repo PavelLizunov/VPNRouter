@@ -433,6 +433,14 @@ public partial class ServerViewModel : ViewModelBase
                     parts.Add(HasUdpSibling ? "naive + hy2" : "naive");
                     break;
 
+                case "vmess":
+                    parts.Add("vmess");
+                    if (!string.IsNullOrWhiteSpace(_originalEntry?.Transport?.Type))
+                        parts.Add(_originalEntry!.Transport!.Type.ToLowerInvariant());
+                    if (_originalEntry?.Tls?.Enabled == true)
+                        parts.Add("tls");
+                    break;
+
                 case "dns-tunnel":
                     parts.Add("dns-tunnel");
                     break;

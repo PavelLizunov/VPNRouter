@@ -33,6 +33,9 @@ public static class ServerUriParser
         if (uri.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
             return VlessUriParser.Parse(uri);
 
+        if (uri.StartsWith(VmessUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return VmessUriParser.Parse(uri);
+
         if (uri.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return DnsttUriParser.Parse(uri);
 
@@ -74,7 +77,7 @@ public static class ServerUriParser
             entry = ParseAmneziaWg(uri);
         }
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / vmess:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
 
         var offendingField = PlaceholderDefense.Inspect(entry);
         if (offendingField != null)
@@ -147,6 +150,7 @@ public static class ServerUriParser
             return SingBoxFeatures.AwgAvailable;
 
         return line.StartsWith("vless://",     StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith(VmessUriParser.Prefix, StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hy2://",       StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("tuic://",      StringComparison.OrdinalIgnoreCase) ||

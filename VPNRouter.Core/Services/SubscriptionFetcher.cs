@@ -23,12 +23,12 @@ public static class SubscriptionFetcher
     private static readonly IReadOnlyDictionary<string, string> SubscriptionHeaders =
         new Dictionary<string, string>
         {
-            ["X-VPNRouter-Capabilities"] = "detour-v1"
+            ["X-VPNRouter-Capabilities"] = "detour-v1, vmess-v1"
         };
 
     private static IReadOnlyDictionary<string, string> GetSubscriptionHeaders(bool secure) =>
         secure && SingBoxFeatures.DnsttAvailable
-            ? new Dictionary<string, string> { ["X-VPNRouter-Capabilities"] = "detour-v1, dnstt-v1" }
+            ? new Dictionary<string, string> { ["X-VPNRouter-Capabilities"] = "detour-v1, dnstt-v1, vmess-v1" }
             : SubscriptionHeaders;
 
     public static async Task<List<VlessServerEntry>> FetchAsync(string url, ILogger? logger = null, CancellationToken ct = default)
@@ -224,13 +224,66 @@ public static class SubscriptionFetcher
 
     private static List<VlessServerEntry> DeduplicateServers(List<VlessServerEntry> result, ILogger? logger)
     {
-        var deduped = result.DistinctBy(e =>
-            (e.Server, e.Port, e.Uuid, e.Flow, e.Username, e.Password, e.OutboundId, e.DetourVia,
-                e.Dnstt?.Domain, e.Dnstt?.NoiseKey, e.Dnstt?.SshHostKey, e.Dnstt?.SshPrivateKey)).ToList();
+        var deduped = result.DistinctBy(DedupeKey).ToList();
         if (deduped.Count < result.Count)
             logger?.Information("[Subscription] Deduplicated {Before}→{After} servers",
                 result.Count, deduped.Count);
         return deduped;
+    }
+
+    private readonly record struct ServerDedupKey(
+        string Protocol,
+        string Server,
+        int Port,
+        string Uuid,
+        string Flow,
+        string Username,
+        string Password,
+        string OutboundId,
+        string DetourVia,
+        string? VmessSecurity,
+        int? AlterId,
+        bool? TlsEnabled,
+        string? TlsServerName,
+        bool? TlsInsecure,
+        string? TlsFingerprint,
+        string? TlsAlpn,
+        string? TransportType,
+        string? TransportPath,
+        string? TransportHost,
+        string? DnsttDomain,
+        string? DnsttNoiseKey,
+        string? DnsttSshHostKey,
+        string? DnsttSshPrivateKey);
+
+    private static ServerDedupKey DedupeKey(VlessServerEntry entry)
+    {
+        var protocol = (entry.Protocol ?? "vless").Trim().ToLowerInvariant();
+        var isVmess = protocol == "vmess";
+        return new ServerDedupKey(
+            Protocol: isVmess ? protocol : string.Empty,
+            Server: entry.Server,
+            Port: entry.Port,
+            Uuid: entry.Uuid,
+            Flow: entry.Flow,
+            Username: entry.Username,
+            Password: entry.Password,
+            OutboundId: entry.OutboundId,
+            DetourVia: entry.DetourVia,
+            VmessSecurity: isVmess ? entry.VmessSecurity : null,
+            AlterId: isVmess ? entry.AlterId : null,
+            TlsEnabled: isVmess ? entry.Tls?.Enabled : null,
+            TlsServerName: isVmess ? entry.Tls?.ServerName : null,
+            TlsInsecure: isVmess ? entry.Tls?.Insecure : null,
+            TlsFingerprint: isVmess ? entry.Tls?.Fingerprint : null,
+            TlsAlpn: isVmess ? entry.Tls?.Alpn : null,
+            TransportType: isVmess ? entry.Transport?.Type : null,
+            TransportPath: isVmess ? entry.Transport?.Path : null,
+            TransportHost: isVmess ? VmessUriParser.HostHeader(entry) : null,
+            DnsttDomain: entry.Dnstt?.Domain,
+            DnsttNoiseKey: entry.Dnstt?.NoiseKey,
+            DnsttSshHostKey: entry.Dnstt?.SshHostKey,
+            DnsttSshPrivateKey: entry.Dnstt?.SshPrivateKey);
     }
 
     public static async Task<int> RefreshEntryAsync(
@@ -278,12 +331,20 @@ internal sealed class NativeSubscriptionRows
         public string? Via { get; } = via;
         public string? ShareUri { get; } = uri;
         public string? DisplayName => ShareUri is null ? null :
-            Uri.UnescapeDataString(ShareUri[(ShareUri.LastIndexOf('#') + 1)..]);
+            ShareUri.StartsWith(VmessUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+                ? VmessUriParser.TryParse(ShareUri)?.Name
+                : Uri.UnescapeDataString(ShareUri[(ShareUri.LastIndexOf('#') + 1)..]);
         public string? OutboundId { get; set; }
         public string? DetourId { get; set; }
 
-        private bool? _usable;
-        public bool IsUsableHop => _usable ??= canChain && ShareUri is not null && VlessUriParser.TryParse(ShareUri) is not null;
+        private VlessServerEntry? _parsed;
+        private bool? _usableUpstream;
+        private bool? _usableTarget;
+        private VlessServerEntry? Parsed => _parsed ??= ShareUri is null ? null : ServerUriParser.TryParse(ShareUri);
+        public bool IsUsableUpstream => _usableUpstream ??=
+            canChain && Parsed is { } upstream && SubscriptionChainSelection.IsUsableChainUpstream(upstream);
+        public bool IsUsableTarget => _usableTarget ??=
+            canChain && Parsed is { } target && SubscriptionChainSelection.IsUsableChainTarget(target);
     }
 
     private readonly List<Row> _rows = new();
@@ -307,9 +368,9 @@ internal sealed class NativeSubscriptionRows
         foreach (var target in _rows.Where(row => row.Via is not null))
         {
             var matches = byName[target.Via];
-            if (!allowChains || string.IsNullOrEmpty(target.Via) || !target.IsUsableHop ||
+            if (!allowChains || string.IsNullOrEmpty(target.Via) || !target.IsUsableTarget ||
                 string.IsNullOrEmpty(target.DisplayName) || byDisplayName[target.DisplayName].Count() != 1 ||
-                matches.Count() != 1 || matches.First() is not { Via: null, IsUsableHop: true } upstream)
+                matches.Count() != 1 || matches.First() is not { Via: null, IsUsableUpstream: true } upstream)
             {
                 skippedChains = true;
                 continue;
@@ -327,10 +388,17 @@ internal sealed class NativeSubscriptionRows
             var uri = row.ShareUri;
             if (row.OutboundId is not null)
             {
-                // Both native VLESS mappers emit a query followed by an escaped name fragment.
-                var metadata = "&outbound=" + row.OutboundId;
-                if (row.DetourId is not null) metadata += "&detour=" + row.DetourId;
-                uri = uri.Insert(uri.IndexOf('#'), metadata);
+                if (uri.StartsWith(VmessUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    uri = VmessUriParser.AddChainMetadata(uri, row.OutboundId, row.DetourId);
+                }
+                else
+                {
+                    // Both native VLESS mappers emit a query followed by an escaped name fragment.
+                    var metadata = "&outbound=" + row.OutboundId;
+                    if (row.DetourId is not null) metadata += "&detour=" + row.DetourId;
+                    uri = uri.Insert(uri.IndexOf('#'), metadata);
+                }
             }
             uris.Add(uri);
         }

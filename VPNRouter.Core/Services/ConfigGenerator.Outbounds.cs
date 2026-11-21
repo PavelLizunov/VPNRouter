@@ -233,10 +233,19 @@ public static partial class ConfigGenerator
 
         var target = chainedTargets[0];
         var targetProto = (target.Protocol ?? "vless").ToLowerInvariant();
-        if (targetProto != "vless" || "xhttp".Equals(target.Transport?.Type, StringComparison.OrdinalIgnoreCase))
+        if ((targetProto != "vless" && targetProto != "vmess")
+            || "xhttp".Equals(target.Transport?.Type, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "ConfigGenerator: chained target uses unsupported protocol/transport — only VLESS is supported.");
+                "ConfigGenerator: chained target uses unsupported protocol/transport — use VLESS or VMess.");
+        }
+
+        var targetTls = target.Tls;
+        if (targetProto == "vmess"
+            && (targetTls is null || !targetTls.Enabled || string.IsNullOrWhiteSpace(targetTls.ServerName)))
+        {
+            throw new InvalidOperationException(
+                "ConfigGenerator: chained VMess target requires TLS with a server name.");
         }
 
         var upstreams = servers.Where(s =>
@@ -256,6 +265,12 @@ public static partial class ConfigGenerator
         {
             throw new InvalidOperationException(
                 "ConfigGenerator: chained upstream uses unsupported protocol/transport — only VLESS is supported.");
+        }
+
+        if (targetProto == "vmess" && !SubscriptionChainSelection.IsUsableChainUpstream(upstream))
+        {
+            throw new InvalidOperationException(
+                "ConfigGenerator: chained VMess target references an unusable upstream.");
         }
 
         var upstreamOutbound = BuildVlessOutbound(upstream, "chain-entry");
