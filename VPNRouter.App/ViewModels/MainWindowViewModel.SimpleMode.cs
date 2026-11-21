@@ -14,7 +14,12 @@ public partial class MainWindowViewModel
     [ObservableProperty] private string _smpInput = string.Empty;
 
     [ObservableProperty] private string _smpErrorText = string.Empty;
-    [ObservableProperty] private bool _smpStopUnconfirmed;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsWarn))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsOff))]
+    [NotifyPropertyChangedFor(nameof(VpnBadgeTooltip))]
+    private bool _smpStopUnconfirmed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(L_SmpConfigRowToggle))]
@@ -131,9 +136,9 @@ public partial class MainWindowViewModel
         }
     }
 
-    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting && !IsApplying && !HasConnectionAlert;
-    public bool SimpleStatusIsWarn => IsConnecting || IsApplying || HasConnectionAlert;
-    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting && !IsApplying && !HasConnectionAlert;
+    public bool SimpleStatusIsOn   => IsConnected && !SimpleStatusIsWarn;
+    public bool SimpleStatusIsWarn => IsConnecting || IsApplying || HasConnectionAlert || SmpStopUnconfirmed;
+    public bool SimpleStatusIsOff  => !IsConnected && !SimpleStatusIsWarn;
 
     public string SimpleStatusTitle => IsConnecting
         ? Strings.SmpStatusConnecting
@@ -663,7 +668,7 @@ public partial class MainWindowViewModel
     // Error represents a failed start. Warn covers a connection alert or an unconfirmed stop.
     public bool SmpHeroIsError => !IsConnected && !string.IsNullOrEmpty(SmpErrorText);
     public bool SmpHeroIsWarn => !IsConnecting && !SmpHeroIsError && (SmpStopUnconfirmed || HasConnectionAlert);
-    public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError && !SmpStopUnconfirmed;
+    public bool SmpHeroIsOn => SimpleStatusIsOn && !SmpHeroIsError;
     public bool SmpHeroIsBusy => (IsConnecting || IsApplying) && !SmpHeroIsError;
     public bool SmpHeroIsIdle => !SmpHeroIsOn && !SmpHeroIsBusy && !SmpHeroIsError && !SmpHeroIsWarn;
 

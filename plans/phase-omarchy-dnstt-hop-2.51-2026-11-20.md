@@ -39,3 +39,19 @@ language, survives a poll after the process exits while the manager still
 holds ownership, and clears on a confirmed stop. Live desktop acceptance is
 pending. The installed Arch smoke test imports and lists a synthetic DNSTT
 profile in a disposable data directory.
+
+## Exact candidate review follow-up
+
+Independent static review at `65bab30` found that the VPN chip and footer
+can disagree with the Simple Stop warning. Reuse the warning state for
+Disconnect and Quit. Keep exact process ownership and existing action
+guards. This has desktop presentation risk and can be rolled back by
+reverting the follow-up commit. Extend the existing ViewModel fixture to
+assert the chip, tooltip, footer, localization and runtime reconciliation.
+Run exact-head hosted checks and verify the failure scenario on WINBRAT
+before claiming live acceptance.
+
+Omarchy 2.51.0 already bundles the Arch package built at `a97808f9`. The
+later `65bab30` changes affect the desktop ViewModel, its tests and plans.
+The existing Omarchy acceptance remains bound to `a97808f9`. Standard's
+release asset inventory excludes the Arch package.

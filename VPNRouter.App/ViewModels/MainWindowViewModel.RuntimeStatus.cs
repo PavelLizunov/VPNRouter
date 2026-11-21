@@ -43,7 +43,9 @@ public partial class MainWindowViewModel
     public IBrush ZapretBadgeBrush  => BadgeBrush(ZapretRuntimeStatus);
     public IBrush TgProxyBadgeBrush => BadgeBrush(TgProxyRuntimeStatus);
 
-    public string VpnBadgeTooltip     => FormatTooltip(Strings.BadgeTooltipVpn, VpnRuntimeStatus);
+    public string VpnBadgeTooltip     => SmpStopUnconfirmed
+        ? Strings.TunnelStopUnconfirmed
+        : FormatTooltip(Strings.BadgeTooltipVpn, VpnRuntimeStatus);
     public string ZapretBadgeTooltip  => FormatTooltip(Strings.BadgeTooltipZapret, ZapretRuntimeStatus);
     public string TgProxyBadgeTooltip => FormatTooltip(Strings.BadgeTooltipTgProxy, TgProxyRuntimeStatus);
 

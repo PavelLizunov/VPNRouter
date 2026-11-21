@@ -107,8 +107,10 @@ public sealed class SimpleConnectStatusTests
         Assert.False(vm.IsConnected);
     }
 
-    [AvaloniaFact]
-    public async Task UnconfirmedStopStaysLocalizedUntilTheTunnelStops()
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnconfirmedStopStaysLocalizedUntilTheTunnelStops(bool quit)
     {
         var settings = new AppSettings();
         settings.App.UiMode = "simple";
@@ -129,16 +131,27 @@ public sealed class SimpleConnectStatusTests
         try
         {
             vm.IsConnected = true;
-            await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            if (quit)
+                Assert.False(vm.TryPrepareQuit());
+            else
+                await vm.SmpToggleConnectCommand.ExecuteAsync(null);
             var firstWarning = BoundText(view.Page, "ConnectionDetails");
             Assert.Equal(Strings.TunnelStopUnconfirmed, firstWarning);
             Assert.True(vm.SimpleCtaIsConnected);
             Assert.True(vm.SmpHeroIsWarn);
             Assert.False(vm.SmpHeroIsOn);
+            Assert.True(vm.SimpleStatusIsWarn);
+            Assert.False(vm.SimpleStatusIsOn);
+            Assert.False(vm.SimpleStatusIsOff);
+            Assert.Equal(firstWarning, vm.VpnBadgeTooltip);
+            ReportStatus(engine, "Tunnel stop was not confirmed. Retry disconnect.");
+            Assert.Equal(firstWarning, vm.StatusText);
 
             vm.ToggleLanguageCommand.Execute(null);
             Assert.Equal(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
             Assert.NotEqual(firstWarning, BoundText(view.Page, "ConnectionDetails"));
+            Assert.Equal(Strings.TunnelStopUnconfirmed, vm.VpnBadgeTooltip);
+            Assert.Equal(Strings.TunnelStopUnconfirmed, vm.StatusText);
 
             identity.ExitQueryUnavailable = false;
             identity.SignalExit(0);
@@ -149,9 +162,14 @@ public sealed class SimpleConnectStatusTests
             Assert.Equal(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
 
             managerField.SetValue(engine, null);
-            ReportStatus(engine, "Stopped");
+            if (quit)
+                ReportStatus(engine, "Stopped");
+            else
+                vm.SyncConnectedWithVpnRuntime(vpnRunning: false);
             Assert.False(vm.IsConnected);
             Assert.False(vm.SmpHeroIsWarn);
+            Assert.True(vm.SimpleStatusIsOff);
+            Assert.Equal(Strings.NotConnected, vm.StatusText);
             Assert.NotEqual(Strings.TunnelStopUnconfirmed, BoundText(view.Page, "ConnectionDetails"));
         }
         finally

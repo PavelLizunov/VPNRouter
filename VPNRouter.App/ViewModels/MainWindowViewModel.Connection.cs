@@ -90,7 +90,7 @@ public partial class MainWindowViewModel
                 RefreshActiveIndicator();
                 HasPendingAppChanges = false;
             }
-            else
+            else if (!SmpStopUnconfirmed)
             {
                 if (IsConnected && status.StartsWith("Applied (", StringComparison.Ordinal))
                 {
@@ -165,6 +165,14 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private Task ToggleConnectionAsync() => ToggleConnectionCoreAsync(null);
 
+    private void ShowUnconfirmedStop()
+    {
+        SmpStopUnconfirmed = true;
+        IsConnected = _engine.HasActiveTunnel;
+        ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
+        StatusText = Strings.TunnelStopUnconfirmed;
+    }
+
     private async Task ToggleConnectionCoreAsync(AppSettings? submitted)
     {
         var toggle = ConnectionSyncPolicy.DecideToggle(
@@ -191,7 +199,6 @@ public partial class MainWindowViewModel
         {
             if (submitted != null) return;
             SmpErrorText = string.Empty;
-            SmpStopUnconfirmed = false;
             IsConnecting = true;
             StatusText = Strings.Stopping;
             try
@@ -213,12 +220,10 @@ public partial class MainWindowViewModel
             {
                 _logger.Error(ex, "[VM] Error during Stop");
                 IsConnecting = false;
-                IsConnected = _engine.HasActiveTunnel;
-                ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
-                StatusText = Strings.TunnelStopUnconfirmed;
-                SmpStopUnconfirmed = true;
+                ShowUnconfirmedStop();
                 return;
             }
+            SmpStopUnconfirmed = false;
             IsConnected = false;
             IsConnecting = false;
             ConnectButtonText = Strings.StartVPN;
@@ -564,6 +569,8 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(SimpleActiveOutboundIsSuspect));
         OnPropertyChanged(nameof(SimpleActiveOutboundNormalVisible));
         OnPropertyChanged(nameof(SimpleActiveOutboundSuspectVisible));
+
+        if (SmpStopUnconfirmed) return;
 
         if (DisplayedTunnel is not { } tunnel)
         {
