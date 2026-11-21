@@ -63,7 +63,7 @@ validated before it can reach root:
   `path`, and the forbidden key list below) must use their exact lowercase
   spelling. Unrelated field names keep their original casing;
 - `log.output` absent or empty (the app omits the user log file);
-- cache file and cache ID settings are absent. The app strips the generated
+- cache file and cache ID settings are absent. The app strips
   `experimental.cache_file` before staging. `experimental.clash_api.external_ui`
   is absent or empty;
 - `experimental.services` absent or empty;
@@ -118,6 +118,12 @@ session and how to stop it. The installer never restores the legacy grant.
 An open descriptor holds the kernel installation lock until the shell exits.
 The lock file stays in the protected directory. The kernel releases the lock
 when an interrupted installer exits.
+
+The system acceptance workflow builds the exact same-repository PR head on a
+disposable macOS runner. It checks migration from a no-op legacy grant and
+starts and stops an isolated TUN through a standard-user helper call. It
+leaves the default route intact. The interactive administrator prompt and
+host DNS and firewall changes require separate live verification.
 
 The app re-runs the installer when the bundled helper or sing-box hash differs
 from the manifest, so a release that changes either artifact costs one

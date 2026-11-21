@@ -278,6 +278,30 @@ live acceptance.
   final probe, rollback and preserving an existing rule if rename fails.
   The staged-file flush passed on a temporary file. No live installer
   or privilege changes were made.
+- Independent review accepted the Shadowsocks restriction at `747100f0`
+  and confirmed that plain generated profiles omit both plugin keys. The
+  managed run 44864672980 and the native and Android checks passed on that
+  commit. The specific plugin P0 is closed in code and CI. Imported
+  profiles that explicitly serialize empty plugin fields still fail at
+  Connect. Live migration remains open under the F-01 P1.
+- An unprivileged macOS AppleScript fixture verified that a shell failure
+  passes the legacy-process marker to osascript stderr for status 66 and
+  78. This confirms error transport without exercising an admin prompt.
+- The release DMG workflow requires an immutable version tag even when
+  uploads are disabled. Use a disposable GitHub-hosted macOS job at an
+  exact commit for pre-release installation acceptance. Exercise the
+  packaged helper with a dedicated standard-user fixture account, an
+  inert legacy policy, real installed ownership, the helper probe and an
+  isolated TUN start and stop with no default route changes. This can
+  validate the system boundary without publishing a tag. Interactive
+  administrator approval and live DNS and firewall coverage remain needed.
+- Live system acceptance will run as a separate check for macOS changes on
+  a same-repository PR. It checks out the exact source head, builds a local
+  package on the disposable hosted runner, migrates a benign legacy rule for
+  a fixture account, and checks the real standard-user helper, TUN, and
+  teardown. It has read-only repository access and publishes no assets.
+- The native contract and all six managed checks passed at `74c0dd4f`
+  before the live test was added. Managed run 44865608490 passed.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

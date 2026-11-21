@@ -16,7 +16,6 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P0** - F-01 native config review: Shadowsocks plugin options can cause privileged file reads in the pinned `v1.14.4-vpnctl.2` core. The helper and managed contract now reject both plugin keys and case variants. Plain Shadowsocks is still allowed. Exact-head CI and review of the restriction are pending. See `plans/phase-f01-macos-durable-2026-11-21.md`.
 - [ ] **P2** - F-01 custom import: macOS runtime restrictions are checked at Connect. Adding an import can accept a profile that later fails those restrictions. Any import preflight must account for compatibility transformations applied before the final config is prepared. See `plans/phase-f01-macos-durable-2026-11-21.md`.
 - [ ] **P1** - F-01 lifecycle review: per-user starts and stops serialize config and session state. Start refuses a present or unknown legacy grant or an observed legacy root runtime for that user. The installer verifies installed artifacts before publishing the managed rule and removes that rule if its probe fails. CI and review of the installer change, ownership of global DNS and firewall mutations, and live migration are pending. See `plans/phase-f01-macos-durable-2026-11-21.md`.
 - [ ] **P2** — Omarchy installed backend predates DNSTT subscription capability. Its packaged core is 1.14.4-vpnctl.2, but the same live feed returns a DNSTT profile only for the newer capability request. New package and live UI acceptance are pending. See [2.51 phase](phase-omarchy-dnstt-hop-2.51-2026-11-20.md).
@@ -27,7 +26,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [ ] **P3** — The desktop VPN chip, tooltip and footer disagree after an unconfirmed Stop. Quit also misses the Simple warning. Fix prepared in PR #713. CI and live verification are pending. See [2.51 phase](phase-omarchy-dnstt-hop-2.51-2026-11-20.md).
 - [ ] **P3** — Quick-test hints for older DNS tunnel formats remain a separate headless follow-up. The candidate change covers chained and DNSTT routes.
 - [ ] **P3** — Arch smoke confirms packaged DNSTT import and listing. Asserting the installed quick-test result and documenting the smoke's OpenSSH prerequisite remain follow-ups.
-- [ ] **P2** — The `65bab30` test ZIP passed two WINBRAT UI connect, proxy HTTPS and disconnect cycles. Ten UDP probes failed with `ProbeSendInlineMethodInvocationException`. The error class does not identify the cause. Investigate before reporting a verified candidate.
+- [ ] **P2** — The `65bab30` test ZIP passed two WINBRAT UI connect, proxy HTTPS and disconnect cycles. All ten UDP failures took 8,007–8,073 ms, consistent with the receive timeout. The verifier uses `ProbeSendInlineMethodInvocationException` for both send and receive and records no route evidence on failure. The next run needs the socket error and the route observation before a verified candidate claim.
 - [ ] **P1** — Android managed DNSTT readiness restores a TCP control listener after the per-app validator removes it. Use the private libbox command socket and verify the exact candidate on Android. See [Android private readiness](phase-android-private-readiness-2026-11-21.md) and #689.
 
 - [x] **P1** - Validate rollback before promoting the snapshot and retain the previous live tree and marker on relaunch failure (#661). RESOLVED in source. Rollback and repair, verified at `45a79762` in CI 44368002825.
@@ -536,6 +535,8 @@ Historical original #240 evidence only: the twelve repairs were recorded as reso
 - [x] **P1** — NIGHT-FOLLOWUP-02: SafeMode forces profile FullTunnel in StartupPipeline.cs:699–716 but ConfigGenerator reads settings.App.RoutingMode -> actual route.final is direct under split settings; baseline semantic mismatch not introduced by NIGHT-05, profileName fix unsafe arbitrary names; deferred outside approved 12 repair scope with source facts — `VPNRouter.Core/Services/StartupPipeline.cs:699–716`; `VPNRouter.Core/Services/ConfigGenerator.cs`; `plans/phase-fix-night-audit-gemini-2026-09-04.md` — TBD AUDIT 2026-09-29: CONFIRMED in source. Safe mode builds `Profile FullTunnel` and a full-tunnel firewall path (`StartupPipeline.cs:359-373`), but settings come from `CreateDefaults()` with `RoutingMode = "split"` (`SettingsLoader.cs:45`, `AppConfig.cs:15`) and `ConfigGenerator` uses that value, so safe mode routes with an empty split profile. Impact only with the safe-mode flag. CLOSED 2026-09-29: fixed by #359 (safe mode also sets `RoutingMode = "full"`; regression test).
 
 ## Resolved (history)
+
+- [x] **P0 RESOLVED IN PR #720** - The macOS helper and managed config deny both Shadowsocks plugin keys and case variants in `747100f0`. Plain Shadowsocks passes the contract. Exact-head CI and independent review passed. Live migration remains tracked under the open F-01 P1. See `plans/phase-f01-macos-durable-2026-11-21.md`.
 
 ### Post-ship executable connection gate — 2026-08-12
 
