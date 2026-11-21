@@ -336,6 +336,33 @@ live acceptance.
   tree `6c7211e7875b77eb3bb145f92c3c544fe7c26596`. These cases check
   manual and automatic system DNS responses and reject ambiguous
   output. No real network service was changed in this test.
+- The disposable system check passed at `b6aad387` in run 44867905717.
+  The new DNS code leaves the tested migration and isolated TUN
+  start and stop working. The fixture does not apply system DNS.
+- Host firewall follow-up: the C helper must serialize pf changes with
+  Start, Stop and DNS. Its root-owned record must identify the host session
+  and the applied anchor or legacy mode. Recovery should use that record
+  and the stored pf token. A user-owned marker can log diagnostic state
+  but cannot authorize a root ruleset reload. An active owner prevents
+  cross-user cleanup. The kill switch must remain armed during an owned
+  crash and restart. Refresh the client identity after a confirmed
+  restart before attempting to release the new session's policy.
+- System acceptance review accepted the workflow and identified an
+  empty-route evidence gap and missing signal teardown. The fixture
+  now requires both default-route fields and traps INT and TERM. It
+  adds a disabled network service in a single SystemConfiguration
+  commit, then applies and restores DNS through the actual helper
+  with no changes to the active service. The system check reruns
+  on SDK, app version and generated-config changes.
+- The DNS commit `b6aad387` passed all nine checks, including
+  44867924231 and 44867905717. Test-fixture compile preflight: macOS
+  26.5.2, 10 logical CPUs, load 2.01, 16 GiB RAM (42,594 free and
+  281,378 inactive 16 KiB pages), 1,174 MiB free swap, 82 GiB free
+  disk, no compiler jobs, and Command Line Tools clang available.
+- The test-only SystemConfiguration helper compiled with warnings as
+  errors for tree `0030e550e42c6694adbbb9f8c8aa21f023bddc47`. The shell
+  syntax passed and the non-hosted invocation exited before privileged
+  work. The system test must still run on the disposable hosted image.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

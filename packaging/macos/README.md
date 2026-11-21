@@ -122,9 +122,11 @@ when an interrupted installer exits.
 
 The system acceptance workflow builds the exact same-repository PR head on a
 disposable macOS runner. It checks migration from a no-op legacy grant and
-starts and stops an isolated TUN through a standard-user helper call. It
-leaves the default route intact. The interactive administrator prompt and
-host DNS and firewall changes require separate live verification.
+starts and stops an isolated TUN through a standard-user helper call. The
+test applies and restores DNS on a disabled fixture network service and
+requires a populated default route to stay unchanged. Interactive
+administrator approval, production auto-routing and firewall changes
+require separate live verification.
 
 The app re-runs the installer when the bundled helper or sing-box hash differs
 from the manifest, so a release that changes either artifact costs one

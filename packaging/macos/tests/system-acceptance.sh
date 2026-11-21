@@ -34,7 +34,10 @@ fi
 fixture_uid=600
 while id -nu "$fixture_uid" >/dev/null 2>&1; do
     fixture_uid=$((fixture_uid + 1))
-    [ "$fixture_uid" -lt 700 ]
+    if [ "$fixture_uid" -ge 700 ]; then
+        echo "no available fixture UID in 600-699" >&2
+        exit 66
+    fi
 done
 policy="$sudoers/vpnrouter-$fixture_uid"
 record="$root_dir/run/$fixture_uid/session.json"
@@ -42,6 +45,8 @@ sudo -n /bin/test ! -e "$policy"
 sudo -n /bin/test ! -L "$policy"
 fixture_dir="$(mktemp -d "$RUNNER_TEMP/vpnrouter-system.XXXXXX")"
 launcher_pid=
+dns_service='VPNRouter CI DNS'
+dns_service_prepared=0
 
 as_fixture() {
     sudo -n -H -u "$fixture_user" /usr/bin/sudo -n "$helper"
@@ -54,11 +59,20 @@ stop_fixture() {
     printf '%s' "$identity" | as_fixture
 }
 
+dns_service_exists() {
+    /usr/sbin/networksetup -listallnetworkservices |
+        sed 's/^\*[[:space:]]*//' | grep -Fxq "$dns_service"
+}
+
 cleanup() {
     local result=$?
     trap - EXIT
     if sudo -n /bin/test -f "$record"; then
         stop_fixture || result=1
+    fi
+    if [ "$dns_service_prepared" -eq 1 ] && dns_service_exists; then
+        printf '%s' '{"version":1,"op":"dns_restore"}' | as_fixture || result=1
+        sudo -n /usr/sbin/networksetup -removenetworkservice "$dns_service" || result=1
     fi
     sudo -n /bin/rm -f "$policy" "$legacy" "$helper" || result=1
     sudo -n /bin/rm -rf "$fixture_source" "$root_dir" "$fixture_home" || result=1
@@ -72,6 +86,8 @@ cleanup() {
     exit "$result"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "Checking protected directories on the hosted macOS image"
 sudo -n /usr/bin/stat -f '%N %u:%g %Op' /Library "/Library/Application Support" \
@@ -125,9 +141,34 @@ jq -e --argjson uid "$fixture_uid" --arg helper "$helper_sha" --arg runtime "$si
 echo "Installed helper is ready under the standard user"
 
 default_route() {
-    /sbin/route -n get default | awk '/gateway:|interface:/ {print}'
+    /sbin/route -n get default | awk '
+        $1 == "gateway:" && NF == 2 { gateway = $2 }
+        $1 == "interface:" && NF == 2 { device = $2 }
+        END {
+            if (gateway == "" || device == "") exit 1
+            print gateway, device
+        }'
 }
+
+fixture_dns() {
+    /usr/sbin/networksetup -getdnsservers "$dns_service"
+}
+
 baseline_route="$(default_route)"
+default_device="$(awk '{print $2}' <<< "$baseline_route")"
+if dns_service_exists; then
+    echo "DNS fixture service name is already in use" >&2
+    exit 66
+fi
+clang -std=c11 -Wall -Wextra -Werror -framework SystemConfiguration -framework CoreFoundation \
+    "$(dirname "$0")/disabled-dns-service.c" -o "$fixture_dir/disabled-dns-service"
+dns_service_prepared=1
+sudo -n "$fixture_dir/disabled-dns-service" "$default_device" "$dns_service"
+[ "$(/usr/sbin/networksetup -getnetworkserviceenabled "$dns_service")" = Disabled ]
+sudo -n /usr/sbin/networksetup -setdnsservers "$dns_service" 192.0.2.17
+[ "$(fixture_dns)" = 192.0.2.17 ]
+[ "$(default_route)" = "$baseline_route" ]
+
 config_dir="$fixture_home/Library/Application Support/VPNRouter/config"
 sudo -n -H -u "$fixture_user" /bin/mkdir -p "$config_dir"
 cat > "$fixture_dir/settings.json" <<'JSON'
@@ -165,6 +206,11 @@ pid="$(sudo -n /bin/cat "$record" | jq -er '.pid')"
 [ "$(/bin/ps -p "$pid" -o uid= | tr -d ' ')" = 0 ]
 echo "Root runtime created the fixture TUN with the default route intact"
 
+jq -cn --arg service "$dns_service" \
+    '{version:1, op:"dns_apply", service:$service, server:"198.18.230.1"}' | as_fixture
+[ "$(fixture_dns)" = 198.18.230.1 ]
+echo "DNS changed on the disabled fixture service while the session was active"
+
 stop_fixture
 wait "$launcher_pid" || true
 sudo -n /bin/test ! -e "$record"
@@ -172,5 +218,7 @@ if /sbin/ifconfig "$tun" >/dev/null 2>&1; then
     echo "fixture TUN remained after stop" >&2
     exit 66
 fi
+printf '%s' '{"version":1,"op":"dns_restore"}' | as_fixture
+[ "$(fixture_dns)" = 192.0.2.17 ]
 [ "$(default_route)" = "$baseline_route" ]
-echo "System migration and standard-user start and stop passed"
+echo "System migration, standard-user TUN, and disabled-service DNS restore passed"

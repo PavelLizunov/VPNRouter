@@ -5,7 +5,10 @@ on:
     paths:
       - "packaging/macos/**"
       - "VPNRouter.Core/Platform/macOS/**"
+      - "VPNRouter.Core/Services/ConfigGenerator.cs"
+      - "VPNRouter.Core/AppVersion.cs"
       - "build-mac.sh"
+      - "global.json"
       - ".github/workflows/macos-privileged-system.yml"
 
 permissions:
