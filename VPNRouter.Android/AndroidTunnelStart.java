@@ -7,9 +7,14 @@ final class AndroidTunnelStart {
     interface Read { String get(String key); }
     interface Available { boolean get(); }
     interface Preflight { String prepare(); }
+    interface MonotonicMillis { long now(); }
+    interface ReadinessWait { boolean await(long timeoutMillis) throws InterruptedException; }
 
     static final String COMMAND = "vpn_ui_command";
     static final String SUPERSEDED = "vpn_superseded_selection";
+    // libbox's 15-second HTTP timeout starts after its transport dial.
+    private static final long DNSTT_READINESS_MILLIS = 25_000L;
+    private static final long READINESS_CANCEL_POLL_MILLIS = 100L;
     final String command;
     private final Object monitor;
     private final Read read;
@@ -37,6 +42,19 @@ final class AndroidTunnelStart {
             transition.run();
             return true;
         }
+    }
+
+    boolean awaitDnsttReadiness(long startedAt, MonotonicMillis clock, ReadinessWait wait,
+                                Available passed) throws InterruptedException {
+        long deadline = startedAt + DNSTT_READINESS_MILLIS;
+        while (current()) {
+            long remaining = deadline - clock.now();
+            if (remaining <= 0) return false;
+            if (wait.await(Math.min(remaining, READINESS_CANCEL_POLL_MILLIS))) {
+                return clock.now() <= deadline && passed.get() && current();
+            }
+        }
+        return false;
     }
 
     String prepareAndClaim(Preflight preflight, Runnable claim) {

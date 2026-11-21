@@ -45,3 +45,21 @@ cancellation and that the TUN descriptor was checked only before the probe.
 The probe worker now owns client cleanup, and the Connected commit
 rechecks the descriptor of the same session. The updated exact-commit
 CI, independent review and device verification remain pending.
+
+## Managed readiness deadline
+
+Exact `d8675207` passed CI and independent review. Android 14 ARM64
+confirmed normal included/excluded HTTPS routing and no app TCP listener.
+The managed DNSTT path started libbox but returned `proxy-unreachable`
+at the application cutoff in both attempts (12.09 seconds in the repeat);
+positive DNSTT HTTPS remains unverified. The repeated ordinary control HTTPS succeeded.
+
+The pinned libbox `v1.14.4-vpnctl.2` uses a 15-second HTTP client timeout
+on the private URL test after DNSTT/SSH pre-dial. The old 12-second app
+window could retire a successful candidate before the result arrived.
+Give the complete private readiness check a 25-second bounded window with
+room for command connection and pre-dial. Preserve the 100 ms cancellation
+check, one-shot callback and same-session commit. Verify a positive result
+at 13 seconds, expiry and supersession on a fake monotonic clock. A new
+device run must still distinguish an unavailable endpoint from a late
+result; the prior timeout alone establishes neither cause.

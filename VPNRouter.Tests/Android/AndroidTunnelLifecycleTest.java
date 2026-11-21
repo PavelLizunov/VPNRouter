@@ -17,6 +17,7 @@ public final class AndroidTunnelLifecycleTest {
         replacementDuringPreflightKeepsEstablishedTunnel(false);
         replacementDuringPreflightKeepsEstablishedTunnel(true);
         lateActivationCannotSaveOrPublish();
+        managedDnsttReadinessWaitsForTheNativeResult();
         onlyTheSessionWithAnOpenDescriptorIsReady();
         lateTunWaitsForMainClose();
         slowOrFailedSidecarBlocksReplacement();
@@ -89,9 +90,10 @@ public final class AndroidTunnelLifecycleTest {
                 "persistLastGoodConfig();", "liveService = this;",
                 "writeVpnState(STATE_CONNECTED,", "setTunnelLive(true);", "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))");
         String probe = start.substring(start.indexOf("class DnsttReadyProbe"));
-        requireOrdered(probe, "new Thread(() -> probe.run(start)", "SystemClock.elapsedRealtime() + 12_000L",
-                "worker.start();", "while (start.current())", "probe.finished.await(",
-                "probe.passed && start.current()", "finally", "probe.complete(false);");
+        requireOrdered(probe, "new Thread(() -> probe.run(start)", "long startedAt = SystemClock.elapsedRealtime()",
+                "worker.start();", "start.awaitDnsttReadiness(startedAt, SystemClock::elapsedRealtime,",
+                "probe.finished.await(timeout, TimeUnit.MILLISECONDS)", "() -> probe.passed",
+                "finally", "probe.complete(false);");
         requireOrdered(probe, "private void run(AndroidTunnelStart start)", "if (finished.getCount() == 0 || !start.current()) return;",
                 "Libbox.CommandOutbounds", "Libbox.newCommandClient(", "client.connect();",
                 "if (finished.getCount() == 0 || !start.current()) return;", "client.urlTest(\"proxy\");",
@@ -195,6 +197,35 @@ public final class AndroidTunnelLifecycleTest {
             require(found >= offset, "Missing or misplaced service step: " + step);
             offset = found + step.length();
         }
+    }
+
+    private static void managedDnsttReadinessWaitsForTheNativeResult() throws InterruptedException {
+        Object monitor = new Object();
+        java.util.Map<String, String> prefs = new java.util.HashMap<>();
+        prefs.put(AndroidTunnelStart.COMMAND, "A");
+        AndroidTunnelStart start = new AndroidTunnelStart(monitor, prefs::get, () -> true, "A", true);
+        long[] now = {0L};
+
+        require(start.awaitDnsttReadiness(0L, () -> now[0], timeout -> {
+            now[0] += timeout;
+            return now[0] >= 13_000L;
+        }, () -> true), "native success beyond the old 12-second limit must be accepted");
+        require(now[0] == 13_000L, "test must deliver the result at 13 seconds");
+
+        now[0] = 0L;
+        require(!start.awaitDnsttReadiness(0L, () -> now[0], timeout -> {
+            now[0] += timeout;
+            return false;
+        }, () -> true), "a probe with no result must time out");
+        require(now[0] == 25_000L, "readiness must retain a bounded deadline");
+
+        now[0] = 0L;
+        require(!start.awaitDnsttReadiness(0L, () -> now[0], timeout -> {
+            now[0] += timeout;
+            synchronized (monitor) { prefs.put(AndroidTunnelStart.SUPERSEDED, "A"); }
+            return true;
+        }, () -> true), "superseded launch must reject a simultaneous successful probe");
+        require(now[0] <= 100L, "cancellation must be observed within one poll");
     }
 
     private static void lateActivationCannotSaveOrPublish() throws Exception {
