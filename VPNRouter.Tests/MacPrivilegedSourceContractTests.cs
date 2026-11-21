@@ -67,7 +67,9 @@ public class MacPrivilegedSourceContractTests
 
         Assert.Contains("new MacPrivilegedClient", lifecycle, StringComparison.Ordinal);
         Assert.DoesNotContain("spawnExe = \"/usr/bin/sudo\"", lifecycle, StringComparison.Ordinal);
-        Assert.Contains("CreateStartRequest(_currentConfigPath, launchId)", lifecycle, StringComparison.Ordinal);
+        Assert.Contains("CreateStartRequest(_currentConfigPath, macLaunchId)", lifecycle, StringComparison.Ordinal);
+        Assert.Contains("_macPrivilegeLaunchId = macLaunchId", lifecycle, StringComparison.Ordinal);
+        Assert.Contains("StopLaunch(launchId, launcherExited)", lifecycle, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -122,11 +124,14 @@ public class MacPrivilegedSourceContractTests
                     assets > lease && staged > assets && host > staged && record > host && exec > record,
             "start must hold both locks before syncing assets, staging config or publishing ownership");
 
-        var stop = helper.IndexOf("static int command_stop", StringComparison.Ordinal);
+        var stop = helper.IndexOf("static int stop_recorded_runtime", StringComparison.Ordinal);
         var stopLock = helper.IndexOf("acquire_state_lock(uid)", stop, StringComparison.Ordinal);
-        var stopSignal = helper.IndexOf("kill(pid, SIGKILL)", stopLock, StringComparison.Ordinal);
-        Assert.True(stop >= 0 && stopLock > stop && stopSignal > stopLock,
-            "stop must serialize state before the exact signal");
+        var stopRecord = helper.IndexOf("read_session_record(uid,", stopLock, StringComparison.Ordinal);
+        var stopIdentity = helper.IndexOf("process_is_root_runtime(pid, start_time)", stopRecord, StringComparison.Ordinal);
+        var stopSignal = helper.IndexOf("kill(pid, SIGKILL)", stopIdentity, StringComparison.Ordinal);
+        Assert.True(stop >= 0 && stopLock > stop && stopRecord > stopLock &&
+                    stopIdentity > stopRecord && stopSignal > stopIdentity,
+            "stop must lock state and verify the recorded process before signaling");
     }
 
     [Fact]
