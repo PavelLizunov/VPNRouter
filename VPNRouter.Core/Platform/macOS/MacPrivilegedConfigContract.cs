@@ -342,7 +342,7 @@ public static class MacPrivilegedConfigContract
     {
         if (!Uri.TryCreate("http://" + value, UriKind.Absolute, out var uri))
             return false;
-        return uri.Host is "127.0.0.1" or "::1" or "localhost";
+        return uri.IdnHost.Trim('[', ']') is "127.0.0.1" or "::1" or "localhost";
     }
 
     private static bool IsUnder(string fullPath, string directory)

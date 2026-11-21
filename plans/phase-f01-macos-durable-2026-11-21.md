@@ -123,6 +123,11 @@ commands or live-host tests on the development workstation.
   sanitizer run was terminated after it stalled initializing shadow memory
   before test entry. Hosted sanitizer results and managed .NET tests remain
   pending. The worker only has .NET 8.
+- Hosted native tests with sanitizers passed at `0de7b32` in run
+  44858184386. The separately dispatched .NET run 44858134050 found one
+  failure on both Linux and Windows. The managed controller check
+  rejected the bracketed IPv6 loopback value `[::1]:9090`. The fix
+  normalizes the parsed host using the same approach as `ClashSingBoxApi`.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time
