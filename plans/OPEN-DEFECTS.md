@@ -24,6 +24,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 - [ ] **P3** — Quick-test hints for older DNS tunnel formats remain a separate headless follow-up. The candidate change covers chained and DNSTT routes.
 - [ ] **P3** — Arch smoke confirms packaged DNSTT import and listing. Asserting the installed quick-test result and documenting the smoke's OpenSSH prerequisite remain follow-ups.
 - [ ] **P2** — The `65bab30` test ZIP passed two WINBRAT UI connect, proxy HTTPS and disconnect cycles. Ten UDP probes failed with `ProbeSendInlineMethodInvocationException`. The error class does not identify the cause. Investigate before reporting a verified candidate.
+- [ ] **P1** — Android managed DNSTT readiness restores a TCP control listener after the per-app validator removes it. Use the private libbox command socket and verify the exact candidate on Android. See [Android private readiness](phase-android-private-readiness-2026-11-21.md) and #689.
 
 - [x] **P1** - Validate rollback before promoting the snapshot and retain the previous live tree and marker on relaunch failure (#661). RESOLVED in source. Rollback and repair, verified at `45a79762` in CI 44368002825.
 - [x] **P1** - Complete monitored startup before service acceptance, preserve native DNS rule fall-through, isolate the accepted import from edits, and retain explicit Stop ownership on refusal (#664). RESOLVED in source. Routing and service acceptance, verified at `45a79762` in CI 44368002825.
