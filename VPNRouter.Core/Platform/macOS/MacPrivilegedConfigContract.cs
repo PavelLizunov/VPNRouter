@@ -26,7 +26,8 @@ public static class MacPrivilegedConfigContract
         "client_certificate_path", "client_key_path", "ech_file", "include",
         "geosite", "geoip", "v2ray_api", "external_ui_download_url",
         "external_ui_download_detour", "store_mode", "store_selected",
-        "store_fake_ip", "dns", "servers", "endpoints", "outbounds", "debug",
+        "store_fake_ip", "store_fakeip", "cache_id", "dns", "servers",
+        "endpoints", "outbounds", "debug", "plugin", "plugin_opts",
         "executable_path", "data_directory", "extra_args", "protect_path",
         "private_key_path", "config_path", "certificate_provider", "dhcp_lease_files",
     };
@@ -165,7 +166,7 @@ public static class MacPrivilegedConfigContract
 
     private static void NormalizeLog(JsonObject root)
     {
-        if (!root.TryGetPropertyValue("log", out var node) || node is null) return;
+        if (!root.TryGetPropertyValue("log", out var node)) return;
         if (node is not JsonObject log)
             throw new InvalidOperationException("Privileged sing-box 'log' must be an object.");
 
@@ -301,10 +302,10 @@ public static class MacPrivilegedConfigContract
 
     private static void RewriteRuleSets(JsonObject root, int uid, string geoDir, string cacheDir)
     {
-        if (!root.TryGetPropertyValue("route", out var routeNode) || routeNode is null) return;
+        if (!root.TryGetPropertyValue("route", out var routeNode)) return;
         if (routeNode is not JsonObject route)
             throw new InvalidOperationException("Privileged sing-box 'route' must be an object.");
-        if (!route.TryGetPropertyValue("rule_set", out var setsNode) || setsNode is null) return;
+        if (!route.TryGetPropertyValue("rule_set", out var setsNode)) return;
         if (setsNode is not JsonArray sets)
             throw new InvalidOperationException("Privileged sing-box 'route.rule_set' must be an array.");
 
@@ -372,7 +373,9 @@ public static class MacPrivilegedConfigContract
         "external_ui_download_detour" => true,
         "store_mode" => true,
         "store_selected" => true,
-        "store_fake_ip" => true,
+        "store_fake_ip" or "store_fakeip" or "cache_id" => true,
+        // Shadowsocks plugin options are parsed inside the runtime and may open files.
+        "plugin" or "plugin_opts" => true,
         "certificate_path" => true,
         "key_path" => true,
         "client_certificate_path" => true,

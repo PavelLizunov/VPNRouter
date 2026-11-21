@@ -192,6 +192,34 @@ public class MacPrivilegedSourceContractTests
     }
 
     [Fact]
+    public void Runtime_component_allowlists_match_in_the_helper_and_app()
+    {
+        var helper = Read("packaging", "macos", "vpnrouter-privileged.c");
+        var contract = Read("VPNRouter.Core", "Platform", "macOS", "MacPrivilegedConfigContract.cs");
+        var lists = new[]
+        {
+            ("reserved_structural_keys[] =", "ReservedStructuralKeys ="),
+            ("root_keys[] =", "SupportedRootKeys ="),
+            ("outbounds[] =", "SupportedOutbounds ="),
+            ("endpoints[] =", "SupportedEndpoints ="),
+            ("dns_servers[] =", "SupportedDnsServers ="),
+        };
+        foreach (var (native, managed) in lists)
+            Assert.Equal(ReadList(helper, native), ReadList(contract, managed));
+
+        static string[] ReadList(string source, string declaration)
+        {
+            var start = source.IndexOf(declaration, StringComparison.Ordinal);
+            Assert.True(start >= 0, $"Missing {declaration}");
+            var open = source.IndexOf('{', start);
+            var close = source.IndexOf('}', open + 1);
+            return System.Text.RegularExpressions.Regex.Matches(source[(open + 1)..close], "\"([^\"]+)\"")
+                .Select(match => match.Groups[1].Value)
+                .ToArray();
+        }
+    }
+
+    [Fact]
     public void Policy_template_is_the_single_rendered_rule()
     {
         var template = Read("packaging", "macos", "sudoers.template");

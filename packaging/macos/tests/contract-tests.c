@@ -319,7 +319,9 @@ static void test_runtime_components(void)
     expect(config_is_valid(
                "{\"inbounds\":[{\"type\":\"tun\"}],"
                "\"outbounds\":[{\"type\":\"dnstt\"},{\"type\":\"ssh\"},"
-               "{\"type\":\"direct\"},{\"type\":\"urltest\"}],"
+               "{\"type\":\"direct\"},{\"type\":\"urltest\"},"
+               "{\"type\":\"vless\"},{\"type\":\"hysteria2\"},{\"type\":\"tuic\"},"
+               "{\"type\":\"shadowsocks\"},{\"type\":\"naive\"},{\"type\":\"selector\"}],"
                "\"endpoints\":[{\"type\":\"wireguard\"}],"
                "\"dns\":{\"servers\":[{\"type\":\"https\"},{\"type\":\"local\"}]}}"),
            "generated VPN, WireGuard and DNS components are accepted");
@@ -328,6 +330,10 @@ static void test_runtime_components(void)
         "\"outbounds\":[{\"type\":\"fixture-unsupported\"}]",
         "\"outbounds\":[{\"type\":\"direct\",\"private_key_path\":\"\"}]",
         "\"outbounds\":[{\"type\":\"direct\",\"Protect_Path\":\"\"}]",
+        "\"outbounds\":[{\"type\":\"shadowsocks\",\"plugin\":\"fixture\"}]",
+        "\"outbounds\":[{\"type\":\"shadowsocks\",\"plugin_opts\":\"\"}]",
+        "\"outbounds\":[{\"type\":\"shadowsocks\",\"Plugin\":\"fixture\"}]",
+        "\"outbounds\":[{\"type\":\"shadowsocks\",\"Plugin_Opts\":\"\"}]",
         "\"outbounds\":[{\"type\":\"direct\",\"type\":\"direct\"}]",
         "\"Outbounds\":[{\"type\":\"direct\"}]",
         "\"outbounds\":[{\"Type\":\"direct\"}]",
@@ -338,8 +344,17 @@ static void test_runtime_components(void)
         "\"dns\":{\"Servers\":[{\"type\":\"https\"}]}",
         "\"dns\":null",
         "\"certificate_providers\":[]",
+        "\"log\":null",
+        "\"route\":null",
+        "\"route\":{\"rule_set\":null}",
         "\"route\":{\"dhcp_lease_files\":[]}",
         "\"experimental\":{\"debug\":{}}",
+        "\"experimental\":{\"clash_api\":{\"external_controller\":\"127.0.0.1:9090\","
+            "\"secret\":\"0123456789abcdef0123456789abcdef\",\"cache_file\":\"\"}}",
+        "\"experimental\":{\"clash_api\":{\"external_controller\":\"127.0.0.1:9090\","
+            "\"secret\":\"0123456789abcdef0123456789abcdef\",\"cache_id\":\"\"}}",
+        "\"experimental\":{\"clash_api\":{\"external_controller\":\"127.0.0.1:9090\","
+            "\"secret\":\"0123456789abcdef0123456789abcdef\",\"store_fakeip\":false}}",
     };
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++) {
         char json[256];

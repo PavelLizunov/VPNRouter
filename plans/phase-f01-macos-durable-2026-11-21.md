@@ -218,6 +218,36 @@ live acceptance.
   rename removed the new rule. Artifact hash, mode and hard-link failures
   prevented publication. A failed rename preserved the existing rule.
   No system paths or installed sudoers state were changed.
+- Independent review of `dcd39bd2` confirmed the matching component
+  allowlists. It found that the allowed Shadowsocks outbound accepts
+  plugin options with privileged file-loading behavior. The tagged
+  `v1.14.4-vpnctl.2` SIP003 and TLS source confirms this capability.
+  Both validators now deny the plugin keys, including case variants,
+  and accept plain Shadowsocks. Inert fixtures cover both outcomes.
+- The review also found that imports reach the macOS contract after
+  compatibility conversion at Connect, and noted differences in
+  deprecated Clash cache fields and null objects. The import preflight
+  needs to preserve conversion of legacy DNS and route entries.
+- The validators reject unmanaged cache file and cache ID fields and the
+  pinned spelling of the legacy FakeIP store option. Managed preparation
+  also rejects explicitly null log, route and rule-set nodes, consistent with
+  the helper. The component allowlists have a parity test.
+- All eight checks passed at `51793ef9`, including managed run 44863698961.
+- The independent lifecycle review of `dca7329c` accepted per-user lock
+  ordering and the record identity checks. Its legacy removal ordering
+  finding is addressed by the pre-removal check in `51793ef9`. First-install
+  failure still lacks a distinct localized reason, and the passive scan
+  covers the exact legacy path for the invoking user. The real runtime's
+  lock inheritance and live start and stop remain unverified.
+- Plugin restriction test preflight: macOS 26.5.2, 10 logical CPUs, load
+  2.36, 16 GiB RAM (38,283 free and 285,086 inactive 16 KiB pages),
+  1,174 MiB free swap, 85 GiB free disk, no compiler jobs, and Command
+  Line Tools clang available.
+- Native compilation with warnings as errors and all native fixtures
+  passed for `packaging/macos` from tree
+  `e886872b51a10cd285dc90c8a29bf1c6757c96e4`. A static comparison of
+  the four component lists and the reserved-key list matched both
+  implementations. Managed execution and live acceptance are pending.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

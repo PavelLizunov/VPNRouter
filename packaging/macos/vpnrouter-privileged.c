@@ -742,7 +742,8 @@ static const char *const reserved_structural_keys[] = {
     "client_certificate_path", "client_key_path", "ech_file", "include",
     "geosite", "geoip", "v2ray_api", "external_ui_download_url",
     "external_ui_download_detour", "store_mode", "store_selected",
-    "store_fake_ip", "dns", "servers", "endpoints", "outbounds", "debug",
+    "store_fake_ip", "store_fakeip", "cache_id", "dns", "servers",
+    "endpoints", "outbounds", "debug", "plugin", "plugin_opts",
     "executable_path", "data_directory", "extra_args", "protect_path",
     "private_key_path", "config_path", "certificate_provider", "dhcp_lease_files"
 };
@@ -999,13 +1000,6 @@ static int validate_experimental(const struct doc *doc, int root)
     if (doc->tokens[experimental].type != JSMN_OBJECT)
         return -1;
 
-    int cache = object_get(doc, experimental, "cache_file");
-    if (cache >= 0) {
-        char value[PATH_MAX];
-        if (json_unescape(doc, cache, value, sizeof(value)) != 0 || value[0] != '\0')
-            return -1;
-    }
-
     int services = object_get(doc, experimental, "services");
     if (services >= 0) {
         if (doc->tokens[services].type == JSMN_ARRAY ||
@@ -1190,7 +1184,10 @@ static int validate_forbidden_keys(const struct doc *doc, int token, int parent_
         "certificate_path", "key_path", "client_certificate_path",
         "client_key_path", "ech_file", "include", "output", "geosite", "geoip",
         "v2ray_api", "external_ui_download_url", "external_ui_download_detour",
-        "store_mode", "store_selected", "store_fake_ip", "debug",
+        "store_mode", "store_selected", "store_fake_ip", "store_fakeip",
+        "cache_file", "cache_id", "debug",
+        /* Shadowsocks plugins can open files through their own option parser. */
+        "plugin", "plugin_opts",
         "executable_path", "data_directory", "extra_args", "protect_path",
         "private_key_path", "config_path", "certificate_provider", "dhcp_lease_files"
     };

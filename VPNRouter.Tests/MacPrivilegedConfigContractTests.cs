@@ -162,7 +162,11 @@ public class MacPrivilegedConfigContractTests : IDisposable
         const string json = """
             {
               "inbounds": [{"type":"tun"}],
-              "outbounds": [{"type":"dnstt"},{"type":"ssh"},{"type":"direct"},{"type":"urltest"}],
+              "outbounds": [
+                {"type":"dnstt"},{"type":"ssh"},{"type":"direct"},{"type":"urltest"},
+                {"type":"vless"},{"type":"hysteria2"},{"type":"tuic"},
+                {"type":"shadowsocks"},{"type":"naive"},{"type":"selector"}
+              ],
               "endpoints": [{"type":"wireguard"}],
               "dns": {"servers":[{"type":"https"},{"type":"local"}]}
             }
@@ -175,6 +179,10 @@ public class MacPrivilegedConfigContractTests : IDisposable
     [InlineData(""" "outbounds":[{"type":"fixture-unsupported"}] """)]
     [InlineData(""" "outbounds":[{"type":"direct","private_key_path":""}] """)]
     [InlineData(""" "outbounds":[{"type":"direct","Protect_Path":""}] """)]
+    [InlineData(""" "outbounds":[{"type":"shadowsocks","plugin":"fixture"}] """)]
+    [InlineData(""" "outbounds":[{"type":"shadowsocks","plugin_opts":""}] """)]
+    [InlineData(""" "outbounds":[{"type":"shadowsocks","Plugin":"fixture"}] """)]
+    [InlineData(""" "outbounds":[{"type":"shadowsocks","Plugin_Opts":""}] """)]
     [InlineData(""" "Outbounds":[{"type":"direct"}] """)]
     [InlineData(""" "outbounds":[{"Type":"direct"}] """)]
     [InlineData(""" "outbounds":[{}] """)]
@@ -184,8 +192,14 @@ public class MacPrivilegedConfigContractTests : IDisposable
     [InlineData(""" "dns":{"Servers":[{"type":"https"}]} """)]
     [InlineData(""" "dns":null """)]
     [InlineData(""" "certificate_providers":[] """)]
+    [InlineData(""" "log":null """)]
+    [InlineData(""" "route":null """)]
+    [InlineData(""" "route":{"rule_set":null} """)]
     [InlineData(""" "route":{"dhcp_lease_files":[]} """)]
     [InlineData(""" "experimental":{"debug":{}} """)]
+    [InlineData(""" "experimental":{"clash_api":{"cache_file":""}} """)]
+    [InlineData(""" "experimental":{"clash_api":{"cache_id":""}} """)]
+    [InlineData(""" "experimental":{"clash_api":{"store_fakeip":false}} """)]
     public void Prepare_rejects_unapproved_runtime_components(string property)
     {
         var json = "{\"inbounds\":[{\"type\":\"tun\"}]," + property + "}";

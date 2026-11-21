@@ -63,7 +63,9 @@ validated before it can reach root:
   `path`, and the forbidden key list below) must use their exact lowercase
   spelling. Unrelated field names keep their original casing;
 - `log.output` absent or empty (the app omits the user log file);
-- `experimental.cache_file` and `experimental.clash_api.external_ui` absent or empty;
+- cache file and cache ID settings are absent. The app strips the generated
+  `experimental.cache_file` before staging. `experimental.clash_api.external_ui`
+  is absent or empty;
 - `experimental.services` absent or empty;
 - `experimental.clash_api.external_controller` loopback only and `clash_api.secret` present with at least 32 characters; the app generates or replaces a short/unsafe secret before the controller is read;
 - every inbound is `type: "tun"`;
@@ -72,6 +74,8 @@ validated before it can reach root:
   These cover generated configurations, including DNSTT with SSH, WireGuard
   endpoints and local or encrypted DNS. Imports using other sections or types
   are refused on the privileged macOS path;
+- Shadowsocks is available without plugins. The privileged path rejects
+  `plugin` and `plugin_opts` because plugins can open files;
 - every `route.rule_set` is `type: "local"`, `format: "binary"`, and points at
   a root-owned `SRS` file under the per-uid asset directory;
 - no `certificate_path`, `key_path`, `client_certificate_path`,
