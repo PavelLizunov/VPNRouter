@@ -75,6 +75,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [InlineData("failover-linux-exit-unknown")]
     [InlineData("verified-free-missing-rule-set")]
     [InlineData("verified-free-invalid-native")]
+    [InlineData("verified-assistant-invalid-native")]
     [InlineData("damaged-built-in")]
     [InlineData("missing-custom-config")]
     [InlineData("imported-unreadable-srs")]
@@ -349,17 +350,49 @@ public sealed class VpnEngineApplyStructuralChangeTests
                     Assert.True(Assert.IsType<bool>(GetField(health!, "_shouldBeRunning")));
                 }
             }
-            else if (scenario.StartsWith("verified-free-", StringComparison.Ordinal))
+            else if (scenario.StartsWith("verified-free-", StringComparison.Ordinal)
+                || scenario == "verified-assistant-invalid-native")
             {
                 runner.OnRun(r => r.Arguments.SequenceEqual(["check", "-c", "stdin"]),
                     new ProcessResult(1, "", "", TimeSpan.Zero, false));
                 var previous = SettingsLoader.Copy(settings);
                 previous.Vless.ActiveServer = "previous selection";
                 SetField(engine, "_failoverSettingsContext", previous);
-                settings.Vless.Servers[0].UseAsSingleOutbound = true;
                 bool saved = false;
-                result = await engine.ConnectVerifiedFreeConfigAsync(settings, () => saved = true,
-                    skipVpnConflictCheck: false, TestContext.Current.CancellationToken);
+                if (scenario == "verified-assistant-invalid-native")
+                {
+                    var accepted = new AcceptedTunnelInfo(previous, originalJson, "", null,
+                        new Dictionary<string, VlessServerEntry>());
+                    engine.CommitTunnelInfo(accepted);
+                    bool staleSaveCalled = false;
+                    var obsolete = new AcceptedTunnelInfo(previous, originalJson, "", null,
+                        new Dictionary<string, VlessServerEntry>());
+                    Action saveStaleSelection = () => staleSaveCalled = true;
+                    Action unexpectedRestore = () => throw new InvalidOperationException("Unexpected settings restore.");
+                    Assert.False(await engine.RestoreAssistantSettingsAsync(obsolete, saveStaleSelection,
+                        unexpectedRestore, TestContext.Current.CancellationToken));
+                    Assert.False(await engine.RestoreAssistantSettingsAsync(null, saveStaleSelection,
+                        unexpectedRestore, TestContext.Current.CancellationToken));
+                    Assert.False(staleSaveCalled);
+                    await Assert.ThrowsAsync<IOException>(() => engine.RestoreAssistantSettingsAsync(accepted,
+                        () => throw new IOException("Synthetic save failure"),
+                        unexpectedRestore, TestContext.Current.CancellationToken));
+                    Assert.False(initialHandle.HasExited);
+                    Assert.Same(accepted, engine.AcceptedTunnel);
+                    settings.App.RoutingMode = "split";
+                    settings.App.RoutingAppsMode = "include";
+                    settings.App.RoutingAppsInclude = ["chrome.exe"];
+                    settings.App.RoutingAppsIncludeInitialized = true;
+                    result = await engine.ConnectVerifiedAppRoutingAsync(settings,
+                        new AssistantRouteIntent(accepted, "chrome.exe"), () => saved = true,
+                        skipVpnConflictCheck: false, TestContext.Current.CancellationToken);
+                }
+                else
+                {
+                    settings.Vless.Servers[0].UseAsSingleOutbound = true;
+                    result = await engine.ConnectVerifiedFreeConfigAsync(settings, () => saved = true,
+                        skipVpnConflictCheck: false, TestContext.Current.CancellationToken);
+                }
                 Assert.False(saved);
                 Assert.Equal("previous selection", previous.Vless.ActiveServer);
                 Assert.DoesNotContain("Stopping...", statuses);
@@ -397,7 +430,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 Assert.DoesNotContain(fakeHttp.SentRequests, r => r.Method != HttpMethod.Get);
             }
             Assert.Empty(runner.StartCalls);
-            if (importedSet || scenario == "verified-free-invalid-native")
+            if (importedSet || scenario is "verified-free-invalid-native" or "verified-assistant-invalid-native")
             {
                 var check = Assert.Single(runner.RunCalls);
                 Assert.Equal(new[] { "check", "-c", "stdin" }, check.Arguments);
@@ -450,6 +483,21 @@ public sealed class VpnEngineApplyStructuralChangeTests
             }
 
             Assert.DoesNotContain(statuses, s => s.StartsWith("Apply failed:") && s != expectedFailure);
+
+            if (scenario == "verified-assistant-invalid-native")
+            {
+                initialHandle.SignalExit(0);
+                engine.Stop();
+                Assert.Null(engine.AcceptedTunnel);
+                statuses.Clear();
+                bool settingsRestored = false;
+                Assert.True(await engine.RestoreAssistantSettingsAsync(null, () => settingsRestored = true,
+                    () => throw new InvalidOperationException("Unexpected rollback after Stop."),
+                    TestContext.Current.CancellationToken));
+                Assert.True(settingsRestored);
+                Assert.Empty(statuses);
+                Assert.Empty(runner.StartCalls);
+            }
         }
         finally
         {

@@ -425,6 +425,8 @@
                     </StackPanel>
                 </Border>
 
+                <pages:AssistantSetupPanel/>
+
                 <!-- Problems card: what is wrong in plain words, one Fix button, then the result with Undo. -->
                 <Border IsVisible="{Binding IsProblemsCardVisible}"
                         Margin="0,20,0,0"
