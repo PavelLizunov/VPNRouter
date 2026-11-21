@@ -157,6 +157,44 @@ public class MacPrivilegedConfigContractTests : IDisposable
     }
 
     [Fact]
+    public void Prepare_accepts_generated_runtime_components()
+    {
+        const string json = """
+            {
+              "inbounds": [{"type":"tun"}],
+              "outbounds": [{"type":"dnstt"},{"type":"ssh"},{"type":"direct"},{"type":"urltest"}],
+              "endpoints": [{"type":"wireguard"}],
+              "dns": {"servers":[{"type":"https"},{"type":"local"}]}
+            }
+            """;
+
+        Assert.NotEmpty(MacPrivilegedConfigContract.Prepare(json, 501, _geo, _cache));
+    }
+
+    [Theory]
+    [InlineData(""" "outbounds":[{"type":"fixture-unsupported"}] """)]
+    [InlineData(""" "outbounds":[{"type":"direct","private_key_path":""}] """)]
+    [InlineData(""" "outbounds":[{"type":"direct","Protect_Path":""}] """)]
+    [InlineData(""" "Outbounds":[{"type":"direct"}] """)]
+    [InlineData(""" "outbounds":[{"Type":"direct"}] """)]
+    [InlineData(""" "outbounds":[{}] """)]
+    [InlineData(""" "outbounds":{} """)]
+    [InlineData(""" "endpoints":[{"type":"fixture-unsupported"}] """)]
+    [InlineData(""" "dns":{"servers":[{"type":"fixture-unsupported"}]} """)]
+    [InlineData(""" "dns":{"Servers":[{"type":"https"}]} """)]
+    [InlineData(""" "dns":null """)]
+    [InlineData(""" "certificate_providers":[] """)]
+    [InlineData(""" "route":{"dhcp_lease_files":[]} """)]
+    [InlineData(""" "experimental":{"debug":{}} """)]
+    public void Prepare_rejects_unapproved_runtime_components(string property)
+    {
+        var json = "{\"inbounds\":[{\"type\":\"tun\"}]," + property + "}";
+
+        Assert.Throws<InvalidOperationException>(() =>
+            MacPrivilegedConfigContract.Prepare(json, 501, _geo, _cache));
+    }
+
+    [Fact]
     public void Controller_secret_is_added_once_and_preserved()
     {
         var first = MacPrivilegedConfigContract.EnsureControllerSecret(BuildConfig());
@@ -220,21 +258,27 @@ public class MacPrivilegedConfigContractTests : IDisposable
     [Fact]
     public void Prepare_preserves_non_structural_key_casing_and_values()
     {
-        var json = BuildConfig().Insert(
-            1, "\"CustomField\":{\"Host\":\"example.com\",\"X-Trace\":\"MiXeD Inbounds\"},");
+        const string json = """
+            {
+              "inbounds": [{"type":"tun"}],
+              "outbounds": [{"type":"vless","transport":{"type":"ws",
+                "headers":{"Host":"example.com","X-Trace":"MiXeD Inbounds"}
+              }}]
+            }
+            """;
 
         var prepared = MacPrivilegedConfigContract.Prepare(json, 501, _geo, _cache);
         var root = JsonNode.Parse(prepared)!.AsObject();
-        var custom = root["CustomField"]!.AsObject();
+        var headers = root["outbounds"]![0]!["transport"]!["headers"]!;
 
-        Assert.Equal("example.com", custom["Host"]!.GetValue<string>());
-        Assert.Equal("MiXeD Inbounds", custom["X-Trace"]!.GetValue<string>());
+        Assert.Equal("example.com", headers["Host"]!.GetValue<string>());
+        Assert.Equal("MiXeD Inbounds", headers["X-Trace"]!.GetValue<string>());
     }
 
     [Fact]
     public void Prepare_rejects_a_key_escaped_by_the_output_serializer()
     {
-        var json = BuildConfig().Insert(1, "\"label<key\":1,");
+        var json = BuildConfig().Insert(1, "\"dns\":{\"label<key\":1},");
 
         var error = Assert.Throws<InvalidOperationException>(() =>
             MacPrivilegedConfigContract.Prepare(json, 501, _geo, _cache));
@@ -246,8 +290,8 @@ public class MacPrivilegedConfigContractTests : IDisposable
     [InlineData(65, false)]
     public void Prepare_enforces_the_helper_nesting_limit(int depth, bool accepted)
     {
-        var nested = new string('[', depth - 1) + "0" + new string(']', depth - 1);
-        var json = BuildConfig().Insert(1, "\"fixture\":" + nested + ",");
+        var nested = new string('[', depth - 2) + "0" + new string(']', depth - 2);
+        var json = BuildConfig().Insert(1, "\"dns\":{\"fixture\":" + nested + "},");
 
         if (accepted)
             Assert.NotEmpty(MacPrivilegedConfigContract.Prepare(json, 501, _geo, _cache));

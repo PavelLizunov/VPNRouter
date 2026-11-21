@@ -724,7 +724,9 @@ static const char *const reserved_structural_keys[] = {
     "client_certificate_path", "client_key_path", "ech_file", "include",
     "geosite", "geoip", "v2ray_api", "external_ui_download_url",
     "external_ui_download_detour", "store_mode", "store_selected",
-    "store_fake_ip"
+    "store_fake_ip", "dns", "servers", "endpoints", "outbounds", "debug",
+    "executable_path", "data_directory", "extra_args", "protect_path",
+    "private_key_path", "config_path", "certificate_provider", "dhcp_lease_files"
 };
 
 static int key_token_is_canonical(const struct doc *doc, int token)
@@ -1062,6 +1064,72 @@ static int validate_inbounds(const struct doc *doc, int root)
     return 0;
 }
 
+static int validate_component_types(const struct doc *doc, int array,
+                                    const char *const *allowed_types)
+{
+    if (array < 0)
+        return 0;
+    if (doc->tokens[array].type != JSMN_ARRAY)
+        return -1;
+
+    int index = array + 1;
+    for (int element = 0; element < doc->tokens[array].size; element++) {
+        char type[64];
+        if (index >= doc->count || doc->tokens[index].type != JSMN_OBJECT ||
+            json_string(doc, index, "type", type, sizeof(type)) != 0)
+            return -1;
+
+        const char *const *allowed = allowed_types;
+        while (*allowed != NULL && strcmp(type, *allowed) != 0)
+            allowed++;
+        if (*allowed == NULL)
+            return -1;
+
+        index = token_skip(doc, index);
+        if (index < 0)
+            return -1;
+    }
+    return 0;
+}
+
+static int validate_runtime_components(const struct doc *doc, int root)
+{
+    static const char *const root_keys[] = {
+        "$schema", "log", "dns", "inbounds", "outbounds", "endpoints", "route", "experimental", NULL
+    };
+    static const char *const outbounds[] = {
+        "direct", "vless", "hysteria2", "tuic", "shadowsocks", "naive",
+        "dnstt", "ssh", "urltest", "selector", NULL
+    };
+    static const char *const endpoints[] = { "wireguard", NULL };
+    static const char *const dns_servers[] = {
+        "local", "udp", "tcp", "tls", "https", "quic", "h3", "fakeip", NULL
+    };
+
+    int index = root + 1;
+    for (int pair = 0; pair < doc->tokens[root].size; pair++) {
+        const char *const *allowed = root_keys;
+        while (*allowed != NULL && !token_equal(doc, index, *allowed))
+            allowed++;
+        if (*allowed == NULL)
+            return -1;
+        index = token_skip(doc, index + 1);
+        if (index < 0)
+            return -1;
+    }
+
+    if (validate_component_types(doc, object_get(doc, root, "outbounds"), outbounds) != 0 ||
+        validate_component_types(doc, object_get(doc, root, "endpoints"), endpoints) != 0)
+        return -1;
+
+    int dns = object_get(doc, root, "dns");
+    if (dns < 0)
+        return 0;
+    if (doc->tokens[dns].type != JSMN_OBJECT)
+        return -1;
+    return validate_component_types(doc, object_get(doc, dns, "servers"), dns_servers);
+}
+
 static int validate_rule_sets(const struct doc *doc, int root, uid_t uid)
 {
     int route = object_get(doc, root, "route");
@@ -1104,7 +1172,9 @@ static int validate_forbidden_keys(const struct doc *doc, int token, int parent_
         "certificate_path", "key_path", "client_certificate_path",
         "client_key_path", "ech_file", "include", "output", "geosite", "geoip",
         "v2ray_api", "external_ui_download_url", "external_ui_download_detour",
-        "store_mode", "store_selected", "store_fake_ip"
+        "store_mode", "store_selected", "store_fake_ip", "debug",
+        "executable_path", "data_directory", "extra_args", "protect_path",
+        "private_key_path", "config_path", "certificate_provider", "dhcp_lease_files"
     };
     if (token < 0 || token >= doc->count)
         return -1;
@@ -1157,6 +1227,8 @@ static int validate_config(const struct doc *doc, uid_t uid)
     if (validate_experimental(doc, 0) != 0)
         return -1;
     if (validate_inbounds(doc, 0) != 0)
+        return -1;
+    if (validate_runtime_components(doc, 0) != 0)
         return -1;
     if (validate_rule_sets(doc, 0, uid) != 0)
         return -1;

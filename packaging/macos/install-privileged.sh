@@ -119,7 +119,9 @@ check_root_dir() {
         exit 66
     fi
     local mode
-    mode=$((0$(stat -f '%Lp' "$path")))
+    mode="$(stat -f '%Op' "$path")"
+    # Match the native helper, which ignores the sticky bit on protected dirs.
+    mode=$((0$mode & 06777))
     local expected_value
     expected_value=$((0$expected))
     [ "$mode" -eq "$expected_value" ] || {

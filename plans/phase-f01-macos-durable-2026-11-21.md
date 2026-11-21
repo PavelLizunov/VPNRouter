@@ -109,6 +109,22 @@ commands or live-host tests on the development workstation.
 
 ## Outcome
 
+The review of the original staged tree found a blocking gap in validation
+of privileged runtime capabilities. The pinned core can register outbound
+types outside the managed client profile. The helper must allow only reviewed
+outbound, endpoint and DNS types, reject caller-directed execution and file
+options, and reject noncanonical spellings of the structural keys. Match the
+managed validator to the native boundary and use inert synthetic tests.
+
+The same review identified outstanding session and installation work. The
+installer now verifies copied artifacts before replacement and binds the
+approved script and policy to the prompt. Publishing a managed grant still
+needs an independent installed-state check and failure handling. The
+installation authorization does not establish publisher identity for an
+unsigned bundle. Concurrent start/stop, legacy process readiness, and
+session ownership of host-global DNS/pf require additional changes before
+live acceptance.
+
 - Status: PARTIAL. Source adaptation complete; build, tests, independent
   review and live macOS acceptance are pending.
 - Integration preflight observed `/etc` as a symlink to `private/etc` and
@@ -147,6 +163,20 @@ commands or live-host tests on the development workstation.
   sticky-bit acceptance logic. The checks assume no write-granting ACL
   on these system directories. Live installer and Connect/Stop tests are
   still pending.
+- The C helper and managed contract now allow only the generated root sections
+  plus `$schema`, with explicit outbound, endpoint and DNS server types.
+  Canonical key checks guard the new selectors and reject privileged file
+  or process options. The macOS import path refuses unsupported sections
+  and types. Added inert fixtures for both validators, including the
+  generated DNSTT and WireGuard components.
+- On the macOS worker, BSD stat confirmed `%Lp` returns `755` for the
+  sticky helper directory, while `%Op` returns `41755`. The installer now
+  checks the full mode with the same mask as the helper. Native fixtures
+  cover acceptance of sticky and rejection of setuid and setgid bits.
+- Native worker preflight for the component validation delta: macOS 26.5.2,
+  10 logical CPUs, load 1.80, 16 GiB RAM (14,964 free and 286,836 inactive
+  16 KiB pages), 1,174 MiB free swap, 86 GiB available on the internal disk,
+  and no compiler jobs. The Command Line Tools clang is available.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

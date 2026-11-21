@@ -66,10 +66,17 @@ validated before it can reach root:
 - `experimental.services` absent or empty;
 - `experimental.clash_api.external_controller` loopback only and `clash_api.secret` present with at least 32 characters; the app generates or replaces a short/unsafe secret before the controller is read;
 - every inbound is `type: "tun"`;
+- the root accepts the app's config sections and optional `$schema` metadata.
+  Outbound, endpoint and DNS server types are selected from explicit lists.
+  These cover generated configurations, including DNSTT with SSH, WireGuard
+  endpoints and local or encrypted DNS. Imports using other sections or types
+  are refused on the privileged macOS path;
 - every `route.rule_set` is `type: "local"`, `format: "binary"`, and points at
   a root-owned `SRS` file under the per-uid asset directory;
 - no `certificate_path`, `key_path`, `client_certificate_path`,
   `client_key_path`, `ech_file`, `include`, or non-log `output` key;
+- no caller-selected executables, private key or config paths, certificate
+  providers, socket paths, DHCP lease files, or runtime debugging options;
 - no `experimental.v2ray_api`, external-UI download URL/detour, or Clash cache
   mode keys.
 

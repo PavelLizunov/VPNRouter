@@ -26,8 +26,17 @@ public static class MacPrivilegedConfigContract
         "client_certificate_path", "client_key_path", "ech_file", "include",
         "geosite", "geoip", "v2ray_api", "external_ui_download_url",
         "external_ui_download_detour", "store_mode", "store_selected",
-        "store_fake_ip",
+        "store_fake_ip", "dns", "servers", "endpoints", "outbounds", "debug",
+        "executable_path", "data_directory", "extra_args", "protect_path",
+        "private_key_path", "config_path", "certificate_provider", "dhcp_lease_files",
     };
+
+    private static readonly string[] SupportedRootKeys =
+        { "$schema", "log", "dns", "inbounds", "outbounds", "endpoints", "route", "experimental" };
+    private static readonly string[] SupportedOutbounds =
+        { "direct", "vless", "hysteria2", "tuic", "shadowsocks", "naive", "dnstt", "ssh", "urltest", "selector" };
+    private static readonly string[] SupportedEndpoints = { "wireguard" };
+    private static readonly string[] SupportedDnsServers = { "local", "udp", "tcp", "tls", "https", "quic", "h3", "fakeip" };
 
     private static readonly JsonSerializerOptions OutputOptions = new()
     {
@@ -74,6 +83,7 @@ public static class MacPrivilegedConfigContract
         NormalizeLog(root);
         NormalizeExperimental(root);
         ValidateInbounds(root);
+        ValidateRuntimeComponents(root);
         RewriteRuleSets(root, uid, geoDir, cacheDir);
         RejectForbiddenKeys(root, parentKey: null);
         var output = root.ToJsonString(OutputOptions);
@@ -252,6 +262,43 @@ public static class MacPrivilegedConfigContract
         }
     }
 
+    private static void ValidateRuntimeComponents(JsonObject root)
+    {
+        foreach (var property in root)
+        {
+            if (!SupportedRootKeys.Contains(property.Key, StringComparer.Ordinal))
+                throw new InvalidOperationException(
+                    $"Privileged sing-box config does not support root field '{property.Key}'.");
+        }
+
+        ValidateComponentTypes(root, "outbounds", SupportedOutbounds);
+        ValidateComponentTypes(root, "endpoints", SupportedEndpoints);
+        if (root.TryGetPropertyValue("dns", out var node))
+        {
+            if (node is not JsonObject dns)
+                throw new InvalidOperationException("Privileged sing-box 'dns' must be an object.");
+
+            ValidateComponentTypes(dns, "servers", SupportedDnsServers);
+        }
+    }
+
+    private static void ValidateComponentTypes(JsonObject parent, string key, string[] allowedTypes)
+    {
+        if (!parent.TryGetPropertyValue(key, out var node))
+            return;
+        if (node is not JsonArray components)
+            throw new InvalidOperationException($"Privileged sing-box '{key}' must be an array.");
+
+        foreach (var entry in components)
+        {
+            if (entry is not JsonObject component ||
+                component["type"] is not JsonValue value ||
+                !value.TryGetValue<string>(out var type) ||
+                !allowedTypes.Contains(type, StringComparer.Ordinal))
+                throw new InvalidOperationException($"Privileged sing-box '{key}' contains an unsupported component type.");
+        }
+    }
+
     private static void RewriteRuleSets(JsonObject root, int uid, string geoDir, string cacheDir)
     {
         if (!root.TryGetPropertyValue("route", out var routeNode) || routeNode is null) return;
@@ -334,6 +381,9 @@ public static class MacPrivilegedConfigContract
         "include" => true,
         "geosite" => true,
         "geoip" => true,
+        "debug" or "executable_path" or "data_directory" or "extra_args" or
+        "protect_path" or "private_key_path" or "config_path" or
+        "certificate_provider" or "dhcp_lease_files" => true,
         "output" => !string.Equals(parentKey, "log", StringComparison.Ordinal),
         _ => false,
     };

@@ -157,6 +157,12 @@ static void test_root_directory_metadata(void)
     st.st_mode = S_IFDIR | 0775;
     expect(!root_directory_stat_is_valid(&st, 0755, 0),
            "a group-writable system directory is rejected");
+    st.st_mode = S_IFDIR | 0755 | S_ISGID;
+    expect(!root_directory_stat_is_valid(&st, 0755, 0),
+           "a setgid system directory is rejected");
+    st.st_mode = S_IFDIR | 0755 | S_ISUID;
+    expect(!root_directory_stat_is_valid(&st, 0755, 0),
+           "a setuid system directory is rejected");
     st.st_mode = S_IFDIR | 0755;
     st.st_uid = 501;
     expect(!root_directory_stat_is_valid(&st, 0755, 0),
@@ -243,15 +249,49 @@ static void test_structural_key_casing(void)
     expect(config_is_valid(
                "{\"log\":{\"output\":\"\"},"
                "\"inbounds\":[{\"type\":\"tun\"}],"
-               "\"outbounds\":[{\"type\":\"direct\"}],"
-               "\"CustomField\":\"MiXeD Inbounds\"}"),
-           "non-structural key casing and string values are preserved");
+               "\"outbounds\":[{\"type\":\"vless\",\"transport\":{"
+               "\"type\":\"ws\",\"headers\":{\"X-Trace\":\"MiXeD Inbounds\"}}}]}"),
+           "case-sensitive HTTP header names and values are preserved");
     expect(config_is_valid(
                "{\"log\":{\"output\":\"\"},"
                "\"inbounds\":[{\"type\":\"tun\",\"auto_route\":true,\"mtu\":9000}],"
                "\"outbounds\":[{\"type\":\"direct\"}],"
                "\"route\":{\"auto_detect_interface\":false}}"),
            "ordinary scalar values in a generated-style config are accepted");
+}
+
+static void test_runtime_components(void)
+{
+    expect(config_is_valid(
+               "{\"inbounds\":[{\"type\":\"tun\"}],"
+               "\"outbounds\":[{\"type\":\"dnstt\"},{\"type\":\"ssh\"},"
+               "{\"type\":\"direct\"},{\"type\":\"urltest\"}],"
+               "\"endpoints\":[{\"type\":\"wireguard\"}],"
+               "\"dns\":{\"servers\":[{\"type\":\"https\"},{\"type\":\"local\"}]}}"),
+           "generated VPN, WireGuard and DNS components are accepted");
+
+    const char *const rejected[] = {
+        "\"outbounds\":[{\"type\":\"fixture-unsupported\"}]",
+        "\"outbounds\":[{\"type\":\"direct\",\"private_key_path\":\"\"}]",
+        "\"outbounds\":[{\"type\":\"direct\",\"Protect_Path\":\"\"}]",
+        "\"outbounds\":[{\"type\":\"direct\",\"type\":\"direct\"}]",
+        "\"Outbounds\":[{\"type\":\"direct\"}]",
+        "\"outbounds\":[{\"Type\":\"direct\"}]",
+        "\"outbounds\":[{}]",
+        "\"outbounds\":{}",
+        "\"endpoints\":[{\"type\":\"fixture-unsupported\"}]",
+        "\"dns\":{\"servers\":[{\"type\":\"fixture-unsupported\"}]}",
+        "\"dns\":{\"Servers\":[{\"type\":\"https\"}]}",
+        "\"dns\":null",
+        "\"certificate_providers\":[]",
+        "\"route\":{\"dhcp_lease_files\":[]}",
+        "\"experimental\":{\"debug\":{}}",
+    };
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++) {
+        char json[256];
+        snprintf(json, sizeof(json), "{\"inbounds\":[{\"type\":\"tun\"}],%s}", rejected[i]);
+        expect(!config_is_valid(json), rejected[i]);
+    }
 }
 
 static int request_op(const char *json, char *out, size_t capacity)
@@ -279,6 +319,7 @@ int main(void)
     test_controller_secret();
     test_wide_object_keys();
     test_structural_key_casing();
+    test_runtime_components();
 
     const char *valid =
         "{\"log\":{\"output\":\"\"},"
@@ -372,11 +413,9 @@ int main(void)
     char long_key[256];
     memset(long_key, 'k', 200);
     long_key[200] = '\0';
-    char long_config[512];
-    snprintf(long_config, sizeof(long_config),
-             "{\"log\":{\"output\":\"\"},"
-             "\"inbounds\":[{\"type\":\"tun\"}],\"%s\":1}", long_key);
-    expect(config_is_valid(long_config), "long canonical key is accepted");
+    char long_request[256];
+    snprintf(long_request, sizeof(long_request), "{\"%s\":1}", long_key);
+    expect(!request_is_invalid(long_request), "long canonical key is accepted");
 
     char op[16];
     expect(request_op("{\"version\":1,\"op\":\"pro\\u0062e\"}", op, sizeof(op)) == 0 &&
