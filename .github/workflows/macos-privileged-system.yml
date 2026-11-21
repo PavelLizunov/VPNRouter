@@ -72,3 +72,23 @@ jobs:
           trap 'rm -rf "$extracted"' EXIT
           ditto -x -k "$ARCHIVE" "$extracted"
           bash packaging/macos/tests/system-acceptance.sh "$extracted/VPNRouter.app"
+
+      - name: Record the tested bundle checksum
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          set -euo pipefail
+          cd "$(dirname "$ARCHIVE")"
+          zip="$(basename "$ARCHIVE")"
+          shasum -a 256 "$zip" > "$zip.sha256"
+
+      - name: Retain the tested bundle for desktop acceptance
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: macos-system-acceptance-${{ env.TEST_HEAD }}
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.archive }}.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3

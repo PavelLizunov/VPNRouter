@@ -523,3 +523,35 @@ live acceptance.
   tests and eight installer cases passed at tree
   `12770dc375e525eb1a10be071c7203b7ecfd5a86`. Shell syntax passed
   for the hosted fixture. No live PF or DNS was changed on the worker.
+- All nine checks passed at `a87bd99b676dbac4bab5f9f7ab7a6a659a454ba8`.
+  Managed run 44874450904 and macOS system run 44874439931 passed.
+  Job 136755907871 built the 82,013,248-byte ZIP on macOS 26.7.2,
+  SHA-256 `ea8e23720e62ee66961a0569bf2cf7b18c904d5419c6873c2c656e8c47781f41`.
+  The standard-user helper fixture passed exact-launch lookup, rejected
+  a different launch ID, preserved lookup after exit until recovery,
+  verified removal of the fixture PF reference from the kernel, and
+  rejected lookup after recovery. The isolated DNS and route checks
+  passed. Real desktop UI and administrator authorization remain open.
+- Independent review confirmed both managed recovery fixes at
+  `a87bd99b`. It found no new confirmed blocker in the launch-binding
+  or PF re-arm delta. The old-session callback is filtered before work
+  and the helper matches the launch against root-owned state.
+  The review's residual coverage gaps are a full desktop restart,
+  real v1/v2 file migration and carrier refresh after outside mutation.
+  These do not contradict the isolated helper run. Checking available
+  isolated macOS desktops and administrator authorization is the remaining
+  acceptance work for F-01.
+
+### Transfer the hosted build to an isolated desktop
+
+- The HomeLab inventory has one physical Apple Silicon worker and no
+  existing macOS GUI guest. The shared host was running the Android
+  acceptance scenario when inspected. Keep the two scenarios serialized.
+  A logged-in standard-user session and a real administrator prompt are
+  required for desktop acceptance.
+- Retain the exact ZIP from the existing same-repository hosted system
+  job as a short-lived Actions artifact after the system checks pass.
+  Include the ZIP SHA-256. This supplies the tested bundle for a
+  disposable desktop and avoids an early release tag or a rebuild on
+  the shared physical Mac. No release asset or repository write token
+  is involved.
