@@ -81,12 +81,21 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(start, "start.prepareAndClaim(preflight, () -> {", "select.run();", "detachTunnel();",
                 "if (tunnelConfig == null)", "closeDetachedTunnel(previous, previousServer);", "if (!start.current()) return;",
                 "session = new AndroidTunnelSession();", "startSlipstreamIfNeeded();", "if (!start.current()) return;",
-                "pendingProbeManagedDnstt ? DnsttReadyProbe.attach(tunnelConfig) : null;",
-                "startLibboxService(probe == null ? tunnelConfig : probe.config);",
-                "session.requireEstablishedTun();", "if (probe != null && (!start.current() || !probe.ready())) {",
+                "startLibboxService(tunnelConfig);",
+                "session.requireEstablishedTun();", "if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start)) {",
                 "retireTunnel();", "reportFailure(\"proxy-unreachable\", false);", "start.commit(() -> {",
                 "persistLastGoodConfig();", "liveService = this;",
                 "writeVpnState(STATE_CONNECTED,", "setTunnelLive(true);", "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))");
+        String probe = start.substring(start.indexOf("class DnsttReadyProbe"));
+        requireOrdered(probe, "Libbox.CommandOutbounds", "Libbox.newCommandClient(", "client.connect();",
+                "client.urlTest(\"proxy\");", "while (start.current())", "probe.finished.await(",
+                "probe.passed && start.current()", "finally", "client.disconnect()");
+        requireOrdered(probe, "\"proxy\".equals(item.getTag())", "\"ssh\".equals(item.getType())",
+                "item.getURLTestDelay() > 0", "complete(true)");
+        require(!probe.contains("external_controller") && !probe.contains("new Socket(")
+                && !probe.contains("ServerSocket"), "DNSTT readiness must use the private command server");
+        String libbox = Files.readString(root.resolve("VPNRouter.Android/LibboxRuntime.java"));
+        require(libbox.contains("options.setCommandServerListenPort(0);"), "Native status socket must remain private");
 
         requireOrdered(activity, "if (configMode == \"custom\")", "DispatchTunnelStart(command, configJson, coldStartOnly)",
                 "DispatchTunnelStart(command, configJson, coldStartOnly, entry)",

@@ -30,4 +30,8 @@ rollback would restore the control listener.
 6. Keep desktop and public protocol interfaces unchanged. Mechanical
    characterization is not applicable.
 
-Outcome pending.
+The pinned `libbox-legacy-1.14.4-vpnctl.2.aar` SHA-256 and Java symbols
+were checked before integration. Its URL test runs HTTPS through the named
+outbound and reports the result over its app-private command socket. The
+native instance creates a separate result history for every start. APK,
+device verification and independent review are pending.
