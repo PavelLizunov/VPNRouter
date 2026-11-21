@@ -598,3 +598,26 @@ replacement config and exited at TUN validation before reaching Stop.
 The replacement now has an inert TUN and direct outbound. The fixture
 still requires Stop refusal to retain the original file, handle and
 TUN lease.
+
+At `7ed65abaa0da5019ce8ed6bad46a6ea3d1a36120`, all nine checks
+passed. Hosted macOS run 44893982376, attempt 2, job 136817083187
+passed managed Stop cases, exact Stop, isolated DNS restoration and
+PF reference recovery.
+
+The exact hosted ZIP passed the standard-user desktop lifecycle in an
+isolated macOS 15.7.7 guest. The app showed the actual administrator
+prompt and installed the helper after approval. Failed warm-up stopped
+the recorded root runtime and removed the TUN and session on both
+attempts. Two subsequent Connect/Stop cycles completed, each removing
+the root runtime and TUN. The guest used a per-app HTTPS proxy for the
+warm-up probe with normal TLS verification. This proves the desktop
+lifecycle. The hosted fixture supplies DNS/PF evidence, and the desktop
+run leaves DNS and PF unchanged in split/custom mode. The ZIP SHA-256
+was `909dc90f4ef0aea7b130c6552ed9801745a490265461b8248f8948d7e96f86fe`.
+
+Independent review accepted `9a316671..7ed65aba` for launch-bound
+Stop. It confirmed that a different live launch is left alone and that
+a launcher which never spawned can release its lease. Production logging
+still shows a generic unconfirmed Stop unless debug details are enabled.
+The never-spawned fixture exercises the manager with a fake handle.
+The broader signing and same-user trust questions remain tracked separately.
