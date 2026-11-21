@@ -9,6 +9,11 @@ on:
         required: false
         default: ""
         type: string
+      artifact_sha:
+        description: "Accepted source SHA for an internal Windows package artifact"
+        required: false
+        default: ""
+        type: string
   release:
     types: [published]
   push:
@@ -28,7 +33,55 @@ permissions:
   contents: read
 
 jobs:
+  windows-package-artifact:
+    if: github.event_name == 'workflow_dispatch' && inputs.artifact_sha != ''
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout accepted source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.artifact_sha }}
+          persist-credentials: false
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
+        with:
+          global-json-file: global.json
+      - name: Setup Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7.1.0
+        with:
+          go-version: 1.26.1
+      - name: Package Windows verification build
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE: ${{ inputs.artifact_sha }}
+        run: |
+          if ($env:EXPECTED_SOURCE -cnotmatch '^[0-9a-f]{40}$') { throw 'Expected a full source SHA' }
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -cne $env:EXPECTED_SOURCE) { throw 'Source SHA mismatch' }
+          $versionText = Get-Content VPNRouter.Core/AppVersion.cs -Raw
+          if ($versionText -notmatch 'string\s+Version\s*=\s*"([0-9][0-9a-z.\-]+)"') {
+            throw 'Cannot read the source version'
+          }
+          $version = $Matches[1]
+          ./build.ps1 -Version $version -BundleSplitDriver
+          $package = "VPNRouter-v$version-win.zip"
+          if (!(Test-Path -LiteralPath $package -PathType Leaf)) { throw 'Windows package missing' }
+          $out = New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'vpnrouter-verification')
+          Copy-Item -LiteralPath $package -Destination $out.FullName
+          $head | Set-Content -Path (Join-Path $out.FullName 'source-sha.txt') -Encoding utf8
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $package).Hash.ToLowerInvariant()
+          "$hash  $package" | Set-Content -Path (Join-Path $out.FullName 'SHA256SUMS') -Encoding utf8
+      - name: Upload Windows verification build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: vpnrouter-windows-${{ inputs.artifact_sha }}
+          path: ${{ runner.temp }}/vpnrouter-verification/
+          if-no-files-found: error
+          retention-days: 7
+
   test-update:
+    if: github.event_name != 'workflow_dispatch' || inputs.artifact_sha == ''
     runs-on: windows-latest
     timeout-minutes: 30
 
