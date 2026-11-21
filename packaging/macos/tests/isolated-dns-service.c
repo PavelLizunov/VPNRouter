@@ -1,7 +1,17 @@
-/* Create a disposable service without enabling it or changing route priority. */
+/* Create a disposable DNS service with no IPv4 or IPv6 configuration. */
 #include <SystemConfiguration/SystemConfiguration.h>
 #include <stdbool.h>
 #include <stdio.h>
+
+static bool disable_protocol(SCNetworkServiceRef service, CFStringRef type)
+{
+    SCNetworkProtocolRef protocol = SCNetworkServiceCopyProtocol(service, type);
+    if (protocol == NULL)
+        return false;
+    bool disabled = SCNetworkProtocolSetEnabled(protocol, false);
+    CFRelease(protocol);
+    return disabled;
+}
 
 int main(int argc, char *argv[])
 {
@@ -39,12 +49,14 @@ int main(int argc, char *argv[])
     int success = fixture != NULL &&
         SCNetworkServiceSetName(fixture, name) &&
         SCNetworkServiceEstablishDefaultConfiguration(fixture) &&
-        SCNetworkServiceSetEnabled(fixture, false) &&
+        disable_protocol(fixture, kSCNetworkProtocolTypeIPv4) &&
+        disable_protocol(fixture, kSCNetworkProtocolTypeIPv6) &&
+        SCNetworkServiceSetEnabled(fixture, true) &&
         SCNetworkSetAddService(set, fixture) &&
         SCPreferencesCommitChanges(preferences) &&
         SCPreferencesApplyChanges(preferences);
     if (!success)
-        fprintf(stderr, "could not create the disabled DNS fixture service: %s\n", SCErrorString(SCError()));
+        fprintf(stderr, "could not create the isolated DNS fixture service: %s\n", SCErrorString(SCError()));
     SCPreferencesUnlock(preferences);
     if (fixture != NULL)
         CFRelease(fixture);

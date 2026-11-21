@@ -150,8 +150,19 @@ default_route() {
         }'
 }
 
-fixture_dns() {
-    /usr/sbin/networksetup -getdnsservers "$dns_service"
+verify_fixture_dns() {
+    local expected="$1" actual
+    actual="$(/usr/sbin/networksetup -getdnsservers "$dns_service")"
+    if [ "$actual" != "$expected" ]; then
+        printf 'DNS fixture expected %s, got: %s\n' "$expected" "$actual" >&2
+        exit 66
+    fi
+    local resolver_config
+    resolver_config="$(/usr/sbin/scutil --dns)"
+    if awk '/nameserver\[/ {print $NF}' <<< "$resolver_config" | grep -Fxq "$expected"; then
+        echo "fixture address appeared among active system resolvers" >&2
+        exit 66
+    fi
 }
 
 baseline_route="$(default_route)"
@@ -161,12 +172,12 @@ if dns_service_exists; then
     exit 66
 fi
 clang -std=c11 -Wall -Wextra -Werror -framework SystemConfiguration -framework CoreFoundation \
-    "$(dirname "$0")/disabled-dns-service.c" -o "$fixture_dir/disabled-dns-service"
+    "$(dirname "$0")/isolated-dns-service.c" -o "$fixture_dir/isolated-dns-service"
 dns_service_prepared=1
-sudo -n "$fixture_dir/disabled-dns-service" "$default_device" "$dns_service"
-[ "$(/usr/sbin/networksetup -getnetworkserviceenabled "$dns_service")" = Disabled ]
+sudo -n "$fixture_dir/isolated-dns-service" "$default_device" "$dns_service"
+[ "$(/usr/sbin/networksetup -getnetworkserviceenabled "$dns_service")" = Enabled ]
 sudo -n /usr/sbin/networksetup -setdnsservers "$dns_service" 192.0.2.17
-[ "$(fixture_dns)" = 192.0.2.17 ]
+verify_fixture_dns 192.0.2.17
 [ "$(default_route)" = "$baseline_route" ]
 
 config_dir="$fixture_home/Library/Application Support/VPNRouter/config"
@@ -208,8 +219,8 @@ echo "Root runtime created the fixture TUN with the default route intact"
 
 jq -cn --arg service "$dns_service" \
     '{version:1, op:"dns_apply", service:$service, server:"198.18.230.1"}' | as_fixture
-[ "$(fixture_dns)" = 198.18.230.1 ]
-echo "DNS changed on the disabled fixture service while the session was active"
+verify_fixture_dns 198.18.230.1
+echo "DNS changed on the isolated fixture service while the session was active"
 
 stop_fixture
 wait "$launcher_pid" || true
@@ -219,6 +230,6 @@ if /sbin/ifconfig "$tun" >/dev/null 2>&1; then
     exit 66
 fi
 printf '%s' '{"version":1,"op":"dns_restore"}' | as_fixture
-[ "$(fixture_dns)" = 192.0.2.17 ]
+verify_fixture_dns 192.0.2.17
 [ "$(default_route)" = "$baseline_route" ]
-echo "System migration, standard-user TUN, and disabled-service DNS restore passed"
+echo "System migration, standard-user TUN, and isolated-service DNS restore passed"

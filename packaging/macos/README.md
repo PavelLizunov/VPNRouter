@@ -123,8 +123,9 @@ when an interrupted installer exits.
 The system acceptance workflow builds the exact same-repository PR head on a
 disposable macOS runner. It checks migration from a no-op legacy grant and
 starts and stops an isolated TUN through a standard-user helper call. The
-test applies and restores DNS on a disabled fixture network service and
-requires a populated default route to stay unchanged. Interactive
+test applies and restores DNS on a fixture network service with IPv4 and
+IPv6 disabled. It checks that the fixture resolver stays out of the active
+DNS configuration and that the default route stays unchanged. Interactive
 administrator approval, production auto-routing and firewall changes
 require separate live verification.
 

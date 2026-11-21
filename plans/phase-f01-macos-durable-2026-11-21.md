@@ -243,6 +243,10 @@ live acceptance.
   2.36, 16 GiB RAM (38,283 free and 285,086 inactive 16 KiB pages),
   1,174 MiB free swap, 85 GiB free disk, no compiler jobs, and Command
   Line Tools clang available.
+- The isolated-service fixture compiled with warnings as errors for
+  tree `44fd9811e7c376ae59ba69f222137e6735d20d87`. Shell syntax and
+  the non-hosted refusal passed. The ordinary macOS worker was not
+  used for a live network mutation.
 - Native compilation with warnings as errors and all native fixtures
   passed for `packaging/macos` from tree
   `e886872b51a10cd285dc90c8a29bf1c6757c96e4`. A static comparison of
@@ -363,6 +367,16 @@ live acceptance.
   errors for tree `0030e550e42c6694adbbb9f8c8aa21f023bddc47`. The shell
   syntax passed and the non-hosted invocation exited before privileged
   work. The system test must still run on the disposable hosted image.
+- Live run 44868793106 at `c16feb63` installed the helper and passed
+  the standard-user probe. It stopped while configuring the DNS fixture:
+  `networksetup` reported the service disabled before TUN start. The
+  fixture now keeps the service enabled with both IP protocols disabled,
+  checks the DNS readback after each operation, and verifies that neither
+  fixture resolver is active. The production DNS contract is unchanged.
+- Retest fixture compile preflight: macOS 26.5.2, 10 logical CPUs, load
+  2.30, 16 GiB RAM (14,294 free and 282,946 inactive 16 KiB pages),
+  1,174 MiB free swap, 82 GiB free disk, no compiler jobs, and Command
+  Line Tools clang available.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time
