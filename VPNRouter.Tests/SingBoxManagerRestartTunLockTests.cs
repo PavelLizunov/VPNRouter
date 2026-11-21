@@ -519,8 +519,15 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
                     new OwnedProcessIdentity(int.MaxValue, 1, Path.Combine(tempDir, "fixture-sing-box")));
             }
             const string previous = """{"route":{"final":"proxy"}}""";
+            const string replacement = """
+                {
+                    "inbounds": [{"type": "tun", "tag": "tun-in"}],
+                    "outbounds": [{"type": "direct", "tag": "direct"}],
+                    "route": {"final": "direct"}
+                }
+                """;
             var configPath = manager.WriteConfigToDisk(previous);
-            var result = manager.ReloadConfigJsonWithResult("{}", forceRestart: true);
+            var result = manager.ReloadConfigJsonWithResult(replacement, forceRestart: true);
 
             Assert.Equal(previous, File.ReadAllText(configPath));
             Assert.Empty(Directory.EnumerateFiles(VPNRouter.Core.AppPaths.ConfigDir, "current-*.tmp"));

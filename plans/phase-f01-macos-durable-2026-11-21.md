@@ -591,3 +591,10 @@ lease even if the helper is unavailable. Failed helper responses log
 only stop status, timeout and whether the launcher was known to exit.
 The managed fixtures model the launch ID and test both refusal and
 pre-spawn cleanup on a hosted macOS runner.
+
+The first hosted managed macOS run passed the never-spawned cleanup and
+failover Stop refusal. The reload refusal fixture supplied an empty
+replacement config and exited at TUN validation before reaching Stop.
+The replacement now has an inert TUN and direct outbound. The fixture
+still requires Stop refusal to retain the original file, handle and
+TUN lease.
