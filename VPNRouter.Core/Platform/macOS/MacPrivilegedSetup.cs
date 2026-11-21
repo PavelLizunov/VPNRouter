@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Serilog;
 
 namespace VPNRouter.Core.Platform.macOS;
@@ -20,17 +21,15 @@ public static class MacPrivilegedSetup
             return true;
 
         var helperPath = Path.Combine(AppContext.BaseDirectory, MacPrivilegePaths.HelperBundleName);
-        var installerPath = Path.Combine(AppContext.BaseDirectory, MacPrivilegePaths.InstallerScriptName);
         var templatePath = Path.Combine(AppContext.BaseDirectory, MacPrivilegePolicy.TemplateFileName);
         var singboxPath = AppPaths.BundledSingBoxExePath;
-        if (!IsProtectedRegularFile(helperPath) || !IsProtectedRegularFile(installerPath) ||
-            !IsProtectedRegularFile(templatePath) || !IsProtectedRegularFile(singboxPath))
+        if (!IsProtectedRegularFile(helperPath) || !IsProtectedRegularFile(templatePath) ||
+            !IsProtectedRegularFile(singboxPath))
         {
             logger.Error(
                 "[MacPrivilege] Bundled privileged artifacts are missing, linked, or in a writable directory; Connect is blocked " +
-                "(helper={Helper}, installer={Installer}, template={Template}, singbox={SingBox})",
-                File.Exists(helperPath), File.Exists(installerPath),
-                File.Exists(templatePath), File.Exists(singboxPath));
+                "(helper={Helper}, template={Template}, singbox={SingBox})",
+                File.Exists(helperPath), File.Exists(templatePath), File.Exists(singboxPath));
             return false;
         }
 
@@ -47,8 +46,12 @@ public static class MacPrivilegedSetup
 
             helperHash = MacPrivilegedClient.ComputeFileSha256(helperPath);
             singboxHash = MacPrivilegedClient.ComputeFileSha256(singboxPath);
+            using var installer = typeof(MacPrivilegedSetup).Assembly.GetManifestResourceStream(
+                "VPNRouter.MacPrivilege.install-privileged.sh")
+                ?? throw new InvalidOperationException("The macOS privileged installer is missing.");
+            using var script = new StreamReader(installer);
             var command = BuildInstallerCommand(
-                installerPath, templatePath, helperPath, singboxPath, helperHash, singboxHash,
+                script.ReadToEnd(), templatePath, helperPath, singboxPath, helperHash, singboxHash,
                 AppVersion.Version, Environment.UserName);
             var result = RunElevated(command, logger);
             if (!result)
@@ -81,7 +84,7 @@ public static class MacPrivilegedSetup
     }
 
     internal static string BuildInstallerCommand(
-        string installerPath,
+        string installerScript,
         string policyTemplatePath,
         string helperPath,
         string singboxPath,
@@ -91,8 +94,12 @@ public static class MacPrivilegedSetup
         string userName)
     {
         MacPrivilegePolicy.ValidateUserName(userName);
+        // Freeze the approved script before the admin prompt. The elevated shell
+        // must not open a script from the user-owned app bundle after approval.
+        var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(installerScript));
         return
-            $"/bin/bash {Quote(installerPath)} " +
+            $"/usr/bin/printf %s {Quote(payload)} | /usr/bin/base64 -D | " +
+            "/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -s -- " +
             $"--policy-template {Quote(policyTemplatePath)} " +
             $"--helper {Quote(helperPath)} " +
             $"--singbox {Quote(singboxPath)} " +

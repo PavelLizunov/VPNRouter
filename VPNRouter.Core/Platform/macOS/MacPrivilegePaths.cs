@@ -19,7 +19,6 @@ public static class MacPrivilegePaths
     public const string PolicyDirectory = "/etc/sudoers.d";
     public const string LegacyPolicyPath = "/etc/sudoers.d/vpnrouter";
     public const string SudoPath = "/usr/bin/sudo";
-    public const string InstallerScriptName = "install-privileged.sh";
     public const string HelperBundleName = "vpnrouter-privileged";
     public const int PolicyVersion = 2;
     public const string PolicyHeader = "# vpnrouter policy v2";

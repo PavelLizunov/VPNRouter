@@ -116,6 +116,13 @@ commands or live-host tests on the development workstation.
   helper now validate the real sudoers path and accept that protected
   Application Support directory. Installer cleanup is registered only after
   lock acquisition, and copied binaries are checked before publication.
+- The app embeds the installer and sends its bytes in the authorization
+  request. The elevated shell starts with an empty environment.
+- On `mac-worker`, the native helper compiled under production warning flags
+  and the unsanitized native contract tests passed for `ac9bb52f`. The
+  sanitizer run was terminated after it stalled initializing shadow memory
+  before test entry. Hosted sanitizer results and managed .NET tests remain
+  pending. The worker only has .NET 8.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

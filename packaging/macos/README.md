@@ -88,11 +88,13 @@ trust the app-side result.
 
 ## Installation and migration
 
-`install-privileged.sh` runs as root through the app's one-time administrator
-prompt. It rejects linked, group/world-writable or foreign-owned source files and
+`install-privileged.sh` is embedded in the app assembly. The app sends the
+script bytes to the elevated shell as part of the one-time administrator
+request. This binds the script to the request before approval. The installer
+rejects linked, group/world-writable or foreign-owned source files and
 world-writable or foreign-owned source directories, verifies the root-owned `/Library`, `/Library/Application Support`,
-`/Library/PrivilegedHelperTools`, `/etc` and `/etc/sudoers.d` chain, validates
-source hashes, removes `/etc/sudoers.d/vpnrouter` first and verifies its absence,
+`/Library/PrivilegedHelperTools` and `/private/etc/sudoers.d` chains, validates
+source and staged artifact hashes, removes `/etc/sudoers.d/vpnrouter` first and verifies its absence,
 installs root-owned artifacts with temp-plus-rename, renders the per-uid policy
 from `sudoers.template`, rejects any non-comment line other than the single
 managed helper rule, validates it with `visudo -cf`, and accepts only a

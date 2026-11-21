@@ -6,10 +6,10 @@ namespace VPNRouter.Tests;
 public class MacPrivilegedSetupContractTests
 {
     [Fact]
-    public void Installer_command_is_managed_and_has_no_temp_script_path()
+    public void Installer_command_captures_the_script_before_elevation()
     {
         var command = MacPrivilegedSetup.BuildInstallerCommand(
-            "/Applications/VPNRouter.app/Contents/MacOS/install-privileged.sh",
+            "#!/bin/bash\nprintf 'fixture'\n",
             "/Applications/VPNRouter.app/Contents/MacOS/sudoers.template",
             "/Applications/VPNRouter.app/Contents/MacOS/vpnrouter-privileged",
             "/Applications/VPNRouter.app/Contents/MacOS/sing-box",
@@ -18,7 +18,12 @@ public class MacPrivilegedSetupContractTests
             "2.50.6-r4",
             "alice");
 
-        Assert.StartsWith("/bin/bash ", command);
+        Assert.StartsWith("/usr/bin/printf %s ", command);
+        Assert.Contains("| /usr/bin/base64 -D | /usr/bin/env -i ", command);
+        Assert.Contains("/bin/bash -s -- ", command);
+        Assert.Contains(Convert.ToBase64String(
+            System.Text.Encoding.UTF8.GetBytes("#!/bin/bash\nprintf 'fixture'\n")), command);
+        Assert.DoesNotContain("install-privileged.sh", command);
         Assert.Contains("--policy-template ", command);
         Assert.Contains("--helper ", command);
         Assert.Contains("--singbox-sha256 ", command);
@@ -33,7 +38,7 @@ public class MacPrivilegedSetupContractTests
     public void Installer_command_rejects_unsafe_user_name()
     {
         Assert.Throws<ArgumentException>(() => MacPrivilegedSetup.BuildInstallerCommand(
-            "/a/install-privileged.sh", "/a/sudoers.template", "/a/helper", "/a/sing-box",
+            "#!/bin/bash\n", "/a/sudoers.template", "/a/helper", "/a/sing-box",
             new string('a', 64), new string('b', 64), "2.50.6", "alice bob"));
     }
 
