@@ -16,6 +16,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2** - Setup-assistant review at `b4e3b27a` found that default JSON escaping expands valid long Russian goals past the 2 KiB server limit. RESOLVED in source with direct UTF-8 JSON, a wire-size guard and the 768-byte Cyrillic regression. See [the setup-agent phase](phase-subscription-ai-assistant-2026-11-21.md) and PR #721.
+- [x] **P3** - Setup-assistant client coverage omitted clarification, error status and cancellation replies. RESOLVED in source with focused status, cancellation, timeout and reply-address fixtures. See PR #721.
+
 - [x] **P1** - Validate rollback before promoting the snapshot and retain the previous live tree and marker on relaunch failure (#661). RESOLVED in source. Rollback and repair, verified at `45a79762` in CI 44368002825.
 - [x] **P1** - Complete monitored startup before service acceptance, preserve native DNS rule fall-through, isolate the accepted import from edits, and retain explicit Stop ownership on refusal (#664). RESOLVED in source. Routing and service acceptance, verified at `45a79762` in CI 44368002825.
 - [ ] **P2** - A stale Android alarm or prepared switch can reconnect after Disconnect, and a concurrent settings save can yield the wrong restore policy. Verify terminal status delivery after stops and rejected switches (#689).
