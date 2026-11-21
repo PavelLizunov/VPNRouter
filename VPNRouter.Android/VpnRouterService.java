@@ -713,17 +713,11 @@ public final class VpnRouterService extends VpnService {
             DnsttReadyProbe probe = new DnsttReadyProbe();
             Thread worker = new Thread(() -> probe.run(start), "dnstt-ready");
             worker.setDaemon(true);
-            long deadline = SystemClock.elapsedRealtime() + 12_000L;
+            long startedAt = SystemClock.elapsedRealtime();
             try {
                 worker.start();
-                while (start.current()) {
-                    long remaining = deadline - SystemClock.elapsedRealtime();
-                    if (remaining <= 0) return false;
-                    if (probe.finished.await(Math.min(remaining, 100L), TimeUnit.MILLISECONDS)) {
-                        return probe.passed && start.current();
-                    }
-                }
-                return false;
+                return start.awaitDnsttReadiness(startedAt, SystemClock::elapsedRealtime,
+                        timeout -> probe.finished.await(timeout, TimeUnit.MILLISECONDS), () -> probe.passed);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return false;
