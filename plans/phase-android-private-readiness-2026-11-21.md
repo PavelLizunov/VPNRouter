@@ -33,5 +33,15 @@ rollback would restore the control listener.
 The pinned `libbox-legacy-1.14.4-vpnctl.2.aar` SHA-256 and Java symbols
 were checked before integration. Its URL test runs HTTPS through the named
 outbound and reports the result over its app-private command socket. The
-native instance creates a separate result history for every start. APK,
-device verification and independent review are pending.
+native instance creates a separate result history for every start.
+
+CI passed all nine checks at `bbeed793`, including the ARM64 APK build
+(run 44849525633, artifact 14684443813). The installed APK hash matched
+the build artifact on an isolated Android 14 guest.
+
+Independent review of `bbeed793` confirmed that the service no longer
+adds a TCP listener. It found that a late client connection could outlive
+cancellation and that the TUN descriptor was checked only before the probe.
+The probe worker now owns client cleanup, and the Connected commit
+rechecks the descriptor of the same session. The updated exact-commit
+CI, independent review and device verification remain pending.

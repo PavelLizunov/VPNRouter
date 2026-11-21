@@ -80,16 +80,22 @@ public final class AndroidTunnelLifecycleTest {
                 source.indexOf("private void reportStartFailure("));
         requireOrdered(start, "start.prepareAndClaim(preflight, () -> {", "select.run();", "detachTunnel();",
                 "if (tunnelConfig == null)", "closeDetachedTunnel(previous, previousServer);", "if (!start.current()) return;",
-                "session = new AndroidTunnelSession();", "startSlipstreamIfNeeded();", "if (!start.current()) return;",
+                "AndroidTunnelSession attempt = new AndroidTunnelSession();", "session = attempt;",
+                "startSlipstreamIfNeeded();", "if (!start.current()) return;",
                 "startLibboxService(tunnelConfig);",
-                "session.requireEstablishedTun();", "if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start)) {",
+                "attempt.requireEstablishedTun();", "if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start)) {",
                 "retireTunnel();", "reportFailure(\"proxy-unreachable\", false);", "start.commit(() -> {",
+                "if (session != attempt)", "attempt.requireEstablishedTun();",
                 "persistLastGoodConfig();", "liveService = this;",
                 "writeVpnState(STATE_CONNECTED,", "setTunnelLive(true);", "broadcastTunnelEvent(new Intent(ACTION_TUNNEL_UP))");
         String probe = start.substring(start.indexOf("class DnsttReadyProbe"));
-        requireOrdered(probe, "Libbox.CommandOutbounds", "Libbox.newCommandClient(", "client.connect();",
-                "client.urlTest(\"proxy\");", "while (start.current())", "probe.finished.await(",
-                "probe.passed && start.current()", "finally", "client.disconnect()");
+        requireOrdered(probe, "new Thread(() -> probe.run(start)", "SystemClock.elapsedRealtime() + 12_000L",
+                "worker.start();", "while (start.current())", "probe.finished.await(",
+                "probe.passed && start.current()", "finally", "probe.complete(false);");
+        requireOrdered(probe, "private void run(AndroidTunnelStart start)", "if (finished.getCount() == 0 || !start.current()) return;",
+                "Libbox.CommandOutbounds", "Libbox.newCommandClient(", "client.connect();",
+                "if (finished.getCount() == 0 || !start.current()) return;", "client.urlTest(\"proxy\");",
+                "finished.await();", "finally", "complete(false);", "client.disconnect()");
         requireOrdered(probe, "\"proxy\".equals(item.getTag())", "\"ssh\".equals(item.getType())",
                 "item.getURLTestDelay() > 0", "complete(true)");
         require(!probe.contains("external_controller") && !probe.contains("new Socket(")

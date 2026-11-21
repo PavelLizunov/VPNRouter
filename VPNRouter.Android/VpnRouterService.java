@@ -649,7 +649,8 @@ public final class VpnRouterService extends VpnService {
                 reportFailure("tunnel-closing", false);
                 return;
             }
-            session = new AndroidTunnelSession();
+            AndroidTunnelSession attempt = new AndroidTunnelSession();
+            session = attempt;
             tunnelSessionId = java.util.UUID.randomUUID().toString();
             establishedAppPolicy = null;
             acquireConnectWakeLock();
@@ -657,13 +658,15 @@ public final class VpnRouterService extends VpnService {
             startSlipstreamIfNeeded();
             if (!start.current()) return;
             startLibboxService(tunnelConfig);
-            session.requireEstablishedTun();
+            attempt.requireEstablishedTun();
             if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start)) {
                 retireTunnel();
                 if (start.current()) reportFailure("proxy-unreachable", false);
                 return;
             }
             if (start.commit(() -> {
+                if (session != attempt) throw new IllegalStateException("tunnel-closing");
+                attempt.requireEstablishedTun();
                 persistLastGoodConfig();
                 establishedStart = start;
                 liveService = this;
@@ -708,17 +711,7 @@ public final class VpnRouterService extends VpnService {
         static boolean ready(AndroidTunnelStart start) {
             if (!start.current()) return false;
             DnsttReadyProbe probe = new DnsttReadyProbe();
-            CommandClientOptions options = new CommandClientOptions();
-            options.addCommand(Libbox.CommandOutbounds);
-            CommandClient client = Libbox.newCommandClient(probe, options);
-            Thread worker = new Thread(() -> {
-                try {
-                    client.connect();
-                    if (probe.finished.getCount() != 0) client.urlTest("proxy");
-                } catch (Exception | LinkageError e) {
-                    probe.complete(false);
-                }
-            }, "dnstt-ready");
+            Thread worker = new Thread(() -> probe.run(start), "dnstt-ready");
             worker.setDaemon(true);
             long deadline = SystemClock.elapsedRealtime() + 12_000L;
             try {
@@ -736,8 +729,32 @@ public final class VpnRouterService extends VpnService {
                 return false;
             } finally {
                 probe.complete(false);
-                try { client.disconnect(); }
-                catch (Exception e) { Log.w(LOG_TAG, "DNSTT readiness client disconnect failed"); }
+            }
+        }
+
+        // Keep the connection and its cleanup on the same worker, including a late connect
+        // that returns after the service stopped waiting for the result.
+        private void run(AndroidTunnelStart start) {
+            CommandClient client = null;
+            try {
+                if (finished.getCount() == 0 || !start.current()) return;
+                CommandClientOptions options = new CommandClientOptions();
+                options.addCommand(Libbox.CommandOutbounds);
+                client = Libbox.newCommandClient(this, options);
+                client.connect();
+                if (finished.getCount() == 0 || !start.current()) return;
+                client.urlTest("proxy");
+                finished.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception | LinkageError e) {
+                Log.w(LOG_TAG, "DNSTT readiness command failed");
+            } finally {
+                complete(false);
+                if (client != null) {
+                    try { client.disconnect(); }
+                    catch (Exception | LinkageError e) { Log.w(LOG_TAG, "DNSTT readiness client disconnect failed"); }
+                }
             }
         }
 
