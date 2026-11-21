@@ -200,7 +200,7 @@ public partial class VpnEngine : IDisposable
     }
 
     private async Task StartSessionGatedAsync(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck,
-        bool restoreAcceptedImport = false, string? sessionImportJson = null)
+        bool restoreAcceptedImport = false, string? sessionImportJson = null, bool deferActiveProfileSave = false)
     {
         if (_startupIncomplete || (ConfirmServiceReplacement != null && HasLiveOrStartingSingBox() &&
             _singBox != null && _healthMonitor?.IsMonitoring(_singBox) != true))
@@ -221,7 +221,8 @@ public partial class VpnEngine : IDisposable
         _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         ResetFailoverContext(settings);
         await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck,
-            restoreAcceptedImport: restoreAcceptedImport, sessionImportJson: sessionImportJson).ConfigureAwait(false);
+            restoreAcceptedImport: restoreAcceptedImport, sessionImportJson: sessionImportJson,
+            deferActiveProfileSave: deferActiveProfileSave).ConfigureAwait(false);
     }
 
     private void RetireIncompleteStartup()
@@ -249,7 +250,8 @@ public partial class VpnEngine : IDisposable
     }
 
     internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck,
-        Action? retireAfterValidation = null, bool restoreAcceptedImport = false, string? sessionImportJson = null)
+        Action? retireAfterValidation = null, bool restoreAcceptedImport = false, string? sessionImportJson = null,
+        bool deferActiveProfileSave = false)
     {
         bool preparingNewRuntime = false;
         async Task PrepareRuntimeAsync()
@@ -276,6 +278,7 @@ public partial class VpnEngine : IDisposable
                 new StartupContext(settings, mode, skipVpnConflictCheck)
                 {
                     RequireCompleteRuleSets = RequireCompleteRuleSetsOnStart,
+                    DeferActiveProfileSave = deferActiveProfileSave,
                     RestoreAcceptedImport = restoreAcceptedImport,
                     SessionImportJson = sessionImportJson
                 }, ct,

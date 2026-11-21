@@ -40,4 +40,21 @@ The request carries the user's goal, UI locale, supported operation IDs and rele
 
 ## Outcome
 
-Revised the product goal to execution, verification and undo. Confirmed that VPNRouter has a shared Apply path for its desktop and service modes. The current Fix Problems action provides a local snapshot pattern and retries with the old MTU; the agent needs to verify and restore the whole change it owns. Product implementation and verification are pending.
+The first implementation uses a local desktop session. It selects Chrome from the goal and submits a typed plan through vpnctl. The app builds the candidate from the same persisted read that establishes its revision. It probes the proxy and verifies the Chrome route and direct fallback in the accepted configuration before saving. The runtime candidate defers any profile migration write until acceptance. An Undo request uses the accepted session identity. It saves the restored configuration before retiring an assistant-started session and reverts the settings write if Stop is refused and the revision still matches.
+
+The server route and independent spec tests passed all 14 checks in vpnctl PR #358 at `fa42ab1f`. The client transport passed all eight checks at `e12c83e`. The desktop change includes policy, native-config rejection, obsolete session, save failure and narrow-width UI fixtures. Desktop CI for this change, a deployed DeepSeek reply, and the real Chrome and control-app traffic tests remain pending. Active service-managed sessions require integration with their service receipts.
+
+The consolidated desktop review caught the panel's missing generated XAML
+initialization and a shutdown lock inversion. The panel uses
+`InitializeComponent`. The lifecycle gate now encloses synchronous
+revision-checked settings writes, and bound state is refreshed on the UI
+thread after the gate is released. Same-process settings saves share
+the file write lock.
+
+Undo remains accessible when the subscription is unavailable. After a
+normal Stop it restores saved routing without starting a tunnel. It
+still refuses a changed settings revision or a replacement session.
+The lifecycle fixture covers an obsolete session, a replacement before
+offline Undo, a save failure with the original session live, and an
+offline restoration after Stop. CI and live desktop acceptance are
+pending for this change.

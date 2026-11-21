@@ -12,6 +12,7 @@ public sealed record StartupContext(
     bool SkipVpnConflictCheck = false)
 {
     internal bool RequireCompleteRuleSets { get; init; }
+    internal bool DeferActiveProfileSave { get; init; }
     internal bool RestoreAcceptedImport { get; init; }
     internal string? SessionImportJson { get; init; }
     internal bool ValidateRequiredRuleSets => Mode != StartupMode.ColdStart || RequireCompleteRuleSets;
@@ -364,7 +365,7 @@ internal sealed class StartupPipeline
 
         ct.ThrowIfCancellationRequested();
 
-        var activeProfile = SelectActiveProfile(settings, context.Mode, manager, collection, isCustomConfig);
+        var activeProfile = SelectActiveProfile(context, manager, collection, isCustomConfig);
 
         AddCustomAppsToProfile(activeProfile, settings);
 
@@ -466,12 +467,12 @@ internal sealed class StartupPipeline
     }
 
     private Profile SelectActiveProfile(
-        AppSettings settings,
-        StartupMode mode,
+        StartupContext context,
         ProfileManager manager,
         ProfileCollection collection,
         bool isCustomConfig)
     {
+        var settings = context.Settings;
         var isFullTunnel = (settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
         var profileName = settings.ActiveProfile;
@@ -512,8 +513,8 @@ internal sealed class StartupPipeline
             if (missing.Count > 0)
             {
                 _host.OnWarning($"Skipped {missing.Count} unknown profile(s)");
-                if (mode == StartupMode.ColdStart)
-                    PersistSanitizedActiveProfile(settings, names, missing, profileName);
+                if (context.Mode == StartupMode.ColdStart)
+                    SanitizeActiveProfile(settings, names, missing, profileName, context.DeferActiveProfileSave);
             }
         }
         else if (isCustomConfig)
@@ -560,11 +561,12 @@ internal sealed class StartupPipeline
         }
     }
 
-    private void PersistSanitizedActiveProfile(
+    private void SanitizeActiveProfile(
         AppSettings settings,
         string[] names,
         IReadOnlyCollection<string> missing,
-        string originalProfileName)
+        string originalProfileName,
+        bool deferSave)
     {
         var sanitized = string.Join(",",
             names.Where(n => !missing.Contains(n, StringComparer.OrdinalIgnoreCase)));
@@ -572,6 +574,7 @@ internal sealed class StartupPipeline
             return;
 
         settings.ActiveProfile = sanitized;
+        if (deferSave) return;
         try
         {
             var fresh = _store.Load(AppPaths.ConfigYamlPath);

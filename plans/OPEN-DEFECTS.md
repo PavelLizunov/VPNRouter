@@ -16,6 +16,15 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P1** - Setup-assistant review found named XAML controls were initialized through the raw loader, leaving generated fields unset on desktop. RESOLVED in source with Avalonia's generated initializer. The narrow Simple-page fixture instantiates the panel. See PR #721.
+- [x] **P1** - Setup-assistant review found Apply and Undo could wait for the UI dispatcher while holding the engine lifecycle gate, which window disposal waits for synchronously. RESOLVED in source. Gated settings callbacks perform revision-checked writes without calling the UI dispatcher. See PR #721.
+- [x] **P2** - Setup-assistant Undo cannot restore saved routing after a normal Stop and disappears when subscription eligibility changes. RESOLVED in source. Undo stays visible and can restore the unchanged saved routing when the tunnel is already stopped. A different live session is rejected. See PR #721.
+
+- [x] **P2** - Setup-assistant desktop review found Undo could stop a replacement session or stop before failed settings persistence. RESOLVED in source by binding Undo to the accepted session and saving before Stop. A refused Stop restores the assistant settings if the revision is unchanged. See PR #721.
+- [x] **P2** - Setup-assistant desktop review found revision checks could accept a candidate from stale UI settings. RESOLVED in source by deriving the input and its revision from one persisted read and deferring the candidate's cold-start profile write. See PR #721.
+- [x] **P2** - Setup-assistant desktop review found the fingerprint check does not prove the emitted app route. RESOLVED in source with an accepted-policy check for the Chrome proxy rule and direct fallback. Live traffic acceptance remains in the setup-agent phase. See PR #721.
+- [x] **P3** - Setup-assistant desktop review found the input timeout includes system authorization, navigation cancels the attempt and VPN conflicts have generic error copy. RESOLVED in source with a separate runtime budget, explicit Cancel and localized conflict states. See PR #721.
+
 - [x] **P2** - Setup-assistant review at `b4e3b27a` found that default JSON escaping expands valid long Russian goals past the 2 KiB server limit. RESOLVED in source with direct UTF-8 JSON, a wire-size guard and the 768-byte Cyrillic regression. See [the setup-agent phase](phase-subscription-ai-assistant-2026-11-21.md) and PR #721.
 - [x] **P3** - Setup-assistant client coverage omitted clarification, error status and cancellation replies. RESOLVED in source with focused status, cancellation, timeout and reply-address fixtures. See PR #721.
 

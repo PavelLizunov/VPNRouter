@@ -4,7 +4,7 @@ VPNRouter is a VPN/proxy client. It has **no telemetry**: no analytics, no
 crash/error reporting service, no "ping home". This document states exactly what
 data exists and where it goes.
 
-## Stored locally (never uploaded by VPNRouter)
+## Stored locally
 
 Under `%ProgramData%\VPNRouter\` on Windows (or the platform equivalent —
 `~/.config/vpnrouter` on Linux, `~/Library/Application Support/VPNRouter` on
@@ -19,7 +19,8 @@ macOS, and the app sandbox on Android):
 - `cache/` — subscription / free-config caches and the Zapret probe cache.
 - `state.json` — runtime state (PID, last status).
 
-VPNRouter never transmits any of these to the author or any third party.
+These files stay on your device. The requests below send the fields needed
+for each feature.
 
 ## Network connections VPNRouter makes
 
@@ -31,6 +32,12 @@ VPNRouter never transmits any of these to the author or any third party.
   is sent beyond a normal HTTPS request.
 - **Subscriptions** — if you add a subscription URL, the server list is fetched
   from that URL (the provider you chose).
+- **DeepSeek setup assistant** — when you submit a request, VPNRouter
+  authenticates to the official vpnctl endpoint with your saved subscription.
+  vpnctl forwards the request text, interface language and whether an app
+  was matched to the configured model. The subscription credential goes
+  only to vpnctl. VPNRouter keeps its settings, app list and routing changes
+  on your device.
 - **Free Configs** — if you use that tab, a pre-aggregated `pool.json` is
   fetched from this project's GitHub releases, and candidate servers may be
   probed (TCP/TLS) to test reachability. If `pool.json` is unavailable, the app
@@ -44,9 +51,8 @@ VPNRouter never transmits any of these to the author or any third party.
 
 - No analytics or usage tracking.
 - No automatic crash uploads.
-- No sharing of your config, credentials, browsing, or process list with
-  anyone. The list of routed apps is used only to generate the local sing-box
-  config.
+- Your browsing and routed-app list stay local to the VPN client. The app
+  list is used to generate the local sing-box config.
 
 ## Your responsibility
 
