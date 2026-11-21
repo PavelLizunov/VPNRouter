@@ -232,16 +232,40 @@ public class MacPrivilegedSourceContractTests
         Assert.DoesNotContain("wget ", script, StringComparison.Ordinal);
         Assert.DoesNotContain("echo \"$user_name ALL=(root) NOPASSWD:", script, StringComparison.Ordinal);
 
-        var legacyIndex = script.IndexOf("rm -f \"$LEGACY_POLICY\"", StringComparison.Ordinal);
-        var installIndex = script.IndexOf("install -o root -g wheel -m 0755 \"$helper_source\"",
-            StringComparison.Ordinal);
-        Assert.True(legacyIndex >= 0 && installIndex > legacyIndex,
-            "Legacy policy must be removed before the new helper is installed.");
-
         var lockIndex = script.IndexOf("flock(STDIN, LOCK_EX | LOCK_NB)", StringComparison.Ordinal);
         var cleanupTrapIndex = script.IndexOf("trap cleanup EXIT", StringComparison.Ordinal);
         Assert.True(lockIndex >= 0 && cleanupTrapIndex > lockIndex,
             "Only the installer holding the lock may clean shared staging paths.");
+    }
+
+    [Fact]
+    public void Installer_checks_legacy_runtime_and_artifacts_before_publishing_the_rule()
+    {
+        var script = Read("packaging", "macos", "install-privileged.sh");
+        const string migrationCheck = "check_legacy_runtime\n";
+        var firstCheck = script.IndexOf(migrationCheck, StringComparison.Ordinal);
+        var legacyRemoval = script.IndexOf("rm -f \"$LEGACY_POLICY\"", StringComparison.Ordinal);
+        var secondCheck = script.LastIndexOf(migrationCheck, StringComparison.Ordinal);
+        var replaceHelper = script.IndexOf("mv -f \"$helper_tmp\" \"$HELPER_DEST\"", StringComparison.Ordinal);
+        var publishRule = script.IndexOf("mv -f \"$policy_tmp\" \"$policy_path\"", StringComparison.Ordinal);
+        Assert.True(firstCheck >= 0 && legacyRemoval > firstCheck && secondCheck > legacyRemoval &&
+                    replaceHelper > secondCheck && publishRule > replaceHelper,
+            "The installer must check for the old runtime around legacy rule removal.");
+
+        foreach (var path in new[] { "HELPER_DEST", "ROOT_BIN", "MANIFEST" })
+        {
+            var verify = script.IndexOf($"verify_root_artifact \"${path}\"", StringComparison.Ordinal);
+            Assert.True(verify > replaceHelper && verify < publishRule,
+                $"Installed file {path} must be checked before publishing the rule.");
+        }
+
+        var armRollback = script.IndexOf("policy_pending=1", StringComparison.Ordinal);
+        var probe = script.IndexOf("probe_output=", StringComparison.Ordinal);
+        var commit = script.LastIndexOf("policy_pending=0", StringComparison.Ordinal);
+        Assert.True(armRollback > replaceHelper && armRollback < publishRule && publishRule < probe && probe < commit,
+            "Rollback stays armed until the installed helper reports readiness.");
+        Assert.Contains("[ \"$policy_pending\" -eq 1 ] && [ ! -e \"$policy_tmp\" ] && ! rm -f \"$policy_path\"", script,
+            StringComparison.Ordinal);
     }
 
     [Fact]

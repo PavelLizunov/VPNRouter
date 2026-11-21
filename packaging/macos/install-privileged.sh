@@ -139,13 +139,48 @@ ensure_root_dir() {
     check_root_dir "$path" "$mode"
 }
 
+file_sha256() {
+    shasum -a 256 "$1" | awk '{print $1}'
+}
+
+check_root_file() {
+    local path="$1"
+    local expected_mode="$2"
+    local metadata mode
+    [ -f "$path" ] && [ ! -L "$path" ] || {
+        echo "install-privileged: protected file is missing or linked: $path" >&2
+        exit 66
+    }
+    metadata="$(stat -f '%u:%g:%l' "$path")"
+    mode="$(stat -f '%Op' "$path")"
+    if [ "$metadata" != "0:0:1" ] || [ "$((0$mode & 07777))" -ne "$((0$expected_mode))" ]; then
+        echo "install-privileged: protected file has unexpected metadata: $path" >&2
+        exit 66
+    fi
+}
+
+check_replacement_target() {
+    if [ -e "$1" ] || [ -L "$1" ]; then
+        check_root_file "$1" "$2"
+    fi
+}
+
+verify_root_artifact() {
+    local path="$1"
+    check_root_file "$path" "$2"
+    if [ "$(file_sha256 "$path")" != "$3" ]; then
+        echo "install-privileged: protected file hash mismatch: $path" >&2
+        exit 66
+    fi
+}
+
 check_source "$helper_source"
 check_source "$singbox_source"
 check_source_chain "$helper_source"
 check_source_chain "$singbox_source"
 
-actual_helper_sha="$(shasum -a 256 "$helper_source" | awk '{print $1}')"
-actual_singbox_sha="$(shasum -a 256 "$singbox_source" | awk '{print $1}')"
+actual_helper_sha="$(file_sha256 "$helper_source")"
+actual_singbox_sha="$(file_sha256 "$singbox_source")"
 [ "$actual_helper_sha" = "$helper_sha256" ] || { echo "install-privileged: helper hash mismatch" >&2; exit 66; }
 [ "$actual_singbox_sha" = "$singbox_sha256" ] || { echo "install-privileged: sing-box hash mismatch" >&2; exit 66; }
 
@@ -155,8 +190,12 @@ manifest_tmp="$MANIFEST.tmp"
 lock_path="$ROOT_DIR/.install.lock"
 helper_tmp="$HELPER_DEST.tmp"
 singbox_tmp="$ROOT_BIN.tmp"
+policy_pending=0
 
 cleanup() {
+    if [ "$policy_pending" -eq 1 ] && [ ! -e "$policy_tmp" ] && ! rm -f "$policy_path"; then
+        echo "install-privileged: could not remove the unconfirmed managed rule" >&2
+    fi
     rm -f "$policy_tmp" "$manifest_tmp" "$helper_tmp" "$singbox_tmp" 2>/dev/null || true
 }
 
@@ -186,6 +225,9 @@ if ! /usr/bin/perl -MFcntl=:flock -e 'flock(STDIN, LOCK_EX | LOCK_NB) or exit 75
     exit 75
 fi
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+rm -f "$policy_tmp" "$manifest_tmp" "$helper_tmp" "$singbox_tmp"
 
 # Only the two managed comments and the exact helper rule may enter sudoers.
 printf '%s' "$policy_base64" | /usr/bin/base64 -D > "$policy_tmp"
@@ -203,9 +245,30 @@ awk -v expected="$expected_rule" '
 chown root:wheel "$policy_tmp"
 chmod 0440 "$policy_tmp"
 visudo -cf "$policy_tmp" >/dev/null
+policy_sha256="$(file_sha256 "$policy_tmp")"
 
-# Remove the legacy grant first. If a later step fails, the app fails closed
-# instead of silently keeping the old user-writable NOPASSWD path.
+ensure_root_dir "$ROOT_DIR/bin" 0755
+ensure_root_dir "$ROOT_DIR/run" 0700
+ensure_root_dir "$ROOT_DIR/assets" 0700
+check_replacement_target "$HELPER_DEST" 0755
+check_replacement_target "$ROOT_BIN" 0755
+check_replacement_target "$MANIFEST" 0600
+check_replacement_target "$policy_path" 0440
+
+install -o root -g wheel -m 0755 "$helper_source" "$helper_tmp"
+install -o root -g wheel -m 0755 "$singbox_source" "$singbox_tmp"
+verify_root_artifact "$helper_tmp" 0755 "$helper_sha256"
+verify_root_artifact "$singbox_tmp" 0755 "$singbox_sha256"
+
+check_legacy_runtime() {
+    printf '%s' '{"version":1,"op":"migration_check"}' |
+        env -i SUDO_UID="$uid" "$helper_tmp" 9>&-
+}
+
+# Check before removal so an active legacy instance can still be stopped.
+check_legacy_runtime
+
+# Remove the legacy grant before replacing executable artifacts.
 if [ -e "$LEGACY_POLICY" ] || [ -L "$LEGACY_POLICY" ]; then
     rm -f "$LEGACY_POLICY"
 fi
@@ -214,38 +277,32 @@ if [ -e "$LEGACY_POLICY" ] || [ -L "$LEGACY_POLICY" ]; then
     exit 66
 fi
 
-ensure_root_dir "$ROOT_DIR/bin" 0755
-ensure_root_dir "$ROOT_DIR/run" 0700
-ensure_root_dir "$ROOT_DIR/assets" 0700
-
-# Replace by temp-plus-rename so a running process never observes a partial file.
-rm -f "$helper_tmp" "$singbox_tmp"
-install -o root -g wheel -m 0755 "$helper_source" "$helper_tmp"
-install -o root -g wheel -m 0755 "$singbox_source" "$singbox_tmp"
-[ "$(shasum -a 256 "$helper_tmp" | awk '{print $1}')" = "$helper_sha256" ] || {
-    echo "install-privileged: staged helper hash mismatch" >&2
-    exit 66
-}
-[ "$(shasum -a 256 "$singbox_tmp" | awk '{print $1}')" = "$singbox_sha256" ] || {
-    echo "install-privileged: staged sing-box hash mismatch" >&2
-    exit 66
-}
-mv -f "$helper_tmp" "$HELPER_DEST"
-mv -f "$singbox_tmp" "$ROOT_BIN"
+check_legacy_runtime
 
 cat > "$manifest_tmp" <<EOF
 {"schema_version":1,"policy_version":2,"app_version":"$app_version","helper_sha256":"$helper_sha256","singbox_sha256":"$singbox_sha256"}
 EOF
 chown root:wheel "$manifest_tmp"
 chmod 0600 "$manifest_tmp"
+manifest_sha256="$(file_sha256 "$manifest_tmp")"
+
+# Publish the rule only after independently checking the installed set.
+mv -f "$helper_tmp" "$HELPER_DEST"
+mv -f "$singbox_tmp" "$ROOT_BIN"
 mv -f "$manifest_tmp" "$MANIFEST"
+verify_root_artifact "$HELPER_DEST" 0755 "$helper_sha256"
+verify_root_artifact "$ROOT_BIN" 0755 "$singbox_sha256"
+verify_root_artifact "$MANIFEST" 0600 "$manifest_sha256"
+verify_root_artifact "$policy_tmp" 0440 "$policy_sha256"
 
+# Arm cleanup before the atomic rename. If rename fails, the staged file is
+# still present and cleanup keeps any existing policy.
+policy_pending=1
 mv -f "$policy_tmp" "$policy_path"
-chown root:wheel "$policy_path"
-chmod 0440 "$policy_path"
+verify_root_artifact "$policy_path" 0440 "$policy_sha256"
 
-# Probe is the only readiness authority. A failed probe leaves no ready state.
-probe_output="$(printf '%s' '{"version":1,"op":"probe"}' | env SUDO_UID="$uid" "$HELPER_DEST")" || {
+# A failed installed-helper probe removes the newly published rule.
+probe_output="$(printf '%s' '{"version":1,"op":"probe"}' | env -i SUDO_UID="$uid" "$HELPER_DEST" 9>&-)" || {
     echo "install-privileged: installed helper probe failed" >&2
     exit 78
 }
@@ -254,4 +311,5 @@ case "$probe_output" in
     *) echo "install-privileged: helper is not ready after installation" >&2; exit 78 ;;
 esac
 
+policy_pending=0
 echo "install-privileged: managed policy=2 uid=$uid"

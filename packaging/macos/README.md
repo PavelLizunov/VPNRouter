@@ -36,6 +36,7 @@ or a missing `SUDO_UID`.
 | Operation | Fields | Effect |
 |---|---|---|
 | `probe` | none | Reports `ready`, `legacy`, `legacy_state` (`absent`, `present` or `unknown`), policy version, artifact hashes and the app version. An unknown or present legacy path blocks readiness; readiness is decided here, never by a user-writable marker. |
+| `migration_check` | none | Verifies the system directory chain and checks for the old root runtime of the invoking user. The installer calls this read-only operation before and after legacy grant removal. |
 | `start` | `config_sha256` | Syncs user `.srs` files into root-owned assets, validates the per-user config against the typed contract, stages it root-owned, writes the root-owned per-uid session record, then `execve`s the root-owned sing-box with `run -c <staged>`. |
 | `stop` | `pid`, positive Unix `start_time` in seconds | Signals a root-owned sing-box only when its executable path, PID and start time match, and the request matches the root-owned per-uid session record. |
 | `dns_set` | `service`, `servers` | Validates the service against `networksetup -listallnetworkservices` and each server as IPv4/IPv6/`empty`, then runs `networksetup -setdnsservers`. |
@@ -96,17 +97,16 @@ trust the app-side result.
 ## Installation and migration
 
 `install-privileged.sh` is embedded in the app assembly. The app sends the
-script and the rendered sudoers policy in the one-time administrator request.
-The installer
-rejects linked, group/world-writable or foreign-owned source files and
-world-writable or foreign-owned source directories, verifies the root-owned `/Library`, `/Library/Application Support`,
-`/Library/PrivilegedHelperTools` and `/private/etc/sudoers.d` chains, validates
-source and staged artifact hashes, removes `/etc/sudoers.d/vpnrouter` first and verifies its absence,
-and installs root-owned artifacts with temp-plus-rename. The installer verifies
-that `/etc` points to `/private/etc`. It accepts the exact two managed policy
-comments and one helper rule, runs `visudo -cf`, and accepts only a
-successful `probe` as ready. If installation is cancelled or fails, no ready
-state is written and the app blocks Connect.
+script and the rendered policy in the administrator request. The installer
+checks the protected system paths, including the `/etc` alias, and verifies
+the hashes of the source and staged artifacts. It validates the exact policy
+with `visudo -cf` and checks for the old root runtime before and after removing
+`/private/etc/sudoers.d/vpnrouter`.
+
+The installer verifies the ownership, modes and hashes of the installed
+helper, runtime and manifest before publishing the per-user rule. It removes
+the new rule if the installed helper fails its readiness probe. The app
+allows Connect after its own probe confirms readiness and the artifact hashes.
 
 An open descriptor holds the kernel installation lock until the shell exits.
 The lock file stays in the protected directory. The kernel releases the lock

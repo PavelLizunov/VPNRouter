@@ -200,6 +200,24 @@ live acceptance.
 - Native production compilation with warnings as errors, installer shell
   syntax, and all contract fixtures passed on the macOS worker for
   `packaging/macos` from tree `2bdfa17e724d6bedc8c08ed84d10c539d421ee59`.
+- Installer transaction follow-up: check for a running legacy instance
+  before removing its grant, verify the installed bytes and permissions
+  against the authorization before publishing the policy, and remove the
+  new grant on a failed readiness probe. Verify this on inert fixtures
+  and keep the live macOS migration gate open.
+- Installer verification preflight: macOS 26.5.2, 10 logical CPUs, load
+  2.26, 16 GiB RAM (40,721 free and 285,958 inactive 16 KiB pages), 1,174
+  MiB free swap, 86 GiB free disk, no compiler jobs, and Command Line
+  Tools clang available. Checks and managed CI passed on `dca7329c` before
+  this change, including run 44862528652.
+- Worker native compile and contract tests passed with `packaging/macos`
+  from tree `26449dd6bd578f1ea0d6e6ff6ddd501c4b242674`. An unprivileged
+  shell fixture exercised those transaction functions with temporary
+  files, real modes and link counts, simulated installed ownership and
+  a fake helper probe. A failed probe and a simulated interruption after
+  rename removed the new rule. Artifact hash, mode and hard-link failures
+  prevented publication. A failed rename preserved the existing rule.
+  No system paths or installed sudoers state were changed.
 - Remaining defects: same-user access to the secret-protected Clash controller;
   app-bundle authenticity remains unsigned; the durable read-only typed status
   path is not implemented; CLI/Headless entry points do not run the one-time

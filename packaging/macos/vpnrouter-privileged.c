@@ -102,6 +102,7 @@ static int legacy_runtime_path(const char *home, char *path, size_t capacity);
 static int legacy_process_identity(uid_t owner, const char *executable,
                                    const char *expected_path);
 static int find_legacy_runtime_process(const char *home);
+static void require_no_legacy_runtime(const char *home);
 
 static void fail(int code, const char *message) __attribute__((noreturn));
 
@@ -1663,12 +1664,7 @@ static int command_start(const char *request_json, size_t request_length,
         fail(EXIT_STATE, "legacy policy removal is unconfirmed");
     if (verify_runtime_artifact() != 0)
         fail(EXIT_STATE, "root-owned runtime artifact is missing or untrusted");
-    int legacy_process_state = find_legacy_runtime_process(home);
-    if (legacy_process_state != 0)
-        fail(EXIT_STATE,
-             legacy_process_state > 0
-                 ? "legacy user-runtime process is still running"
-                 : "legacy user-runtime process state is unknown");
+    require_no_legacy_runtime(home);
     int state_lock = acquire_state_lock(uid);
     if (state_lock < 0)
         fail(EXIT_STATE, "could not serialize privileged state");
@@ -1925,6 +1921,15 @@ static int find_legacy_runtime_process(const char *home)
     }
     free(pids);
     return found;
+}
+
+static void require_no_legacy_runtime(const char *home)
+{
+    int state = find_legacy_runtime_process(home);
+    if (state != 0)
+        fail(EXIT_STATE, state > 0
+            ? "legacy user-runtime process is still running"
+            : "legacy user-runtime process state is unknown");
 }
 
 static int command_probe(uid_t uid, const char *home)
@@ -2339,6 +2344,12 @@ int main(void)
 
     if (strcmp(op, "probe") == 0)
         return command_probe(uid, pw->pw_dir);
+    if (strcmp(op, "migration_check") == 0) {
+        if (verify_fixed_chain() != 0)
+            return EXIT_STATE;
+        require_no_legacy_runtime(pw->pw_dir);
+        return 0;
+    }
     if (strcmp(op, "start") == 0)
         return command_start(request_json, request_length, uid, pw->pw_dir);
     if (strcmp(op, "stop") == 0)
