@@ -99,6 +99,7 @@ cleanup() {
     exit "$result"
 }
 trap cleanup EXIT
+trap 'printf "system acceptance failed at line %s (exit %s)\n" "$LINENO" "$?" >&2' ERR
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -258,12 +259,26 @@ first_state="$(sudo -n /usr/bin/shasum -a 256 "$host_state")"
 pf_request pf_enable
 [ "$(sudo -n /usr/bin/shasum -a 256 "$host_state")" = "$first_state" ]
 sudo -n /sbin/pfctl -s info | grep '^Status: Enabled' >/dev/null
+echo "PF enable retained the live fixture reference across repeated calls"
 
 # The record stores its uint64 PF reference after the 32-byte owner prefix.
 # Release only the fixture reference; leave its stale owner record in place.
 first_reference="$(sudo -n /usr/bin/od -An -t u8 -j 32 -N 8 "$host_state" | tr -d '[:space:]')"
 [[ "$first_reference" =~ ^[1-9][0-9]*$ ]]
-sudo -n /sbin/pfctl -X "$first_reference" >/dev/null 2>&1
+references="$(sudo -n /sbin/pfctl -s References)"
+if ! grep -qw "$first_reference" <<< "$references"; then
+    echo "the first fixture reference was absent before external release" >&2
+    exit 66
+fi
+release_status=0
+release_output="$(sudo -n /sbin/pfctl -X "$first_reference" 2>&1)" || release_status=$?
+references="$(sudo -n /sbin/pfctl -s References)"
+if grep -qw "$first_reference" <<< "$references"; then
+    echo "the fixture reference is still registered after external release (pfctl exit $release_status)" >&2
+    printf '%s\n' "$release_output" | sed "s/$first_reference/<fixture-reference>/g" >&2
+    exit 66
+fi
+echo "PF fixture reference absent from the kernel after external release (pfctl exit $release_status)"
 pf_request pf_enable
 [ "$(sudo -n /usr/bin/shasum -a 256 "$host_state")" != "$first_state" ]
 sudo -n /sbin/pfctl -s info | grep '^Status: Enabled' >/dev/null

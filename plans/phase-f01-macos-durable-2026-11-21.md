@@ -621,3 +621,18 @@ a launcher which never spawned can release its lease. Production logging
 still shows a generic unconfirmed Stop unless debug details are enabled.
 The never-spawned fixture exercises the manager with a fake handle.
 The broader signing and same-user trust questions remain tracked separately.
+
+### Hosted PF reacquisition follow-up
+
+Run 44905496602 at documentation-only `55e3b9ec` passed the managed Stop
+cases, helper migration, fixture TUN and DNS apply. It stopped before
+the PF reference replacement checkpoint, matching the first attempt at
+`7ed65aba`. The old fixture suppressed the output of the external
+release and did not report the failing line. The fixture now requires
+the recorded reference in the kernel before release and its absence
+afterward, matching the helper's release verification. It retains the
+replacement and teardown assertions and reports the failing line and
+release status. No production behavior is changed.
+Shell syntax and six inert cases passed for released, retained,
+initially absent and unreadable kernel references. Hosted validation
+is still pending.
