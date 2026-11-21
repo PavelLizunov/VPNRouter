@@ -700,6 +700,8 @@ public final class VpnRouterService extends VpnService {
     // The freshly started native instance owns its URL-test history and the private command socket.
     private static final class DnsttReadyProbe implements CommandClientHandler {
         private final CountDownLatch finished = new CountDownLatch(1);
+        private volatile String commandStage = "connecting";
+        private volatile String outboundStage = "no-snapshot";
         private boolean passed;
 
         private synchronized void complete(boolean success) {
@@ -723,6 +725,10 @@ public final class VpnRouterService extends VpnService {
                 return false;
             } finally {
                 probe.complete(false);
+                Log.i(LOG_TAG, "DNSTT readiness: command=" + probe.commandStage
+                        + " outbounds=" + probe.outboundStage
+                        + " positiveCallback=" + probe.passed
+                        + " elapsedMs=" + (SystemClock.elapsedRealtime() - startedAt));
             }
         }
 
@@ -736,8 +742,11 @@ public final class VpnRouterService extends VpnService {
                 options.addCommand(Libbox.CommandOutbounds);
                 client = Libbox.newCommandClient(this, options);
                 client.connect();
+                commandStage = "connected";
                 if (finished.getCount() == 0 || !start.current()) return;
+                commandStage = "requesting-test";
                 client.urlTest("proxy");
+                commandStage = "test-requested";
                 finished.await();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -753,14 +762,18 @@ public final class VpnRouterService extends VpnService {
         }
 
         public void writeOutbounds(OutboundGroupItemIterator items) {
+            boolean hasProxy = false;
             while (items != null && items.hasNext()) {
                 OutboundGroupItem item = items.next();
-                if (item != null && "proxy".equals(item.getTag()) && "ssh".equals(item.getType())
-                        && item.getURLTestDelay() > 0) {
+                if (item == null || !"proxy".equals(item.getTag()) || !"ssh".equals(item.getType())) continue;
+                hasProxy = true;
+                if (item.getURLTestDelay() > 0) {
+                    outboundStage = "proxy-available";
                     complete(true);
                     return;
                 }
             }
+            outboundStage = hasProxy ? "proxy-pending" : "proxy-missing";
         }
 
         public void connected() { }
