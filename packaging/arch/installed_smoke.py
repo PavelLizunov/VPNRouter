@@ -2,11 +2,14 @@
 """CI-only installed package acceptance in an isolated Arch network namespace."""
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
+import pwd
 import select
 import subprocess
+import tempfile
 import time
 
 ROOT = Path('/usr/lib/vpnrouter-headless')
@@ -14,9 +17,12 @@ RUNTIME = ROOT / 'runtime/sing-box'
 
 
 class Backend:
-    def __init__(self):
+    def __init__(self, data_dir=None):
+        command = ['runuser', '-u', 'builder', '--', str(ROOT / 'VPNRouter.Headless'), '--stdio']
+        if data_dir is not None:
+            command.extend(['--data-dir', data_dir])
         self.process = subprocess.Popen(
-            ['runuser', '-u', 'builder', '--', str(ROOT / 'VPNRouter.Headless'), '--stdio'],
+            command,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None, bufsize=0,
             env={key: value for key, value in os.environ.items()
                  if not key.startswith('DOTNET_ROOT')},
@@ -76,6 +82,26 @@ def snapshot(expected, reason=None):
         backend.close()
 
 
+def verify_dnstt_import(backend):
+    # A fresh test-only key exercises the installed parser without contacting a resolver.
+    with tempfile.TemporaryDirectory() as directory:
+        key = Path(directory) / 'fixture'
+        subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key)], check=True)
+        profile = {
+            'id': 'arch-fixture', 'resolver': '8.8.8.8', 'port': 53,
+            'domain': 'dnstt.example.test', 'noise_key': 'a' * 64,
+            'ssh_host_key': ' '.join(key.with_suffix('.pub').read_text().split()[:2]),
+            'ssh_private_key': key.read_text(),
+        }
+        encoded = base64.urlsafe_b64encode(json.dumps(profile).encode()).decode().rstrip('=')
+        revision = backend.call('snapshot')['revision']
+        backend.call('servers.import', {'revision': revision, 'text': 'dnstt://' + encoded + '#Arch-DNSTT'})
+    rows = backend.call('servers.list')['items']
+    assert len(rows) == 1
+    assert (rows[0]['name'], rows[0]['protocol']) == ('Arch-DNSTT', 'dnstt')
+    print('Installed backend imported and listed a DNSTT profile', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-sha', required=True)
@@ -94,6 +120,14 @@ def main():
         assert any(item['status'] == 'info' for item in backend.call('diagnostics.check')['items'])
     finally:
         backend.close()
+    with tempfile.TemporaryDirectory(prefix='arch-dnstt-import-') as data_dir:
+        builder = pwd.getpwnam('builder')
+        os.chown(data_dir, builder.pw_uid, builder.pw_gid)
+        backend = Backend(data_dir)
+        try:
+            verify_dnstt_import(backend)
+        finally:
+            backend.close()
 
     # Exercise the real policy through the normal-user installed backend.
     subprocess.run(['setcap', '-r', str(RUNTIME)], check=True)

@@ -1,6 +1,7 @@
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -300,13 +301,23 @@ public class HealthMonitor : IDisposable
                 {
                     try
                     {
-                        _firewall.DisableBlockRules();
-                        _logger.Information(
-                            "[HealthMonitor] Kill-switch block rules lifted after restart — TUN serving confirmed (clashApi={Clash}, fallback={Fallback}, +{Secs:F0}s)",
-                            clashServing, fallbackElapsed, sinceRestart.TotalSeconds);
+                        var released = true;
+                        if (_firewall is MacFirewallManager macFirewall)
+                            released = macFirewall.TryDisableBlockRules();
+                        else
+                            _firewall.DisableBlockRules();
+
+                        if (released)
+                            _logger.Information(
+                                "[HealthMonitor] Kill-switch block rules lifted after restart — TUN serving confirmed (clashApi={Clash}, fallback={Fallback}, +{Secs:F0}s)",
+                                clashServing, fallbackElapsed, sinceRestart.TotalSeconds);
+                        else
+                            Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
                     }
                     catch (Exception fwEx)
                     {
+                        if (_firewall is MacFirewallManager)
+                            Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
                         _logger.Error(fwEx, "[HealthMonitor] Failed to lift firewall block rules on deferred-disable");
                     }
                 }
@@ -610,6 +621,8 @@ public class HealthMonitor : IDisposable
                 if (!hotReloaded)
                 {
                     _logger.Warning("[HealthMonitor] Hot-reload unavailable on restart attempt — performing full restart");
+                    if (_firewall is MacFirewallManager macFirewall)
+                        macFirewall.EnableBlockRules();
                     try
                     {
                         var freshScan = _scanner.ScanForProfile(_activeProfile);

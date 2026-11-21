@@ -1,0 +1,103 @@
+name: macOS privileged system acceptance
+
+on:
+  pull_request:
+    paths:
+      - "packaging/macos/**"
+      - "VPNRouter.Core/Platform/macOS/**"
+      - "VPNRouter.Core/Services/ConfigGenerator*.cs"
+      - "VPNRouter.Core/Services/ConfigPipeline*.cs"
+      - "VPNRouter.Core/Services/CustomConfigInjector*.cs"
+      - "VPNRouter.Core/Services/HealthMonitor.cs"
+      - "VPNRouter.Core/Services/SingBoxManager*.cs"
+      - "VPNRouter.Core/Services/StartupPipeline.cs"
+      - "VPNRouter.Core/Services/VpnEngine.cs"
+      - "VPNRouter.Core/AppVersion.cs"
+      - "VPNRouter.Tests/SingBoxManagerRestartTunLockTests.cs"
+      - "VPNRouter.Tests/VpnEngineApplyStructuralChangeTests.cs"
+      - "build-mac.sh"
+      - "global.json"
+      - ".github/workflows/macos-privileged-system.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  macos-privileged-system:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    timeout-minutes: 25
+    env:
+      TEST_HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Check out the PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ env.TEST_HEAD }}
+          persist-credentials: false
+
+      - name: Inspect the disposable runner
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$(git rev-parse HEAD)" = "$TEST_HEAD"
+          sw_vers
+          sysctl hw.logicalcpu hw.memsize vm.loadavg vm.swapusage
+          vm_stat
+          df -h "$RUNNER_TEMP" /private/tmp
+          xcrun --find clang
+          command -v jq
+          sudo -n /usr/bin/true
+
+      - name: Setup the pinned .NET SDK
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Check managed macOS stop lifecycle
+        run: >-
+          dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release
+          --filter "FullyQualifiedName~MacStop_NeverSpawnedLauncher|FullyQualifiedName~ReloadConfigJsonWithResult_UnixFailedExactStop|(FullyQualifiedName~ApplyAsync_FailedGenerationOrReload_PreservesActiveTunnel&DisplayName~failover-unix-stop-refused)"
+          --logger "console;verbosity=normal"
+
+      - name: Build the macOS package locally
+        id: package
+        run: |
+          set -euo pipefail
+          dotnet --version
+          version="$(sed -nE 's/^[[:space:]]*public static readonly string Version = "([^"]+)";.*/\1/p' VPNRouter.Core/AppVersion.cs)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-r[1-9][0-9]*)?$ ]]
+          bash build-mac.sh "$version"
+          archive="/tmp/VPNRouter-v$version-mac.zip"
+          shasum -a 256 "$archive"
+          printf 'archive=%s\n' "$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Migrate the helper and check standard-user TUN start and stop
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          set -euo pipefail
+          extracted="$(mktemp -d "$RUNNER_TEMP/vpnrouter-package.XXXXXX")"
+          trap 'rm -rf "$extracted"' EXIT
+          ditto -x -k "$ARCHIVE" "$extracted"
+          bash packaging/macos/tests/system-acceptance.sh "$extracted/VPNRouter.app"
+
+      - name: Record the tested bundle checksum
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          set -euo pipefail
+          cd "$(dirname "$ARCHIVE")"
+          zip="$(basename "$ARCHIVE")"
+          shasum -a 256 "$zip" > "$zip.sha256"
+
+      - name: Retain the tested bundle for desktop acceptance
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: macos-system-acceptance-${{ env.TEST_HEAD }}
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.archive }}.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3

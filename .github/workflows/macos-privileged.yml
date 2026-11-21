@@ -1,0 +1,48 @@
+name: macOS privileged helper contract
+
+on:
+  pull_request:
+    paths:
+      - "packaging/macos/**"
+      - "VPNRouter.Core/Platform/macOS/**"
+      - "VPNRouter.Tests/MacPrivilege*"
+      - "VPNRouter.Tests/MacPrivileged*"
+      - "build-mac.sh"
+      - ".github/workflows/macos-privileged.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packaging/macos/**"
+      - "VPNRouter.Core/Platform/macOS/**"
+      - "VPNRouter.Tests/MacPrivilege*"
+      - "VPNRouter.Tests/MacPrivileged*"
+      - "build-mac.sh"
+      - ".github/workflows/macos-privileged.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helper-contract:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Validate installer shell syntax
+        run: bash -n packaging/macos/install-privileged.sh
+
+      - name: Compile production helper
+        run: |
+          clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -D_FORTIFY_SOURCE=2 -fstack-protector-strong \
+            -I packaging/macos \
+            -o "$RUNNER_TEMP/vpnrouter-privileged" \
+            packaging/macos/vpnrouter-privileged.c
+
+      - name: Run typed helper contract tests
+        run: |
+          chmod +x packaging/macos/tests/run-tests.sh
+          packaging/macos/tests/run-tests.sh

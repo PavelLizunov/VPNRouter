@@ -19,10 +19,6 @@
   .step-text { flex: 1; }
   .step-text h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
   .step-text p { font-size: 13px; color: #94a3b8; line-height: 1.5; }
-  .cmd-block { margin-top: 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px; position: relative; }
-  .cmd-block code { font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; color: #a5f3fc; word-break: break-all; line-height: 1.6; display: block; user-select: all; }
-  .copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #94a3b8; font-size: 12px; cursor: pointer; transition: all 0.2s; }
-  .copy-btn:hover { background: #334155; color: white; }
   .note { margin-top: 24px; padding: 12px 16px; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); border-radius: 8px; font-size: 13px; color: #86efac; text-align: center; }
   .section { display: none; }
   .section.active { display: block; }
@@ -30,40 +26,34 @@
 </head>
 <body>
 <div class="container">
-  <div class="header"><h1>Virtual Penguin Network</h1><p>v2.0.0 — Installation Guide</p></div>
+  <div class="header"><h1>Virtual Penguin Network</h1><p>Installation Guide</p></div>
   <div class="lang-tabs">
-    <button class="lang-tab active" onclick="switchLang('ru')">Русский</button>
-    <button class="lang-tab" onclick="switchLang('en')">English</button>
+    <button class="lang-tab active" onclick="switchLang('ru', event)">Русский</button>
+    <button class="lang-tab" onclick="switchLang('en', event)">English</button>
   </div>
   <div id="ru" class="section active">
     <div class="steps">
-      <div class="step"><div class="step-num">1</div><div class="step-text"><h3>Перетащи приложение</h3><p>Перетащи <b>VPNRouter.app</b> в папку <b>Applications</b></p></div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-text"><h3>Открой Terminal</h3><p>Нажми на иконку <b>Terminal</b> в этом окне</p></div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-text"><h3>Вставь команду</h3><p>Скопируй команду ниже (кнопка Копировать) и вставь в Terminal (Cmd+V), нажми Enter</p></div></div>
+      <div class="step"><div class="step-num">1</div><div class="step-text"><h3>Перетащи приложение</h3><p>Перетащи <b>VPNRouter.app</b> в папку <b>Applications</b> и открой его.</p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text"><h3>Нажми Connect</h3><p>Приложение само предложит установить защищённый компонент macOS.</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text"><h3>Подтверди один раз</h3><p>Введи пароль Mac в системном окне. Это нужно <b>только один раз</b>; Terminal не требуется.</p></div></div>
     </div>
-    <div class="cmd-block">
-      <button class="copy-btn" onclick="copyCmd()">Копировать</button>
-      <code id="cmd">xattr -cr /Applications/VPNRouter.app && USER=$(whoami) && sudo bash -c "echo \"$USER ALL=(root) NOPASSWD: /Users/$USER/Library/Application\\ Support/VPNRouter/bin/sing-box *\" > /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/pkill *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/sbin/networksetup *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/dscacheutil *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/killall -HUP mDNSResponder\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /sbin/pfctl *\" >> /etc/sudoers.d/vpnrouter && chmod 0440 /etc/sudoers.d/vpnrouter" && open /Applications/VPNRouter.app</code>
-    </div>
-    <div class="step" style="margin-top:16px"><div class="step-num">4</div><div class="step-text"><h3>Введи пароль Mac</h3><p>Terminal попросит пароль — введи пароль от Mac. Это нужно <b>один раз</b>, больше не попросит.</p></div></div>
-    <div class="note">✅ Готово! Приложение запустится. В следующий раз просто открывай из Applications.</div>
+    <div class="note">Готово! Дальше VPN подключается и отключается без пароля. Приложение показывает, если защищённый компонент нужно обновить.</div>
   </div>
   <div id="en" class="section">
     <div class="steps">
-      <div class="step"><div class="step-num">1</div><div class="step-text"><h3>Drag the app</h3><p>Drag <b>VPNRouter.app</b> to <b>Applications</b></p></div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-text"><h3>Open Terminal</h3><p>Click the <b>Terminal</b> icon in this window</p></div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-text"><h3>Paste the command</h3><p>Copy the command below and paste in Terminal (Cmd+V), press Enter</p></div></div>
+      <div class="step"><div class="step-num">1</div><div class="step-text"><h3>Drag the app</h3><p>Drag <b>VPNRouter.app</b> to <b>Applications</b> and open it.</p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text"><h3>Click Connect</h3><p>The app offers a one-time install of the macOS privileged helper.</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text"><h3>Approve once</h3><p>Enter your Mac password in the system prompt. This is needed <b>only once</b>; no Terminal step.</p></div></div>
     </div>
-    <div class="cmd-block">
-      <button class="copy-btn" onclick="copyCmd()">Copy</button>
-      <code>xattr -cr /Applications/VPNRouter.app && USER=$(whoami) && sudo bash -c "echo \"$USER ALL=(root) NOPASSWD: /Users/$USER/Library/Application\\ Support/VPNRouter/bin/sing-box *\" > /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/pkill *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/sbin/networksetup *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/dscacheutil *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/killall -HUP mDNSResponder\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /sbin/pfctl *\" >> /etc/sudoers.d/vpnrouter && chmod 0440 /etc/sudoers.d/vpnrouter" && open /Applications/VPNRouter.app</code>
-    </div>
-    <div class="step" style="margin-top:16px"><div class="step-num">4</div><div class="step-text"><h3>Enter Mac password</h3><p>Terminal will ask for your password — type your Mac password. Needed <b>only once</b>.</p></div></div>
-    <div class="note">✅ Done! The app will launch. Next time just open from Applications.</div>
+    <div class="note">Done. Connect and Stop then work without a password. The app tells you when the privileged helper needs an update.</div>
   </div>
 </div>
 <script>
-function switchLang(l){document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));document.querySelectorAll(".lang-tab").forEach(t=>t.classList.remove("active"));document.getElementById(l).classList.add("active");event.target.classList.add("active")}
-function copyCmd(){var c=document.getElementById("cmd").textContent;navigator.clipboard.writeText(c).then(()=>{event.target.textContent="✓";setTimeout(()=>event.target.textContent=document.getElementById("ru").classList.contains("active")?"Копировать":"Copy",1500)})}
+function switchLang(l, event) {
+  document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+  document.querySelectorAll(".lang-tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(l).classList.add("active");
+  event.target.classList.add("active");
+}
 </script>
 </body></html>

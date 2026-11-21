@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Management;
 #endif
 using System.Text.Json;
+using VPNRouter.Core.Platform.macOS;
 using YamlDotNet.RepresentationModel;
 
 namespace VPNRouter.Core.Services;
@@ -126,6 +127,9 @@ internal static class ProcessOwnership
         var identity = TryReadIdentity(process);
         if (identity is not { } value) return null;
         if (IsUnderDirectory(value.ExecutablePath, BinDir)) return value;
+        if (OperatingSystem.IsMacOS() &&
+            MacPrivilegePaths.IsPrivilegedSingBoxPath(value.ExecutablePath))
+            return value;
 
         var owner = ReadRuntimeOwnerRecord(OwnerRecordPath);
         var owned = owner.Kind switch
@@ -222,6 +226,9 @@ internal static class ProcessOwnership
         foreach (var candidate in candidates)
         {
             if (IsUnderDirectory(candidate.ExecutablePath, trustedBinDir))
+                return candidate;
+            if (OperatingSystem.IsMacOS() &&
+                MacPrivilegePaths.IsPrivilegedSingBoxPath(candidate.ExecutablePath))
                 return candidate;
         }
 

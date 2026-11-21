@@ -22,7 +22,7 @@ Creation/arming is not evidence that blocking was successfully enabled.
 |---|---|
 | [Windows FirewallManager](../Services/FirewallManager.cs) | Per-executable `netsh` rules; ignores `isFullTunnel`. Unresolved paths or command failures can prevent rule creation. This is not a global full-host block guarantee. |
 | [LinuxFirewallManager](Linux/LinuxFirewallManager.cs) | Global nftables block, armed only when explicit `isFullTunnel` is true. Uses table `inet vpnrouter_ks`; loading requires the noninteractive `sudo -n nft` path. |
-| [MacFirewallManager](macOS/MacFirewallManager.cs) | Global pf block, armed only when explicit `isFullTunnel` is true. Uses `sudo -n pfctl`; prefers an anchor carrier but includes a legacy broad-ruleset fallback. |
+| [MacFirewallManager](macOS/MacFirewallManager.cs) | Global pf block, armed only when explicit `isFullTunnel` is true. Uses the typed privileged helper for pf operations; prefers an anchor carrier but includes a legacy broad-ruleset fallback. |
 | [NullFirewallManager](macOS/NullFirewallManager.cs) | No-op adapter selected by the factory for other targets; do not infer Android OS VPN policy from this adapter. |
 
 Linux/macOS do not infer full-tunnel mode from an empty process list. With

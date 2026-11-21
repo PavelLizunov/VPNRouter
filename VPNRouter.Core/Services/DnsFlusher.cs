@@ -1,6 +1,7 @@
 #nullable enable
 using System.Diagnostics;
 using Serilog;
+using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
@@ -93,35 +94,17 @@ public sealed class DnsFlusher
 
     private bool FlushMac(ILogger log)
     {
-        var anyOk = false;
-
         try
         {
-            var r1 = _runner.RunAsync(new ProcessRequest(
-                ExecutablePath: "/usr/bin/dscacheutil",
-                Arguments: new[] { "-flushcache" },
-                Timeout: FlushTimeout)).GetAwaiter().GetResult();
-            if (r1.ExitCode == 0 && !r1.TimedOut) anyOk = true;
+            var ok = new MacPrivilegedClient(_runner, log).DnsFlush();
+            log.Information("[DnsFlusher] macOS DNS cache flush attempted");
+            return ok;
         }
         catch (Exception ex)
         {
-            log.Debug(ex, "[DnsFlusher] dscacheutil failed");
+            log.Debug(ex, "[DnsFlusher] macOS DNS flush through the privileged helper failed");
+            return false;
         }
-
-        try
-        {
-            _ = _runner.RunAsync(new ProcessRequest(
-                ExecutablePath: "/usr/bin/sudo",
-                Arguments: new[] { "-n", "killall", "-HUP", "mDNSResponder" },
-                Timeout: FlushTimeout)).GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            log.Debug(ex, "[DnsFlusher] mDNSResponder restart failed (sudo not configured for killall)");
-        }
-
-        log.Information("[DnsFlusher] macOS DNS cache flush attempted");
-        return anyOk;
     }
 
     public static void Flush(ILogger? logger = null) => DefaultInstance.FlushInstance(logger);

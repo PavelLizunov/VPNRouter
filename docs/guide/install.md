@@ -22,7 +22,7 @@ Debian / Ubuntu / Mint / Pop / elementary. Adds the signed apt repo, installs `v
 ```bash
 brew install --cask pavellizunov/vpnrouter/vpnrouter
 ```
-Apple Silicon. Auto-strips Gatekeeper quarantine. First launch prompts once for sudoers setup, then passwordless. Updates: `brew upgrade --cask vpnrouter`.
+Apple Silicon. Auto-strips Gatekeeper quarantine. First Connect offers a one-time privileged-helper setup; no Terminal command, then passwordless. Updates: `brew upgrade --cask vpnrouter`.
 </td>
 </tr>
 <tr>
@@ -63,7 +63,7 @@ Published version tags are permanent source references; older candidate download
 | `VPNRouter-update-v{version}-win.zip` | Windows | DLL-only update (if you're already on a recent version) |
 | `VPNRouter-Setup-v{version}.exe` | Windows | Setup wizard (Inno Setup, not code-signed): installs the same files as the install zip, with an uninstaller and optional autostart/service checkboxes |
 | `VPNRouter-*-win.zip.sha256` | Windows | SHA256 companion file — auto-updater verifies the download against this before extracting (v2.15.8+) |
-| `VPNRouter-v{version}-mac.dmg` | macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
+| `VPNRouter-v{version}-mac.dmg` | macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time privileged-helper setup |
 | `VPNRouter-v{version}-mac.zip` | macOS | Raw `.app` bundle (for manual install) |
 | `VPNRouter-v{version}-linux-amd64.deb` | Linux | Debian/Ubuntu package with a desktop entry and `setcap` for passwordless TUN. Install with `sudo apt install ./VPNRouter-v{version}-linux-amd64.deb`. |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | Linux | Portable single-file build. `chmod +x`, run, no install needed |
@@ -79,12 +79,12 @@ The scheduled pool job publishes this separate artifact when it succeeds:
 |---|---|
 | [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Public VLESS configurations and GeoIP metadata; pool size varies. Consumed by the in-app Free Configs tab. |
 
-Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, follow the in-DMG `InstallGuide.html` for the one-time sudoers entry that lets TUN come up without a password prompt each time. On Linux, the `.deb` applies `setcap cap_net_admin,cap_net_bind_service` to the bundled sing-box so TUN comes up without root or a password (no systemd service is installed); an unsandboxed read-only `AppImage` falls back to a host `pkexec` password prompt. AppImages wrapped in bubblewrap or a user namespace (including NixOS `appimageTools.wrapType2`) cannot acquire permission to create the host TUN interface even when `getcap` shows the file capability. Use a native distro package outside that sandbox.
+Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, open the app and click Connect; approve the one-time privileged-helper prompt so TUN comes up without a password prompt each time. On Linux, the `.deb` applies `setcap cap_net_admin,cap_net_bind_service` to the bundled sing-box so TUN comes up without root or a password (no systemd service is installed); an unsandboxed read-only `AppImage` falls back to a host `pkexec` password prompt. AppImages wrapped in bubblewrap or a user namespace (including NixOS `appimageTools.wrapType2`) cannot acquire permission to create the host TUN interface even when `getcap` shows the file capability. Use a native distro package outside that sandbox.
 
 ## Requirements
 
 - **Windows 10/11 x64** — Administrator rights (TUN, firewall, ETW)
-- **macOS 12+** — Apple Silicon (arm64). Intel is not currently packaged. First-run sudoers setup required (guided)
+- **macOS 12+** — Apple Silicon (arm64). Intel is not currently packaged. First-run privileged-helper setup required (guided in the app)
 - **Linux x86_64** — kernel 5.6+ (TUN/wireguard), `glibc` 2.31+. Tested on Ubuntu 22.04 / 24.04 and Debian 12. `nftables` (`nft`) for the kill switch.
 - **Android 6.0+** (API 23+), ARM64. Uses Android's `VpnService` API (no root required). Camera permission is only requested when scanning a QR code.
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) — bundled in the desktop installer

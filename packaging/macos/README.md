@@ -1,0 +1,201 @@
+# macOS privileged runtime contract (F-01)
+
+This directory owns the managed macOS privilege boundary. The app must not
+write `/etc/sudoers.d` directly and must not grant NOPASSWD to a user-writable
+path.
+
+## Trust boundary
+
+| Item | Path | Owner/mode |
+|---|---|---|
+| Privileged helper | `/Library/PrivilegedHelperTools/com.vpnrouter.privileged` | `root:wheel 0755` |
+| sing-box | `/Library/Application Support/VPNRouter/bin/sing-box` | `root:wheel 0755` |
+| Manifest | `/Library/Application Support/VPNRouter/install.json` | `root:wheel 0600` |
+| Staged config | `/Library/Application Support/VPNRouter/run/<uid>/current.json` | `root:wheel 0600` |
+| Session record | `/Library/Application Support/VPNRouter/run/<uid>/session.json` | `root:wheel 0600` |
+| Host firewall owner, mode and enable reference | `/Library/Application Support/VPNRouter/run/host-session` | `root:wheel 0600` |
+| Original DNS | `/Library/Application Support/VPNRouter/run/dns-state` | `root:wheel 0600` |
+| Rule-set assets | `/Library/Application Support/VPNRouter/assets/<uid>/*.srs` | `root:wheel 0600` |
+| Policy | `/etc/sudoers.d/vpnrouter-<uid>` | `root:wheel 0440` |
+| Legacy file removed | `/etc/sudoers.d/vpnrouter` | removed |
+
+The only policy line is:
+
+```text
+<user> ALL=(root) NOPASSWD: /Library/PrivilegedHelperTools/com.vpnrouter.privileged
+```
+
+There is no wildcard, no argument, no user-writable executable, no generic
+`kill`, and no generic `pfctl` grant.
+
+## Request protocol
+
+The app runs `/usr/bin/sudo -n /Library/PrivilegedHelperTools/com.vpnrouter.privileged`
+and writes one JSON object to stdin. The helper rejects anything larger than
+1 MiB, any non-object, non-canonical or duplicate keys, an unknown operation,
+or a missing `SUDO_UID`.
+
+| Operation | Fields | Effect |
+|---|---|---|
+| `probe` | none | Reports `ready`, `legacy`, `legacy_state` (`absent`, `present` or `unknown`), policy version, artifact hashes and the app version. An unknown or present legacy path blocks readiness; readiness is decided here, never by a user-writable marker. |
+| `migration_check` | none | Verifies the system directory chain and checks for the old root runtime of the invoking user. The installer calls this read-only operation before and after legacy grant removal. |
+| `start` | `config_sha256`, `launch_id` (32 lowercase hex characters) | Syncs user `.srs` files into root-owned assets, validates the per-user config against the typed contract, stages it root-owned, claims the shared host network owner and writes the per-uid session record, then `execve`s the root-owned sing-box with `run -c <staged>`. |
+| `stop` | `pid`, positive Unix `start_time` in seconds | Signals a root-owned sing-box only when its executable path, PID and start time match, and the request matches the root-owned per-uid session record. |
+| `stop_launch` | `launch_id` from `start` | Resolves the runtime from the root-owned launch record under the host transition lock and uses the exact Stop check. Returns `stopped` for a confirmed exit. Refuses a different live launch of the same caller. Returns `not_registered` for other unmatched launches. |
+| `dns_apply` | `service`, `server` | Requires an active session owned by the caller, saves the system's original DNS in a root-owned snapshot, then applies and verifies one IPv4 or IPv6 resolver. |
+| `dns_restore` | none | Restores and verifies the snapshot of the caller's stopped session. The helper retains it if restoration fails. |
+| `dns_flush` | none | Flushes the DNS cache for an active session owned by the caller. |
+| `pf_session` | `launch_id` | Returns the calling user's PID and start time for that exact launch, including after a runtime exit until policy recovery retires it. |
+| `pf_apply` | `pid`, `start_time`, `mode` (`anchor`, `legacy`, `main`), `rules` for anchor/legacy | `main` reads `/etc/pf.conf` itself and appends the fixed anchor. `anchor`/`legacy` accepts only the fixed `block`/`lo0`/CIDR `pass` grammar. The helper records the disengagement mode. |
+| `pf_enable` | `pid`, `start_time` | Acquires and stores one root-owned enable reference for the owned policy. Repeated calls reuse it while the kernel holds it and PF is running. |
+| `pf_release` | `pid`, `start_time` | Clears the rules according to the recorded mode and releases the stored enable reference. |
+| `pf_recover` | none | Releases the recorded policy of the calling user's stopped runtime. Refuses a live runtime. |
+| `pf_status` | none | Returns `pfctl -sr` output. |
+
+Start, Stop, DNS and PF transitions share the host network lock. The helper
+keeps the firewall policy and enable reference across a same-user runtime
+replacement. The app resolves the current launch through the private ID it
+sent on startup and rechecks PF whenever it arms. The helper rejects delayed
+requests carrying the replaced or recovered identity.
+The enable reference and release mode are stored in the same root record as
+the owner. A past boot's PF state is discarded because the rules and reference
+live in the kernel. An old token-only file is removed after the kernel confirms
+its reference is gone. Restarting macOS releases an unattributed old reference.
+DNS snapshots remain available after reboot.
+
+## Config contract
+
+The privileged config is derived from the app's generated/custom config but is
+validated before it can reach root:
+
+- exactly one strict JSON object (RFC 8259 syntax; comments, trailing commas,
+  unquoted tokens and other lenient forms are rejected), at most 64 nested
+  containers, then optional JSON whitespace. The helper validates syntax and
+  depth before tokenization;
+- object keys are non-empty printable ASCII (0x20-0x7e) without escapes or
+  duplicates. Names that carry this contract (`log`, `output`, `experimental`,
+  `cache_file`, `services`, `clash_api`, `external_ui`,
+  `external_controller`, `inbounds`, `type`, `route`, `rule_set`, `format`,
+  `path`, and the forbidden key list below) must use their exact lowercase
+  spelling. Unrelated field names keep their original casing;
+- `log.output` absent or empty (the app omits the user log file);
+- cache file and cache ID settings are absent. The app strips
+  `experimental.cache_file` before staging. `experimental.clash_api.external_ui`
+  is absent or empty;
+- `experimental.services` absent or empty;
+- `experimental.clash_api.external_controller` loopback only and `clash_api.secret` present with at least 32 characters; the app generates or replaces a short/unsafe secret before the controller is read;
+- every inbound is `type: "tun"`;
+- the root accepts the app's config sections and optional `$schema` metadata.
+  Outbound, endpoint and DNS server types are selected from explicit lists.
+  These cover generated configurations, including DNSTT with SSH, WireGuard
+  endpoints and local or encrypted DNS. Imports using other sections or types
+  are refused on the privileged macOS path;
+- Shadowsocks is available without plugins. The privileged path rejects
+  `plugin` and `plugin_opts` because plugins can open files;
+- every `route.rule_set` is `type: "local"`, `format: "binary"`, and points at
+  a root-owned `SRS` file under the per-uid asset directory;
+- no `certificate_path`, `key_path`, `client_certificate_path`,
+  `client_key_path`, `ech_file`, `include`, or non-log `output` key;
+- no caller-selected executables, private key or config paths, certificate
+  providers, socket paths, DHCP lease files, or runtime debugging options;
+- no `experimental.v2ray_api`, external-UI download URL/detour, or Clash cache
+  mode keys.
+
+String values are evaluated by their field validators. The helper's decoded
+string fields support raw UTF-8 and escaped ASCII. Their decoder rejects
+Unicode escapes above ASCII. sing-box binds struct fields case-insensitively,
+so a variant spelling of a reserved name would otherwise select the same field
+while bypassing these checks; the helper rejects that spelling instead of
+normalizing it. Other field names and normal string values are preserved.
+Case-sensitive dictionary keys (for example HTTP header names) keep their
+casing; only a map key that case-folds to a reserved name is rejected.
+
+The helper is authoritative. The managed app-side `MacPrivilegedConfigContract`
+normalizes the same fields so a normal Connect succeeds, but the helper does not
+trust the app-side result.
+
+## Installation and migration
+
+`install-privileged.sh` is embedded in the app assembly. The app sends the
+script and the rendered policy in the administrator request. The installer
+checks the protected system paths, including the `/etc` alias, and verifies
+the hashes of the source and staged artifacts. It validates the exact policy
+with `visudo -cf` and checks for the old root runtime before and after removing
+`/private/etc/sudoers.d/vpnrouter`.
+
+The installer flushes the staged files before publishing them and verifies
+the ownership, modes and hashes of the installed
+helper, runtime and manifest before publishing the per-user rule. It removes
+the new rule if the installed helper fails its readiness probe. The app
+allows Connect after its own probe confirms readiness and the artifact hashes.
+When migration detects an active legacy instance, Connect reports the old
+session and how to stop it. The installer never restores the legacy grant.
+
+An open descriptor holds the kernel installation lock until the shell exits.
+The lock file stays in the protected directory. The kernel releases the lock
+when an interrupted installer exits.
+
+The system acceptance workflow builds the exact same-repository PR head on a
+disposable macOS runner. It checks migration from a no-op legacy grant and
+starts and stops an isolated TUN through a standard-user helper call. The
+test applies and restores DNS on a fixture network service with IPv4 and
+IPv6 disabled. It checks that the fixture resolver stays out of the active
+DNS configuration and that the default route stays unchanged. It also
+exercises a non-blocking PF anchor, checks that a stale identity or active
+recovery request leaves it in place, and checks reference reacquisition and stopped-runtime recovery.
+Interactive administrator approval, production auto-routing and the
+desktop kill-switch flow require separate live verification.
+
+The app re-runs the installer when the bundled helper or sing-box hash differs
+from the manifest, so a release that changes either artifact costs one
+administrator prompt. The app version is recorded but is not a security
+boundary.
+
+## Core provenance and controller verification (2026-11-21)
+
+The macOS bundle pin is `PavelLizunov/sing-box-vpnctl` tag
+`v1.14.4-vpnctl.2`. The GitHub release asset
+`sing-box-1.14.4-vpnctl.2-darwin-universal.zip` has
+`sha256:c3f7efa244d376017fb346c0bb8ffcfc77be36cdba170efc42dc9cd84d57a6f0`,
+which matches `SB_DARWIN_SHA256` in `build-mac.sh`. The source at that tag was
+read for this contract:
+
+- `experimental/clashapi/configs.go` `PUT /configs` returns 204 without reading
+  or applying a file. `PATCH /configs` only changes Clash mode.
+- Route registration exposes proxy selection/delay, connection close, cache
+  flush, DNS query, rule/provider reads and no-op script/provider handlers. No
+  handler accepts a config path or reloads a caller-supplied file.
+- The app does not use hot reload on privileged macOS; it restarts through the
+  helper. The loopback controller is still protected by a per-session secret so
+  another local user cannot call it. A same-user process can read the secret;
+  that residual is tracked below.
+
+## Residual risks and pending work
+
+- The app bundle is not signed or notarized. The one-time prompt trusts the
+  admin-approved bundle; the installer rejects linked and group/world-writable
+  source files/directories but cannot prove the publisher.
+- `pf_apply` accepts the fixed firewall grammar above; it is still a root
+  network-policy input. The full typed XPC helper is the durable replacement.
+- A multi-user Mac removes the legacy shared file once; an older app session
+  for another user may lose its old grant until it runs this migration.
+- The privileged config still opens a loopback Clash API controller. `PUT
+  /configs` is a verified no-op and the app disables hot reload, but proxy
+  selection/delay, connection close, cache and DNS query handlers remain
+  reachable to the invoking user who can read the per-config secret. A
+  read-only typed status path is the durable replacement.
+- Dragging the app to Trash does not remove the root helper or per-uid policy;
+  a future uninstaller must clean `/Library/Application Support/VPNRouter`,
+  `/Library/PrivilegedHelperTools/com.vpnrouter.privileged`, and
+  `/etc/sudoers.d/vpnrouter-<uid>`.
+- macOS 12 remains the minimum. The helper is a plain privileged executable,
+  not `SMAppService` (macOS 13+).
+
+## Verification
+
+- `VPNRouter.Tests` checks the policy renderer, config contract, client request
+  shape, guide absence of manual grants, and static helper invariants.
+- macOS CI compiles the helper with `clang -Wall -Wextra -Werror`, runs its
+  typed-contract tests under ASan/UBSan, and builds the DMG.
+- Live Connect/Stop, cancellation, legacy migration and the optional DNS/pf
+  paths require a disposable macOS host; they are not proven by unit tests.

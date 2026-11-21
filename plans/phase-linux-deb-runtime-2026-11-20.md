@@ -82,6 +82,9 @@ package-owned `/opt/vpnrouter/sing-box` directly.
   owning process handle for capability-mode stop and keep external signaling
   dependent on a live image check. Any receipt-based status evidence must
   remain display-only and scoped to the protected desktop package.
+- Merged `origin/main` at `60c65c72` to clear the PR conflict. The only conflict
+  was the additive Open block in `plans/OPEN-DEFECTS.md`; both entries were
+  kept. Product and packaging files were unchanged by the resolution.
 - Build, full tests and live `.deb` acceptance must run on an authorized worker
   or CI; no local build was performed for this isolated task.
 

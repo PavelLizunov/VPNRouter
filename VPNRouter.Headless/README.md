@@ -165,6 +165,11 @@ legacy entries are not individually removable. `servers.remove` returns
 `not_removable` for these IDs without changing settings or revision; manage the
 subscription instead. Unknown IDs still return `not_found`.
 
+`servers.test` returns `requiresTunnel: true`, `reachable: false`, and
+`latencyMs: null` for a required detour or DNSTT profile without contacting any
+endpoint. This result means the quick test could not measure the VPN route.
+Ordinary quick-test results omit the optional field.
+
 On first launch, `diagnostics.check` reports absent configuration/directories as
 `info` with "Not configured yet: add a subscription or a server". Existing
 invalid configurations and runtime/ownership failures retain their error/warning

@@ -226,6 +226,12 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 {
                     initialHandle.ExitQueryUnavailable = true;
                 }
+                else if (OperatingSystem.IsMacOS())
+                {
+                    SetField(singBox, "_macLaunchPending", true);
+                    SetField(singBox, "_macPrivilegeLaunchId", Guid.NewGuid().ToString("N"));
+                    runner.OnRun(_ => true, new ProcessResult(66, "", "", TimeSpan.Zero, false));
+                }
                 else
                 {
                     // An absent recorded child refuses escalation before any signal.
@@ -411,6 +417,11 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 Assert.Equal(Path.GetFullPath(deployed), check.ExecutablePath);
                 var json = System.Text.Json.Nodes.JsonNode.Parse(check.StdinInput!)!;
                 Assert.Equal(VPNRouter.Core.AppPaths.GeoIpRuPath, (string?)json["route"]!["rule_set"]![0]!["path"]);
+            }
+            else if (refusedStop && OperatingSystem.IsMacOS())
+            {
+                var stop = Assert.Single(runner.RunCalls);
+                Assert.Contains("\"op\":\"stop_launch\"", stop.StdinInput, StringComparison.Ordinal);
             }
             else
             {
