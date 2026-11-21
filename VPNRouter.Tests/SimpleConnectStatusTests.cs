@@ -1,5 +1,6 @@
 using System.Reflection;
 using Avalonia.Controls;
+using Avalonia.Input;
 using VPNRouter.App.Controls;
 using Avalonia.Threading;
 using Avalonia.Headless.XUnit;
@@ -247,6 +248,57 @@ public sealed class SimpleConnectStatusTests
         Assert.Equal("accepted", vm.SmpConfigServer?.Name);
         Assert.False(vm.SelectedSubscriptionServer!.IsActive);
         Assert.True(vm.SubscriptionServers.Single(s => s.Name == "accepted").IsActive);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("generated", false)]
+    [InlineData("subscribe", true)]
+    public void ManualServerPickerDisablesTheCrossHostAutoGroup(string mode, bool selectAgain)
+    {
+        var first = Entry("first", "first.invalid");
+        var chosen = Entry("second", "second.invalid");
+        var subscription = mode == "subscribe";
+        var settings = new AppSettings();
+        settings.App.ConfigMode = mode;
+        settings.Vless.AutoSelectBestServer = true;
+        settings.Vless.ActiveServer = first.Name;
+        if (subscription) settings.App.Subscriptions = [new() { Servers = [first, chosen] }];
+        else settings.Vless.Servers = [first, chosen];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+
+        var row = (subscription ? vm.SubscriptionServers : vm.Servers)[1];
+        if (selectAgain) vm.SelectedSubscriptionServer = row;
+        Assert.True(vm.AutoSelectBestServer);
+        Assert.True(Generate(VpnEngine.CopySessionSettings(store.Load(AppPaths.ConfigYamlPath))).UsesAutoGroup);
+
+        UserControl page = subscription ? new SubscribePage() : new ServersPage();
+        page.DataContext = vm;
+        var window = new Window { Content = page, Width = 520, Height = 800 };
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var picker = page.FindControl<ServerPickerListBox>(subscription ? "SubList" : "ServerList")!;
+            Assert.Equal(selectAgain, ReferenceEquals(row, picker.SelectedItem));
+            var item = Assert.IsType<ListBoxItem>(picker.ContainerFromIndex(1));
+            Assert.True(picker.UpdateSelectionFromEvent(item, new KeyEventArgs
+            {
+                Source = item,
+                RoutedEvent = InputElement.KeyDownEvent,
+                Key = Key.Enter
+            }));
+            Assert.Same(row, picker.SelectedItem);
+            Assert.False(vm.AutoSelectBestServer);
+
+            var saved = store.Load(AppPaths.ConfigYamlPath);
+            Assert.False(saved.Vless.AutoSelectBestServer);
+            var connection = Generate(VpnEngine.CopySessionSettings(saved));
+            Assert.False(connection.UsesAutoGroup);
+            Assert.Equal(chosen.Name, connection.Server.Name);
+        }
+        finally { window.Close(); }
     }
 
     [AvaloniaTheory]

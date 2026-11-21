@@ -647,13 +647,13 @@
                         <StackPanel IsVisible="{Binding SmpPickerVisible}" Margin="16,12,16,14" Spacing="8">
                             <StackPanel IsVisible="{Binding SmpHasSubscriptionServers}" Spacing="6">
                                 <TextBlock Classes="label" Text="{Binding L_SmpPickServerLabel}"/>
-                                <ListBox Classes="pick"
+                                <icons:ServerPickerListBox Classes="pick"
                                          ItemsSource="{Binding SubscriptionServers}"
                                          SelectedItem="{Binding SelectedSubscriptionServer}"
                                          MaxHeight="216"
                                          AutomationProperties.Name="{Binding L_SmpPickServerLabel}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                    <ListBox.ItemTemplate>
+                                    <icons:ServerPickerListBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ServerViewModel">
                                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                                 <icons:ProtocolDisc Width="22" Height="22" GlyphSize="13" CornerRadius="11"
@@ -672,8 +672,8 @@
                                                            Foreground="{DynamicResource TextMutedBrush}"/>
                                             </Grid>
                                         </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
+                                    </icons:ServerPickerListBox.ItemTemplate>
+                                </icons:ServerPickerListBox>
                                 <TextBlock Classes="hint" Text="{Binding L_SmpPickServerHint}"/>
                             </StackPanel>
                             <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">

@@ -31,4 +31,8 @@ Give an explicit server choice precedence over periodic cross-host selection. Sa
 
 ## Outcome
 
-The report matches the released source. Implementation and verification are pending.
+The planning commit `cbcf4903` passed both required checks in PR #725.
+The three desktop server pickers now pass through Avalonia's accepted row input before turning off auto-select.
+The existing selection binding continues to handle settings loads and refreshes. Choosing the same row also disables the cross-host group.
+The desktop regression exercises the actual generated and subscription pickers, verifies the saved setting and regenerates the tunnel configuration.
+No installer or product release was requested. Exact implementation CI is pending.
