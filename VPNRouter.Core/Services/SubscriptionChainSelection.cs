@@ -11,7 +11,7 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
     {
         if (!string.Equals(app.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase)) return null;
         var preference = SubscriptionServerPreference.For(app);
-        if (preference is { IsCategory: true }) return null;
+        if (preference is { CategoryName: not null }) return null;
 
         var feeds = (registeredFeeds ?? app.Subscriptions).Where(s => s.Enabled).ToList();
         var scoped = preference?.Preferred(app, feeds);
@@ -33,7 +33,7 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
 
     internal void RebindPin(AppConfig app, List<SubscriptionEntry> feeds, VlessServerEntry successor)
     {
-        if (SubscriptionServerPreference.For(app) is not { IsCategory: false } pin ||
+        if (SubscriptionServerPreference.For(app) is not { CategoryName: null } pin ||
             pin.FeedId != FeedId || pin.RowKey != SubscriptionEntry.RowKey(Target)) return;
 
         var feed = feeds.FirstOrDefault(s => s.Enabled && s.Id == FeedId && s.Url == Url);

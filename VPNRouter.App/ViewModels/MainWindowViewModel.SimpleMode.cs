@@ -300,7 +300,7 @@ public partial class MainWindowViewModel
             selected.ProtocolGroup == category && SubscriptionServerPreference.CanAutoSelect(selected.SourceEntry)
             ? selected : SubscriptionServers.FirstOrDefault(row => row.ProtocolGroup == category &&
                 SubscriptionServerPreference.CanAutoSelect(row.SourceEntry));
-        if (row != null) ConfirmSimplePreference(new() { Category = category }, row);
+        if (row != null) ConfirmSimplePreference(SubscriptionServerPreference.InCategory(category), row);
     }
 
     private void ConfirmSimplePreference(SubscriptionServerPreference preference, ServerViewModel row)
@@ -328,7 +328,7 @@ public partial class MainWindowViewModel
 
         if (IsConnected)
         {
-            var label = preference.Category is { } category ? SimpleCategoryName(category) : row.DisplayName;
+            var label = preference.GetCategory() is { } category ? SimpleCategoryName(category) : row.DisplayName;
             if (IsServiceManagedVpn) WarnServiceManagedReconnect(label);
             else _ = ReconnectAsync(label, ReconnectIntent.Subscription);
             return;
@@ -502,7 +502,7 @@ public partial class MainWindowViewModel
                 preferred ??= candidates[0];
                 StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                 // A direct probe of an exit cannot judge the selected route through its required hop.
-                var chosen = preference?.Category != null
+                var chosen = preference?.CategoryName != null
                     ? await PickCategoryServerAsync(candidates, preferred)
                     : preference != null || preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia)
                         ? preferred
@@ -860,15 +860,16 @@ public partial class MainWindowViewModel
         get
         {
             var tunnel = DisplayedTunnel;
-            var mode = tunnel?.ConfigMode ?? _settings?.App.ConfigMode ?? "generated";
+            var app = _settings?.App;
+            var mode = tunnel?.ConfigMode ?? app?.ConfigMode ?? "generated";
             if (IsConnected && tunnel == null) return string.Empty;
             if (mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
             {
-                if (SimpleServerPreference is { } preference)
+                if (app != null && SubscriptionServerPreference.For(app) is { } preference)
                 {
-                    if (preference.Preferred(_settings.App) == null)
+                    if (preference.Preferred(app) == null)
                         return Core.Localization.Strings.SmpSelectionUnavailable;
-                    return preference.Category is { } category
+                    return preference.GetCategory() is { } category
                         ? $"{SimpleCategoryName(category)} · {Core.Localization.Strings.SmpAutoInCategory}"
                         : Core.Localization.Strings.SmpPinnedServer;
                 }

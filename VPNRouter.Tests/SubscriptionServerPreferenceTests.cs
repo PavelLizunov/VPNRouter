@@ -13,13 +13,13 @@ public sealed class SubscriptionServerPreferenceTests
         var first = Row("daily", "same.invalid");
         var replacement = Row("daily", "backup.invalid");
         var settings = SubscriptionSettings(outside, first, replacement);
-        settings.App.SubscriptionPreference = new() { Category = ProtocolGroup.Daily };
+        settings.App.SubscriptionPreference = SubscriptionServerPreference.InCategory(ProtocolGroup.Daily);
         settings = VpnEngine.CopySessionSettings(settings);
         var ct = TestContext.Current.CancellationToken;
 
         Assert.Equal(3, await SubscriptionResolver.ResolveAsync(settings, false, ct: ct));
         Assert.Equal("subscribe", settings.App.ConfigMode);
-        Assert.Equal(ProtocolGroup.Daily, settings.App.SubscriptionPreference?.Category);
+        Assert.Equal(ProtocolGroup.Daily, settings.App.SubscriptionPreference?.GetCategory());
         Assert.Equal(first.Server, Assert.Single(VlessServersResolver.GetActiveServers(settings)).Server);
 
         var store = new InMemorySettingsStore();
@@ -27,7 +27,7 @@ public sealed class SubscriptionServerPreferenceTests
         var failover = new AutoFailoverEngine(settings, new ConfigSanityCheck(), store: store);
         Assert.True((await failover.HandleDeadConfigAsync("dead", ct)).Switched);
         Assert.Equal(replacement.Server, Assert.Single(VlessServersResolver.GetActiveServers(settings)).Server);
-        Assert.Equal(ProtocolGroup.Daily, store.Load().App.SubscriptionPreference?.Category);
+        Assert.Equal(ProtocolGroup.Daily, store.Load().App.SubscriptionPreference?.GetCategory());
         Assert.False((await failover.HandleDeadConfigAsync("dead", ct)).Switched);
     }
 
@@ -83,7 +83,7 @@ public sealed class SubscriptionServerPreferenceTests
         chained.DetourVia = "fixture-hop";
         var direct = Row("plain", "plain.invalid");
         var settings = SubscriptionSettings(chained, direct);
-        settings.App.SubscriptionPreference = new() { Category = ProtocolGroup.Daily };
+        settings.App.SubscriptionPreference = SubscriptionServerPreference.InCategory(ProtocolGroup.Daily);
 
         Assert.Null(SubscriptionChainSelection.Capture(settings.App));
         Assert.Same(direct, Assert.Single(VlessServersResolver.GetActiveServers(settings)));

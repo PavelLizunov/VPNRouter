@@ -75,3 +75,10 @@ refresh when the existing route identity and feed still match. Added regressions
 for unknown YAML categories, protocol eligibility, explicit feed changes and
 scoped recovery. The current staged delta passed whitespace and XAML syntax
 checks. Hosted builds, tests and Windows capture review remain pending.
+
+Hosted Linux run 45014407551 at `6275549b` reported seven failures from
+the settings round trip. The generated YAML serializer wrote the getter-only
+`IsCategory` property and the reader could not set it. Computed category
+access now uses methods, leaving only the three wire properties visible to
+the generator. The macOS acceptance rerun passed on the same head, job
+137184217889. Exact follow-up hosted results are pending.

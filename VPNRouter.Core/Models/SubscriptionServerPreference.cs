@@ -8,21 +8,17 @@ public sealed record SubscriptionServerPreference
     [YamlMember(Alias = "category", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
     public string? CategoryName { get; set; }
 
-    [YamlIgnore]
-    internal ProtocolGroup? Category
-    {
-        get => Enum.TryParse<ProtocolGroup>(CategoryName, out var group) && Enum.IsDefined(group)
-            ? group : null;
-        set => CategoryName = value?.ToString();
-    }
-
-    internal bool IsCategory => CategoryName != null;
-
     [YamlMember(Alias = "feed_id", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
     public string? FeedId { get; set; }
 
     [YamlMember(Alias = "row_key", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
     public string? RowKey { get; set; }
+
+    internal static SubscriptionServerPreference InCategory(ProtocolGroup category) =>
+        new() { CategoryName = category.ToString() };
+
+    internal ProtocolGroup? GetCategory() =>
+        Enum.TryParse<ProtocolGroup>(CategoryName, out var group) && Enum.IsDefined(group) ? group : null;
 
     internal static SubscriptionServerPreference? For(AppConfig app) =>
         string.Equals(app.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase)
@@ -31,12 +27,12 @@ public sealed record SubscriptionServerPreference
 
     internal IEnumerable<(SubscriptionEntry Feed, VlessServerEntry Server)> Candidates(IEnumerable<SubscriptionEntry> subscriptions)
     {
-        var category = Category;
-        if (IsCategory && category == null) yield break;
+        var category = GetCategory();
+        if (CategoryName != null && category == null) yield break;
 
         foreach (var feed in subscriptions.Where(feed => feed.Enabled))
         {
-            if (!IsCategory && (RowKey == null || FeedId != feed.Id)) continue;
+            if (CategoryName == null && (RowKey == null || FeedId != feed.Id)) continue;
             foreach (var server in feed.Servers)
             {
                 if (category is { } group
@@ -59,7 +55,7 @@ public sealed record SubscriptionServerPreference
         var candidates = Candidates(subscriptions ?? app.Subscriptions).ToList();
         if (candidates.Count == 0) return null;
 
-        if (Category != null && app.ActiveSubscriptionRow != null)
+        if (CategoryName != null && app.ActiveSubscriptionRow != null)
         {
             var active = candidates.FindIndex(row => row.Feed.Id == app.ActiveSubscriptionId &&
                 row.Server.Name == app.ActiveSubscriptionServer &&

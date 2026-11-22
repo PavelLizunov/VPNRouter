@@ -371,7 +371,7 @@ public sealed class SimpleConnectStatusTests
         FindGroupButton(groups, ProtocolGroup.WebFallback, disclosure: false).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
         var automatic = store.Load(AppPaths.ConfigYamlPath);
-        Assert.Equal(ProtocolGroup.WebFallback, automatic.App.SubscriptionPreference?.Category);
+        Assert.Equal(ProtocolGroup.WebFallback, automatic.App.SubscriptionPreference?.GetCategory());
         Assert.False(vm.AutoSelectBestServer);
         Assert.False(search.IsEffectivelyVisible);
         Assert.Equal(firstMatch.Server, Generate(VpnEngine.CopySessionSettings(automatic)).Server.Address);
@@ -414,7 +414,7 @@ public sealed class SimpleConnectStatusTests
 
         Assert.Equal(new[] { slow.Name, fast.Name }, probed);
         Assert.Equal(fast.Server, Assert.IsType<AcceptedTunnelInfo>(started).Server.Address);
-        Assert.Equal(ProtocolGroup.Daily, store.Load(AppPaths.ConfigYamlPath).App.SubscriptionPreference?.Category);
+        Assert.Equal(ProtocolGroup.Daily, store.Load(AppPaths.ConfigYamlPath).App.SubscriptionPreference?.GetCategory());
     }
 
     [AvaloniaFact]

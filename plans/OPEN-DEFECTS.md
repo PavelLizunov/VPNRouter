@@ -18,7 +18,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 - [x] **P1** - The first grouped picker draft allowed auto selection of exact-only routes and could keep a preference after an explicit source change. Restricted category candidates, kept exact pins through unavailable states and clear the scope at explicit selection boundaries. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
-- [x] **P1** - A future category name in the grouped picker draft could make YAML unreadable. Store a string and reject unknown categories at selection time. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+- [x] **P1** - A future category name in the grouped picker draft could make YAML unreadable. Store a string and reject unknown categories at selection time. Hosted Linux run 45014407551 found that the generated YAML serializer also wrote the computed IsCategory property. Removed computed properties from the persisted model and retained round-trip coverage. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P2** - Simple-page picker labels could retain the previous language. Fixed in source by refreshing the labels after localization notifications have finished. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 

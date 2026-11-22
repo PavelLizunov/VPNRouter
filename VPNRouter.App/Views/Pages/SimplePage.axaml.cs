@@ -124,7 +124,7 @@ public partial class SimplePage : UserControl
                 .Select(group => new SimpleServerGroup(group.Key,
                     group.OrderByDescending(row => ReferenceEquals(row, current)).ToArray(),
                     selected != null && group.Contains(selected) ? selected : null,
-                    vm.SimpleServerPreference?.Category == group.Key)
+                    vm.SimpleServerPreference?.GetCategory() == group.Key)
                 {
                     IsExpanded = group.Key == _expandedServerGroup,
                 }).ToArray();

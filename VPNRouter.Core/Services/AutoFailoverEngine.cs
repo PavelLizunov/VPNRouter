@@ -144,7 +144,7 @@ public sealed class AutoFailoverEngine
                 UserFacingMessage: Strings.FailoverCustomConfigUnusable);
         }
 
-        if (SubscriptionServerPreference.For(_settings.App) is { IsCategory: false })
+        if (SubscriptionServerPreference.For(_settings.App) is { CategoryName: null })
             return new FailoverOutcome(false, null, Strings.SmpPinnedServerUnreachable);
 
         var active = VlessServersResolver.GetActiveServers(_settings).FirstOrDefault();
