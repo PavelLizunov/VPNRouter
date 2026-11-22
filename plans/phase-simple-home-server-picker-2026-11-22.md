@@ -120,3 +120,28 @@ publisher's digest after decompression, and its offline ranges cover all
 All ten hosted checks passed for the first flag-resource revision
 `b926cefd`, and a Windows preview package was built. Use the follow-up
 package for the owner preview so the actual subscription can show flags.
+
+## Subscription link, search and checks
+
+The owner supplied a narrow Simple-mode design and ten interaction criteria.
+Keep the link editor in the connection card, independent of the server list.
+Keep the first-run link and Connect flow. Give existing configurations a
+separate draft, explicit save, cancellation and field-local feedback.
+
+Validate an explicitly submitted URL or server URI through the existing
+subscription fetch/refresh and server parser. Prepare a remote result before
+publishing it, reject stale submissions, and preserve accepted runtime
+ownership. A saved link takes effect on the next connection or explicit
+Apply. Keep DNS, transports, failover policy, package and release out of scope.
+
+Put search behind a focused disclosure and filter the displayed rows by
+existing name/location data. Closing it restores the group view. A recognized
+link can be transferred to the draft without applying it. Put diagnostics on
+a separate button. Preserve category protocols, server flags, ping, and picker
+selection. Use the existing branch for this follow-up; rollback is its revert.
+
+Verification targets: exact-head Release build and full suites, focused
+draft/validation/stale-response and picker keyboard regressions, brief outcome,
+independent review of save ownership, headless Windows captures at narrow
+widths in both themes, and the existing ViewModel surface characterization.
+Live candidate deployment is outside this task.
