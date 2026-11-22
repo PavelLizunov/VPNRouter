@@ -89,7 +89,9 @@ public class VlessConfig
             return new List<VlessServerEntry> { active };
         }
 
-        if (active.Dnstt != null || active.UseAsSingleOutbound) return new List<VlessServerEntry> { active };
+        if (active.Dnstt != null || active.UseAsSingleOutbound ||
+            (!AutoSelectBestServer && string.Equals(active.Protocol, "vmess", StringComparison.OrdinalIgnoreCase)))
+            return new List<VlessServerEntry> { active };
         if (all.Count <= 1) return all;
 
         if (AutoSelectBestServer)

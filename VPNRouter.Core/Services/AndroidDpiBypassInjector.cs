@@ -19,7 +19,7 @@ public static class AndroidDpiBypassInjector
     private static readonly HashSet<string> ProxyTypes =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            "vless", "hysteria2", "tuic", "shadowsocks", "ss",
+            "vless", "vmess", "hysteria2", "tuic", "shadowsocks", "ss",
             "trojan", "http", "socks", "shadowtls",
         };
 

@@ -315,6 +315,14 @@ public class SingBoxOutbound
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Flow { get; set; }
 
+    [JsonPropertyName("security")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? VmessSecurity { get; set; }
+
+    [JsonPropertyName("alter_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? AlterId { get; set; }
+
     [JsonPropertyName("detour")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Detour { get; set; }

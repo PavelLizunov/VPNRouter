@@ -64,3 +64,13 @@ headless fixture passed in run 44905729899 and produced the 360 x 340
 panel screenshot. It exercises panel initialization, opening the
 form and subscription eligibility. Live Chrome/control-app traffic,
 a deployed model reply and live Undo remain pending.
+
+## DeepSeek prerelease
+
+Prepare `2.51.0-r2` on the current Standard base. The candidate exposes
+the setup assistant on desktop with a subscription-backed model plan,
+local application routing and Undo. The Android readiness report and
+automatic connection repair are separate work. Verify the real model
+reply, app and control traffic, manual workflow, and Undo on Windows
+before calling the assistant live-verified. Run exact-head CI and the
+rolling candidate's package, integrity, update and fixed-WINBRAT gates.
