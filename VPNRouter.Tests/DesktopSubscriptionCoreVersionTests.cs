@@ -30,7 +30,7 @@ public class DesktopSubscriptionCoreVersionTests
     [InlineData("https://provider.example/vpn/api/v1/app/config/test-device", true)]
     [InlineData("http://provider.example/api/v1/app/config/test-device", false)]
     [InlineData("https://provider.example/sub/test-token", false)]
-    public async Task SelectedHeadlessRuntimeIsReportedOnlyToHttpsAppConfig(string url, bool expected)
+    public async Task ReportsSelectedRuntimeOnlyToHttpsAppConfig(string url, bool expected)
     {
         Assert.SkipWhen(!OperatingSystem.IsLinux(), "The pinned headless runtime is Linux-only");
         var runtime = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
