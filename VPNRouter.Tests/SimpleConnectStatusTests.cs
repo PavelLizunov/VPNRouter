@@ -50,7 +50,7 @@ public sealed class SimpleConnectStatusTests
         Assert.False(options.IsChecked);
         options.IsChecked = true;
         Dispatcher.UIThread.RunJobs();
-        Assert.False(link.IsEffectivelyVisible);
+        Assert.False(Shown(link));
 
         var ping = view.Page.FindControl<Button>("SimplePing")!;
         var deepCheck = view.Page.FindControl<Button>("SimpleDeepCheck")!;
@@ -110,8 +110,8 @@ public sealed class SimpleConnectStatusTests
             control => control.IsEffectivelyVisible && ReferenceEquals(control.Command, vm.SmpToggleConnectCommand));
         Assert.True(link.IsEffectivelyVisible);
         Assert.False(connect.IsEffectivelyEnabled);
-        Assert.False(FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!.IsEffectivelyVisible);
-        Assert.False(FindOnPage<ToggleButton>(view.Page, "SimpleServerSearchButton")!.IsEffectivelyVisible);
+        Assert.False(Shown(FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!));
+        Assert.False(Shown(FindOnPage<ToggleButton>(view.Page, "SimpleServerSearchButton")!));
         if (OperatingSystem.IsWindows()) view.Capture("simple-home-first-link-320");
 
         var before = store.SaveCount;
@@ -153,12 +153,12 @@ public sealed class SimpleConnectStatusTests
             var before = store.SaveCount;
 
             Assert.True(linkButton.IsEffectivelyVisible);
-            Assert.False(searchButton.IsEffectivelyVisible);
+            Assert.False(Shown(searchButton));
             vm.OpenConfigPickerCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
             Assert.True(linkButton.IsEffectivelyVisible);
             Assert.True(searchButton.IsEffectivelyVisible);
-            Assert.False(search.IsEffectivelyVisible);
+            Assert.False(Shown(search));
 
             Toggle(page, "SimpleServerSearchButton", true);
             Assert.True(search.IsFocused);
@@ -169,7 +169,7 @@ public sealed class SimpleConnectStatusTests
             PressPickerKey(search, Key.Escape);
             Dispatcher.UIThread.RunJobs();
             Assert.True(searchButton.IsFocused);
-            Assert.False(search.IsEffectivelyVisible);
+            Assert.False(Shown(search));
             Assert.True(string.IsNullOrEmpty(search.Text));
 
             Toggle(page, "SimpleServerSearchButton", true);
@@ -178,7 +178,7 @@ public sealed class SimpleConnectStatusTests
             Dispatcher.UIThread.RunJobs();
             PressPickerKey(search, Key.Enter);
             Assert.True(transfer.IsEffectivelyVisible);
-            Assert.False(link.IsEffectivelyVisible);
+            Assert.False(Shown(link));
             Assert.False(vm.IsConnecting);
             Assert.Equal(before, store.SaveCount);
             if (OperatingSystem.IsWindows()) view.Capture($"simple-picker-search-{width}");
@@ -187,7 +187,7 @@ public sealed class SimpleConnectStatusTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(link.IsFocused);
             Assert.Equal(draft, link.Text);
-            Assert.False(search.IsEffectivelyVisible);
+            Assert.False(Shown(search));
             Assert.True(string.IsNullOrEmpty(search.Text));
             Assert.True(link.Bounds.Width < width);
             Assert.True(groups.IsEffectivelyVisible);
@@ -210,7 +210,7 @@ public sealed class SimpleConnectStatusTests
             Assert.Equal(Strings.SmpLinkInputInvalid, BoundText(page, "SimpleLinkError"));
             PressPickerKey(link, Key.Escape);
             Dispatcher.UIThread.RunJobs();
-            Assert.False(link.IsEffectivelyVisible);
+            Assert.False(Shown(link));
             Assert.True(linkButton.IsFocused);
             Assert.Equal(savedLink, link.Text);
             Assert.Equal(before, store.SaveCount);
@@ -221,7 +221,7 @@ public sealed class SimpleConnectStatusTests
             save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             Assert.True(linkButton.IsFocused);
-            Assert.False(link.IsEffectivelyVisible);
+            Assert.False(Shown(link));
             Assert.Equal(before, store.SaveCount);
         }
         finally { VPNRouter.App.Localization.Strings.Lang = language; }
@@ -439,18 +439,18 @@ public sealed class SimpleConnectStatusTests
         var before = store.SaveCount;
         var input = vm.SmpInput;
 
-        Assert.False(search.IsEffectivelyVisible);
+        Assert.False(Shown(search));
         if (OperatingSystem.IsWindows()) view.Capture($"simple-home-{width}");
         vm.OpenConfigPickerCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
-        Assert.False(search.IsEffectivelyVisible);
-        Assert.False(link.IsAttachedToVisualTree() && link.IsEffectivelyVisible);
+        Assert.False(Shown(search));
+        Assert.False(Shown(link));
         var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
         var groupedRows = groups.Items.Cast<SimpleServerGroup>().ToArray();
         Assert.Equal(new[] { ProtocolGroup.Daily, ProtocolGroup.WebFallback }, groupedRows.Select(group => group.Category));
         Assert.Equal(16, groupedRows.Sum(group => group.Servers.Length));
         Assert.Same(previous, groupedRows[0].Servers[0]);
-        Assert.False(list.IsEffectivelyVisible);
+        Assert.False(Shown(list));
         Assert.All(groupedRows, group => Assert.False(group.IsExpanded));
 
         FindGroupButton(groups, ProtocolGroup.Daily, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -500,7 +500,7 @@ public sealed class SimpleConnectStatusTests
         Assert.Same(vm.SelectedSubscriptionServer, vm.SmpConfigServer);
         Assert.Equal(ProtocolGroup.Daily, view.Page.FindControl<ProtocolDisc>("ConfigProtocol")!.Group);
         Assert.False(vm.AutoSelectBestServer);
-        Assert.False(search.IsEffectivelyVisible);
+        Assert.False(Shown(search));
         Assert.Equal(before + 1, store.SaveCount);
         var saved = store.Load(AppPaths.ConfigYamlPath);
         Assert.Equal(SubscriptionEntry.RowKey(chosen), saved.App.ActiveSubscriptionRow);
@@ -514,7 +514,7 @@ public sealed class SimpleConnectStatusTests
         var automatic = store.Load(AppPaths.ConfigYamlPath);
         Assert.Equal(ProtocolGroup.WebFallback, automatic.App.SubscriptionPreference?.GetCategory());
         Assert.False(vm.AutoSelectBestServer);
-        Assert.False(search.IsEffectivelyVisible);
+        Assert.False(Shown(search));
         Assert.Equal(firstMatch.Server, Generate(VpnEngine.CopySessionSettings(automatic)).Server.Address);
 
         vm.OpenConfigPickerCommand.Execute(null);
@@ -528,7 +528,7 @@ public sealed class SimpleConnectStatusTests
         PressPickerKey(groupRow, Key.Enter);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.False(search.IsEffectivelyVisible);
+        Assert.False(Shown(search));
         Assert.Equal(SubscriptionEntry.RowKey(firstMatch), vm.SimpleServerPreference?.RowKey);
     }
 
@@ -633,6 +633,37 @@ public sealed class SimpleConnectStatusTests
 
         Assert.Null(vm.SimpleServerPreference);
         Assert.Equal(alternative.Server, Assert.IsType<AcceptedTunnelInfo>(started).Server.Address);
+    }
+
+    [AvaloniaFact]
+    public async Task RefreshRemovingThePinnedRowDoesNotChooseItsSibling()
+    {
+        var pinned = Entry("pinned", "same.invalid");
+        var sibling = Entry("sibling", "same.invalid", 8443);
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.Subscriptions = [new() { Url = "https://feed.invalid/pin", Servers = [pinned, sibling] }];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        vm.ConfirmSimpleServer(vm.SubscriptionServers[0]);
+
+        vm.Subscriptions[0].UnderlyingEntry.Servers = [sibling];
+        typeof(MainWindowViewModel).GetMethod("RebuildSubscriptionPool", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(vm, null);
+        Assert.Null(vm.SelectedSubscriptionServer);
+        Assert.Equal(settings.App.Subscriptions[0].Url, vm.SmpInput);
+        var starts = 0;
+        vm.SimpleTunnelStart = (_, _, _) =>
+        {
+            starts++;
+            return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.Connected));
+        };
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, starts);
+        Assert.Equal(Strings.SmpSelectionUnavailable, vm.SmpErrorText);
+        Assert.Equal(SubscriptionEntry.RowKey(pinned), store.Load(AppPaths.ConfigYamlPath).App.SubscriptionPreference?.RowKey);
     }
 
     [AvaloniaFact]
@@ -785,7 +816,7 @@ public sealed class SimpleConnectStatusTests
                 Assert.Empty(header.GetVisualDescendants().OfType<Button>());
                 Assert.Equal(Strings.SmpExpandCategory, AutomationProperties.GetName(header));
                 Assert.True(link.IsEffectivelyVisible);
-                Assert.False(simpleGroups.IsEffectivelyVisible);
+                Assert.False(Shown(simpleGroups));
                 var before = store.SaveCount;
                 var initial = vm.SelectedSubscriptionServer;
                 Click(window, simple.FindControl<TextBlock>("ConfigName")!);
@@ -881,7 +912,7 @@ public sealed class SimpleConnectStatusTests
                 Assert.Equal(connected, vm.HasPendingAppChanges);
                 Assert.False(vm.IsConnecting);
                 Assert.Equal(unchanged + 2, store.SaveCount);
-                if (!simpleGroups.IsEffectivelyVisible)
+                if (!Shown(simpleGroups))
                     Click(window, simple.FindControl<TextBlock>("ConfigName")!);
                 Assert.Contains(dailySecond.Name, FindOnPage<TextBlock>(simple, "PickerSelection")!.Text);
                 Capture(window, $"simple-picker-unified-simple-manual-{width}");
@@ -912,6 +943,8 @@ public sealed class SimpleConnectStatusTests
         Assert.NotNull(bitmap);
         bitmap.Save(Path.Combine(ScreenshotHelper.ScreenshotsDir, $"{name}.png"), PngBitmapEncoderOptions.Default);
     }
+
+    private static bool Shown(Control control) => control.IsAttachedToVisualTree() && control.IsEffectivelyVisible;
 
     private static T? FindOnPage<T>(UserControl page, string name) where T : Control =>
         page.FindControl<T>(name) ??

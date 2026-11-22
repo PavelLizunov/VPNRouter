@@ -907,7 +907,8 @@ public partial class MainWindowViewModel
         // On the home screen IsVlessMode/IsSubscribeMode are leftovers of the last Advanced tab, not a choice: saving a routing change
         // from there turned a subscription into "server link" (tester log 01:03:31). The home screen changes the mode only by
         // setting it itself (TryApplyVless / ApplySimpleSubscriptionInput).
-        if (IsSimpleMode && !string.IsNullOrWhiteSpace(_settings.App.ConfigMode))
+        if ((IsSimpleMode || (SimpleServerPreference != null && SelectedTabIndex is not (0 or 1))) &&
+            !string.IsNullOrWhiteSpace(_settings.App.ConfigMode))
             return;
 
         var wantsCustomMode = !IsSubscribeMode && !IsVlessMode;
@@ -943,9 +944,14 @@ public partial class MainWindowViewModel
         var activeSub = SelectedSubscriptionServer;
         if (activeSub == null && SimpleServerPreference == null)
             activeSub = SubscriptionServers.FirstOrDefault();
-        _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
-        _settings.App.ActiveSubscriptionId = activeSub?.SubscriptionId;
-        _settings.App.ActiveSubscriptionRow = activeSub?.SubscriptionId != null ? SubscriptionEntry.RowKey(activeSub.SourceEntry) : null;
+        // A missing scoped row is still the user's choice. Keep its registration identity
+        // so a saved link cannot be interpreted as an explicit source switch on Connect.
+        if (activeSub != null || SimpleServerPreference == null)
+        {
+            _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
+            _settings.App.ActiveSubscriptionId = activeSub?.SubscriptionId;
+            _settings.App.ActiveSubscriptionRow = activeSub?.SubscriptionId != null ? SubscriptionEntry.RowKey(activeSub.SourceEntry) : null;
+        }
 
         _settings.App.SubscriptionUrl = string.Empty;
         _settings.App.SubscriptionServers = new();

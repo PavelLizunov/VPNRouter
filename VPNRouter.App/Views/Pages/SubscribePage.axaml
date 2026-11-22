@@ -19,15 +19,11 @@
     </Grid.RowDefinitions>
 
     <Border Grid.Row="0" Classes="list-card">
-      <Panel>
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
-                      IsVisible="{Binding !!SubscriptionServers.Count}">
-          <StackPanel Margin="12" Spacing="8">
-            <pages:SubscriptionLinkEditor Name="AdvancedLink"/>
-            <pages:SubscriptionServerPicker Name="AdvancedPicker" Classes="advanced"/>
-          </StackPanel>
-        </ScrollViewer>
-        <StackPanel Classes="empty-state" IsVisible="{Binding !SubscriptionServers.Count}">
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="12" Spacing="8">
+          <pages:SubscriptionLinkEditor Name="AdvancedLink" IsVisible="{Binding !!Subscriptions.Count}"/>
+          <pages:SubscriptionServerPicker Name="AdvancedPicker" Classes="advanced"/>
+          <StackPanel Classes="empty-state" IsVisible="{Binding !SubscriptionServers.Count}">
             <Border Classes="empty-icon">
               <icons:Pictogram Id="tab-subscribe"/>
             </Border>
@@ -35,8 +31,9 @@
             <TextBlock Classes="empty-text" Text="{Binding L_SubsEmptyBody}" IsVisible="{Binding !Subscriptions.Count}"/>
             <TextBlock Classes="empty-title" Text="{Binding L_LblNoServers}" IsVisible="{Binding !!Subscriptions.Count}"/>
             <TextBlock Classes="empty-text" Text="{Binding L_TipRefreshSubscription}" IsVisible="{Binding !!Subscriptions.Count}"/>
+          </StackPanel>
         </StackPanel>
-      </Panel>
+      </ScrollViewer>
     </Border>
 
     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">

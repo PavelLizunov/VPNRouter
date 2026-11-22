@@ -64,6 +64,26 @@ public sealed class MainWindowViewModelModeCoherenceTests
         Assert.Equal("subscribe", store.Load(AppPaths.ConfigYamlPath).App.ConfigMode);
     }
 
+    [AvaloniaFact]
+    public void AdvancedNetworkSaveKeepsTheScopedSubscription()
+    {
+        var store = new InMemorySettingsStore();
+        store.Save(BuildSubscribeSettings(), AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store);
+        vm.ConfirmSimpleServer(Assert.Single(vm.SubscriptionServers));
+        var preference = Assert.IsType<SubscriptionServerPreference>(vm.SimpleServerPreference);
+
+        vm.ToggleUiModeCommand.Execute(null);
+        vm.SelectedTabIndex = 0;
+        vm.SelectedTabIndex = 2;
+        Assert.True(vm.IsVlessMode);
+        Invoke(vm, "SaveSettings");
+
+        var saved = store.Load(AppPaths.ConfigYamlPath);
+        Assert.Equal("subscribe", saved.App.ConfigMode);
+        Assert.Equal(preference, saved.App.SubscriptionPreference);
+    }
+
     private static AppSettings BuildSubscribeSettings()
     {
         var settings = new AppSettings().EnsureSane();

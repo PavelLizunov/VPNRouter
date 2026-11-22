@@ -254,3 +254,11 @@ are pending.
 The Linux build/test, macOS system job and Windows characterization job at
 `1efd17f7` stopped at the same missing Avalonia primitives import. Restore
 the import in the Simple view and its companion icon test before retesting.
+
+At `ee9155fc`, the Release build and macOS system checks passed. Linux ran
+3,920 tests with seven visibility failures. The tests checked effective
+visibility on not-yet-attached content inside the shared controls. Verify
+both attachment to the window and visibility. The follow-up also preserves
+a scoped choice across Advanced non-server saves and an unavailable pin
+after refreshing its original feed. Regressions cover both persistence
+paths. Hosted retest remains pending.

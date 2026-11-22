@@ -164,7 +164,7 @@ public partial class MainWindowViewModel
 
     [RelayCommand]
     private Task ToggleConnectionAsync() =>
-        !IsConnected && IsSubscribeMode && SimpleServerPreference != null
+        !IsConnected && SimpleServerPreference != null && (IsSubscribeMode || SelectedTabIndex is not (0 or 1))
             ? PrepareSubscriptionConnectionAsync(useSimpleInput: false)
             : ToggleConnectionCoreAsync(null);
 

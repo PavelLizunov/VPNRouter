@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2** - Reviewing the shared picker exposed two policy losses in desktop settings. An Advanced preferences save can use stale server-tab flags, and an enabled feed that loses its pinned row can be mistaken for a new link at the next Simple Connect. Preserve the scoped policy in both cases. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
 - [x] **P2** - Hosted macOS PF acceptance assumed the kernel could not reuse a released token value. Both runs at `b4c21893` confirmed the release then failed the host record digest comparison. The fixture now verifies a kernel reference owned by a new pfctl PID. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P3** - At 360 px the Advanced Subscriptions intent controls narrowed the auto-select checkbox to a few letters per line. Stacked controls keep the checkbox label readable. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).

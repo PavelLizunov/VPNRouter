@@ -641,6 +641,8 @@ public partial class MainWindowViewModel
     {
         var action = SimpleConnectPolicy.DecideSubscriptionInput(input, _settings.App.Subscriptions);
         if (action == SubscriptionInputAction.Disabled) return action;
+        var currentFeed = SelectedSubscriptionServer?.SubscriptionId ??
+            (SimpleServerPreference is { } preference ? preference.FeedId ?? _settings.App.ActiveSubscriptionId : null);
         if (action == SubscriptionInputAction.Replace)
         {
             var entry = new SubscriptionEntry
@@ -657,8 +659,7 @@ public partial class MainWindowViewModel
             Subscriptions.Add(CreateSubscriptionView(entry));
             RebuildSubscriptionPool();
         }
-        else if (SelectedSubscriptionServer?.SubscriptionId is not { } id ||
-                 !Subscriptions.Any(s => s.Id == id && SimpleConnectPolicy.SameUrl(s.Url, input)))
+        else if (!Subscriptions.Any(s => s.Id == currentFeed && SimpleConnectPolicy.SameUrl(s.Url, input)))
         {
             var source = Subscriptions.FirstOrDefault(s => s.Enabled && SimpleConnectPolicy.SameUrl(s.Url, input));
             if (source != null)

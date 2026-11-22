@@ -123,7 +123,7 @@
             <TextBlock Name="PickerSelection" Classes="label" TextWrapping="Wrap"/>
             <TextBlock Name="PickerRunning" Classes="hint" TextTrimming="CharacterEllipsis"/>
         </StackPanel>
-        <ToggleButton Name="SimpleServerSearchButton" Classes="change"
+        <ToggleButton Name="SimpleServerSearchButton" Classes="change" IsVisible="{Binding SmpHasSubscriptionServers}"
                       HorizontalAlignment="Left" Click="ToggleServerSearch">
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <icons:Pictogram Id="search-tab" Width="14" Height="14"/>
