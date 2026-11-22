@@ -883,15 +883,15 @@ public partial class MainWindowViewModel
             if (IsConnected && tunnel == null) return string.Empty;
             if (mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
             {
+                if (tunnel != null) return $"{Strings.SmpCurrentServer} · {Strings.SmpKindSubscription}";
                 if (app != null && SubscriptionServerPreference.For(app) is { } preference)
                 {
                     if (preference.Preferred(app) != null)
                         return preference.GetCategory() is { } category
                             ? $"{SimpleCategoryName(category)} · {Core.Localization.Strings.SmpAutoInCategory}"
                             : Core.Localization.Strings.SmpPinnedServer;
-                    if (IsConnected) return Core.Localization.Strings.SmpSelectionUnavailableTitle;
                 }
-                var count = tunnel?.SubscriptionServerCount ?? SubscriptionServers.Count;
+                var count = SubscriptionServers.Count;
                 return count > 0 ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(count)}" : Strings.SmpKindSubscription;
             }
             return mode.Equals("generated", StringComparison.OrdinalIgnoreCase)

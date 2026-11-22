@@ -915,6 +915,8 @@ public sealed class SimpleConnectStatusTests
                 if (!Shown(simpleGroups))
                     Click(window, simple.FindControl<TextBlock>("ConfigName")!);
                 Assert.Contains(dailySecond.Name, FindOnPage<TextBlock>(simple, "PickerSelection")!.Text);
+                Assert.Equal(connected ? $"{Strings.SmpCurrentServer} · {Strings.SmpKindSubscription}" : Strings.SmpPinnedServer,
+                    BoundText(simple, "ConfigKind"));
                 Capture(window, $"simple-picker-unified-simple-manual-{width}");
 
                 FindGroupButton(simpleGroups, ProtocolGroup.Daily, disclosure: false)

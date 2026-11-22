@@ -262,3 +262,13 @@ both attachment to the window and visibility. The follow-up also preserves
 a scoped choice across Advanced non-server saves and an unavailable pin
 after refreshing its original feed. Regressions cover both persistence
 paths. Hosted retest remains pending.
+
+All 11 checks passed on `fc9ac716`. The Linux TRX records 3,836 passed,
+86 skipped and no failures. The Windows artifact includes the 320 px first
+run and both modes at 360 px light and 450 px dark. The 450 px scenario
+exercises a service-managed pending selection while a different server is
+active. Visual inspection revealed that the running server label showed
+the pending manual mode and the disclosure could render halfway through
+its rotation. Separate the running caption from the selected policy and
+remove the animation on the header chevron. The updated fixture asserts
+the running caption stays accurate after switching views.

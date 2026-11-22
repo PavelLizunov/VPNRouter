@@ -465,7 +465,7 @@
                                            FontSize="{StaticResource FsLg}" FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource TextPrimaryBrush}"/>
-                                <TextBlock Text="{Binding SmpConfigKind}"
+                                <TextBlock Name="ConfigKind" Text="{Binding SmpConfigKind}"
                                            FontSize="{StaticResource FsSm}"
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource TextMutedBrush}"/>
@@ -487,7 +487,8 @@
                                            FontSize="{StaticResource FsSm}" FontWeight="SemiBold"
                                            Foreground="{DynamicResource AccentFgBrush}" VerticalAlignment="Center"/>
                                 <icons:Pictogram Grid.Column="1" Id="chevron-down" Classes="disclosure"
-                                                 Classes.open="{Binding SmpFormExpanded}"/>
+                                                 Classes.open="{Binding SmpFormExpanded}"
+                                                 Width="14" Height="14" Transitions="{x:Null}"/>
                             </Grid>
                           </Grid>
                         </ToggleButton>
