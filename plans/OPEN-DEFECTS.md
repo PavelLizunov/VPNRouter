@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
+
 - [x] **P1** - Arch source export omitted the macOS installer script embedded by VPNRouter.Core. The exact-main Arch build at `60c65c72` failed with CS1566 in run 44910872465. RESOLVED in source by including the tracked installer script. The export fixture and a real Git archive check passed for all five external Core resources. Hosted package confirmation is pending.
 
 - [ ] **P2** - F-01 custom import: macOS runtime restrictions are checked at Connect. Adding an import can accept a profile that later fails those restrictions. Any import preflight must account for compatibility transformations applied before the final config is prepared. See `plans/phase-f01-macos-durable-2026-11-21.md`.

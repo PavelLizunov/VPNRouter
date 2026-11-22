@@ -130,6 +130,18 @@ public sealed class VmessSubscriptionTests
         Assert.Equal("entry-node-1", entry.DetourVia);
     }
 
+    [Theory]
+    [InlineData("cdn.example.com", "cdn.example.com")]
+    [InlineData("", "198.51.100.7")]
+    public void QuickProbe_UsesTlsNameOrDialHostForCachedVmessWithRealityDefaults(string tlsName, string expected)
+    {
+        var entry = ServerUriParser.Parse(VmessUri(StandardPayload()));
+        entry.Reality = new VlessRealityConfig { Enabled = true, ServerName = "legacy.example.com" };
+        entry.Tls.ServerName = tlsName;
+
+        Assert.Equal(expected, TcpTlsProbe.ResolveTlsSni(entry, entry.Server));
+    }
+
     [Fact]
     public void Parse_UrlSafeUnpaddedPayload_IsAccepted()
     {

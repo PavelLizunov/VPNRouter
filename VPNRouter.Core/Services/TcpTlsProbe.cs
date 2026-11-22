@@ -437,7 +437,7 @@ public static class TcpTlsProbe
                 }
                 else if (hasTls)
                 {
-                    var sni = ResolveSni(server, host);
+                    var sni = ResolveTlsSni(server, host);
                     result = await ProbeAsync(host, port, sni, requireTls: true, ct);
                 }
                 else
@@ -452,7 +452,7 @@ public static class TcpTlsProbe
                 var tlsEnabled = server.Tls?.Enabled == true
                     || string.Equals(server.Security, "tls", StringComparison.OrdinalIgnoreCase);
                 result = tlsEnabled
-                    ? await ProbeAsync(host, port, ResolveSni(server, host), requireTls: true, ct)
+                    ? await ProbeAsync(host, port, ResolveTlsSni(server, host), requireTls: true, ct)
                     : await ProbeTcpOnlyAsync(host, port, ct);
                 break;
             }
@@ -585,12 +585,6 @@ public static class TcpTlsProbe
         }
     }
 
-    private static string ResolveSni(VlessServerEntry server, string fallback)
-    {
-        if (server.Reality is { Enabled: true } r && !string.IsNullOrWhiteSpace(r.ServerName))
-            return r.ServerName;
-        if (server.Tls is { Enabled: true } t && !string.IsNullOrWhiteSpace(t.ServerName))
-            return t.ServerName;
-        return fallback;
-    }
+    internal static string ResolveTlsSni(VlessServerEntry server, string fallback)
+        => server.Tls?.ServerName is { } sni && !string.IsNullOrWhiteSpace(sni) ? sni : fallback;
 }
