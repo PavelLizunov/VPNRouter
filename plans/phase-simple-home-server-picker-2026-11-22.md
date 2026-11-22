@@ -197,3 +197,8 @@ Category changes update only view state. Explicit row activation still
 uses the Advanced selection path. The headless regression covers filtering,
 an unavailable category after refresh, the untouched choice and settings,
 and a 360 px capture. Hosted verification is pending.
+
+At `16b2d78c` the Linux filter and manual selection tests passed. An older
+icon test counted the new filter icon as a server-row icon. The follow-up
+checks the visible fallback discs inside the server list and the visible
+country flag on the filtered row separately.

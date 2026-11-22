@@ -801,6 +801,7 @@ public sealed class SimpleConnectStatusTests
                 Assert.Null(list.SelectedItem);
                 Assert.Same(chosen, vm.SelectedSubscriptionServer);
                 Assert.Equal(subscriptions, vm.SubscriptionServers);
+                Assert.Single(list.GetVisualDescendants().OfType<Image>(), flag => flag.IsEffectivelyVisible);
                 Assert.True(vm.AutoSelectBestServer);
                 Assert.Equal(before, store.SaveCount);
                 if (OperatingSystem.IsWindows())

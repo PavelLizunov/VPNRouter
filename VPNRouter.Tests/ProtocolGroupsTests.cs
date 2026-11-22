@@ -120,19 +120,19 @@ public class ProtocolGroupsTests
     }
 
     [AvaloniaFact]
-    public void SubscribeList_ShowsAColouredDiscPerServer()
+    public void SubscribeList_ShowsAColouredDiscForEachServerWithoutAFlag()
     {
         var app = Avalonia.Application.Current!;
         using var vm = new MainWindowViewModel(new InMemorySettingsStore());
-        var awg = Entry("amneziawg", null, "Finland AWG");
+        var awg = Entry("amneziawg", null, "awg-route");
         awg.Awg = new AwgConfig();
-        var dns = Entry("dns-tunnel", null, "Emergency DNS");
+        var dns = Entry("dns-tunnel", null, "emergency");
         dns.DnsDomain = "t.example";
         VlessServerEntry[] entries =
         [
-            Entry("vless", "tcp", "Netherlands Reality"), Entry("hysteria2", null, "Germany HY2"), awg,
-            Entry("vless", "xhttp", "Sweden XHTTP"), Entry("vless", "ws", "Poland WS"), Entry("naive", null, "Latvia Naive"),
-            Entry("ss", null, "Turkey SS"), dns,
+            Entry("vless", "tcp", "daily"), Entry("hysteria2", null, "voice"), awg,
+            Entry("vless", "xhttp", "stealth"), Entry("vless", "ws", "web-fallback"), Entry("naive", null, "web-only"),
+            Entry("ss", null, "fallback"), dns,
         ];
         foreach (var entry in entries) vm.SubscriptionServers.Add(new ServerViewModel(entry));
 
@@ -140,7 +140,8 @@ public class ProtocolGroupsTests
         var window = new Window { Width = 520, Height = 900, Content = page };
         window.Bind(Window.BackgroundProperty, window.GetResourceObservable("SurfaceAppBrush"));
         window.Show();
-        var discs = page.GetVisualDescendants().OfType<ProtocolDisc>().ToList();
+        var list = page.FindControl<ServerPickerListBox>("SubList")!;
+        var discs = list.GetVisualDescendants().OfType<ProtocolDisc>().Where(disc => disc.IsEffectivelyVisible).ToList();
         Assert.Equal(entries.Length, discs.Count);
         Assert.Equal(Enum.GetValues<ProtocolGroup>().Length, discs.Select(d => d.Group).Distinct().Count());
         foreach (var disc in discs)
