@@ -22,13 +22,16 @@ internal sealed partial class SimpleServerGroup : ObservableObject
         SelectionHint = CanAutoSelect ? string.Empty : servers.Any(row => row.CanSelectInSimpleMode)
             ? Strings.SmpManualOnlyCategory : Strings.SmpServerUnsupported;
         Name = MainWindowViewModel.SimpleCategoryName(category);
-        Protocols = string.Join(" · ", servers.Select(row =>
+        Protocols = DescribeProtocols(category, servers);
+    }
+
+    internal static string DescribeProtocols(ProtocolGroup category, IEnumerable<ServerViewModel> servers) =>
+        string.Join(" · ", servers.Select(row =>
         {
             var entry = row.SourceEntry;
             return entry.Awg != null ? "awg" : category is ProtocolGroup.StealthWeb or ProtocolGroup.WebFallback
                 ? (entry.Transport?.Type ?? "vless") : (entry.Protocol ?? "vless");
         }).Select(protocol => protocol.ToLowerInvariant()).Distinct(StringComparer.Ordinal));
-    }
 
     public ProtocolGroup Category { get; }
     public string Name { get; }

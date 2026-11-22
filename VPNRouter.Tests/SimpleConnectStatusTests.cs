@@ -759,6 +759,70 @@ public sealed class SimpleConnectStatusTests
         finally { window.Close(); }
     }
 
+    [AvaloniaFact]
+    public void AdvancedSubscriptionCategoriesFilterRowsWithoutChangingTheConnectionChoice()
+    {
+        var language = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            var daily = Entry("Sweden", "daily.invalid");
+            var web = Entry("Netherlands", "web.invalid");
+            web.Transport.Type = "ws";
+            var settings = new AppSettings();
+            settings.App.Language = "ru";
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions = [new() { Url = "https://feed.invalid/categories", Servers = [daily, web] }];
+            settings.Vless.AutoSelectBestServer = true;
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = CreateVm(store);
+            var chosen = vm.SelectedSubscriptionServer;
+            var subscriptions = vm.SubscriptionServers.ToArray();
+            var before = store.SaveCount;
+            var page = new SubscribePage { DataContext = vm };
+            var window = new Window { Content = page, Width = 360, Height = 760, RequestedThemeVariant = ThemeVariant.Light };
+            window.Show();
+            try
+            {
+                Dispatcher.UIThread.RunJobs();
+                var filter = page.FindControl<ComboBox>("SubscriptionCategory")!;
+                var list = page.FindControl<ServerPickerListBox>("SubList")!;
+                var categories = filter.Items.Cast<SubscriptionCategoryOption>().ToArray();
+                Assert.Equal(new ProtocolGroup?[] { null, ProtocolGroup.Daily, ProtocolGroup.WebFallback },
+                    categories.Select(option => option.Category));
+                Assert.Equal(Strings.ServerAllCategories, categories[0].Name);
+                Assert.Equal(MainWindowViewModel.SimpleCategoryName(ProtocolGroup.WebFallback), categories[2].Name);
+                Assert.Equal("ws", categories[2].Protocols);
+                Assert.Equal(subscriptions, list.Items.Cast<ServerViewModel>());
+
+                filter.SelectedItem = categories[2];
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(subscriptions[1], Assert.Single(list.Items));
+                Assert.Null(list.SelectedItem);
+                Assert.Same(chosen, vm.SelectedSubscriptionServer);
+                Assert.Equal(subscriptions, vm.SubscriptionServers);
+                Assert.True(vm.AutoSelectBestServer);
+                Assert.Equal(before, store.SaveCount);
+                if (OperatingSystem.IsWindows())
+                {
+                    using var capture = window.CaptureRenderedFrame();
+                    Assert.NotNull(capture);
+                    capture.Save(Path.Combine(ScreenshotHelper.ScreenshotsDir, "simple-picker-advanced-subscriptions-360.png"),
+                        PngBitmapEncoderOptions.Default);
+                }
+
+                vm.SubscriptionServers.Remove(subscriptions[1]);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Null(Assert.IsType<SubscriptionCategoryOption>(filter.SelectedItem).Category);
+                Assert.Same(chosen, list.SelectedItem);
+                Assert.Same(chosen, vm.SelectedSubscriptionServer);
+                Assert.Equal(before, store.SaveCount);
+            }
+            finally { window.Close(); }
+        }
+        finally { VPNRouter.App.Localization.Strings.Lang = language; }
+    }
+
     private static void PressPickerKey(InputElement item, Key key) => item.RaiseEvent(new KeyEventArgs
     {
         Source = item,

@@ -189,3 +189,11 @@ Use the existing task branch, with a revert as rollback. Verification gates:
 exact-head Release build, existing full suites and a focused filter/selection
 regression, plan outcome, static review of selection boundaries, narrow
 Windows headless capture, and unchanged desktop public surface.
+
+The Advanced Subscriptions tab now displays the shared category names and
+protocol summaries in a filter above its virtualized server list. Server
+rows retain diagnostics and use the existing country flags when available.
+Category changes update only view state. Explicit row activation still
+uses the Advanced selection path. The headless regression covers filtering,
+an unavailable category after refresh, the untouched choice and settings,
+and a 360 px capture. Hosted verification is pending.

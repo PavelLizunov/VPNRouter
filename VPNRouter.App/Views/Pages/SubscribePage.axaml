@@ -3,6 +3,7 @@
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:conv="using:VPNRouter.App"
              xmlns:icons="using:VPNRouter.App.Controls"
+             xmlns:pages="using:VPNRouter.App.Views.Pages"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -27,18 +28,32 @@
     <Border Grid.Row="0" Classes="list-card">
       <DockPanel>
         <Border DockPanel.Dock="Top" Classes="list-head" IsVisible="{Binding SubscriptionServers.Count}">
-          <Grid ColumnDefinitions="22,26,*,Auto,30" ColumnSpacing="10" Margin="0,0,10,0">
-            <TextBlock Grid.Column="2" Text="{Binding L_ColServer}"/>
-            <TextBlock Grid.Column="3" Text="{Binding L_ColPing}"
+          <Grid ColumnDefinitions="*,58,30" ColumnSpacing="10" Margin="0,0,10,0">
+            <ComboBox Name="SubscriptionCategory" MinWidth="0" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch" MaxDropDownHeight="360">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="pages:SubscriptionCategoryOption">
+                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <icons:ProtocolDisc Group="{Binding IconGroup}" Width="24" Height="24"
+                                        GlyphSize="14" CornerRadius="12" IsVisible="{Binding HasCategory}"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                      <TextBlock Text="{Binding Protocols}" IsVisible="{Binding HasCategory}"
+                                 Foreground="{DynamicResource TextSecondaryBrush}" FontSize="{StaticResource FsXs}"
+                                 TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                  </Grid>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Grid.Column="1" Text="{Binding L_ColPing}"
                        ToolTip.Tip="{Binding L_ColPingTooltip}"
-                       MinWidth="58" TextAlignment="Center"/>
+                       VerticalAlignment="Center" TextAlignment="Center"/>
           </Grid>
         </Border>
         <Panel>
           <icons:ServerPickerListBox x:Name="SubList"
                    Classes="server-list"
-                   ItemsSource="{Binding SubscriptionServers}"
-                   SelectedItem="{Binding SelectedSubscriptionServer}"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                    ScrollViewer.VerticalScrollBarVisibility="Auto">
             <icons:ServerPickerListBox.ItemsPanel>
@@ -55,9 +70,15 @@
                       <icons:Pictogram Id="radio-off" Width="18" Height="18" IsVisible="{Binding !IsActive}" Foreground="{DynamicResource BorderStrongBrush}"/>
                     </Panel>
 
-                    <icons:ProtocolDisc Grid.Column="1" Group="{Binding ProtocolGroup}"
-                                         ToolTip.Tip="{Binding ProtocolUseCaseTooltip}"
-                                         AutomationProperties.Name="{Binding ProtocolUseCase}"/>
+                    <Panel Grid.Column="1" VerticalAlignment="Center">
+                      <icons:ProtocolDisc Group="{Binding ProtocolGroup}" IsVisible="{Binding !HasCountryFlag}"
+                                           ToolTip.Tip="{Binding ProtocolUseCaseTooltip}"
+                                           AutomationProperties.Name="{Binding ProtocolUseCase}"/>
+                      <Image Source="{Binding CountryFlag}" IsVisible="{Binding HasCountryFlag}"
+                             Width="24" Height="18" Stretch="Uniform"
+                             ToolTip.Tip="{Binding CountryFlagTooltip}"
+                             AutomationProperties.Name="{Binding CountryFlagTooltip}"/>
+                    </Panel>
 
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3">
                       <TextBlock Classes="server-name" Text="{Binding DisplayName}" ToolTip.Tip="{Binding DisplayName}"/>

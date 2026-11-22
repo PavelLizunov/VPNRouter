@@ -135,6 +135,8 @@ public static partial class Strings
     public static string SmpMoveLink => Ru ? "Перенести в поле ссылки" : "Move to link field";
     public static string SmpNoMatchingServers       => Ru ? "Серверы не найдены" : "No matching servers";
     public static string SmpDailyCategory => Ru ? "Повседневный" : "Everyday";
+    internal static string ServerAllCategories => Ru ? "Все категории" : "All categories";
+    internal static string ServerCategoryFilter => Ru ? "Категория серверов" : "Server category";
     public static string SmpAutoInCategory => Ru ? "Авто" : "Auto";
     public static string SmpPinnedServer => Ru ? "Вручную" : "Manual";
     public static string SmpExpandCategory => Ru ? "Показать серверы" : "Show servers";
