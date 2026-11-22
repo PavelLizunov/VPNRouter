@@ -6,7 +6,8 @@ namespace VPNRouter.Core.Services;
 internal sealed record SubscriptionCacheUpdate(SubscriptionEntry Origin, List<VlessServerEntry> PreviousRows,
     SubscriptionEntry Candidate, bool Failed)
 {
-    internal static async Task<SubscriptionCacheUpdate> FetchAsync(SubscriptionEntry origin, ILogger? logger, CancellationToken ct)
+    internal static async Task<SubscriptionCacheUpdate> FetchAsync(
+        SubscriptionEntry origin, ILogger? logger, CancellationToken ct, SingBoxSettings? runtime = null)
     {
         var previous = origin.Servers;
         // RefreshEntryAsync replaces the list and updates metadata. Keep those writes detached until
@@ -18,7 +19,7 @@ internal sealed record SubscriptionCacheUpdate(SubscriptionEntry Origin, List<Vl
         };
         try
         {
-            var count = await SubscriptionFetcher.RefreshEntryAsync(candidate, logger, ct);
+            var count = await SubscriptionFetcher.RefreshEntryAsync(candidate, logger, ct, runtime);
             return new(origin, previous, candidate, count == 0);
         }
         catch (Exception) when (!ct.IsCancellationRequested)

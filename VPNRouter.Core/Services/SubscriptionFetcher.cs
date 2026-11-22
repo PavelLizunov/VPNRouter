@@ -26,20 +26,43 @@ public static class SubscriptionFetcher
             ["X-VPNRouter-Capabilities"] = "detour-v1, vmess-v1"
         };
 
-    private static IReadOnlyDictionary<string, string> GetSubscriptionHeaders(bool secure) =>
-        secure && SingBoxFeatures.DnsttAvailable
+    private static async Task<IReadOnlyDictionary<string, string>> GetSubscriptionHeadersAsync(
+        Uri uri, SingBoxSettings? runtime, CancellationToken ct)
+    {
+        var secure = uri.Scheme == Uri.UriSchemeHttps;
+        var headers = secure && SingBoxFeatures.DnsttAvailable
             ? new Dictionary<string, string> { ["X-VPNRouter-Capabilities"] = "detour-v1, dnstt-v1, vmess-v1" }
             : SubscriptionHeaders;
+        var path = uri.AbsolutePath;
+        var deviceIdSlash = path.LastIndexOf('/');
+        if (!secure || deviceIdSlash <= 0 || deviceIdSlash == path.Length - 1
+            || !path.AsSpan(0, deviceIdSlash).EndsWith("/api/v1/app/config", StringComparison.Ordinal)
+            || SingBoxFeatures.EmbeddedCore || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS())
+            return headers;
+        var platform = OperatingSystem.IsWindows() ? "windows"
+            : OperatingSystem.IsMacOS() ? "macos"
+            : OperatingSystem.IsLinux() ? "linux" : null;
+        if (platform == null) return headers;
+        var core = await Task.Run(() => SingBoxFeatures.ReadDesktopCoreVersion(runtime), ct).ConfigureAwait(false);
+        if (core == null) return headers;
+        return new Dictionary<string, string>(headers)
+        {
+            ["X-VPNRouter-Platform"] = platform,
+            ["X-VPNRouter-Core-Version"] = core,
+        };
+    }
 
-    public static async Task<List<VlessServerEntry>> FetchAsync(string url, ILogger? logger = null, CancellationToken ct = default)
+    public static async Task<List<VlessServerEntry>> FetchAsync(
+        string url, ILogger? logger = null, CancellationToken ct = default, SingBoxSettings? runtime = null)
     {
-        var result = await FetchWithDiagnosticsAsync(url, logger, ct);
+        var result = await FetchWithDiagnosticsAsync(url, logger, ct, runtime);
         if (result.ChainImportFailed) throw new UnsupportedSubscriptionChainException();
         return result.Entries;
     }
 
     internal static async Task<(List<VlessServerEntry> Entries, int DroppedPlaceholders, string? UserInfo, bool ChainImportFailed)>
-        FetchWithDiagnosticsAsync(string url, ILogger? logger = null, CancellationToken ct = default)
+        FetchWithDiagnosticsAsync(string url, ILogger? logger = null, CancellationToken ct = default,
+            SingBoxSettings? runtime = null)
     {
         var result = new List<VlessServerEntry>();
         var droppedPlaceholders = 0;
@@ -61,9 +84,10 @@ public static class SubscriptionFetcher
         {
             logger?.Information("[Subscription] Fetching server list");
 
+            var headers = await GetSubscriptionHeadersAsync(parsedUri, runtime, ct);
             var httpResp = await Http.SendAsync(
                 new HttpRequest(HttpMethod.Get, parsedUri,
-                    Headers: GetSubscriptionHeaders(secure),
+                    Headers: headers,
                     Timeout: TimeSpan.FromSeconds(15)),
                 ct);
             if (!httpResp.IsSuccess())
@@ -287,11 +311,13 @@ public static class SubscriptionFetcher
     }
 
     public static async Task<int> RefreshEntryAsync(
-        SubscriptionEntry entry, ILogger? logger = null, CancellationToken ct = default)
+        SubscriptionEntry entry, ILogger? logger = null, CancellationToken ct = default,
+        SingBoxSettings? runtime = null)
     {
         if (entry == null || string.IsNullOrWhiteSpace(entry.Url)) return 0;
 
-        var (servers, droppedPlaceholders, userInfo, chainImportFailed) = await FetchWithDiagnosticsAsync(entry.Url, logger, ct);
+        var (servers, droppedPlaceholders, userInfo, chainImportFailed) =
+            await FetchWithDiagnosticsAsync(entry.Url, logger, ct, runtime);
         if (ct.IsCancellationRequested) return 0;
 
         // Never overwrite a cached quota with null on a transient failure.

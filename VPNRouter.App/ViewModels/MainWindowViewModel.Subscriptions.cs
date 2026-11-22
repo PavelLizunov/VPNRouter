@@ -212,7 +212,7 @@ public partial class MainWindowViewModel
     }
 
     private Task<SubscriptionCacheUpdate[]> FetchSubscriptionRowsAsync(List<SubscriptionViewModel> rows, CancellationToken ct) =>
-        Task.WhenAll(rows.Select(s => SubscriptionCacheUpdate.FetchAsync(s.ToEntry(), _logger, ct)));
+        Task.WhenAll(rows.Select(s => SubscriptionCacheUpdate.FetchAsync(s.ToEntry(), _logger, ct, _settings.SingBox)));
 
     private bool PublishSubscriptionRows(List<SubscriptionViewModel> rows, SubscriptionCacheUpdate[] updates,
         AppSettings? submission = null)
@@ -261,7 +261,7 @@ public partial class MainWindowViewModel
                 return;
             }
             var selectionAtStart = SelectedSubscriptionServer;
-            var entries = await SubscriptionFetcher.FetchAsync(url, _logger);
+            var entries = await SubscriptionFetcher.FetchAsync(url, _logger, runtime: _settings.SingBox);
             if (_disposed || !SimpleConnectPolicy.SameUrl(url, SubscriptionUrl) ||
                 !ReferenceEquals(selectionAtStart, SelectedSubscriptionServer)) return;
 

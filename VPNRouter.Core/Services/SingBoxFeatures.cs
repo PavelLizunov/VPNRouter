@@ -1,7 +1,9 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
+using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
@@ -56,6 +58,55 @@ public static class SingBoxFeatures
         return parts.Length == 2 && Version.TryParse(parts[0], out var core)
             && int.TryParse(parts[1], out int patch) && patch >= 1
             && (core > new Version(1, 14, 4) || (core == new Version(1, 14, 4) && patch >= 2));
+    }
+
+    internal static string? ReadDesktopCoreVersion(SingBoxSettings? settings)
+    {
+        if (EmbeddedCore || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS()) return null;
+        try
+        {
+            string? path;
+            if (SingBoxRuntimePolicy.Current is { } policy)
+            {
+                if (!policy.IsAvailable) return null;
+                path = policy.SelectedExecutablePath;
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                // Connect provisions the privileged copy from this bundle before starting.
+                path = AppPaths.BundledSingBoxExePath;
+            }
+            else if (OperatingSystem.IsWindows() && settings == null)
+            {
+                return null;
+            }
+            else
+            {
+                path = AppPaths.SingBoxDeploymentSource(AppPaths.BundledSingBoxExePath,
+                    AppPaths.DeployedSingBoxExePath(settings));
+            }
+            return path != null && File.Exists(path)
+                ? ParseManagedCoreVersion(ReadVersionOutput(Path.GetFullPath(path)))
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    internal static string? ParseManagedCoreVersion(string output)
+    {
+        const string prefix = "sing-box version ";
+        var line = Array.Find(output.Split('\n'), value => value.StartsWith(prefix, StringComparison.Ordinal));
+        if (line == null) return null;
+        var version = line[prefix.Length..].Trim();
+        var parts = version.Split("-vpnctl.", StringSplitOptions.None);
+        return parts.Length == 2 && Version.TryParse(parts[0], out var core) && core.Build >= 0
+            && core.Revision < 0 && core.ToString(3) == parts[0]
+            && uint.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var patch)
+            && patch > 0 && patch.ToString(CultureInfo.InvariantCulture) == parts[1]
+            ? version : null;
     }
 
     internal static bool? OverrideDnstt { get; set; }

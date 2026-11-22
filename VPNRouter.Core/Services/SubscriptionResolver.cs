@@ -39,7 +39,7 @@ public static class SubscriptionResolver
             if (enabled.Count > 0)
             {
                 logger?.Information("[SubscriptionResolver] Refreshing {Count} subscription(s)...", enabled.Count);
-                var updates = await Task.WhenAll(enabled.Select(s => SubscriptionCacheUpdate.FetchAsync(s, logger, ct)));
+                var updates = await Task.WhenAll(enabled.Select(s => SubscriptionCacheUpdate.FetchAsync(s, logger, ct, settings.SingBox)));
                 ct.ThrowIfCancellationRequested();
                 var chain = SubscriptionChainSelection.Capture(settings.App);
                 if (!SubscriptionCacheUpdate.TryPublish(updates, settings.App.Subscriptions, chain, out var selected))
