@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
+
 - [x] **P2** - Simple desktop routing summary presented fixed example apps as the current policy in Windows 2.51.0-r1. Fixed in source with a route-mode description, a link to the actual application rules and a separate applied-mode line. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P2** - Desktop manual server selection left auto-select enabled, so the cross-host `urltest` group could choose another host every three minutes. Confirmed in Standard 2.51.0-r1 and fixed in source by saving explicit row activations with auto-select off. Review caught keyboard navigation disabling auto-select before confirmation. The follow-up uses Avalonia's row activation path and covers navigation, an active row and the service Apply path. See [manual server selection](phase-manual-server-selection-2026-11-22.md).
