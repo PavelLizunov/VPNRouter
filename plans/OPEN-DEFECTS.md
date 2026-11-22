@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Windows preview `b85fc444` shows DNSTT under Everyday and multiple nested scroll regions in the shared server list. The DNSTT protocol falls through the classifier and the tree and group lists both limit their height inside the host viewport. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
 - [x] **P2** - The Simple header could label the active server with the next selection's manual/auto setting. Separate the accepted connection caption from the pending choice and keep the header chevron aligned with its action. Confirmed with the Windows headless capture at `fc9ac716`, resolved in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P2** - Reviewing the shared picker exposed two policy losses in desktop settings. An Advanced preferences save can use stale server-tab flags, and an enabled feed that loses its pinned row can be mistaken for a new link at the next Simple Connect. Preserve the scoped policy in both cases. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).

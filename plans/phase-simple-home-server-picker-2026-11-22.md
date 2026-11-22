@@ -272,3 +272,17 @@ the pending manual mode and the disclosure could render halfway through
 its rotation. Separate the running caption from the selected policy and
 remove the animation on the header chevron. The updated fixture asserts
 the running caption stays accurate after switching views.
+
+## DNSTT category and picker scrolling
+
+The installed Windows preview at `b85fc444` grouped DNSTT as Everyday and
+displayed nested scrollbars over the expanded picker. Classify DNSTT as
+Emergency by protocol or profile. Keep exact pins and the manual-only
+selection rule. Use the host viewport for the full category tree and its
+search results. Test actual wheel input and visibility of the last row
+at 360 px in both desktop modes. Scope is the shared picker and category
+classifier. Roll back by reverting this block on the task branch.
+
+Gates are the exact-head Release build, category and wheel regressions
+with the existing suite, Windows headless captures, a scoped source
+review, this outcome, and unchanged selection behavior.
