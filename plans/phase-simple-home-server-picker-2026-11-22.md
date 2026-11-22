@@ -109,3 +109,14 @@ settings unchanged. Verify flag resources and narrow Windows UI in hosted
 checks. Build an exact-source preview and install it on the owner's local
 Windows VM on request. Preserve the installation and settings for rollback.
 This preview does not publish a release or tag.
+
+The owner preview configuration has 15 cached subscription rows. Its labels
+and subscription metadata supply no country codes. Twelve rows have literal
+global addresses and the other three contain hostnames. Add a bundled
+country-only fallback for literal addresses, with explicit provider labels
+taking precedence. The pinned DB-IP Lite November 2026 CSV matches the
+publisher's digest after decompression, and its offline ranges cover all
+12 literal addresses. The picker does not resolve hostnames for flags.
+All ten hosted checks passed for the first flag-resource revision
+`b926cefd`, and a Windows preview package was built. Use the follow-up
+package for the owner preview so the actual subscription can show flags.

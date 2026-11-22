@@ -24,6 +24,17 @@ public sealed class ServerCountryFlagsTests
         Assert.Equal("Sweden 2", ServerCountryFlags.DisplayName("Sweden 2"));
     }
 
+    [AvaloniaTheory]
+    [InlineData("8.8.8.8", "US")]
+    [InlineData("::ffff:8.8.8.8", "US")]
+    [InlineData("2606:4700:4700::1111", "US")]
+    [InlineData("10.0.0.1", "")]
+    [InlineData("provider.invalid", "")]
+    public void OfflineLookupSupportsLiteralAddressesWithoutResolvingHostnames(string server, string expected)
+    {
+        Assert.Equal(expected, BundledServerIpCountry.Code(server));
+    }
+
     [AvaloniaFact]
     public void EveryIso3166CountryAndKosovoHasABundledFlag()
     {

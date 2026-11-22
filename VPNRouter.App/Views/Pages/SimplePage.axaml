@@ -12,8 +12,8 @@
         <DataTemplate x:Key="SimpleServerRowTemplate" x:DataType="vm:ServerViewModel">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                 <Grid Width="24" Height="18" VerticalAlignment="Center">
-                    <Image Source="{Binding CountryFlag}" Stretch="Uniform" ToolTip.Tip="{Binding CountryCode}"
-                           AutomationProperties.Name="{Binding CountryCode}"/>
+                    <Image Source="{Binding CountryFlag}" Stretch="Uniform" ToolTip.Tip="{Binding CountryFlagTooltip}"
+                           IsVisible="{Binding HasCountryFlag}" AutomationProperties.Name="{Binding CountryFlagTooltip}"/>
                     <icons:Pictogram Id="globe" Width="15" Height="15" IsVisible="{Binding !HasCountryFlag}"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"
                                      Foreground="{DynamicResource TextMutedBrush}"/>

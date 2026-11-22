@@ -140,6 +140,9 @@ public static partial class Strings
         ? "Закреплённый сервер не отвечает. Можно повторить подключение или выбрать другой."
         : "The pinned server is not responding. Retry the connection or choose another server.";
     public static string SmpManualOnlyCategory => Ru ? "Выберите сервер вручную" : "Choose a server manually";
+    public static string SmpServerCountryByIp(string code) => Ru
+        ? $"{code} · Страна по IP (DB-IP)"
+        : $"{code} · Country by IP (DB-IP)";
     public static string SmpServerUnsupported => Ru ? "Недоступно в этой сборке" : "Unsupported in this build";
     public static string SmpSelectionUnavailableTitle => Ru ? "Выбор недоступен" : "Selection unavailable";
     public static string SmpNoOtherInCategory => Ru
