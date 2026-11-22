@@ -113,7 +113,7 @@ public partial class MainWindowViewModel
         finally { _savingSimpleLink = false; }
     }
 
-    private bool CanSaveSimpleLink() => !_disposed && IsSimpleMode && SmpHasConfig &&
+    private bool CanSaveSimpleLink() => !_disposed && (IsSimpleMode || IsSubscribeMode) && SmpHasConfig &&
         !SimpleCtaIsConnecting && !_isReconnecting && !SmpSubscriptionsRefreshing;
 
     private static void SelectSavedSimpleFeed(AppConfig app, SubscriptionEntry feed, SubscriptionInputAction action)

@@ -238,3 +238,15 @@ Gates: exact-head Release build, existing suites plus focused regressions,
 this outcome, independent runtime review, native Windows headless renders
 at narrow widths in both modes, and unchanged public VM surface. Live
 candidate deployment and release are outside this brief.
+
+Both views now use the same tree, link editor and subscription choice
+commands. The Simple header is one toggle. Advanced retains row retests,
+health verdicts, bulk diagnostics, intent, and registered-feed management.
+The cold-start path uses the same scoped probe from both views. The full
+subscription cache, exact manual pin and existing recovery limits remain
+in use. Added regressions for disclosure clicks, category/manual round trips,
+filter and ping isolation, service-managed Apply, and switching views
+during a probe. Windows captures exercise both choices and the Simple
+header at 360 px light and 450 px dark. XML/handler checks and
+`git diff --check` passed. Hosted verification and independent review
+are pending.

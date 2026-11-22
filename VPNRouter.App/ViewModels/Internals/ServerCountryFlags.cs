@@ -41,6 +41,14 @@ internal static class ServerCountryFlags
         return remainder.Length > 0 ? remainder : name;
     }
 
+    internal static string CountryName(string code)
+    {
+        var localizedLabel = string.Equals(Localization.Strings.Lang, "ru", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        foreach (var country in Countries)
+            if (country.Code == code) return country.Labels[localizedLabel];
+        return code;
+    }
+
     internal static bool MatchesCountry(string code, string query)
     {
         if (code.Length == 0) return false;

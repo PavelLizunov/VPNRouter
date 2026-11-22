@@ -163,7 +163,10 @@ public partial class MainWindowViewModel
     }
 
     [RelayCommand]
-    private Task ToggleConnectionAsync() => ToggleConnectionCoreAsync(null);
+    private Task ToggleConnectionAsync() =>
+        !IsConnected && IsSubscribeMode && SimpleServerPreference != null
+            ? PrepareSubscriptionConnectionAsync(useSimpleInput: false)
+            : ToggleConnectionCoreAsync(null);
 
     private void ShowUnconfirmedStop()
     {

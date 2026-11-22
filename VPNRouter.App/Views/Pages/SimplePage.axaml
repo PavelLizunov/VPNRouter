@@ -8,53 +8,7 @@
              x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
 
-    <UserControl.Resources>
-        <DataTemplate x:Key="SimpleServerRowTemplate" x:DataType="vm:ServerViewModel">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                <Grid Width="24" Height="18" VerticalAlignment="Center">
-                    <Image Source="{Binding CountryFlag}" Stretch="Uniform" ToolTip.Tip="{Binding CountryFlagTooltip}"
-                           IsVisible="{Binding HasCountryFlag}" AutomationProperties.Name="{Binding CountryFlagTooltip}"/>
-                    <icons:Pictogram Id="globe" Width="15" Height="15" IsVisible="{Binding !HasCountryFlag}"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                     Foreground="{DynamicResource TextMutedBrush}"/>
-                </Grid>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="{Binding SimpleDisplayName}" TextTrimming="CharacterEllipsis"
-                               ToolTip.Tip="{Binding DisplayName}"/>
-                    <TextBlock Classes="hint" Text="{Binding Endpoint}" TextTrimming="CharacterEllipsis"
-                               IsVisible="{Binding CanSelectInSimpleMode}" ToolTip.Tip="{Binding Endpoint}"/>
-                    <TextBlock Classes="hint" Text="{x:Static loc:Strings.SmpServerUnsupported}"
-                               IsVisible="{Binding !CanSelectInSimpleMode}" TextWrapping="Wrap"
-                               ToolTip.Tip="{Binding Endpoint}"/>
-                </StackPanel>
-                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                    <TextBlock Text="{Binding PingDisplay}" ToolTip.Tip="{Binding HealthTooltip}"
-                               HorizontalAlignment="Right" Classes="hint"/>
-                    <TextBlock IsVisible="{Binding IsActive}" Text="{x:Static loc:Strings.SmpCurrentServer}"
-                               Foreground="{DynamicResource SuccessFgBrush}" FontSize="{StaticResource FsXs}"/>
-                </StackPanel>
-            </Grid>
-        </DataTemplate>
-    </UserControl.Resources>
-
     <UserControl.Styles>
-        <Style Selector="Button.category">
-            <Setter Property="HorizontalAlignment" Value="Stretch"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="MinHeight" Value="46"/>
-            <Setter Property="Padding" Value="8,4"/>
-            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
-            <Setter Property="Background" Value="{DynamicResource SurfaceAppBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-        </Style>
-        <Style Selector="Button.category.current">
-            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
-        </Style>
-        <Style Selector="Button.category.disclosure">
-            <Setter Property="MinWidth" Value="40"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-        </Style>
-
         <!-- Status emblem: halo, track, state ring, connecting arc, mascot tile and a shield badge at six o'clock. -->
         <Style Selector="Ellipse.halo">
             <Setter Property="Fill" Value="Transparent"/>
@@ -234,17 +188,6 @@
             <Setter Property="Height" Value="1"/>
             <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}"/>
         </Style>
-        <Style Selector="ListBox.pick">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-        </Style>
-        <Style Selector="ListBox.pick ListBoxItem">
-            <Setter Property="Padding" Value="8,5"/>
-            <Setter Property="MinHeight" Value="36"/>
-            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
-            <Setter Property="FontSize" Value="{StaticResource FsMd}"/>
-        </Style>
         <Style Selector="TextBlock.label">
             <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -257,7 +200,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         </Style>
 
-        <Style Selector="Button.row">
+        <Style Selector="Button.row, ToggleButton.row">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -266,11 +209,13 @@
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}"/>
         </Style>
-        <Style Selector="Button.row:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Style Selector="Button.row:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.row:pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
-        <Style Selector="Button.row:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Style Selector="Button.row:pressed /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.row:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
@@ -494,9 +439,12 @@
                 <!-- Current connection: which config, and what goes through it. -->
                 <Border Classes="card" Margin="0,14,0,0">
                     <StackPanel>
-                        <Grid IsVisible="{Binding SmpHasConfig}"
-                              ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"
-                              Margin="16,14,14,14">
+                        <ToggleButton Name="SimpleChangeServer" Classes="row"
+                                      IsVisible="{Binding SmpHasConfig}"
+                                      IsChecked="{Binding SmpFormExpanded, Mode=TwoWay}"
+                                      AutomationProperties.Name="{Binding L_SmpConfigRowToggle}"
+                                      MinHeight="56" Margin="4" Padding="12,10">
+                          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                             <Border Width="40" Height="40"
                                     CornerRadius="{StaticResource RadiusLg}"
                                     Background="{DynamicResource AccentBgSubtleBrush}"
@@ -532,127 +480,23 @@
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
                             </StackPanel>
-                            <Button Name="SimpleChangeServer" Grid.Column="2" Classes="change"
-                                    Command="{Binding OpenConfigPickerCommand}"
-                                    AutomationProperties.Name="{Binding L_SmpConfigRowToggle}">
-                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                    <TextBlock Text="{Binding L_SmpConfigRowToggle}" VerticalAlignment="Center"/>
-                                    <icons:Pictogram Id="chevron-down" Classes="disclosure"
-                                                     Classes.open="{Binding SmpFormExpanded}"/>
-                                </StackPanel>
-                            </Button>
-                        </Grid>
+                            <Grid Grid.Column="2" ColumnDefinitions="*,Auto" ColumnSpacing="4"
+                                  MaxWidth="100" VerticalAlignment="Center"
+                                  IsVisible="{Binding #SimpleChangeServer.IsEnabled}">
+                                <TextBlock Text="{Binding L_SmpConfigRowToggle}" TextWrapping="Wrap"
+                                           FontSize="{StaticResource FsSm}" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentFgBrush}" VerticalAlignment="Center"/>
+                                <icons:Pictogram Grid.Column="1" Id="chevron-down" Classes="disclosure"
+                                                 Classes.open="{Binding SmpFormExpanded}"/>
+                            </Grid>
+                          </Grid>
+                        </ToggleButton>
 
-                        <StackPanel IsVisible="{Binding SmpHasConfig}" Margin="16,0,16,12" Spacing="8">
-                            <ToggleButton Name="SimpleLinkButton" Classes="change" HorizontalAlignment="Left" Click="ToggleLinkEditor">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <icons:Pictogram Id="link" Width="14" Height="14"/>
-                                    <TextBlock Name="SimpleLinkButtonLabel"/>
-                                </StackPanel>
-                            </ToggleButton>
-                            <StackPanel Name="SimpleLinkEditor" IsVisible="{Binding #SimpleLinkButton.IsChecked, FallbackValue=False}"
-                                        Spacing="8" KeyDown="OnLinkEditorKeyDown">
-                                <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" TextWrapping="Wrap"/>
-                                <TextBox Name="SimpleConfigLink" PlaceholderText="{Binding L_SmpInputWatermark}"
-                                         AutomationProperties.Name="{Binding L_SmpInputLabel}"
-                                         MinHeight="40" AcceptsReturn="False" CornerRadius="{StaticResource RadiusLg}"/>
-                                <TextBlock Name="SimpleLinkError" Classes="hint" TextWrapping="Wrap"
-                                           AutomationProperties.LiveSetting="Polite"
-                                           Foreground="{DynamicResource DangerFgBrush}"
-                                           IsVisible="{Binding #SimpleLinkError.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                <TextBlock Name="SimpleLinkProgress" Classes="hint" TextWrapping="Wrap"
-                                           IsVisible="False" AutomationProperties.LiveSetting="Polite"/>
-                                <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
-                                    <Button Name="SimpleCancelLink" Classes="change" Click="CancelLinkEdit"/>
-                                    <Button Name="SimpleSaveLink" Classes="solid" Click="SaveLink"
-                                            Background="{DynamicResource AccentSolidBrush}"
-                                            Foreground="{DynamicResource AccentOnSolidBrush}"/>
-                                </WrapPanel>
-                            </StackPanel>
-                            <TextBlock Name="SimpleLinkNotice" Classes="hint" TextWrapping="Wrap"
-                                       AutomationProperties.LiveSetting="Polite"
-                                       IsVisible="{Binding #SimpleLinkNotice.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                        </StackPanel>
-
-                        <Border Classes="divider" IsVisible="{Binding SmpPickerVisible}"/>
-                        <StackPanel IsVisible="{Binding SmpPickerVisible}" Margin="16,12,16,14" Spacing="8">
-                            <StackPanel Name="SimpleServerPanel" IsVisible="False" Spacing="8"
-                                        IsEnabled="{Binding !SimpleCtaIsConnecting}" KeyDown="OnPickerKeyDown">
-                                <ToggleButton Name="SimpleServerSearchButton" Classes="change"
-                                              HorizontalAlignment="Left" Click="ToggleServerSearch">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <icons:Pictogram Id="search-tab" Width="14" Height="14"/>
-                                        <TextBlock Name="SimpleServerSearchButtonLabel"/>
-                                    </StackPanel>
-                                </ToggleButton>
-                                <StackPanel Spacing="6" IsVisible="{Binding #SimpleServerSearchButton.IsChecked, FallbackValue=False}">
-                                    <TextBlock Name="SimpleServerSearchLabel" Classes="label"/>
-                                    <TextBox Name="SimpleServerSearch" MinHeight="36" KeyDown="OnSearchKeyDown"/>
-                                    <StackPanel Name="SimpleSearchLinkHint" IsVisible="False" Spacing="4">
-                                        <TextBlock Name="SimpleSearchLinkMessage" Classes="hint" TextWrapping="Wrap"/>
-                                        <Button Name="SimpleTransferLink" Classes="change" Click="TransferSearchLink"/>
-                                    </StackPanel>
-                                </StackPanel>
-                                <ScrollViewer Name="SimpleServerGroupsScroll" MaxHeight="260"
-                                              HorizontalScrollBarVisibility="Disabled">
-                                    <ItemsControl Name="SimpleServerGroups">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><StackPanel Spacing="4"/></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="pages:SimpleServerGroup">
-                                                <StackPanel Spacing="4">
-                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                                        <Button Classes="category" Classes.current="{Binding IsCurrent}"
-                                                                Click="ChooseServerCategory"
-                                                                IsEnabled="{Binding CanAutoSelect}"
-                                                                AutomationProperties.Name="{Binding AutoLabel}">
-                                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                                                <icons:ProtocolDisc Width="30" Height="30" GlyphSize="16" CornerRadius="15"
-                                                                                    Group="{Binding Category}"/>
-                                                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                                                    <TextBlock Classes="hint" Text="{Binding Protocols}"
-                                                                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Protocols}"/>
-                                                                    <TextBlock Classes="hint" Text="{Binding SelectionHint}"
-                                                                               IsVisible="{Binding !CanAutoSelect}" TextWrapping="Wrap"/>
-                                                                </StackPanel>
-                                                                <TextBlock Grid.Column="2" Text="{Binding AutoText}" IsVisible="{Binding IsCurrent}"
-                                                                           Foreground="{DynamicResource AccentFgBrush}"
-                                                                           FontSize="{StaticResource FsXs}" VerticalAlignment="Center"/>
-                                                            </Grid>
-                                                        </Button>
-                                                        <Button Grid.Column="1" Classes="category disclosure"
-                                                                Click="ToggleServerCategory"
-                                                                AutomationProperties.Name="{Binding DisclosureLabel}"
-                                                                ToolTip.Tip="{Binding DisclosureLabel}">
-                                                            <icons:Pictogram Id="chevron-down" Classes="disclosure"
-                                                                             Classes.open="{Binding IsExpanded}"/>
-                                                        </Button>
-                                                    </Grid>
-                                                    <icons:ServerPickerListBox Classes="pick" MaxHeight="172"
-                                                                               Margin="16,0,0,2"
-                                                                               IsVisible="{Binding IsExpanded}"
-                                                                               ItemsSource="{Binding Servers}"
-                                                                               SelectedItem="{Binding SelectedServer, Mode=OneWay}"
-                                                                               ItemTemplate="{StaticResource SimpleServerRowTemplate}"
-                                                                               AutomationProperties.Name="{Binding Name}"
-                                                                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                                                               Loaded="WireGroupServerList"/>
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </ScrollViewer>
-                                <icons:ServerPickerListBox Name="SimpleServerResults" Classes="pick"
-                                                           MaxHeight="172"
-                                                           ItemTemplate="{StaticResource SimpleServerRowTemplate}"
-                                                           AutomationProperties.Name="{Binding L_SmpPickServerLabel}"
-                                                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
-                                <TextBlock Name="SimpleServerCount" Classes="hint"
-                                           AutomationProperties.LiveSetting="Polite"/>
-                            </StackPanel>
-                        </StackPanel>
+                        <pages:SubscriptionLinkEditor Name="SimpleLink" Margin="16,0,16,12"
+                                                      IsVisible="{Binding SmpHasConfig}"/>
+                        <Border Classes="divider" IsVisible="{Binding #SimplePicker.IsVisible}"/>
+                        <pages:SubscriptionServerPicker Name="SimplePicker" Margin="16,12,16,14"
+                                                        IsVisible="False"/>
                         <StackPanel Name="SimpleChecks" IsVisible="False" Margin="16,0,16,12" Spacing="8">
                             <ToggleButton Name="SimpleCheckServers" Classes="change" HorizontalAlignment="Left" Click="ToggleServerChecks">
                                 <StackPanel Orientation="Horizontal" Spacing="6">

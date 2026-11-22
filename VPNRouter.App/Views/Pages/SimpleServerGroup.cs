@@ -12,13 +12,17 @@ internal sealed partial class SimpleServerGroup : ObservableObject
     [NotifyPropertyChangedFor(nameof(DisclosureLabel))]
     private bool _isExpanded;
 
-    public SimpleServerGroup(ProtocolGroup category, ServerViewModel[] servers, ServerViewModel? selected, bool isCurrent)
+    [ObservableProperty]
+    private ServerViewModel? _selectedServer;
+
+    [ObservableProperty]
+    private bool _isCurrent;
+
+    public SimpleServerGroup(ProtocolGroup category, ServerViewModel[] servers)
     {
         Category = category;
         Servers = servers;
-        SelectedServer = selected;
         CanAutoSelect = servers.Any(row => SubscriptionServerPreference.CanAutoSelect(row.SourceEntry));
-        IsCurrent = isCurrent && CanAutoSelect;
         SelectionHint = CanAutoSelect ? string.Empty : servers.Any(row => row.CanSelectInSimpleMode)
             ? Strings.SmpManualOnlyCategory : Strings.SmpServerUnsupported;
         Name = MainWindowViewModel.SimpleCategoryName(category);
@@ -37,8 +41,6 @@ internal sealed partial class SimpleServerGroup : ObservableObject
     public string Name { get; }
     public string Protocols { get; }
     public ServerViewModel[] Servers { get; }
-    public ServerViewModel? SelectedServer { get; }
-    public bool IsCurrent { get; }
     public bool CanAutoSelect { get; }
     public string SelectionHint { get; }
     public string AutoText => Strings.SmpAutoInCategory;

@@ -16,14 +16,14 @@ public partial class ServerViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleDisplayName), nameof(CountryCode), nameof(CountryFlag),
-        nameof(HasCountryFlag), nameof(CountryFlagTooltip))]
+        nameof(HasCountryFlag), nameof(CountryFlagTooltip), nameof(SimpleLocation))]
     private string _name = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Endpoint), nameof(SimpleDisplayName), nameof(CountryCode),
-        nameof(CountryFlag), nameof(HasCountryFlag), nameof(CountryFlagTooltip))]
+        nameof(CountryFlag), nameof(HasCountryFlag), nameof(CountryFlagTooltip), nameof(SimpleLocation))]
     private string _server = string.Empty;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Endpoint))]
+    [NotifyPropertyChangedFor(nameof(Endpoint), nameof(SimpleLocation))]
     private int _port = 443;
 
     public string Endpoint => Port > 0 ? $"{Server}:{Port}" : Server;
@@ -403,6 +403,8 @@ public partial class ServerViewModel : ViewModelBase
         ? explicitCode : BundledServerIpCountry.Code(Server);
     public string CountryFlagTooltip => ServerCountryFlags.Code(Name) is { Length: > 0 } explicitCode
         ? explicitCode : CoreStrings.SmpServerCountryByIp(CountryCode);
+    public string SimpleLocation => CountryCode is { Length: > 0 } country
+        ? $"{ServerCountryFlags.CountryName(country)} · {Endpoint}" : Endpoint;
     public IImage? CountryFlag => ServerCountryFlags.Flag(CountryCode);
     public bool HasCountryFlag => CountryFlag != null;
 

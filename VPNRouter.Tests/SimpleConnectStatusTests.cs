@@ -1,4 +1,5 @@
 using System.Reflection;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -42,8 +43,8 @@ public sealed class SimpleConnectStatusTests
         using var vm = CreateVm(store);
         using var view = new OpenPage(vm, width: 380);
         var options = view.Page.FindControl<ToggleButton>("SimpleCheckServers")!;
-        var linkButton = view.Page.FindControl<ToggleButton>("SimpleLinkButton")!;
-        var link = view.Page.FindControl<TextBox>("SimpleConfigLink")!;
+        var linkButton = FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!;
+        var link = FindOnPage<TextBox>(view.Page, "SimpleConfigLink")!;
         Assert.True(options.IsEffectivelyVisible);
         Assert.True(linkButton.IsEffectivelyVisible);
         Assert.False(options.IsChecked);
@@ -109,8 +110,8 @@ public sealed class SimpleConnectStatusTests
             control => control.IsEffectivelyVisible && ReferenceEquals(control.Command, vm.SmpToggleConnectCommand));
         Assert.True(link.IsEffectivelyVisible);
         Assert.False(connect.IsEffectivelyEnabled);
-        Assert.False(view.Page.FindControl<ToggleButton>("SimpleLinkButton")!.IsEffectivelyVisible);
-        Assert.False(view.Page.FindControl<ToggleButton>("SimpleServerSearchButton")!.IsEffectivelyVisible);
+        Assert.False(FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!.IsEffectivelyVisible);
+        Assert.False(FindOnPage<ToggleButton>(view.Page, "SimpleServerSearchButton")!.IsEffectivelyVisible);
         if (OperatingSystem.IsWindows()) view.Capture("simple-home-first-link-320");
 
         var before = store.SaveCount;
@@ -142,12 +143,12 @@ public sealed class SimpleConnectStatusTests
             using var vm = CreateVm(store);
             using var view = new OpenPage(vm, width, width == 320 ? ThemeVariant.Light : ThemeVariant.Dark);
             var page = view.Page;
-            var linkButton = page.FindControl<ToggleButton>("SimpleLinkButton")!;
-            var searchButton = page.FindControl<ToggleButton>("SimpleServerSearchButton")!;
-            var search = page.FindControl<TextBox>("SimpleServerSearch")!;
-            var link = page.FindControl<TextBox>("SimpleConfigLink")!;
-            var transfer = page.FindControl<Button>("SimpleTransferLink")!;
-            var groups = page.FindControl<ItemsControl>("SimpleServerGroups")!;
+            var linkButton = FindOnPage<ToggleButton>(page, "SimpleLinkButton")!;
+            var searchButton = FindOnPage<ToggleButton>(page, "SimpleServerSearchButton")!;
+            var search = FindOnPage<TextBox>(page, "SimpleServerSearch")!;
+            var link = FindOnPage<TextBox>(page, "SimpleConfigLink")!;
+            var transfer = FindOnPage<Button>(page, "SimpleTransferLink")!;
+            var groups = FindOnPage<ItemsControl>(page, "SimpleServerGroups")!;
             var selected = vm.SelectedSubscriptionServer;
             var before = store.SaveCount;
 
@@ -163,7 +164,7 @@ public sealed class SimpleConnectStatusTests
             Assert.True(search.IsFocused);
             search.Text = "Швеция";
             Dispatcher.UIThread.RunJobs();
-            var result = Assert.Single(page.FindControl<ServerPickerListBox>("SimpleServerResults")!.Items);
+            var result = Assert.Single(FindOnPage<ServerPickerListBox>(page, "SimpleServerResults")!.Items);
             Assert.Same(vm.SubscriptionServers[0], result);
             PressPickerKey(search, Key.Escape);
             Dispatcher.UIThread.RunJobs();
@@ -215,7 +216,7 @@ public sealed class SimpleConnectStatusTests
             Assert.Equal(before, store.SaveCount);
 
             Toggle(page, "SimpleLinkButton", true);
-            var save = page.FindControl<Button>("SimpleSaveLink")!;
+            var save = FindOnPage<Button>(page, "SimpleSaveLink")!;
             Assert.True(save.Focus());
             save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
@@ -430,10 +431,10 @@ public sealed class SimpleConnectStatusTests
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = CreateVm(store);
         using var view = new OpenPage(vm, width);
-        var search = view.Page.FindControl<TextBox>("SimpleServerSearch")!;
-        var list = view.Page.FindControl<ServerPickerListBox>("SimpleServerResults")!;
-        var count = view.Page.FindControl<TextBlock>("SimpleServerCount")!;
-        var link = view.Page.FindControl<TextBox>("SimpleConfigLink")!;
+        var search = FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!;
+        var list = FindOnPage<ServerPickerListBox>(view.Page, "SimpleServerResults")!;
+        var count = FindOnPage<TextBlock>(view.Page, "SimpleServerCount")!;
+        var link = FindOnPage<TextBox>(view.Page, "SimpleConfigLink")!;
         var previous = vm.SelectedSubscriptionServer;
         var before = store.SaveCount;
         var input = vm.SmpInput;
@@ -444,7 +445,7 @@ public sealed class SimpleConnectStatusTests
         Dispatcher.UIThread.RunJobs();
         Assert.False(search.IsEffectivelyVisible);
         Assert.False(link.IsAttachedToVisualTree() && link.IsEffectivelyVisible);
-        var groups = view.Page.FindControl<ItemsControl>("SimpleServerGroups")!;
+        var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
         var groupedRows = groups.Items.Cast<SimpleServerGroup>().ToArray();
         Assert.Equal(new[] { ProtocolGroup.Daily, ProtocolGroup.WebFallback }, groupedRows.Select(group => group.Category));
         Assert.Equal(16, groupedRows.Sum(group => group.Servers.Length));
@@ -531,8 +532,10 @@ public sealed class SimpleConnectStatusTests
         Assert.Equal(SubscriptionEntry.RowKey(firstMatch), vm.SimpleServerPreference?.RowKey);
     }
 
-    [AvaloniaFact]
-    public async Task SimpleConnectPicksTheFastestVerifiedServerWithinTheSelectedCategory()
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConnectPicksWithinTheCategoryAcrossAModeSwitch(bool startInAdvanced)
     {
         var slow = Entry("slow", "slow.invalid");
         var fast = Entry("fast", "fast.invalid");
@@ -550,21 +553,36 @@ public sealed class SimpleConnectStatusTests
         using var vm = CreateVm(store);
 
         vm.ConfirmSimpleCategory(ProtocolGroup.Daily);
+        if (startInAdvanced) vm.ToggleUiModeCommand.Execute(null);
         string[]? probed = null;
+        List<ServerLiveness>? results = null;
+        var probe = new TaskCompletionSource<List<ServerLiveness>>(TaskCreationOptions.RunContinuationsAsynchronously);
         vm.SimpleProbe = (rows, _) =>
         {
             probed = rows.Select(row => row.Name).ToArray();
-            return Task.FromResult(rows.Select(row =>
-                new ServerLiveness(row, Alive: true, LatencyMs: row.Name == fast.Name ? 20 : 100)).ToList());
+            results = rows.Select(row =>
+                new ServerLiveness(row, Alive: true, LatencyMs: row.Name == fast.Name ? 20 : 100)).ToList();
+            return probe.Task;
         };
+        var starts = 0;
         AcceptedTunnelInfo? started = null;
         vm.SimpleTunnelStart = (snapshot, _, _) =>
         {
+            starts++;
             started = Generate(snapshot);
             return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.Connected));
         };
 
-        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        var connect = startInAdvanced ? vm.ToggleConnectionCommand : vm.SmpToggleConnectCommand;
+        var connecting = connect.ExecuteAsync(null);
+        Assert.True(vm.IsConnecting);
+        var preference = vm.SimpleServerPreference;
+        vm.ToggleUiModeCommand.Execute(null);
+        Assert.Equal(preference, vm.SimpleServerPreference);
+        Assert.Equal(0, starts);
+        probe.SetResult(Assert.IsType<List<ServerLiveness>>(results));
+        await connecting;
+        Assert.Equal(1, starts);
 
         Assert.Equal(new[] { slow.Name, fast.Name }, probed);
         Assert.Equal(fast.Server, Assert.IsType<AcceptedTunnelInfo>(started).Server.Address);
@@ -636,7 +654,7 @@ public sealed class SimpleConnectStatusTests
             vm.OpenConfigPickerCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
 
-            var groups = view.Page.FindControl<ItemsControl>("SimpleServerGroups")!;
+            var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
             var group = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
             Assert.False(group.CanAutoSelect);
             Assert.Equal(Strings.SmpServerUnsupported, group.SelectionHint);
@@ -668,9 +686,9 @@ public sealed class SimpleConnectStatusTests
             store.Save(settings, AppPaths.ConfigYamlPath);
             using var vm = CreateVm(store);
             using var view = new OpenPage(vm);
-            var search = view.Page.FindControl<TextBox>("SimpleServerSearch")!;
+            var search = FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!;
             var check = view.Page.FindControl<ToggleButton>("SimpleCheckServers")!;
-            var link = view.Page.FindControl<ToggleButton>("SimpleLinkButton")!;
+            var link = FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!;
             var appRules = view.Page.FindControl<Button>("SimpleAppRules")!;
             Assert.Equal("Name, country or city", search.PlaceholderText);
 
@@ -685,80 +703,40 @@ public sealed class SimpleConnectStatusTests
         finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
     }
 
-    [AvaloniaTheory]
-    [InlineData("generated", false)]
-    [InlineData("subscribe", true)]
-    [InlineData("subscribe", false)]
-    public void ManualServerPickerDisablesTheCrossHostAutoGroup(string mode, bool selectAgain)
+    [AvaloniaFact]
+    public void ManualServerPickerDisablesTheCrossHostAutoGroup()
     {
         var first = Entry("first", "first.invalid");
         var chosen = Entry("second", "second.invalid");
-        var subscription = mode == "subscribe";
         var settings = new AppSettings();
-        settings.App.ConfigMode = mode;
-        settings.App.Language = "en";
+        settings.App.ConfigMode = "generated";
         settings.Vless.AutoSelectBestServer = true;
         settings.Vless.ActiveServer = first.Name;
-        if (subscription) settings.App.Subscriptions = [new() { Servers = [first, chosen] }];
-        else settings.Vless.Servers = [first, chosen];
+        settings.Vless.Servers = [first, chosen];
         var store = new InMemorySettingsStore();
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = CreateVm(store);
+        Assert.True(Generate(VpnEngine.CopySessionSettings(settings)).UsesAutoGroup);
 
-        var row = (subscription ? vm.SubscriptionServers : vm.Servers)[1];
-        if (selectAgain) vm.SelectedSubscriptionServer = row;
-        Assert.True(vm.AutoSelectBestServer);
-        Assert.True(Generate(VpnEngine.CopySessionSettings(store.Load(AppPaths.ConfigYamlPath))).UsesAutoGroup);
-
-        UserControl page = subscription ? new SubscribePage() : new ServersPage();
-        page.DataContext = vm;
+        var page = new ServersPage { DataContext = vm };
         var window = new Window { Content = page, Width = 520, Height = 800 };
         window.Show();
         try
         {
             Dispatcher.UIThread.RunJobs();
-            var picker = page.FindControl<ServerPickerListBox>(subscription ? "SubList" : "ServerList")!;
-            Assert.Equal(selectAgain, ReferenceEquals(row, picker.SelectedItem));
+            var picker = page.FindControl<ServerPickerListBox>("ServerList")!;
+            var firstItem = Assert.IsType<ListBoxItem>(picker.ContainerFromIndex(0));
+            firstItem.Focus();
+            var before = store.SaveCount;
+            PressPickerKey(firstItem, Key.Down);
+            Assert.Same(vm.Servers[1], picker.SelectedItem);
+            Assert.True(vm.AutoSelectBestServer);
+            Assert.Equal(before, store.SaveCount);
 
-            if (subscription)
-            {
-                // Model a service-managed connection, including activation of another row.
-                vm.IsConnected = true;
-                row.IsActive = selectAgain;
-            }
-            if (!selectAgain)
-            {
-                var firstItem = Assert.IsType<ListBoxItem>(picker.ContainerFromIndex(0));
-                firstItem.Focus();
-                var beforeNavigation = store.SaveCount;
-                PressPickerKey(firstItem, Key.Down);
-                Assert.Same(row, picker.SelectedItem);
-                Assert.True(vm.AutoSelectBestServer);
-                Assert.Equal(beforeNavigation, store.SaveCount);
-                if (subscription)
-                {
-                    Assert.Same(vm.SubscriptionServers[0], vm.SelectedSubscriptionServer);
-                    Assert.False(vm.HasPendingAppChanges);
-                }
-                else
-                {
-                    vm.SelectedServer = vm.Servers[0];
-                    Assert.NotSame(row, picker.SelectedItem);
-                }
-            }
-
-            var beforeConfirmation = store.SaveCount;
             var item = Assert.IsType<ListBoxItem>(picker.ContainerFromIndex(1));
             PressPickerKey(item, Key.Enter);
-            Assert.Same(row, picker.SelectedItem);
             Assert.False(vm.AutoSelectBestServer);
-            Assert.Equal(beforeConfirmation + 1, store.SaveCount);
-            if (subscription)
-            {
-                Assert.True(vm.HasPendingAppChanges);
-                Assert.Contains("Click Apply", vm.StatusText);
-            }
-
+            Assert.Equal(before + 1, store.SaveCount);
             var saved = store.Load(AppPaths.ConfigYamlPath);
             Assert.False(saved.Vless.AutoSelectBestServer);
             var connection = Generate(VpnEngine.CopySessionSettings(saved));
@@ -768,72 +746,177 @@ public sealed class SimpleConnectStatusTests
         finally { window.Close(); }
     }
 
-    [AvaloniaFact]
-    public void AdvancedSubscriptionCategoriesFilterRowsWithoutChangingTheConnectionChoice()
+    [AvaloniaTheory]
+    [InlineData(360, false)]
+    [InlineData(450, true)]
+    public void SubscriptionPickersSharePolicyAndKeepTheRunningSession(int width, bool connected)
     {
         var language = VPNRouter.App.Localization.Strings.Lang;
         try
         {
-            var daily = Entry("Sweden", "daily.invalid");
-            var web = Entry("Netherlands", "web.invalid");
+            var daily = Entry("Швеция · Стокгольм", "daily.invalid");
+            var dailySecond = Entry("Финляндия · Хельсинки", "second.invalid");
+            var web = Entry("Нидерланды · Амстердам", "web.invalid");
             web.Transport.Type = "ws";
             var settings = new AppSettings();
             settings.App.Language = "ru";
             settings.App.ConfigMode = "subscribe";
-            settings.App.Subscriptions = [new() { Url = "https://feed.invalid/categories", Servers = [daily, web] }];
+            settings.App.Subscriptions =
+                [new() { Url = "https://feed.invalid/categories", Servers = [daily, dailySecond, web] }];
             settings.Vless.AutoSelectBestServer = true;
             var store = new InMemorySettingsStore();
             store.Save(settings, AppPaths.ConfigYamlPath);
             using var vm = CreateVm(store);
-            var chosen = vm.SelectedSubscriptionServer;
-            var subscriptions = vm.SubscriptionServers.ToArray();
-            var before = store.SaveCount;
-            var page = new SubscribePage { DataContext = vm };
-            var window = new Window { Content = page, Width = 360, Height = 760, RequestedThemeVariant = ThemeVariant.Light };
+            var simple = new SimplePage { DataContext = vm };
+            var advanced = new SubscribePage { DataContext = vm };
+            var window = new Window
+            {
+                Content = simple, Width = width, Height = 850,
+                RequestedThemeVariant = connected ? ThemeVariant.Dark : ThemeVariant.Light,
+            };
             window.Show();
             try
             {
                 Dispatcher.UIThread.RunJobs();
-                var filter = page.FindControl<ComboBox>("SubscriptionCategory")!;
-                var list = page.FindControl<ServerPickerListBox>("SubList")!;
-                var autoSelect = page.FindControl<CheckBox>("SubscriptionAutoSelect")!;
-                Assert.InRange(autoSelect.Bounds.Width, 200, 360);
-                var categories = filter.Items.Cast<SubscriptionCategoryOption>().ToArray();
-                Assert.Equal(new ProtocolGroup?[] { null, ProtocolGroup.Daily, ProtocolGroup.WebFallback },
-                    categories.Select(option => option.Category));
-                Assert.Equal(Strings.ServerAllCategories, categories[0].Name);
-                Assert.Equal(MainWindowViewModel.SimpleCategoryName(ProtocolGroup.WebFallback), categories[2].Name);
-                Assert.Equal("ws", categories[2].Protocols);
-                Assert.Equal(subscriptions, list.Items.Cast<ServerViewModel>());
-
-                filter.SelectedItem = categories[2];
-                Dispatcher.UIThread.RunJobs();
-                Assert.Same(subscriptions[1], Assert.Single(list.Items));
-                Assert.Null(list.SelectedItem);
-                Assert.Same(chosen, vm.SelectedSubscriptionServer);
-                Assert.Equal(subscriptions, vm.SubscriptionServers);
-                Assert.Single(list.GetVisualDescendants().OfType<Image>(), flag => flag.IsEffectivelyVisible);
-                Assert.True(vm.AutoSelectBestServer);
+                var header = simple.FindControl<ToggleButton>("SimpleChangeServer")!;
+                var simpleGroups = FindOnPage<ItemsControl>(simple, "SimpleServerGroups")!;
+                var link = FindOnPage<ToggleButton>(simple, "SimpleLinkButton")!;
+                var advancedGroups = FindOnPage<ItemsControl>(advanced, "SimpleServerGroups")!;
+                Assert.Empty(header.GetVisualDescendants().OfType<Button>());
+                Assert.Equal(Strings.SmpExpandCategory, AutomationProperties.GetName(header));
+                Assert.True(link.IsEffectivelyVisible);
+                Assert.False(simpleGroups.IsEffectivelyVisible);
+                var before = store.SaveCount;
+                var initial = vm.SelectedSubscriptionServer;
+                Click(window, simple.FindControl<TextBlock>("ConfigName")!);
+                Assert.Equal(Strings.SmpCollapseCategory, AutomationProperties.GetName(header));
+                Assert.True(simpleGroups.IsEffectivelyVisible);
                 Assert.Equal(before, store.SaveCount);
-                if (OperatingSystem.IsWindows())
+                Assert.Same(initial, vm.SelectedSubscriptionServer);
+                Assert.Null(vm.SimpleServerPreference);
+                Toggle(simple, "SimpleLinkButton", true);
+                Assert.True(simpleGroups.IsEffectivelyVisible);
+                Toggle(simple, "SimpleLinkButton", false);
+
+                FindGroupButton(simpleGroups, ProtocolGroup.Daily, disclosure: false)
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+                var automatic = vm.SimpleServerPreference;
+                Assert.Equal(ProtocolGroup.Daily, automatic?.GetCategory());
+                Assert.False(vm.AutoSelectBestServer);
+                Assert.False(vm.IsConnecting);
+                Assert.Equal(before + 1, store.SaveCount);
+                Assert.Equal(Strings.SmpExpandCategory, AutomationProperties.GetName(header));
+                Capture(window, $"simple-home-unified-auto-collapsed-{width}");
+                Click(window, simple.FindControl<TextBlock>("ConfigName")!);
+                Capture(window, $"simple-picker-unified-simple-auto-{width}");
+
+                if (connected)
                 {
-                    using var capture = window.CaptureRenderedFrame();
-                    Assert.NotNull(capture);
-                    capture.Save(Path.Combine(ScreenshotHelper.ScreenshotsDir, "simple-picker-advanced-subscriptions-360.png"),
-                        PngBitmapEncoderOptions.Default);
+                    Engine(vm).CommitTunnelInfo(Generate(VpnEngine.CopySessionSettings(store.Load(AppPaths.ConfigYamlPath))));
+                    vm.IsConnected = true;
                 }
 
-                vm.SubscriptionServers.Remove(subscriptions[1]);
+                vm.ToggleUiModeCommand.Execute(null);
+                Assert.False(vm.IsSimpleMode);
+                window.Content = advanced;
                 Dispatcher.UIThread.RunJobs();
-                Assert.Null(Assert.IsType<SubscriptionCategoryOption>(filter.SelectedItem).Category);
-                Assert.Same(chosen, list.SelectedItem);
-                Assert.Same(chosen, vm.SelectedSubscriptionServer);
-                Assert.Equal(before, store.SaveCount);
+                Assert.Equal(automatic, vm.SimpleServerPreference);
+                Assert.True(Assert.Single(advancedGroups.Items.Cast<SimpleServerGroup>(), group => group.IsCurrent).CanAutoSelect);
+                Assert.Equal("ws", Assert.Single(advancedGroups.Items.Cast<SimpleServerGroup>(),
+                    group => group.Category == ProtocolGroup.WebFallback).Protocols);
+                Assert.False(vm.IsConnecting);
+                Assert.False(vm.HasPendingAppChanges);
+                Capture(window, $"simple-picker-unified-advanced-auto-{width}");
+
+                var unchanged = store.SaveCount;
+                Toggle(advanced, "SimpleServerSearchButton", true);
+                var search = FindOnPage<TextBox>(advanced, "SimpleServerSearch")!;
+                search.Text = "Хельсинки";
+                Dispatcher.UIThread.RunJobs();
+                var results = FindOnPage<ServerPickerListBox>(advanced, "SimpleServerResults")!;
+                Assert.Same(vm.SubscriptionServers[1], Assert.Single(results.Items));
+                vm.SubscriptionServers[0].TestStatus = ServerProbeStatus.Ok;
+                vm.SubscriptionServers[0].PingMs = 28;
+                Assert.Equal(automatic, vm.SimpleServerPreference);
+                Assert.Equal(2, automatic!.Candidates(store.Load(AppPaths.ConfigYamlPath).App.Subscriptions).Count());
+                Assert.Same(initial, vm.SelectedSubscriptionServer);
+                Assert.Equal(unchanged, store.SaveCount);
+                PressPickerKey(search, Key.Escape);
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(string.IsNullOrEmpty(search.Text));
+
+                var dailyGroup = Assert.Single(advancedGroups.Items.Cast<SimpleServerGroup>(),
+                    group => group.Category == ProtocolGroup.Daily);
+                if (!dailyGroup.IsExpanded)
+                    FindGroupButton(advancedGroups, dailyGroup.Category, disclosure: true)
+                        .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+                var list = Assert.Single(advancedGroups.GetVisualDescendants().OfType<ServerPickerListBox>(),
+                    control => control.IsEffectivelyVisible);
+                var selectedRow = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(1));
+                selectedRow.Focus();
+                PressPickerKey(selectedRow, Key.Enter);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(vm.SubscriptionServers[1], vm.SelectedSubscriptionServer);
+                Assert.Equal(SubscriptionEntry.RowKey(dailySecond), vm.SimpleServerPreference?.RowKey);
+                Assert.Equal(unchanged + 1, store.SaveCount);
+                Assert.Equal(connected, vm.HasPendingAppChanges);
+                Assert.False(vm.IsConnecting);
+                Assert.Single(list.GetVisualDescendants().OfType<Image>(),
+                    flag => flag.IsEffectivelyVisible && ReferenceEquals(flag.DataContext, vm.SelectedSubscriptionServer));
+                if (connected)
+                {
+                    Assert.Contains("Применить", vm.StatusText);
+                    Assert.Equal(daily.Name, vm.SmpConfigServer?.Name);
+                }
+                Capture(window, $"simple-picker-unified-advanced-manual-{width}");
+
+                var pinned = vm.SimpleServerPreference;
+                vm.ToggleUiModeCommand.Execute(null);
+                window.Content = simple;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(vm.IsSimpleMode);
+                Assert.Equal(pinned, vm.SimpleServerPreference);
+                Assert.Equal(connected, vm.HasPendingAppChanges);
+                Assert.False(vm.IsConnecting);
+                Assert.Equal(unchanged + 2, store.SaveCount);
+                if (!simpleGroups.IsEffectivelyVisible)
+                    Click(window, simple.FindControl<TextBlock>("ConfigName")!);
+                Assert.Contains(dailySecond.Name, FindOnPage<TextBlock>(simple, "PickerSelection")!.Text);
+                Capture(window, $"simple-picker-unified-simple-manual-{width}");
+
+                FindGroupButton(simpleGroups, ProtocolGroup.Daily, disclosure: false)
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(ProtocolGroup.Daily, vm.SimpleServerPreference?.GetCategory());
+                Assert.False(vm.IsConnecting);
             }
             finally { window.Close(); }
         }
         finally { VPNRouter.App.Localization.Strings.Lang = language; }
     }
+
+    private static void Click(Window window, Control control)
+    {
+        var center = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(center, MouseButton.Left);
+        window.MouseUp(center, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void Capture(Window window, string name)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var bitmap = window.CaptureRenderedFrame();
+        Assert.NotNull(bitmap);
+        bitmap.Save(Path.Combine(ScreenshotHelper.ScreenshotsDir, $"{name}.png"), PngBitmapEncoderOptions.Default);
+    }
+
+    private static T? FindOnPage<T>(UserControl page, string name) where T : Control =>
+        page.FindControl<T>(name) ??
+        page.FindControl<SubscriptionServerPicker>(page is SimplePage ? "SimplePicker" : "AdvancedPicker")?.FindControl<T>(name) ??
+        page.FindControl<SubscriptionLinkEditor>(page is SimplePage ? "SimpleLink" : "AdvancedLink")?.FindControl<T>(name);
 
     private static void PressPickerKey(InputElement item, Key key) => item.RaiseEvent(new KeyEventArgs
     {
@@ -842,9 +925,9 @@ public sealed class SimpleConnectStatusTests
         Key = key
     });
 
-    private static void Toggle(SimplePage page, string name, bool open)
+    private static void Toggle(UserControl page, string name, bool open)
     {
-        var button = page.FindControl<ToggleButton>(name)!;
+        var button = FindOnPage<ToggleButton>(page, name)!;
         button.IsChecked = open;
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
@@ -989,18 +1072,13 @@ public sealed class SimpleConnectStatusTests
 
         public void Dispose() => _window.Close();
 
-        public void Capture(string name)
-        {
-            using var bitmap = _window.CaptureRenderedFrame();
-            Assert.NotNull(bitmap);
-            bitmap.Save(Path.Combine(ScreenshotHelper.ScreenshotsDir, $"{name}.png"), PngBitmapEncoderOptions.Default);
-        }
+        public void Capture(string name) => SimpleConnectStatusTests.Capture(_window, name);
     }
 
     private static string BoundText(SimplePage page, string name)
     {
         Dispatcher.UIThread.RunJobs();
-        return page.FindControl<TextBlock>(name)!.Text!;
+        return FindOnPage<TextBlock>(page, name)!.Text!;
     }
 
     private static void ReportStatus(VpnEngine engine, string message)

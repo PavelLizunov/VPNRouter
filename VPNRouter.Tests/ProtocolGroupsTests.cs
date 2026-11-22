@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.Headless.XUnit;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
@@ -134,18 +136,31 @@ public class ProtocolGroupsTests
             Entry("vless", "xhttp", "stealth"), Entry("vless", "ws", "web-fallback"), Entry("naive", null, "web-only"),
             Entry("ss", null, "fallback"), dns,
         ];
-        foreach (var entry in entries) vm.SubscriptionServers.Add(new ServerViewModel(entry));
+        for (var index = 0; index < entries.Length; ++index)
+        {
+            entries[index].Name = $"Test {index}: {entries[index].Name}";
+            vm.SubscriptionServers.Add(new ServerViewModel(entries[index]));
+        }
 
         var page = new SubscribePage { DataContext = vm };
         var window = new Window { Width = 520, Height = 900, Content = page };
         window.Bind(Window.BackgroundProperty, window.GetResourceObservable("SurfaceAppBrush"));
         window.Show();
-        var list = page.FindControl<ServerPickerListBox>("SubList")!;
-        var discs = list.GetVisualDescendants().OfType<ProtocolDisc>().Where(disc => disc.IsEffectivelyVisible).ToList();
-        Assert.Equal(entries.Length, discs.Count);
-        Assert.Equal(Enum.GetValues<ProtocolGroup>().Length, discs.Select(d => d.Group).Distinct().Count());
-        foreach (var disc in discs)
+        var picker = page.FindControl<SubscriptionServerPicker>("AdvancedPicker")!;
+        var filter = picker.FindControl<ToggleButton>("SimpleServerSearchButton")!;
+        filter.IsChecked = true;
+        filter.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var search = picker.FindControl<TextBox>("SimpleServerSearch")!;
+        var list = picker.FindControl<ServerPickerListBox>("SimpleServerResults")!;
+        for (var index = 0; index < entries.Length; ++index)
         {
+            search.Text = $"Test {index}:";
+            Dispatcher.UIThread.RunJobs();
+            Assert.Same(vm.SubscriptionServers[index], Assert.Single(list.Items));
+            var row = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
+            var disc = Assert.Single(row.GetVisualDescendants().OfType<ProtocolDisc>(), icon => icon.IsEffectivelyVisible);
+            Assert.Equal(vm.SubscriptionServers[index].ProtocolGroup, disc.Group);
+
             Assert.True(app.TryGetResource(ProtocolGroups.TokenPrefix(disc.Group) + "BgBrush", app.ActualThemeVariant, out var bg));
             Assert.Same(bg, disc.Background);
             var glyph = Assert.IsType<Pictogram>(disc.Child);

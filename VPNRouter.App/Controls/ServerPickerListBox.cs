@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 
 namespace VPNRouter.App.Controls;
@@ -13,6 +14,9 @@ public sealed class ServerPickerListBox : ListBox
 
     public override bool UpdateSelectionFromEvent(Control container, RoutedEventArgs e)
     {
+        if (e.Source is Control source && (source is Button || source.FindAncestorOfType<Button>() != null))
+            return false;
+
         if (e is KeyEventArgs or PointerEventArgs
             { Properties.PointerUpdateKind: PointerUpdateKind.LeftButtonPressed or PointerUpdateKind.LeftButtonReleased })
             return SelectFromInput(() => base.UpdateSelectionFromEvent(container, e));
