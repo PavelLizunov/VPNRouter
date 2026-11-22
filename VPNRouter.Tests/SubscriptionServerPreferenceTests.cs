@@ -32,6 +32,21 @@ public sealed class SubscriptionServerPreferenceTests
     }
 
     [Fact]
+    public async Task MissingCategoryReportsUnavailableInsteadOfAnEmptySubscription()
+    {
+        var settings = SubscriptionSettings(Row("web", "web.invalid", "ws"));
+        settings.App.SubscriptionPreference = SubscriptionServerPreference.InCategory(ProtocolGroup.Daily);
+        var store = new InMemorySettingsStore();
+        var failover = new AutoFailoverEngine(settings, new ConfigSanityCheck(), store: store);
+
+        var result = await failover.HandleDeadConfigAsync("dead", TestContext.Current.CancellationToken);
+
+        Assert.False(result.Switched);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.SmpSelectionUnavailable, result.UserFacingMessage);
+        Assert.Equal(0, store.SaveCount);
+    }
+
+    [Fact]
     public async Task ManualPinKeepsTheExactRowOrReportsItMissing()
     {
         var sibling = Row("same", "same.invalid", "ws");

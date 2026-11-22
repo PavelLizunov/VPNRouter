@@ -16,6 +16,12 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2** - The grouped picker could display another subscription server after the exact choice disappeared, and duplicate names could resolve the wrong protocol icon. Use the actual editor selection and label unavailable preferences. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - The grouped picker offered manual selection for unsupported runtime protocols and reported unavailable groups as empty subscriptions. Distinguish unsupported rows, manually selectable routes and unavailable categories. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [ ] **P2** - Grouped picker runtime capability checks can wait for a cold sing-box probe on macOS or Linux. Source risk from synchronous feature lookup; no cold-start duration measured. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
 - [x] **P1** - The first grouped picker draft allowed auto selection of exact-only routes and could keep a preference after an explicit source change. Restricted category candidates, kept exact pins through unavailable states and clear the scope at explicit selection boundaries. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P1** - A future category name in the grouped picker draft could make YAML unreadable. Store a string and reject unknown categories at selection time. Hosted Linux run 45014407551 found that the generated YAML serializer also wrote the computed IsCategory property. Removed computed properties from the persisted model and retained round-trip coverage. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).

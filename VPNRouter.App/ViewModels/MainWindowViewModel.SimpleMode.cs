@@ -291,6 +291,11 @@ public partial class MainWindowViewModel
     internal void ConfirmSimpleServer(ServerViewModel row)
     {
         if (row.SubscriptionId is not { } feedId || !SubscriptionServers.Contains(row)) return;
+        if (!row.CanSelectInSimpleMode)
+        {
+            SmpErrorText = Core.Localization.Strings.SmpServerUnsupported;
+            return;
+        }
         ConfirmSimplePreference(new() { FeedId = feedId, RowKey = SubscriptionEntry.RowKey(row.SourceEntry) }, row);
     }
 
@@ -824,6 +829,8 @@ public partial class MainWindowViewModel
         get
         {
             if (IsConnected && DisplayedTunnel == null) return Strings.SmpStatusConnectedNoDetails;
+            if (!IsConnected && SimpleServerPreference != null && SelectedSubscriptionServer == null)
+                return Core.Localization.Strings.SmpSelectionUnavailableTitle;
             var (name, address) = DeriveConnectedServerLabel();
             if (!string.IsNullOrWhiteSpace(name)) return name;
             return string.IsNullOrWhiteSpace(address) ? SmpConfigKind : address;
@@ -843,13 +850,7 @@ public partial class MainWindowViewModel
                     string.Equals(s.Server, row.Address, StringComparison.OrdinalIgnoreCase) &&
                     s.SubscriptionId == row.FeedId && SubscriptionEntry.RowKey(s.SourceEntry) == row.RowKey);
             }
-            if (IsConnected) return null;
-            var (name, _) = DeriveConnectedServerLabel();
-            if (string.IsNullOrWhiteSpace(name)) return null;
-            return SubscriptionServers.FirstOrDefault(s =>
-                       string.Equals(s.DisplayName, name, StringComparison.Ordinal))
-                   ?? Servers.FirstOrDefault(s =>
-                       string.Equals(s.DisplayName, name, StringComparison.Ordinal));
+            return IsConnected ? null : EditorServerRow(_settings?.App.ConfigMode ?? "generated");
         }
     }
 
@@ -867,11 +868,11 @@ public partial class MainWindowViewModel
             {
                 if (app != null && SubscriptionServerPreference.For(app) is { } preference)
                 {
-                    if (preference.Preferred(app) == null)
-                        return Core.Localization.Strings.SmpSelectionUnavailable;
-                    return preference.GetCategory() is { } category
-                        ? $"{SimpleCategoryName(category)} · {Core.Localization.Strings.SmpAutoInCategory}"
-                        : Core.Localization.Strings.SmpPinnedServer;
+                    if (preference.Preferred(app) != null)
+                        return preference.GetCategory() is { } category
+                            ? $"{SimpleCategoryName(category)} · {Core.Localization.Strings.SmpAutoInCategory}"
+                            : Core.Localization.Strings.SmpPinnedServer;
+                    if (IsConnected) return Core.Localization.Strings.SmpSelectionUnavailableTitle;
                 }
                 var count = tunnel?.SubscriptionServerCount ?? SubscriptionServers.Count;
                 return count > 0 ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(count)}" : Strings.SmpKindSubscription;

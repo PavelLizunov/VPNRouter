@@ -15,6 +15,9 @@
                     <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding DisplayName}"/>
                     <TextBlock Classes="hint" Text="{Binding Endpoint}" TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding CanSelectInSimpleMode}" ToolTip.Tip="{Binding Endpoint}"/>
+                    <TextBlock Classes="hint" Text="{x:Static loc:Strings.SmpServerUnsupported}"
+                               IsVisible="{Binding !CanSelectInSimpleMode}" TextWrapping="Wrap"
                                ToolTip.Tip="{Binding Endpoint}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
@@ -559,7 +562,7 @@
                                                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                                                     <TextBlock Classes="hint" Text="{Binding Protocols}"
                                                                                TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Protocols}"/>
-                                                                    <TextBlock Classes="hint" Text="{Binding ManualOnlyText}"
+                                                                    <TextBlock Classes="hint" Text="{Binding SelectionHint}"
                                                                                IsVisible="{Binding !CanAutoSelect}" TextWrapping="Wrap"/>
                                                                 </StackPanel>
                                                                 <TextBlock Grid.Column="2" Text="{Binding AutoText}" IsVisible="{Binding IsCurrent}"

@@ -358,6 +358,8 @@ public sealed class SimpleConnectStatusTests
         PressPickerKey(item, Key.Enter);
         Dispatcher.UIThread.RunJobs();
         Assert.Same(vm.SubscriptionServers[2], vm.SelectedSubscriptionServer);
+        Assert.Same(vm.SelectedSubscriptionServer, vm.SmpConfigServer);
+        Assert.Equal(ProtocolGroup.Daily, view.Page.FindControl<ProtocolDisc>("ConfigProtocol")!.Group);
         Assert.False(vm.AutoSelectBestServer);
         Assert.False(search.IsEffectivelyVisible);
         Assert.Equal(before + 1, store.SaveCount);
@@ -375,6 +377,20 @@ public sealed class SimpleConnectStatusTests
         Assert.False(vm.AutoSelectBestServer);
         Assert.False(search.IsEffectivelyVisible);
         Assert.Equal(firstMatch.Server, Generate(VpnEngine.CopySessionSettings(automatic)).Server.Address);
+
+        vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        FindGroupButton(groups, ProtocolGroup.WebFallback, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        var groupList = Assert.Single(groups.GetVisualDescendants().OfType<ServerPickerListBox>(),
+            picker => picker.IsEffectivelyVisible);
+        var groupRow = Assert.IsType<ListBoxItem>(groupList.ContainerFromIndex(0));
+        groupRow.Focus();
+        PressPickerKey(groupRow, Key.Enter);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(search.IsEffectivelyVisible);
+        Assert.Equal(SubscriptionEntry.RowKey(firstMatch), vm.SimpleServerPreference?.RowKey);
     }
 
     [AvaloniaFact]
@@ -432,8 +448,14 @@ public sealed class SimpleConnectStatusTests
         var store = new InMemorySettingsStore();
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = CreateVm(store);
+        using var view = new OpenPage(vm, 360);
         vm.ConfirmSimpleServer(vm.SubscriptionServers[0]);
         vm.Subscriptions[0].Enabled = false;
+
+        Assert.DoesNotContain(vm.SubscriptionServers, row => row.Name == pinned.Name);
+        Assert.Null(vm.SmpConfigServer);
+        Assert.Equal(Strings.SmpSelectionUnavailableTitle, BoundText(view.Page, "ConfigName"));
+        Assert.False(view.Page.FindControl<ProtocolDisc>("ConfigProtocol")!.IsEffectivelyVisible);
 
         AcceptedTunnelInfo? started = null;
         vm.SimpleProbe = (rows, _) =>
@@ -455,6 +477,40 @@ public sealed class SimpleConnectStatusTests
 
         Assert.Null(vm.SimpleServerPreference);
         Assert.Equal(alternative.Server, Assert.IsType<AcceptedTunnelInfo>(started).Server.Address);
+    }
+
+    [AvaloniaFact]
+    public void UnsupportedGroupHasAnExplanationAndCannotBePinned()
+    {
+        var previous = SingBoxFeatures.OverrideXhttp;
+        SingBoxFeatures.OverrideXhttp = false;
+        try
+        {
+            var server = Entry("xhttp", "xhttp.invalid");
+            server.Transport.Type = "xhttp";
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions = [new() { Url = "https://feed.invalid/picker", Servers = [server] }];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = CreateVm(store);
+            using var view = new OpenPage(vm, 360);
+            vm.OpenConfigPickerCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+
+            var groups = view.Page.FindControl<ItemsControl>("SimpleServerGroups")!;
+            var group = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
+            Assert.False(group.CanAutoSelect);
+            Assert.Equal(Strings.SmpServerUnsupported, group.SelectionHint);
+            Assert.False(FindGroupButton(groups, ProtocolGroup.StealthWeb, disclosure: false).IsEffectivelyEnabled);
+            Assert.True(FindGroupButton(groups, ProtocolGroup.StealthWeb, disclosure: true).IsEffectivelyEnabled);
+            var before = store.SaveCount;
+            vm.ConfirmSimpleServer(Assert.Single(group.Servers));
+            Assert.Null(vm.SimpleServerPreference);
+            Assert.Equal(Strings.SmpServerUnsupported, vm.SmpErrorText);
+            Assert.Equal(before, store.SaveCount);
+        }
+        finally { SingBoxFeatures.OverrideXhttp = previous; }
     }
 
     private static Button FindGroupButton(ItemsControl groups, ProtocolGroup category, bool disclosure) =>

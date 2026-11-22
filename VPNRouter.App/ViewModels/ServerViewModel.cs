@@ -469,6 +469,9 @@ public partial class ServerViewModel : ViewModelBase
     /// <summary>What the server is good for; the lists show it as the coloured icon in front of the name.</summary>
     public ProtocolGroup ProtocolGroup => ProtocolGroups.Of(_originalEntry);
 
+    public bool CanSelectInSimpleMode => ConfigGenerator.IsServerRuntimeAvailable(_originalEntry) &&
+        (_originalEntry.Dnstt == null || SingBoxFeatures.DnsttAvailable);
+
     public string ProtocolUseCase => ProtocolGroup switch
     {
         ProtocolGroup.GamesVoice => Strings.ProtocolUseGamesVoice,

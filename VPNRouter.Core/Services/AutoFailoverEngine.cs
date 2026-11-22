@@ -144,10 +144,13 @@ public sealed class AutoFailoverEngine
                 UserFacingMessage: Strings.FailoverCustomConfigUnusable);
         }
 
-        if (SubscriptionServerPreference.For(_settings.App) is { CategoryName: null })
+        var preference = SubscriptionServerPreference.For(_settings.App);
+        if (preference is { CategoryName: null })
             return new FailoverOutcome(false, null, Strings.SmpPinnedServerUnreachable);
 
         var active = VlessServersResolver.GetActiveServers(_settings).FirstOrDefault();
+        if (preference != null && active == null)
+            return new FailoverOutcome(false, null, Strings.SmpSelectionUnavailable);
         if (active?.Dnstt != null ||
             (configMode == "generated" && IsSelectionConfirmed?.Invoke() != true && active?.UseAsSingleOutbound == true))
             return new FailoverOutcome(false, null, null);
@@ -188,9 +191,8 @@ public sealed class AutoFailoverEngine
             return new FailoverOutcome(
                 Switched: false,
                 NewActiveServer: null,
-                UserFacingMessage: poolSource == "subscriptions"
-                    ? Strings.FailoverNoOtherInSubscription
-                    : Strings.FailoverNoOtherInList);
+                UserFacingMessage: preference != null ? Strings.SmpNoOtherInCategory :
+                    poolSource == "subscriptions" ? Strings.FailoverNoOtherInSubscription : Strings.FailoverNoOtherInList);
         }
 
         return null;

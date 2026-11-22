@@ -140,6 +140,11 @@ public static partial class Strings
         ? "Закреплённый сервер не отвечает. Можно повторить подключение или выбрать другой."
         : "The pinned server is not responding. Retry the connection or choose another server.";
     public static string SmpManualOnlyCategory => Ru ? "Выберите сервер вручную" : "Choose a server manually";
+    public static string SmpServerUnsupported => Ru ? "Недоступно в этой сборке" : "Unsupported in this build";
+    public static string SmpSelectionUnavailableTitle => Ru ? "Выбор недоступен" : "Selection unavailable";
+    public static string SmpNoOtherInCategory => Ru
+        ? "В этой категории больше нет доступных серверов."
+        : "There are no other available servers in this category.";
     public static string SmpSelectionUnavailable => Ru
         ? "Выбранный сервер или категория недоступны. Выберите другой вариант."
         : "The selected server or category is unavailable. Choose another option.";

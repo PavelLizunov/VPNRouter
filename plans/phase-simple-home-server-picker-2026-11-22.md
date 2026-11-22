@@ -82,3 +82,19 @@ the settings round trip. The generated YAML serializer wrote the getter-only
 access now uses methods, leaving only the three wire properties visible to
 the generator. The macOS acceptance rerun passed on the same head, job
 137184217889. Exact follow-up hosted results are pending.
+
+All ten hosted checks passed at `f994a779`. Linux passed 3,809 tests
+with 86 skips. Windows passed 4,022 tests with 31 skips. Examined the four
+synthetic Windows images in artifact 14751244900, including the open
+picker at 360 and 520 logical pixels.
+
+The consolidated review found that the disconnected summary could show
+the wrong server after a pin disappeared or two server names matched.
+The summary now uses the exact selected row and displays a short
+unavailable label when that row is missing. Recovery reports an
+unavailable category separately from an exhausted category, and
+unsupported rows show a capability warning and cannot be pinned in Simple.
+Regressions exercise these cases and keyboard activation in an expanded group.
+Cold feature-probe latency on macOS or Linux remains unmeasured and is tracked
+in the ledger. The review follow-up passed XAML parsing and whitespace checks.
+Hosted confirmation is pending for the follow-up.

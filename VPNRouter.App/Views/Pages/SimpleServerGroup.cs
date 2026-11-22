@@ -17,7 +17,10 @@ internal sealed partial class SimpleServerGroup : ObservableObject
         Category = category;
         Servers = servers;
         SelectedServer = selected;
-        IsCurrent = isCurrent;
+        CanAutoSelect = servers.Any(row => SubscriptionServerPreference.CanAutoSelect(row.SourceEntry));
+        IsCurrent = isCurrent && CanAutoSelect;
+        SelectionHint = CanAutoSelect ? string.Empty : servers.Any(row => row.CanSelectInSimpleMode)
+            ? Strings.SmpManualOnlyCategory : Strings.SmpServerUnsupported;
         Name = MainWindowViewModel.SimpleCategoryName(category);
         Protocols = string.Join(" · ", servers.Select(row =>
         {
@@ -33,8 +36,8 @@ internal sealed partial class SimpleServerGroup : ObservableObject
     public ServerViewModel[] Servers { get; }
     public ServerViewModel? SelectedServer { get; }
     public bool IsCurrent { get; }
-    public bool CanAutoSelect => Servers.Any(row => SubscriptionServerPreference.CanAutoSelect(row.SourceEntry));
-    public string ManualOnlyText => Strings.SmpManualOnlyCategory;
+    public bool CanAutoSelect { get; }
+    public string SelectionHint { get; }
     public string AutoText => Strings.SmpAutoInCategory;
     public string AutoLabel => $"{Name}. {Strings.SmpSelectCategory}";
     public string DisclosureLabel => $"{(IsExpanded ? Strings.SmpCollapseCategory : Strings.SmpExpandCategory)} · {Name}";
