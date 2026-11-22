@@ -216,3 +216,25 @@ The acceptance check now requires a live reference owned by a new pfctl
 PID, even if the token value repeats. Privileged runtime code is unchanged.
 Extended the Advanced keyboard case to verify that arrows preview a row and
 Enter requests Apply through the existing service-managed path.
+
+## Shared subscription selection and disclosure
+
+Continue from `3ccbddb4` on this task branch. The updated design brief asks
+for one accessible disclosure across the Simple card header and one
+category/server picker in both modes. Extract the existing native picker and
+link editor. Keep diagnostics, subscription management and connection intent
+settings. The previous Advanced web-test checkbox controls a global sing-box
+pool, so remove that alternate subscription control. Existing settings without
+an explicit subscription preference retain their runtime behavior.
+
+Use the same preference and explicit commands for category auto and exact
+pins on either page. Keep search/disclosure local to each view. Exercise
+mode switching, a connected service-managed choice, refresh and ping with
+unchanged selection, same-category probes, exact pins, and stale results.
+Risk is settings or reconnect side effects while selecting or switching
+views. A revert on this task branch restores the previous implementation.
+
+Gates: exact-head Release build, existing suites plus focused regressions,
+this outcome, independent runtime review, native Windows headless renders
+at narrow widths in both modes, and unchanged public VM surface. Live
+candidate deployment and release are outside this brief.
