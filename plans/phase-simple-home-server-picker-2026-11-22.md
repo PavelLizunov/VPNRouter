@@ -292,3 +292,9 @@ VLESS transport. The expanded server list and search results use the host
 viewport. Removed the nested group scrollbar and list height caps. XML and
 diff checks passed. Hosted wheel tests and before/after inspection are
 pending.
+
+Linux CI at `c8d03da8` passed grouping and verified that wheel input
+moved the host viewport in both modes. The new regressions then tried
+to read the last virtualized row before it was realized. Bring that item
+into the host viewport through the list's item index before checking
+its position and the saved selection.

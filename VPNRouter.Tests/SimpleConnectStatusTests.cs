@@ -973,9 +973,10 @@ public sealed class SimpleConnectStatusTests
             window.MouseWheel(point, new Vector(0, -1));
             Assert.True(viewport.Offset.Y > previousOffset);
 
-            var last = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(list.Items.Count - 1));
-            last.BringIntoView();
+            var lastIndex = list.Items.Count - 1;
+            list.ScrollIntoView(lastIndex);
             Dispatcher.UIThread.RunJobs();
+            var last = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(lastIndex));
             var lastPosition = last.TranslatePoint(new Point(0, last.Bounds.Height / 2), viewport)!.Value;
             Assert.InRange(lastPosition.Y, 0, viewport.Viewport.Height);
             Assert.Same(initial, vm.SelectedSubscriptionServer);
