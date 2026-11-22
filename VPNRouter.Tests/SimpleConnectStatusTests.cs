@@ -39,10 +39,12 @@ public sealed class SimpleConnectStatusTests
         vm.OpenConfigPickerCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         var options = view.Page.FindControl<Expander>("SimpleConnectionOptions")!;
+        var link = view.Page.FindControl<TextBox>("SimpleConfigLink")!;
         Assert.False(options.IsExpanded);
-        Assert.False(view.Page.FindControl<TextBox>("SimpleConfigLink")!.IsEffectivelyVisible);
+        Assert.False(link.IsEffectivelyVisible);
         options.IsExpanded = true;
         Dispatcher.UIThread.RunJobs();
+        Assert.True(link.IsEffectivelyVisible);
 
         var ping = view.Page.FindControl<Button>("SimplePing")!;
         var deepCheck = view.Page.FindControl<Button>("SimpleDeepCheck")!;

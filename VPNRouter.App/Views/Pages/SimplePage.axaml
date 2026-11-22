@@ -530,7 +530,7 @@
                             </StackPanel>
                             <Expander Name="SimpleConnectionOptions" HorizontalAlignment="Stretch"
                                       HorizontalContentAlignment="Stretch">
-                                <StackPanel Spacing="8">
+                                <StackPanel IsVisible="{Binding #SimpleConnectionOptions.IsExpanded}" Spacing="8">
                                     <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up"
                                                icons:PictogramText.Text="{Binding ConnectionStatsText}"
                                                IsVisible="{Binding HasConnectionStats}"
