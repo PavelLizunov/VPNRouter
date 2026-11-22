@@ -1,0 +1,37 @@
+# Simple desktop home and server picker
+
+- Branch `dsh/simple-home-server-picker-20261122`
+- Base `cc361c50a6bab949ea9e92ca054346c836cdbae6` with the verified manual-selection change at `566812acb98493094c88e330a0305c328e892dfd` from PR #725
+- Risk is medium because the desktop picker submits connection preferences
+- Rollback by reverting this phase's implementation commits
+
+## Why
+
+On Windows 2.51.0-r1 a real 16-server subscription fills the home screen when expanded. Choosing a server, running checks and editing the subscription URL share one disclosure. The home routing hint lists fixed example applications as if it reported current rules.
+
+## What
+
+Keep connection action, the current server and the routing choice at the top of Simple mode. Make the connection status and recovery action easy to reach at a narrow window size. Put secondary workflow entries below the primary controls. Preserve the detailed pages for managing subscriptions, running checks and editing network settings.
+
+Open a bounded server picker on request. Keep the current server identifiable, support case-insensitive search across the full subscription and make all entries accessible. Searching or navigating the results must leave the committed server and auto-select setting intact. Explicit activation uses the manual selection behavior from PR #725. A separate action reveals the config editor so choosing a server does not expose the saved subscription URL.
+
+Replace the static routing examples with wording based on the route mode and a link to the existing application rules. Keep the applied mode distinct from pending settings. This is a shared desktop UX change with Windows verification first.
+
+## How
+
+1. Read the current Simple page, connection-status projections and manual server picker.
+2. Simplify the layout using existing Avalonia controls and design tokens. Keep English and Russian labels in the shared localization table.
+3. Exercise the real page at default and narrow widths with a disconnected fixture and a long subscription. Verify filtering, zero results, active selection, refresh and explicit activation. Use only synthetic subscription data.
+
+## Verification
+
+1. Build through the hosted Release jobs.
+2. Run selection and Simple-mode regressions in the hosted desktop suites.
+3. Update this outcome and the defect ledger.
+4. Obtain independent scoped review of the picker state and UI keyboard behavior.
+5. Verify desktop headless rendering and retain screenshots with synthetic values. Live release acceptance is separate.
+6. Keep the existing public ViewModel characterization surface or record intentional changes with tests.
+
+## Outcome
+
+The current Windows layout was observed with the subscription connected. The branch combines the current Standard base and the already verified manual-selection change. The implementation and its CI results are pending.
