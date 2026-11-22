@@ -175,3 +175,17 @@ Country search uses stored name and country data, with the existing bilingual
 aliases and the platform's country labels. City names are matched when present
 in a server name. No geolocation lookup is added. Added regressions for feed
 preservation, exact-row direct-link recovery, and focus after an explicit save.
+
+## Advanced subscription category filter
+
+Use the same protocol categories, labels, icons and protocol summaries in the
+Advanced Subscriptions list. Provide an All categories entry and keep the
+existing row template, diagnostics and virtualized scrolling. The filter is
+view state. It must not pick a server, write settings, restrict auto-selection
+or reconnect, even if a refresh removes the shown category. Row activation
+still uses Advanced manual selection and its service-managed Apply behavior.
+
+Use the existing task branch, with a revert as rollback. Verification gates:
+exact-head Release build, existing full suites and a focused filter/selection
+regression, plan outcome, static review of selection boundaries, narrow
+Windows headless capture, and unchanged desktop public surface.
