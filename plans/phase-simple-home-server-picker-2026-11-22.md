@@ -155,3 +155,11 @@ first run, Escape, query transfer, input preservation, and narrow themed
 layouts. The fetch seam covers rejection and stale completion. Local AXAML
 parse, named-control/event checks and whitespace checks passed. Exact-head
 hosted build, tests and captures are pending.
+
+All ten checks passed at `67987fae`. Linux passed 3,831 tests with 86 skips,
+and Windows passed 4,044 tests with 31 skips. The Windows artifact
+`14758173417` includes headless Avalonia captures at 320, 360, 450 and
+520 px. The 320 px and 450 px captures fit the link input, long draft, and
+actions in light and dark themes. Visual inspection found low contrast on
+Save link. The follow-up uses the existing solid action brushes. Live
+installation and service control were outside the brief.

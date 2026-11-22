@@ -562,7 +562,9 @@
                                            IsVisible="{Binding #SimpleLinkError.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
                                     <Button Name="SimpleCancelLink" Classes="change" Click="CancelLinkEdit"/>
-                                    <Button Name="SimpleSaveLink" Classes="accent" Click="SaveLink"/>
+                                    <Button Name="SimpleSaveLink" Classes="solid" Click="SaveLink"
+                                            Background="{DynamicResource AccentSolidBrush}"
+                                            Foreground="{DynamicResource AccentOnSolidBrush}"/>
                                 </WrapPanel>
                             </StackPanel>
                             <TextBlock Name="SimpleLinkNotice" Classes="hint" TextWrapping="Wrap"
