@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using VPNRouter.App.Controls;
 using Avalonia.Threading;
@@ -276,6 +277,7 @@ public sealed class SimpleConnectStatusTests
     {
         var initial = Entry("Sweden", "first.invalid");
         var firstMatch = Entry("Amsterdam", "ams-one.invalid");
+        firstMatch.Transport.Type = "ws";
         var chosen = Entry("Amsterdam", "ams-two.invalid", 8443);
         var settings = new AppSettings();
         settings.App.Language = width == 360 ? "ru" : "en";
@@ -309,9 +311,24 @@ public sealed class SimpleConnectStatusTests
         Dispatcher.UIThread.RunJobs();
         Assert.True(search.IsEffectivelyVisible);
         Assert.False(link.IsAttachedToVisualTree() && link.IsEffectivelyVisible);
-        Assert.Equal(16, list.Items.Count);
-        Assert.Same(previous, list.Items[0]);
-        Assert.InRange(list.Bounds.Height, 1, 172);
+        var groups = view.Page.FindControl<ItemsControl>("SimpleServerGroups")!;
+        var groupedRows = groups.Items.Cast<SimpleServerGroup>().ToArray();
+        Assert.Equal(new[] { ProtocolGroup.Daily, ProtocolGroup.WebFallback }, groupedRows.Select(group => group.Category));
+        Assert.Equal(16, groupedRows.Sum(group => group.Servers.Length));
+        Assert.Same(previous, groupedRows[0].Servers[0]);
+        Assert.False(list.IsEffectivelyVisible);
+        Assert.All(groupedRows, group => Assert.False(group.IsExpanded));
+
+        FindGroupButton(groups, ProtocolGroup.Daily, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(groupedRows[0].IsExpanded);
+        Assert.Same(previous, vm.SelectedSubscriptionServer);
+        Assert.Equal(before, store.SaveCount);
+        if (OperatingSystem.IsWindows()) view.Capture($"simple-picker-{width}");
+
+        FindGroupButton(groups, ProtocolGroup.WebFallback, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.False(groupedRows[0].IsExpanded);
+        Assert.True(groupedRows[1].IsExpanded);
 
         search.Text = "no matches";
         Dispatcher.UIThread.RunJobs();
@@ -328,6 +345,7 @@ public sealed class SimpleConnectStatusTests
         search.Text = "  aMsTeRdAm  ";
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(2, list.Items.Count);
+        Assert.InRange(list.Bounds.Height, 1, 172);
         var firstItem = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
         firstItem.Focus();
         PressPickerKey(firstItem, Key.Down);
@@ -336,8 +354,6 @@ public sealed class SimpleConnectStatusTests
         Assert.Equal(input, vm.SmpInput);
         Assert.Equal(autoSelect, vm.AutoSelectBestServer);
         Assert.Equal(before, store.SaveCount);
-        if (OperatingSystem.IsWindows()) view.Capture($"simple-picker-{width}");
-
         var item = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(1));
         PressPickerKey(item, Key.Enter);
         Dispatcher.UIThread.RunJobs();
@@ -347,8 +363,104 @@ public sealed class SimpleConnectStatusTests
         Assert.Equal(before + 1, store.SaveCount);
         var saved = store.Load(AppPaths.ConfigYamlPath);
         Assert.Equal(SubscriptionEntry.RowKey(chosen), saved.App.ActiveSubscriptionRow);
+        Assert.Equal(saved.App.ActiveSubscriptionRow, saved.App.SubscriptionPreference?.RowKey);
         Assert.Equal(chosen.Server, Generate(VpnEngine.CopySessionSettings(saved)).Server.Address);
+
+        vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        FindGroupButton(groups, ProtocolGroup.WebFallback, disclosure: false).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        var automatic = store.Load(AppPaths.ConfigYamlPath);
+        Assert.Equal(ProtocolGroup.WebFallback, automatic.App.SubscriptionPreference?.Category);
+        Assert.False(vm.AutoSelectBestServer);
+        Assert.False(search.IsEffectivelyVisible);
+        Assert.Equal(firstMatch.Server, Generate(VpnEngine.CopySessionSettings(automatic)).Server.Address);
     }
+
+    [AvaloniaFact]
+    public async Task SimpleConnectPicksTheFastestVerifiedServerWithinTheSelectedCategory()
+    {
+        var slow = Entry("slow", "slow.invalid");
+        var fast = Entry("fast", "fast.invalid");
+        var other = Entry("other", "other.invalid");
+        other.Transport.Type = "ws";
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.UiMode = "simple";
+        settings.App.Subscriptions =
+        [
+            new() { Url = "https://feed.invalid/auto", Servers = [slow, fast, other] }
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+
+        vm.ConfirmSimpleCategory(ProtocolGroup.Daily);
+        string[]? probed = null;
+        vm.SimpleProbe = (rows, _) =>
+        {
+            probed = rows.Select(row => row.Name).ToArray();
+            return Task.FromResult(rows.Select(row =>
+                new ServerLiveness(row, Alive: true, LatencyMs: row.Name == fast.Name ? 20 : 100)).ToList());
+        };
+        AcceptedTunnelInfo? started = null;
+        vm.SimpleTunnelStart = (snapshot, _, _) =>
+        {
+            started = Generate(snapshot);
+            return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.Connected));
+        };
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(new[] { slow.Name, fast.Name }, probed);
+        Assert.Equal(fast.Server, Assert.IsType<AcceptedTunnelInfo>(started).Server.Address);
+        Assert.Equal(ProtocolGroup.Daily, store.Load(AppPaths.ConfigYamlPath).App.SubscriptionPreference?.Category);
+    }
+
+    [AvaloniaFact]
+    public async Task MissingPinWaitsForANewChoiceAndAnExplicitFeedChangeClearsIt()
+    {
+        var pinned = Entry("pinned", "pinned.invalid");
+        var alternative = Entry("alternative", "alternative.invalid");
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.Subscriptions =
+        [
+            new() { Url = "https://feed.invalid/first", Servers = [pinned] },
+            new() { Url = "https://feed.invalid/second", Servers = [alternative] },
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        vm.ConfirmSimpleServer(vm.SubscriptionServers[0]);
+        vm.Subscriptions[0].Enabled = false;
+
+        AcceptedTunnelInfo? started = null;
+        vm.SimpleProbe = (rows, _) =>
+            Task.FromResult(rows.Select(row => new ServerLiveness(row, Alive: true, LatencyMs: 1)).ToList());
+        vm.SimpleTunnelStart = (snapshot, _, _) =>
+        {
+            started = Generate(snapshot);
+            return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.Connected));
+        };
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Null(started);
+        Assert.Equal(SubscriptionEntry.RowKey(pinned), vm.SimpleServerPreference?.RowKey);
+        Assert.Equal(Strings.SmpSelectionUnavailable, vm.SmpErrorText);
+
+        vm.SmpInput = settings.App.Subscriptions[1].Url;
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Null(vm.SimpleServerPreference);
+        Assert.Equal(alternative.Server, Assert.IsType<AcceptedTunnelInfo>(started).Server.Address);
+    }
+
+    private static Button FindGroupButton(ItemsControl groups, ProtocolGroup category, bool disclosure) =>
+        Assert.Single(groups.GetVisualDescendants().OfType<Button>(), button =>
+            button.Classes.Contains("category") && button.Classes.Contains("disclosure") == disclosure &&
+            button.DataContext is SimpleServerGroup group && group.Category == category);
 
     [AvaloniaFact]
     public void SimplePickerLabelsFollowLiveLanguageChanges()

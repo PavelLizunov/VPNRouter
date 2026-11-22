@@ -243,7 +243,7 @@ internal sealed class StartupPipeline
 
         ct.ThrowIfCancellationRequested();
 
-        var activeForTransport = settings.Vless?.GetActiveServers() ?? new List<VlessServerEntry>();
+        var activeForTransport = VlessServersResolver.GetActiveServers(settings);
         if (activeForTransport.Count > 0 &&
             string.Equals(activeForTransport[0].Protocol, "dns-tunnel", StringComparison.OrdinalIgnoreCase))
         {
@@ -438,7 +438,7 @@ internal sealed class StartupPipeline
                 throw new InvalidOperationException(why);
             }
 
-            var activeServers = settings.Vless.GetActiveServers();
+            var activeServers = VlessServersResolver.GetActiveServers(settings);
             serverAddress = activeServers.Count > 0 ? activeServers[0].Server : allServers[0].Server;
         }
 
@@ -660,7 +660,7 @@ internal sealed class StartupPipeline
     {
         try
         {
-            var active = settings.Vless.GetActiveServers();
+            var active = VlessServersResolver.GetActiveServers(settings);
             if (active == null || !active.Any(NaivePairing.IsNaive))
                 return null;
 
@@ -841,7 +841,7 @@ internal sealed class StartupPipeline
         if (isCustomConfig) return ScheduleWarmupProbe(pid, settings, null, token);
 
         _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
-        var active = settings.Vless.GetActiveServers().FirstOrDefault();
+        var active = VlessServersResolver.GetActiveServers(settings).FirstOrDefault();
         bool dnstt = active?.Dnstt != null;
         Task<ProbeResult> ProbeProxy(CancellationToken probeToken) =>
             sanityCheck.ProbeAsync(controller.Endpoint, controller.Secret, probeToken, dnstt);

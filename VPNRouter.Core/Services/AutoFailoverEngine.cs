@@ -110,7 +110,7 @@ public sealed class AutoFailoverEngine
                 if (addedOld) _tried.Remove(oldActive);
             }
             else if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(newName))
-                _tried.Add(newName);
+                _tried.Add(AttemptKey(candidate));
             previous.Apply(_settings);
             _logger?.Information(
                 "[AutoFailover] Replacement start not confirmed, restored previous selection");
@@ -144,7 +144,10 @@ public sealed class AutoFailoverEngine
                 UserFacingMessage: Strings.FailoverCustomConfigUnusable);
         }
 
-        var active = _settings.Vless.GetActiveServers().FirstOrDefault();
+        if (SubscriptionServerPreference.For(_settings.App) is { IsCategory: false })
+            return new FailoverOutcome(false, null, Strings.SmpPinnedServerUnreachable);
+
+        var active = VlessServersResolver.GetActiveServers(_settings).FirstOrDefault();
         if (active?.Dnstt != null ||
             (configMode == "generated" && IsSelectionConfirmed?.Invoke() != true && active?.UseAsSingleOutbound == true))
             return new FailoverOutcome(false, null, null);
@@ -217,6 +220,8 @@ public sealed class AutoFailoverEngine
         try
         {
             var onDisk = _store.Load();
+            if (SubscriptionServerPreference.For(onDisk.App) != SubscriptionServerPreference.For(_settings.App))
+                return;
             replacement.Apply(onDisk);
             _store.Save(onDisk);
             _logger?.Information("[AutoFailover] Persisted replacement server selection");
@@ -244,6 +249,15 @@ public sealed class AutoFailoverEngine
     private List<VlessServerEntry> PickCandidates(out string poolSource)
     {
         var oldActive = ActiveAttemptName();
+
+        if (SubscriptionServerPreference.For(_settings.App) is { } preference)
+        {
+            poolSource = "subscriptions";
+            return preference.Candidates(_settings.App.Subscriptions).Select(row => row.Server)
+                .Where(IsCandidateUsable)
+                .Where(server => !IsAlreadyTried(server, oldActive))
+                .ToList();
+        }
 
         var subs = _settings.App.Subscriptions ?? new List<SubscriptionEntry>();
         var subscriptionPool = subs
@@ -336,6 +350,9 @@ public sealed class AutoFailoverEngine
 
     private string ActiveAttemptName()
     {
+        if (SubscriptionServerPreference.For(_settings.App) is { } preference)
+            return preference.Preferred(_settings.App) is { } chosen ? AttemptKey(chosen.Server) : string.Empty;
+
         if (!string.IsNullOrWhiteSpace(_settings.Vless.ActiveServer)) return _settings.Vless.ActiveServer;
         var app = _settings.App;
         var source = app.Subscriptions?.FirstOrDefault(s => s != null && s.Id == app.ActiveSubscriptionId);
@@ -345,15 +362,19 @@ public sealed class AutoFailoverEngine
 
     private bool IsAlreadyTried(VlessServerEntry entry, string oldActive)
     {
-        var nameKey = string.IsNullOrWhiteSpace(entry.Name)
-            ? $"{entry.Server}:{entry.Port}"
-            : entry.Name;
+        var nameKey = AttemptKey(entry);
 
         if (string.Equals(nameKey, oldActive, StringComparison.OrdinalIgnoreCase))
             return true;
         if (_tried.Contains(nameKey))
             return true;
         return false;
+    }
+
+    private string AttemptKey(VlessServerEntry entry)
+    {
+        if (SubscriptionServerPreference.For(_settings.App) != null) return SubscriptionEntry.RowKey(entry);
+        return string.IsNullOrWhiteSpace(entry.Name) ? $"{entry.Server}:{entry.Port}" : entry.Name;
     }
 
     public void ResetCycle()

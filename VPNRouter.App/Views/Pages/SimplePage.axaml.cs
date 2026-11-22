@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using VPNRouter.App.Controls;
 using VPNRouter.App.ViewModels;
+using VPNRouter.Core.Services;
 using Strings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.App.Views.Pages;
@@ -18,6 +19,9 @@ public partial class SimplePage : UserControl
     private readonly StackPanel _serverPanel;
     private readonly TextBox _serverSearch;
     private readonly ServerPickerListBox _serverResults;
+    private readonly ItemsControl _serverGroups;
+    private readonly ScrollViewer _serverGroupsScroll;
+    private ProtocolGroup? _expandedServerGroup;
     private readonly TextBlock _serverCount;
     private readonly ToggleButton _connectionOptions;
     private readonly Button _changeServer;
@@ -32,14 +36,14 @@ public partial class SimplePage : UserControl
         _serverPanel = this.FindControl<StackPanel>("SimpleServerPanel")!;
         _serverSearch = this.FindControl<TextBox>("SimpleServerSearch")!;
         _serverResults = this.FindControl<ServerPickerListBox>("SimpleServerResults")!;
+        _serverGroups = this.FindControl<ItemsControl>("SimpleServerGroups")!;
+        _serverGroupsScroll = this.FindControl<ScrollViewer>("SimpleServerGroupsScroll")!;
         _serverCount = this.FindControl<TextBlock>("SimpleServerCount")!;
         _connectionOptions = this.FindControl<ToggleButton>("SimpleConnectionOptions")!;
         _changeServer = this.FindControl<Button>("SimpleChangeServer")!;
         _appRules = this.FindControl<Button>("SimpleAppRules")!;
         _serverResults.ConfirmSelection = ConfirmServer;
         _serverSearch.TextChanged += (_, _) => RefreshServerPicker();
-        _serverSearch.KeyDown += OnPickerKeyDown;
-        _serverResults.KeyDown += OnPickerKeyDown;
         AttachedToVisualTree += (_, _) => BindPicker(DataContext as MainWindowViewModel);
         DetachedFromVisualTree += (_, _) => BindPicker(null);
         DataContextChanged += (_, _) =>
@@ -99,22 +103,43 @@ public partial class SimplePage : UserControl
             {
                 _serverSearch.Text = string.Empty;
                 _serverResults.ItemsSource = null;
+                _serverGroups.ItemsSource = null;
+                _expandedServerGroup = null;
             }
             return;
         }
 
         var vm = source!;
-        var current = vm.IsConnected ? vm.SmpConfigServer : vm.SelectedSubscriptionServer;
+        var selected = vm.SelectedSubscriptionServer;
+        var current = vm.IsConnected ? vm.SmpConfigServer : selected;
         var query = _serverSearch.Text?.Trim() ?? string.Empty;
+        _serverGroupsScroll.IsVisible = query.Length == 0;
+        _serverResults.IsVisible = _serverCount.IsVisible = query.Length != 0;
+        if (query.Length == 0)
+        {
+            _serverResults.ItemsSource = null;
+            _serverGroups.ItemsSource = vm.SubscriptionServers
+                .GroupBy(row => row.ProtocolGroup)
+                .OrderBy(group => group.Key)
+                .Select(group => new SimpleServerGroup(group.Key,
+                    group.OrderByDescending(row => ReferenceEquals(row, current)).ToArray(),
+                    selected != null && group.Contains(selected) ? selected : null,
+                    vm.SimpleServerPreference?.Category == group.Key)
+                {
+                    IsExpanded = group.Key == _expandedServerGroup,
+                }).ToArray();
+            if (!wasOpen && _serverSearch.IsEffectivelyVisible) _serverSearch.Focus();
+            return;
+        }
+
         var matches = vm.SubscriptionServers
             .Where(row => row.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 row.Server.Contains(query, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(row => ReferenceEquals(row, current))
             .ToArray();
         _serverResults.ItemsSource = matches;
-        _serverResults.SelectedItem = current != null && matches.Contains(current) ? current : null;
+        _serverResults.SelectedItem = selected != null && matches.Contains(selected) ? selected : null;
         _serverCount.Text = matches.Length == 0 ? Strings.SmpNoMatchingServers : Strings.SmpKindServers(matches.Length);
-        if (!wasOpen && _serverSearch.IsEffectivelyVisible) _serverSearch.Focus();
     }
 
     private void OnPickerKeyDown(object? sender, KeyEventArgs args)
@@ -123,6 +148,26 @@ public partial class SimplePage : UserControl
         vm.SmpFormExpanded = false;
         _changeServer.Focus();
         args.Handled = true;
+    }
+
+    private void ToggleServerCategory(object? sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { DataContext: SimpleServerGroup group }) return;
+        _expandedServerGroup = group.IsExpanded ? null : group.Category;
+        foreach (var item in _serverGroups.Items.OfType<SimpleServerGroup>())
+            item.IsExpanded = item.Category == _expandedServerGroup;
+    }
+
+    private void ChooseServerCategory(object? sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { DataContext: SimpleServerGroup group }) return;
+        _viewModel?.ConfirmSimpleCategory(group.Category);
+        if (_viewModel?.SmpPickerVisible == false) _changeServer.Focus();
+    }
+
+    private void WireGroupServerList(object? sender, RoutedEventArgs args)
+    {
+        if (sender is ServerPickerListBox list) list.ConfirmSelection = ConfirmServer;
     }
 
     private void ConfirmServer(ServerViewModel row)

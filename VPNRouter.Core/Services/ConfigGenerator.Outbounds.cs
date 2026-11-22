@@ -29,7 +29,7 @@ public static partial class ConfigGenerator
     {
         endpoints = null;
         proxyIsUdpNativeOutbound = false;
-        var servers = settings.Vless.GetActiveServers();
+        var servers = VlessServersResolver.GetActiveServers(settings);
         var hasRequestedChain = servers.Any(s => !string.IsNullOrEmpty(s.DetourVia));
 
         servers = FilterUnavailableServers(servers);
@@ -39,6 +39,8 @@ public static partial class ConfigGenerator
 
         if (servers.Count == 0)
         {
+            if (SubscriptionServerPreference.For(settings.App) != null)
+                throw new InvalidOperationException(Localization.Strings.SmpSelectionUnavailable);
             throw new InvalidOperationException(
                 "ConfigGenerator: no active VLESS servers — refusing to generate sing-box config " +
                 "with route rules pointing at a missing 'proxy' outbound. " +
@@ -175,19 +177,13 @@ public static partial class ConfigGenerator
         return match ?? (fallbackToFirstOnMiss ? servers.FirstOrDefault() : null);
     }
 
-    private static List<VlessServerEntry> FilterUnavailableServers(List<VlessServerEntry> servers)
-    {
-        if (!ServerUriParser.NaiveRuntimeAvailable)
-            servers = servers.Where(s =>
-                !"naive".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)).ToList();
+    internal static bool IsServerRuntimeAvailable(VlessServerEntry server) =>
+        (!string.Equals(server.Protocol, "naive", StringComparison.OrdinalIgnoreCase) || ServerUriParser.NaiveRuntimeAvailable) &&
+        (!IsAwg(server) || SingBoxFeatures.AwgAvailable) &&
+        (!string.Equals(server.Transport?.Type, "xhttp", StringComparison.OrdinalIgnoreCase) || SingBoxFeatures.XhttpAvailable);
 
-        if (!SingBoxFeatures.AwgAvailable)
-            servers = servers.Where(s => !IsAwg(s)).ToList();
-        if (!SingBoxFeatures.XhttpAvailable)
-            servers = servers.Where(s =>
-                !"xhttp".Equals(s.Transport?.Type, StringComparison.OrdinalIgnoreCase)).ToList();
-        return servers;
-    }
+    private static List<VlessServerEntry> FilterUnavailableServers(List<VlessServerEntry> servers) =>
+        servers.Where(IsServerRuntimeAvailable).ToList();
 
     private static List<VlessServerEntry> NarrowByServerHealth(List<VlessServerEntry> servers)
     {

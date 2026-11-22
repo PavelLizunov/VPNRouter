@@ -247,7 +247,7 @@ public partial class MainWindowViewModel
 
     internal bool SelectServerFromPicker(Func<bool> select, Func<ServerViewModel?> getSelection)
     {
-        if (!AutoSelectBestServer || _isLoadingUI) return select();
+        if (_isLoadingUI || (!AutoSelectBestServer && SimpleServerPreference == null)) return select();
 
         // Let the picker update its binding before reconnect captures the choice.
         ServerViewModel server;
@@ -264,8 +264,17 @@ public partial class MainWindowViewModel
         }
         finally { _updatingServerPickerSelection = false; }
 
+        _settings.App.SubscriptionPreference = null;
         HandleServerSelection(server, subscription, disableAutoSelect: true);
+        RaiseSimpleHomeProps();
         return true;
+    }
+
+    partial void OnAutoSelectBestServerChanged(bool value)
+    {
+        if (_isLoadingUI || SimpleServerPreference == null) return;
+        _settings.App.SubscriptionPreference = null;
+        RaiseSimpleHomeProps();
     }
 
     partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value) =>

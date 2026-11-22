@@ -606,7 +606,7 @@ public partial class MainWindowViewModel
 
         var configMode = _settings.App.ConfigMode ?? "generated";
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
-        SmpInput = IsSubscribeMode
+        SmpInput = IsSubscribeMode && SimpleServerPreference == null
             ? _settings.App.Subscriptions.FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url))?.Url ?? string.Empty
             : string.Empty;
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
@@ -643,7 +643,7 @@ public partial class MainWindowViewModel
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
-        AutoSelectBestServer = _settings.Vless.AutoSelectBestServer;
+        AutoSelectBestServer = SimpleServerPreference == null && _settings.Vless.AutoSelectBestServer;
         ConnectionIntentIndex = IntentToIndex(_settings.App.ConnectionIntent);
         IsDnsLeakLockdownEnabled = _settings.App.DnsLeakLockdown;
 
@@ -882,6 +882,7 @@ public partial class MainWindowViewModel
     private void ReadSettingsFromControls(bool preserveConfigMode = false)
     {
         if (!preserveConfigMode) ApplyConfigModeToSettings();
+        if (!CanPickSimpleSubscriptionServer) _settings.App.SubscriptionPreference = null;
         ApplySubscriptionsToSettings();
         ApplyRoutingToSettings();
         ApplyOptionsToSettings();
@@ -939,7 +940,9 @@ public partial class MainWindowViewModel
     {
         _settings.App.Subscriptions = Subscriptions.Select(sv => sv.ToEntry()).ToList();
 
-        var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
+        var activeSub = SelectedSubscriptionServer;
+        if (activeSub == null && SimpleServerPreference == null)
+            activeSub = SubscriptionServers.FirstOrDefault();
         _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
         _settings.App.ActiveSubscriptionId = activeSub?.SubscriptionId;
         _settings.App.ActiveSubscriptionRow = activeSub?.SubscriptionId != null ? SubscriptionEntry.RowKey(activeSub.SourceEntry) : null;

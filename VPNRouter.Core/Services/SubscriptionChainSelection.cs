@@ -6,13 +6,20 @@ namespace VPNRouter.Core.Services;
 // on refresh, but an automatic replacement must still take an unambiguous, usable detour.
 internal sealed record SubscriptionChainSelection(string FeedId, string Url, VlessServerEntry Target, string? Route)
 {
-    internal static SubscriptionChainSelection? Capture(AppConfig app)
+    internal static SubscriptionChainSelection? Capture(AppConfig app,
+        IReadOnlyList<SubscriptionEntry>? registeredFeeds = null)
     {
         if (!string.Equals(app.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase)) return null;
-        var feeds = app.Subscriptions.Where(s => s.Enabled).ToList();
-        var source = feeds.FirstOrDefault(s => s.Id == app.ActiveSubscriptionId);
-        var row = source?.FindExactRow(app.ActiveSubscriptionServer, app.ActiveSubscriptionRow);
-        if (row == null && app.ActiveSubscriptionRow == null)
+        var preference = SubscriptionServerPreference.For(app);
+        if (preference is { IsCategory: true }) return null;
+
+        var feeds = (registeredFeeds ?? app.Subscriptions).Where(s => s.Enabled).ToList();
+        var scoped = preference?.Preferred(app, feeds);
+        var source = scoped?.Feed ?? feeds.FirstOrDefault(s => s.Id == app.ActiveSubscriptionId);
+        var row = preference == null
+            ? source?.FindExactRow(app.ActiveSubscriptionServer, app.ActiveSubscriptionRow)
+            : scoped?.Server;
+        if (preference == null && row == null && app.ActiveSubscriptionRow == null)
         {
             // A legacy name-only setting has the same first-match semantics as GetActiveServers.
             var pool = source != null ? source.Servers.AsEnumerable() : feeds.SelectMany(s => s.Servers);
@@ -22,6 +29,16 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
         }
         return source == null || row == null || (row.Dnstt == null && string.IsNullOrEmpty(row.DetourVia)) ? null :
             new(source.Id, source.Url, row, SubscriptionEntry.RouteKey(row, source.Servers));
+    }
+
+    internal void RebindPin(AppConfig app, List<SubscriptionEntry> feeds, VlessServerEntry successor)
+    {
+        if (SubscriptionServerPreference.For(app) is not { IsCategory: false } pin ||
+            pin.FeedId != FeedId || pin.RowKey != SubscriptionEntry.RowKey(Target)) return;
+
+        var feed = feeds.FirstOrDefault(s => s.Enabled && s.Id == FeedId && s.Url == Url);
+        if (feed != null && SubscriptionEntry.RouteKey(successor, feed.Servers) == Route)
+            app.SubscriptionPreference = pin with { RowKey = SubscriptionEntry.RowKey(successor) };
     }
 
     internal VlessServerEntry? Match(SubscriptionEntry? feed, IEnumerable<VlessServerEntry> enabledRows)

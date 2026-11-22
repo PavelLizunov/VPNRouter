@@ -285,31 +285,74 @@ public partial class MainWindowViewModel
         SmpFormExpanded = !SmpFormExpanded;
     }
 
+    internal SubscriptionServerPreference? SimpleServerPreference =>
+        SubscriptionServerPreference.For(_settings.App);
+
     internal void ConfirmSimpleServer(ServerViewModel row)
     {
-        if (_isLoadingUI || SimpleCtaIsConnecting || _isReconnecting ||
-            !CanPickSimpleSubscriptionServer || !SubscriptionServers.Contains(row)) return;
-        // An open result list is presentation state. Only an explicit row activation changes the preference.
+        if (row.SubscriptionId is not { } feedId || !SubscriptionServers.Contains(row)) return;
+        ConfirmSimplePreference(new() { FeedId = feedId, RowKey = SubscriptionEntry.RowKey(row.SourceEntry) }, row);
+    }
+
+    internal void ConfirmSimpleCategory(ProtocolGroup category)
+    {
+        var row = SelectedSubscriptionServer is { } selected && SubscriptionServers.Contains(selected) &&
+            selected.ProtocolGroup == category && SubscriptionServerPreference.CanAutoSelect(selected.SourceEntry)
+            ? selected : SubscriptionServers.FirstOrDefault(row => row.ProtocolGroup == category &&
+                SubscriptionServerPreference.CanAutoSelect(row.SourceEntry));
+        if (row != null) ConfirmSimplePreference(new() { Category = category }, row);
+    }
+
+    private void ConfirmSimplePreference(SubscriptionServerPreference preference, ServerViewModel row)
+    {
+        if (_isLoadingUI || SimpleCtaIsConnecting || _isReconnecting || !CanPickSimpleSubscriptionServer)
+            return;
+
+        SmpFormExpanded = false;
+        if (SimpleServerPreference == preference && ReferenceEquals(SelectedSubscriptionServer, row)) return;
+
         IsSubscribeMode = true;
         IsVlessMode = false;
-        var wasAutoSelecting = AutoSelectBestServer;
-        SelectServerFromPicker(() =>
+        AutoSelectBestServer = false;
+        _settings.App.SubscriptionPreference = preference;
+        _updatingServerPickerSelection = true;
+        try { SelectedSubscriptionServer = row; }
+        finally { _updatingServerPickerSelection = false; }
+
+        if (Subscriptions.FirstOrDefault(feed => feed.Id == row.SubscriptionId) is { } source)
+            SmpInput = source.Url;
+
+        SmpErrorText = string.Empty;
+        MarkRoutingSettingsChanged();
+        RaiseSimpleHomeProps();
+
+        if (IsConnected)
         {
-            SelectedSubscriptionServer = row;
-            return true;
-        }, () => row);
-        if (!wasAutoSelecting && (!IsConnected || row.IsActive))
-        {
-            try { SaveSettings(); }
-            catch (Exception ex)
-            {
-                _logger.Warning("[Simple] Server selection save failed ({ErrorType})", ex.GetType().Name);
-                SmpErrorText = Strings.ApplyFailed;
-                return;
-            }
+            var label = preference.Category is { } category ? SimpleCategoryName(category) : row.DisplayName;
+            if (IsServiceManagedVpn) WarnServiceManagedReconnect(label);
+            else _ = ReconnectAsync(label, ReconnectIntent.Subscription);
+            return;
         }
-        SmpFormExpanded = false;
+
+        try { SaveSettings(); }
+        catch (Exception ex)
+        {
+            _logger.Warning("[Simple] Server selection save failed ({ErrorType})", ex.GetType().Name);
+            SmpErrorText = Strings.ApplyFailed;
+        }
     }
+
+    internal static string SimpleCategoryName(ProtocolGroup group) => group switch
+    {
+        ProtocolGroup.GamesVoice => Strings.ProtocolUseGamesVoice,
+        ProtocolGroup.WebOnly => Strings.ProtocolUseWebOnly,
+        ProtocolGroup.LowPing => Strings.ProtocolUseLowLatency,
+        ProtocolGroup.Emergency => Strings.ProtocolUseEmergency,
+        ProtocolGroup.Fallback => Strings.ProtocolUseFallback,
+        ProtocolGroup.StealthWeb => Strings.ProtocolUseStealthWeb,
+        ProtocolGroup.WebFallback => Strings.ProtocolUseWebFallback,
+        _ => Core.Localization.Strings.SmpDailyCategory,
+    };
 
     internal bool CanPickSimpleSubscriptionServer =>
         string.Equals(_settings.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase);
@@ -380,6 +423,11 @@ public partial class MainWindowViewModel
             else if (_settings.Vless.Servers is not { Count: > 0 } &&
                 _settings.App.Subscriptions?.Any(s => s.Enabled && s.Servers.Count > 0) != true)
             {
+                if (SimpleServerPreference != null)
+                {
+                    SmpErrorText = Core.Localization.Strings.SmpSelectionUnavailable;
+                    return;
+                }
                 SmpErrorText = IsRussian
                     ? "Вставь ссылку (vless:// / vmess:// / hysteria2:// / tuic:// / ss:// / naive://) или URL подписки (http:// / https://)."
                     : "Paste a server link (vless:// / vmess:// / hysteria2:// / tuic:// / ss:// / naive://) or a subscription URL (http:// / https://).";
@@ -432,16 +480,21 @@ public partial class MainWindowViewModel
 
             if (string.Equals(submitted.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase))
             {
-                var candidates = submitted.App.Subscriptions.Where(s => s.Enabled).SelectMany(s => s.Servers).ToList();
+                var preference = SubscriptionServerPreference.For(submitted.App);
+                var candidates = preference != null
+                    ? preference.Candidates(submitted.App.Subscriptions).Select(row => row.Server).ToList()
+                    : submitted.App.Subscriptions.Where(s => s.Enabled).SelectMany(s => s.Servers).ToList();
                 if (candidates.Count == 0)
                 {
-                    SmpErrorText = Strings.SyncEmpty;
+                    SmpErrorText = preference == null ? Strings.SyncEmpty : Core.Localization.Strings.SmpSelectionUnavailable;
                     return;
                 }
 
-                var preferred = SubscriptionRefreshDiff.FindRegisteredServer(selectedSource, candidates,
-                    selectedName, selectedKey, previous, previousRoute);
-                if (preferred == null && previous != null && (previous.Dnstt != null || !string.IsNullOrEmpty(previous.DetourVia)))
+                var preferred = preference != null
+                    ? preference.Preferred(submitted.App)?.Server
+                    : SubscriptionRefreshDiff.FindRegisteredServer(selectedSource, candidates,
+                        selectedName, selectedKey, previous, previousRoute);
+                if (preference == null && preferred == null && previous != null && (previous.Dnstt != null || !string.IsNullOrEmpty(previous.DetourVia)))
                 {
                     SmpErrorText = Strings.SyncEmpty;
                     return;
@@ -449,9 +502,14 @@ public partial class MainWindowViewModel
                 preferred ??= candidates[0];
                 StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                 // A direct probe of an exit cannot judge the selected route through its required hop.
-                var chosen = preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia) ? preferred :
-                    await PickSimpleServerAsync(candidates.Where(server => server.Dnstt == null).ToList(), preferred, submitted.App.ConnectionIntent, Preparing);
-                if (!Preparing()) return;
+                var chosen = preference?.Category != null
+                    ? await PickCategoryServerAsync(candidates, preferred)
+                    : preference != null || preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia)
+                        ? preferred
+                        : await PickSimpleServerAsync(candidates.Where(server => server.Dnstt == null).ToList(),
+                            preferred, submitted.App.ConnectionIntent, Preparing);
+                if (!Preparing() || preference != SimpleServerPreference ||
+                    (preference != null && !choiceUnchanged())) return;
                 if (chosen == null)
                 {
                     SmpErrorText = IsRussian
@@ -469,7 +527,7 @@ public partial class MainWindowViewModel
                 }
                 if ((chosen.Dnstt != null || !string.IsNullOrEmpty(chosen.DetourVia)) &&
                     new SubscriptionChainSelection(source.Id, source.Url, chosen, SubscriptionEntry.RouteKey(chosen, source.Servers))
-                        .Match(source, candidates) != chosen)
+                        .Match(source, submitted.App.Subscriptions.Where(feed => feed.Enabled).SelectMany(feed => feed.Servers)) != chosen)
                 {
                     SmpErrorText = Strings.SyncEmpty;
                     return;
@@ -513,6 +571,7 @@ public partial class MainWindowViewModel
         List<SubscriptionViewModel> rows)
     {
         // The editor and the engine must not share mutable servers after publishing the cache.
+        _settings.App.SubscriptionPreference = submitted.App.SubscriptionPreference;
         var caches = VpnEngine.CopySessionSettings(submitted).App.Subscriptions
             .Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
         foreach (var live in liveRows)
@@ -527,6 +586,23 @@ public partial class MainWindowViewModel
         }
         RebuildSubscriptionPool();
         SaveSettings();
+    }
+
+    private async Task<VlessServerEntry> PickCategoryServerAsync(List<VlessServerEntry> candidates, VlessServerEntry preferred)
+    {
+        if (candidates.Count < 2) return preferred;
+
+        try
+        {
+            var probe = SimpleProbe ?? ((servers, timeout) => new ServerHealthProbe(_logger).ProbeAllAsync(servers, timeout));
+            var results = await probe(candidates, TimeSpan.FromSeconds(4));
+            return ServerHealthProbe.PickBest(results.Where(result => candidates.Contains(result.Server))) ?? preferred;
+        }
+        catch (Exception)
+        {
+            _logger.Warning("[SmartConnect] Category probe failed, using the preferred server");
+            return preferred;
+        }
     }
 
     private async Task<VlessServerEntry?> PickSimpleServerAsync(List<VlessServerEntry> candidates,
@@ -566,6 +642,7 @@ public partial class MainWindowViewModel
                 Enabled = true,
                 Servers = new List<VlessServerEntry>(),
             };
+            _settings.App.SubscriptionPreference = null;
             _settings.App.Subscriptions = new List<SubscriptionEntry> { entry };
 
             Subscriptions.Clear();
@@ -577,7 +654,10 @@ public partial class MainWindowViewModel
         {
             var source = Subscriptions.FirstOrDefault(s => s.Enabled && SimpleConnectPolicy.SameUrl(s.Url, input));
             if (source != null)
+            {
+                _settings.App.SubscriptionPreference = null;
                 SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault(row => row.SubscriptionId == source.Id);
+            }
         }
         _settings.App.ConfigMode = "subscribe";
         IsSubscribeMode = true;
@@ -610,11 +690,13 @@ public partial class MainWindowViewModel
         var input = editorInput = SmpInput;
         var mode = _settings.App.ConfigMode;
         var intent = ConnectionIntentIndex;
+        var preference = SimpleServerPreference;
         var tabs = (IsSimpleMode, SelectedTabIndex, SelectedServerModeIndex, IsSubscribeMode, IsVlessMode, SelectedCustomConfig);
         var selected = SelectedSubscriptionServer;
         var manual = SelectedServer;
         var feeds = Subscriptions.Select(s => (s, s.Url, s.Enabled, s.UnderlyingEntry.Servers)).ToArray();
         return () => SmpInput == input && _settings.App.ConfigMode == mode && ConnectionIntentIndex == intent &&
+            preference == SimpleServerPreference &&
             tabs == (IsSimpleMode, SelectedTabIndex, SelectedServerModeIndex, IsSubscribeMode, IsVlessMode, SelectedCustomConfig) &&
             ReferenceEquals(selected, SelectedSubscriptionServer) && ReferenceEquals(manual, SelectedServer) &&
             feeds.SequenceEqual(Subscriptions.Select(s => (s, s.Url, s.Enabled, s.UnderlyingEntry.Servers)));
@@ -629,7 +711,7 @@ public partial class MainWindowViewModel
             ReferenceEquals(SelectedSubscriptionServer, winnerVm)) return;
 
         _logger.Information("[SmartConnect] Switching to a reachable server");
-        if (!string.IsNullOrWhiteSpace(previousServer))
+        if (SimpleServerPreference == null && !string.IsNullOrWhiteSpace(previousServer))
             _smpChoiceNote = Strings.SmpServerSwitchedNote(previousServer);
         _settings.App.ActiveSubscriptionServer = chosen.Name ?? previousServer;
         SelectedSubscriptionServer = winnerVm;
@@ -657,6 +739,7 @@ public partial class MainWindowViewModel
 
             var entry = ServerUriParser.Parse(uri);
 
+            _settings.App.SubscriptionPreference = null;
             _settings.Vless.Servers = new List<VlessServerEntry> { entry };
             _settings.Vless.ActiveServer = entry.Name ?? string.Empty;
 
@@ -781,6 +864,14 @@ public partial class MainWindowViewModel
             if (IsConnected && tunnel == null) return string.Empty;
             if (mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
             {
+                if (SimpleServerPreference is { } preference)
+                {
+                    if (preference.Preferred(_settings.App) == null)
+                        return Core.Localization.Strings.SmpSelectionUnavailable;
+                    return preference.Category is { } category
+                        ? $"{SimpleCategoryName(category)} · {Core.Localization.Strings.SmpAutoInCategory}"
+                        : Core.Localization.Strings.SmpPinnedServer;
+                }
                 var count = tunnel?.SubscriptionServerCount ?? SubscriptionServers.Count;
                 return count > 0 ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(count)}" : Strings.SmpKindSubscription;
             }

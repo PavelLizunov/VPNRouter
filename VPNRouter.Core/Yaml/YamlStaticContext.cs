@@ -19,6 +19,7 @@ namespace VPNRouter.Core.Yaml;
 [YamlSerializable(typeof(ProfileSource))]
 [YamlSerializable(typeof(SingBoxSettings))]
 [YamlSerializable(typeof(SubscriptionEntry))]
+[YamlSerializable(typeof(SubscriptionServerPreference))]
 [YamlSerializable(typeof(TunSettings))]
 [YamlSerializable(typeof(UpdateSettings))]
 [YamlSerializable(typeof(UserFreeSource))]

@@ -130,6 +130,19 @@ public static partial class Strings
     public static string SmpPickServerLabel         => Ru ? "Сервер" : "Server";
     public static string SmpSearchServers           => Ru ? "Найти сервер" : "Find a server";
     public static string SmpNoMatchingServers       => Ru ? "Серверы не найдены" : "No matching servers";
+    public static string SmpDailyCategory => Ru ? "Повседневный" : "Everyday";
+    public static string SmpAutoInCategory => Ru ? "Авто" : "Auto";
+    public static string SmpPinnedServer => Ru ? "Вручную" : "Manual";
+    public static string SmpExpandCategory => Ru ? "Показать серверы" : "Show servers";
+    public static string SmpCollapseCategory => Ru ? "Скрыть серверы" : "Hide servers";
+    public static string SmpSelectCategory => Ru ? "Автоподбор в категории" : "Auto-select in category";
+    public static string SmpPinnedServerUnreachable => Ru
+        ? "Закреплённый сервер не отвечает. Можно повторить подключение или выбрать другой."
+        : "The pinned server is not responding. Retry the connection or choose another server.";
+    public static string SmpManualOnlyCategory => Ru ? "Выберите сервер вручную" : "Choose a server manually";
+    public static string SmpSelectionUnavailable => Ru
+        ? "Выбранный сервер или категория недоступны. Выберите другой вариант."
+        : "The selected server or category is unavailable. Choose another option.";
     public static string SmpCurrentServer           => Ru ? "Активен" : "Active";
     public static string SmpConnectionOptions       => Ru ? "Ссылка и проверка серверов" : "Connection link and server checks";
     public static string SmpApplicationRules        => Ru ? "Настроить приложения" : "Configure app rules";

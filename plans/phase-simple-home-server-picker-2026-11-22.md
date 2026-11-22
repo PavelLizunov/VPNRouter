@@ -32,6 +32,26 @@ Replace the static routing examples with wording based on the route mode and a l
 5. Verify desktop headless rendering and retain screenshots with synthetic values. Live release acceptance is separate.
 6. Keep the existing public ViewModel characterization surface or record intentional changes with tests.
 
+## Category picker follow-up
+
+Continue PR #728 from verified head `9efdc0a3`. The approved design groups
+subscription servers by their existing protocol use case. Keep the Simple home
+and its routing controls. Use one open group, global search, separate auto and
+disclosure actions, and compact rows with the current measurement. No location
+is inferred from the provider or endpoint.
+
+Category selection persists independently of the observed active server.
+Startup and recovery choose only from that group. An explicit row selection
+pins its subscription ID and row key. Missing choices require a new selection.
+Keep the full subscription cache available for required route dependencies.
+Legacy settings retain their selection behavior.
+
+Risk is medium because selection affects config generation and recovery.
+Rollback is a revert of this follow-up. Verify the persisted policy, generated
+outbounds, scoped failover and narrow keyboard-operated picker. Use hosted
+builds, desktop tests and synthetic Windows captures. Review startup, refresh,
+detour and failover before push. Keep the public ViewModel surface stable.
+
 ## Outcome
 
 The current Windows layout was observed with the subscription connected. The planning head `27ea2f96` passed eight GitHub checks on PR #728.
@@ -45,3 +65,13 @@ The Linux runs at `47098b98` and `5eaa71c2` failed the four hidden-link assertio
 All nine checks passed at `4231f120`. The Linux suite reported 3,885 tests. The Windows suite passed 4,012 with 31 skips. Inspected all four synthetic 360 px and 520 px captures in artifact `simple-desktop-windows` from run 45007163572. The connection action and collapsed server row fit the narrow layout. The filtered list shows different endpoints for duplicate names. Matched the details toggle to the page's existing disclosure style and shortened the disconnected hint.
 
 Independent review found stale live translations and mode drift when the app-rules shortcut follows an Advanced Servers visit. The code now refreshes labels on the dispatcher and preserves connection mode when saving the view. Regressions cover both findings. Final follow-up CI is pending.
+
+The grouped picker and scoped runtime preference are staged for the #728
+follow-up. Read-only runtime audit identified unscoped exact-only routes,
+obsolete preferences after explicit source changes and unsafe enum parsing.
+Category auto now selects an eligible route on connect or recovery. Advanced
+periodic auto selection remains a separate setting. Pinned chain IDs can
+refresh when the existing route identity and feed still match. Added regressions
+for unknown YAML categories, protocol eligibility, explicit feed changes and
+scoped recovery. The current staged delta passed whitespace and XAML syntax
+checks. Hosted builds, tests and Windows capture review remain pending.
