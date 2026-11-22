@@ -1,10 +1,12 @@
 using System.Reflection;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using VPNRouter.App.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Avalonia.Headless.XUnit;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.ViewModels.Internals;
@@ -38,13 +40,13 @@ public sealed class SimpleConnectStatusTests
         using var view = new OpenPage(vm, width: 380);
         vm.OpenConfigPickerCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
-        var options = view.Page.FindControl<Expander>("SimpleConnectionOptions")!;
+        var options = view.Page.FindControl<ToggleButton>("SimpleConnectionOptions")!;
         var link = view.Page.FindControl<TextBox>("SimpleConfigLink")!;
-        Assert.False(options.IsExpanded);
-        Assert.False(link.IsEffectivelyVisible);
-        options.IsExpanded = true;
+        Assert.False(options.IsChecked);
+        Assert.False(link.IsAttachedToVisualTree() && link.IsEffectivelyVisible);
+        options.IsChecked = true;
         Dispatcher.UIThread.RunJobs();
-        Assert.True(link.IsEffectivelyVisible);
+        Assert.True(link.IsAttachedToVisualTree() && link.IsEffectivelyVisible);
 
         var ping = view.Page.FindControl<Button>("SimplePing")!;
         var deepCheck = view.Page.FindControl<Button>("SimpleDeepCheck")!;
@@ -298,7 +300,7 @@ public sealed class SimpleConnectStatusTests
         vm.OpenConfigPickerCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         Assert.True(search.IsEffectivelyVisible);
-        Assert.False(link.IsEffectivelyVisible);
+        Assert.False(link.IsAttachedToVisualTree() && link.IsEffectivelyVisible);
         Assert.Equal(16, list.Items.Count);
         Assert.Same(previous, list.Items[0]);
         Assert.InRange(list.Bounds.Height, 1, 172);

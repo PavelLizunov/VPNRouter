@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -18,7 +19,7 @@ public partial class SimplePage : UserControl
     private readonly TextBox _serverSearch;
     private readonly ServerPickerListBox _serverResults;
     private readonly TextBlock _serverCount;
-    private readonly Expander _connectionOptions;
+    private readonly ToggleButton _connectionOptions;
     private readonly Button _changeServer;
     private readonly Button _appRules;
     private MainWindowViewModel? _viewModel;
@@ -32,7 +33,7 @@ public partial class SimplePage : UserControl
         _serverSearch = this.FindControl<TextBox>("SimpleServerSearch")!;
         _serverResults = this.FindControl<ServerPickerListBox>("SimpleServerResults")!;
         _serverCount = this.FindControl<TextBlock>("SimpleServerCount")!;
-        _connectionOptions = this.FindControl<Expander>("SimpleConnectionOptions")!;
+        _connectionOptions = this.FindControl<ToggleButton>("SimpleConnectionOptions")!;
         _changeServer = this.FindControl<Button>("SimpleChangeServer")!;
         _appRules = this.FindControl<Button>("SimpleAppRules")!;
         _serverResults.ConfirmSelection = ConfirmServer;
@@ -81,7 +82,7 @@ public partial class SimplePage : UserControl
     {
         _serverSearch.PlaceholderText = Strings.SmpSearchServers;
         Avalonia.Automation.AutomationProperties.SetName(_serverSearch, Strings.SmpSearchServers);
-        _connectionOptions.Header = Strings.SmpConnectionOptions;
+        _connectionOptions.Content = Strings.SmpConnectionOptions;
         _appRules.Content = Strings.SmpApplicationRules;
     }
 
@@ -93,7 +94,7 @@ public partial class SimplePage : UserControl
         _serverPanel.IsVisible = _pickerOpen;
         if (!_pickerOpen)
         {
-            if (source?.SmpPickerVisible != true) _connectionOptions.IsExpanded = false;
+            if (source?.SmpPickerVisible != true) _connectionOptions.IsChecked = false;
             if (wasOpen)
             {
                 _serverSearch.Text = string.Empty;

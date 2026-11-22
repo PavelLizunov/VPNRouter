@@ -528,63 +528,61 @@
                                 <TextBlock Name="SimpleServerCount" Classes="hint"
                                            AutomationProperties.LiveSetting="Polite"/>
                             </StackPanel>
-                            <Expander Name="SimpleConnectionOptions" HorizontalAlignment="Stretch"
-                                      HorizontalContentAlignment="Stretch">
-                                <StackPanel IsVisible="{Binding #SimpleConnectionOptions.IsExpanded}" Spacing="8">
-                                    <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up"
-                                               icons:PictogramText.Text="{Binding ConnectionStatsText}"
-                                               IsVisible="{Binding HasConnectionStats}"
-                                               FontSize="{StaticResource FsSm}"
-                                               Foreground="{DynamicResource TextMutedBrush}"/>
-                                    <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
-                                        <Button Name="SimplePing" Content="{Binding SmpPingButtonText}"
-                                                Command="{Binding TestAllSubscriptionServersCommand}"
-                                                IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
-                                                IsVisible="{Binding SmpHasSubscriptionServers}"
-                                                ToolTip.Tip="{Binding L_TipTestAllServers}"/>
-                                        <Button Name="SimpleDeepCheck" Content="{Binding ServerDeepButtonText}"
-                                                Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
-                                                IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
-                                                IsVisible="{Binding SmpHasSubscriptionServers}"
-                                                ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
-                                        <Button Name="SimpleRefreshSubscriptions" Content="{Binding L_SmpRefreshSubscriptions}"
-                                                Command="{Binding RefreshAllSubscriptionsCommand}"
-                                                IsVisible="{Binding SmpHasRefreshableSubscriptions}"
-                                                IsEnabled="{Binding SmpCanRefreshSubscriptions}"/>
-                                    </WrapPanel>
-                                    <TextBlock Classes="hint" Text="{Binding L_SubsRefreshing}"
-                                               IsVisible="{Binding SmpSubscriptionsRefreshing}"/>
-                                    <TextBlock Classes="hint" Text="{Binding SubscriptionTestProgressText}"
-                                               IsVisible="{Binding SubscriptionTestProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                    <TextBlock Classes="hint" Text="{Binding SubscriptionTestImplausibleWarning}"
-                                               IsVisible="{Binding SubscriptionTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                    <TextBlock Classes="hint" Text="{Binding SubscriptionDeepProgressText}"
-                                               IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                    <ItemsControl ItemsSource="{Binding Subscriptions}"
-                                                  IsVisible="{Binding SmpHasRefreshableSubscriptions}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:SubscriptionViewModel">
-                                                <Panel IsVisible="{Binding Enabled}">
-                                                    <TextBlock Classes="hint" Text="{Binding StatusBadge}"
-                                                               IsVisible="{Binding LastRefreshFailed}"
-                                                               ToolTip.Tip="{Binding Name}"/>
-                                                </Panel>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" Margin="0,4,0,0"/>
-                                    <TextBox Name="SimpleConfigLink" Text="{Binding SmpInput}"
-                                             PlaceholderText="{Binding L_SmpInputWatermark}"
-                                             AutomationProperties.Name="{Binding L_SmpInputLabel}"
-                                             FontSize="{StaticResource FsMd}"
-                                             MinHeight="40"
-                                             Padding="8,10,12,10"
-                                             VerticalContentAlignment="Center"
-                                             AcceptsReturn="False"
-                                             CornerRadius="{StaticResource RadiusLg}"/>
-                                    <TextBlock Classes="hint" Text="{Binding L_SmpInputHint}"/>
-                                </StackPanel>
-                            </Expander>
+                            <ToggleButton Name="SimpleConnectionOptions" HorizontalAlignment="Left"/>
+                            <StackPanel IsVisible="{Binding #SimpleConnectionOptions.IsChecked, FallbackValue=False}" Spacing="8">
+                                <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up"
+                                           icons:PictogramText.Text="{Binding ConnectionStatsText}"
+                                           IsVisible="{Binding HasConnectionStats}"
+                                           FontSize="{StaticResource FsSm}"
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                                <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
+                                    <Button Name="SimplePing" Content="{Binding SmpPingButtonText}"
+                                            Command="{Binding TestAllSubscriptionServersCommand}"
+                                            IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
+                                            IsVisible="{Binding SmpHasSubscriptionServers}"
+                                            ToolTip.Tip="{Binding L_TipTestAllServers}"/>
+                                    <Button Name="SimpleDeepCheck" Content="{Binding ServerDeepButtonText}"
+                                            Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
+                                            IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
+                                            IsVisible="{Binding SmpHasSubscriptionServers}"
+                                            ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
+                                    <Button Name="SimpleRefreshSubscriptions" Content="{Binding L_SmpRefreshSubscriptions}"
+                                            Command="{Binding RefreshAllSubscriptionsCommand}"
+                                            IsVisible="{Binding SmpHasRefreshableSubscriptions}"
+                                            IsEnabled="{Binding SmpCanRefreshSubscriptions}"/>
+                                </WrapPanel>
+                                <TextBlock Classes="hint" Text="{Binding L_SubsRefreshing}"
+                                           IsVisible="{Binding SmpSubscriptionsRefreshing}"/>
+                                <TextBlock Classes="hint" Text="{Binding SubscriptionTestProgressText}"
+                                           IsVisible="{Binding SubscriptionTestProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                <TextBlock Classes="hint" Text="{Binding SubscriptionTestImplausibleWarning}"
+                                           IsVisible="{Binding SubscriptionTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                <TextBlock Classes="hint" Text="{Binding SubscriptionDeepProgressText}"
+                                           IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                <ItemsControl ItemsSource="{Binding Subscriptions}"
+                                              IsVisible="{Binding SmpHasRefreshableSubscriptions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SubscriptionViewModel">
+                                            <Panel IsVisible="{Binding Enabled}">
+                                                <TextBlock Classes="hint" Text="{Binding StatusBadge}"
+                                                           IsVisible="{Binding LastRefreshFailed}"
+                                                           ToolTip.Tip="{Binding Name}"/>
+                                            </Panel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" Margin="0,4,0,0"/>
+                                <TextBox Name="SimpleConfigLink" Text="{Binding SmpInput}"
+                                         PlaceholderText="{Binding L_SmpInputWatermark}"
+                                         AutomationProperties.Name="{Binding L_SmpInputLabel}"
+                                         FontSize="{StaticResource FsMd}"
+                                         MinHeight="40"
+                                         Padding="8,10,12,10"
+                                         VerticalContentAlignment="Center"
+                                         AcceptsReturn="False"
+                                         CornerRadius="{StaticResource RadiusLg}"/>
+                                <TextBlock Classes="hint" Text="{Binding L_SmpInputHint}"/>
+                            </StackPanel>
                         </StackPanel>
 
                         <Border Classes="divider" IsVisible="{Binding SmpHasConfig}"/>
