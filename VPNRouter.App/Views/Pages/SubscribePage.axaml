@@ -35,18 +35,18 @@
           </Grid>
         </Border>
         <Panel>
-          <ListBox x:Name="SubList"
+          <icons:ServerPickerListBox x:Name="SubList"
                    Classes="server-list"
                    ItemsSource="{Binding SubscriptionServers}"
                    SelectedItem="{Binding SelectedSubscriptionServer}"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                    ScrollViewer.VerticalScrollBarVisibility="Auto">
-            <ListBox.ItemsPanel>
+            <icons:ServerPickerListBox.ItemsPanel>
               <ItemsPanelTemplate>
                 <VirtualizingStackPanel/>
               </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBox.ItemTemplate>
+            </icons:ServerPickerListBox.ItemsPanel>
+            <icons:ServerPickerListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ServerViewModel">
                 <Border Classes="server-row" Classes.active="{Binding IsActive}">
                   <Grid ColumnDefinitions="22,26,*,Auto,Auto" ColumnSpacing="10" Margin="0,0,10,0">
@@ -95,8 +95,8 @@
                   </Grid>
                 </Border>
               </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+            </icons:ServerPickerListBox.ItemTemplate>
+          </icons:ServerPickerListBox>
 
           <StackPanel Classes="empty-state" IsVisible="{Binding !SubscriptionServers.Count}">
             <Border Classes="empty-icon">
