@@ -1,6 +1,8 @@
 using System.Reflection;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Media.Imaging;
 using VPNRouter.App.Controls;
 using Avalonia.Threading;
 using Avalonia.Headless.XUnit;
@@ -35,6 +37,11 @@ public sealed class SimpleConnectStatusTests
         using var vm = CreateVm(store);
         using var view = new OpenPage(vm, width: 380);
         vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var options = view.Page.FindControl<Expander>("SimpleConnectionOptions")!;
+        Assert.False(options.IsExpanded);
+        Assert.False(view.Page.FindControl<TextBox>("SimpleConfigLink")!.IsEffectivelyVisible);
+        options.IsExpanded = true;
         Dispatcher.UIThread.RunJobs();
 
         var ping = view.Page.FindControl<Button>("SimplePing")!;
@@ -248,6 +255,87 @@ public sealed class SimpleConnectStatusTests
         Assert.Equal("accepted", vm.SmpConfigServer?.Name);
         Assert.False(vm.SelectedSubscriptionServer!.IsActive);
         Assert.True(vm.SubscriptionServers.Single(s => s.Name == "accepted").IsActive);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(360, true)]
+    [InlineData(520, false)]
+    public void SimpleServerSearchPreservesSelectionUntilExactRowActivation(int width, bool autoSelect)
+    {
+        var initial = Entry("Sweden", "first.invalid");
+        var firstMatch = Entry("Amsterdam", "ams-one.invalid");
+        var chosen = Entry("Amsterdam", "ams-two.invalid", 8443);
+        var settings = new AppSettings();
+        settings.App.Language = width == 360 ? "ru" : "en";
+        settings.App.ConfigMode = "subscribe";
+        settings.App.ActiveSubscriptionServer = initial.Name;
+        settings.Vless.AutoSelectBestServer = autoSelect;
+        settings.App.Subscriptions =
+        [
+            new()
+            {
+                Enabled = true, Url = "https://feed.invalid/picker",
+                Servers = [initial, firstMatch, chosen, .. Enumerable.Range(1, 13)
+                    .Select(n => Entry($"Server {n}", $"node-{n}.invalid"))]
+            }
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm, width);
+        var search = view.Page.FindControl<TextBox>("SimpleServerSearch")!;
+        var list = view.Page.FindControl<ServerPickerListBox>("SimpleServerResults")!;
+        var count = view.Page.FindControl<TextBlock>("SimpleServerCount")!;
+        var link = view.Page.FindControl<TextBox>("SimpleConfigLink")!;
+        var previous = vm.SelectedSubscriptionServer;
+        var before = store.SaveCount;
+        var input = vm.SmpInput;
+
+        Assert.False(search.IsEffectivelyVisible);
+        if (OperatingSystem.IsWindows()) view.Capture($"simple-home-{width}");
+        vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(search.IsEffectivelyVisible);
+        Assert.False(link.IsEffectivelyVisible);
+        Assert.Equal(16, list.Items.Count);
+        Assert.Same(previous, list.Items[0]);
+        Assert.InRange(list.Bounds.Height, 1, 172);
+
+        search.Text = "no matches";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(list.Items);
+        Assert.Equal(Strings.SmpNoMatchingServers, count.Text);
+        Assert.Same(previous, vm.SelectedSubscriptionServer);
+        vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(string.IsNullOrEmpty(search.Text));
+        Assert.Same(previous, vm.SelectedSubscriptionServer);
+
+        vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        search.Text = "  aMsTeRdAm  ";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(2, list.Items.Count);
+        var firstItem = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
+        firstItem.Focus();
+        PressPickerKey(firstItem, Key.Down);
+        Assert.Same(vm.SubscriptionServers[2], list.SelectedItem);
+        Assert.Same(previous, vm.SelectedSubscriptionServer);
+        Assert.Equal(input, vm.SmpInput);
+        Assert.Equal(autoSelect, vm.AutoSelectBestServer);
+        Assert.Equal(before, store.SaveCount);
+        if (OperatingSystem.IsWindows()) view.Capture($"simple-picker-{width}");
+
+        var item = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(1));
+        PressPickerKey(item, Key.Enter);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(vm.SubscriptionServers[2], vm.SelectedSubscriptionServer);
+        Assert.False(vm.AutoSelectBestServer);
+        Assert.False(search.IsEffectivelyVisible);
+        Assert.Equal(before + 1, store.SaveCount);
+        var saved = store.Load(AppPaths.ConfigYamlPath);
+        Assert.Equal(SubscriptionEntry.RowKey(chosen), saved.App.ActiveSubscriptionRow);
+        Assert.Equal(chosen.Server, Generate(VpnEngine.CopySessionSettings(saved)).Server.Address);
     }
 
     [AvaloniaTheory]
@@ -468,6 +556,13 @@ public sealed class SimpleConnectStatusTests
         }
 
         public void Dispose() => _window.Close();
+
+        public void Capture(string name)
+        {
+            using var bitmap = _window.CaptureRenderedFrame();
+            Assert.NotNull(bitmap);
+            bitmap.Save(Path.Combine(ScreenshotHelper.ScreenshotsDir, $"{name}.png"), PngBitmapEncoderOptions.Default);
+        }
     }
 
     private static string BoundText(SimplePage page, string name)

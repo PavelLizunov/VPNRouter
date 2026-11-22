@@ -27,7 +27,7 @@ public static partial class Strings
         : "Accepts a server link (vless / hysteria2 / tuic / ss / naive / dnstt) or a subscription URL (http/https).";
     public static string SmpInvalidServerLink => Ru ? "Некорректная ссылка на сервер. Проверьте её формат." : "Invalid server link. Check its format.";
     public static string SmpDnsttCoreRequired => Ru ? "Для DNSTT нужна совместимая версия ядра sing-box-vpnctl." : "DNSTT requires a compatible sing-box-vpnctl core.";
-    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "Route through VPN";
+    public static string SmpTunnelModeLabel => Ru ? "Что направлять через VPN" : "Route through VPN";
     public static string SmpSplitOption => Ru
         ? "Выбранные приложения"
         : "Selected apps";
@@ -46,11 +46,11 @@ public static partial class Strings
     public static string SmpConnectedTitle => Ru ? "VPN работает" : "VPN is running";
     public static string SmpDisconnectedTitle => Ru ? "VPN не запущен" : "VPN is off";
     public static string SmpTipSplit => Ru
-        ? "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code и Cursor идут через VPN. Игры, Steam, банк — мимо."
-        : "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code and Cursor go through the VPN. Games, Steam, banking — direct.";
+        ? "Трафик направляется по правилам приложений."
+        : "App rules determine which traffic uses the VPN.";
     public static string SmpTipFull => Ru
-        ? "Весь трафик компьютера идёт через VPN. Включая игры и банки."
-        : "All traffic on this computer goes through the VPN — including games and banking.";
+        ? "VPN используется по умолчанию. Настроенные исключения действуют."
+        : "Traffic uses the VPN by default. Configured exceptions still apply.";
     public static string SmpAutostartLabel => Ru
         ? $"Запускать вместе с {OsDisplayName}"
         : $"Start with {OsDisplayName}";
@@ -128,6 +128,11 @@ public static partial class Strings
         ? $"«{previous}» не отвечал, выбран самый быстрый из рабочих."
         : $"'{previous}' was not responding; picked the fastest working server.";
     public static string SmpPickServerLabel         => Ru ? "Сервер" : "Server";
+    public static string SmpSearchServers           => Ru ? "Найти сервер" : "Find a server";
+    public static string SmpNoMatchingServers       => Ru ? "Серверы не найдены" : "No matching servers";
+    public static string SmpCurrentServer           => Ru ? "Активен" : "Active";
+    public static string SmpConnectionOptions       => Ru ? "Ссылка и проверка серверов" : "Connection link and server checks";
+    public static string SmpApplicationRules        => Ru ? "Настроить приложения" : "Configure app rules";
     public static string SmpPickServerHint          => Ru
         ? "Подключение берёт последний выбранный сервер, если он отвечает, иначе самый быстрый из рабочих."
         : "Connect uses the server you picked last if it answers, otherwise the fastest working one.";
@@ -156,6 +161,7 @@ public static partial class Strings
 
     public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
     public static string SmpConfigRowChange => Ru ? "Изменить" : "Change";
+    public static string SmpConfigRowChoose => Ru ? "Выбрать" : "Choose";
     public static string SmpConfigRowHide   => Ru ? "Свернуть" : "Hide";
     internal static string SmpActiveMode(string mode) => Ru ? $"Сейчас · {mode}" : $"Active · {mode}";
     internal static string SmpPendingConfig(string config) => Ru ? $"Ожидает применения · {config}" : $"Pending · {config}";
@@ -163,7 +169,7 @@ public static partial class Strings
     public static string SmpCfgSubscribe   => Ru ? "подписка"       : "subscribe";
     public static string SmpCfgManual      => Ru ? "вручную"        : "manual";
     public static string SmpCfgCustom      => Ru ? "свой"           : "custom";
-    public static string SmpCfgSplit       => Ru ? "сплит"          : "split";
+    public static string SmpCfgSplit       => Ru ? "по приложениям" : "by app";
     public static string SmpCfgFull        => Ru ? "полный"         : "full";
 
     public static string SmpHeroAddConfigTitle => Ru ? "Добавьте конфиг VPN" : "Add a VPN config";

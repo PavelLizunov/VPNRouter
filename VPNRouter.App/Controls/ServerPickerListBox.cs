@@ -7,6 +7,8 @@ namespace VPNRouter.App.Controls;
 
 public sealed class ServerPickerListBox : ListBox
 {
+    internal Action<ServerViewModel>? ConfirmSelection { get; set; }
+
     protected override Type StyleKeyOverride => typeof(ListBox);
 
     public override bool UpdateSelectionFromEvent(Control container, RoutedEventArgs e)
@@ -17,7 +19,16 @@ public sealed class ServerPickerListBox : ListBox
         return base.UpdateSelectionFromEvent(container, e);
     }
 
-    private bool SelectFromInput(Func<bool> select) => DataContext is MainWindowViewModel vm
-        ? vm.SelectServerFromPicker(select, () => SelectedItem as ServerViewModel)
-        : select();
+    private bool SelectFromInput(Func<bool> select)
+    {
+        if (ConfirmSelection is not { } confirm)
+            return DataContext is MainWindowViewModel vm
+                ? vm.SelectServerFromPicker(select, () => SelectedItem as ServerViewModel)
+                : select();
+
+        var accepted = select();
+        if (accepted && SelectedItem is ServerViewModel row)
+            confirm(row);
+        return accepted;
+    }
 }

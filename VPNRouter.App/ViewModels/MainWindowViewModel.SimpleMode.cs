@@ -25,7 +25,11 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(L_SmpConfigRowToggle))]
     private bool _smpFormExpanded;
 
-    public string L_SmpConfigRowToggle => SmpFormExpanded ? Strings.SmpConfigRowHide : Strings.SmpConfigRowChange;
+    public string L_SmpConfigRowToggle => SmpFormExpanded
+        ? Strings.SmpConfigRowHide
+        : CanPickSimpleSubscriptionServer && SmpHasSubscriptionServers
+            ? Core.Localization.Strings.SmpConfigRowChoose
+            : Strings.SmpConfigRowChange;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(L_FcSettingsToggle))]
@@ -279,6 +283,42 @@ public partial class MainWindowViewModel
     private void OpenConfigPicker()
     {
         SmpFormExpanded = !SmpFormExpanded;
+    }
+
+    internal void ConfirmSimpleServer(ServerViewModel row)
+    {
+        if (_isLoadingUI || SimpleCtaIsConnecting || _isReconnecting ||
+            !CanPickSimpleSubscriptionServer || !SubscriptionServers.Contains(row)) return;
+        // An open result list is presentation state. Only an explicit row activation changes the preference.
+        IsSubscribeMode = true;
+        IsVlessMode = false;
+        var wasAutoSelecting = AutoSelectBestServer;
+        SelectServerFromPicker(() =>
+        {
+            SelectedSubscriptionServer = row;
+            return true;
+        }, () => row);
+        if (!wasAutoSelecting && (!IsConnected || row.IsActive))
+        {
+            try { SaveSettings(); }
+            catch (Exception ex)
+            {
+                _logger.Warning("[Simple] Server selection save failed ({ErrorType})", ex.GetType().Name);
+                SmpErrorText = Strings.ApplyFailed;
+                return;
+            }
+        }
+        SmpFormExpanded = false;
+    }
+
+    internal bool CanPickSimpleSubscriptionServer =>
+        string.Equals(_settings.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase);
+
+    internal void OpenSimpleApplicationRules()
+    {
+        if (!IsSimpleMode) return;
+        SelectedTabIndex = 3;
+        ToggleUiMode();
     }
 
     // Only the command that raised IsConnecting may release it after pre-flight.
@@ -758,7 +798,7 @@ public partial class MainWindowViewModel
     private static readonly string[] SmpHomeProps =
     {
         nameof(SmpHasConfig), nameof(SmpNeedsConfig), nameof(SmpConfigEditorVisible), nameof(SmpCanConnect),
-        nameof(SmpFirstRunEditorVisible), nameof(SmpPickerVisible), nameof(SmpHasSubscriptionServers),
+        nameof(SmpFirstRunEditorVisible), nameof(SmpPickerVisible), nameof(SmpHasSubscriptionServers), nameof(L_SmpConfigRowToggle),
         nameof(SmpHasRefreshableSubscriptions), nameof(SmpSubscriptionsRefreshing), nameof(SmpCanRefreshSubscriptions),
         nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
         nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),

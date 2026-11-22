@@ -34,4 +34,8 @@ Replace the static routing examples with wording based on the route mode and a l
 
 ## Outcome
 
-The current Windows layout was observed with the subscription connected. The branch combines the current Standard base and the already verified manual-selection change. The implementation and its CI results are pending.
+The current Windows layout was observed with the subscription connected. The planning head `27ea2f96` passed eight GitHub checks on PR #728.
+
+The Simple page places the compact status and connect action above the server and routing controls. The list opens on demand, searches all subscription results by name or host, and caps the viewport at 172 logical pixels. The current selection remains separate from the list highlight. The exact row is saved only on activation. Subscription editing and checks remain behind a second disclosure.
+
+Static XML namescope checks, YAML parsing and `git diff --check` passed. Hosted regressions exercise both auto-select states, arrow navigation, duplicate labels, hidden link input and persistence. The Windows suite also captures the 360 px Russian and 520 px English layouts using synthetic data. Exact implementation CI and screenshot inspection are pending.
