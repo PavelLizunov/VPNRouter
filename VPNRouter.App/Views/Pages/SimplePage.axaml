@@ -10,9 +10,16 @@
 
     <UserControl.Resources>
         <DataTemplate x:Key="SimpleServerRowTemplate" x:DataType="vm:ServerViewModel">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Grid Width="24" Height="18" VerticalAlignment="Center">
+                    <Image Source="{Binding CountryFlag}" Stretch="Uniform" ToolTip.Tip="{Binding CountryCode}"
+                           AutomationProperties.Name="{Binding CountryCode}"/>
+                    <icons:Pictogram Id="globe" Width="15" Height="15" IsVisible="{Binding !HasCountryFlag}"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Foreground="{DynamicResource TextMutedBrush}"/>
+                </Grid>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Text="{Binding SimpleDisplayName}" TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding DisplayName}"/>
                     <TextBlock Classes="hint" Text="{Binding Endpoint}" TextTrimming="CharacterEllipsis"
                                IsVisible="{Binding CanSelectInSimpleMode}" ToolTip.Tip="{Binding Endpoint}"/>
@@ -20,7 +27,7 @@
                                IsVisible="{Binding !CanSelectInSimpleMode}" TextWrapping="Wrap"
                                ToolTip.Tip="{Binding Endpoint}"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <TextBlock Text="{Binding PingDisplay}" ToolTip.Tip="{Binding HealthTooltip}"
                                HorizontalAlignment="Right" Classes="hint"/>
                     <TextBlock IsVisible="{Binding IsActive}" Text="{x:Static loc:Strings.SmpCurrentServer}"

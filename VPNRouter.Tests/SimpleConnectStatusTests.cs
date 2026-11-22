@@ -322,6 +322,9 @@ public sealed class SimpleConnectStatusTests
         FindGroupButton(groups, ProtocolGroup.Daily, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
         Assert.True(groupedRows[0].IsExpanded);
+        Assert.Equal("SE", previous!.CountryCode);
+        Assert.NotNull(previous.CountryFlag);
+        Assert.False(vm.SubscriptionServers[1].HasCountryFlag);
         Assert.Same(previous, vm.SelectedSubscriptionServer);
         Assert.Equal(before, store.SaveCount);
         if (OperatingSystem.IsWindows()) view.Capture($"simple-picker-{width}");

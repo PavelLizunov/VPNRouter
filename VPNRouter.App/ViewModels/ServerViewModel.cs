@@ -1,6 +1,7 @@
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using VPNRouter.App.Localization;
+using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using CoreStrings = VPNRouter.Core.Localization.Strings;
@@ -13,9 +14,11 @@ public partial class ServerViewModel : ViewModelBase
     internal VlessServerEntry SourceEntry => _originalEntry;
     internal string? SubscriptionId { get; init; }
 
-    [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Endpoint))]
+    [NotifyPropertyChangedFor(nameof(SimpleDisplayName), nameof(CountryCode), nameof(CountryFlag), nameof(HasCountryFlag))]
+    private string _name = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Endpoint), nameof(SimpleDisplayName))]
     private string _server = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Endpoint))]
@@ -392,6 +395,11 @@ public partial class ServerViewModel : ViewModelBase
     }
 
     public string DisplayName => string.IsNullOrEmpty(Name) ? Server : Name;
+
+    public string SimpleDisplayName => ServerCountryFlags.DisplayName(DisplayName);
+    public string CountryCode => ServerCountryFlags.Code(Name);
+    public IImage? CountryFlag => ServerCountryFlags.Flag(CountryCode);
+    public bool HasCountryFlag => CountryFlag != null;
 
     private string ProtocolKey => (_originalEntry?.Awg != null)
         ? "amneziawg"

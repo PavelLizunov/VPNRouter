@@ -98,3 +98,14 @@ Regressions exercise these cases and keyboard activation in an expanded group.
 Cold feature-probe latency on macOS or Linux remains unmeasured and is tracked
 in the ledger. The review follow-up passed XAML parsing and whitespace checks.
 Hosted confirmation is pending for the follow-up.
+
+## Country flags and owner Windows preview
+
+Scope is the grouped and searched Simple subscription rows. Reuse the
+Business ISO flag images with their source and license. Read their explicit
+country labels and leading regional indicators from provider names. Unknown
+country labels show the neutral globe. Keep row identity, routing and saved
+settings unchanged. Verify flag resources and narrow Windows UI in hosted
+checks. Build an exact-source preview and install it on the owner's local
+Windows VM on request. Preserve the installation and settings for rollback.
+This preview does not publish a release or tag.
