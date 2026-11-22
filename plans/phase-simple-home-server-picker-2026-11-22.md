@@ -286,3 +286,9 @@ classifier. Roll back by reverting this block on the task branch.
 Gates are the exact-head Release build, category and wheel regressions
 with the existing suite, Windows headless captures, a scoped source
 review, this outcome, and unchanged selection behavior.
+
+The classifier and protocol summary now recognize DNSTT independently of
+VLESS transport. The expanded server list and search results use the host
+viewport. Removed the nested group scrollbar and list height caps. XML and
+diff checks passed. Hosted wheel tests and before/after inspection are
+pending.

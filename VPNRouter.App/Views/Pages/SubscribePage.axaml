@@ -19,7 +19,8 @@
     </Grid.RowDefinitions>
 
     <Border Grid.Row="0" Classes="list-card">
-      <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <ScrollViewer Name="ServerPickerViewport" HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
         <StackPanel Margin="12" Spacing="8">
           <pages:SubscriptionLinkEditor Name="AdvancedLink" IsVisible="{Binding !!Subscriptions.Count}"/>
           <pages:SubscriptionServerPicker Name="AdvancedPicker" Classes="advanced"/>

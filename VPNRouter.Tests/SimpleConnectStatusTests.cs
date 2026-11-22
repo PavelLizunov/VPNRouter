@@ -484,7 +484,7 @@ public sealed class SimpleConnectStatusTests
         search.Text = "  aMsTeRdAm  ";
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(2, list.Items.Count);
-        Assert.InRange(list.Bounds.Height, 1, 172);
+        Assert.True(list.Bounds.Height > 0);
         var firstItem = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
         firstItem.Focus();
         PressPickerKey(firstItem, Key.Down);
@@ -928,6 +928,61 @@ public sealed class SimpleConnectStatusTests
             finally { window.Close(); }
         }
         finally { VPNRouter.App.Localization.Strings.Lang = language; }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExpandedSubscriptionRowsUseTheHostsWheelScroll(bool advanced)
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        var rows = Enumerable.Range(1, 24).Select(i => Entry($"Test {i}", $"node-{i}.invalid")).ToList();
+        var dnstt = Entry("Test backup", "backup.invalid");
+        dnstt.Protocol = "dnstt";
+        rows.Add(dnstt);
+        settings.App.Subscriptions = [new() { Url = "https://feed.invalid/scroll", Servers = rows }];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        UserControl page = advanced ? new SubscribePage() : new SimplePage();
+        page.DataContext = vm;
+        var window = new Window { Content = page, Width = 360, Height = 680 };
+        window.Show();
+        try
+        {
+            if (advanced) vm.ToggleUiModeCommand.Execute(null);
+            else vm.OpenConfigPickerCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+
+            var viewport = page.FindControl<ScrollViewer>("ServerPickerViewport")!;
+            var groups = FindOnPage<ItemsControl>(page, "SimpleServerGroups")!;
+            var emergency = Assert.Single(groups.Items.Cast<SimpleServerGroup>(), group => group.Category == ProtocolGroup.Emergency);
+            Assert.Equal("dnstt", emergency.Protocols);
+            FindGroupButton(groups, ProtocolGroup.Daily, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
+            var list = Assert.Single(groups.GetVisualDescendants().OfType<ServerPickerListBox>(), Shown);
+            Assert.Equal(24, list.Items.Count);
+            Assert.True(viewport.Extent.Height > viewport.Viewport.Height);
+            var initial = vm.SelectedSubscriptionServer;
+            var saved = store.SaveCount;
+            var first = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
+            var point = first.TranslatePoint(new Point(first.Bounds.Width / 2, first.Bounds.Height / 2), window)!.Value;
+            var previousOffset = viewport.Offset.Y;
+            window.MouseWheel(point, new Vector(0, -1));
+            Assert.True(viewport.Offset.Y > previousOffset);
+
+            var last = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(list.Items.Count - 1));
+            last.BringIntoView();
+            Dispatcher.UIThread.RunJobs();
+            var lastPosition = last.TranslatePoint(new Point(0, last.Bounds.Height / 2), viewport)!.Value;
+            Assert.InRange(lastPosition.Y, 0, viewport.Viewport.Height);
+            Assert.Same(initial, vm.SelectedSubscriptionServer);
+            Assert.Equal(saved, store.SaveCount);
+            Capture(window, $"simple-picker-scroll-{(advanced ? "advanced" : "simple")}-360");
+        }
+        finally { window.Close(); }
     }
 
     private static void Click(Window window, Control control)

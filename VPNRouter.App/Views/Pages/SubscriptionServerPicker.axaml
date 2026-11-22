@@ -67,6 +67,7 @@
         </Style>
 
         <Style Selector="ListBox.pick">
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
@@ -138,59 +139,55 @@
                 <Button Name="SimpleTransferLink" Classes="change" Click="TransferSearchLink"/>
             </StackPanel>
         </StackPanel>
-        <ScrollViewer Name="SimpleServerGroupsScroll" MaxHeight="260"
-                      HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl Name="SimpleServerGroups">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><StackPanel Spacing="4"/></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="pages:SimpleServerGroup">
-                        <StackPanel Spacing="4">
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                <Button Classes="category" Classes.current="{Binding IsCurrent}"
-                                        Click="ChooseServerCategory"
-                                        IsEnabled="{Binding CanAutoSelect}"
-                                        AutomationProperties.Name="{Binding AutoLabel}">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                        <icons:ProtocolDisc Width="30" Height="30" GlyphSize="16" CornerRadius="15"
-                                                            Group="{Binding Category}"/>
-                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                            <TextBlock Classes="hint" Text="{Binding Protocols}"
-                                                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Protocols}"/>
-                                            <TextBlock Classes="hint" Text="{Binding SelectionHint}"
-                                                       IsVisible="{Binding !CanAutoSelect}" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="2" Text="{Binding AutoText}" IsVisible="{Binding IsCurrent}"
-                                                   Foreground="{DynamicResource AccentFgBrush}"
-                                                   FontSize="{StaticResource FsXs}" VerticalAlignment="Center"/>
-                                    </Grid>
-                                </Button>
-                                <Button Grid.Column="1" Classes="category disclosure"
-                                        Click="ToggleServerCategory"
-                                        AutomationProperties.Name="{Binding DisclosureLabel}"
-                                        ToolTip.Tip="{Binding DisclosureLabel}">
-                                    <icons:Pictogram Id="chevron-down" Classes="disclosure"
-                                                     Classes.open="{Binding IsExpanded}"/>
-                                </Button>
-                            </Grid>
-                            <icons:ServerPickerListBox Classes="pick" MaxHeight="172"
-                                                       Margin="16,0,0,2"
-                                                       IsVisible="{Binding IsExpanded}"
-                                                       ItemsSource="{Binding Servers}"
-                                                       SelectedItem="{Binding SelectedServer, Mode=OneWay}"
-                                                       ItemTemplate="{StaticResource SimpleServerRowTemplate}"
-                                                       AutomationProperties.Name="{Binding Name}"
-                                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                                       Loaded="WireGroupServerList"/>
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+        <ItemsControl Name="SimpleServerGroups">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><StackPanel Spacing="4"/></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="pages:SimpleServerGroup">
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                            <Button Classes="category" Classes.current="{Binding IsCurrent}"
+                                    Click="ChooseServerCategory"
+                                    IsEnabled="{Binding CanAutoSelect}"
+                                    AutomationProperties.Name="{Binding AutoLabel}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                    <icons:ProtocolDisc Width="30" Height="30" GlyphSize="16" CornerRadius="15"
+                                                        Group="{Binding Category}"/>
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock Classes="hint" Text="{Binding Protocols}"
+                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Protocols}"/>
+                                        <TextBlock Classes="hint" Text="{Binding SelectionHint}"
+                                                   IsVisible="{Binding !CanAutoSelect}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding AutoText}" IsVisible="{Binding IsCurrent}"
+                                               Foreground="{DynamicResource AccentFgBrush}"
+                                               FontSize="{StaticResource FsXs}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
+                            <Button Grid.Column="1" Classes="category disclosure"
+                                    Click="ToggleServerCategory"
+                                    AutomationProperties.Name="{Binding DisclosureLabel}"
+                                    ToolTip.Tip="{Binding DisclosureLabel}">
+                                <icons:Pictogram Id="chevron-down" Classes="disclosure"
+                                                 Classes.open="{Binding IsExpanded}"/>
+                            </Button>
+                        </Grid>
+                        <icons:ServerPickerListBox Classes="pick"
+                                                   Margin="16,0,0,2"
+                                                   IsVisible="{Binding IsExpanded}"
+                                                   ItemsSource="{Binding Servers}"
+                                                   SelectedItem="{Binding SelectedServer, Mode=OneWay}"
+                                                   ItemTemplate="{StaticResource SimpleServerRowTemplate}"
+                                                   AutomationProperties.Name="{Binding Name}"
+                                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                   Loaded="WireGroupServerList"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <icons:ServerPickerListBox Name="SimpleServerResults" Classes="pick"
-                                   MaxHeight="172"
                                    ItemTemplate="{StaticResource SimpleServerRowTemplate}"
                                    AutomationProperties.Name="{Binding L_SmpPickServerLabel}"
                                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>

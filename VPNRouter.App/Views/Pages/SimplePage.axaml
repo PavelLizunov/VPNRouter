@@ -311,7 +311,7 @@
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+    <ScrollViewer Name="ServerPickerViewport" HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
                   AllowAutoHide="False">
         <Grid Margin="16,16,16,16">

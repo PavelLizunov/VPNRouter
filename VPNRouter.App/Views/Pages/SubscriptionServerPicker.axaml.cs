@@ -22,7 +22,6 @@ public partial class SubscriptionServerPicker : UserControl
     private readonly StackPanel _searchLinkHint;
     private readonly ServerPickerListBox _serverResults;
     private readonly ItemsControl _serverGroups;
-    private readonly ScrollViewer _serverGroupsScroll;
     private ProtocolGroup? _expandedServerGroup;
     private ServerViewModel[] _sourceRows = [];
     private string? _language;
@@ -42,7 +41,6 @@ public partial class SubscriptionServerPicker : UserControl
         _searchLinkHint = this.FindControl<StackPanel>("SimpleSearchLinkHint")!;
         _serverResults = this.FindControl<ServerPickerListBox>("SimpleServerResults")!;
         _serverGroups = this.FindControl<ItemsControl>("SimpleServerGroups")!;
-        _serverGroupsScroll = this.FindControl<ScrollViewer>("SimpleServerGroupsScroll")!;
         _serverCount = this.FindControl<TextBlock>("SimpleServerCount")!;
         _serverResults.ConfirmSelection = ConfirmServer;
         _serverSearch.TextChanged += (_, _) => RefreshServerPicker();
@@ -132,7 +130,7 @@ public partial class SubscriptionServerPicker : UserControl
         var looksLikeLink = SimpleInputDetector.Classify(query) != SmpInputKind.Invalid;
         _searchLinkHint.IsVisible = looksLikeLink;
         var filtering = query.Length != 0 && !looksLikeLink;
-        _serverGroupsScroll.IsVisible = !filtering;
+        _serverGroups.IsVisible = !filtering;
         _serverResults.IsVisible = _serverCount.IsVisible = filtering;
         if (!filtering)
         {

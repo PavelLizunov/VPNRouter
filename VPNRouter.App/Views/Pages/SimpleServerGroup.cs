@@ -33,8 +33,10 @@ internal sealed partial class SimpleServerGroup : ObservableObject
         string.Join(" · ", servers.Select(row =>
         {
             var entry = row.SourceEntry;
-            return entry.Awg != null ? "awg" : category is ProtocolGroup.StealthWeb or ProtocolGroup.WebFallback
-                ? (entry.Transport?.Type ?? "vless") : (entry.Protocol ?? "vless");
+            if (entry.Awg != null) return "awg";
+            if (entry.Dnstt != null) return "dnstt";
+            return category is ProtocolGroup.StealthWeb or ProtocolGroup.WebFallback
+                ? entry.Transport?.Type ?? "vless" : entry.Protocol ?? "vless";
         }).Select(protocol => protocol.ToLowerInvariant()).Distinct(StringComparer.Ordinal));
 
     public ProtocolGroup Category { get; }

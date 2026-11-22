@@ -21,7 +21,7 @@ public static class ProtocolGroups
     public static ProtocolGroup Of(VlessServerEntry? entry)
     {
         if (entry?.Awg != null) return ProtocolGroup.LowPing;
-        if (entry?.IsDnsTunnel == true) return ProtocolGroup.Emergency;
+        if (entry is { Dnstt: not null } or { IsDnsTunnel: true }) return ProtocolGroup.Emergency;
         var protocol = (entry?.Protocol ?? "vless").ToLowerInvariant();
         var transport = entry?.Transport?.Type?.ToLowerInvariant();
         return protocol switch
@@ -29,7 +29,7 @@ public static class ProtocolGroups
             "hysteria2" or "hy2" or "tuic" => ProtocolGroup.GamesVoice,
             "naive" => ProtocolGroup.WebOnly,
             "amneziawg" or "awg" => ProtocolGroup.LowPing,
-            "dns-tunnel" => ProtocolGroup.Emergency,
+            "dns-tunnel" or "dnstt" => ProtocolGroup.Emergency,
             "shadowsocks" or "ss" => ProtocolGroup.Fallback,
             _ when transport is "xhttp" => ProtocolGroup.StealthWeb,
             _ when transport is "ws" or "grpc" => ProtocolGroup.WebFallback,
