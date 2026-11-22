@@ -9,15 +9,18 @@ public partial class MainWindowViewModel
 {
     private bool _savingSimpleLink;
 
-    internal bool SimpleUsesDirectLink => _settings.App.ConfigMode == "generated" && Servers.Count > 0;
+    internal bool SimpleUsesDirectLink =>
+        string.Equals(_settings.App.ConfigMode, "generated", StringComparison.OrdinalIgnoreCase) && Servers.Count > 0;
 
     internal string SimpleSavedLink
     {
         get
         {
-            if (SimpleUsesDirectLink && SimpleInputDetector.Classify(SmpInput) == SmpInputKind.ServerUri)
-                return SmpInput;
-            if (_settings.App.ConfigMode != "subscribe") return string.Empty;
+            var app = _settings.App;
+            if (SimpleUsesDirectLink)
+                return app.SimpleServerLink is { Length: > 0 } link && SelectedServer is { } server &&
+                    app.SimpleServerLinkRow == SubscriptionEntry.RowKey(server.SourceEntry) ? link : string.Empty;
+            if (!string.Equals(app.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase)) return string.Empty;
 
             var id = SelectedSubscriptionServer?.SubscriptionId ?? _settings.App.ActiveSubscriptionId;
             return Subscriptions.FirstOrDefault(feed => feed.Enabled && feed.Id == id)?.Url
@@ -34,7 +37,7 @@ public partial class MainWindowViewModel
         if (_savingSimpleLink || !CanSaveSimpleLink()) return Strings.SmpLinkSaveBusy;
         input = input.Trim();
         var kind = SimpleInputDetector.Classify(input);
-        if (kind == SmpInputKind.Invalid) return Strings.SmpLinkInputInvalid;
+        if (kind == SmpInputKind.Invalid || input.Any(char.IsControl)) return Strings.SmpLinkInputInvalid;
 
         var choiceUnchanged = CaptureSimpleChoice(out _);
         var generation = _connectionGeneration;
@@ -90,6 +93,7 @@ public partial class MainWindowViewModel
                 candidate.Vless.Servers = [server];
                 candidate.Vless.ActiveServer = server.Name ?? string.Empty;
                 SetLegacyManualServer(candidate.Vless, server);
+                RememberSimpleDirectLink(candidate.App, server, input);
             }
             else
             {
@@ -114,11 +118,12 @@ public partial class MainWindowViewModel
 
     private static void SelectSavedSimpleFeed(AppConfig app, SubscriptionEntry feed, SubscriptionInputAction action)
     {
-        var keepSelection = app.ConfigMode == "subscribe" && app.ActiveSubscriptionId == feed.Id;
+        var keepSelection = string.Equals(app.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase) &&
+            app.ActiveSubscriptionId == feed.Id;
         var selected = keepSelection ? feed.FindExactRow(app.ActiveSubscriptionServer, app.ActiveSubscriptionRow) : null;
         selected ??= feed.Servers[0];
 
-        if (action == SubscriptionInputAction.Replace) app.Subscriptions = [feed];
+        if (action == SubscriptionInputAction.Replace) app.Subscriptions.Add(feed);
         else if (action == SubscriptionInputAction.KeepAndRefresh)
             app.Subscriptions[app.Subscriptions.FindIndex(entry => entry.Id == feed.Id)] = feed;
         if (!keepSelection) app.SubscriptionPreference = null;
@@ -127,6 +132,13 @@ public partial class MainWindowViewModel
         app.ActiveSubscriptionId = feed.Id;
         app.ActiveSubscriptionServer = selected.Name;
         app.ActiveSubscriptionRow = SubscriptionEntry.RowKey(selected);
+    }
+
+    private static void RememberSimpleDirectLink(AppConfig app, VlessServerEntry server, string input)
+    {
+        // A legacy/manual edit of the row invalidates its original link without changing the usable server.
+        app.SimpleServerLink = input.Any(char.IsControl) ? null : input;
+        app.SimpleServerLinkRow = app.SimpleServerLink == null ? null : SubscriptionEntry.RowKey(server);
     }
 
     private void PublishSavedSimpleLink(AppSettings candidate, string input, bool direct)

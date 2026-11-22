@@ -163,3 +163,15 @@ and Windows passed 4,044 tests with 31 skips. The Windows artifact
 actions in light and dark themes. Visual inspection found low contrast on
 Save link. The follow-up uses the existing solid action brushes. Live
 installation and service control were outside the brief.
+
+Independent review confirmed the detached save and stale-response guards.
+The follow-up preserves other registered feeds and keeps the previous runtime
+visible. The editor shows progress without removing keyboard focus from Save.
+Newly saved direct links round-trip in the private settings and are offered
+only when the stored row still matches. Legacy manual rows have no original
+link to recover. The checks button explicitly starts the ping check, as in
+the supplied preview, and reveals the existing deep-check and refresh actions.
+Country search uses stored name and country data, with the existing bilingual
+aliases and the platform's country labels. City names are matched when present
+in a server name. No geolocation lookup is added. Added regressions for feed
+preservation, exact-row direct-link recovery, and focus after an explicit save.

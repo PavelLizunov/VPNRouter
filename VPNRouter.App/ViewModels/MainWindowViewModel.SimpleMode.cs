@@ -735,6 +735,7 @@ public partial class MainWindowViewModel
         _settings.App.SubscriptionPreference = null;
         _settings.Vless.Servers = [entry];
         _settings.Vless.ActiveServer = entry.Name ?? string.Empty;
+        RememberSimpleDirectLink(_settings.App, entry, uri);
 
         Servers.Clear();
         var vm = new ServerViewModel(entry);

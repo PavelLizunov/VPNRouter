@@ -31,6 +31,7 @@ public partial class SimplePage : UserControl
     private readonly StackPanel _linkEditor;
     private readonly TextBox _linkInput;
     private readonly TextBlock _linkError;
+    private readonly TextBlock _linkProgress;
     private readonly TextBlock _linkNotice;
     private readonly Button _saveLink;
     private readonly StackPanel _checksPanel;
@@ -58,6 +59,7 @@ public partial class SimplePage : UserControl
         _linkEditor = this.FindControl<StackPanel>("SimpleLinkEditor")!;
         _linkInput = this.FindControl<TextBox>("SimpleConfigLink")!;
         _linkError = this.FindControl<TextBlock>("SimpleLinkError")!;
+        _linkProgress = this.FindControl<TextBlock>("SimpleLinkProgress")!;
         _linkNotice = this.FindControl<TextBlock>("SimpleLinkNotice")!;
         _saveLink = this.FindControl<Button>("SimpleSaveLink")!;
         _checksPanel = this.FindControl<StackPanel>("SimpleChecks")!;
@@ -102,6 +104,9 @@ public partial class SimplePage : UserControl
 
     private void OnPickerSourceChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainWindowViewModel.IsSimpleMode) && _viewModel?.IsSimpleMode == false)
+            _linkDraftRevision++;
+
         if (args.PropertyName is not (null or "" or nameof(MainWindowViewModel.SmpPickerVisible) or
             nameof(MainWindowViewModel.SmpConfigServer) or nameof(MainWindowViewModel.SmpInput) or
             nameof(MainWindowViewModel.SmpHasRefreshableSubscriptions) or nameof(MainWindowViewModel.IsRussian)) || _refreshQueued)
@@ -130,6 +135,7 @@ public partial class SimplePage : UserControl
         this.FindControl<Button>("SimpleTransferLink")!.Content = Strings.SmpMoveLink;
         this.FindControl<Button>("SimpleCancelLink")!.Content = Strings.CommonCancel;
         _saveLink.Content = Strings.SmpSaveLink;
+        _linkProgress.Text = Strings.SmpLinkSaving;
         _appRules.Content = Strings.SmpApplicationRules;
     }
 
@@ -296,7 +302,7 @@ public partial class SimplePage : UserControl
             revision == _linkDraftRevision && input == (_linkInput.Text ?? string.Empty);
 
         _savingLink = true;
-        _saveLink.IsEnabled = false;
+        _linkProgress.IsVisible = true;
         _linkError.Text = string.Empty;
         try
         {
@@ -313,7 +319,7 @@ public partial class SimplePage : UserControl
         finally
         {
             _savingLink = false;
-            _saveLink.IsEnabled = true;
+            _linkProgress.IsVisible = false;
         }
     }
 

@@ -213,6 +213,15 @@ public sealed class SimpleConnectStatusTests
             Assert.True(linkButton.IsFocused);
             Assert.Equal(savedLink, link.Text);
             Assert.Equal(before, store.SaveCount);
+
+            Toggle(page, "SimpleLinkButton", true);
+            var save = page.FindControl<Button>("SimpleSaveLink")!;
+            Assert.True(save.Focus());
+            save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(linkButton.IsFocused);
+            Assert.False(link.IsEffectivelyVisible);
+            Assert.Equal(before, store.SaveCount);
         }
         finally { VPNRouter.App.Localization.Strings.Lang = language; }
     }

@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2** - Saving a new link in Simple used the first-run feed replacement semantics and removed other registered subscriptions. Keep their entries and caches while choosing the new feed. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P3** - The initial Simple editor could lose keyboard focus while saving, lacked progress feedback, and failed to load stored links for mixed-case modes or after a direct-link restart. Keep focus and show progress, compare modes case-insensitively, and associate saved direct links with the exact row. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
 - [x] **P3** - The Simple link save button had 2.77:1 light and 2.14:1 dark text contrast in Windows captures at `67987fae`. Use the existing solid-action brushes for 4.94:1 light and 9.23:1 dark. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P2** - The grouped picker could display another subscription server after the exact choice disappeared, and duplicate names could resolve the wrong protocol icon. Use the actual editor selection and label unavailable preferences. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).

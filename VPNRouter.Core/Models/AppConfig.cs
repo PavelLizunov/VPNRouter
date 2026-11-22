@@ -41,6 +41,14 @@ public class AppConfig
     [YamlMember(Alias = "config_mode")]
     public string ConfigMode { get; set; } = "generated";
 
+    [YamlMember(Alias = "simple_server_link", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    [JsonIgnore]
+    public string? SimpleServerLink { get; set; }
+
+    [YamlMember(Alias = "simple_server_link_row", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    [JsonIgnore]
+    public string? SimpleServerLinkRow { get; set; }
+
     [YamlMember(Alias = "custom_config")]
     public string CustomConfig { get; set; } = string.Empty;
 

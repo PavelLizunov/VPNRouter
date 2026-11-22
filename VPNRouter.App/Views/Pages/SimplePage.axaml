@@ -560,6 +560,8 @@
                                            AutomationProperties.LiveSetting="Polite"
                                            Foreground="{DynamicResource DangerFgBrush}"
                                            IsVisible="{Binding #SimpleLinkError.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                <TextBlock Name="SimpleLinkProgress" Classes="hint" TextWrapping="Wrap"
+                                           IsVisible="False" AutomationProperties.LiveSetting="Polite"/>
                                 <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
                                     <Button Name="SimpleCancelLink" Classes="change" Click="CancelLinkEdit"/>
                                     <Button Name="SimpleSaveLink" Classes="solid" Click="SaveLink"

@@ -314,10 +314,38 @@ public sealed class SubscriptionChainRefreshTests : IDisposable
         Assert.Null(await vm.SaveSimpleLinkAsync(Other, () => true));
         Assert.Equal(before + 1, store.SaveCount);
         Assert.Equal(Other, vm.SimpleSavedLink);
-        Assert.Equal(Other, Assert.Single(Recovery(store).App.Subscriptions).Url);
+        var saved = Recovery(store).App;
+        Assert.Equal(new[] { Feed, Other }, saved.Subscriptions.Select(feed => feed.Url));
+        Assert.Equal(3, saved.Subscriptions[0].Servers.Count);
+        Assert.Equal(saved.Subscriptions[1].Id, saved.ActiveSubscriptionId);
+        Assert.Equal(saved.Subscriptions[1].Id, vm.SelectedSubscriptionServer?.SubscriptionId);
         Assert.True(vm.IsConnected);
         Assert.False(vm.IsConnecting);
         Assert.True(vm.HasPendingAppChanges);
+    }
+
+    [AvaloniaFact]
+    public async Task SimpleDirectLinkSurvivesYamlRoundTripForTheSameServerOnly()
+    {
+        var store = new InMemorySettingsStore();
+        store.Save(SavedChain(), AppPaths.ConfigYamlPath);
+        using (var vm = Editor(store))
+        {
+            Assert.Null(await vm.SaveSimpleLinkAsync(Exit(), () => true));
+            Assert.Equal(Exit(), vm.SimpleSavedLink);
+            Assert.False(vm.IsConnecting);
+        }
+
+        var persisted = SettingsLoader.Copy(store.Load(AppPaths.ConfigYamlPath));
+        persisted.App.ConfigMode = "Generated";
+        store.Save(persisted, AppPaths.ConfigYamlPath);
+        using (var reopened = Editor(store)) Assert.Equal(Exit(), reopened.SimpleSavedLink);
+
+        persisted.Vless.Servers[0].Server = "edited.invalid";
+        store.Save(persisted, AppPaths.ConfigYamlPath);
+        using var edited = Editor(store);
+        Assert.True(edited.SimpleUsesDirectLink);
+        Assert.Empty(edited.SimpleSavedLink);
     }
 
     [AvaloniaTheory]

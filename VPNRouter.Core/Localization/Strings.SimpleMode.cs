@@ -161,8 +161,9 @@ public static partial class Strings
     public static string SmpSaveLink => Ru ? "Сохранить ссылку" : "Save link";
     public static string SmpLinkInputInvalid => Ru ? "Вставьте действительную ссылку подписки или сервера." : "Enter a valid subscription or server link.";
     public static string SmpLinkSaved => Ru ? "Ссылка сохранена для следующего подключения." : "Link saved for the next connection.";
+    public static string SmpLinkSaving => Ru ? "Сохраняем ссылку…" : "Saving link…";
     public static string SmpLinkSaveBusy => Ru ? "Дождитесь завершения подключения или применения настроек." : "Wait for the connection or settings change to finish.";
-    public static string SmpLinkSaveStale => Ru ? "Выбор изменился. Проверьте ссылку и повторите сохранение." : "The selection changed. Check the link and save again.";
+    public static string SmpLinkSaveStale => Ru ? "Состояние VPN изменилось. Повторите сохранение." : "The VPN state changed. Save the link again.";
     public static string SmpCheckServers => Ru ? "Проверить серверы" : "Check servers";
     public static string SmpApplicationRules        => Ru ? "Настроить приложения" : "Configure app rules";
     public static string SmpPickServerHint          => Ru
