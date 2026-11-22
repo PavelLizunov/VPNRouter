@@ -250,3 +250,7 @@ during a probe. Windows captures exercise both choices and the Simple
 header at 360 px light and 450 px dark. XML/handler checks and
 `git diff --check` passed. Hosted verification and independent review
 are pending.
+
+The Linux build/test, macOS system job and Windows characterization job at
+`1efd17f7` stopped at the same missing Avalonia primitives import. Restore
+the import in the Simple view and its companion icon test before retesting.
