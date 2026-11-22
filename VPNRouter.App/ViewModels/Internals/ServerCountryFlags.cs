@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -38,6 +39,24 @@ internal static class ServerCountryFlags
         if (LeadingIndicatorCode(label) == null) return name;
         var remainder = label[4..].TrimStart();
         return remainder.Length > 0 ? remainder : name;
+    }
+
+    internal static bool MatchesCountry(string code, string query)
+    {
+        if (code.Length == 0) return false;
+        if (code.Equals(query, StringComparison.OrdinalIgnoreCase)) return true;
+        if (Countries.Any(country => country.Code == code &&
+            country.Labels.Any(label => label.Contains(query, StringComparison.OrdinalIgnoreCase))))
+            return true;
+
+        try
+        {
+            var region = new RegionInfo(code);
+            return region.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                region.EnglishName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                region.NativeName.Contains(query, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException) { return false; }
     }
 
     private static string? LeadingIndicatorCode(string name)

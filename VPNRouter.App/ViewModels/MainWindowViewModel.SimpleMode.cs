@@ -725,45 +725,56 @@ public partial class MainWindowViewModel
 
     private bool TryApplyVless(string uri)
     {
+        var entry = ParseSimpleServerLink(uri, out var error);
+        if (entry == null)
+        {
+            SmpErrorText = error;
+            return false;
+        }
+
+        _settings.App.SubscriptionPreference = null;
+        _settings.Vless.Servers = [entry];
+        _settings.Vless.ActiveServer = entry.Name ?? string.Empty;
+
+        Servers.Clear();
+        var vm = new ServerViewModel(entry);
+        Servers.Add(vm);
+        SelectedServer = vm;
+
+        _settings.App.ConfigMode = "generated";
+        _settings.App.ActiveSubscriptionServer = string.Empty;
+        IsSubscribeMode = false;
+        IsVlessMode = true;
+        return true;
+    }
+
+    private VlessServerEntry? ParseSimpleServerLink(string uri, out string error)
+    {
         try
         {
             if (uri.StartsWith("naive", StringComparison.OrdinalIgnoreCase) &&
                 !ServerUriParser.NaiveRuntimeAvailable)
             {
-                SmpErrorText = IsRussian
+                error = IsRussian
                     ? "NaiveProxy работает только на Windows и Linux (нужен libcronet)."
                     : "NaiveProxy works only on Windows and Linux (needs libcronet).";
-                return false;
+                return null;
             }
 
             if (uri.StartsWith("dnstt://", StringComparison.OrdinalIgnoreCase) && !SingBoxFeatures.DnsttAvailable)
             {
-                SmpErrorText = Strings.SmpDnsttCoreRequired;
-                return false;
+                error = Strings.SmpDnsttCoreRequired;
+                return null;
             }
 
-            var entry = ServerUriParser.Parse(uri);
-
-            _settings.App.SubscriptionPreference = null;
-            _settings.Vless.Servers = new List<VlessServerEntry> { entry };
-            _settings.Vless.ActiveServer = entry.Name ?? string.Empty;
-
-            Servers.Clear();
-            var vm = new ServerViewModel(entry);
-            Servers.Add(vm);
-            SelectedServer = vm;
-
-            _settings.App.ConfigMode = "generated";
-            _settings.App.ActiveSubscriptionServer = string.Empty;
-            IsSubscribeMode = false;
-            IsVlessMode = true;
-            return true;
+            error = string.Empty;
+            return ServerUriParser.Parse(uri);
         }
         catch (Exception)
         {
             _logger.Warning("[Simple] Server URI parse failed");
-            SmpErrorText = Strings.SmpInvalidServerLink;
-            return false;
+            error = Strings.SmpInvalidServerLink;
+            return null;
         }
     }
 

@@ -429,7 +429,7 @@
                         Padding="16,14,16,16">
                     <StackPanel Spacing="8">
                         <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}"/>
-                        <TextBox Text="{Binding SmpInput}"
+                        <TextBox Name="SimpleInitialLink" Text="{Binding SmpInput}"
                                  PlaceholderText="{Binding L_SmpInputWatermark}"
                                  AutomationProperties.Name="{Binding L_SmpInputLabel}"
                                  FontSize="{StaticResource FsMd}"
@@ -543,11 +543,52 @@
                             </Button>
                         </Grid>
 
+                        <StackPanel IsVisible="{Binding SmpHasConfig}" Margin="16,0,16,12" Spacing="8">
+                            <ToggleButton Name="SimpleLinkButton" Classes="change" HorizontalAlignment="Left" Click="ToggleLinkEditor">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <icons:Pictogram Id="link" Width="14" Height="14"/>
+                                    <TextBlock Name="SimpleLinkButtonLabel"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <StackPanel Name="SimpleLinkEditor" IsVisible="{Binding #SimpleLinkButton.IsChecked, FallbackValue=False}"
+                                        Spacing="8" KeyDown="OnLinkEditorKeyDown">
+                                <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" TextWrapping="Wrap"/>
+                                <TextBox Name="SimpleConfigLink" PlaceholderText="{Binding L_SmpInputWatermark}"
+                                         AutomationProperties.Name="{Binding L_SmpInputLabel}"
+                                         MinHeight="40" AcceptsReturn="False" CornerRadius="{StaticResource RadiusLg}"/>
+                                <TextBlock Name="SimpleLinkError" Classes="hint" TextWrapping="Wrap"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           Foreground="{DynamicResource DangerFgBrush}"
+                                           IsVisible="{Binding #SimpleLinkError.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
+                                    <Button Name="SimpleCancelLink" Classes="change" Click="CancelLinkEdit"/>
+                                    <Button Name="SimpleSaveLink" Classes="accent" Click="SaveLink"/>
+                                </WrapPanel>
+                            </StackPanel>
+                            <TextBlock Name="SimpleLinkNotice" Classes="hint" TextWrapping="Wrap"
+                                       AutomationProperties.LiveSetting="Polite"
+                                       IsVisible="{Binding #SimpleLinkNotice.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+
                         <Border Classes="divider" IsVisible="{Binding SmpPickerVisible}"/>
                         <StackPanel IsVisible="{Binding SmpPickerVisible}" Margin="16,12,16,14" Spacing="8">
                             <StackPanel Name="SimpleServerPanel" IsVisible="False" Spacing="8"
                                         IsEnabled="{Binding !SimpleCtaIsConnecting}" KeyDown="OnPickerKeyDown">
-                                <TextBox Name="SimpleServerSearch" MinHeight="36"/>
+                                <ToggleButton Name="SimpleServerSearchButton" Classes="change"
+                                              HorizontalAlignment="Left" Click="ToggleServerSearch">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <icons:Pictogram Id="search-tab" Width="14" Height="14"/>
+                                        <TextBlock Name="SimpleServerSearchButtonLabel"/>
+                                    </StackPanel>
+                                </ToggleButton>
+                                <StackPanel Spacing="6" IsVisible="{Binding #SimpleServerSearchButton.IsChecked, FallbackValue=False}">
+                                    <TextBlock Name="SimpleServerSearchLabel" Classes="label"/>
+                                    <TextBox Name="SimpleServerSearch" MinHeight="36" KeyDown="OnSearchKeyDown"/>
+                                    <StackPanel Name="SimpleSearchLinkHint" IsVisible="False" Spacing="4">
+                                        <TextBlock Name="SimpleSearchLinkMessage" Classes="hint" TextWrapping="Wrap"/>
+                                        <Button Name="SimpleTransferLink" Classes="change" Click="TransferSearchLink"/>
+                                    </StackPanel>
+                                </StackPanel>
                                 <ScrollViewer Name="SimpleServerGroupsScroll" MaxHeight="260"
                                               HorizontalScrollBarVisibility="Disabled">
                                     <ItemsControl Name="SimpleServerGroups">
@@ -607,8 +648,15 @@
                                 <TextBlock Name="SimpleServerCount" Classes="hint"
                                            AutomationProperties.LiveSetting="Polite"/>
                             </StackPanel>
-                            <ToggleButton Name="SimpleConnectionOptions" Classes="change" HorizontalAlignment="Left"/>
-                            <StackPanel IsVisible="{Binding #SimpleConnectionOptions.IsChecked, FallbackValue=False}" Spacing="8">
+                        </StackPanel>
+                        <StackPanel Name="SimpleChecks" IsVisible="False" Margin="16,0,16,12" Spacing="8">
+                            <ToggleButton Name="SimpleCheckServers" Classes="change" HorizontalAlignment="Left" Click="ToggleServerChecks">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <icons:Pictogram Id="shield-check" Width="14" Height="14"/>
+                                    <TextBlock Name="SimpleCheckServersLabel"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <StackPanel IsVisible="{Binding #SimpleCheckServers.IsChecked, FallbackValue=False}" Spacing="8">
                                 <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up"
                                            icons:PictogramText.Text="{Binding ConnectionStatsText}"
                                            IsVisible="{Binding HasConnectionStats}"
@@ -650,17 +698,6 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" Margin="0,4,0,0"/>
-                                <TextBox Name="SimpleConfigLink" Text="{Binding SmpInput}"
-                                         PlaceholderText="{Binding L_SmpInputWatermark}"
-                                         AutomationProperties.Name="{Binding L_SmpInputLabel}"
-                                         FontSize="{StaticResource FsMd}"
-                                         MinHeight="40"
-                                         Padding="8,10,12,10"
-                                         VerticalContentAlignment="Center"
-                                         AcceptsReturn="False"
-                                         CornerRadius="{StaticResource RadiusLg}"/>
-                                <TextBlock Classes="hint" Text="{Binding L_SmpInputHint}"/>
                             </StackPanel>
                         </StackPanel>
 

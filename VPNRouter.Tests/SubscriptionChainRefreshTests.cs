@@ -288,6 +288,72 @@ public sealed class SubscriptionChainRefreshTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task SimpleLinkSaveValidatesBeforeChangingTheSavedSourceAndDoesNotReconnect()
+    {
+        var settings = SavedChain();
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = Editor(store);
+        vm.IsConnected = true;
+        var selection = vm.SelectedSubscriptionServer;
+        var before = store.SaveCount;
+        var http = new FakeHttpClient().Setup(Other, "not a subscription");
+        SubscriptionFetcher.Http = http;
+
+        Assert.NotNull(await vm.SaveSimpleLinkAsync("https://", () => true));
+        Assert.NotNull(await vm.SaveSimpleLinkAsync("vless://bad", () => true));
+        Assert.Empty(http.SentRequests);
+        Assert.NotNull(await vm.SaveSimpleLinkAsync(Other, () => true));
+        Assert.Single(http.SentRequests);
+        Assert.Equal(before, store.SaveCount);
+        Assert.Equal(Feed, vm.SimpleSavedLink);
+        Assert.Same(selection, vm.SelectedSubscriptionServer);
+        CheckChain(Recovery(store), false);
+
+        SubscriptionFetcher.Http = new FakeHttpClient().Setup(Other, Exit());
+        Assert.Null(await vm.SaveSimpleLinkAsync(Other, () => true));
+        Assert.Equal(before + 1, store.SaveCount);
+        Assert.Equal(Other, vm.SimpleSavedLink);
+        Assert.Equal(Other, Assert.Single(Recovery(store).App.Subscriptions).Url);
+        Assert.True(vm.IsConnected);
+        Assert.False(vm.IsConnecting);
+        Assert.True(vm.HasPendingAppChanges);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SimpleLinkSaveDiscardsAnOldResponseAfterTheDraftOrSelectionChanges(bool editDraft)
+    {
+        var store = new InMemorySettingsStore();
+        store.Save(SavedChain(), AppPaths.ConfigYamlPath);
+        using var vm = Editor(store);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var http = new FakeHttpClient().Setup(Other, Exit());
+        SubscriptionFetcher.Http = new WaitForEdit(http, entered, release.Task);
+        var ct = TestContext.Current.CancellationToken;
+        var current = true;
+        var saving = vm.SaveSimpleLinkAsync(Other, () => current);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+            Assert.NotNull(await vm.SaveSimpleLinkAsync(Other, () => true));
+            if (editDraft) current = false;
+            else vm.ConfirmSimpleServer(vm.SubscriptionServers.First());
+        }
+        finally { release.TrySetResult(); }
+
+        var before = store.SaveCount;
+        var selection = vm.SelectedSubscriptionServer;
+        Assert.NotNull(await saving.WaitAsync(TimeSpan.FromSeconds(5), ct));
+        Assert.Single(http.SentRequests);
+        Assert.Equal(before, store.SaveCount);
+        Assert.Equal(Feed, vm.SimpleSavedLink);
+        Assert.Same(selection, vm.SelectedSubscriptionServer);
+    }
+
+    [AvaloniaFact]
     public async Task SimpleConnectWithAnEmptyFeedDoesNotDuplicateItsManualRefresh()
     {
         var settings = SavedChain();

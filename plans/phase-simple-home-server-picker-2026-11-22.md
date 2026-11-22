@@ -145,3 +145,13 @@ draft/validation/stale-response and picker keyboard regressions, brief outcome,
 independent review of save ownership, headless Windows captures at narrow
 widths in both themes, and the existing ViewModel surface characterization.
 Live candidate deployment is outside this task.
+
+The view separates the link editor, search disclosure and diagnostics.
+The new save path prepares a detached candidate via the existing parser and
+subscription cache updater, persists it, then updates the next selection.
+The editor never calls the Connect or Apply paths. The review checked these
+ownership boundaries before implementation. Added headless coverage for the
+first run, Escape, query transfer, input preservation, and narrow themed
+layouts. The fetch seam covers rejection and stale completion. Local AXAML
+parse, named-control/event checks and whitespace checks passed. Exact-head
+hosted build, tests and captures are pending.

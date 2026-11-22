@@ -18,13 +18,13 @@ public static partial class Strings
         ? "Переключить на Advanced"
         : "Switch to Advanced";
 
-    public static string SmpInputLabel => Ru ? "Конфиг VPN" : "VPN config";
+    public static string SmpInputLabel => Ru ? "Ссылка подписки или сервера" : "Subscription or server link";
     public static string SmpInputWatermark => Ru
         ? "vless:// / naive://... или https://..."
         : "vless:// / naive://... or https://...";
     public static string SmpInputHint => Ru
-        ? "Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive / dnstt) или URL подписки (http/https)."
-        : "Accepts a server link (vless / hysteria2 / tuic / ss / naive / dnstt) or a subscription URL (http/https).";
+        ? "Вставьте ссылку, которую получили от провайдера."
+        : "Paste the link provided by your VPN provider.";
     public static string SmpInvalidServerLink => Ru ? "Некорректная ссылка на сервер. Проверьте её формат." : "Invalid server link. Check its format.";
     public static string SmpDnsttCoreRequired => Ru ? "Для DNSTT нужна совместимая версия ядра sing-box-vpnctl." : "DNSTT requires a compatible sing-box-vpnctl core.";
     public static string SmpTunnelModeLabel => Ru ? "Что направлять через VPN" : "Route through VPN";
@@ -128,7 +128,11 @@ public static partial class Strings
         ? $"«{previous}» не отвечал, выбран самый быстрый из рабочих."
         : $"'{previous}' was not responding; picked the fastest working server.";
     public static string SmpPickServerLabel         => Ru ? "Сервер" : "Server";
-    public static string SmpSearchServers           => Ru ? "Найти сервер" : "Find a server";
+    public static string SmpSearchServers => Ru ? "Поиск серверов" : "Server search";
+    public static string SmpSearchLabel => Ru ? "Поиск по списку" : "Search the list";
+    public static string SmpSearchHint => Ru ? "Название, страна или город" : "Name, country or city";
+    public static string SmpSearchLooksLikeLink => Ru ? "Похоже на ссылку VPN." : "This looks like a VPN link.";
+    public static string SmpMoveLink => Ru ? "Перенести в поле ссылки" : "Move to link field";
     public static string SmpNoMatchingServers       => Ru ? "Серверы не найдены" : "No matching servers";
     public static string SmpDailyCategory => Ru ? "Повседневный" : "Everyday";
     public static string SmpAutoInCategory => Ru ? "Авто" : "Auto";
@@ -152,7 +156,14 @@ public static partial class Strings
         ? "Выбранный сервер или категория недоступны. Выберите другой вариант."
         : "The selected server or category is unavailable. Choose another option.";
     public static string SmpCurrentServer           => Ru ? "Активен" : "Active";
-    public static string SmpConnectionOptions       => Ru ? "Ссылка и проверка серверов" : "Connection link and server checks";
+    public static string SmpSubscriptionLink => Ru ? "Ссылка подписки" : "Subscription link";
+    public static string SmpDirectLink => Ru ? "Ссылка сервера" : "Server link";
+    public static string SmpSaveLink => Ru ? "Сохранить ссылку" : "Save link";
+    public static string SmpLinkInputInvalid => Ru ? "Вставьте действительную ссылку подписки или сервера." : "Enter a valid subscription or server link.";
+    public static string SmpLinkSaved => Ru ? "Ссылка сохранена для следующего подключения." : "Link saved for the next connection.";
+    public static string SmpLinkSaveBusy => Ru ? "Дождитесь завершения подключения или применения настроек." : "Wait for the connection or settings change to finish.";
+    public static string SmpLinkSaveStale => Ru ? "Выбор изменился. Проверьте ссылку и повторите сохранение." : "The selection changed. Check the link and save again.";
+    public static string SmpCheckServers => Ru ? "Проверить серверы" : "Check servers";
     public static string SmpApplicationRules        => Ru ? "Настроить приложения" : "Configure app rules";
     public static string SmpPickServerHint          => Ru
         ? "Подключение берёт последний выбранный сервер, если он отвечает, иначе самый быстрый из рабочих."
@@ -193,7 +204,7 @@ public static partial class Strings
     public static string SmpCfgSplit       => Ru ? "по приложениям" : "by app";
     public static string SmpCfgFull        => Ru ? "полный"         : "full";
 
-    public static string SmpHeroAddConfigTitle => Ru ? "Добавьте конфиг VPN" : "Add a VPN config";
+    public static string SmpHeroAddConfigTitle => Ru ? "Добавьте ссылку VPN" : "Add a VPN link";
     public static string SmpHeroAddConfigHint  => Ru
         ? "Вставьте ссылку на сервер или URL подписки, затем подключитесь."
         : "Paste a server link or a subscription URL, then connect.";

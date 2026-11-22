@@ -1024,15 +1024,17 @@ public partial class MainWindowViewModel
         var activeVless = SelectedServer ?? Servers.FirstOrDefault();
         _settings.Vless.ActiveServer = activeVless?.Name ?? "";
         if (_settings.Vless.Servers.Count > 0)
-        {
-            var entry = activeVless?.ToEntry() ?? _settings.Vless.Servers[0];
-            _settings.Vless.Server = entry.Server;
-            _settings.Vless.Port = entry.Port;
-            _settings.Vless.Uuid = entry.Uuid;
-            _settings.Vless.Flow = entry.Flow;
-            _settings.Vless.Security = entry.Security;
-            _settings.Vless.Reality = entry.Reality;
-        }
+            SetLegacyManualServer(_settings.Vless, activeVless?.ToEntry() ?? _settings.Vless.Servers[0]);
+    }
+
+    private static void SetLegacyManualServer(VlessConfig config, VlessServerEntry entry)
+    {
+        config.Server = entry.Server;
+        config.Port = entry.Port;
+        config.Uuid = entry.Uuid;
+        config.Flow = entry.Flow;
+        config.Security = entry.Security;
+        config.Reality = entry.Reality;
     }
 
     private void ApplyCustomConfigsToSettings()

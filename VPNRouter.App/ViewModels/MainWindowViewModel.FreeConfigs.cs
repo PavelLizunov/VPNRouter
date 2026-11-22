@@ -26,7 +26,7 @@ public partial class MainWindowViewModel
             if (!_settings.App.FreeConfigSecurityWarningAcked && !await ShowFreeConfigSecurityWarningAsync())
                 return false;
 
-            var candidate = SnapshotFreeConfigSettings();
+            var candidate = SnapshotDesktopSettingsFromControls();
             var index = FreeConfigSelection.SelectOrAdd(candidate.Vless.Servers, entry.ToVlessServerEntry());
             var target = candidate.Vless.Servers[index];
             candidate.Vless.ActiveServer = target.Name;
@@ -79,7 +79,7 @@ public partial class MainWindowViewModel
         }
     }
 
-    private AppSettings SnapshotFreeConfigSettings()
+    private AppSettings SnapshotDesktopSettingsFromControls()
     {
         var current = _settings;
         try
