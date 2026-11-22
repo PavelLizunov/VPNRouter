@@ -11,7 +11,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 18
     env:
-      PREVIEW_SOURCE: b926cefda60ae13be396632bd4359a2ca62caa27
+      PREVIEW_SOURCE: 9318678801b6df5c32b461ccd45cf3029f42bd8a
     steps:
       - name: Checkout the exact preview source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -39,21 +39,11 @@ jobs:
             throw 'Cannot read preview version.'
           }
           $version = $Matches[1]
-          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (!(Test-Path -LiteralPath $compiler -PathType Leaf)) {
-            $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.4.exe'
-            Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $setup
-            if ((Get-FileHash -Algorithm SHA256 $setup).Hash -ne 'a549929319f9120716677c685535ca4671e4b937b5fdc87e2585f32d8eb30e8c') {
-              throw 'Inno Setup installer checksum mismatch'
-            }
-            $install = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS' -Wait -PassThru
-            if ($install.ExitCode -ne 0) { throw "Inno Setup exited with $($install.ExitCode)" }
-          }
-          ./build.ps1 -Version $version -BundleSplitDriver -Installer
+          ./build.ps1 -Version $version -BundleSplitDriver
           if ($LASTEXITCODE -ne 0) { throw "Build exited with $LASTEXITCODE" }
           $output = Join-Path $env:RUNNER_TEMP 'windows-preview'
           New-Item -Path $output -ItemType Directory | Out-Null
-          foreach ($name in @("VPNRouter-v$version-win.zip", "VPNRouter-update-v$version-win.zip", "VPNRouter-Setup-v$version.exe")) {
+          foreach ($name in @("VPNRouter-v$version-win.zip")) {
             $sidecar = (Get-Content "$name.sha256" -Raw).Trim()
             if ($sidecar -notmatch '^(?<hash>[0-9a-fA-F]{64})(?:\s+(?<file>.+))?$') {
               throw "Invalid checksum sidecar for $name"
