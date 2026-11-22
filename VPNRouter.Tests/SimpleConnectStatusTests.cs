@@ -688,6 +688,7 @@ public sealed class SimpleConnectStatusTests
     [AvaloniaTheory]
     [InlineData("generated", false)]
     [InlineData("subscribe", true)]
+    [InlineData("subscribe", false)]
     public void ManualServerPickerDisablesTheCrossHostAutoGroup(string mode, bool selectAgain)
     {
         var first = Entry("first", "first.invalid");
@@ -719,13 +720,13 @@ public sealed class SimpleConnectStatusTests
             var picker = page.FindControl<ServerPickerListBox>(subscription ? "SubList" : "ServerList")!;
             Assert.Equal(selectAgain, ReferenceEquals(row, picker.SelectedItem));
 
-            if (selectAgain)
+            if (subscription)
             {
-                // Model a service-managed connection with this row already active.
+                // Model a service-managed connection, including activation of another row.
                 vm.IsConnected = true;
-                row.IsActive = true;
+                row.IsActive = selectAgain;
             }
-            else
+            if (!selectAgain)
             {
                 var firstItem = Assert.IsType<ListBoxItem>(picker.ContainerFromIndex(0));
                 firstItem.Focus();
@@ -734,8 +735,16 @@ public sealed class SimpleConnectStatusTests
                 Assert.Same(row, picker.SelectedItem);
                 Assert.True(vm.AutoSelectBestServer);
                 Assert.Equal(beforeNavigation, store.SaveCount);
-                vm.SelectedServer = vm.Servers[0];
-                Assert.NotSame(row, picker.SelectedItem);
+                if (subscription)
+                {
+                    Assert.Same(vm.SubscriptionServers[0], vm.SelectedSubscriptionServer);
+                    Assert.False(vm.HasPendingAppChanges);
+                }
+                else
+                {
+                    vm.SelectedServer = vm.Servers[0];
+                    Assert.NotSame(row, picker.SelectedItem);
+                }
             }
 
             var beforeConfirmation = store.SaveCount;
@@ -744,7 +753,7 @@ public sealed class SimpleConnectStatusTests
             Assert.Same(row, picker.SelectedItem);
             Assert.False(vm.AutoSelectBestServer);
             Assert.Equal(beforeConfirmation + 1, store.SaveCount);
-            if (selectAgain)
+            if (subscription)
             {
                 Assert.True(vm.HasPendingAppChanges);
                 Assert.Contains("Click Apply", vm.StatusText);

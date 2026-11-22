@@ -207,3 +207,12 @@ All ten checks passed at `08d314c9`, with 4,046 Windows tests passing and
 31 skipped. The Windows capture showed an existing 360 px layout issue:
 the intent picker crowded the auto-select label onto one letter per line.
 Stack the controls and assert the checkbox has space to lay out its label.
+
+Both hosted macOS attempts at `b4c21893` reached PF reacquisition after
+confirming the reference was absent from the kernel. The fixture compared
+host record bytes, but [XNU derives the token from the allocation
+address](https://github.com/apple-oss-distributions/xnu/blob/xnu-11417.140.69/bsd/net/pf_ioctl.c#L318-L359).
+The acceptance check now requires a live reference owned by a new pfctl
+PID, even if the token value repeats. Privileged runtime code is unchanged.
+Extended the Advanced keyboard case to verify that arrows preview a row and
+Enter requests Apply through the existing service-managed path.

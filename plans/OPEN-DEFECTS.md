@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2** - Hosted macOS PF acceptance assumed the kernel could not reuse a released token value. Both runs at `b4c21893` confirmed the release then failed the host record digest comparison. The fixture now verifies a kernel reference owned by a new pfctl PID. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
 - [x] **P3** - At 360 px the Advanced Subscriptions intent controls narrowed the auto-select checkbox to a few letters per line. Stacked controls keep the checkbox label readable. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P2** - Saving a new link in Simple used the first-run feed replacement semantics and removed other registered subscriptions. Keep their entries and caches while choosing the new feed. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).

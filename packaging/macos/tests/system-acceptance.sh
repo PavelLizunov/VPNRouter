@@ -261,12 +261,17 @@ pf_request pf_enable
 sudo -n /sbin/pfctl -s info | grep '^Status: Enabled' >/dev/null
 echo "PF enable retained the live fixture reference across repeated calls"
 
+pf_reference_pid() {
+    /usr/bin/awk -v token="x$1" '$1 ~ /^[1-9][0-9]*$/ && $2 == "pfctl" && "x" $3 == token { print $1 }'
+}
+
 # The record stores its uint64 PF reference after the 32-byte owner prefix.
 # Release only the fixture reference; leave its stale owner record in place.
 first_reference="$(sudo -n /usr/bin/od -An -t u8 -j 32 -N 8 "$host_state" | tr -d '[:space:]')"
 [[ "$first_reference" =~ ^[1-9][0-9]*$ ]]
 references="$(sudo -n /sbin/pfctl -s References)"
-if ! grep -qw "$first_reference" <<< "$references"; then
+first_reference_pid="$(pf_reference_pid "$first_reference" <<< "$references")"
+if ! [[ "$first_reference_pid" =~ ^[1-9][0-9]*$ ]]; then
     echo "the first fixture reference was absent before external release" >&2
     exit 66
 fi
@@ -280,11 +285,17 @@ if grep -qw "$first_reference" <<< "$references"; then
 fi
 echo "PF fixture reference absent from the kernel after external release (pfctl exit $release_status)"
 pf_request pf_enable
-[ "$(sudo -n /usr/bin/shasum -a 256 "$host_state")" != "$first_state" ]
 sudo -n /sbin/pfctl -s info | grep '^Status: Enabled' >/dev/null
 replacement_reference="$(sudo -n /usr/bin/od -An -t u8 -j 32 -N 8 "$host_state" | tr -d '[:space:]')"
 [[ "$replacement_reference" =~ ^[1-9][0-9]*$ ]]
-[ "$replacement_reference" != "$first_reference" ]
+references="$(sudo -n /sbin/pfctl -s References)"
+replacement_reference_pid="$(pf_reference_pid "$replacement_reference" <<< "$references")"
+[[ "$replacement_reference_pid" =~ ^[1-9][0-9]*$ ]]
+# XNU hashes the allocation address, so a new reference can reuse a released token.
+[ "$replacement_reference_pid" != "$first_reference_pid" ]
+if [ "$replacement_reference" = "$first_reference" ]; then
+    echo "PF kernel reused the released token value for the new reference"
+fi
 echo "PF enable verified a replacement for the released kernel reference"
 sudo -n /usr/bin/install -o root -g wheel -m 0600 "$host_state" "$fixture_dir/pf-prior-boot"
 jq -c '. + {version:1, op:"pf_apply", mode:"anchor", rules:"pass out quick on lo0 all\n"}' \
