@@ -1,4 +1,5 @@
 using System.Reflection;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
@@ -266,6 +267,13 @@ public sealed class SimpleConnectStatusTests
     [InlineData(520, false)]
     public void SimpleServerSearchPreservesSelectionUntilExactRowActivation(int width, bool autoSelect)
     {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try { CheckSimpleServerSearch(width, autoSelect); }
+        finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
+    }
+
+    private static void CheckSimpleServerSearch(int width, bool autoSelect)
+    {
         var initial = Entry("Sweden", "first.invalid");
         var firstMatch = Entry("Amsterdam", "ams-one.invalid");
         var chosen = Entry("Amsterdam", "ams-two.invalid", 8443);
@@ -340,6 +348,33 @@ public sealed class SimpleConnectStatusTests
         var saved = store.Load(AppPaths.ConfigYamlPath);
         Assert.Equal(SubscriptionEntry.RowKey(chosen), saved.App.ActiveSubscriptionRow);
         Assert.Equal(chosen.Server, Generate(VpnEngine.CopySessionSettings(saved)).Server.Address);
+    }
+
+    [AvaloniaFact]
+    public void SimplePickerLabelsFollowLiveLanguageChanges()
+    {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            var settings = new AppSettings();
+            settings.App.Language = "en";
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = CreateVm(store);
+            using var view = new OpenPage(vm);
+            var search = view.Page.FindControl<TextBox>("SimpleServerSearch")!;
+            var options = view.Page.FindControl<ToggleButton>("SimpleConnectionOptions")!;
+            var appRules = view.Page.FindControl<Button>("SimpleAppRules")!;
+            Assert.Equal("Find a server", search.PlaceholderText);
+
+            vm.SetLanguageRussianCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Найти сервер", search.PlaceholderText);
+            Assert.Equal("Найти сервер", AutomationProperties.GetName(search));
+            Assert.Equal("Ссылка и проверка серверов", options.Content);
+            Assert.Equal("Настроить приложения", appRules.Content);
+        }
+        finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
     }
 
     [AvaloniaTheory]

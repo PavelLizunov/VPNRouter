@@ -317,6 +317,8 @@ public partial class MainWindowViewModel
     internal void OpenSimpleApplicationRules()
     {
         if (!IsSimpleMode) return;
+        IsSubscribeMode = CanPickSimpleSubscriptionServer;
+        IsVlessMode = string.Equals(_settings.App.ConfigMode, "generated", StringComparison.OrdinalIgnoreCase);
         SelectedTabIndex = 3;
         ToggleUiMode();
     }

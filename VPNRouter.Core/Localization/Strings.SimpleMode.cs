@@ -156,8 +156,8 @@ public static partial class Strings
         ? "Проверяем готовность туннеля…"
         : "Checking tunnel readiness…";
     public static string SmpStatusDisconnectedHint  => Ru
-        ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
-        : "Traffic goes straight — pick a config and start the tunnel.";
+        ? "Трафик идёт напрямую."
+        : "Traffic goes directly.";
 
     public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
     public static string SmpConfigRowChange => Ru ? "Изменить" : "Change";

@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2** - Simple-page picker labels could retain the previous language. Fixed in source by refreshing the labels after localization notifications have finished. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Opening application rules from Simple mode could replace the saved subscription mode with a stale Advanced tab's mode. The shortcut now restores the current mode flags and saves the view preference without recomputing the connection mode. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
 - [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
 
 - [x] **P2** - Simple desktop routing summary presented fixed example apps as the current policy in Windows 2.51.0-r1. Fixed in source with a route-mode description, a link to the actual application rules and a separate applied-mode line. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).

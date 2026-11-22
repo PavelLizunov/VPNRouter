@@ -242,7 +242,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         </Style>
 
-        <Style Selector="Button.change">
+        <Style Selector="Button.change, ToggleButton.change">
             <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -253,7 +253,10 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-        <Style Selector="Button.change:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.change:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Style Selector="Button.change:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         Button.change:pressed /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.change:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.change:checked /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
         </Style>
@@ -528,7 +531,7 @@
                                 <TextBlock Name="SimpleServerCount" Classes="hint"
                                            AutomationProperties.LiveSetting="Polite"/>
                             </StackPanel>
-                            <ToggleButton Name="SimpleConnectionOptions" HorizontalAlignment="Left"/>
+                            <ToggleButton Name="SimpleConnectionOptions" Classes="change" HorizontalAlignment="Left"/>
                             <StackPanel IsVisible="{Binding #SimpleConnectionOptions.IsChecked, FallbackValue=False}" Spacing="8">
                                 <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up"
                                            icons:PictogramText.Text="{Binding ConnectionStatsText}"

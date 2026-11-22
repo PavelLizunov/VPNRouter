@@ -36,6 +36,34 @@ public sealed class MainWindowViewModelModeCoherenceTests
         Assert.Equal(1, vm.SelectedTabIndex);
     }
 
+    [AvaloniaFact]
+    public void SimpleAppRulesNavigationKeepsTheSubscriptionAfterAnAdvancedServersVisit()
+    {
+        var store = new InMemorySettingsStore();
+        var settings = BuildSubscribeSettings();
+        settings.App.UiMode = "simple";
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store);
+
+        vm.ToggleUiModeCommand.Execute(null);
+        vm.SelectedTabIndex = 0;
+        Assert.True(vm.IsVlessMode);
+        vm.ToggleUiModeCommand.Execute(null);
+        Assert.True(vm.IsSimpleMode);
+        Assert.Equal("subscribe", store.Load(AppPaths.ConfigYamlPath).App.ConfigMode);
+
+        var chosen = vm.SelectedSubscriptionServer;
+        vm.OpenSimpleApplicationRules();
+
+        Assert.True(vm.IsAppsTabSelected);
+        Assert.False(vm.IsSimpleMode);
+        Assert.True(vm.IsSubscribeMode);
+        Assert.False(vm.IsVlessMode);
+        Assert.Same(chosen, vm.SelectedSubscriptionServer);
+        Assert.Equal("advanced", store.Load(AppPaths.ConfigYamlPath).App.UiMode);
+        Assert.Equal("subscribe", store.Load(AppPaths.ConfigYamlPath).App.ConfigMode);
+    }
+
     private static AppSettings BuildSubscribeSettings()
     {
         var settings = new AppSettings().EnsureSane();

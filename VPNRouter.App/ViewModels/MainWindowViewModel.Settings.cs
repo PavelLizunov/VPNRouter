@@ -456,7 +456,7 @@ public partial class MainWindowViewModel
     {
         IsSimpleMode = !IsSimpleMode;
         _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
-        SaveSettings();
+        SaveSettingsFromControls(preserveConfigMode: true);
     }
 
     [RelayCommand]
@@ -868,18 +868,20 @@ public partial class MainWindowViewModel
         finally { IsApplying = false; }
     }
 
-    private void SaveSettings()
+    private void SaveSettings() => SaveSettingsFromControls();
+
+    private void SaveSettingsFromControls(bool preserveConfigMode = false)
     {
         if (_isLoadingUI) return;
 
         BackupConfigFile();
-        ReadSettingsFromControls();
+        ReadSettingsFromControls(preserveConfigMode);
         _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
-    private void ReadSettingsFromControls()
+    private void ReadSettingsFromControls(bool preserveConfigMode = false)
     {
-        ApplyConfigModeToSettings();
+        if (!preserveConfigMode) ApplyConfigModeToSettings();
         ApplySubscriptionsToSettings();
         ApplyRoutingToSettings();
         ApplyOptionsToSettings();

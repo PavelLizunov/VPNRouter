@@ -64,8 +64,7 @@ public partial class SimplePage : UserControl
 
     private void OnPickerSourceChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(MainWindowViewModel.IsRussian)) RefreshPickerLabels();
-        if (args.PropertyName is not (nameof(MainWindowViewModel.SmpPickerVisible) or
+        if (args.PropertyName is not (null or "" or nameof(MainWindowViewModel.SmpPickerVisible) or
             nameof(MainWindowViewModel.SmpConfigServer) or nameof(MainWindowViewModel.IsRussian)) || _refreshQueued)
             return;
 
@@ -74,6 +73,7 @@ public partial class SimplePage : UserControl
         Dispatcher.UIThread.Post(() =>
         {
             _refreshQueued = false;
+            RefreshPickerLabels();
             RefreshServerPicker();
         });
     }
