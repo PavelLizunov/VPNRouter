@@ -202,3 +202,8 @@ At `16b2d78c` the Linux filter and manual selection tests passed. An older
 icon test counted the new filter icon as a server-row icon. The follow-up
 checks the visible fallback discs inside the server list and the visible
 country flag on the filtered row separately.
+
+All ten checks passed at `08d314c9`, with 4,046 Windows tests passing and
+31 skipped. The Windows capture showed an existing 360 px layout issue:
+the intent picker crowded the auto-select label onto one letter per line.
+Stack the controls and assert the checkbox has space to lay out its label.

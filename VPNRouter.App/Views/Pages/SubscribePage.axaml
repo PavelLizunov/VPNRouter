@@ -167,23 +167,24 @@
                      FontSize="10" TextWrapping="Wrap"
                      Foreground="{DynamicResource WarningFgBrush}"/>
       </Border>
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-        <CheckBox Grid.Column="0" IsChecked="{Binding AutoSelectBestServer}"
-                  MinHeight="0" Padding="4,0"
+      <StackPanel Spacing="4">
+        <CheckBox Name="SubscriptionAutoSelect" IsChecked="{Binding AutoSelectBestServer}"
+                  HorizontalAlignment="Stretch" MinHeight="0" Padding="4,0"
                   ToolTip.Tip="{Binding L_AutoSelectBestTip}">
           <TextBlock Text="{Binding L_AutoSelectBest}" TextWrapping="Wrap" FontSize="11"/>
         </CheckBox>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="4,0,0,0">
           <TextBlock Text="{Binding ConnectionIntentStatusText}"
                      FontSize="10"
                      Foreground="{DynamicResource TextMutedBrush}"
+                     TextTrimming="CharacterEllipsis"
                      VerticalAlignment="Center"/>
-          <ComboBox ItemsSource="{Binding ConnectionIntentChoices}"
+          <ComboBox Grid.Column="1" ItemsSource="{Binding ConnectionIntentChoices}"
                     SelectedIndex="{Binding ConnectionIntentIndex}"
                     FontSize="11"
                     Padding="8,5"/>
-        </StackPanel>
-      </Grid>
+        </Grid>
+      </StackPanel>
     </StackPanel>
 
     <StackPanel Spacing="6" IsVisible="{Binding Subscriptions.Count}">

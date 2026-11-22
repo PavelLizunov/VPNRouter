@@ -787,6 +787,8 @@ public sealed class SimpleConnectStatusTests
                 Dispatcher.UIThread.RunJobs();
                 var filter = page.FindControl<ComboBox>("SubscriptionCategory")!;
                 var list = page.FindControl<ServerPickerListBox>("SubList")!;
+                var autoSelect = page.FindControl<CheckBox>("SubscriptionAutoSelect")!;
+                Assert.InRange(autoSelect.Bounds.Width, 200, 360);
                 var categories = filter.Items.Cast<SubscriptionCategoryOption>().ToArray();
                 Assert.Equal(new ProtocolGroup?[] { null, ProtocolGroup.Daily, ProtocolGroup.WebFallback },
                     categories.Select(option => option.Category));
