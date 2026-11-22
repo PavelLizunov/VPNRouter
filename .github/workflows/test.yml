@@ -1,137 +1,44 @@
-name: dotnet test
-
+name: Build Simple Windows preview
 
 on:
-  push:
-    branches: [main, v3.0-prep]
-    tags: ['v*']
-  pull_request:
-    branches: [main, v3.0-prep]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
-      - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
-        with:
-          global-json-file: global.json
-
-      - name: Record selected SDK and bundled VSTest
-        run: python .github/scripts/report-test-sdk.py
-      - name: Restore
-        run: dotnet restore VPNRouter.sln
-
-      - name: Build
-        run: dotnet build VPNRouter.sln -c Release --no-restore
-
-      - name: Provision the pinned core for loopback verification
-        working-directory: packaging/arch
-        shell: python
-        run: |
-          import os
-          from pathlib import Path
-          import sys
-          sys.path.insert(0, str(Path.cwd()))
-          import build_package as package
-          work = Path(os.environ["RUNNER_TEMP"]) / "vpnrouter-verifier"
-          work.mkdir()
-          archive = package.acquire_archive(package.RUNTIME_URL, package.RUNTIME_SHA256, "runtime.tar.gz", work, None)
-          package.staging_tools.safe_extract(archive, work / "core", package.RUNTIME_SHA256)
-          core = package.find_file(work / "core", "sing-box")
-          core.chmod(0o700)
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              env.write(f"VPNROUTER_TEST_VERIFIER_RUNTIME={core}\n")
-
-      - name: Test
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
-        with:
-          name: test-results-${{ github.sha }}
-          path: VPNRouter.Tests/TestResults/*.trx
-          retention-days: 30
-
-  headless-publish:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
-        with:
-          global-json-file: global.json
-      - name: Publish headless without the GUI stack
-        run: |
-          dotnet publish VPNRouter.Headless/VPNRouter.Headless.csproj -c Release -r linux-x64 --self-contained false -o "$RUNNER_TEMP/vpnrouter-headless"
-          test -f "$RUNNER_TEMP/vpnrouter-headless/VPNRouter.Headless.dll"
-          if find "$RUNNER_TEMP/vpnrouter-headless" -iname '*Avalonia*' | grep -q .; then
-            echo "Avalonia leaked into the headless publish" >&2
-            exit 1
-          fi
-
-  headless-contract:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
-        with:
-          global-json-file: global.json
-      - name: Headless contract checks
-        run: timeout 8m dotnet run --project VPNRouter.Headless.Tests/VPNRouter.Headless.Tests.csproj -c Release
-
-  packaging-arch:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - name: Arch packaging unit tests
-        run: python3 -m unittest discover -s packaging/arch/tests -v
-
-  go-test-windows:
+  windows-preview:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 18
+    env:
+      PREVIEW_SOURCE: b926cefda60ae13be396632bd4359a2ca62caa27
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - name: Setup Go
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7.1.0
+      - name: Checkout the exact preview source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          go-version: "1.21"
-      - name: Go test (VPNRouter.GUI repair stub)
-        working-directory: VPNRouter.GUI
-        run: go test ./...
-
-  characterization-windows:
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-      - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
+          ref: ${{ env.PREVIEW_SOURCE }}
+          persist-credentials: false
+      - name: Set up pinned .NET SDK
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
         with:
           global-json-file: global.json
-      - name: Record selected SDK and bundled VSTest
-        run: python .github/scripts/report-test-sdk.py
-      - name: Publish CLI (Windows)
-        run: dotnet publish VPNRouter.CLI/VPNRouter.CLI.csproj -c Release -r win-x64 --self-contained false -o "$env:RUNNER_TEMP\vpnrouter-cli"
-      - name: Compile Windows installer scripts with a test payload
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
+        with:
+          go-version: 1.26.1
+      - name: Build unsigned Windows packages from the exact source
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -cne $env:PREVIEW_SOURCE -or (git status --porcelain)) {
+            throw 'Preview source checkout is not the requested clean commit.'
+          }
+          $text = Get-Content VPNRouter.Core/AppVersion.cs -Raw
+          if ($text -notmatch 'string\s+Version\s*=\s*"([0-9.]+(?:-r[1-9][0-9]*)?)"') {
+            throw 'Cannot read preview version.'
+          }
+          $version = $Matches[1]
           $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           if (!(Test-Path -LiteralPath $compiler -PathType Leaf)) {
             $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.4.exe'
@@ -139,33 +46,28 @@ jobs:
             if ((Get-FileHash -Algorithm SHA256 $setup).Hash -ne 'a549929319f9120716677c685535ca4671e4b937b5fdc87e2585f32d8eb30e8c') {
               throw 'Inno Setup installer checksum mismatch'
             }
-            $toolsDir = Join-Path $env:RUNNER_TEMP 'inno-test-compiler'
-            $install = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /DIR=`"$toolsDir`"" -Wait -PassThru
-            if ($install.ExitCode -ne 0) { throw "Inno Setup installation failed with $($install.ExitCode)" }
-            $compiler = Join-Path $toolsDir 'ISCC.exe'
+            $install = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS' -Wait -PassThru
+            if ($install.ExitCode -ne 0) { throw "Inno Setup exited with $($install.ExitCode)" }
           }
-          $payload = Join-Path $env:RUNNER_TEMP 'installer-test-payload'
-          $output = Join-Path $env:RUNNER_TEMP 'installer-test-output'
-          New-Item -ItemType Directory -Path "$payload\app", $output | Out-Null
-          Copy-Item "$env:RUNNER_TEMP\vpnrouter-cli\VPNRouter.CLI.exe" "$payload\app"
-          foreach ($script in Get-ChildItem 'packaging/windows/*.iss') {
-            & $compiler /Q /DAppVersion=0.0.0 "/DPayloadDir=$payload" "/DOutputDir=$output" $script.FullName
-            if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed for $($script.Name)" }
+          ./build.ps1 -Version $version -BundleSplitDriver -Installer
+          if ($LASTEXITCODE -ne 0) { throw "Build exited with $LASTEXITCODE" }
+          $output = Join-Path $env:RUNNER_TEMP 'windows-preview'
+          New-Item -Path $output -ItemType Directory | Out-Null
+          foreach ($name in @("VPNRouter-v$version-win.zip", "VPNRouter-update-v$version-win.zip", "VPNRouter-Setup-v$version.exe")) {
+            $sidecar = (Get-Content "$name.sha256" -Raw).Trim()
+            if ($sidecar -notmatch '^(?<hash>[0-9a-fA-F]{64})(?:\s+(?<file>.+))?$') {
+              throw "Invalid checksum sidecar for $name"
+            }
+            if ($Matches['file'] -and $Matches['file'] -cne $name) { throw "Wrong filename in sidecar for $name" }
+            if ($Matches['hash'] -ne (Get-FileHash $name -Algorithm SHA256).Hash) { throw "Checksum mismatch for $name" }
+            Move-Item -LiteralPath $name, "$name.sha256" -Destination $output
           }
-          foreach ($file in Get-Item packaging/windows/install.ps1, packaging/windows/uninstall.ps1, packaging/windows/installer/*.ps1) {
-            $errors = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors)
-            if ($errors) { throw ($errors -join [Environment]::NewLine) }
-          }
-      - name: Characterization and release-gate contracts (Windows)
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "(FullyQualifiedName~Characterization|FullyQualifiedName~PostShipVerifierContractTests|FullyQualifiedName~BratVerifierContractTests|FullyQualifiedName~ReleaseDefectGateTests|FullyQualifiedName~ReleaseToolingContractTests|FullyQualifiedName~PlatformReleaseWorkflowTests|FullyQualifiedName~ReleaseSafetyBehaviorTests|FullyQualifiedName~ReleaseIntegrityWorkflowTests|FullyQualifiedName~AptReleaseWorkflowTests|FullyQualifiedName~PerformanceShareLinkTests|FullyQualifiedName~UrlValidationSecurityTests|FullyQualifiedName~Night|FullyQualifiedName~CommittedFirewallConfigTests|FullyQualifiedName~SingBoxManagerRestartTunLockTests|FullyQualifiedName~SingBoxManagerSuppressExitedEventTests|FullyQualifiedName~MvmTwoPhaseStartTimerTests|FullyQualifiedName~FreeConfigFetcherTests|FullyQualifiedName~ZapretAutoStrategyR4Tests|FullyQualifiedName~VPNRouter.Tests)&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff&FullyQualifiedName!~HeadlessGui" --logger "console;verbosity=normal" --blame-hang-timeout 4m --blame-hang-dump-type none
-
-      - name: Retain Simple desktop screenshots
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+          Set-Content -Path (Join-Path $output 'SOURCE_SHA.txt') -Value $head
+      - name: Retain verified Windows preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: simple-desktop-windows
-          path: |
-            VPNRouter.Tests/screenshots/simple-home-*.png
-            VPNRouter.Tests/screenshots/simple-picker-*.png
+          name: windows-simple-preview-${{ env.PREVIEW_SOURCE }}
+          path: ${{ runner.temp }}/windows-preview
           if-no-files-found: error
-          retention-days: 14
+          compression-level: 0
+          retention-days: 7
