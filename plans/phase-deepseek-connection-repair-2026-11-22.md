@@ -48,3 +48,11 @@ VPN permission handling. Run exact-head Android compile and shared tests,
 then one device or emulator trace before enabling the feature. Windows
 uses the existing assistant lifecycle fixtures and a focused repair test.
 Keep the feature behind the assistant gateway for rollback.
+
+## First implementation block
+
+Write the native DNSTT readiness summary with the published tunnel state
+and include its bounded, validated fields in the Android diagnostics
+export. Clear stale readiness when a new attempt starts. The diagnostic
+report is useful on its own and can land before the assistant UI or repair
+endpoint. Input contract tests reject unknown fields or attached text.

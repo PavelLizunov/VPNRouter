@@ -10,6 +10,7 @@ using VPNRouter.Android.Json;
 using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.Diagnostics;
 
 namespace VPNRouter.Android;
 
@@ -56,6 +57,9 @@ public static class AndroidStorage
     private const string KeyTunnelLive = "tunnel_live";
 
     public static bool GetTunnelLive() => GetBool(KeyTunnelLive, false);
+
+    internal static string? GetDnsttReadiness() =>
+        AndroidDnsttReadiness.Validated(GetString("vpn_dnstt_readiness"));
 
     internal const string UiCommandKey = AndroidSubscriptionRefresh.UiCommand;
     internal const string StateEventKey = "vpn_state_event";

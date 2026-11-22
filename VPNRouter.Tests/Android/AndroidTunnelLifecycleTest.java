@@ -79,12 +79,13 @@ public final class AndroidTunnelLifecycleTest {
 
         String start = source.substring(source.indexOf("private void startTunnel("),
                 source.indexOf("private void reportStartFailure("));
-        requireOrdered(start, "start.prepareAndClaim(preflight, () -> {", "select.run();", "detachTunnel();",
-                "if (tunnelConfig == null)", "closeDetachedTunnel(previous, previousServer);", "if (!start.current()) return;",
+        requireOrdered(start, "start.prepareAndClaim(preflight, () -> {", "select.run();", "dnsttReadiness = null;", "detachTunnel();",
+                "if (tunnelConfig == null)",
+                "closeDetachedTunnel(previous, previousServer);", "if (!start.current()) return;",
                 "AndroidTunnelSession attempt = new AndroidTunnelSession();", "session = attempt;",
                 "startSlipstreamIfNeeded();", "if (!start.current()) return;",
                 "startLibboxService(tunnelConfig);",
-                "attempt.requireEstablishedTun();", "if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start)) {",
+                "attempt.requireEstablishedTun();", "if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start, report -> dnsttReadiness = report)) {",
                 "retireTunnel();", "reportFailure(\"proxy-unreachable\", false);", "start.commit(() -> {",
                 "if (session != attempt)", "attempt.requireEstablishedTun();",
                 "persistLastGoodConfig();", "liveService = this;",
@@ -93,7 +94,7 @@ public final class AndroidTunnelLifecycleTest {
         requireOrdered(probe, "new Thread(() -> probe.run(start)", "long startedAt = SystemClock.elapsedRealtime()",
                 "worker.start();", "start.awaitDnsttReadiness(startedAt, SystemClock::elapsedRealtime,",
                 "probe.finished.await(timeout, TimeUnit.MILLISECONDS)", "() -> probe.passed",
-                "finally", "probe.complete(false);");
+                "finally", "probe.complete(false);", "if (start.current()) report.accept(summary);");
         requireOrdered(probe, "private void run(AndroidTunnelStart start)", "if (finished.getCount() == 0 || !start.current()) return;",
                 "Libbox.CommandOutbounds", "Libbox.newCommandClient(", "client.connect();",
                 "if (finished.getCount() == 0 || !start.current()) return;", "client.urlTest(\"proxy\");",

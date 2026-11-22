@@ -124,6 +124,7 @@ internal static class AndroidDiagnosticsExporter
         sb.AppendLine($"Connected:  {connected}");
         sb.AppendLine($"ConfigMode: {configMode}");
         sb.AppendLine($"Servers:    {serverCount}");
+        if (AndroidStorage.GetDnsttReadiness() is { } readiness) sb.AppendLine(readiness);
         sb.AppendLine($"Generated:  {timestamp:o} (local)");
         return sb.ToString();
     }

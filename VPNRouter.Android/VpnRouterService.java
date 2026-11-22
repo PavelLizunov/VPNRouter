@@ -42,6 +42,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import io.nekohasekai.libbox.CommandClient;
 import io.nekohasekai.libbox.CommandClientHandler;
@@ -128,6 +129,7 @@ public final class VpnRouterService extends VpnService {
     private static final String STATE_ERROR = "error";
     private static final String KEY_VPN_STATE = "vpn_state";
     private static final String KEY_VPN_STATE_REASON = "vpn_state_reason";
+    private static final String KEY_DNSTT_READINESS = "vpn_dnstt_readiness";
     private static final String KEY_VPN_STATE_PID = "vpn_state_pid";
     private static final String KEY_VPN_STATE_AT_MS = "vpn_state_at_ms";
     private static final String TILE_SERVICE_CLASS = "com.ninitux.vpnrouter.VpnTileService";
@@ -139,6 +141,7 @@ public final class VpnRouterService extends VpnService {
 
     private String pendingConfigJson;
     private boolean pendingProbeManagedDnstt;
+    private String dnsttReadiness;
     private String pendingPerAppMode;
     private String[] pendingPerAppPackages;
     private String pendingPerAppPrefs;
@@ -560,6 +563,8 @@ public final class VpnRouterService extends VpnService {
                     .putString(ACTIVE_SESSION, STATE_CONNECTED.equals(state) ? tunnelSessionId : null)
                     .putString("vpn_active_per_app_policy", STATE_CONNECTED.equals(state) ? establishedAppPolicy : null)
                     .putString(KEY_VPN_STATE_REASON, reason)
+                    .putString(KEY_DNSTT_READINESS,
+                            STATE_CONNECTED.equals(state) || "proxy-unreachable".equals(reason) ? dnsttReadiness : null)
                     .putInt(KEY_VPN_STATE_PID, android.os.Process.myPid())
                     .putLong(KEY_VPN_STATE_AT_MS, System.currentTimeMillis())
                     .apply();
@@ -633,6 +638,7 @@ public final class VpnRouterService extends VpnService {
         CommandServer previousServer = commandServer;
         String tunnelConfig = start.prepareAndClaim(preflight, () -> {
             select.run();
+            dnsttReadiness = null;
             writeVpnState(STATE_CONNECTING, null);
             setTunnelLive(false);
             detachTunnel();
@@ -659,7 +665,7 @@ public final class VpnRouterService extends VpnService {
             if (!start.current()) return;
             startLibboxService(tunnelConfig);
             attempt.requireEstablishedTun();
-            if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start)) {
+            if (pendingProbeManagedDnstt && !DnsttReadyProbe.ready(start, report -> dnsttReadiness = report)) {
                 retireTunnel();
                 if (start.current()) reportFailure("proxy-unreachable", false);
                 return;
@@ -710,7 +716,7 @@ public final class VpnRouterService extends VpnService {
             finished.countDown();
         }
 
-        static boolean ready(AndroidTunnelStart start) {
+        static boolean ready(AndroidTunnelStart start, Consumer<String> report) {
             if (!start.current()) return false;
             DnsttReadyProbe probe = new DnsttReadyProbe();
             Thread worker = new Thread(() -> probe.run(start), "dnstt-ready");
@@ -725,10 +731,12 @@ public final class VpnRouterService extends VpnService {
                 return false;
             } finally {
                 probe.complete(false);
-                Log.i(LOG_TAG, "DNSTT readiness: command=" + probe.commandStage
+                String summary = "DNSTT readiness: command=" + probe.commandStage
                         + " outbounds=" + probe.outboundStage
                         + " positiveCallback=" + probe.passed
-                        + " elapsedMs=" + (SystemClock.elapsedRealtime() - startedAt));
+                        + " elapsedMs=" + (SystemClock.elapsedRealtime() - startedAt);
+                Log.i(LOG_TAG, summary);
+                if (start.current()) report.accept(summary);
             }
         }
 
