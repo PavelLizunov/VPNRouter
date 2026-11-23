@@ -11,7 +11,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 18
     env:
-      PREVIEW_SOURCE: b6b0f8c0ea3ef4bf89e1c427aa923c6381783598
+      PREVIEW_SOURCE: 484c49424fe005e79532b0929b12610a810d141a
     steps:
       - name: Checkout the exact preview source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -68,11 +68,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: b6b0f8c0ea3ef4bf89e1c427aa923c6381783598
+          ref: 484c49424fe005e79532b0929b12610a810d141a
           persist-credentials: false
       - name: Confirm exact source
         shell: bash
-        run: test "$(git rev-parse HEAD)" = b6b0f8c0ea3ef4bf89e1c427aa923c6381783598
+        run: test "$(git rev-parse HEAD)" = 484c49424fe005e79532b0929b12610a810d141a
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
         with:
           global-json-file: global.json
@@ -80,7 +80,7 @@ jobs:
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter 'FullyQualifiedName=VPNRouter.Tests.PageScreenshotTests.SimplePage_ConnectedWithAssistantAt520x680' --logger 'console;verbosity=normal'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: deepseek-harness-window-b6b0f8c0
+          name: deepseek-harness-window-484c4942
           path: VPNRouter.Tests/screenshots/simple-connected-with-assistant.png
           if-no-files-found: error
           retention-days: 3
