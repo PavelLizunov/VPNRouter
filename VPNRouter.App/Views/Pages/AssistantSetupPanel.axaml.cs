@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
 using VPNRouter.App.ViewModels;
 using Strings = VPNRouter.Core.Localization.Strings;
 
@@ -45,7 +46,7 @@ public partial class AssistantSetupPanel : UserControl
 
     private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(MainWindowViewModel.IsSimpleMode) && _viewModel?.IsSimpleMode == false)
+        if (args.PropertyName == nameof(MainWindowViewModel.IsSimpleMode) && _viewModel is { IsSimpleMode: false, IsInvokingAssistantControl: false })
             _request?.Cancel();
         if (args.PropertyName == nameof(MainWindowViewModel.IsRussian)) RefreshLabels();
     }
@@ -100,14 +101,28 @@ public partial class AssistantSetupPanel : UserControl
     private async void RunAssistant_Click(object? sender, RoutedEventArgs args)
     {
         var goal = AssistantGoal.Text;
-        if (_viewModel is not { } vm || string.IsNullOrWhiteSpace(goal)) return;
-        await RunAsync(ct => vm.RunAssistantGoalAsync(goal, ct));
+        if (_viewModel is not { } vm || string.IsNullOrWhiteSpace(goal)
+            || TopLevel.GetTopLevel(this) is not Window window) return;
+        window.AddHandler(InputElement.KeyDownEvent, CancelFromWindow, RoutingStrategies.Tunnel);
+        window.AddHandler(InputElement.PointerPressedEvent, CancelFromWindow, RoutingStrategies.Tunnel);
+        try
+        {
+            await RunAsync(ct => vm.RunAssistantGoalAsync(goal, window, this, ct));
+            if (!vm.IsSimpleMode) vm.StatusText = AssistantStatus.Text ?? string.Empty;
+        }
+        finally
+        {
+            window.RemoveHandler(InputElement.KeyDownEvent, CancelFromWindow);
+            window.RemoveHandler(InputElement.PointerPressedEvent, CancelFromWindow);
+        }
     }
 
     private async void UndoAssistant_Click(object? sender, RoutedEventArgs args)
     {
         if (_viewModel is { } vm) await RunAsync(vm.UndoAssistantGoalAsync);
     }
+
+    private void CancelFromWindow(object? sender, RoutedEventArgs args) => _request?.Cancel();
 
     private void CancelAssistant_Click(object? sender, RoutedEventArgs args) => _request?.Cancel();
 

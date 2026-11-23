@@ -1,4 +1,6 @@
-using System.Text.RegularExpressions;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using VPNRouter.App.Services;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -12,8 +14,9 @@ public partial class MainWindowViewModel
     internal bool HasAssistantUndo => _assistantUndo != null;
     internal bool HasAssistantSubscription => Subscriptions.Any(s =>
         s.Enabled && SubscriptionAssistantClient.IsEligible(s.Url));
-    internal Func<string, string, bool, bool, CancellationToken, Task<AssistantPlan>> PlanAssistantAsync { get; init; }
-        = SubscriptionAssistantClient.Shared.PlanAsync;
+    internal Func<string, string, bool, AssistantObservation, CancellationToken, Task<AssistantStep>> StepAssistantAsync { get; init; }
+        = SubscriptionAssistantClient.Shared.StepAsync;
+    internal bool IsInvokingAssistantControl { get; private set; }
 
     private sealed record AssistantUndo(RoutingSelection Previous, RoutingSelection Applied, string Revision,
         bool WasConnected, AcceptedTunnelInfo Session);
@@ -56,40 +59,72 @@ public partial class MainWindowViewModel
             ?? (eligible.Length == 1 ? eligible[0] : null);
     }
 
-    internal static string? ResolveAssistantApp(string goal)
-    {
-        if (!Regex.IsMatch(goal, @"(?<![\p{L}\p{N}_])(?:chrome|хром)(?![\p{L}\p{N}_])",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
-            return null;
-
-        if (OperatingSystem.IsWindows()) return "chrome.exe";
-        return OperatingSystem.IsMacOS() ? "Google Chrome" : "chrome";
-    }
-
-    internal async Task<string> RunAssistantGoalAsync(string goal, CancellationToken ct)
+    internal async Task<string> RunAssistantGoalAsync(string goal, Window window, Control source, CancellationToken ct)
     {
         if (IsServiceManagedVpn || _displayExternalTunnel) return Strings.AssistantServiceManaged;
         if (!CanRunAssistantChange()) return Strings.AssistantBusy;
-        var snapshot = ReadAssistantSnapshot();
-        if (snapshot == null || !_engine.IsAssistantSessionCurrent(snapshot.Session))
-            return Strings.AssistantSettingsChanged;
 
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(TimeSpan.FromMinutes(2));
+        var token = budget.Token;
+        var automation = new AssistantWindowAutomation(window, source);
+        string? previous = null;
+
+        for (int iteration = 0; iteration < 6; iteration++)
+        {
+            while (IsConnecting || IsApplying || _isReconnecting)
+                await Task.Delay(150, token);
+            token.ThrowIfCancellationRequested();
+
+            var snapshot = ReadAssistantSnapshot();
+            if (snapshot == null || !_engine.IsAssistantSessionCurrent(snapshot.Session))
+                return Strings.AssistantSettingsChanged;
+            var subscription = SelectAssistantSubscription(snapshot.Settings.App);
+            if (subscription == null) return Strings.AssistantSubscription;
+
+            var routeControl = CanRunAssistantChange() && snapshot.Settings.App.ConfigMode is ("generated" or "subscribe")
+                && snapshot.Settings.App.CustomRules.All(rule => !rule.Enabled)
+                ? new AssistantControl(1, OperatingSystem.IsWindows()
+                    ? "RouteOnlyApplicationByWindowsExecutableName" : "RouteOnlyApplicationByProcessName", "text", null)
+                : null;
+            var controls = automation.Observe(routeControl == null ? 1 : 2);
+            if (routeControl != null) controls = [routeControl, .. controls];
+            var observation = new AssistantObservation(IsConnected, false, IsSimpleMode, controls, previous);
+
+            var step = await StepAssistantAsync(subscription.Url, goal, IsRussian, observation, token);
+            token.ThrowIfCancellationRequested();
+            if (!CanRunAssistantChange(allowPendingChanges: true) || !AssistantSnapshotStillCurrent(snapshot)
+                || IsConnected != observation.Connected || IsSimpleMode != observation.Simple
+                || !_engine.IsAssistantSessionCurrent(snapshot.Session)
+                || !ReferenceEquals(TopLevel.GetTopLevel(source), window))
+                return Strings.AssistantSettingsChanged;
+
+            if (step.Status != AssistantStepStatus.Act) return AssistantStepMessage(step.Status, previous != null);
+            if (step.Control is not { } target || !controls.Contains(target)) return Strings.AssistantUnavailable;
+            if (routeControl != null && target == routeControl)
+            {
+                if (!CanRunAssistantChange() || step.Toggle != null || step.Text is not { } executable
+                    || executable.IndexOfAny(['/', '\\', ':']) >= 0
+                    || RoutingAppListEditor.NormalizeManualProcessName(executable, OperatingSystem.IsWindows()) is not { } process
+                    || !process.All(c => char.IsLetterOrDigit(c) || c is ' ' or '.' or '_' or '-'))
+                    return Strings.AssistantAppNeeded;
+
+                return await ApplyAssistantAppRouteAsync(snapshot, process, token);
+            }
+
+            IsInvokingAssistantControl = true;
+            try { previous = automation.Execute(target, step.Text, step.Toggle); }
+            finally { IsInvokingAssistantControl = false; }
+            if (previous == null) return Strings.AssistantSettingsChanged;
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+        }
+
+        return Strings.AssistantStepLimit;
+    }
+
+    private async Task<string> ApplyAssistantAppRouteAsync(AssistantSnapshot snapshot, string target, CancellationToken ct)
+    {
         var saved = snapshot.Settings;
-        var subscription = SelectAssistantSubscription(saved.App);
-        if (subscription == null) return Strings.AssistantSubscription;
-        if (saved.App.ConfigMode is not ("generated" or "subscribe") || saved.App.CustomRules.Any(rule => rule.Enabled))
-            return Strings.AssistantRuleConflict;
-
-        var target = ResolveAssistantApp(goal);
-        var plan = await PlanAssistantAsync(subscription.Url, goal, target != null, IsRussian, ct);
-        if (plan.Status != AssistantPlanStatus.RouteOnlyApp || target == null)
-            return AssistantPlanMessage(plan.Status);
-
-        ct.ThrowIfCancellationRequested();
-        if (!CanRunAssistantChange() || !AssistantSnapshotStillCurrent(snapshot)
-            || !_engine.IsAssistantSessionCurrent(snapshot.Session))
-            return Strings.AssistantSettingsChanged;
-
         var previous = RoutingSelection.Capture(saved);
         var profile = previous.Mode == "split" ? previous.Profile : SimpleSplitProfile;
         var desired = new RoutingSelection("split", "include", true, [target], profile, BypassRussianTraffic: false);
@@ -316,13 +351,13 @@ public partial class MainWindowViewModel
         }
     }
 
-    private static string AssistantPlanMessage(AssistantPlanStatus status) => status switch
+    private static string AssistantStepMessage(AssistantStepStatus status, bool acted) => status switch
     {
-        AssistantPlanStatus.AppSelectionNeeded => Strings.AssistantAppNeeded,
-        AssistantPlanStatus.UnsupportedGoal => Strings.AssistantUnsupportedGoal,
-        AssistantPlanStatus.AccessDenied => Strings.AssistantAccessDenied,
-        AssistantPlanStatus.RateLimited => Strings.AssistantRateLimited,
-        AssistantPlanStatus.InvalidRequest => Strings.AssistantInvalidGoal,
+        AssistantStepStatus.Finish => acted ? Strings.AssistantFinished : Strings.AssistantNoChanges,
+        AssistantStepStatus.Clarify => Strings.AssistantUnsupportedGoal,
+        AssistantStepStatus.AccessDenied => Strings.AssistantAccessDenied,
+        AssistantStepStatus.RateLimited => Strings.AssistantRateLimited,
+        AssistantStepStatus.InvalidRequest => Strings.AssistantInvalidGoal,
         _ => Strings.AssistantUnavailable,
     };
 }

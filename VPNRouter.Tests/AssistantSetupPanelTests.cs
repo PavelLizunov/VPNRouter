@@ -33,17 +33,19 @@ public sealed class AssistantSetupPanelTests
             var store = new InMemorySettingsStore();
             store.Save(settings, AppPaths.ConfigYamlPath);
             CancellationToken request = default;
-            var pending = new TaskCompletionSource<AssistantPlan>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var pending = new TaskCompletionSource<AssistantStep>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var logger = new Serilog.LoggerConfiguration().CreateLogger();
             using var vm = new MainWindowViewModel(store, logger)
             {
-                PlanAssistantAsync = (_, _, _, _, ct) =>
+                StepAssistantAsync = (_, _, _, _, ct) =>
                 {
                     request = ct;
                     return pending.Task.WaitAsync(ct);
                 },
             };
             var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Content = panel };
+            window.Show();
             panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             panel.FindControl<TextBox>("AssistantGoal")!.Text = "Route only Chrome through the VPN";
             panel.FindControl<Button>("RunAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -56,6 +58,7 @@ public sealed class AssistantSetupPanelTests
             Assert.True(request.IsCancellationRequested);
             Assert.Equal(revision, File.ReadAllText(AppPaths.ConfigYamlPath));
             Assert.False(vm.HasAssistantUndo);
+            window.Close();
         }
         finally
         {

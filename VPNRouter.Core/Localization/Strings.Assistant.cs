@@ -3,7 +3,7 @@ namespace VPNRouter.Core.Localization;
 public static partial class Strings
 {
     public static string AssistantTitle => Ru ? "Настроить с DeepSeek" : "Set up with DeepSeek";
-    public static string AssistantGoalHint => Ru ? "Chrome через VPN, остальное напрямую" : "Chrome through the VPN, other apps direct";
+    public static string AssistantGoalHint => Ru ? "Что настроить в VPNRouter?" : "What should VPNRouter do?";
     public static string AssistantDataNotice => Ru
         ? "Текст команды отправляется в DeepSeek."
         : "Your request is sent to DeepSeek.";
@@ -22,18 +22,21 @@ public static partial class Strings
     public static string AssistantTunnelBusy => Ru ? "VPN-адаптер занят. Попробуйте ещё раз." : "The VPN adapter is busy. Try again.";
     public static string AssistantSettingsChanged => Ru ? "Настройки изменились. Запустите команду заново." : "Settings changed. Run the command again.";
     public static string AssistantRuleConflict => Ru ? "Вручную заданные правила могут изменить этот маршрут." : "Custom rules can change this route.";
-    public static string AssistantAlreadySet => Ru ? "Для Chrome уже настроен этот маршрут." : "Chrome already has this route policy.";
+    public static string AssistantAlreadySet => Ru ? "Для приложения уже настроен этот маршрут." : "The application already has this route policy.";
     public static string AssistantApplyFailed => Ru ? "Применение маршрута не подтверждено. Проверьте состояние VPN." : "The route change could not be confirmed. Check the VPN status.";
-    public static string AssistantApplied => Ru ? "Правило для Chrome применено. VPN готов." : "The Chrome routing rule is active. The VPN is ready.";
+    public static string AssistantApplied => Ru ? "Правило для приложения применено. VPN готов." : "The application routing rule is active. The VPN is ready.";
     public static string AssistantAppliedWithNewerSettings => Ru
-        ? "Правило для Chrome применено. Более поздние правки настроек сохранены."
-        : "The Chrome routing rule is active. Your later settings edits were kept.";
+        ? "Правило для приложения применено. Более поздние правки настроек сохранены."
+        : "The application routing rule is active. Your later settings edits were kept.";
     public static string AssistantUndone => Ru ? "Прежние настройки восстановлены." : "The previous settings were restored.";
     public static string AssistantUndoPreservedNewerSettings => Ru
         ? "Маршрут помощника отключён. Более поздние правки настроек сохранены."
         : "The assistant's route was stopped. Your later settings edits were kept.";
-    public static string AssistantAppNeeded => Ru ? "Укажите Chrome в команде." : "Specify Chrome in the request.";
-    public static string AssistantUnsupportedGoal => Ru ? "Пока можно настроить Chrome через VPN, остальное напрямую." : "You can currently route Chrome through the VPN and leave other apps direct.";
+    public static string AssistantAppNeeded => Ru ? "Укажите имя приложения." : "Specify the application name.";
+    public static string AssistantUnsupportedGoal => Ru ? "Пока можно настроить Что настроить в VPNRouter?." : "Specify what you want VPNRouter to do.";
+    public static string AssistantFinished => Ru ? "Готово." : "Done.";
+    public static string AssistantNoChanges => Ru ? "Изменений не потребовалось." : "No changes were needed.";
+    public static string AssistantStepLimit => Ru ? "Достигнут лимит шагов. Уточните оставшуюся задачу." : "The step limit was reached. Specify what remains.";
     public static string AssistantRateLimited => Ru ? "Лимит запросов исчерпан. Попробуйте позже." : "Request limit reached. Try again later.";
     public static string AssistantInvalidGoal => Ru ? "Введите короткую команду без данных подписки." : "Enter a short request without subscription details.";
     public static string AssistantUnavailable => Ru ? "DeepSeek недоступен. Попробуйте позже." : "DeepSeek is unavailable. Try again later.";

@@ -19,8 +19,9 @@ internal enum AssistantPlanStatus
 
 internal sealed record AssistantPlan(AssistantPlanStatus Status, TimeSpan? RetryAfter = null);
 
-internal sealed class SubscriptionAssistantClient(IHttpClient http)
+internal sealed partial class SubscriptionAssistantClient(IHttpClient http)
 {
+    private readonly IHttpClient _http = http;
     internal const string Endpoint = "https://ninitux.com/api/v1/assistant/vpnrouter/plan";
     private const int RequestLimit = 2048;
     private const int ResponseLimit = 2048;
@@ -62,7 +63,7 @@ internal sealed class SubscriptionAssistantClient(IHttpClient http)
 
         try
         {
-            var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+            var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
             if (response.FinalUri is { } finalUri && !finalUri.Equals(request.Uri))
                 return new(AssistantPlanStatus.Unavailable);
 

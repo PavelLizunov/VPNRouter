@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Reflection;
+using System.Windows.Input;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -433,17 +435,34 @@ public static class AppAutomationDriver
     {
         if (string.IsNullOrWhiteSpace(target)) return null;
 
-        foreach (var child in parent.GetVisualChildren())
+        return ControlsIn(parent).OfType<T>().FirstOrDefault(control =>
+            string.Equals(control.Name, target, StringComparison.OrdinalIgnoreCase)
+            || (control is ContentControl { Content: string text }
+                && string.Equals(text, target, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    internal static IEnumerable<Control> ControlsIn(Visual root) =>
+        root.GetVisualDescendants().OfType<Control>();
+
+    internal static string? CommandName(Control control)
+    {
+        ICommand? command = control switch
         {
-            if (child is T c)
+            Button button => button.Command,
+            MenuItem menu => menu.Command,
+            _ => null,
+        };
+        if (command == null) return null;
+
+        for (StyledElement? element = control; element != null; element = element.Parent)
+        {
+            if (element.DataContext is not { } context) continue;
+            foreach (var property in context.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
-                if (string.Equals(c.Name, target, StringComparison.OrdinalIgnoreCase))
-                    return c;
-                if (c is ContentControl cc && cc.Content is string s && string.Equals(s, target, StringComparison.OrdinalIgnoreCase))
-                    return c;
+                if (!typeof(ICommand).IsAssignableFrom(property.PropertyType) || property.GetIndexParameters().Length != 0)
+                    continue;
+                if (ReferenceEquals(property.GetValue(context), command)) return property.Name;
             }
-            var found = FindControl<T>(child, target);
-            if (found != null) return found;
         }
         return null;
     }
