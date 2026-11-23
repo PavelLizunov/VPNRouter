@@ -315,7 +315,15 @@ public static class SettingsLoader
         return (count, at);
     }
 
+    internal static object FileWriteLock { get; } = new();
+
     internal static void Save(AppSettings settings, string? path = null)
+    {
+        lock (FileWriteLock)
+            SaveCore(settings, path);
+    }
+
+    private static void SaveCore(AppSettings settings, string? path)
     {
         if (SafeMode.Enabled)
             return;

@@ -41,7 +41,7 @@ public partial class VpnEngine
             _engine.SingBoxStarted?.Invoke(pid);
         }
 
-        public bool CallerConfirmsProxy => _engine._confirmingFreeConfig;
+        public bool CallerConfirmsProxy => _engine._confirmingCandidate;
 
         public bool IsCurrentStart(int pid)
         {
@@ -66,7 +66,7 @@ public partial class VpnEngine
 
         public void OnConnected(int pid)
         {
-            if (!IsCurrentStart(pid) || _engine._confirmingFreeConfig) return;
+            if (!IsCurrentStart(pid) || _engine._confirmingCandidate) return;
 
             _engine._warmupConfirmed = true;
             _engine._failover?.ResetCycle();
@@ -192,7 +192,7 @@ public partial class VpnEngine
                 IsCurrentIntent = () =>
                 {
                     var sessionCts = _engine._sessionCts;
-                    return !_engine._disposed && !_engine._confirmingFreeConfig
+                    return !_engine._disposed && !_engine._confirmingCandidate
                         && _engine._failoverGeneration == generation && ReferenceEquals(session, sessionCts)
                         && (sessionCts == null || !sessionCts.IsCancellationRequested);
                 }

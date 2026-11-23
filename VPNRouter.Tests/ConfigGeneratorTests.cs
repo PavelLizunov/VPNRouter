@@ -215,6 +215,12 @@ public class ConfigGeneratorTests
                 .Any(tag => tag?.ToString() == "vpnrouter-geosite-ru") == true).ToList();
 
             Assert.Equal(routingMode == "full" || appsMode == "exclude" ? "proxy" : "direct", config.Route.Final);
+            if (routingMode == "split" && appsMode == "include")
+            {
+                var tunnel = new AcceptedTunnelInfo(settings, ConfigGenerator.Serialize(config), "", null,
+                    new Dictionary<string, VlessServerEntry>());
+                Assert.Equal(!enabled, tunnel.RoutesOnlyApp("firefox.exe"));
+            }
             if (!enabled)
             {
                 Assert.Empty(bypassRules);
