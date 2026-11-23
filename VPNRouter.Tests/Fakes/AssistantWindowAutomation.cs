@@ -4,9 +4,10 @@ using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
+using VPNRouter.App.Services;
 using VPNRouter.Core.Services;
 
-namespace VPNRouter.App.Services;
+namespace VPNRouter.Tests.Fakes;
 
 internal sealed class AssistantWindowAutomation(Window window, Control assistant)
 {

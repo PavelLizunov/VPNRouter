@@ -34,3 +34,21 @@ of a persisted DNS preference, and navigation. The fixture, XML wiring,
 and whitespace checks passed locally. Hosted compilation and runtime checks
 apply to the product commit. Windows acceptance and publication are separate
 gates.
+
+## Review follow-up
+
+At 28dc9489 all nine PR checks passed. The Linux suite executed 4,295 tests
+and the Windows suite passed 4,508 with 31 skips. The independent review of
+this head found gaps in the decline outcome, early recognition of satisfied
+requests, disclosure of route effects, and resolver and panel fixtures.
+Verify these cases on the follow-up head. The production network page already
+uses the same settings label as the confirmation via LblTabNetwork. The
+command parser already has direct positive grammar tests.
+
+The follow-up handles refusal in the panel, checks already-satisfied toggles
+and routes locally, and describes profile and regional bypass changes from
+the prepared settings. After confirmation it checks that the effective route
+still matches the preview. The exact resolver has Windows and Unix cases.
+The 98-case fixture checks both the parser and the ViewModel and pins the
+ordered UTF-8 texts independently of checkout line endings. Generic UI
+automation is now a test helper.

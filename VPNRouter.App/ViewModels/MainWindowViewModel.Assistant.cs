@@ -102,12 +102,15 @@ public partial class MainWindowViewModel
         var settings = snapshot.Settings.App;
         var controlName = intent.Control;
         string? process = null;
+        AppSettings? route = null;
+        bool direct = intent.Control == "RouteApplicationDirect";
         if (intent.Application is { } app)
         {
             if (settings.ConfigMode is not ("generated" or "subscribe") || settings.CustomRules.Any(rule => rule.Enabled))
                 return Strings.AssistantRuleConflict;
             process = ResolveAssistantApplication(app);
             if (process == null) return Strings.AssistantAppNeeded;
+            if (PrepareAssistantAppRoute(snapshot, process, direct, out route) is { } reason) return reason;
             controlName += AssistantApplicationTarget.IsDefaultBrowserRequest(app) ? "ForDefaultBrowser" : "ForResolvedTarget";
         }
         if (controlName == "SetStrictDns" && settings.ConfigMode is not ("generated" or "subscribe")
@@ -120,6 +123,9 @@ public partial class MainWindowViewModel
             "SetFlushDnsOnStart" => settings.FlushDnsOnStart,
             _ => null,
         };
+        if (intent.Desired is bool desired && current == desired)
+            return controlName == "SetVpnConnected" ? VerifiedVpnStatus(desired) : Strings.AssistantNoChanges;
+
         var control = new AssistantControl(1, controlName, current.HasValue ? "toggle" : "press", current);
         var observation = state with { Controls = [control] };
         var step = await StepAssistantAsync(subscription.Url, goal, IsRussian, observation, token);
@@ -129,11 +135,14 @@ public partial class MainWindowViewModel
         if (step.Control != control || step.Toggle != intent.Desired || step.Text != null)
             return Strings.AssistantProposalMismatch;
 
-        if (intent.Desired is bool desired && current == desired)
-            return controlName == "SetVpnConnected" ? VerifiedVpnStatus(desired) : Strings.AssistantNoChanges;
-
         string description = Strings.AssistantChangeDescription(intent.Control, intent.Desired, process,
             observation.Connected);
+        if (route != null)
+        {
+            if (route.ActiveProfile != snapshot.Settings.ActiveProfile || route.App.RoutingMode != settings.RoutingMode)
+                description += Strings.AssistantSplitProfileChange;
+            if (settings.BypassRussianTraffic && !route.App.BypassRussianTraffic) description += Strings.AssistantRegionalBypassChange;
+        }
         bool accepted = await confirm(description, token);
         token.ThrowIfCancellationRequested();
         if (!accepted) return Strings.AssistantNoChanges;
@@ -141,9 +150,13 @@ public partial class MainWindowViewModel
             && ResolveAssistantApplication(requested) != process))
             return Strings.AssistantSettingsChanged;
 
-        return process != null
-            ? await ApplyAssistantAppRouteAsync(snapshot, process, intent.Control == "RouteApplicationDirect", token)
-            : await ExecuteAssistantStateAsync(snapshot, control, intent.Desired, token);
+        if (process != null && route != null)
+        {
+            if (PrepareAssistantAppRoute(snapshot, process, direct, out var latest) is { } reason) return reason;
+            if (!RoutingSelection.Capture(route).Matches(latest)) return Strings.AssistantSettingsChanged;
+            return await ApplyAssistantAppRouteAsync(snapshot, latest, process, direct, token);
+        }
+        return await ExecuteAssistantStateAsync(snapshot, control, intent.Desired, token);
 
         bool StillCurrent() => CanRunAssistantChange() && AssistantSnapshotStillCurrent(snapshot)
             && _engine.IsAssistantSessionCurrent(snapshot.Session) && IsConnected == observation.Connected
@@ -243,16 +256,16 @@ public partial class MainWindowViewModel
         return true;
     }
 
-    private async Task<string> ApplyAssistantAppRouteAsync(AssistantSnapshot snapshot, string target, bool direct, CancellationToken ct)
+    private string? PrepareAssistantAppRoute(AssistantSnapshot snapshot, string target, bool direct, out AppSettings candidate)
     {
         var saved = snapshot.Settings;
+        candidate = SettingsLoader.Copy(saved);
         // An uninitialized include list is supplied by the runtime scan. Without
         // that scan, freezing an empty list could silently drop unrelated routes.
         if (direct && saved.App.RoutingMode == "split" && saved.App.RoutingAppsMode == "include"
             && !saved.App.RoutingAppsIncludeInitialized && (saved.App.RoutingAppsInclude?.Count ?? 0) == 0
             && !_engine.HasAssistantProcessScan)
             return Strings.AssistantRouteScanNeeded;
-        var candidate = SettingsLoader.Copy(saved);
         if (!TryConfigureAssistantRoute(candidate, target, direct, _engine.MonitoredProcesses))
             return Strings.AssistantDirectFullConflict;
         bool offline = direct && snapshot.Session == null;
@@ -260,7 +273,13 @@ public partial class MainWindowViewModel
             (_engine.AssistantRouteMatches(saved, target, direct) &&
             _engine.SingBoxPid is { } pid && _engine.DescribeReadiness(pid) == null)))
             return Strings.AssistantAlreadySet;
+        return null;
+    }
 
+    private async Task<string> ApplyAssistantAppRouteAsync(AssistantSnapshot snapshot, AppSettings candidate,
+        string target, bool direct, CancellationToken ct)
+    {
+        bool offline = direct && snapshot.Session == null;
         var result = await ApplyAssistantSettingsAsync(candidate, snapshot, target, offline, ct, direct: direct);
         if (result.Error != null) return result.Error;
         if (offline) return result.SettingsChangedAfterCommit ? Strings.AssistantSettingsChanged : Strings.AssistantPreferenceSaved;

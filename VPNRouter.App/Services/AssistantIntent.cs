@@ -13,8 +13,8 @@ internal sealed record AssistantIntent(string Control, bool? Desired = null, str
         @"(?<verb>connect|disconnect|enable|disable|turn on|turn off|start|stop|включи|выключи|отключи|подключи|запусти|останови) (?:the )?" +
         @"(?<setting>vpn|впн|strict dns|строгий dns|строгий днс|dns flushing on startup|очистку dns при запуске|сброс dns при запуске)");
     private static readonly Regex Direct = Command(
-        @"(?:route |send |пусти |направь )?" + App + @" (?:directly|напрямую|без vpn|мимо vpn)" +
-        @"|bypass (?:the )?vpn for " + App);
+        @"(?<verb>route |send |пусти |направь )?" + App + @" (?:directly|напрямую|без vpn|мимо vpn)" +
+        @"|(?<verb>bypass) (?:the )?vpn for " + App);
     private static readonly Regex Exclusive = Command(
         @"(?:(?:route |send |пусти |направь )?(?:only|только) " + App + @" (?:through (?:the )?vpn|via vpn|через vpn|в туннель)" +
         @"|vpn (?:only for|только для) " + App + @")");
@@ -43,7 +43,13 @@ internal sealed record AssistantIntent(string Control, bool? Desired = null, str
         }
 
         Match route = Direct.Match(command);
-        if (route.Success) return new("RouteApplicationDirect", Application: route.Groups["app"].Value);
+        if (route.Success)
+        {
+            string app = route.Groups["app"].Value;
+            if (!route.Groups["verb"].Success && app.Contains(' ') && !AssistantApplicationTarget.IsKnownAppName(app))
+                return null;
+            return new("RouteApplicationDirect", Application: app);
+        }
         route = Exclusive.Match(command);
         if (route.Success) return new("RouteOnlyApplication", Application: route.Groups["app"].Value);
 

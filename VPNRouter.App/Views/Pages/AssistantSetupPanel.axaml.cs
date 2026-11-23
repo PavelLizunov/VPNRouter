@@ -93,7 +93,7 @@ public partial class AssistantSetupPanel : UserControl
         ConfirmAssistant.Content = Strings.AssistantConfirm;
         DiagnoseCrash.Content = Strings.AssistantDiagnoseCrash;
         RepairVpn.Content = Strings.AssistantRepair;
-        CancelAssistant.Content = Strings.AssistantCancel;
+        CancelAssistant.Content = _confirmation != null ? Strings.AssistantDecline : Strings.AssistantCancel;
         UndoAssistant.Content = Strings.AssistantUndo;
         AssistantGoal.IsVisible = canPlan;
         AssistantNotice.IsVisible = canPlan;
@@ -151,6 +151,7 @@ public partial class AssistantSetupPanel : UserControl
         var choice = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _confirmation = choice;
         AssistantStatus.Text = description;
+        CancelAssistant.Content = Strings.AssistantDecline;
         ConfirmAssistant.IsVisible = true;
         CancelAssistant.Focus();
         try
@@ -160,6 +161,7 @@ public partial class AssistantSetupPanel : UserControl
         finally
         {
             _confirmation = null;
+            CancelAssistant.Content = Strings.AssistantCancel;
             ConfirmAssistant.IsVisible = false;
         }
     }
@@ -178,10 +180,15 @@ public partial class AssistantSetupPanel : UserControl
         if (_confirmation != null && args.Source is Avalonia.Visual origin
             && (ReferenceEquals(origin, this) || origin.GetVisualAncestors().Contains(this))
             && args is not KeyEventArgs { Key: Key.Escape }) return;
-        _request?.Cancel();
+        DeclineOrCancel();
     }
 
-    private void CancelAssistant_Click(object? sender, RoutedEventArgs args) => _request?.Cancel();
+    private void CancelAssistant_Click(object? sender, RoutedEventArgs args) => DeclineOrCancel();
+
+    private void DeclineOrCancel()
+    {
+        if (_confirmation?.TrySetResult(false) != true) _request?.Cancel();
+    }
 
     private async Task RunAsync(Func<CancellationToken, Task<string>> action, string? progress = null, string? error = null)
     {

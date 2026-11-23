@@ -59,6 +59,36 @@ public sealed class AssistantApplicationTargetTests
         Assert.Equal(expected, AssistantApplicationTarget.IsAppScopedRoute(goal, hasResolvedTarget: false));
     }
 
+    [Theory]
+    [InlineData("Microsoft Edge", true, "MSEdge.exe")]
+    [InlineData("Edge Beta", true, null)]
+    [InlineData("Firefox", true, null)]
+    [InlineData("браузер по умолчанию", true, "firefox.exe")]
+    [InlineData("browser", false, null)]
+    [InlineData("браузер", false, null)]
+    [InlineData("browser.exe", true, "browser.exe")]
+    [InlineData("Candidate.exe", true, "Candidate.exe")]
+    [InlineData("missing.exe", true, null)]
+    [InlineData("Acme Editor", true, "acme.exe")]
+    [InlineData("Acme Desktop", true, "acme.exe")]
+    [InlineData("Acme", true, null)]
+    [InlineData("Shared Product", true, null)]
+    [InlineData("swiftclient", false, "swiftclient")]
+    [InlineData("SwiftClient", false, null)]
+    public void Exact_operand_requires_platform_evidence(string input, bool windows, string? expected)
+    {
+        string[] available = ["MSEdge.exe", "Candidate.exe", "swiftclient", "browser", "browser.exe"];
+        string? Find(string name) => available.FirstOrDefault(x => x.Equals(name,
+            windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        AssistantRunningApplication[] running =
+        [
+            new("acme.exe", "Acme Editor", "Acme Desktop"),
+            new("one.exe", "Shared Product", null),
+            new("two.exe", "Shared Product", null),
+        ];
+        Assert.Equal(expected, AssistantApplicationTarget.ResolveExact(input, windows, Find, () => "firefox.exe", () => running));
+    }
+
     private static IReadOnlyDictionary<string, TargetCase> ReadCases()
     {
         using var fixtures = typeof(AssistantApplicationTargetTests).Assembly.GetManifestResourceStream("AssistantAppTargets.jsonl")

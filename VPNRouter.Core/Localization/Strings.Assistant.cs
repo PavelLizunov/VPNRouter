@@ -128,7 +128,10 @@ public static partial class Strings
         : "Full tunnel has saved exclusions. Choose which apps to exclude in application settings.";
     public static string AssistantPreferenceSaved => Ru ? "Настройка сохранена и проверена." : "The saved setting was verified.";
     public static string AssistantUnconfirmed => Ru ? "Помощник не подтвердил результат команды." : "The assistant could not verify the requested outcome.";
-    public static string AssistantNoChanges => Ru ? "Изменений не потребовалось." : "No changes were needed.";
+    public static string AssistantDecline => Ru ? "Оставить как есть" : "Keep current settings";
+    public static string AssistantNoChanges => Ru ? "Ничего не изменено." : "Nothing was changed.";
+    internal static string AssistantSplitProfileChange => Ru ? " VPN переключится на профиль раздельной маршрутизации." : " The VPN will switch to the split-routing profile.";
+    internal static string AssistantRegionalBypassChange => Ru ? " Исключение для российского трафика будет отключено." : " The Russian traffic bypass will be turned off.";
     public static string AssistantStepLimit => Ru ? "Достигнут лимит шагов. Уточните оставшуюся задачу." : "The step limit was reached. Specify what remains.";
     public static string AssistantRateLimited => Ru ? "Лимит запросов исчерпан. Попробуйте позже." : "Request limit reached. Try again later.";
     public static string AssistantInvalidGoal => Ru ? "Введите короткую команду без данных подписки." : "Enter a short request without subscription details.";

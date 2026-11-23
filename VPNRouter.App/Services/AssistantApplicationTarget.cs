@@ -59,21 +59,28 @@ internal static class AssistantApplicationTarget
         @"telegram\s+(?:portable|beta)|(?:vs\s+code|visual\s+studio\s+code)\s+insiders)" +
         NameEnd, NameOptions);
 
+    internal static bool IsKnownAppName(string app) => WindowsNames.ContainsKey(app) || IsBrowserPlaceholder(app);
+
     internal static string? ResolveExact(string app)
     {
+        if (OperatingSystem.IsWindows())
+            return ResolveExact(app, true, name => FindProcess(name, true), ReadWindowsDefaultBrowser, ReadRunningApplications);
+        return ResolveExact(app, false, name => FindProcess(name, false));
+    }
+
+    internal static string? ResolveExact(string app, bool windows, Func<string, string?> findProcess,
+        Func<string?>? defaultBrowser = null, Func<IReadOnlyList<AssistantRunningApplication>>? running = null)
+    {
         if (!ValidName(app)) return null;
-        if (!OperatingSystem.IsWindows()) return FindProcess(app, windows: false);
+        if (!windows) return IsBrowserPlaceholder(app) ? null : VerifyProcess(app, findProcess, StringComparison.Ordinal);
         if (SharedExecutableVariants.IsMatch(app)) return null;
         if (WindowsNames.TryGetValue(app, out var executable))
-            return FindProcess(executable, windows: true);
-        if (app.Equals("browser", StringComparison.OrdinalIgnoreCase)
-            || app.Equals("default browser", StringComparison.OrdinalIgnoreCase)
-            || app.Equals("браузер", StringComparison.OrdinalIgnoreCase)
-            || app.Equals("браузер по умолчанию", StringComparison.OrdinalIgnoreCase))
-            return ReadWindowsDefaultBrowser();
+            return VerifyProcess(executable, findProcess, StringComparison.OrdinalIgnoreCase);
         if (app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            return FindProcess(app, windows: true);
-        return ResolveRunningApplication(app, null, null, ReadRunningApplications(), exact: true);
+            return VerifyProcess(app, findProcess, StringComparison.OrdinalIgnoreCase);
+        if (IsBrowserPlaceholder(app))
+            return defaultBrowser?.Invoke() is { } browser && WindowsBrowsers.Contains(browser) ? browser : null;
+        return running == null ? null : ResolveRunningApplication(app, null, null, running(), exact: true);
     }
 
     internal static string? ResolveRequested(string goal, string? proposal)
