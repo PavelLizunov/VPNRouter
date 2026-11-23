@@ -143,26 +143,26 @@ public sealed class AssistantRepairPolicyTests
     }
 
     [Theory]
-    [InlineData("generated", "split", "include", true, false, AssistantRepairRoutingIssue.EmptyInclude)]
-    [InlineData("subscribe", "split", "include", true, false, AssistantRepairRoutingIssue.EmptyInclude)]
-    [InlineData("generated", "split", "include", true, true, AssistantRepairRoutingIssue.None)]
-    [InlineData("generated", "full", "include", true, false, AssistantRepairRoutingIssue.None)]
-    [InlineData("generated", "full", "include", true, true, AssistantRepairRoutingIssue.None)]
-    [InlineData("generated", "split", "exclude", true, false, AssistantRepairRoutingIssue.None)]
-    [InlineData("generated", "split", "exclude", true, true, AssistantRepairRoutingIssue.None)]
-    [InlineData("generated", "split", "include", false, false, AssistantRepairRoutingIssue.AutoRouteDisabled)]
-    [InlineData("generated", "split", "include", false, true, AssistantRepairRoutingIssue.AutoRouteDisabled)]
-    [InlineData("subscribe", "full", "include", false, false, AssistantRepairRoutingIssue.AutoRouteDisabled)]
-    [InlineData("custom", "split", "include", true, false, AssistantRepairRoutingIssue.CustomConfiguration)]
-    [InlineData("custom", "split", "include", false, false, AssistantRepairRoutingIssue.CustomConfiguration)]
-    [InlineData("manual", "full", "exclude", false, false, AssistantRepairRoutingIssue.CustomConfiguration)]
+    [InlineData("generated", "split", "include", true, false, (int)AssistantRepairRoutingIssue.EmptyInclude)]
+    [InlineData("subscribe", "split", "include", true, false, (int)AssistantRepairRoutingIssue.EmptyInclude)]
+    [InlineData("generated", "split", "include", true, true, (int)AssistantRepairRoutingIssue.None)]
+    [InlineData("generated", "full", "include", true, false, (int)AssistantRepairRoutingIssue.None)]
+    [InlineData("generated", "full", "include", true, true, (int)AssistantRepairRoutingIssue.None)]
+    [InlineData("generated", "split", "exclude", true, false, (int)AssistantRepairRoutingIssue.None)]
+    [InlineData("generated", "split", "exclude", true, true, (int)AssistantRepairRoutingIssue.None)]
+    [InlineData("generated", "split", "include", false, false, (int)AssistantRepairRoutingIssue.AutoRouteDisabled)]
+    [InlineData("generated", "split", "include", false, true, (int)AssistantRepairRoutingIssue.AutoRouteDisabled)]
+    [InlineData("subscribe", "full", "include", false, false, (int)AssistantRepairRoutingIssue.AutoRouteDisabled)]
+    [InlineData("custom", "split", "include", true, false, (int)AssistantRepairRoutingIssue.CustomConfiguration)]
+    [InlineData("custom", "split", "include", false, false, (int)AssistantRepairRoutingIssue.CustomConfiguration)]
+    [InlineData("manual", "full", "exclude", false, false, (int)AssistantRepairRoutingIssue.CustomConfiguration)]
     public void FindRoutingIssue_applies_mode_auto_route_and_include_priority(
         string configMode, string routingMode, string routingAppsMode, bool autoRoute,
-        bool hasEffectiveInclude, AssistantRepairRoutingIssue expected)
+        bool hasEffectiveInclude, int expected)
     {
         var settings = Settings(configMode, routingMode, routingAppsMode, autoRoute);
 
-        Assert.Equal(expected, AssistantRepairPolicy.FindRoutingIssue(settings, hasEffectiveInclude));
+        Assert.Equal((AssistantRepairRoutingIssue)expected, AssistantRepairPolicy.FindRoutingIssue(settings, hasEffectiveInclude));
     }
 
     [Fact]

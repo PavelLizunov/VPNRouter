@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - The text assistant can return a mutating action for a question, quoted command, or a conditional request whose condition is unavailable. The sealed WINBRAT model replay proposed 26 actions in 98 cases that expected abstention, including 19 simulated connection or settings changes. No reply was executed against the app. The explicit local repair button is outside the model inventory. Keep text-driven mutation on the release gate. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
+
 - [ ] **P1** - The Windows assistant can choose the exclusive VPN action for a direct-route request and report that the route is already configured. WINBRAT reproduced the retained proxy route at `484c4942`. The live model fixture scored 0/25 on direct routing. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).
 - [ ] **P2** - The setup assistant can finish without verifying the requested state, and the evaluation measured 16 false finishes. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).
 - [ ] **P2** - Switching a Full tunnel with a separate UDP outbound to per-app exclusion would send unrelated UDP through the primary outbound. At `495b3cf3`, `ConfigGenerator.Route.AddPerAppRoutingRules` emits the UDP default only for Full. Preserve it after explicit exclusions. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).

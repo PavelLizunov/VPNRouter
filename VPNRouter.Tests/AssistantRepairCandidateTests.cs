@@ -8,7 +8,7 @@ public sealed class AssistantRepairCandidateTests
     [Fact]
     public void Repair_parser_corrects_only_invalid_mtu_before_validation()
     {
-        const string yaml = "tun:\n  mtu: 9000\n  auto_route: false\n";
+        string yaml = $"schema_version: {AppSettings.CurrentSchemaVersion}\ntun:\n  mtu: 9000\n  auto_route: false\n";
         Assert.Null(SettingsLoader.ParseLiveCandidate(yaml));
 
         var candidate = Assert.IsType<AppSettings>(SettingsLoader.ParseRepairCandidate(yaml, out var mtu));
@@ -20,7 +20,7 @@ public sealed class AssistantRepairCandidateTests
     [Fact]
     public void Repair_parser_retains_other_validation_errors()
     {
-        const string yaml = "app:\n  config_mode: unsupported\ntun:\n  mtu: 9000\n";
+        string yaml = $"schema_version: {AppSettings.CurrentSchemaVersion}\napp:\n  config_mode: unsupported\ntun:\n  mtu: 9000\n";
         Assert.Null(SettingsLoader.ParseRepairCandidate(yaml, out _));
     }
 
