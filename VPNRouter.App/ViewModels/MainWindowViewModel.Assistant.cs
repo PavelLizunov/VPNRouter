@@ -69,20 +69,10 @@ public partial class MainWindowViewModel
         var token = budget.Token;
         var automation = new AssistantWindowAutomation(window, source);
         string? previous = null;
-        bool? expectedConnection = null;
 
         for (int iteration = 0; iteration < 6; iteration++)
         {
-            while (IsConnecting || IsApplying || _isReconnecting)
-                await Task.Delay(150, token);
             token.ThrowIfCancellationRequested();
-            if (expectedConnection is { } expected)
-            {
-                if (IsConnected != expected || SmpStopUnconfirmed)
-                    return expected ? Strings.FailedStartVpn : Strings.TunnelStopUnconfirmed;
-                expectedConnection = null;
-            }
-
             var snapshot = ReadAssistantSnapshot();
             if (snapshot == null || !_engine.IsAssistantSessionCurrent(snapshot.Session))
                 return Strings.AssistantSettingsChanged;
@@ -121,9 +111,16 @@ public partial class MainWindowViewModel
             try { previous = automation.Execute(target, step.Text, step.Toggle); }
             finally { IsInvokingAssistantControl = false; }
             if (previous == null) return Strings.AssistantSettingsChanged;
-            if (target.Name is "ConnectVpn" or "DisconnectVpn" or "ToggleVpn")
-                expectedConnection = !observation.Connected;
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+            while (IsConnecting || IsApplying || _isReconnecting)
+                await Task.Delay(150, token);
+            token.ThrowIfCancellationRequested();
+            if (target.Name is "ConnectVpn" or "DisconnectVpn" or "ToggleVpn")
+            {
+                bool expected = !observation.Connected;
+                if (IsConnected != expected || SmpStopUnconfirmed)
+                    return expected ? Strings.FailedStartVpn : Strings.TunnelStopUnconfirmed;
+            }
         }
 
         return Strings.AssistantStepLimit;

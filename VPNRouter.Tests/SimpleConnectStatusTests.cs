@@ -6,6 +6,7 @@ using Avalonia.VisualTree;
 using VPNRouter.App.Controls;
 using Avalonia.Threading;
 using Avalonia.Headless.XUnit;
+using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.App.Views.Pages;
@@ -145,7 +146,12 @@ public sealed class SimpleConnectStatusTests
             return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.PhaseBTimeout));
         };
 
-        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        var assistant = view.Page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+        var window = Assert.IsType<Window>(TopLevel.GetTopLevel(view.Page));
+        var automation = new AssistantWindowAutomation(window, assistant);
+        var action = Assert.Single(automation.Observe(), control => control.Name == "ConnectVpn");
+        Assert.Equal("ConnectVpn", automation.Execute(action, null, null));
+        await vm.SmpToggleConnectCommand.ExecutionTask!;
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(started);
