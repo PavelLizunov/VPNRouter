@@ -30,4 +30,12 @@ returned an already-configured status for a proxy route after a direct request.
 
 ## Outcome
 
-Pending implementation and verification.
+The sealed model replay passed 221 of 224 supported scenarios. A separate
+WINBRAT run verified switching a test process from proxy to direct with the
+tunnel active. The bounded structured command path verifies and reports one
+action per request. Compound operations are outside that measured scope.
+
+Review found that a direct route from Full could discard saved exclusions
+and that the accepted-route verifier ignored preempting rejection rules.
+Retain dormant choices and avoid claiming a direct route when a matching
+rule would reject it. Legacy list normalization remains in the settings loader.

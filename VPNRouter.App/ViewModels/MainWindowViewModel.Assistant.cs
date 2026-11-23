@@ -176,7 +176,7 @@ public partial class MainWindowViewModel
             }
             finally { IsInvokingAssistantControl = false; }
             token.ThrowIfCancellationRequested();
-            return !IsSimpleMode && SelectedTabIndex == tab ? Strings.AssistantFinished : Strings.AssistantSettingsChanged;
+            return !IsSimpleMode && SelectedTabIndex == tab ? Strings.AssistantPageOpened : Strings.AssistantSettingsChanged;
         }
         if (value is not bool desired) return Strings.AssistantUnavailable;
         if (target.Name == "SetVpnConnected")
@@ -186,7 +186,9 @@ public partial class MainWindowViewModel
             bool verified = desired
                 ? IsConnected && _engine.AcceptedTunnel != null && _engine.SingBoxPid is { } pid && _engine.DescribeReadiness(pid) == null
                 : !IsConnected && !SmpStopUnconfirmed && _engine.IsAssistantSessionCurrent(null);
-            return verified ? Strings.AssistantFinished : desired ? Strings.FailedStartVpn : Strings.TunnelStopUnconfirmed;
+            return verified
+                ? (desired ? Strings.AssistantVpnActive : Strings.AssistantVpnStopped)
+                : (desired ? Strings.FailedStartVpn : Strings.TunnelStopUnconfirmed);
         }
 
         bool strict = target.Name == "SetStrictDns";
@@ -204,11 +206,16 @@ public partial class MainWindowViewModel
             ? Strings.AssistantPreferenceSaved : Strings.AssistantSettingsChanged;
     }
 
-    internal static void ConfigureAssistantRoute(AppSettings candidate, string target, bool direct,
+    internal static bool TryConfigureAssistantRoute(AppSettings candidate, string target, bool direct,
         IEnumerable<string> monitored)
     {
         var app = candidate.App;
-        bool full = app.RoutingMode == "full";
+        bool full = string.Equals(app.RoutingMode, "full", StringComparison.OrdinalIgnoreCase);
+        // The first active exclusion would also activate every saved Full-mode exclusion.
+        if (direct && full && app.RoutingAppsExclude?.Any(name => !string.IsNullOrWhiteSpace(name)
+            && !string.Equals(name, target, StringComparison.OrdinalIgnoreCase)) == true)
+            return false;
+
         if (full) candidate.ActiveProfile = SimpleSplitProfile;
         if (!direct)
         {
@@ -217,12 +224,11 @@ public partial class MainWindowViewModel
             app.RoutingAppsInclude = [target];
             app.BypassRussianTraffic = false;
         }
-        else if (full || app.RoutingAppsMode == "exclude")
+        else if (full || string.Equals(app.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase))
         {
             app.RoutingAppsMode = "exclude";
-            // A full tunnel had no active exclusions.
-            if (full) app.RoutingAppsExclude = [target];
-            else if (!app.RoutingAppsExclude.Contains(target, StringComparer.Ordinal))
+            app.RoutingAppsExclude ??= [];
+            if (!app.RoutingAppsExclude.Contains(target, StringComparer.Ordinal))
             {
                 app.RoutingAppsExclude.RemoveAll(name => string.Equals(name, target, StringComparison.OrdinalIgnoreCase));
                 app.RoutingAppsExclude.Add(target);
@@ -236,6 +242,7 @@ public partial class MainWindowViewModel
             app.RoutingAppsIncludeInitialized = true;
         }
         app.RoutingMode = "split";
+        return true;
     }
 
     private async Task<string> ApplyAssistantAppRouteAsync(AssistantSnapshot snapshot, string target, bool direct, CancellationToken ct)
@@ -244,11 +251,12 @@ public partial class MainWindowViewModel
         // An uninitialized include list is supplied by the runtime scan. Without
         // that scan, freezing an empty list could silently drop unrelated routes.
         if (direct && saved.App.RoutingMode == "split" && saved.App.RoutingAppsMode == "include"
-            && !saved.App.RoutingAppsIncludeInitialized && saved.App.RoutingAppsInclude.Count == 0
+            && !saved.App.RoutingAppsIncludeInitialized && (saved.App.RoutingAppsInclude?.Count ?? 0) == 0
             && !_engine.HasAssistantProcessScan)
             return Strings.AssistantRouteScanNeeded;
         var candidate = SettingsLoader.Copy(saved);
-        ConfigureAssistantRoute(candidate, target, direct, _engine.MonitoredProcesses);
+        if (!TryConfigureAssistantRoute(candidate, target, direct, _engine.MonitoredProcesses))
+            return Strings.AssistantDirectFullConflict;
         bool offline = direct && snapshot.Session == null;
         if (RoutingSelection.Capture(candidate).Matches(saved) && (offline ||
             (_engine.AssistantRouteMatches(saved, target, direct) &&

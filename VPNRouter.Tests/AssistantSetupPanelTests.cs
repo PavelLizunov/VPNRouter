@@ -49,7 +49,7 @@ public sealed class AssistantSetupPanelTests
                 Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantUnconfirmed,
                     await vm.RunAssistantGoalAsync("Open Applications", window, panel, default));
                 navigate = true;
-                Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantFinished,
+                Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantPageOpened,
                     await vm.RunAssistantGoalAsync("Open Applications", window, panel, default));
                 Assert.False(vm.IsSimpleMode);
                 Assert.True(vm.IsAppsTabSelected);

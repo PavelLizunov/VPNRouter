@@ -38,7 +38,12 @@ public static partial class Strings
     public static string AssistantRouteScanNeeded => Ru ? "Сначала обновите список приложений для маршрутизации." : "Refresh the routing application list first.";
     public static string AssistantAppNeeded => Ru ? "Запустите приложение или укажите точное имя его процесса." : "Run the application or specify its exact process name.";
     public static string AssistantUnsupportedGoal => Ru ? "Уточните, что нужно сделать в VPNRouter." : "Specify what you want VPNRouter to do.";
-    public static string AssistantFinished => Ru ? "Помощник завершил шаги." : "The assistant finished its steps.";
+    public static string AssistantPageOpened => Ru ? "Раздел открыт." : "Section opened.";
+    public static string AssistantVpnActive => Ru ? "VPN подключён." : "VPN connected.";
+    public static string AssistantVpnStopped => Ru ? "VPN отключён." : "VPN disconnected.";
+    public static string AssistantDirectFullConflict => Ru
+        ? "В режиме «Весь трафик» сохранены исключения. Выберите нужные исключения в настройках приложений."
+        : "Full tunnel has saved exclusions. Choose which apps to exclude in application settings.";
     public static string AssistantPreferenceSaved => Ru ? "Настройка сохранена и проверена." : "The saved setting was verified.";
     public static string AssistantUnconfirmed => Ru ? "Помощник не подтвердил результат команды." : "The assistant could not verify the requested outcome.";
     public static string AssistantNoChanges => Ru ? "Изменений не потребовалось." : "No changes were needed.";

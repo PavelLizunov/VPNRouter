@@ -15,6 +15,7 @@ internal sealed class AcceptedTunnelInfo
     private readonly (Uri Endpoint, string? Secret)? _controller;
     private readonly AppRoutePolicy? _appRoutePolicy;
     private readonly JsonElement _acceptedRoute;
+    private readonly string _tunAddress;
     private readonly bool _usesDnstt;
     internal ClashSingBoxApi? OpenController(Serilog.ILogger logger) =>
         _controller is { } local ? ClashSingBoxApi.ForController(local.Endpoint, local.Secret, logger) : null;
@@ -32,6 +33,7 @@ internal sealed class AcceptedTunnelInfo
         (Uri Endpoint, string? Secret)? controller, IReadOnlyDictionary<string, VlessServerEntry> proxySources)
     {
         _controller = controller;
+        _tunAddress = settings.Tun.Ipv4Address;
         ConfigMode = (settings.App.ConfigMode ?? "generated").Trim().ToLowerInvariant();
         RoutingMode = string.Equals(settings.App.RoutingMode, "full", StringComparison.OrdinalIgnoreCase) ? "full" : "split";
         if (ConfigMode == "custom")
@@ -106,19 +108,51 @@ internal sealed class AcceptedTunnelInfo
         foreach (var rule in rules.EnumerateArray())
         {
             if (rule.ValueKind != JsonValueKind.Object) return false;
-            if (!rule.TryGetProperty("outbound", out var outbound)) continue;
             if (rule.TryGetProperty("process_name", out var names))
             {
                 if (names.ValueKind != JsonValueKind.Array || rule.TryGetProperty("invert", out _)) return false;
                 if (!names.EnumerateArray().Any(name => name.ValueKind == JsonValueKind.String &&
                     name.GetString() == process)) continue;
             }
-            if (outbound.ValueKind != JsonValueKind.String || !outbound.ValueEquals("direct")) return false;
+
+            string? action = null;
+            if (rule.TryGetProperty("action", out var actionValue))
+            {
+                if (actionValue.ValueKind != JsonValueKind.String) return false;
+                action = actionValue.GetString();
+            }
+            if (!rule.TryGetProperty("outbound", out var outbound))
+            {
+                if (action == "sniff" || IsGeneratedInfrastructureAction(rule, action)) continue;
+                return false;
+            }
+            if (action is not (null or "route") || outbound.ValueKind != JsonValueKind.String
+                || !outbound.ValueEquals("direct")) return false;
             if (rule.EnumerateObject().All(field => field.Name is "outbound" or "action" or "process_name"))
                 return true;
         }
         return _acceptedRoute.TryGetProperty("final", out var final) && final.ValueKind == JsonValueKind.String && final.ValueEquals("direct");
     }
+
+    private bool IsGeneratedInfrastructureAction(JsonElement rule, string? action)
+    {
+        if (action == "hijack-dns" && rule.TryGetProperty("protocol", out var protocol)
+            && protocol.ValueKind == JsonValueKind.String && protocol.ValueEquals("dns"))
+            return rule.EnumerateObject().All(field => field.Name is "action" or "protocol");
+
+        if (action != "reject") return false;
+        if (ContainsOnlyString(rule, "rule_set", ConfigGenerator.AdBlockRuleSetTag))
+            return rule.EnumerateObject().All(field => field.Name is "action" or "rule_set");
+
+        return rule.TryGetProperty("network", out var network)
+            && network.ValueKind == JsonValueKind.String && network.ValueEquals("icmp")
+            && ContainsOnlyString(rule, "ip_cidr", _tunAddress)
+            && rule.EnumerateObject().All(field => field.Name is "action" or "network" or "ip_cidr");
+    }
+
+    private static bool ContainsOnlyString(JsonElement rule, string key, string value)
+        => rule.TryGetProperty(key, out var values) && values.ValueKind == JsonValueKind.Array
+            && values.GetArrayLength() == 1 && values[0].ValueKind == JsonValueKind.String && values[0].ValueEquals(value);
 
     private sealed record AppRoutePolicy(HashSet<string> PrimaryProcesses, HashSet<string> ProxiedProcesses)
     {

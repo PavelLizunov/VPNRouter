@@ -27,6 +27,11 @@ public sealed class AssistantRoutePolicyTests
     [InlineData("""{"route":{"final":"proxy","rules":[{"outbound":"direct","process_name":["Browser.exe"]}]}}""", true)]
     [InlineData("""{"route":{"final":"proxy","rules":[{"outbound":"direct","process_name":["Browser.exe"],"network":"udp"}]}}""", false)]
     [InlineData("""{"route":{"final":"direct","rules":[{"outbound":"proxy"}]}}""", false)]
+    [InlineData("""{"route":{"final":"direct","rules":[{"action":"reject","process_name":["Browser.exe"]},{"outbound":"direct","process_name":["Browser.exe"]}]}}""", false)]
+    [InlineData("""{"route":{"final":"direct","rules":[{"action":"reject","outbound":"direct","process_name":["Browser.exe"]}]}}""", false)]
+    [InlineData("""{"route":{"final":"direct","rules":[{"action":"reject","process_name":["Work.exe"]}]}}""", true)]
+    [InlineData("""{"route":{"final":"direct","rules":[{"action":"hijack-dns"}]}}""", false)]
+    [InlineData("""{"route":{"final":"direct","rules":[{"action":"sniff"},{"protocol":"dns","action":"hijack-dns"},{"rule_set":["vpnrouter-adblock"],"action":"reject"}]}}""", true)]
     public void Direct_proof_checks_order_scope_and_final_outbound(string config, bool expected)
     {
         var tunnel = new AcceptedTunnelInfo(new AppSettings(), config, "", null, new Dictionary<string, VlessServerEntry>());
@@ -44,7 +49,7 @@ public sealed class AssistantRoutePolicyTests
         settings.App.RoutingAppsMode = "include";
         settings.App.RoutingAppsIncludeInitialized = false;
         settings.App.RoutingAppsExclude = ["Dormant.exe"];
-        MainWindowViewModel.ConfigureAssistantRoute(settings, "Browser.exe", true, ["Browser.exe", "Work.exe"]);
+        Assert.True(MainWindowViewModel.TryConfigureAssistantRoute(settings, "Browser.exe", true, ["Browser.exe", "Work.exe"]));
         Assert.Equal(new[] { "Work.exe" }, settings.App.RoutingAppsInclude);
         Assert.Equal(new[] { "Dormant.exe" }, settings.App.RoutingAppsExclude);
         Assert.True(settings.App.RoutingAppsIncludeInitialized);
@@ -58,9 +63,38 @@ public sealed class AssistantRoutePolicyTests
         settings.App.RoutingAppsMode = "exclude";
         settings.App.RoutingAppsExclude = ["Work.exe"];
         settings.App.RoutingAppsInclude = ["Dormant.exe"];
-        MainWindowViewModel.ConfigureAssistantRoute(settings, "Browser.exe", true, []);
-        MainWindowViewModel.ConfigureAssistantRoute(settings, "Browser.exe", true, []);
+        Assert.True(MainWindowViewModel.TryConfigureAssistantRoute(settings, "Browser.exe", true, []));
+        Assert.True(MainWindowViewModel.TryConfigureAssistantRoute(settings, "Browser.exe", true, []));
         Assert.Equal(new[] { "Work.exe", "Browser.exe" }, settings.App.RoutingAppsExclude);
         Assert.Equal(new[] { "Dormant.exe" }, settings.App.RoutingAppsInclude);
+    }
+
+    [Fact]
+    public void Direct_route_from_full_keeps_saved_exclusions_and_active_routes_when_they_conflict()
+    {
+        var settings = new AppSettings();
+        settings.App.RoutingMode = "full";
+        settings.App.RoutingAppsMode = "include";
+        settings.App.RoutingAppsExclude = ["Work.exe"];
+        var originalProfile = settings.ActiveProfile;
+
+        Assert.False(MainWindowViewModel.TryConfigureAssistantRoute(settings, "Browser.exe", true, []));
+        Assert.Equal("full", settings.App.RoutingMode);
+        Assert.Equal("include", settings.App.RoutingAppsMode);
+        Assert.Equal(new[] { "Work.exe" }, settings.App.RoutingAppsExclude);
+        Assert.Equal(originalProfile, settings.ActiveProfile);
+    }
+
+    [Fact]
+    public void Direct_route_from_full_accepts_a_missing_legacy_exclusion_list()
+    {
+        var settings = new AppSettings();
+        settings.App.RoutingMode = "full";
+        settings.App.RoutingAppsExclude = null!;
+
+        Assert.True(MainWindowViewModel.TryConfigureAssistantRoute(settings, "Browser.exe", true, []));
+        Assert.Equal("split", settings.App.RoutingMode);
+        Assert.Equal("exclude", settings.App.RoutingAppsMode);
+        Assert.Equal(new[] { "Browser.exe" }, settings.App.RoutingAppsExclude);
     }
 }
