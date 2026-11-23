@@ -49,7 +49,7 @@ internal static class AssistantRepairPolicy
         var matching = feed.Servers.Where(row => string.Equals(row.Name, settings.App.ActiveSubscriptionServer, StringComparison.OrdinalIgnoreCase)
             && (settings.App.ActiveSubscriptionRow == null || SubscriptionEntry.RowKey(row) == settings.App.ActiveSubscriptionRow))
             .Take(2).ToArray();
-        if (matching is not [var active] || !SupportsTrial(active)) return [];
+        if (matching is not [var active] || active.UseAsSingleOutbound || !SupportsTrial(active)) return [];
 
         return feed.Servers.Where(server => !ReferenceEquals(server, active) && SupportsTrial(server)
                 && string.Equals(server.Protocol ?? "vless", active.Protocol ?? "vless", StringComparison.OrdinalIgnoreCase)

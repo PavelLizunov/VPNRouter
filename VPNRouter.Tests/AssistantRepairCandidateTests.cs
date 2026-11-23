@@ -47,6 +47,14 @@ public sealed class AssistantRepairCandidateTests
         Assert.Empty(AssistantRepairPolicy.AlternateServers(settings));
     }
 
+    [Fact]
+    public void Server_trials_respect_a_single_outbound_selection_with_autoselect_enabled()
+    {
+        var settings = ServerSettings();
+        settings.App.Subscriptions[0].Servers[0].UseAsSingleOutbound = true;
+        Assert.Empty(AssistantRepairPolicy.AlternateServers(settings));
+    }
+
     private static AppSettings ServerSettings()
     {
         var settings = new AppSettings();

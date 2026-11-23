@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Repair can replace an explicitly single-outbound subscription row if a legacy config also has the auto-select checkbox enabled. Startup gives the single-outbound flag precedence. Match that precedence before trying alternate servers. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
+
 - [ ] **P1** - The text assistant can return a mutating action for a question, quoted command, or a conditional request whose condition is unavailable. The sealed WINBRAT model replay proposed 26 actions in 98 cases that expected abstention, including 19 simulated connection or settings changes. No reply was executed against the app. The explicit local repair button is outside the model inventory. Keep text-driven mutation on the release gate. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
 
 - [ ] **P1** - The Windows assistant can choose the exclusive VPN action for a direct-route request and report that the route is already configured. WINBRAT reproduced the retained proxy route at `484c4942`. The live model fixture scored 0/25 on direct routing. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).
