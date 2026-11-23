@@ -38,3 +38,29 @@ selects a current control and the app executes its normal interaction.
    a disposable Windows fixture.
 6. Check the developer automation and previous assistant protocol for
    compatibility.
+
+## Outcome
+
+The assistant discovers named actions from the live window. It runs the
+same controls used for connection, tab navigation and selected app and DNS
+settings. For exclusive app routing, the model supplies an executable name.
+The client resolves it locally and uses the existing route verifier and Undo.
+The privacy notice is a single sentence. The complete data flow is in
+`PRIVACY.md`.
+
+Review led to positive control marking and local verification of executable
+names. The gateway validates decoded text before returning it, including
+escaped credential rejection. The model gets up to six steps per request.
+
+The desktop candidate is `b8b0e9e3`. Its Windows package and screen capture
+passed hosted run `45120648117`. All six jobs in run `45120583469` passed,
+including Linux and Windows tests. The tests exercised the Simple Connect
+button through the window automation and validated an Edge process argument
+from the same planner contract.
+The gateway is `d6128ad3`. Candidate build `45120298423` and all 19 contract
+tests in run `45120484348` passed, with coverage of both protocol versions.
+
+The running subscription service accepted the original route at the
+authentication boundary and returned 404 for the step route. That separates
+the hosted verification from activation and the live DeepSeek routing
+scenario. GitHub's connector declined both draft PR requests with 403.
