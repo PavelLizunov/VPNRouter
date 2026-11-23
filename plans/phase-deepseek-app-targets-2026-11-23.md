@@ -27,4 +27,27 @@ The release and live protected-route checks are separate from this mapping work.
 
 ## Outcome
 
-Pending.
+The exact product revision `2697557f` passed all six jobs in GitHub Actions
+run `45190069764`. The Linux and Windows suites passed 4,284 and 4,497 tests
+respectively. Each executed all 337 Astra target cases, seven local-Metadata
+cases and five scope cases. The ViewModel fixture rejected a mismatched
+proposal without saving settings or starting the tunnel.
+
+A WINBRAT replay sent 337 synthetic requests to DeepSeek Flash with the
+existing gateway prompt and actions. In the 119 cases with an unambiguous
+expected target and a requested action, 85 replies named the correct target.
+The model proposed an app route in 60 of the 122 requests where the target
+was absent, unsupported or ambiguous. None of the replies was executed.
+
+The same 15 default-browser requests produced zero usable routes under the
+original action inventory. A second replay using the bound controls and the
+gateway's actual fallback prompt produced 15 matching route choices. A
+separate request phrased like the original browser complaint also matched.
+These are model decisions against synthetic state, not live VPN traffic
+tests. The Windows owner's HTTP and HTTPS registration was read separately
+and resolved to the existing `msedge.exe`. WINBRAT lease 99 was released.
+
+The desktop still accepts one user submission at a time. Clarify ends the
+request. A local target chooser is described in
+[the resolver design](../docs/assistant-app-target-resolution.md).
+No new chooser, production rollout or installed desktop update was made.

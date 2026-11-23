@@ -60,3 +60,40 @@ and a simulated local process inventory. It verifies the binder independently
 of provider output. It includes examples where the target is clear even
 though the request is a question or a quotation. These examples must not be
 read as permission to change the VPN.
+
+## What clarification means in the current UI
+
+The user submits one request. VPNRouter can run several internal action
+steps within it. The gateway's `clarify` reply ends that request and the
+desktop shows a local status message. There is no model question field and a
+new submission does not carry conversation history from the previous one.
+
+A verified Windows default already answers which browser is intended.
+When a request names several applications or the local evidence is missing,
+a focused application chooser would be enough. It should retain the pending
+request and show locally verified app labels. Selecting one option should
+recheck settings and application identity before executing the original
+direction. A chooser would keep the resolution on the device. It would not
+require exposing a general chat or inventing a target from model text.
+
+For example, with a verified default browser the request can offer:
+
+```json
+[
+  {"id":1,"name":"RouteOnlyApplicationForDefaultBrowser","kind":"press"},
+  {"id":2,"name":"RouteApplicationDirectForDefaultBrowser","kind":"press"}
+]
+```
+
+The response `{"operation":"act","id":1}` selects VPN for the one resolved
+browser. The client checks the original request, the current settings
+revision and the browser association again. The app knows that the rule
+means `msedge.exe`, for example. DeepSeek need only choose the direction.
+
+For the proposed chooser, retain the original request and a local token for
+its settings revision. If a user says “Chrome or Edge”, show verified
+options for those two applications and a cancel action. If the executable
+cannot be confirmed, give the user a way to open the application and
+recheck. A pick resolves the target locally. The ordinary route verification
+still runs before saving. A request to route several applications together
+requires a separate multi-app action and policy check.
