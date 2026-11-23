@@ -14,6 +14,7 @@ internal sealed class AcceptedTunnelInfo
     private readonly Dictionary<string, TunnelServerLabel> _members = new(StringComparer.Ordinal);
     private readonly (Uri Endpoint, string? Secret)? _controller;
     private readonly AppRoutePolicy? _appRoutePolicy;
+    private readonly JsonElement _acceptedRoute;
     private readonly bool _usesDnstt;
     internal ClashSingBoxApi? OpenController(Serilog.ILogger logger) =>
         _controller is { } local ? ClashSingBoxApi.ForController(local.Endpoint, local.Secret, logger) : null;
@@ -60,6 +61,8 @@ internal sealed class AcceptedTunnelInfo
         Server = proxySources.TryGetValue("proxy", out var direct) ? Label(direct) : new("", serverAddress, 0);
 
         using var document = JsonDocument.Parse(configJson);
+        if (document.RootElement.TryGetProperty("route", out var route))
+            _acceptedRoute = route.Clone();
         _appRoutePolicy = AppRoutePolicy.Read(document.RootElement);
         if (!document.RootElement.TryGetProperty("outbounds", out var outbounds)) return;
         _usesDnstt = outbounds.EnumerateArray().Any(outbound =>
@@ -85,6 +88,36 @@ internal sealed class AcceptedTunnelInfo
             ? ConfigGenerator.ExpandMacHelperNames([processName])
             : [processName];
         return route.ProxiedProcesses.IsSubsetOf(expected);
+    }
+
+    internal bool RoutesAppDirect(string processName)
+    {
+        IEnumerable<string> targets = OperatingSystem.IsMacOS()
+            ? ConfigGenerator.ExpandMacHelperNames([processName]) : [processName];
+        return targets.All(HasDirectOutbound);
+    }
+
+    private bool HasDirectOutbound(string process)
+    {
+        if (_acceptedRoute.ValueKind != JsonValueKind.Object ||
+            !_acceptedRoute.TryGetProperty("rules", out var rules) || rules.ValueKind != JsonValueKind.Array)
+            return false;
+
+        foreach (var rule in rules.EnumerateArray())
+        {
+            if (rule.ValueKind != JsonValueKind.Object) return false;
+            if (!rule.TryGetProperty("outbound", out var outbound)) continue;
+            if (rule.TryGetProperty("process_name", out var names))
+            {
+                if (names.ValueKind != JsonValueKind.Array || rule.TryGetProperty("invert", out _)) return false;
+                if (!names.EnumerateArray().Any(name => name.ValueKind == JsonValueKind.String &&
+                    name.GetString() == process)) continue;
+            }
+            if (outbound.ValueKind != JsonValueKind.String || !outbound.ValueEquals("direct")) return false;
+            if (rule.EnumerateObject().All(field => field.Name is "outbound" or "action" or "process_name"))
+                return true;
+        }
+        return _acceptedRoute.TryGetProperty("final", out var final) && final.ValueKind == JsonValueKind.String && final.ValueEquals("direct");
     }
 
     private sealed record AppRoutePolicy(HashSet<string> PrimaryProcesses, HashSet<string> ProxiedProcesses)

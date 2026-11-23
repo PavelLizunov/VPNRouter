@@ -60,7 +60,7 @@ public partial class VpnEngine
                 bool IsCurrent() => !handle.HasExited && ReferenceEquals(handle, _singBox?.OwnedProcessHandle)
                     && ReferenceEquals(tunnel, AcceptedTunnel) && ReferenceEquals(candidate, _failoverSettingsContext);
                 if (!IsCurrent()) return RejectVerifiedCandidate("candidate-changed");
-                if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.OnlyProcess))
+                if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.Process, routeIntent.Direct))
                     return RejectVerifiedCandidate("app-route");
 
                 using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct, _sessionCts.Token);
@@ -71,7 +71,7 @@ public partial class VpnEngine
                 probeCts.Token.ThrowIfCancellationRequested();
                 if (probe == null) return RejectVerifiedCandidate("candidate-changed");
                 if (probe.IsDead) return RejectVerifiedCandidate("proxy-health");
-                if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.OnlyProcess))
+                if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.Process, routeIntent.Direct))
                     return RejectVerifiedCandidate("app-route");
 
                 commitSelection();

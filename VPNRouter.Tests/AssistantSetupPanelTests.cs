@@ -14,6 +14,57 @@ namespace VPNRouter.Tests;
 public sealed class AssistantSetupPanelTests
 {
     [AvaloniaFact]
+    public async Task Bare_finish_is_unconfirmed_and_semantic_navigation_checks_the_selected_page()
+    {
+        var dataDir = AppPaths.DataDir;
+        var temporary = Path.Combine(Path.GetTempPath(), $"vpnrouter-assistant-{Guid.NewGuid():N}");
+        try
+        {
+            AppPaths.OverrideDataDir(temporary);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "en";
+            settings.App.Subscriptions = [new() { Url = "https://ninitux.com/sub/synthetic-assistant", Enabled = true }];
+            SettingsLoader.Save(settings, AppPaths.ConfigYamlPath);
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            bool navigate = false;
+            int calls = 0;
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger)
+            {
+                StepAssistantAsync = (_, _, _, observation, _) =>
+                {
+                    calls++;
+                    return Task.FromResult(navigate
+                        ? new AssistantStep(AssistantStepStatus.Act, observation.Controls.Single(c => c.Name == "OpenApplications"))
+                        : new AssistantStep(AssistantStepStatus.Finish));
+                },
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Content = panel };
+            window.Show();
+            try
+            {
+                Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantUnconfirmed,
+                    await vm.RunAssistantGoalAsync("Open Applications", window, panel, default));
+                navigate = true;
+                Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantFinished,
+                    await vm.RunAssistantGoalAsync("Open Applications", window, panel, default));
+                Assert.False(vm.IsSimpleMode);
+                Assert.True(vm.IsAppsTabSelected);
+                Assert.Equal(2, calls);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(dataDir);
+            if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
     public void LeavingSimpleModeCancelsThePendingAssistantRequest()
     {
         var dataDir = AppPaths.DataDir;

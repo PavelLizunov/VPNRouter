@@ -35,9 +35,12 @@ public static partial class Strings
     public static string AssistantUndoPreservedNewerSettings => Ru
         ? "Маршрут помощника отключён. Более поздние правки настроек сохранены."
         : "The assistant's route was stopped. Your later settings edits were kept.";
+    public static string AssistantRouteScanNeeded => Ru ? "Сначала обновите список приложений для маршрутизации." : "Refresh the routing application list first.";
     public static string AssistantAppNeeded => Ru ? "Запустите приложение или укажите точное имя его процесса." : "Run the application or specify its exact process name.";
     public static string AssistantUnsupportedGoal => Ru ? "Уточните, что нужно сделать в VPNRouter." : "Specify what you want VPNRouter to do.";
     public static string AssistantFinished => Ru ? "Помощник завершил шаги." : "The assistant finished its steps.";
+    public static string AssistantPreferenceSaved => Ru ? "Настройка сохранена и проверена." : "The saved setting was verified.";
+    public static string AssistantUnconfirmed => Ru ? "Помощник не подтвердил результат команды." : "The assistant could not verify the requested outcome.";
     public static string AssistantNoChanges => Ru ? "Изменений не потребовалось." : "No changes were needed.";
     public static string AssistantStepLimit => Ru ? "Достигнут лимит шагов. Уточните оставшуюся задачу." : "The step limit was reached. Specify what remains.";
     public static string AssistantRateLimited => Ru ? "Лимит запросов исчерпан. Попробуйте позже." : "Request limit reached. Try again later.";

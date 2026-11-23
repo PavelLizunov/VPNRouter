@@ -2,7 +2,7 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-internal sealed record AssistantRouteIntent(AcceptedTunnelInfo? Session, string? OnlyProcess);
+internal sealed record AssistantRouteIntent(AcceptedTunnelInfo? Session, string? Process, bool Direct = false);
 
 public partial class VpnEngine
 {
@@ -16,13 +16,28 @@ public partial class VpnEngine
             skipVpnConflictCheck, requestLifetime.Token).ConfigureAwait(false);
     }
 
+    internal bool HasAssistantProcessScan => _scanResult != null;
+
     internal bool IsAssistantSessionCurrent(AcceptedTunnelInfo? session) =>
         ReferenceEquals(AcceptedTunnel, session) &&
         (session == null ? !HasLiveOrStartingSingBox() : HasLiveOrStartingSingBox());
 
-    internal bool AssistantRouteMatches(AppSettings settings, string? onlyProcess) =>
+    internal bool AssistantRouteMatches(AppSettings settings, string? process, bool direct = false) =>
         ActiveAppRoutingFingerprint == ConfigGenerator.ComputeAppRoutingFingerprint(MonitoredProcesses, settings) &&
-        (onlyProcess == null || AcceptedTunnel?.RoutesOnlyApp(onlyProcess) == true);
+        (process == null || (direct ? AcceptedTunnel?.RoutesAppDirect(process) : AcceptedTunnel?.RoutesOnlyApp(process)) == true);
+
+    internal async Task<bool> SaveAssistantPreferenceAsync(AcceptedTunnelInfo? session, Action save, CancellationToken ct)
+    {
+        await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (!IsAssistantSessionCurrent(session)) return false;
+            ct.ThrowIfCancellationRequested();
+            save();
+            return true;
+        }
+        finally { _lifecycleGate.Release(); }
+    }
 
     internal async Task<bool> RestoreAssistantSettingsAsync(AcceptedTunnelInfo? session,
         Action saveRestoredSettings, Action restoreAfterFailedStop, CancellationToken ct)
