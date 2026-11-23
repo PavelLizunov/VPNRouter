@@ -9,13 +9,24 @@ $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 $data = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) $Edition
 $runtime = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) "$Edition Zapret Runtime"
 $legacyBin = Join-Path $data 'zapret\bin'
+$ninaBin = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'NINA\engine'
 $services = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Services')
 $known = @('zapret', 'WinDivert', 'WinDivert14', 'WinDivert15')
 $sc = Join-Path ([Environment]::SystemDirectory) 'sc.exe'
 $options = [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames
 
+function Get-DriverImage([string]$image) {
+    if (!$image -or $image -match '[\x00\r\n]') { return }
+    $driver = $image.Trim()
+    if ($driver.Length -ge 2 -and $driver[0] -eq '"' -and $driver[-1] -eq '"') {
+        $driver = $driver.Substring(1, $driver.Length - 2)
+    }
+    if ($driver.StartsWith('\??\') -or $driver.StartsWith('\\?\')) { $driver = $driver.Substring(4) }
+    return $driver
+}
+
 function Test-LegacyImage($name, $image, $type, $bin = $legacyBin) {
-    if (!$image -or $image -match '[\r\n]') { return $false }
+    if (!$image -or $image -match '[\x00\r\n]') { return $false }
     if ($name -eq 'zapret') {
         if ($type -ne 16) { return $false }
         $exe = Join-Path $bin 'winws.exe'
@@ -23,19 +34,38 @@ function Test-LegacyImage($name, $image, $type, $bin = $legacyBin) {
         return ($image -match $quoted -or ($exe -notmatch '\s' -and $image -match ('^' + [regex]::Escape($exe) + '(?:[ \t]|$)')))
     }
     if ($type -ne 1 -or $name -notin $known) { return $false }
-    $driver = $image.Trim()
-    if ($driver.Length -ge 2 -and $driver[0] -eq '"' -and $driver[-1] -eq '"') {
-        $driver = $driver.Substring(1, $driver.Length - 2)
+    return ((Get-DriverImage $image) -in @((Join-Path $bin 'WinDivert64.sys'), (Join-Path $bin 'WinDivert32.sys')))
+}
+
+function Test-NinaDriver($reg, $protectedBin) {
+    if ($Edition -ne 'VPNRouter' -or $reg.Name -ne 'WinDivert' -or $reg.Type -ne 1) { return $false }
+    $nina = Join-Path $ninaBin 'WinDivert64.sys'
+    if ((Get-DriverImage $reg.Image) -ne $nina) { return $false }
+    $installed = Join-Path $protectedBin 'WinDivert64.sys'
+    foreach ($path in @($nina, $installed)) {
+        if (![IO.File]::Exists($path) -or ([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint)) { return $false }
     }
-    if ($driver.StartsWith('\??\') -or $driver.StartsWith('\\?\')) { $driver = $driver.Substring(4) }
-    return ($driver -in @((Join-Path $bin 'WinDivert64.sys'), (Join-Path $bin 'WinDivert32.sys')))
+    $source = $target = $hasher = $null
+    try {
+        $source = [IO.File]::Open($nina, 'Open', 'Read', 'Read')
+        $target = [IO.File]::Open($installed, 'Open', 'Read', 'Read')
+        if ($source.Length -le 0 -or $source.Length -gt 1048576 -or $source.Length -ne $target.Length) { return $false }
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        $expected = [BitConverter]::ToString($hasher.ComputeHash($source))
+        return ($expected -ceq [BitConverter]::ToString($hasher.ComputeHash($target)))
+    } finally {
+        if ($hasher) { $hasher.Dispose() }
+        if ($target) { $target.Dispose() }
+        if ($source) { $source.Dispose() }
+    }
 }
 
 function Assert-PrepareOwnership($registrations, $processes) {
     $protectedBin = Join-Path $runtime 'zapret\bin'
     foreach ($reg in $registrations) {
         if (!(Test-LegacyImage $reg.Name $reg.Image $reg.Type) -and
-            !(Test-LegacyImage $reg.Name $reg.Image $reg.Type $protectedBin)) {
+            !(Test-LegacyImage $reg.Name $reg.Image $reg.Type $protectedBin) -and
+            !(Test-NinaDriver $reg $protectedBin)) {
             throw "Zapret migration blocked by service $($reg.Name). Resolve its ownership before upgrading."
         }
     }
@@ -79,6 +109,9 @@ function Invoke-Prepare {
         }
     })
     if (!($registrations | Where-Object { Test-LegacyImage $_.Name $_.Image $_.Type })) { return }
+    if ($Edition -eq 'VPNRouter' -and (Get-CimInstance Win32_Process -Filter "Name='winws2.exe'" -ErrorAction Stop)) {
+        throw 'Zapret migration blocked by a running winws2 process.'
+    }
     Assert-PrepareOwnership $registrations @(Get-CimInstance Win32_Process -Filter "Name='winws.exe'" -ErrorAction Stop)
     Add-Type -AssemblyName System.ServiceProcess
     foreach ($candidate in $registrations) {

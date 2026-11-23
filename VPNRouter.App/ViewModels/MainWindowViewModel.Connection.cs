@@ -175,6 +175,7 @@ public partial class MainWindowViewModel
 
     private async Task ToggleConnectionCoreAsync(AppSettings? submitted)
     {
+        if (BlockConnectionChangeDuringNinaRepair()) return;
         var toggle = ConnectionSyncPolicy.DecideToggle(
             IsConnected,
             inTransition: IsConnecting || IsApplying || _isReconnecting,
@@ -615,7 +616,7 @@ public partial class MainWindowViewModel
 
     private async Task ReconnectAsync(string configName, ReconnectIntent intent = ReconnectIntent.Follow)
     {
-        if (_isReconnecting) return;
+        if (_isReconnecting || BlockConnectionChangeDuringNinaRepair()) return;
         if (IsServiceManagedVpn)
         {
             WarnServiceManagedReconnect(configName);

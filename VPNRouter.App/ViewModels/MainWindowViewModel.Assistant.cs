@@ -141,7 +141,7 @@ public partial class MainWindowViewModel
     }
 
     private bool CanRunAssistantChange(bool allowPendingChanges = false) =>
-        !_disposed && !SafeMode.Enabled && !IsConnecting && !IsApplying
+        !_disposed && !SafeMode.Enabled && !IsConnecting && !IsApplying && _ninaZapretRequest == null
         && !_isReconnecting && !IsServiceManagedVpn && (allowPendingChanges || !HasPendingAppChanges) && !_displayExternalTunnel
         && (!IsConnected || _engine.HasActiveTunnel);
 

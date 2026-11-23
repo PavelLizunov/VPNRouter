@@ -9,7 +9,7 @@ foreach ($path in @('packaging/windows/install.ps1', 'packaging/windows/uninstal
     if ($errors.Count) { throw ($errors.Message -join [Environment]::NewLine) }
 }
 $known = @('zapret', 'WinDivert', 'WinDivert14', 'WinDivert15')
-foreach ($name in @('Test-LegacyImage','Test-ReferencesRoot','Assert-PrepareOwnership','Invoke-Prepare')) {
+foreach ($name in @('Get-DriverImage','Test-LegacyImage','Test-NinaDriver','Test-ReferencesRoot','Assert-PrepareOwnership','Invoke-Prepare')) {
     $fn = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if (!$fn) { throw "Missing installer decision $name" }
     . ([scriptblock]::Create($fn.Extent.Text))
@@ -41,7 +41,11 @@ function Test-PrepareSequence {
         $key | Add-Member ScriptMethod Dispose {}
         $services.Keys[$name] = $key
     }
-    function Get-CimInstance { param($ClassName, $Filter, $ErrorAction) return $fakeProcesses }
+    function Get-CimInstance {
+        param($ClassName, $Filter, $ErrorAction)
+        if ($Filter -eq "Name='winws2.exe'") { return $fakeNinaProcess }
+        return $fakeProcesses
+    }
     function Add-Type { param($AssemblyName) }
     function New-Object {
         param($TypeName, $ArgumentList)
@@ -81,6 +85,46 @@ function Test-PrepareSequence {
     }
     Invoke-Prepare
     Check ($services.ConfigCalls -eq 2 -and $services.WriteOpens -eq 2) 'repeat Prepare preserves the original snapshot'
+
+    if ($Edition -ne 'VPNRouter' -or [IO.Path]::DirectorySeparatorChar -ne '\') { return }
+    $scratch = [IO.Path]::Combine([IO.Path]::GetTempPath(), [Guid]::NewGuid().ToString('N'))
+    try {
+        $runtime = Join-Path $scratch 'runtime'
+        $ninaBin = Join-Path $scratch 'nina'
+        $protectedBin = Join-Path $runtime 'zapret\bin'
+        $null = [IO.Directory]::CreateDirectory($ninaBin)
+        $null = [IO.Directory]::CreateDirectory($protectedBin)
+        $nina = Join-Path $ninaBin 'WinDivert64.sys'
+        $installed = Join-Path $protectedBin 'WinDivert64.sys'
+        [IO.File]::WriteAllBytes($nina, [byte[]]@(1, 2, 3))
+        [IO.File]::WriteAllBytes($installed, [byte[]]@(1, 2, 4))
+        Add-Registration 'zapret' ('"' + $legacyBin + '\winws.exe" --old-choice') 16 2
+        Add-Registration 'WinDivert' ('\??\' + $nina) 1 3
+
+        $blocked = $false
+        try { Invoke-Prepare } catch {
+            if ($_.Exception.Message -notmatch 'blocked by service WinDivert') { throw }
+            $blocked = $true
+        }
+        Check ($blocked -and $services.ConfigCalls -eq 2 -and $services.WriteOpens -eq 2) 'mismatched NINA driver fails before any change'
+        [IO.File]::WriteAllBytes($installed, [byte[]]@(1, 2, 3))
+        $fakeNinaProcess = [pscustomobject]@{ ExecutablePath=(Join-Path $ninaBin 'winws2.exe') }
+        $blocked = $false
+        try { Invoke-Prepare } catch {
+            if ($_.Exception.Message -notmatch 'running winws2 process') { throw }
+            $blocked = $true
+        }
+        Check ($blocked -and $services.ConfigCalls -eq 2 -and $services.WriteOpens -eq 2) 'running NINA capture blocks changes'
+        $fakeNinaProcess = $null
+
+        Invoke-Prepare
+        Check ($services.ConfigCalls -eq 3 -and $services.WriteOpens -eq 3) 'compatible NINA driver leaves only Zapret to migrate'
+        Check ($services.Keys['zapret'].Data.VPNRouterPreUpgradeState -eq 18) 'Zapret retained its original startup state'
+        Check ($services.Keys['WinDivert'].Data.Start -eq 3 -and
+            !$services.Keys['WinDivert'].Data.ContainsKey('VPNRouterPreUpgradeState')) 'the NINA registration was preserved'
+    } finally {
+        if ([IO.Directory]::Exists($scratch)) { [IO.Directory]::Delete($scratch, $true) }
+    }
 }
 
 foreach ($edition in @('VPNRouter','VPNRouterBusiness')) {

@@ -786,7 +786,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return false;
         }
 #if PLATFORM_WINDOWS
-        if (_zapretProbeCts != null)
+        if (_ninaZapretRequest != null)
+        {
+            _ninaZapretRequest.Cancel();
+        }
+        else if (_zapretProbeCts != null)
         {
             _zapretProbeCts.Cancel();
         }

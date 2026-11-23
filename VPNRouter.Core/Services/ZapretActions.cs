@@ -722,6 +722,8 @@ public static class ZapretActions
     internal static bool HasDriverConflict(ZapretServiceOwnership paths, Func<string, bool, IWindowsRegistration?> open,
         bool allowLegacy = false)
     {
+        if (OperatingSystem.IsWindows() && ZapretRuntimeDirectory.TestRoot == null
+            && paths.NinaBin != null && ProcessQuery.AnyAlive("winws2")) return true;
         foreach (var driverName in ZapretServiceOwnership.DriverNames)
         {
             try
@@ -731,6 +733,7 @@ public static class ZapretActions
                 if (config == null) continue;
                 if (config.Type != 1) return true;
                 if (ZapretServiceOwnership.Matches(driverName, config.Image, paths.ProtectedBin)) continue;
+                if (CanShareNinaDriver(paths, driverName, config)) continue;
                 if (!allowLegacy || !ZapretServiceOwnership.Matches(driverName, config.Image, paths.LegacyBin)) return true;
             }
             catch (Exception ex) when (ex is Win32Exception or UnauthorizedAccessException or IOException)
@@ -739,6 +742,28 @@ public static class ZapretActions
             }
         }
         return false;
+    }
+
+    internal static bool CanShareNinaDriver(ZapretServiceOwnership paths, string name, ServiceConfig config)
+    {
+        const string file = "WinDivert64.sys";
+        if (config.Type != 1 || name != "WinDivert" || paths.NinaBin is not { } ninaBin
+            || !ZapretServiceOwnership.IsImage(config.Image, Path.Combine(ninaBin, file), allowArguments: false))
+            return false;
+        var nina = new FileInfo(Path.Combine(ninaBin, file));
+        var legacy = new FileInfo(Path.Combine(paths.ProtectedBin, file));
+        if (!nina.Exists || !legacy.Exists || (nina.Attributes & FileAttributes.ReparsePoint) != 0
+            || (legacy.Attributes & FileAttributes.ReparsePoint) != 0)
+            return false;
+        using var ninaReader = nina.Open(FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var legacyReader = legacy.Open(FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (ninaReader.Length is <= 0 or > 1_048_576 || legacyReader.Length != ninaReader.Length)
+            return false;
+        var expected = new byte[(int)ninaReader.Length];
+        var actual = new byte[expected.Length];
+        ninaReader.ReadExactly(expected);
+        legacyReader.ReadExactly(actual);
+        return expected.AsSpan().SequenceEqual(actual);
     }
 
     [SupportedOSPlatform("windows")]

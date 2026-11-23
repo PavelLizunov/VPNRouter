@@ -6,6 +6,7 @@ using Avalonia.Headless.XUnit;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services.FreeConfigs;
 using VPNRouter.Tests.Fakes;
 using Xunit;
 
@@ -36,6 +37,50 @@ public sealed class MainWindowViewModelConcurrencyAndDataLossTests
         resume.SetResult();
 
         Assert.Equal(("generated", "submitted"), await worker);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("ToggleConnectionCoreAsync")]
+    [InlineData("SmpToggleConnectAsync")]
+    [InlineData("ApplyFreeConfigAsync")]
+    [InlineData("ReconnectAsync")]
+    [InlineData("ApplyPendingChangesInternalAsync")]
+    public async Task ConnectionCommandsRespectActiveNinaRepair(string command)
+    {
+        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+        using var repair = new CancellationTokenSource();
+        const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+        var request = typeof(MainWindowViewModel).GetField("_ninaZapretRequest", fields)!;
+        request.SetValue(vm, repair);
+        var method = typeof(MainWindowViewModel).GetMethod(command, fields)!;
+        object?[] args = command switch
+        {
+            "ToggleConnectionCoreAsync" => [null],
+            "ApplyFreeConfigAsync" => [new FreeConfigEntry { Status = FreeConfigStatus.Verified }],
+            "ReconnectAsync" => ["sample", Enum.Parse(method.GetParameters()[1].ParameterType, "Follow")],
+            "ApplyPendingChangesInternalAsync" => [true],
+            _ => []
+        };
+
+        bool applying = command == "ApplyPendingChangesInternalAsync";
+        if (applying) typeof(MainWindowViewModel).GetField("_isConnected", fields)!.SetValue(vm, true);
+        try
+        {
+            var operation = (Task)method.Invoke(vm, args)!;
+            Assert.True(operation.IsCompletedSuccessfully);
+            await operation;
+            if (operation is Task<bool> result) Assert.False(await result);
+
+            Assert.Equal(VPNRouter.Core.Localization.Strings.NinaZapretBusy, vm.StatusText);
+            Assert.False(vm.IsConnecting);
+            Assert.False(vm.IsApplying);
+            Assert.Equal(applying, vm.IsConnected);
+        }
+        finally
+        {
+            request.SetValue(vm, null);
+            if (applying) typeof(MainWindowViewModel).GetField("_isConnected", fields)!.SetValue(vm, false);
+        }
     }
 
     [AvaloniaFact]

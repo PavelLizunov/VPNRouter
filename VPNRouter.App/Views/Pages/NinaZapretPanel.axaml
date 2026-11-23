@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VPNRouter.App.Views.Pages.NinaZapretPanel"
+             IsVisible="False">
+    <Border Classes="hk-card">
+        <StackPanel Spacing="8">
+            <TextBlock x:Name="TitleText" FontWeight="SemiBold"/>
+            <TextBlock x:Name="TargetText" TextWrapping="Wrap"/>
+            <Button x:Name="RepairButton" Click="RepairClick"/>
+            <Button x:Name="CancelButton" Click="CancelClick" IsVisible="False"/>
+            <Button x:Name="StopButton" Click="StopClick"/>
+            <TextBlock x:Name="ResultText" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite"/>
+        </StackPanel>
+    </Border>
+</UserControl>

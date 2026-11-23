@@ -602,7 +602,8 @@ public partial class MainWindowViewModel
         ? Strings.ZapretOneTapStopButton
         : Strings.ZapretOneTapStartButton;
 
-    public bool IsZapretMagicButtonEnabled => !_restartReserved && !IsZapretDownloading && !IsZapretProbing && !IsZapretActionRunning;
+    public bool IsZapretMagicButtonEnabled => !_restartReserved && !IsZapretDownloading
+        && !IsZapretProbing && !IsZapretActionRunning && _ninaZapretRequest == null;
 
     public string L_ZapretOneTapTune => Strings.ZapretOneTapTune;
 
@@ -1212,7 +1213,7 @@ public partial class MainWindowViewModel
     private async Task RunZapretActionAsync(string title,
         Func<CancellationToken, IAsyncEnumerable<string>> action)
     {
-        if (_disposed || _restartReserved || IsZapretActionRunning) return;
+        if (_disposed || _restartReserved || IsZapretActionRunning || _ninaZapretRequest != null) return;
         IsZapretActionRunning = true;
         ZapretActionTitle = title;
         ZapretActionOutput.Clear();
@@ -1239,6 +1240,7 @@ public partial class MainWindowViewModel
     private async Task ToggleFlowsealHostsAsync()
     {
 #if PLATFORM_WINDOWS
+        if (_ninaZapretRequest != null) return;
         try
         {
             if (FlowsealHostsInstalled)
@@ -1328,6 +1330,7 @@ public partial class MainWindowViewModel
     private void ToggleDiscordHosts()
     {
 #if PLATFORM_WINDOWS
+        if (_ninaZapretRequest != null) return;
         try
         {
             if (DiscordHostsInstalled)

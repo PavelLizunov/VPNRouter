@@ -15,7 +15,8 @@ public partial class MainWindowViewModel
 {
     private async Task<bool> ApplyFreeConfigAsync(FreeConfigEntry entry)
     {
-        if (entry.Status != FreeConfigStatus.Verified || IsConnecting || _isReconnecting || IsServiceManagedVpn)
+        if (entry.Status != FreeConfigStatus.Verified || IsConnecting || _isReconnecting || IsServiceManagedVpn
+            || BlockConnectionChangeDuringNinaRepair())
             return false;
 
         var previousPid = _engine.SingBoxPid;
