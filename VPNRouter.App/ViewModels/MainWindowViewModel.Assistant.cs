@@ -147,8 +147,9 @@ public partial class MainWindowViewModel
 
     private AssistantSnapshot? ReadAssistantSnapshot()
     {
-        if (!File.Exists(AppPaths.ConfigYamlPath)) return null;
-        var yaml = File.ReadAllText(AppPaths.ConfigYamlPath);
+        string yaml;
+        try { yaml = File.ReadAllText(AppPaths.ConfigYamlPath); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
         var saved = SettingsLoader.ParseLiveCandidate(yaml);
         return saved == null ? null : new(saved, SettingsLoader.GetRevision(yaml),
             Volatile.Read(ref _routingSettingsRevision), _engine.AcceptedTunnel);
@@ -161,7 +162,7 @@ public partial class MainWindowViewModel
     private static string? ReadAssistantRevision()
     {
         try { return SettingsLoader.GetRevision(File.ReadAllText(AppPaths.ConfigYamlPath)); }
-        catch (IOException) { return null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
     }
 
     private async Task<AssistantChangeResult> ApplyAssistantSettingsAsync(AppSettings candidate,
@@ -206,7 +207,8 @@ public partial class MainWindowViewModel
 
             // Commit already checked the submitted revision under the lifecycle and file locks.
             // Later edits are a separate operation, so retain this session's Undo and do not publish stale controls.
-            bool settingsChangedAfterCommit = ReadAssistantRevision() != savedRevision
+            bool fileChangedAfterCommit = ReadAssistantRevision() != savedRevision;
+            bool settingsChangedAfterCommit = fileChangedAfterCommit
                 || Volatile.Read(ref _routingSettingsRevision) != savedRoutingRevision;
             if (!_disposed && !settingsChangedAfterCommit)
             {
@@ -216,6 +218,14 @@ public partial class MainWindowViewModel
             }
             else if (!_disposed && appliedSession != null)
             {
+                // A later Apply must read the user's newer saved configuration, not the assistant's inputs.
+                if (fileChangedAfterCommit && ReadAssistantSnapshot() is { } newer)
+                {
+                    bool simpleMode = IsSimpleMode;
+                    _settings = newer.Settings;
+                    LoadSettingsIntoUI();
+                    IsSimpleMode = simpleMode;
+                }
                 HasPendingAppChanges = true;
             }
             return new(null, settingsChangedAfterCommit);

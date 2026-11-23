@@ -34,7 +34,8 @@ public sealed class AssistantSetupPanelTests
             store.Save(settings, AppPaths.ConfigYamlPath);
             CancellationToken request = default;
             var pending = new TaskCompletionSource<AssistantPlan>(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var vm = new MainWindowViewModel(store)
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger)
             {
                 PlanAssistantAsync = (_, _, _, _, ct) =>
                 {
