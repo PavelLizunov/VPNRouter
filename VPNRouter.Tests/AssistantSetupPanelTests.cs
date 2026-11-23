@@ -1,18 +1,35 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
+using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
+using Strings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.Tests;
 
 [Collection(SafeModeStateCollection.Name)]
 public sealed class AssistantSetupPanelTests
 {
+    [Theory]
+    [InlineData("Подключи VPN.", "SetVpnConnected", true, null)]
+    [InlineData("Disconnect the VPN", "SetVpnConnected", false, null)]
+    [InlineData("Disable strict DNS", "SetStrictDns", false, null)]
+    [InlineData("Включи сброс DNS при запуске", "SetFlushDnsOnStart", true, null)]
+    [InlineData("Route only Firefox through the VPN", "RouteOnlyApplication", null, "Firefox")]
+    [InlineData("VPN только для Firefox", "RouteOnlyApplication", null, "Firefox")]
+    [InlineData("Bypass VPN for Microsoft Edge", "RouteApplicationDirect", null, "Microsoft Edge")]
+    [InlineData("Пусти браузер по умолчанию напрямую", "RouteApplicationDirect", null, "браузер по умолчанию")]
+    [InlineData("Open network settings", "OpenNetworkSettings", null, null)]
+    public void Single_command_binds_its_effect_and_operand(string text, string control, bool? value, string? application)
+    {
+        Assert.Equal(new AssistantIntent(control, value, application), AssistantIntent.Parse(text));
+    }
+
     [AvaloniaFact]
     public async Task Assistant_rejects_unbound_results_and_verifies_semantic_navigation()
     {
@@ -34,6 +51,7 @@ public sealed class AssistantSetupPanelTests
             using var logger = new Serilog.LoggerConfiguration().CreateLogger();
             using var vm = new MainWindowViewModel(store, logger)
             {
+                ResolveAssistantApplication = app => app == "synthetic-target.exe" ? app : null,
                 StepAssistantAsync = (_, _, _, observation, _) =>
                 {
                     calls++;
@@ -56,18 +74,22 @@ public sealed class AssistantSetupPanelTests
             try
             {
                 Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantUnconfirmed,
-                    await vm.RunAssistantGoalAsync("Open Applications", window, panel, default));
+                    await vm.RunAssistantGoalAsync("Open Applications", window, panel, UnexpectedConfirmation, default));
                 var revision = File.ReadAllText(AppPaths.ConfigYamlPath);
                 routeConflict = true;
-                Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantAppNeeded,
-                    await vm.RunAssistantGoalAsync("Route only synthetic-target.exe through VPN", window, panel, default));
+                Assert.Equal(Strings.AssistantProposalMismatch,
+                    await vm.RunAssistantGoalAsync("Route only synthetic-target.exe through VPN", window, panel, UnexpectedConfirmation, default));
                 Assert.Equal(revision, File.ReadAllText(AppPaths.ConfigYamlPath));
                 Assert.False(vm.IsConnected);
                 Assert.False(vm.HasAssistantUndo);
                 routeConflict = false;
                 navigate = true;
-                Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantPageOpened,
-                    await vm.RunAssistantGoalAsync("Open Applications", window, panel, default));
+                Assert.Equal(Strings.AssistantPageOpened,
+                    await vm.RunAssistantGoalAsync("Open Applications", window, panel, (description, _) =>
+                    {
+                        Assert.Equal(Strings.AssistantChangeDescription("OpenApplications", null, null, false), description);
+                        return Task.FromResult(true);
+                    }, default));
                 Assert.False(vm.IsSimpleMode);
                 Assert.True(vm.IsAppsTabSelected);
                 Assert.Equal(3, calls);
@@ -77,6 +99,183 @@ public sealed class AssistantSetupPanelTests
         finally
         {
             AppPaths.OverrideDataDir(dataDir);
+            if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
+        }
+    }
+
+    private static Task<bool> UnexpectedConfirmation(string text, CancellationToken ct) =>
+        throw new InvalidOperationException("This request cannot authorize a change.");
+
+    [AvaloniaFact]
+    public async Task Unrequested_or_stale_effects_leave_the_settings_and_tunnel_untouched()
+    {
+        string previousDir = AppPaths.DataDir;
+        string temporary = Path.Combine(Path.GetTempPath(), $"assistant-consent-{Guid.NewGuid():N}");
+        try
+        {
+            AppPaths.OverrideDataDir(temporary);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.FlushDnsOnStart = false;
+            settings.App.Subscriptions = [new() { Url = "https://ninitux.com/sub/synthetic-consent", Enabled = true }];
+            SettingsLoader.Save(settings, AppPaths.ConfigYamlPath);
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            int calls = 0;
+            bool replay = true;
+            string browser = "msedge.exe";
+            Func<AssistantControl, AssistantStep> propose = c => new(AssistantStepStatus.Act, c, Toggle: true);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger)
+            {
+                ResolveAssistantApplication = app => app == "Edge" || app == "браузер" ? browser : null,
+                StepAssistantAsync = (_, _, _, observation, _) =>
+                {
+                    calls++;
+                    if (replay)
+                    {
+                        var c = observation.Controls.First();
+                        return Task.FromResult(new AssistantStep(AssistantStepStatus.Act, c,
+                            Toggle: c.Kind == "toggle" ? c.Active != true : null));
+                    }
+                    return Task.FromResult(propose(Assert.Single(observation.Controls)));
+                },
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Content = panel };
+            window.Show();
+            try
+            {
+                string original = File.ReadAllText(AppPaths.ConfigYamlPath);
+                int saves = store.SaveCount;
+                using var stream = typeof(AssistantSetupPanelTests).Assembly.GetManifestResourceStream("AssistantAbstention.json")!;
+                var questions = System.Text.Json.JsonSerializer.Deserialize<string[]>(stream)!;
+                Assert.Equal(98, questions.Distinct().Count());
+                foreach (string question in questions)
+                {
+                    var message = await vm.RunAssistantGoalAsync(question, window, panel, UnexpectedConfirmation, default);
+                    Assert.False(string.IsNullOrWhiteSpace(message), question);
+                }
+                string hint = await vm.RunAssistantGoalAsync("How do I connect my VPN?", window, panel, UnexpectedConfirmation, default);
+                string commandHint = Strings.AssistantCommandExample("SetVpnConnected", true, null)!;
+                Assert.Equal(Strings.AssistantSuggestedCommand(commandHint), hint);
+                Assert.InRange(calls, 1, 99);
+                Assert.Equal(saves, store.SaveCount);
+                Assert.Equal(original, File.ReadAllText(AppPaths.ConfigYamlPath));
+                Assert.False(vm.IsConnected);
+                Assert.False(vm.HasAssistantUndo);
+                replay = false;
+                Assert.Equal(Strings.AssistantProposalMismatch,
+                    await vm.RunAssistantGoalAsync("Disconnect VPN", window, panel, UnexpectedConfirmation, default));
+                propose = c => new(AssistantStepStatus.Act, c, Toggle: false);
+                Assert.Equal(Strings.AssistantNoChanges, await vm.RunAssistantGoalAsync("Disable DNS flushing on startup",
+                    window, panel, UnexpectedConfirmation, default));
+                propose = c => new(AssistantStepStatus.Act, c with { Name = "RouteOnlyApplicationForResolvedTarget" });
+                Assert.Equal(Strings.AssistantProposalMismatch,
+                    await vm.RunAssistantGoalAsync("Пусти Edge напрямую", window, panel, UnexpectedConfirmation, default));
+                propose = c => new(AssistantStepStatus.Act, c);
+                Assert.Equal(Strings.AssistantSettingsChanged,
+                    await vm.RunAssistantGoalAsync("Пусти браузер напрямую", window, panel, (description, _) =>
+                    {
+                        Assert.Contains("msedge.exe", description);
+                        browser = "firefox.exe";
+                        return Task.FromResult(true);
+                    }, default));
+                propose = c => new(AssistantStepStatus.Act, c, Toggle: true);
+                const string command = "Enable DNS flushing on startup";
+                Assert.Equal(Strings.AssistantNoChanges, await vm.RunAssistantGoalAsync(command, window, panel,
+                    (description, _) =>
+                    {
+                        Assert.Equal(Strings.AssistantChangeDescription("SetFlushDnsOnStart", true, null, false), description);
+                        return Task.FromResult(false);
+                    }, default));
+                using var abort = new CancellationTokenSource();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.RunAssistantGoalAsync(command, window, panel,
+                    (_, _) =>
+                    {
+                        abort.Cancel();
+                        return Task.FromResult(true);
+                    }, abort.Token));
+                Assert.Equal(original, File.ReadAllText(AppPaths.ConfigYamlPath));
+
+                Assert.Equal(Strings.AssistantSettingsChanged, await vm.RunAssistantGoalAsync(command, window, panel,
+                    (_, _) =>
+                    {
+                        File.AppendAllText(AppPaths.ConfigYamlPath, "\n# newer settings\n");
+                        return Task.FromResult(true);
+                    }, default));
+                Assert.EndsWith("# newer settings\n", File.ReadAllText(AppPaths.ConfigYamlPath));
+                Assert.Equal(saves, store.SaveCount);
+                Assert.False(vm.HasAssistantUndo);
+                Assert.False(vm.IsConnected);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previousDir);
+            if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Confirm_button_applies_only_the_displayed_preference()
+    {
+        var previousDir = AppPaths.DataDir;
+        var temporary = Path.Combine(Path.GetTempPath(), $"assistant-ui-consent-{Guid.NewGuid():N}");
+        try
+        {
+            AppPaths.OverrideDataDir(temporary);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.FlushDnsOnStart = false;
+            settings.App.Subscriptions = [new() { Url = "https://ninitux.com/sub/synthetic-consent", Enabled = true }];
+            SettingsLoader.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            int requests = 0;
+            using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
+            {
+                StepAssistantAsync = (_, _, _, obs, _) =>
+                {
+                    requests++;
+                    return Task.FromResult(new AssistantStep(AssistantStepStatus.Act, Assert.Single(obs.Controls), Toggle: true));
+                },
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Content = panel };
+            window.Show();
+            try
+            {
+                var run = panel.FindControl<Button>("RunAssistant")!;
+                var confirm = panel.FindControl<Button>("ConfirmAssistant")!;
+                var status = panel.FindControl<TextBlock>("AssistantStatus")!;
+                var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                run.PropertyChanged += (_, args) =>
+                {
+                    if (args.Property == Avalonia.Input.InputElement.IsEnabledProperty && run.IsEnabled)
+                        completed.TrySetResult(true);
+                };
+                panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                panel.FindControl<TextBox>("AssistantGoal")!.Text = "Enable DNS flushing on startup";
+                Assert.False(confirm.IsVisible);
+                run.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.True(confirm.IsVisible);
+                Assert.Equal(Strings.AssistantChangeDescription("SetFlushDnsOnStart", true, null, false), status.Text);
+                Assert.False(SettingsLoader.Load(AppPaths.ConfigYamlPath).App.FlushDnsOnStart);
+                confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+                Assert.False(confirm.IsVisible);
+                Assert.Equal(Strings.AssistantPreferenceSaved, status.Text);
+                Assert.True(SettingsLoader.Load(AppPaths.ConfigYamlPath).App.FlushDnsOnStart);
+                Assert.Equal(1, requests);
+                Assert.False(vm.IsConnected);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previousDir);
             if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
         }
     }
@@ -149,7 +348,7 @@ public sealed class AssistantSetupPanelTests
             var window = new Window { Content = panel };
             window.Show();
             panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            panel.FindControl<TextBox>("AssistantGoal")!.Text = "Route only Chrome through the VPN";
+            panel.FindControl<TextBox>("AssistantGoal")!.Text = "Connect VPN";
             panel.FindControl<Button>("RunAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(request.CanBeCanceled);
             Assert.False(request.IsCancellationRequested);

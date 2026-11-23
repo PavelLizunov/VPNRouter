@@ -11,6 +11,9 @@
                      AcceptsReturn="False" MaxLength="384"/>
             <TextBlock x:Name="AssistantNotice" FontSize="{StaticResource FsSm}"
                        Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+            <TextBlock x:Name="AssistantStatus" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="Assistant.Status"
+                       AutomationProperties.LiveSetting="Polite"/>
             <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
                 <Button x:Name="RunAssistant" AutomationProperties.AutomationId="Assistant.Run"
                         Click="RunAssistant_Click"/>
@@ -18,14 +21,13 @@
                         Click="DiagnoseCrash_Click"/>
                 <Button x:Name="RepairVpn" AutomationProperties.AutomationId="Assistant.Repair"
                         Click="RepairVpn_Click"/>
+                <Button x:Name="ConfirmAssistant" AutomationProperties.AutomationId="Assistant.Confirm"
+                        Click="ConfirmAssistant_Click" IsVisible="False"/>
                 <Button x:Name="CancelAssistant" AutomationProperties.AutomationId="Assistant.Cancel"
                         Click="CancelAssistant_Click" IsVisible="False"/>
                 <Button x:Name="UndoAssistant" AutomationProperties.AutomationId="Assistant.Undo"
                         Click="UndoAssistant_Click" IsVisible="False"/>
             </WrapPanel>
-            <TextBlock x:Name="AssistantStatus" TextWrapping="Wrap"
-                       AutomationProperties.AutomationId="Assistant.Status"
-                       AutomationProperties.LiveSetting="Polite"/>
         </StackPanel>
     </StackPanel>
 </UserControl>

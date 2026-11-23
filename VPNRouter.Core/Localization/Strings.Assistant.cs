@@ -11,6 +11,65 @@ public static partial class Strings
     public static string AssistantDiagnosingCrash => Ru ? "Проверяю отчёт о последнем сбое…" : "Checking the last crash report…";
     public static string AssistantNoCrash => Ru ? "Сохранённый отчёт о сбое не найден." : "No saved crash report was found.";
     public static string AssistantApply => Ru ? "Настроить" : "Apply";
+    public static string AssistantPlan => Ru ? "Проверить команду" : "Review command";
+    public static string AssistantPlanning => Ru ? "Проверяю команду…" : "Reviewing your command…";
+    public static string AssistantConfirm => Ru ? "Подтвердить изменение" : "Confirm change";
+    public static string AssistantSingleCommand => Ru
+        ? "Укажите одно действие, например «Включи VPN», «Пусти Edge напрямую» или «Только Firefox через VPN»."
+        : "Enter one action, such as “Connect VPN”, “Route Edge directly” or “Route only Firefox through the VPN”.";
+    internal static string AssistantSuggestedCommand(string command) => Ru
+        ? $"Настройки не изменены. Если это ваша цель, введите отдельную команду «{command}»."
+        : $"Your settings are unchanged. If this is what you intended, enter the separate command “{command}”.";
+    internal static string? AssistantCommandExample(string name, bool? value, string? app) => name switch
+    {
+        "SetVpnConnected" => value == true ? (Ru ? "Включи VPN" : "Connect VPN") : (Ru ? "Отключи VPN" : "Disconnect VPN"),
+        "SetStrictDns" => value == true ? (Ru ? "Включи строгий DNS" : "Enable strict DNS") : (Ru ? "Отключи строгий DNS" : "Disable strict DNS"),
+        "SetFlushDnsOnStart" => value == true ? (Ru ? "Включи сброс DNS при запуске" : "Enable DNS flushing on startup")
+            : (Ru ? "Отключи сброс DNS при запуске" : "Disable DNS flushing on startup"),
+        "OpenServerSettings" => Ru ? "Открой серверы" : "Open server settings",
+        "OpenSubscriptions" => Ru ? "Открой подписки" : "Open subscriptions",
+        "OpenNetworkSettings" => Ru ? "Открой сеть" : "Open network settings",
+        "OpenApplications" => Ru ? "Открой приложения" : "Open applications",
+        "OpenTools" => Ru ? "Открой инструменты" : "Open tools",
+        "OpenFreeConfigurations" => Ru ? "Открой бесплатные конфигурации" : "Open free configurations",
+        "RouteOnlyApplicationForDefaultBrowser" or "RouteOnlyApplicationForResolvedTarget" when app != null =>
+            Ru ? $"Только {app} через VPN" : $"Route only {app} through the VPN",
+        "RouteApplicationDirectForDefaultBrowser" or "RouteApplicationDirectForResolvedTarget" when app != null =>
+            Ru ? $"Пусти {app} напрямую" : $"Route {app} directly",
+        _ => null,
+    };
+    public static string AssistantProposalMismatch => Ru
+        ? "Предложение DeepSeek отличается от вашей команды. Настройки сохранены без изменений."
+        : "The DeepSeek suggestion differs from your command. Your settings are unchanged.";
+    internal static string AssistantChangeDescription(string control, bool? desired, string? app, bool connected) =>
+        control switch
+        {
+            "SetVpnConnected" when desired == true => Ru ? "Подключить VPN с текущими настройками?" : "Connect the VPN with your current settings?",
+            "SetVpnConnected" => Ru ? "Отключить текущее VPN-соединение?" : "Disconnect the current VPN connection?",
+            "SetFlushDnsOnStart" when desired == true => Ru ? "Очищать кэш DNS при запуске VPN?" : "Flush the DNS cache when the VPN starts?",
+            "SetFlushDnsOnStart" => Ru ? "Сохранять кэш DNS при запуске VPN?" : "Keep the DNS cache when the VPN starts?",
+            "SetStrictDns" => (desired == true
+                ? (Ru ? "Включить строгий DNS?" : "Enable strict DNS?")
+                : (Ru ? "Отключить строгий DNS?" : "Disable strict DNS?")) + RestartNotice(connected),
+            "RouteOnlyApplication" => (Ru ? $"Заменить список приложений VPN? Только {app} будет использовать VPN. Остальные приложения пойдут напрямую."
+                : $"Replace the VPN app list? Only {app} will use the VPN. Other apps will connect directly.")
+                + (connected ? RestartNotice(true) : (Ru ? " VPN подключится." : " The VPN will connect.")),
+            "RouteApplicationDirect" => (Ru ? $"Направить трафик {app} в обход VPN?" : $"Send {app} traffic directly, outside the VPN?") + RestartNotice(connected),
+            "OpenServerSettings" => Ru ? "Перейти в расширенный режим и выбрать вкладку ручной настройки серверов?" : "Switch to Advanced mode and select manual server settings?",
+            "OpenSubscriptions" => Ru ? "Перейти в расширенный режим и выбрать вкладку подписок?" : "Switch to Advanced mode and select subscriptions?",
+            "OpenNetworkSettings" => OpenAssistantSection(TabSettings),
+            "OpenApplications" => OpenAssistantSection(TabApps),
+            "OpenTools" => OpenAssistantSection(TabAdvTools),
+            "OpenFreeConfigurations" => OpenAssistantSection(TabFreeConfigs),
+            _ => throw new ArgumentOutOfRangeException(nameof(control)),
+        };
+
+    private static string OpenAssistantSection(string section) =>
+        Ru ? $"Открыть раздел «{section}» в расширенном режиме?" : $"Open {section} in Advanced mode?";
+
+    private static string RestartNotice(bool connected) => connected
+        ? (Ru ? " VPN применит настройки к текущему соединению." : " The VPN will reapply settings to the current connection.")
+        : string.Empty;
     public static string AssistantUndo => Ru ? "Отменить изменения" : "Undo changes";
     public static string AssistantCancel => Ru ? "Прервать" : "Cancel";
     public static string AssistantWorking => Ru ? "Настраиваю и проверяю маршрут…" : "Applying and checking the route…";

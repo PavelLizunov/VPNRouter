@@ -1,5 +1,4 @@
 using Avalonia.Controls;
-using Avalonia.Threading;
 using VPNRouter.App.Services;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
@@ -16,6 +15,7 @@ public partial class MainWindowViewModel
         s.Enabled && SubscriptionAssistantClient.IsEligible(s.Url));
     internal Func<string, string, bool, AssistantObservation, CancellationToken, Task<AssistantStep>> StepAssistantAsync { get; init; }
         = SubscriptionAssistantClient.Shared.StepAsync;
+    internal Func<string, string?> ResolveAssistantApplication { get; init; } = AssistantApplicationTarget.ResolveExact;
     internal bool IsInvokingAssistantControl { get; private set; }
 
     private sealed record AssistantUndo(RoutingSelection Previous, RoutingSelection Applied, string Revision,
@@ -77,111 +77,78 @@ public partial class MainWindowViewModel
             : AssistantStepMessage(result.Status);
     }
 
-    internal async Task<string> RunAssistantGoalAsync(string goal, Window window, Control source, CancellationToken ct)
+    internal async Task<string> RunAssistantGoalAsync(string goal, Window window, Control source,
+        Func<string, CancellationToken, Task<bool>> confirm, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(goal) || goal.Length > 384 || goal.Any(char.IsControl))
+            return Strings.AssistantInvalidGoal;
         if (IsServiceManagedVpn || _displayExternalTunnel) return Strings.AssistantServiceManaged;
         if (!CanRunAssistantChange()) return Strings.AssistantBusy;
+
+        var snapshot = ReadAssistantSnapshot();
+        if (snapshot == null || !_engine.IsAssistantSessionCurrent(snapshot.Session))
+            return Strings.AssistantSettingsChanged;
+        var subscription = SelectAssistantSubscription(snapshot.Settings.App);
+        if (subscription == null) return Strings.AssistantSubscription;
 
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
         budget.CancelAfter(TimeSpan.FromMinutes(2));
         var token = budget.Token;
-        var automation = new AssistantWindowAutomation(window, source);
-        string? previous = null;
+        var state = new AssistantObservation(IsConnected, false, IsSimpleMode, [], null);
+        if (AssistantIntent.Parse(goal) is not { } intent)
+            return await SuggestAssistantCommandAsync(goal, subscription.Url, snapshot, state, token);
 
-        for (int iteration = 0; iteration < 6; iteration++)
+        var settings = snapshot.Settings.App;
+        var controlName = intent.Control;
+        string? process = null;
+        if (intent.Application is { } app)
         {
-            token.ThrowIfCancellationRequested();
-            var snapshot = ReadAssistantSnapshot();
-            if (snapshot == null || !_engine.IsAssistantSessionCurrent(snapshot.Session))
-                return Strings.AssistantSettingsChanged;
-            var subscription = SelectAssistantSubscription(snapshot.Settings.App);
-            if (subscription == null) return Strings.AssistantSubscription;
-
-            var semantic = new List<AssistantControl>();
-            void Add(string name, string kind, bool? active = null) =>
-                semantic.Add(new AssistantControl(semantic.Count + 1, name, kind, active));
-
-            string? resolvedApp = null;
-            if (CanRunAssistantChange() && snapshot.Settings.App.ConfigMode is ("generated" or "subscribe")
-                && snapshot.Settings.App.CustomRules.All(rule => !rule.Enabled))
-            {
-                if (AssistantApplicationTarget.MentionsRouting(goal))
-                    resolvedApp = AssistantApplicationTarget.ResolveRequested(goal, proposal: null);
-                if (resolvedApp != null)
-                {
-                    var suffix = AssistantApplicationTarget.IsDefaultBrowserRequest(goal)
-                        ? "ForDefaultBrowser" : "ForResolvedTarget";
-                    Add("RouteOnlyApplication" + suffix, "press");
-                    Add("RouteApplicationDirect" + suffix, "press");
-                }
-                else
-                {
-                    var suffix = OperatingSystem.IsWindows() ? "ByWindowsExecutableName" : "ByProcessName";
-                    Add("RouteOnlyApplication" + suffix, "text");
-                    Add("RouteApplicationDirect" + suffix, "text");
-                }
-            }
-
-            bool appScoped = AssistantApplicationTarget.IsAppScopedRoute(goal, resolvedApp != null);
-            if (!appScoped)
-            {
-                Add("SetVpnConnected", "toggle", IsConnected);
-                if (snapshot.Settings.App.ConfigMode is "generated" or "subscribe")
-                    Add("SetStrictDns", "toggle", snapshot.Settings.App.StrictDns);
-                Add("SetFlushDnsOnStart", "toggle", snapshot.Settings.App.FlushDnsOnStart);
-                for (int tab = 0; tab < AssistantSections.Length; tab++)
-                    if (tab != 4 || IsToolsAvailable)
-                        Add(AssistantSections[tab], "press");
-            }
-            var controls = appScoped ? semantic.ToArray() : semantic.Concat(automation.Observe(semantic.Count + 1)).ToArray();
-            var observation = new AssistantObservation(IsConnected, false, IsSimpleMode, controls, previous);
-
-            var step = await StepAssistantAsync(subscription.Url, goal, IsRussian, observation, token);
-            token.ThrowIfCancellationRequested();
-            if (!CanRunAssistantChange(allowPendingChanges: true) || !AssistantSnapshotStillCurrent(snapshot)
-                || IsConnected != observation.Connected || IsSimpleMode != observation.Simple
-                || !_engine.IsAssistantSessionCurrent(snapshot.Session)
-                || !ReferenceEquals(TopLevel.GetTopLevel(source), window))
-                return Strings.AssistantSettingsChanged;
-
-            if (step.Status != AssistantStepStatus.Act) return AssistantStepMessage(step.Status);
-            if (step.Control is not { } target || !controls.Contains(target)) return Strings.AssistantUnavailable;
-            if (semantic.Contains(target) && (target.Name.StartsWith("RouteOnlyApplication", StringComparison.Ordinal)
-                || target.Name.StartsWith("RouteApplicationDirect", StringComparison.Ordinal)))
-            {
-                if (!CanRunAssistantChange() || step.Toggle != null)
-                    return Strings.AssistantAppNeeded;
-                var process = target.Kind switch
-                {
-                    "text" when step.Text is { } executable => AssistantApplicationTarget.ResolveRequested(goal, executable),
-                    "press" when step.Text == null && AssistantApplicationTarget.ResolveRequested(goal, proposal: null) == resolvedApp => resolvedApp,
-                    _ => null,
-                };
-                if (process == null) return Strings.AssistantAppNeeded;
-
-                return await ApplyAssistantAppRouteAsync(snapshot, process, target.Name.StartsWith("RouteApplicationDirect", StringComparison.Ordinal), token);
-            }
-
-            if (semantic.Contains(target))
-                return await ExecuteAssistantStateAsync(snapshot, target, step.Toggle, token);
-
-            IsInvokingAssistantControl = true;
-            try { previous = automation.Execute(target, step.Text, step.Toggle); }
-            finally { IsInvokingAssistantControl = false; }
-            if (previous == null) return Strings.AssistantSettingsChanged;
-            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-            while (IsConnecting || IsApplying || _isReconnecting)
-                await Task.Delay(150, token);
-            token.ThrowIfCancellationRequested();
-            if (target.Name is "ConnectVpn" or "DisconnectVpn" or "ToggleVpn")
-            {
-                bool expected = !observation.Connected;
-                if (IsConnected != expected || SmpStopUnconfirmed)
-                    return expected ? Strings.FailedStartVpn : Strings.TunnelStopUnconfirmed;
-            }
+            if (settings.ConfigMode is not ("generated" or "subscribe") || settings.CustomRules.Any(rule => rule.Enabled))
+                return Strings.AssistantRuleConflict;
+            process = ResolveAssistantApplication(app);
+            if (process == null) return Strings.AssistantAppNeeded;
+            controlName += AssistantApplicationTarget.IsDefaultBrowserRequest(app) ? "ForDefaultBrowser" : "ForResolvedTarget";
         }
+        if (controlName == "SetStrictDns" && settings.ConfigMode is not ("generated" or "subscribe")
+            || controlName == "OpenTools" && !IsToolsAvailable) return Strings.AssistantUnsupportedGoal;
 
-        return Strings.AssistantStepLimit;
+        bool? current = controlName switch
+        {
+            "SetVpnConnected" => IsConnected,
+            "SetStrictDns" => settings.StrictDns,
+            "SetFlushDnsOnStart" => settings.FlushDnsOnStart,
+            _ => null,
+        };
+        var control = new AssistantControl(1, controlName, current.HasValue ? "toggle" : "press", current);
+        var observation = state with { Controls = [control] };
+        var step = await StepAssistantAsync(subscription.Url, goal, IsRussian, observation, token);
+        token.ThrowIfCancellationRequested();
+        if (!StillCurrent()) return Strings.AssistantSettingsChanged;
+        if (step.Status != AssistantStepStatus.Act) return AssistantStepMessage(step.Status);
+        if (step.Control != control || step.Toggle != intent.Desired || step.Text != null)
+            return Strings.AssistantProposalMismatch;
+
+        if (intent.Desired is bool desired && current == desired)
+            return controlName == "SetVpnConnected" ? VerifiedVpnStatus(desired) : Strings.AssistantNoChanges;
+
+        string description = Strings.AssistantChangeDescription(intent.Control, intent.Desired, process,
+            observation.Connected);
+        bool accepted = await confirm(description, token);
+        token.ThrowIfCancellationRequested();
+        if (!accepted) return Strings.AssistantNoChanges;
+        if (!StillCurrent() || (intent.Application is { } requested
+            && ResolveAssistantApplication(requested) != process))
+            return Strings.AssistantSettingsChanged;
+
+        return process != null
+            ? await ApplyAssistantAppRouteAsync(snapshot, process, intent.Control == "RouteApplicationDirect", token)
+            : await ExecuteAssistantStateAsync(snapshot, control, intent.Desired, token);
+
+        bool StillCurrent() => CanRunAssistantChange() && AssistantSnapshotStillCurrent(snapshot)
+            && _engine.IsAssistantSessionCurrent(snapshot.Session) && IsConnected == observation.Connected
+            && IsSimpleMode == observation.Simple && ReferenceEquals(TopLevel.GetTopLevel(source), window)
+            && ReferenceEquals(source.DataContext, this);
     }
 
     private static readonly string[] AssistantSections =
@@ -209,12 +176,7 @@ public partial class MainWindowViewModel
         {
             if (IsConnected != desired) await ToggleConnectionCoreAsync(null, token);
             token.ThrowIfCancellationRequested();
-            bool verified = desired
-                ? IsConnected && _engine.AcceptedTunnel != null && _engine.SingBoxPid is { } pid && _engine.DescribeReadiness(pid) == null
-                : !IsConnected && !SmpStopUnconfirmed && _engine.IsAssistantSessionCurrent(null);
-            return verified
-                ? (desired ? Strings.AssistantVpnActive : Strings.AssistantVpnStopped)
-                : (desired ? Strings.FailedStartVpn : Strings.TunnelStopUnconfirmed);
+            return VerifiedVpnStatus(desired);
         }
 
         bool strict = target.Name == "SetStrictDns";
@@ -230,6 +192,16 @@ public partial class MainWindowViewModel
         var persisted = ReadAssistantSnapshot()?.Settings.App;
         return persisted != null && (strict ? persisted.StrictDns : persisted.FlushDnsOnStart) == desired
             ? Strings.AssistantPreferenceSaved : Strings.AssistantSettingsChanged;
+    }
+
+    private string VerifiedVpnStatus(bool desired)
+    {
+        bool verified = desired
+            ? IsConnected && _engine.AcceptedTunnel != null && _engine.SingBoxPid is { } pid && _engine.DescribeReadiness(pid) == null
+            : !IsConnected && !SmpStopUnconfirmed && _engine.IsAssistantSessionCurrent(null);
+        return verified
+            ? (desired ? Strings.AssistantVpnActive : Strings.AssistantVpnStopped)
+            : (desired ? Strings.FailedStartVpn : Strings.TunnelStopUnconfirmed);
     }
 
     internal static bool TryConfigureAssistantRoute(AppSettings candidate, string target, bool direct,

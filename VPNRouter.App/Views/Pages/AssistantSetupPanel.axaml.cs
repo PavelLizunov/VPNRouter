@@ -4,6 +4,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 using Strings = VPNRouter.Core.Localization.Strings;
 
@@ -14,6 +15,7 @@ public partial class AssistantSetupPanel : UserControl
     private MainWindowViewModel? _viewModel;
     private readonly List<SubscriptionViewModel> _subscriptions = [];
     private CancellationTokenSource? _request;
+    private TaskCompletionSource<bool>? _confirmation;
 
     public AssistantSetupPanel()
     {
@@ -53,6 +55,7 @@ public partial class AssistantSetupPanel : UserControl
 
     private void SubscriptionsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
+        if (_confirmation != null) _request?.Cancel();
         TrackSubscriptions();
         RefreshLabels();
     }
@@ -71,7 +74,10 @@ public partial class AssistantSetupPanel : UserControl
     private void SubscriptionChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is nameof(SubscriptionViewModel.Url) or nameof(SubscriptionViewModel.Enabled))
+        {
+            if (_confirmation != null) _request?.Cancel();
             RefreshLabels();
+        }
     }
 
     private void RefreshLabels()
@@ -83,7 +89,8 @@ public partial class AssistantSetupPanel : UserControl
         AssistantGoal.Watermark = Strings.AssistantGoalHint;
         AutomationProperties.SetName(AssistantGoal, Strings.AssistantGoalHint);
         AssistantNotice.Text = Strings.AssistantDataNotice;
-        RunAssistant.Content = Strings.AssistantApply;
+        RunAssistant.Content = Strings.AssistantPlan;
+        ConfirmAssistant.Content = Strings.AssistantConfirm;
         DiagnoseCrash.Content = Strings.AssistantDiagnoseCrash;
         RepairVpn.Content = Strings.AssistantRepair;
         CancelAssistant.Content = Strings.AssistantCancel;
@@ -111,7 +118,7 @@ public partial class AssistantSetupPanel : UserControl
         window.AddHandler(InputElement.PointerPressedEvent, CancelFromWindow, RoutingStrategies.Tunnel);
         try
         {
-            await RunAsync(ct => vm.RunAssistantGoalAsync(goal, window, this, ct));
+            await RunAsync(ct => vm.RunAssistantGoalAsync(goal, window, this, ConfirmChangeAsync, ct), Strings.AssistantPlanning);
             if (!vm.IsSimpleMode) vm.StatusText = AssistantStatus.Text ?? string.Empty;
         }
         finally
@@ -138,7 +145,41 @@ public partial class AssistantSetupPanel : UserControl
             await RunAsync(vm.RepairAssistantVpnAsync, Strings.AssistantRepairWorking, Strings.AssistantRepairFailed);
     }
 
-    private void CancelFromWindow(object? sender, RoutedEventArgs args) => _request?.Cancel();
+    private async Task<bool> ConfirmChangeAsync(string description, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var choice = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _confirmation = choice;
+        AssistantStatus.Text = description;
+        ConfirmAssistant.IsVisible = true;
+        CancelAssistant.Focus();
+        try
+        {
+            return await choice.Task.WaitAsync(ct);
+        }
+        finally
+        {
+            _confirmation = null;
+            ConfirmAssistant.IsVisible = false;
+        }
+    }
+
+    private void ConfirmAssistant_Click(object? sender, RoutedEventArgs args)
+    {
+        if (_confirmation?.TrySetResult(true) == true)
+        {
+            ConfirmAssistant.IsVisible = false;
+            AssistantStatus.Text = Strings.AssistantWorking;
+        }
+    }
+
+    private void CancelFromWindow(object? sender, RoutedEventArgs args)
+    {
+        if (_confirmation != null && args.Source is Avalonia.Visual origin
+            && (ReferenceEquals(origin, this) || origin.GetVisualAncestors().Contains(this))
+            && args is not KeyEventArgs { Key: Key.Escape }) return;
+        _request?.Cancel();
+    }
 
     private void CancelAssistant_Click(object? sender, RoutedEventArgs args) => _request?.Cancel();
 

@@ -16,3 +16,21 @@ Exercise the historical cases, wrong toggles and route directions, cancellation
 and stale confirmation. Inspect the diff independently and verify the panel on
 WINBRAT before release. There is no public ViewModel API or data migration.
 Revert this change as a unit if it regresses the panel; keep publication held.
+
+## Implementation and verification
+
+The text executor now advertises one semantic action. It accepts only a
+matching operation, target, and toggle value. The panel shows its own
+localized description and waits for Confirm. Cancelling the request,
+detaching the panel, or changing the settings or resolved target prevents
+execution. Free-form text outside the single-action forms can yield a locally formatted
+example to enter as a separate request. This path cannot offer confirmation
+or execute a control.
+
+The fixture exactly matches the 98 unique no-action texts of the original
+sealed replay. Panel tests cover that corpus, wrong direction and value,
+decline, cancellation, a changed revision or default browser, confirmation
+of a persisted DNS preference, and navigation. The fixture, XML wiring,
+and whitespace checks passed locally. Hosted compilation and runtime checks
+apply to the product commit. Windows acceptance and publication are separate
+gates.

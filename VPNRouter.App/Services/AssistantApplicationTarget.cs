@@ -59,6 +59,23 @@ internal static class AssistantApplicationTarget
         @"telegram\s+(?:portable|beta)|(?:vs\s+code|visual\s+studio\s+code)\s+insiders)" +
         NameEnd, NameOptions);
 
+    internal static string? ResolveExact(string app)
+    {
+        if (!ValidName(app)) return null;
+        if (!OperatingSystem.IsWindows()) return FindProcess(app, windows: false);
+        if (SharedExecutableVariants.IsMatch(app)) return null;
+        if (WindowsNames.TryGetValue(app, out var executable))
+            return FindProcess(executable, windows: true);
+        if (app.Equals("browser", StringComparison.OrdinalIgnoreCase)
+            || app.Equals("default browser", StringComparison.OrdinalIgnoreCase)
+            || app.Equals("браузер", StringComparison.OrdinalIgnoreCase)
+            || app.Equals("браузер по умолчанию", StringComparison.OrdinalIgnoreCase))
+            return ReadWindowsDefaultBrowser();
+        if (app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return FindProcess(app, windows: true);
+        return ResolveRunningApplication(app, null, null, ReadRunningApplications(), exact: true);
+    }
+
     internal static string? ResolveRequested(string goal, string? proposal)
     {
         var windows = OperatingSystem.IsWindows();
@@ -129,9 +146,9 @@ internal static class AssistantApplicationTarget
         && (hasResolvedTarget || Browser.IsMatch(goal) || NamedApps.IsMatch(goal) || Executables.IsMatch(goal));
 
     private static string? ResolveRunningApplication(string goal, string? proposal, string? target,
-        IReadOnlyList<AssistantRunningApplication> apps)
+        IReadOnlyList<AssistantRunningApplication> apps, bool exact = false)
     {
-        var matches = apps.Where(app => NameMatches(app.ProductName, goal) || NameMatches(app.DisplayName, goal))
+        var matches = apps.Where(app => NameMatches(app.ProductName, goal, exact) || NameMatches(app.DisplayName, goal, exact))
             .DistinctBy(app => app.Executable, StringComparer.OrdinalIgnoreCase).Take(2).ToArray();
         if (matches is not [var app] || !ValidName(app.Executable) || !app.Executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             return null;
