@@ -139,9 +139,6 @@ public sealed class WindowsInstallerContractTests
         int guard = prepare.IndexOf("PrepareZapretUpgrade('VPNRouter')", StringComparison.Ordinal);
         Assert.True(guard >= 0 && guard < prepare.IndexOf("Code := StopVpnrouter", StringComparison.Ordinal));
         Assert.Contains("if SystemChangesAllowed then", prepare);
-        var service = Assert.Single(Section("Run").Split('\n'), line => line.Contains("Tasks: service"));
-        Assert.Contains("Check: SystemChangesAllowed", service);
-        Assert.Contains("-InstallService", service);
         Assert.Contains("FinishZapretUpgrade;", prepare);
         if (!OperatingSystem.IsWindows()) return;
         var ps = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
@@ -152,6 +149,22 @@ public sealed class WindowsInstallerContractTests
         using var process = System.Diagnostics.Process.Start(info)!;
         Assert.True(process.WaitForExit(30_000));
         Assert.Equal(0, process.ExitCode);
+    }
+
+    [Fact]
+    public void SetupReportsUnverifiedOrFailedServiceStartBeforeOptionalNinaSetup()
+    {
+        var code = Section("Code");
+        Assert.DoesNotContain("Tasks: service", Section("Run"));
+        Assert.Matches(new Regex(
+            @"WizardIsTaskSelected\('service'\).*?' -InstallService'.*?ServiceWasRunning.*?' -RestartService'",
+            RegexOptions.Singleline), code);
+        Assert.Matches(new Regex(
+            @"if \(not Exec\(ExpandConstant\(PowerShellExe\),.*?\) or \(Code <> 0\) then\s+begin\s+Log\('VPNRouter service start failed.*?CustomMessage\('ServiceStartFailed'\)",
+            RegexOptions.Singleline), code);
+        Assert.Matches(new Regex(@"FinishZapretUpgrade;\s+StartVpnrouterService;.*?nina-windows-install\.ps1", RegexOptions.Singleline), code);
+        Assert.Contains("if (!$owned) { throw", StopScript);
+        Assert.Contains("$owned.WaitForStatus('Running'", StopScript);
     }
 
     [Fact]

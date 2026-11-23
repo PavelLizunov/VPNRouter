@@ -291,7 +291,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task SmpToggleConnectAsync()
     {
-        if (SimpleCtaIsConnecting || _isReconnecting) return;
+        if (SimpleCtaIsConnecting || _isReconnecting || BlockConnectionChangeDuringNinaRepair()) return;
         SmpErrorText = string.Empty;
 
         if (IsConnected)

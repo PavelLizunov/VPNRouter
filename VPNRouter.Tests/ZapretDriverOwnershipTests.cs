@@ -82,17 +82,18 @@ public sealed class ZapretDriverOwnershipTests
         {
             var nina = Directory.CreateDirectory(Path.Combine(scratch, "nina")).FullName;
             var zapret = Directory.CreateDirectory(Path.Combine(scratch, "zapret")).FullName;
-            var paths = new ZapretServiceOwnership("legacy", zapret);
+            var paths = new ZapretServiceOwnership("legacy", zapret) { NinaBin = nina };
             var image = Path.Combine(nina, "WinDivert64.sys");
             File.WriteAllBytes(image, [1, 2, 3]);
             var installed = Path.Combine(zapret, "WinDivert64.sys");
             File.WriteAllBytes(installed, [1, 2, 3]);
 
-            Assert.True(ZapretActions.CanShareNinaDriver(paths, nina, "WinDivert", image));
-            Assert.False(ZapretActions.CanShareNinaDriver(paths, nina, "WinDivert14", image));
-            Assert.False(ZapretActions.CanShareNinaDriver(paths, nina, "WinDivert", installed));
+            Assert.True(ZapretActions.CanShareNinaDriver(paths, "WinDivert", new(image, 1, 3)));
+            Assert.False(ZapretActions.CanShareNinaDriver(paths, "WinDivert", new(image, 16, 3)));
+            Assert.False(ZapretActions.CanShareNinaDriver(paths, "WinDivert14", new(image, 1, 3)));
+            Assert.False(ZapretActions.CanShareNinaDriver(paths, "WinDivert", new(installed, 1, 3)));
             File.WriteAllBytes(installed, [1, 3, 2]);
-            Assert.False(ZapretActions.CanShareNinaDriver(paths, nina, "WinDivert", image));
+            Assert.False(ZapretActions.CanShareNinaDriver(paths, "WinDivert", new(image, 1, 3)));
         }
         finally { if (Directory.Exists(scratch)) Directory.Delete(scratch, recursive: true); }
     }

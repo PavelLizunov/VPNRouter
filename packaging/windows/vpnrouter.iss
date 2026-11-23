@@ -77,6 +77,7 @@ russian.NinaInstallFailed=VPNRouter установлен. Не удалось у
 english.TaskGroupStartup=Startup:
 english.TaskAutostart=Start VPNRouter when I sign in
 english.TaskService=Install the VPNRouter Windows service (starts with Windows)
+english.ServiceStartFailed=Setup could not start the VPNRouter service. See the Setup log for details.
 english.TaskGroupSecurity=Antivirus:
 english.TaskDefender=Add Microsoft Defender exclusions for VPNRouter (recommended until the program is code-signed)
 english.CleanupWarning=VPNRouter could not remove everything it added to Windows (see the log). You can run "VPNRouter.CLI.exe cleanup" later.
@@ -84,6 +85,7 @@ english.AskDeleteData=Also delete VPNRouter settings, profiles and logs (%Progra
 russian.TaskGroupStartup=Запуск:
 russian.TaskAutostart=Запускать VPNRouter при входе в систему
 russian.TaskService=Установить службу Windows VPNRouter (запускается вместе с Windows)
+russian.ServiceStartFailed=Установщик не смог запустить службу VPNRouter. Подробности в журнале установки.
 russian.TaskGroupSecurity=Антивирус:
 russian.TaskDefender=Добавить исключения Microsoft Defender для VPNRouter (рекомендуется, пока программа не подписана)
 russian.CleanupWarning=VPNRouter не смог убрать из Windows всё, что добавил (см. журнал). Позже можно выполнить "VPNRouter.CLI.exe cleanup".
@@ -114,7 +116,6 @@ Root: HKLM; Subkey: "Software\VPNRouter\Installer"; ValueType: dword; ValueName:
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Add-MpPreference -ExclusionPath '{app}','{commonappdata}\VPNRouter'"""; Flags: runhidden; Tasks: defender
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\installer\stop-vpnrouter.ps1"" -InstallDir ""{app}"" -InstallService"; Flags: runhidden; Tasks: service; Check: SystemChangesAllowed
 Filename: "{app}\app\VPNRouter.GUI.exe"; Description: "{cm:LaunchProgram,VPNRouter}"; WorkingDir: "{app}\app"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallDelete]
@@ -227,6 +228,28 @@ begin
     '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
 
+procedure StartVpnrouterService;
+var
+  Code: Integer;
+  Mode: string;
+begin
+  if WizardIsTaskSelected('service') then
+    Mode := ' -InstallService'
+  else if ServiceWasRunning then
+    Mode := ' -RestartService'
+  else
+    Exit;
+
+  if (not Exec(ExpandConstant(PowerShellExe),
+      '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
+      ExpandConstant('{app}\installer\stop-vpnrouter.ps1') + '" -InstallDir "' +
+      ExpandConstant('{app}') + '"' + Mode, '', SW_HIDE, ewWaitUntilTerminated, Code)) or (Code <> 0) then
+  begin
+    Log('VPNRouter service start failed, result code ' + IntToStr(Code) + '.');
+    SuppressibleMsgBox(CustomMessage('ServiceStartFailed'), mbError, MB_OK, IDOK);
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
@@ -236,10 +259,7 @@ begin
     MigrateOldScriptInstall;
     RestrictDataDirectoryAcl;
     FinishZapretUpgrade;
-    if ServiceWasRunning and (not WizardIsTaskSelected('service')) then
-      Exec(ExpandConstant(PowerShellExe), '-NoProfile -ExecutionPolicy Bypass -File "' +
-        ExpandConstant('{app}\installer\stop-vpnrouter.ps1') + '" -RestartService -InstallDir "' +
-        ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    StartVpnrouterService;
 #ifdef NinaBundleDir
     if (not Exec(ExpandConstant(PowerShellExe),
         '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +

@@ -164,7 +164,7 @@ public static class ZapretLegacyServices
                 writable.Configure(Path.Combine(paths.ProtectedBin, file), disabled ? 4u : 3u);
                 writable.WriteChoice("VPNRouterPreUpgradeState", null);
             }
-            else if (!paths.Owns(name, config))
+            else if (!paths.Owns(name, config) && !ZapretActions.CanShareNinaDriver(paths, name, config))
                 return new(false, Conflict);
         }
 

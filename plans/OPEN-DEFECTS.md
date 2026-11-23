@@ -17,8 +17,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 ## Open
 
 - [x] **P1** - A bundled NINA setup failure could skip restoring a running VPNRouter service. The optional step now runs after the service restore and reports its failure without aborting VPNRouter. RESOLVED in source. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
-- [x] **P2** - A NINA trial could overlap with VPN connection changes or legacy Zapret actions. Quit now requests rollback and waits for completion before it permits shutdown. RESOLVED in source. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
+- [x] **P2** - A NINA trial could overlap with VPN connection changes or legacy Zapret actions. Quit requests rollback and declines the current Quit request while repair is active. Retry Quit after rollback finishes. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
 - [ ] **P2** - WINBRAT retained a loaded WinDivert registration marked for deletion after capture stopped. Both controllers now accept an identical driver from the other protected runtime, with competing capture blocked. The unit test passed. A live handover between engines remains unverified. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
+
+- [x] **P1** - Review of `4c1f89dc`: legacy migration can park and disable Zapret before rejecting a compatible NINA WinDivert registration. The installer can reject the same driver before migration. The installer and migration now accept the verified companion driver without writing to its registration. RESOLVED in source in #729. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
+- [x] **P2** - Review of `4c1f89dc`: Free Config Apply and reconnect can change the network path during a NINA trial. Simple Connect and pending-settings Apply also bypass the NINA gate. The connection entry points share the active NINA guard. RESOLVED in source in #729. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
+- [x] **P2** - Review of `4c1f89dc`: Setup ignores failure to restart a previously running VPNRouter service. The restart script returns success when the service cannot be verified. Setup checks the launcher and exit code and reports failure in English and Russian. RESOLVED in source in #729. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
+- [ ] **P3** - Review of `4c1f89dc`: independent Windows SCM and CLI starts can pass both capture checks before either engine starts. The existing SCM registration launches winws directly and has no shared lock with NINA. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
 
 - [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
 

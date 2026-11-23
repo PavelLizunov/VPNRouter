@@ -2,6 +2,8 @@ namespace VPNRouter.Core.Services;
 
 internal sealed record ZapretServiceOwnership(string LegacyBin, string ProtectedBin)
 {
+    internal string? NinaBin { get; init; }
+
     internal static readonly string[] DriverNames = ["WinDivert", "WinDivert14", "WinDivert15"];
     internal const string Service = "zapret";
     internal const string EditionName = "VPNRouter";
@@ -10,8 +12,12 @@ internal sealed record ZapretServiceOwnership(string LegacyBin, string Protected
     {
         var data = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         if (!Path.IsPathFullyQualified(data)) throw new IOException("Cannot resolve ProgramData.");
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         return new(Path.Combine(data, EditionName, "zapret", "bin"),
-            Path.Combine(ZapretRuntimeDirectory.Root, "zapret", "bin"));
+            Path.Combine(ZapretRuntimeDirectory.Root, "zapret", "bin"))
+        {
+            NinaBin = Path.IsPathFullyQualified(programFiles) ? Path.Combine(programFiles, "NINA", "engine") : null
+        };
     }
 
     internal static bool Matches(string name, string? image, string bin) => FileName(name, image, bin) != null;

@@ -96,6 +96,54 @@ public sealed class ZapretServiceMigrationTests
         Assert.Equal(0, _services["zapret"].Changes);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NinaDriverPermitsMigrationOnlyWhenIdenticalWithoutOpeningItForWrites(bool identical)
+    {
+        var scratch = Directory.CreateTempSubdirectory("vpnrouter-shared-driver-");
+        try
+        {
+            var paths = new ZapretServiceOwnership(_paths.LegacyBin, scratch.CreateSubdirectory("vpnrouter").FullName)
+            {
+                NinaBin = scratch.CreateSubdirectory("nina").FullName
+            };
+            var image = Path.Combine(paths.NinaBin!, "WinDivert64.sys");
+            File.WriteAllBytes(image, [1, 2, 3]);
+            File.WriteAllBytes(Path.Combine(paths.ProtectedBin, "WinDivert64.sys"), [1, 2, identical ? (byte)3 : (byte)4]);
+
+            var old = Old("general", 2, true);
+            var driver = new FakeRegistration(new(image, 1, 3)) { IsActive = true };
+            _services["WinDivert"] = driver;
+            _catalogue = [new("general", () => ["--wf-tcp=443"])];
+
+            var result = ZapretLegacyServices.Migrate(paths, (name, writable) =>
+            {
+                if (name == "WinDivert") Assert.False(writable);
+                return Open(name, writable);
+            }, () => _catalogue);
+
+            Assert.Equal(identical, result.SafeForReboot);
+            Assert.Equal(2u, old.Config.Start);
+            Assert.True(old.IsActive);
+            if (identical)
+            {
+                Assert.Null(result.Message);
+                Assert.Contains(paths.ProtectedBin, old.Config.Image);
+            }
+            else
+            {
+                Assert.Contains("conflict", result.Message);
+                Assert.Equal(0, old.Changes);
+            }
+            Assert.False(old.Values.ContainsKey("VPNRouterMigrationV1"));
+            Assert.Equal(new ServiceConfig(image, 1, 3), driver.Config);
+            Assert.True(driver.IsActive);
+            Assert.Equal(0, driver.Changes);
+        }
+        finally { scratch.Delete(recursive: true); }
+    }
+
     [Fact]
     public async Task ExplicitRepairDownloadsOnceOutsideMigrationAndRestoresTheSavedSelection()
     {

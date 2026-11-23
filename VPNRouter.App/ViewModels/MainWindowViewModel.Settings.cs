@@ -798,7 +798,7 @@ public partial class MainWindowViewModel
     /// <returns>True when the active tunnel manager confirmed the settings.</returns>
     private async Task<bool> ApplyPendingChangesInternalAsync(bool forceRestart)
     {
-        if (!CanApplyAppChanges) return false;
+        if (!CanApplyAppChanges || BlockConnectionChangeDuringNinaRepair()) return false;
         IsApplying = true;
         var appliedRevision = Volatile.Read(ref _routingSettingsRevision);
         try

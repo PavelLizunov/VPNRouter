@@ -8,6 +8,13 @@ public partial class MainWindowViewModel
 {
     private CancellationTokenSource? _ninaZapretRequest;
 
+    private bool BlockConnectionChangeDuringNinaRepair()
+    {
+        if (_ninaZapretRequest == null) return false;
+        StatusText = Strings.NinaZapretBusy;
+        return true;
+    }
+
     internal async Task<string> RunNinaZapretAsync(
         string command, IProgress<string> progress, CancellationToken ct)
     {
@@ -21,7 +28,7 @@ public partial class MainWindowViewModel
                 return Strings.NinaZapretBusy;
             if (ZapretEnabled || IsZapretRunning() || ProcessQuery.AnyAlive("winws"))
                 return Strings.NinaZapretEngineConflict;
-            if (IsConnected || IsConnecting || _displayExternalTunnel)
+            if (IsConnected || IsConnecting || _engine.HasActiveTunnel || _displayExternalTunnel)
                 return Strings.NinaZapretVpnActive;
             if (ReadAssistantSnapshot() is not { } snapshot) return Strings.AssistantSettingsChanged;
             subscription = SelectAssistantSubscription(snapshot.Settings.App)?.Url;

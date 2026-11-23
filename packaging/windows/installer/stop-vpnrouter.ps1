@@ -55,11 +55,11 @@ if ($InstallService -or $RestartService) {
         if ($LASTEXITCODE -ne 0) { throw 'Could not install the VPNRouter service.' }
     }
     $owned = Get-OwnMainService
-    if ($owned) {
-        try { Start-Service -InputObject $owned } finally { $owned.Dispose() }
-    } elseif ($InstallService) {
-        throw 'A different or unverifiable VPNRouter service is already registered.'
-    }
+    if (!$owned) { throw 'Could not verify the installed VPNRouter service.' }
+    try {
+        Start-Service -InputObject $owned
+        $owned.WaitForStatus('Running', [TimeSpan]::FromSeconds(10))
+    } finally { $owned.Dispose() }
     exit 0
 }
 

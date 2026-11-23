@@ -722,11 +722,8 @@ public static class ZapretActions
     internal static bool HasDriverConflict(ZapretServiceOwnership paths, Func<string, bool, IWindowsRegistration?> open,
         bool allowLegacy = false)
     {
-        var ninaBin = OperatingSystem.IsWindows() && ZapretRuntimeDirectory.TestRoot == null
-            && paths == ZapretServiceOwnership.Current()
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "NINA", "engine")
-            : null;
-        if (ninaBin != null && ProcessQuery.AnyAlive("winws2")) return true;
+        if (OperatingSystem.IsWindows() && ZapretRuntimeDirectory.TestRoot == null
+            && paths.NinaBin != null && ProcessQuery.AnyAlive("winws2")) return true;
         foreach (var driverName in ZapretServiceOwnership.DriverNames)
         {
             try
@@ -736,7 +733,7 @@ public static class ZapretActions
                 if (config == null) continue;
                 if (config.Type != 1) return true;
                 if (ZapretServiceOwnership.Matches(driverName, config.Image, paths.ProtectedBin)) continue;
-                if (ninaBin != null && CanShareNinaDriver(paths, ninaBin, driverName, config.Image)) continue;
+                if (CanShareNinaDriver(paths, driverName, config)) continue;
                 if (!allowLegacy || !ZapretServiceOwnership.Matches(driverName, config.Image, paths.LegacyBin)) return true;
             }
             catch (Exception ex) when (ex is Win32Exception or UnauthorizedAccessException or IOException)
@@ -747,10 +744,11 @@ public static class ZapretActions
         return false;
     }
 
-    internal static bool CanShareNinaDriver(ZapretServiceOwnership paths, string ninaBin, string name, string image)
+    internal static bool CanShareNinaDriver(ZapretServiceOwnership paths, string name, ServiceConfig config)
     {
         const string file = "WinDivert64.sys";
-        if (name != "WinDivert" || ZapretServiceOwnership.FileName(name, image, ninaBin) != file)
+        if (config.Type != 1 || name != "WinDivert" || paths.NinaBin is not { } ninaBin
+            || !ZapretServiceOwnership.IsImage(config.Image, Path.Combine(ninaBin, file), allowArguments: false))
             return false;
         var nina = new FileInfo(Path.Combine(ninaBin, file));
         var legacy = new FileInfo(Path.Combine(paths.ProtectedBin, file));
