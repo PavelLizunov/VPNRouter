@@ -57,8 +57,10 @@ public final class AndroidTunnelLifecycleTest {
                 "origin.CompletePreparation(ReadTunnelEvent, _ => DispatchTunnelStart(command, configJson, coldStartOnly, entry))",
                 ".PutExtra(ExtraColdStartOnly, coldStartOnly)");
         String imported = builder.substring(builder.indexOf("internal static string BuildConfigJsonFromCustom("));
-        requireOrdered(imported, "settings.App.BlockAds = AndroidStorage.GetBlockAds();",
+        requireOrdered(imported, "CreateAndroidSettings(\"custom\")",
                 "CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet)");
+        requireOrdered(builder, "private static AppSettings CreateAndroidSettings(",
+                "settings.App.BlockAds = AndroidStorage.GetBlockAds();");
         require(builder.contains("resolveRuleSet: null, onMissingRuleSet: onMissingRuleSet)")
                 && builder.contains("CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet)"),
                 "Android builder did not propagate rule-set availability");
