@@ -64,3 +64,21 @@ The running subscription service accepted the original route at the
 authentication boundary and returned 404 for the step route. That separates
 the hosted verification from activation and the live DeepSeek routing
 scenario. GitHub's connector declined both draft PR requests with 403.
+
+## Follow-up: missing gateway route and crash diagnosis
+
+The installed gateway responds to POST /plan with 401 without credentials
+and to POST /step with 404. A direct synthetic request to DeepSeek Flash
+with an archived OpenCode Go key returned 200. Give the desktop a distinct
+response for the missing gateway route.
+
+After restart the assistant can analyze the latest managed crash report.
+Use the existing report and log tail to build a bounded set of diagnostic
+codes locally. The crash analysis request is read-only and carries no raw
+report text. Normal configuration still uses the application driver.
+Rollback by reverting this follow-up in the client and gateway separately.
+
+Verify the release build and existing tests at exact hosted revisions,
+crash parsing and wire validation with synthetic fixtures, model-boundary
+review, privacy text, and the desktop panel separately. No mechanical
+split or Android change is in scope.
