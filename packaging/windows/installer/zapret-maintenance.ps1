@@ -45,13 +45,16 @@ function Test-NinaDriver($reg, $protectedBin) {
     foreach ($path in @($nina, $installed)) {
         if (![IO.File]::Exists($path) -or ([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint)) { return $false }
     }
-    $source = $target = $null
+    $source = $target = $hasher = $null
     try {
         $source = [IO.File]::Open($nina, 'Open', 'Read', 'Read')
         $target = [IO.File]::Open($installed, 'Open', 'Read', 'Read')
-        return ($source.Length -gt 0 -and $source.Length -le 1048576 -and $source.Length -eq $target.Length -and
-            (Get-FileHash -InputStream $source).Hash -eq (Get-FileHash -InputStream $target).Hash)
+        if ($source.Length -le 0 -or $source.Length -gt 1048576 -or $source.Length -ne $target.Length) { return $false }
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        $expected = [BitConverter]::ToString($hasher.ComputeHash($source))
+        return ($expected -ceq [BitConverter]::ToString($hasher.ComputeHash($target)))
     } finally {
+        if ($hasher) { $hasher.Dispose() }
         if ($target) { $target.Dispose() }
         if ($source) { $source.Dispose() }
     }

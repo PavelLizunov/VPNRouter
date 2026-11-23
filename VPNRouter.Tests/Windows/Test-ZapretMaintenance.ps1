@@ -102,12 +102,18 @@ function Test-PrepareSequence {
         Add-Registration 'WinDivert' ('\??\' + $nina) 1 3
 
         $blocked = $false
-        try { Invoke-Prepare } catch { $blocked = $_.Exception.Message -match 'blocked by service WinDivert' }
+        try { Invoke-Prepare } catch {
+            if ($_.Exception.Message -notmatch 'blocked by service WinDivert') { throw }
+            $blocked = $true
+        }
         Check ($blocked -and $services.ConfigCalls -eq 2 -and $services.WriteOpens -eq 2) 'mismatched NINA driver fails before any change'
         [IO.File]::WriteAllBytes($installed, [byte[]]@(1, 2, 3))
         $fakeNinaProcess = [pscustomobject]@{ ExecutablePath=(Join-Path $ninaBin 'winws2.exe') }
         $blocked = $false
-        try { Invoke-Prepare } catch { $blocked = $_.Exception.Message -match 'running winws2 process' }
+        try { Invoke-Prepare } catch {
+            if ($_.Exception.Message -notmatch 'running winws2 process') { throw }
+            $blocked = $true
+        }
         Check ($blocked -and $services.ConfigCalls -eq 2 -and $services.WriteOpens -eq 2) 'running NINA capture blocks changes'
         $fakeNinaProcess = $null
 

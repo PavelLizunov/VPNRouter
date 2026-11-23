@@ -328,7 +328,7 @@ if ($Repair) { $repairMarker = Open-TargetFailureMarker $AppDir }
 # Capture the old service's start mode and running state before stopping the old app.
 $canRestoreZapret = [IO.File]::Exists((Join-Path $payloadDir 'app\zapret-maintenance.ps1'))
 # Prepare belongs to the running installer even if the selected release contains an older helper.
-$maintenanceBytes = Get-InstallerHelper '__VPNROUTER_MAINTENANCE_BASE64__' 'zapret-maintenance.ps1' '87a7e58202b3a050e634abf8d8bf9cfebc5a03bc893b1972b39feb2f94ff8e6f'
+$maintenanceBytes = Get-InstallerHelper '__VPNROUTER_MAINTENANCE_BASE64__' 'zapret-maintenance.ps1' '94e255939456e34de56117588783175fab330e4af8d85a2cd3889d8ae6a485d5'
 $prepare = Join-Path $stagingDir 'zapret-maintenance.ps1'
 [IO.File]::WriteAllBytes($prepare, $maintenanceBytes)
 & $WindowsPowerShell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $prepare -Edition VPNRouter -Operation Prepare
