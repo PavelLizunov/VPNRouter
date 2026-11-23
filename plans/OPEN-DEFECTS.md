@@ -16,9 +16,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P2** - Verified VPN repair changes the runtime subscription row ID when it pins an alternate for the trial. The accepted server then fails to match the saved row in the desktop UI. An already pinned candidate can also change the saved pool semantics. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
-- [ ] **P2** - Cancelling a repair does not interrupt the Windows MTU ping sequence once started. Pass the repair token to the active process. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
-- [ ] **P3** - If a candidate starts on a different row, the repair stops before trying the remaining automatic alternates. Retry only a clean rejection after teardown. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
+- [x] **P2** - Verified VPN repair changes the runtime subscription row ID when it pins an alternate for the trial. The accepted server then fails to match the saved row in the desktop UI. An already pinned candidate can also change the saved pool semantics. RESOLVED at `09969ed1` with CI run `45176953517`. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
+- [x] **P2** - Cancelling a repair does not interrupt the Windows MTU ping sequence once started. Pass the repair token to the active process. RESOLVED at `09969ed1` with CI run `45176953517`. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
+- [x] **P3** - If a candidate starts on a different row, the repair stops before trying the remaining automatic alternates. Retry only a clean rejection after teardown. RESOLVED at `09969ed1` with CI run `45176953517`. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
 
 - [x] **P2** - Repair could replace an explicitly single-outbound subscription row when the legacy auto-select checkbox was enabled. RESOLVED in source at `65f455f9` by honoring the single-outbound flag. Exact-head CI run `45173196488` passed. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
 

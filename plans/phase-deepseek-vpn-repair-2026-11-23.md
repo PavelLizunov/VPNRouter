@@ -87,3 +87,18 @@ text-action P1 remains a release blocker. No rollout or merge was performed.
 - Verify proxy checks fail closed without a controller. Cover row identity and
   cancellation with focused tests and rerun hosted CI. Revert the follow-up
   commit to roll back the changes.
+
+Exact revision `09969ed1` passed all six jobs in run `45176953517`. Linux
+passed 3,935 tests and Windows passed 4,148. The new tests verify that a
+single-server trial produces the saved identity, leaves the automatic pool
+available for the next regular start, skips pinned alternates, and cancels
+the MTU sequence during an active ping. The Windows process-runner contract
+also passed against a real local ping process. A tunnel without a controller
+already failed the proxy check at the reviewed revision. The new test
+pins that behavior.
+
+The first follow-up at `b50a572a` failed the headless settings serialization
+contract. The private runtime field introduced at `09969ed1` avoids generated
+serializer properties, and the same contract passed. The previous WINBRAT
+scenarios still describe the earlier preview. Live switching to an alternate
+server remains unverified on WINBRAT.
