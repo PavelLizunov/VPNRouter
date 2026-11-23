@@ -16,6 +16,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - On WINBRAT at 520 x 680, the published DeepSeek candidate at `d50cfb2f` connected but grew the Simple page beyond its viewport. Disconnect was below the fold and the canonical automation could not invoke it. See `plans/phase-deepseek-desktop-acceptance-2026-11-23.md`.
+- [ ] **P1** - Post-publication WINBRAT verification at `d50cfb2f` reached the DeepSeek form but the Chrome-only candidate rolled back with an unconfirmed Apply even after disabling the test profile's conflicting rule. Undo and Chrome traffic were not reached. See `plans/phase-deepseek-desktop-acceptance-2026-11-23.md`.
+
 - [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
 
 - [x] **P1** - Arch source export omitted the macOS installer script embedded by VPNRouter.Core. The exact-main Arch build at `60c65c72` failed with CS1566 in run 44910872465. RESOLVED in source by including the tracked installer script. The export fixture and a real Git archive check passed for all five external Core resources. Hosted package confirmation is pending.
