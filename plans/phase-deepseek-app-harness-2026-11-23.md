@@ -98,5 +98,18 @@ Disconnect control in the same viewport.
 Direct synthetic OpenCode Go tests returned HTTP 200. The first Russian
 diagnostic overran the byte limit. With the shorter prompt, Russian and
 English replies fit at 184 and 119 bytes and match the diagnosis envelope.
-Gateway source and contract tests await the independent review and hosted
-execution. The production routes have not been activated for this revision.
+Independent review prompted three desktop fixes: explain the older gateway's
+400 response, read the end of long reports, and continue to the latest valid
+report if the newest one is unreadable or incomplete.
+
+Desktop source `484c4942` passed all six jobs in run `45124356685`.
+Windows passed 4,065 tests with 31 skipped, and Linux passed 3,852 with 86
+skipped. Exact-source Windows packaging and screenshot passed in
+`45124437702` (artifacts `14794669495` and `14794818837`).
+
+Gateway source `968fde02` passed all five checks in `45124263631`, including
+the full workspace test suite and 30 VPNRouter assistant contract tests.
+Portable candidate run `45124267977` passed and retained artifact
+`14795466280`. The latest public probe still returned JSON 401 for `/plan`
+and HTML 404 for `/step`. Activation still requires the daemon and ingress
+route update.
