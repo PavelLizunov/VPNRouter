@@ -26,9 +26,9 @@ public partial class AssistantSetupPanel : UserControl
     private void BindViewModel(MainWindowViewModel? vm)
     {
         if (ReferenceEquals(_viewModel, vm)) return;
-        if (_viewModel != null && vm != null) _request?.Cancel();
         if (_viewModel != null)
         {
+            _request?.Cancel();
             _viewModel.PropertyChanged -= ViewModelChanged;
             _viewModel.Subscriptions.CollectionChanged -= SubscriptionsChanged;
         }
@@ -45,6 +45,8 @@ public partial class AssistantSetupPanel : UserControl
 
     private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainWindowViewModel.IsSimpleMode) && _viewModel?.IsSimpleMode == false)
+            _request?.Cancel();
         if (args.PropertyName == nameof(MainWindowViewModel.IsRussian)) RefreshLabels();
     }
 
@@ -78,7 +80,7 @@ public partial class AssistantSetupPanel : UserControl
         IsVisible = _request != null || canPlan || canUndo;
         OpenAssistant.Content = Strings.AssistantTitle;
         AssistantGoal.Watermark = Strings.AssistantGoalHint;
-        AutomationProperties.SetName(AssistantGoal, Strings.AssistantTitle);
+        AutomationProperties.SetName(AssistantGoal, Strings.AssistantGoalHint);
         AssistantNotice.Text = Strings.AssistantDataNotice;
         RunAssistant.Content = Strings.AssistantApply;
         CancelAssistant.Content = Strings.AssistantCancel;

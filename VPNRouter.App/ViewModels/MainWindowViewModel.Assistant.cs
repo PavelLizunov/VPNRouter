@@ -12,19 +12,27 @@ public partial class MainWindowViewModel
     internal bool HasAssistantUndo => _assistantUndo != null;
     internal bool HasAssistantSubscription => Subscriptions.Any(s =>
         s.Enabled && SubscriptionAssistantClient.IsEligible(s.Url));
+    internal Func<string, string, bool, bool, CancellationToken, Task<AssistantPlan>> PlanAssistantAsync { get; init; }
+        = SubscriptionAssistantClient.Shared.PlanAsync;
 
-    private sealed record AssistantUndo(RoutingSelection Previous, string Revision,
+    private sealed record AssistantUndo(RoutingSelection Previous, RoutingSelection Applied, string Revision,
         bool WasConnected, AcceptedTunnelInfo Session);
     private sealed record AssistantSnapshot(AppSettings Settings, string Revision, int RoutingRevision,
         AcceptedTunnelInfo? Session);
-    private sealed record AssistantChangeResult(string? Error, AcceptedTunnelInfo? Session = null);
+    private sealed record AssistantChangeResult(string? Error, bool SettingsChangedAfterCommit = false);
 
     private sealed record RoutingSelection(string Mode, string AppsMode, bool Initialized, string[] Include,
-        string Profile)
+        string Profile, bool BypassRussianTraffic)
     {
         internal static RoutingSelection Capture(AppSettings settings) =>
             new(settings.App.RoutingMode, settings.App.RoutingAppsMode, settings.App.RoutingAppsIncludeInitialized,
-                [.. (settings.App.RoutingAppsInclude ?? [])], settings.ActiveProfile);
+                [.. (settings.App.RoutingAppsInclude ?? [])], settings.ActiveProfile, settings.App.BypassRussianTraffic);
+
+        internal bool Matches(AppSettings settings) =>
+            Mode == settings.App.RoutingMode && AppsMode == settings.App.RoutingAppsMode
+            && Initialized == settings.App.RoutingAppsIncludeInitialized && Profile == settings.ActiveProfile
+            && BypassRussianTraffic == settings.App.BypassRussianTraffic
+            && Include.SequenceEqual(settings.App.RoutingAppsInclude ?? [], StringComparer.Ordinal);
 
         internal void ApplyTo(AppSettings settings)
         {
@@ -33,6 +41,7 @@ public partial class MainWindowViewModel
             settings.App.RoutingAppsIncludeInitialized = Initialized;
             settings.App.RoutingAppsInclude = [.. Include];
             settings.ActiveProfile = Profile;
+            settings.App.BypassRussianTraffic = BypassRussianTraffic;
         }
     }
 
@@ -59,6 +68,7 @@ public partial class MainWindowViewModel
 
     internal async Task<string> RunAssistantGoalAsync(string goal, CancellationToken ct)
     {
+        if (IsServiceManagedVpn || _displayExternalTunnel) return Strings.AssistantServiceManaged;
         if (!CanRunAssistantChange()) return Strings.AssistantBusy;
         var snapshot = ReadAssistantSnapshot();
         if (snapshot == null || !_engine.IsAssistantSessionCurrent(snapshot.Session))
@@ -71,7 +81,7 @@ public partial class MainWindowViewModel
             return Strings.AssistantRuleConflict;
 
         var target = ResolveAssistantApp(goal);
-        var plan = await SubscriptionAssistantClient.Shared.PlanAsync(subscription.Url, goal, target != null, IsRussian, ct);
+        var plan = await PlanAssistantAsync(subscription.Url, goal, target != null, IsRussian, ct);
         if (plan.Status != AssistantPlanStatus.RouteOnlyApp || target == null)
             return AssistantPlanMessage(plan.Status);
 
@@ -82,10 +92,8 @@ public partial class MainWindowViewModel
 
         var previous = RoutingSelection.Capture(saved);
         var profile = previous.Mode == "split" ? previous.Profile : SimpleSplitProfile;
-        var desired = new RoutingSelection("split", "include", true, [target], profile);
-        if (snapshot.Session?.RoutesOnlyApp(target) == true && previous.Mode == desired.Mode
-            && previous.AppsMode == desired.AppsMode && previous.Initialized
-            && previous.Include.SequenceEqual(desired.Include, StringComparer.Ordinal)
+        var desired = new RoutingSelection("split", "include", true, [target], profile, BypassRussianTraffic: false);
+        if (snapshot.Session?.RoutesOnlyApp(target) == true && desired.Matches(saved)
             && _engine.AssistantRouteMatches(saved, target)
             && _engine.SingBoxPid is { } pid && _engine.DescribeReadiness(pid) == null)
             return Strings.AssistantAlreadySet;
@@ -94,17 +102,16 @@ public partial class MainWindowViewModel
         desired.ApplyTo(candidate);
         var result = await ApplyAssistantSettingsAsync(candidate, snapshot, target, restoreWithoutStart: false, ct);
         if (result.Error != null) return result.Error;
-        if (result.Session is not { } session) return Strings.AssistantApplyFailed;
-
-        _assistantUndo = new(previous, SettingsLoader.GetSubmittedRevision(candidate), snapshot.Session != null, session);
-        return Strings.AssistantApplied;
+        return result.SettingsChangedAfterCommit ? Strings.AssistantAppliedWithNewerSettings : Strings.AssistantApplied;
     }
 
     internal async Task<string> UndoAssistantGoalAsync(CancellationToken ct)
     {
-        if (_assistantUndo is not { } undo || !CanRunAssistantChange()) return Strings.AssistantBusy;
+        if (IsServiceManagedVpn || _displayExternalTunnel) return Strings.AssistantServiceManaged;
+        if (_assistantUndo is not { } undo || !CanRunAssistantChange(allowPendingChanges: true))
+            return Strings.AssistantBusy;
         var snapshot = ReadAssistantSnapshot();
-        if (snapshot == null || snapshot.Revision != undo.Revision
+        if (snapshot == null
             || (snapshot.Session != null && !ReferenceEquals(snapshot.Session, undo.Session))
             || !_engine.IsAssistantSessionCurrent(snapshot.Session))
         {
@@ -112,19 +119,30 @@ public partial class MainWindowViewModel
             return Strings.AssistantSettingsChanged;
         }
 
+        bool hasNewerSettings = snapshot.Revision != undo.Revision || HasPendingAppChanges;
+        bool keepLaterRouting = hasNewerSettings && !undo.Applied.Matches(snapshot.Settings);
+        if (keepLaterRouting && snapshot.Session == null)
+        {
+            _assistantUndo = null;
+            return Strings.AssistantSettingsChanged;
+        }
+
         var candidate = SettingsLoader.Copy(snapshot.Settings);
-        undo.Previous.ApplyTo(candidate);
+        if (!keepLaterRouting) undo.Previous.ApplyTo(candidate);
 
         var result = await ApplyAssistantSettingsAsync(candidate, snapshot, null,
-            restoreWithoutStart: snapshot.Session == null || !undo.WasConnected, ct);
+            restoreWithoutStart: snapshot.Session == null || !undo.WasConnected || hasNewerSettings, ct,
+            keepSavedSettings: keepLaterRouting);
         if (result.Error != null) return result.Error;
 
         _assistantUndo = null;
-        return Strings.AssistantUndone;
+        return keepLaterRouting || result.SettingsChangedAfterCommit
+            ? Strings.AssistantUndoPreservedNewerSettings : Strings.AssistantUndone;
     }
 
-    private bool CanRunAssistantChange() => !_disposed && !SafeMode.Enabled && !IsConnecting && !IsApplying
-        && !_isReconnecting && !IsServiceManagedVpn && !HasPendingAppChanges && !_displayExternalTunnel
+    private bool CanRunAssistantChange(bool allowPendingChanges = false) =>
+        !_disposed && !SafeMode.Enabled && !IsConnecting && !IsApplying
+        && !_isReconnecting && !IsServiceManagedVpn && (allowPendingChanges || !HasPendingAppChanges) && !_displayExternalTunnel
         && (!IsConnected || _engine.HasActiveTunnel);
 
     private AssistantSnapshot? ReadAssistantSnapshot()
@@ -140,11 +158,15 @@ public partial class MainWindowViewModel
         !_disposed && !SafeMode.Enabled && ReadAssistantRevision() == snapshot.Revision
         && Volatile.Read(ref _routingSettingsRevision) == snapshot.RoutingRevision;
 
-    private static string? ReadAssistantRevision() =>
-        File.Exists(AppPaths.ConfigYamlPath) ? SettingsLoader.GetRevision(File.ReadAllText(AppPaths.ConfigYamlPath)) : null;
+    private static string? ReadAssistantRevision()
+    {
+        try { return SettingsLoader.GetRevision(File.ReadAllText(AppPaths.ConfigYamlPath)); }
+        catch (IOException) { return null; }
+    }
 
     private async Task<AssistantChangeResult> ApplyAssistantSettingsAsync(AppSettings candidate,
-        AssistantSnapshot snapshot, string? target, bool restoreWithoutStart, CancellationToken ct)
+        AssistantSnapshot snapshot, string? target, bool restoreWithoutStart, CancellationToken ct,
+        bool keepSavedSettings = false)
     {
         var previousPid = _engine.SingBoxPid;
         var wasConnected = IsConnected;
@@ -177,14 +199,26 @@ public partial class MainWindowViewModel
             }
 
             if (!applied) return new(Strings.AssistantApplyFailed);
-            if (_disposed || ReadAssistantRevision() != savedRevision
-                || Volatile.Read(ref _routingSettingsRevision) != savedRoutingRevision)
-                return new(Strings.AssistantSettingsChanged);
 
-            _settings = candidate;
-            LoadSettingsIntoUI();
-            HasPendingAppChanges = false;
-            return new(null, appliedSession);
+            if (target != null && appliedSession is { } session && savedRevision is { } revision)
+                _assistantUndo = new(RoutingSelection.Capture(snapshot.Settings), RoutingSelection.Capture(candidate),
+                    revision, snapshot.Session != null, session);
+
+            // Commit already checked the submitted revision under the lifecycle and file locks.
+            // Later edits are a separate operation, so retain this session's Undo and do not publish stale controls.
+            bool settingsChangedAfterCommit = ReadAssistantRevision() != savedRevision
+                || Volatile.Read(ref _routingSettingsRevision) != savedRoutingRevision;
+            if (!_disposed && !settingsChangedAfterCommit)
+            {
+                _settings = candidate;
+                LoadSettingsIntoUI();
+                HasPendingAppChanges = false;
+            }
+            else if (!_disposed && appliedSession != null)
+            {
+                HasPendingAppChanges = true;
+            }
+            return new(null, settingsChangedAfterCommit);
         }
         catch (AssistantSettingsChangedException)
         {
@@ -234,6 +268,13 @@ public partial class MainWindowViewModel
                 if (!AssistantSnapshotStillCurrent(snapshot))
                     throw new AssistantSettingsChangedException();
 
+                if (keepSavedSettings)
+                {
+                    savedRevision = snapshot.Revision;
+                    savedRoutingRevision = snapshot.RoutingRevision;
+                    return;
+                }
+
                 // Startup can sanitize the runtime profile without changing persisted preferences.
                 candidate.ActiveProfile = verified.ActiveProfile;
                 savedRevision = SettingsLoader.GetSubmittedRevision(candidate);
@@ -246,6 +287,8 @@ public partial class MainWindowViewModel
 
         void RestoreAfterFailedStop()
         {
+            if (keepSavedSettings) return;
+
             lock (SettingsLoader.FileWriteLock)
             {
                 if (_disposed || SafeMode.Enabled || savedRevision == null || ReadAssistantRevision() != savedRevision

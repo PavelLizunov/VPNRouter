@@ -4,17 +4,23 @@
              IsVisible="False">
     <StackPanel Spacing="8" Margin="0,16,0,0">
         <Button x:Name="OpenAssistant" Click="OpenAssistant_Click"
+                AutomationProperties.AutomationId="Assistant.Open"
                 HorizontalAlignment="Left"/>
         <StackPanel x:Name="AssistantFields" IsVisible="False" Spacing="8">
-            <TextBox x:Name="AssistantGoal" AcceptsReturn="False" MaxLength="384"/>
+            <TextBox x:Name="AssistantGoal" AutomationProperties.AutomationId="Assistant.Goal"
+                     AcceptsReturn="False" MaxLength="384"/>
             <TextBlock x:Name="AssistantNotice" FontSize="{StaticResource FsSm}"
                        Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
             <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
-                <Button x:Name="RunAssistant" Click="RunAssistant_Click"/>
-                <Button x:Name="CancelAssistant" Click="CancelAssistant_Click" IsVisible="False"/>
-                <Button x:Name="UndoAssistant" Click="UndoAssistant_Click" IsVisible="False"/>
+                <Button x:Name="RunAssistant" AutomationProperties.AutomationId="Assistant.Run"
+                        Click="RunAssistant_Click"/>
+                <Button x:Name="CancelAssistant" AutomationProperties.AutomationId="Assistant.Cancel"
+                        Click="CancelAssistant_Click" IsVisible="False"/>
+                <Button x:Name="UndoAssistant" AutomationProperties.AutomationId="Assistant.Undo"
+                        Click="UndoAssistant_Click" IsVisible="False"/>
             </WrapPanel>
             <TextBlock x:Name="AssistantStatus" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="Assistant.Status"
                        AutomationProperties.LiveSetting="Polite"/>
         </StackPanel>
     </StackPanel>

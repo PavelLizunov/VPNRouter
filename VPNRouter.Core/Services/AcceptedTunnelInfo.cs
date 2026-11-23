@@ -97,7 +97,11 @@ internal sealed class AcceptedTunnelInfo
                     continue;
                 if (outbound.ValueKind != JsonValueKind.String) return null;
                 var tag = outbound.GetString();
-                if (tag == "direct") continue;
+                if (tag == "direct")
+                {
+                    if (primary.Count == 0 && rule.TryGetProperty("rule_set", out _)) return null;
+                    continue;
+                }
                 if (tag is not ("proxy" or "proxy-udp") ||
                     !rule.TryGetProperty("process_name", out var names) || names.ValueKind != JsonValueKind.Array ||
                     names.GetArrayLength() == 0)

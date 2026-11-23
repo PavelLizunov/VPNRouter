@@ -74,3 +74,16 @@ automatic connection repair are separate work. Verify the real model
 reply, app and control traffic, manual workflow, and Undo on Windows
 before calling the assistant live-verified. Run exact-head CI and the
 rolling candidate's package, integrity, update and fixed-WINBRAT gates.
+
+### Release review follow-up
+
+The initial exact-branch build and Windows panel fixture passed. The
+independent review found two correctness defects before publication. Disable
+the geographic bypass for the exclusive Chrome selection and restore it on
+Undo. Reject accepted configurations with a rule-set bypass before the
+browser rule. Treat the revision-checked save as the commit point and retain
+an exact-session Undo after later edits. Preserve newer settings during
+Undo and require a fresh connection when the configuration has changed.
+Cancel an uncommitted request when leaving Simple mode. Add stable Windows
+UI Automation identifiers and deterministic coverage for the reviewed paths.
+Rollback is to revert this follow-up on the task branch before publication.
