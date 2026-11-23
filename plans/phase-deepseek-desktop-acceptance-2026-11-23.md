@@ -48,6 +48,28 @@ configuration and exclusive route before it persists the settings.
 Rejections identify the verification stage in the log without exposing
 addresses, subscription data or proxy response text.
 
-This corrects source-level differences in verification. The cause of the
-published WINBRAT Apply failure still requires a repeat run. CI and
-live verification are pending.
+## Windows acceptance on the follow-up
+
+The exact tested source is `2890a246f559d2cb5721749c319d49f2f583f136`. Six hosted jobs
+passed in run `45110349257`. Windows package and synthetic 520 x 680 screenshot
+came from run `45110437838`. The ZIP SHA-256 was
+`d0856845bf689fa8e3f592d1ef7bd53672bb9f2343c65106748f1011729f4818`.
+
+WINBRAT lease 94 retested the original DNSTT configuration. Normal Connect
+timed out in Phase B. The assistant reached its proxy-health check, rolled back,
+and restored the original file. The underlying DNSTT transport failure remains
+open.
+
+A separate fixture used a cached VLESS row of the same entitled subscription.
+The accepted controller returned HTTP 200. The fixed Disconnect button was
+reachable during all three successful Apply/Undo runs. The final run measured
+egress using the actual Chrome executable and a separate curl control. Both
+started direct. Apply moved Chrome to a different egress while curl stayed on
+the original egress. Undo returned both to the original egress. Two additional
+normal VLESS Connect/Disconnect cycles passed with HTTPS through the proxy and
+all five UDP sizes per cycle. Core and TUN were absent after each stop.
+
+Private preview only. The findings for the published `v2.51.0-r2` remain
+attached to its original artifact. The live evidence and preview are retained
+under `acceptance/deepseek-2.51.0-r2/followup-2890a246/` in the owner evidence
+directory.

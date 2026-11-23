@@ -16,8 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P2** - On WINBRAT at 520 x 680, the published DeepSeek candidate at `d50cfb2f` grew the Simple page beyond its viewport after connecting. Disconnect was below the fold and the canonical automation could not invoke it. A fixed action footer is implemented on the follow-up branch. See `plans/phase-deepseek-desktop-acceptance-2026-11-23.md`.
-- [ ] **P1** - Post-publication WINBRAT verification at `d50cfb2f` reached the DeepSeek form but the Chrome-only candidate rolled back with an unconfirmed Apply even after disabling the test profile's conflicting rule. Undo and Chrome traffic were not reached. See `plans/phase-deepseek-desktop-acceptance-2026-11-23.md`.
+- [ ] **P2** - On WINBRAT at 520 x 680, the published DeepSeek candidate at `d50cfb2f` grew the Simple page beyond its viewport after connecting. Disconnect was below the fold and the canonical automation could not invoke it. The fixed footer at `2890a246` passed viewport fixtures, live Disconnect inspection during DeepSeek Apply, and two ordinary VLESS Connect/Disconnect cycles. Awaiting release. See `plans/phase-deepseek-desktop-acceptance-2026-11-23.md`.
+- [ ] **P1** - Post-publication WINBRAT verification at `d50cfb2f` reached the DeepSeek form but the Chrome-only candidate rolled back with an unconfirmed Apply even after disabling the test profile's conflicting rule. At `2890a246` the DNSTT candidate still rolled back at proxy-health and ordinary Connect hit a Phase B timeout. The same subscription's VLESS fixture passed Apply, Chrome-only egress, Undo and two HTTPS/UDP cycles. The underlying DNSTT failure remains open. See `plans/phase-deepseek-desktop-acceptance-2026-11-23.md`.
 
 - [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
 
