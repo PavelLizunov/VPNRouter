@@ -19,8 +19,10 @@ selects a current control and the app executes its normal interaction.
   gateway. Accept one action at a time. Each reply can act only on a control
   from that request. Re-check window, enabled state and visibility before
   executing. Take a fresh observation before the next action.
-- Retain normal command guards, pending changes and operating system prompts.
-  Cover application controls through reusable interaction types. Native
+- Discover controls explicitly marked for assistant use. Built-in navigation,
+  connection and settings actions use reusable interaction types. Verify
+  requested process names against running apps and registered Windows paths.
+  Retain normal command guards, pending changes and operating system prompts. Native
   dialogs and programs outside VPNRouter are outside the window surface.
 - Preserve existing published clients and names. Keep rollback by reverting
   the client change and serving the previous planning endpoint.

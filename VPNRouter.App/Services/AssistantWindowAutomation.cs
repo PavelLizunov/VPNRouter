@@ -1,4 +1,5 @@
 using System.Text;
+using Avalonia.Automation;
 using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
 using Avalonia.Controls;
@@ -9,8 +10,7 @@ namespace VPNRouter.App.Services;
 
 internal sealed class AssistantWindowAutomation(Window window, Control assistant)
 {
-    private static readonly string[] OutsideWindowActions =
-        ["Browse", "Export", "Install", "Update", "Import", "OpenFolder", "OpenLink", "Reset", "Delete", "Copy", "Paste"];
+    internal const string AutomationIdPrefix = "AssistantAction.";
     private readonly Dictionary<int, Entry> _entries = [];
     private sealed record Entry(Control Control, Control? Parent, object? DataContext,
         object? Parameter, AssistantControl Description);
@@ -55,11 +55,6 @@ internal sealed class AssistantWindowAutomation(Window window, Control assistant
                                && peer.GetProvider<ISelectionItemProvider>() is { } selection:
                 selection.Select();
                 break;
-            case "expand" when text == null && toggle == null
-                               && peer.GetProvider<IExpandCollapseProvider>() is { } expansion:
-                if (advertised.Active == true) expansion.Collapse();
-                else expansion.Expand();
-                break;
             case "text" when toggle == null && text != null && ValidText(text)
                              && peer.GetProvider<IValueProvider>() is { IsReadOnly: false } input:
                 input.SetValue(text);
@@ -80,21 +75,13 @@ internal sealed class AssistantWindowAutomation(Window window, Control assistant
     private static bool TryDescribe(Control control, int id, out AssistantControl description)
     {
         description = null!;
-        var name = AppAutomationDriver.CommandName(control) ?? control.Name;
-        if (name == null && control is ListBoxItem item && item.GetVisualAncestors()
-                .OfType<ListBox>().FirstOrDefault() is { Name: { } listName } list)
-        {
-            int index = list.IndexFromContainer(item);
-            if (index >= 0) name = $"{listName}.{index}";
-        }
-
-        if (name is not { Length: >= 1 and <= 72 }
-            || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_'))
+        var automationId = AutomationProperties.GetAutomationId(control);
+        if (automationId == null || !automationId.StartsWith(AutomationIdPrefix, StringComparison.Ordinal))
             return false;
 
-        // Opening OS files, moving data out of the app and installing components
-        // are handled through the user's normal UI.
-        if (OutsideWindowActions.Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
+        string name = automationId[AutomationIdPrefix.Length..];
+        if (name is not { Length: >= 1 and <= 72 }
+            || !name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_'))
             return false;
 
         var peer = ControlAutomationPeer.CreatePeerForElement(control);
@@ -106,8 +93,6 @@ internal sealed class AssistantWindowAutomation(Window window, Control assistant
                 => ("select", select.IsSelected),
             _ when peer.GetProvider<IToggleProvider>() != null && control is Avalonia.Controls.Primitives.ToggleButton toggle
                 => ("toggle", toggle.IsChecked),
-            ComboBox combo when peer.GetProvider<IExpandCollapseProvider>() != null
-                => ("expand", combo.IsDropDownOpen),
             _ when peer.GetProvider<IInvokeProvider>() != null => ("press", null),
             _ => (null, null),
         };

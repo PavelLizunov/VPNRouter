@@ -420,6 +420,7 @@
                 <!-- The way back to the home screen: the house icon and the word "Home" on a quiet accent tint, like the other header controls. -->
                 <Button Grid.Column="2"
                         Command="{Binding ToggleUiModeCommand}"
+                        AutomationProperties.AutomationId="AssistantAction.OpenSimple"
                         ToolTip.Tip="{Binding L_SmpHomeButtonTip}"
                         AutomationProperties.Name="{Binding L_SmpHomeButton}"
                         IsVisible="{Binding !IsSimpleMode}"
@@ -628,38 +629,38 @@
                             <StackPanel Orientation="Horizontal" Spacing="4"/>
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabManual}" ToolTip.Tip="{Binding LblTabManual}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.AutomationId="AssistantAction.ServerSettings" AutomationProperties.Name="{Binding LblTabManual}" ToolTip.Tip="{Binding LblTabManual}">
                         <StackPanel Orientation="Horizontal">
                             <icons:Pictogram Classes="tab-icon" Id="tab-servers"/>
                             <TextBlock Text="{Binding LblTabManual}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabSubscribe}" ToolTip.Tip="{Binding LblTabSubscribe}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.AutomationId="AssistantAction.Subscriptions" AutomationProperties.Name="{Binding LblTabSubscribe}" ToolTip.Tip="{Binding LblTabSubscribe}">
                         <StackPanel Orientation="Horizontal">
                             <icons:Pictogram Classes="tab-icon" Id="tab-subscribe"/>
                             <TextBlock Text="{Binding LblTabSubscribe}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabNetwork}" ToolTip.Tip="{Binding LblTabNetwork}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.AutomationId="AssistantAction.NetworkSettings" AutomationProperties.Name="{Binding LblTabNetwork}" ToolTip.Tip="{Binding LblTabNetwork}">
                         <StackPanel Orientation="Horizontal">
                             <icons:Pictogram Classes="tab-icon" Id="tab-settings"/>
                             <TextBlock Text="{Binding LblTabNetwork}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabApps}" ToolTip.Tip="{Binding LblTabApps}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.AutomationId="AssistantAction.Applications" AutomationProperties.Name="{Binding LblTabApps}" ToolTip.Tip="{Binding LblTabApps}">
                         <StackPanel Orientation="Horizontal">
                             <icons:Pictogram Classes="tab-icon" Id="tab-apps"/>
                             <TextBlock Text="{Binding LblTabApps}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabTools}" ToolTip.Tip="{Binding LblTabTools}"
+                    <ListBoxItem Classes="main-tab" AutomationProperties.AutomationId="AssistantAction.Tools" AutomationProperties.Name="{Binding LblTabTools}" ToolTip.Tip="{Binding LblTabTools}"
                                  IsVisible="{Binding IsToolsAvailable}">
                         <StackPanel Orientation="Horizontal">
                             <icons:Pictogram Classes="tab-icon" Id="tab-tools"/>
                             <TextBlock Text="{Binding LblTabTools}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ListBoxItem>
-                    <ListBoxItem Classes="main-tab" AutomationProperties.Name="{Binding LblTabFreeConfigs}" ToolTip.Tip="{Binding LblTabFreeConfigs}">
+                    <ListBoxItem Classes="main-tab" AutomationProperties.AutomationId="AssistantAction.FreeConfigurations" AutomationProperties.Name="{Binding LblTabFreeConfigs}" ToolTip.Tip="{Binding LblTabFreeConfigs}">
                         <StackPanel Orientation="Horizontal">
                             <icons:Pictogram Classes="tab-icon" Id="tab-public"/>
                             <TextBlock Text="{Binding LblTabFreeConfigs}" VerticalAlignment="Center"/>
@@ -713,6 +714,7 @@
 
                 <Button Classes="solid" Grid.Column="1"
                         icons:PictogramText.Icons="play,stop" icons:PictogramText.Content="{Binding ConnectButtonText}"
+                        AutomationProperties.AutomationId="AssistantAction.ToggleVpn"
                         Command="{Binding ToggleConnectionCommand}"
                         IsEnabled="{Binding CanToggleConnection}"
                         FontSize="11" FontWeight="Bold"

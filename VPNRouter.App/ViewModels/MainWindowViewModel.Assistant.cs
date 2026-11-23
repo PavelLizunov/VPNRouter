@@ -69,12 +69,19 @@ public partial class MainWindowViewModel
         var token = budget.Token;
         var automation = new AssistantWindowAutomation(window, source);
         string? previous = null;
+        bool? expectedConnection = null;
 
         for (int iteration = 0; iteration < 6; iteration++)
         {
             while (IsConnecting || IsApplying || _isReconnecting)
                 await Task.Delay(150, token);
             token.ThrowIfCancellationRequested();
+            if (expectedConnection is { } expected)
+            {
+                if (IsConnected != expected || SmpStopUnconfirmed)
+                    return expected ? Strings.FailedStartVpn : Strings.TunnelStopUnconfirmed;
+                expectedConnection = null;
+            }
 
             var snapshot = ReadAssistantSnapshot();
             if (snapshot == null || !_engine.IsAssistantSessionCurrent(snapshot.Session))
@@ -104,9 +111,7 @@ public partial class MainWindowViewModel
             if (routeControl != null && target == routeControl)
             {
                 if (!CanRunAssistantChange() || step.Toggle != null || step.Text is not { } executable
-                    || executable.IndexOfAny(['/', '\\', ':']) >= 0
-                    || RoutingAppListEditor.NormalizeManualProcessName(executable, OperatingSystem.IsWindows()) is not { } process
-                    || !process.All(c => char.IsLetterOrDigit(c) || c is ' ' or '.' or '_' or '-'))
+                    || AssistantApplicationTarget.Resolve(executable) is not { } process)
                     return Strings.AssistantAppNeeded;
 
                 return await ApplyAssistantAppRouteAsync(snapshot, process, token);
@@ -116,6 +121,8 @@ public partial class MainWindowViewModel
             try { previous = automation.Execute(target, step.Text, step.Toggle); }
             finally { IsInvokingAssistantControl = false; }
             if (previous == null) return Strings.AssistantSettingsChanged;
+            if (target.Name is "ConnectVpn" or "DisconnectVpn" or "ToggleVpn")
+                expectedConnection = !observation.Connected;
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
         }
 

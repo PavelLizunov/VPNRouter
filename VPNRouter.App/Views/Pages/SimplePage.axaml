@@ -721,6 +721,7 @@
                 <Border Classes="quiet" Margin="0,12,0,0">
                     <StackPanel>
                         <Button Classes="row"
+                                AutomationProperties.AutomationId="AssistantAction.OpenAutostartSettings"
                                 Command="{Binding OpenAutostartSettingsCommand}"
                                 ToolTip.Tip="{Binding L_SmpTipAutostart}"
                                 AutomationProperties.Name="{Binding L_SmpAutostartCardTitle}">
@@ -775,6 +776,7 @@
                             </Grid>
                         </Button>
                         <Button Classes="row"
+                                AutomationProperties.AutomationId="AssistantAction.OpenAdvanced"
                                 Command="{Binding ToggleUiModeCommand}"
                                 ToolTip.Tip="{Binding UiModeToggleTooltip}"
                                 AutomationProperties.Name="{Binding L_SmpAdvCardTitle}">
@@ -805,6 +807,7 @@
             <Panel Name="SimpleConnectionActions" MaxWidth="400" HorizontalAlignment="Stretch">
                 <Button Classes="cta go solid"
                         Command="{Binding SmpToggleConnectCommand}"
+                        AutomationProperties.AutomationId="AssistantAction.ConnectVpn"
                         IsVisible="{Binding SimpleCtaIsDisconnected}"
                         IsEnabled="{Binding SmpCanConnect}"
                         AutomationProperties.Name="{Binding SimpleCtaText}">
@@ -815,6 +818,7 @@
                 </Button>
                 <Button Classes="cta stop danger-soft"
                         Command="{Binding SmpToggleConnectCommand}"
+                        AutomationProperties.AutomationId="AssistantAction.DisconnectVpn"
                         IsVisible="{Binding SimpleCtaIsConnected}"
                         AutomationProperties.Name="{Binding SimpleCtaText}">
                     <StackPanel Orientation="Horizontal" Spacing="8">

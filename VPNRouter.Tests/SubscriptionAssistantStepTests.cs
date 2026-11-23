@@ -8,7 +8,7 @@ public sealed class SubscriptionAssistantStepTests
 {
     private const string Endpoint = "https://ninitux.com/api/v1/assistant/vpnrouter/step";
     private const string Subscription = "https://ninitux.com/sub/synthetic-assistant";
-    private static readonly AssistantControl Connect = new(2, "SmpToggleConnectCommand", "press", null);
+    private static readonly AssistantControl Connect = new(2, "ConnectVpn", "press", null);
     private static readonly AssistantControl Route = new(1, "RouteOnlyApplicationByWindowsExecutableName", "text", null);
 
     [Theory]

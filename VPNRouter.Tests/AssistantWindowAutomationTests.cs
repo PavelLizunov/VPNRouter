@@ -1,3 +1,4 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using VPNRouter.App.Services;
@@ -14,10 +15,14 @@ public sealed class AssistantWindowAutomationTests
         var app = new TextBox { Name = "CustomAppInput", Text = "previous.exe" };
         var password = new TextBox { Name = "Password", Text = "private", PasswordChar = '*' };
         var assistant = new StackPanel();
-        assistant.Children.Add(new Button { Name = "RunAssistant" });
+        var assistantButton = new Button { Name = "RunAssistant" };
+        assistant.Children.Add(assistantButton);
+        var external = new Button { Name = "OpenHelp" };
+        foreach (var control in new Control[] { connect, settings, app, password, assistantButton })
+            AutomationProperties.SetAutomationId(control, AssistantWindowAutomation.AutomationIdPrefix + control.Name);
         var window = new Window
         {
-            Content = new StackPanel { Children = { connect, settings, app, password, assistant } },
+            Content = new StackPanel { Children = { connect, settings, app, password, assistant, external } },
         };
         int clicks = 0;
         connect.Click += (_, _) => clicks++;
@@ -26,7 +31,7 @@ public sealed class AssistantWindowAutomationTests
         {
             var automation = new AssistantWindowAutomation(window, assistant);
             var observed = automation.Observe();
-            Assert.DoesNotContain(observed, control => control.Name is "Password" or "RunAssistant");
+            Assert.DoesNotContain(observed, control => control.Name is "Password" or "RunAssistant" or "OpenHelp");
             Assert.DoesNotContain(observed, control => control.Name.Contains("previous.exe", StringComparison.Ordinal));
             var start = Assert.Single(observed, control => control.Name == "Connect");
             Assert.Equal("Connect", automation.Execute(start, null, null));
@@ -47,6 +52,7 @@ public sealed class AssistantWindowAutomationTests
     public void RejectsDisabledAndDetachedControlsAfterObservation()
     {
         var control = new Button { Name = "Connect" };
+        AutomationProperties.SetAutomationId(control, "AssistantAction.Connect");
         var panel = new StackPanel { Children = { control } };
         var window = new Window { Content = panel };
         var automation = new AssistantWindowAutomation(window, new StackPanel());

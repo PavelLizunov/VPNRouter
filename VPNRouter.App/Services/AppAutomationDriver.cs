@@ -4,8 +4,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Reflection;
-using System.Windows.Input;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -443,29 +441,6 @@ public static class AppAutomationDriver
 
     internal static IEnumerable<Control> ControlsIn(Visual root) =>
         root.GetVisualDescendants().OfType<Control>();
-
-    internal static string? CommandName(Control control)
-    {
-        ICommand? command = control switch
-        {
-            Button button => button.Command,
-            MenuItem menu => menu.Command,
-            _ => null,
-        };
-        if (command == null) return null;
-
-        for (StyledElement? element = control; element != null; element = element.Parent)
-        {
-            if (element.DataContext is not { } context) continue;
-            foreach (var property in context.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (!typeof(ICommand).IsAssignableFrom(property.PropertyType) || property.GetIndexParameters().Length != 0)
-                    continue;
-                if (ReferenceEquals(property.GetValue(context), command)) return property.Name;
-            }
-        }
-        return null;
-    }
 
     private static async Task HandleScreenshotAsync(HttpListenerResponse response)
     {
