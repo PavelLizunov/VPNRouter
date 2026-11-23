@@ -82,3 +82,21 @@ Verify the release build and existing tests at exact hosted revisions,
 crash parsing and wire validation with synthetic fixtures, model-boundary
 review, privacy text, and the desktop panel separately. No mechanical
 split or Android change is in scope.
+
+### Verified follow-up
+
+Public health still identifies `0.9.0+ddaeb22`. The public POST to `/plan`
+returns a 401 JSON response from vpnctl. The public POST to `/step` returns
+the HTML site 404. Activation requires both the updated daemon and an
+ingress match for the exact new POST path.
+
+The desktop source is `b6b0f8c0`. All six checks in hosted run
+`45123013984` passed. Exact-source Windows preview and 520x680 panel capture
+passed in `45123128818`. The screenshot shows the new action and the
+Disconnect control in the same viewport.
+
+Direct synthetic OpenCode Go tests returned HTTP 200. The first Russian
+diagnostic overran the byte limit. With the shorter prompt, Russian and
+English replies fit at 184 and 119 bytes and match the diagnosis envelope.
+Gateway source and contract tests await the independent review and hosted
+execution. The production routes have not been activated for this revision.
