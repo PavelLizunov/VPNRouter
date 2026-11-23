@@ -80,6 +80,31 @@ public class ConfigGeneratorExcludeModeTests
     }
 
     [Fact]
+    public void ExcludeMode_RoutesExcludedAppBeforeDefaultUdpProxy()
+    {
+        var settings = BuildSettings(exclude: ["Steam.exe"]);
+        settings.Vless.Servers.Add(new VlessServerEntry
+        {
+            Name = "udp",
+            Server = "1.2.3.4",
+            Port = 8443,
+            Uuid = "def",
+            Security = "reality",
+            Reality = new VlessRealityConfig { PublicKey = "key2", ShortId = "bb" },
+        });
+
+        var config = ConfigGenerator.Generate(EmptyProfile(), [], settings);
+
+        Assert.Contains(config.Outbounds, outbound => outbound.Tag == "proxy-udp");
+        int exclusion = config.Route.Rules.FindIndex(rule =>
+            rule.Outbound == "direct" && rule.ProcessName?.Contains("Steam.exe") == true);
+        int udpDefault = config.Route.Rules.FindIndex(rule =>
+            rule.Outbound == "proxy-udp" && rule.Network == "udp" && rule.ProcessName == null);
+        Assert.True(exclusion >= 0 && udpDefault > exclusion);
+        Assert.Equal("proxy", config.Route.Final);
+    }
+
+    [Fact]
     public void ExcludeMode_DnsRulesRouteSelectedAppsToLocalResolver()
     {
         var settings = BuildSettings(

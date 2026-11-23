@@ -143,7 +143,7 @@ public static partial class ConfigGenerator
                 });
             }
         }
-        else if (isFullTunnel && hasUdpProxy)
+        if ((isFullTunnel || isExcludeMode) && hasUdpProxy)
         {
             rules.Add(new RouteRule
             {

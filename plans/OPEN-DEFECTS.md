@@ -3,9 +3,6 @@
 Canonical open-defect ledger read by `tools/check-open-p0.ps1` (the cut-stable
 P0 gate, audit item 7, 2026-06-25). The `bug-hunt` skill appends survivors to
 the **## Open** section below; the cut-stable gate (`cut-stable` skill pre-flight
-
-- [ ] **P1** - The Windows assistant can choose the exclusive VPN action for a direct-route request and report that the route is already configured. WINBRAT reproduced the retained proxy route at `484c4942`. The live model fixture scored 0/25 on direct routing. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).
-- [ ] **P2** - The setup assistant can finish without verifying the requested state, and the evaluation measured 16 false finishes. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).
 condition 6.5) **BLOCKS a stable cut** while any `- [ ]` P0/P1 remains open here,
 unless `tools/check-open-p0.ps1 -Waive '<reason>'` is run for that specific cut.
 
@@ -18,6 +15,10 @@ Only the `## Open` section is gated; `## Resolved` is history. Keep entries to o
 line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target version>`.
 
 ## Open
+
+- [ ] **P1** - The Windows assistant can choose the exclusive VPN action for a direct-route request and report that the route is already configured. WINBRAT reproduced the retained proxy route at `484c4942`. The live model fixture scored 0/25 on direct routing. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).
+- [ ] **P2** - The setup assistant can finish without verifying the requested state, and the evaluation measured 16 false finishes. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).
+- [ ] **P2** - Switching a Full tunnel with a separate UDP outbound to per-app exclusion would send unrelated UDP through the primary outbound. At `495b3cf3`, `ConfigGenerator.Route.AddPerAppRoutingRules` emits the UDP default only for Full. Preserve it after explicit exclusions. See [harness reliability](phase-deepseek-harness-reliability-2026-11-23.md).
 
 - [ ] **P2** - On WINBRAT at 520 x 680, the published DeepSeek candidate at `d50cfb2f` grew the Simple page beyond its viewport after connecting. Disconnect was below the fold and the canonical automation could not invoke it. The fixed footer at `2890a246` passed viewport fixtures, live Disconnect inspection during DeepSeek Apply, and two ordinary VLESS Connect/Disconnect cycles. Awaiting release. See `plans/phase-deepseek-desktop-acceptance-2026-11-23.md`.
 - [ ] **P1** - Post-publication WINBRAT verification at `d50cfb2f` reached the DeepSeek form but the Chrome-only candidate rolled back with an unconfirmed Apply even after disabling the test profile's conflicting rule. At `2890a246` the DNSTT candidate still rolled back at proxy-health and ordinary Connect hit a Phase B timeout. The same subscription's VLESS fixture passed Apply, Chrome-only egress, Undo and two HTTPS/UDP cycles. The underlying DNSTT failure remains open. See `plans/phase-deepseek-desktop-acceptance-2026-11-23.md`.
