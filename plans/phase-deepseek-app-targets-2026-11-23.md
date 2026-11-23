@@ -6,7 +6,8 @@ treated as the same field. A later request naming Edge reached candidate
 verification and failed proxy health separately.
 
 Resolve the one app named by the original request locally. Recognize common
-Windows product names, preserve exact process spelling, and require a verified
+Windows product names and local metadata for other running desktop apps,
+preserve exact process spelling, and require a verified
 executable or Windows browser registration. A generic browser request can use
 the agreed Windows HTTP and HTTPS default if locally verified. Ambiguous,
 conflicting or unresolvable targets should ask for an explicit name. Keep the

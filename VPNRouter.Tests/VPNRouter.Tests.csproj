@@ -71,6 +71,7 @@
        keeps test behavior aligned with the pre-bump baseline. -->
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Fixtures/AssistantAppTargets.jsonl" LogicalName="AssistantAppTargets.jsonl" />
   </ItemGroup>
 
   <ItemGroup>

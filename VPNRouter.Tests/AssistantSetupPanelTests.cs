@@ -14,7 +14,7 @@ namespace VPNRouter.Tests;
 public sealed class AssistantSetupPanelTests
 {
     [AvaloniaFact]
-    public async Task Bare_finish_is_unconfirmed_and_semantic_navigation_checks_the_selected_page()
+    public async Task Assistant_rejects_unbound_results_and_verifies_semantic_navigation()
     {
         var dataDir = AppPaths.DataDir;
         var temporary = Path.Combine(Path.GetTempPath(), $"vpnrouter-assistant-{Guid.NewGuid():N}");
@@ -29,6 +29,7 @@ public sealed class AssistantSetupPanelTests
             var store = new InMemorySettingsStore();
             store.Save(settings, AppPaths.ConfigYamlPath);
             bool navigate = false;
+            bool routeConflict = false;
             int calls = 0;
             using var logger = new Serilog.LoggerConfiguration().CreateLogger();
             using var vm = new MainWindowViewModel(store, logger)
@@ -37,6 +38,10 @@ public sealed class AssistantSetupPanelTests
                 {
                     calls++;
                     Assert.DoesNotContain(observation.Controls, control => control.Name.Contains("Repair", StringComparison.Ordinal));
+                    if (routeConflict)
+                        return Task.FromResult(new AssistantStep(AssistantStepStatus.Act,
+                            observation.Controls.Single(c => c.Name.StartsWith("RouteOnlyApplication", StringComparison.Ordinal)),
+                            Path.GetFileName(Environment.ProcessPath!)));
                     return Task.FromResult(navigate
                         ? new AssistantStep(AssistantStepStatus.Act, observation.Controls.Single(c => c.Name == "OpenApplications"))
                         : new AssistantStep(AssistantStepStatus.Finish));
@@ -49,12 +54,20 @@ public sealed class AssistantSetupPanelTests
             {
                 Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantUnconfirmed,
                     await vm.RunAssistantGoalAsync("Open Applications", window, panel, default));
+                var revision = File.ReadAllText(AppPaths.ConfigYamlPath);
+                routeConflict = true;
+                Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantAppNeeded,
+                    await vm.RunAssistantGoalAsync("Route only Firefox through VPN", window, panel, default));
+                Assert.Equal(revision, File.ReadAllText(AppPaths.ConfigYamlPath));
+                Assert.False(vm.IsConnected);
+                Assert.False(vm.HasAssistantUndo);
+                routeConflict = false;
                 navigate = true;
                 Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantPageOpened,
                     await vm.RunAssistantGoalAsync("Open Applications", window, panel, default));
                 Assert.False(vm.IsSimpleMode);
                 Assert.True(vm.IsAppsTabSelected);
-                Assert.Equal(2, calls);
+                Assert.Equal(3, calls);
             }
             finally { window.Close(); }
         }

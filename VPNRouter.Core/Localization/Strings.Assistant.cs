@@ -36,7 +36,9 @@ public static partial class Strings
         ? "Маршрут помощника отключён. Более поздние правки настроек сохранены."
         : "The assistant's route was stopped. Your later settings edits were kept.";
     public static string AssistantRouteScanNeeded => Ru ? "Сначала обновите список приложений для маршрутизации." : "Refresh the routing application list first.";
-    public static string AssistantAppNeeded => Ru ? "Запустите приложение или укажите точное имя его процесса." : "Run the application or specify its exact process name.";
+    public static string AssistantAppNeeded => Ru
+        ? "Укажите один браузер или приложение, например Edge или Telegram. Если имя не распознаётся, запустите программу и укажите имя процесса."
+        : "Name one browser or app, such as Edge or Telegram. If the name is unclear, open the app and enter its process name.";
     public static string AssistantUnsupportedGoal => Ru ? "Уточните, что нужно сделать в VPNRouter." : "Specify what you want VPNRouter to do.";
     public static string AssistantPageOpened => Ru ? "Раздел открыт." : "Section opened.";
     public static string AssistantVpnActive => Ru ? "VPN подключён." : "VPN connected.";

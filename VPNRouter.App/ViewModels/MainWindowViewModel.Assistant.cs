@@ -131,7 +131,7 @@ public partial class MainWindowViewModel
             if (semantic.Contains(target) && target.Kind == "text")
             {
                 if (!CanRunAssistantChange() || step.Toggle != null || step.Text is not { } executable
-                    || AssistantApplicationTarget.Resolve(executable) is not { } process)
+                    || AssistantApplicationTarget.ResolveRequested(goal, executable) is not { } process)
                     return Strings.AssistantAppNeeded;
 
                 return await ApplyAssistantAppRouteAsync(snapshot, process, target.Name.StartsWith("RouteApplicationDirect", StringComparison.Ordinal), token);
