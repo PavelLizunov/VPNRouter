@@ -1,5 +1,8 @@
 using System.Reflection;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using VPNRouter.App.Controls;
 using Avalonia.Threading;
 using Avalonia.Headless.XUnit;
@@ -17,6 +20,51 @@ namespace VPNRouter.Tests;
 [Collection(SafeModeStateCollection.Name)]
 public sealed class SimpleConnectStatusTests
 {
+    [AvaloniaTheory]
+    [InlineData(520, 540)]
+    [InlineData(380, 400)]
+    public void ConnectionActionStaysInTheViewportWithTheAssistantOpen(int width, int height)
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.UiMode = "simple";
+        settings.App.Subscriptions =
+        [
+            new() { Enabled = true, Url = "https://ninitux.com/sub/synthetic-layout", Servers = [Entry("test", "test.invalid")] }
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm, width, height);
+
+        var assistant = Assert.Single(view.Page.GetVisualDescendants().OfType<AssistantSetupPanel>());
+        Assert.True(assistant.IsEffectivelyVisible);
+        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(assistant.FindControl<StackPanel>("AssistantFields")!.IsEffectivelyVisible);
+
+        var scroll = view.Page.FindControl<ScrollViewer>("SimpleContentScroll")!;
+        var actions = view.Page.FindControl<Panel>("SimpleConnectionActions")!;
+        Assert.Contains("go", GetVisibleAction().Classes);
+
+        vm.IsConnected = true;
+        Dispatcher.UIThread.RunJobs();
+        var disconnect = GetVisibleAction();
+        Assert.Contains("stop", disconnect.Classes);
+        Assert.True(disconnect.IsEffectivelyEnabled);
+        Assert.Same(vm.SmpToggleConnectCommand, disconnect.Command);
+        Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
+        Assert.True(disconnect.Bounds.Height > 0);
+        var initial = disconnect.TranslatePoint(default, view.Page)!.Value;
+        Assert.InRange(initial.Y, 0, view.Page.Bounds.Height - disconnect.Bounds.Height);
+
+        scroll.Offset = new Vector(0, scroll.Extent.Height - scroll.Viewport.Height);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(scroll.Offset.Y > 0);
+        Assert.Equal(initial, disconnect.TranslatePoint(default, view.Page)!.Value);
+
+        Button GetVisibleAction() => Assert.Single(actions.Children.OfType<Button>().Where(b => b.IsEffectivelyVisible));
+    }
+
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]
@@ -378,10 +426,10 @@ public sealed class SimpleConnectStatusTests
         public SimplePage Page { get; }
         private readonly Window _window;
 
-        public OpenPage(MainWindowViewModel vm, int width = 520)
+        public OpenPage(MainWindowViewModel vm, int width = 520, int height = 800)
         {
             Page = new SimplePage { DataContext = vm };
-            _window = new Window { Content = Page, Width = width, Height = 800 };
+            _window = new Window { Content = Page, Width = width, Height = height };
             _window.Show();
         }
 

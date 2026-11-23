@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text.Json.Nodes;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 
@@ -200,12 +201,14 @@ public class ConfigSanityCheckTests
         }
 
         public List<Uri> Requests { get; } = [];
+        public List<string?> BearerTokens { get; } = [];
         public int Calls => Requests.Count;
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request.RequestUri!);
+            BearerTokens.Add(request.Headers.Authorization?.Parameter);
             if (_responses.Count == 0)
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)
@@ -252,6 +255,31 @@ public class ConfigSanityCheckTests
             Assert.Equal("504", e.Properties["Status"].ToString());
         });
         sink.AssertExcludes(responseBody);
+    }
+
+    [Fact]
+    public async Task CandidateProbeUsesTheAcceptedControllerAndHttpsDestination()
+    {
+        const string config = """
+            {"experimental":{"clash_api":{"external_controller":"[::1]:9087","secret":"fixture-accepted"}},"outbounds":[]}
+            """;
+        var settings = new AppSettings();
+        settings.SingBox.ClashApi = "127.0.0.1:9090";
+        settings.SingBox.ClashApiSecret = "fixture-configured";
+        var tunnel = new AcceptedTunnelInfo(settings, config, "",
+            ClashSingBoxApi.ReadLocalController(config), new Dictionary<string, VlessServerEntry>());
+        var handler = new MockHandler([
+            () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""{"delay":123}""") }
+        ]);
+        using var http = new HttpClient(handler);
+        var probe = await tunnel.ProbeProxyAsync(new ConfigSanityCheck(httpClient: http),
+            TestContext.Current.CancellationToken, preferHttps: true);
+
+        Assert.False(probe.IsDead);
+        Assert.Equal("fixture-accepted", Assert.Single(handler.BearerTokens));
+        Assert.Equal("http://[::1]:9087/proxies/proxy/delay?url=" +
+            Uri.EscapeDataString(DeepVerifyConstants.ProbeUrl) + "&timeout=5000",
+            Assert.Single(handler.Requests).AbsoluteUri);
     }
 
     [Fact]

@@ -247,6 +247,11 @@ public partial class MainWindowViewModel
                 : Strings.ConflictOtherVpnDetectedTitle;
             return new(Strings.ConflictOtherVpnDetectedTitle);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warning("DeepSeek setup failed during Apply or Undo ({ExceptionType})", ex.GetType().Name);
+            return new(Strings.AssistantApplyFailed);
+        }
         finally
         {
             if (!_disposed)

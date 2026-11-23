@@ -35,6 +35,23 @@ public class PageScreenshotTests
     [AvaloniaFact] public void SimplePage() => Capture(new SimplePage(), "page-simple");
 
     [AvaloniaFact]
+    public void SimplePage_ConnectedWithAssistantAt520x680()
+    {
+        using var vm = GetVm();
+        vm.Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry
+        {
+            Name = "Fixture subscription",
+            Url = "https://ninitux.com/sub/synthetic-viewport",
+            Enabled = true
+        }));
+        vm.IsConnected = true;
+        var page = new SimplePage { DataContext = vm };
+        var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        ScreenshotHelper.CapturePage(page, "simple-connected-with-assistant", width: 520, height: 680);
+    }
+
+    [AvaloniaFact]
     public void Assistant_panel_follows_subscription_eligibility()
     {
         using var vm = GetVm();

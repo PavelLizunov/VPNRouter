@@ -14,8 +14,14 @@ internal sealed class AcceptedTunnelInfo
     private readonly Dictionary<string, TunnelServerLabel> _members = new(StringComparer.Ordinal);
     private readonly (Uri Endpoint, string? Secret)? _controller;
     private readonly AppRoutePolicy? _appRoutePolicy;
+    private readonly bool _usesDnstt;
     internal ClashSingBoxApi? OpenController(Serilog.ILogger logger) =>
         _controller is { } local ? ClashSingBoxApi.ForController(local.Endpoint, local.Secret, logger) : null;
+
+    internal Task<ProbeResult> ProbeProxyAsync(ConfigSanityCheck sanity, CancellationToken ct, bool preferHttps) =>
+        _controller is { } local
+            ? sanity.ProbeAsync(local.Endpoint, local.Secret, ct, _usesDnstt, preferHttps)
+            : Task.FromResult(new ProbeResult(true, "No accepted proxy controller", 0));
 
     internal bool UsesAutoGroup { get; }
     internal TunnelServerLabel? FindMember(string? tag) =>
@@ -56,6 +62,8 @@ internal sealed class AcceptedTunnelInfo
         using var document = JsonDocument.Parse(configJson);
         _appRoutePolicy = AppRoutePolicy.Read(document.RootElement);
         if (!document.RootElement.TryGetProperty("outbounds", out var outbounds)) return;
+        _usesDnstt = outbounds.EnumerateArray().Any(outbound =>
+            outbound.TryGetProperty("tag", out var tag) && tag.GetString() == "dnstt-transport");
         foreach (var outbound in outbounds.EnumerateArray())
         {
             if (!outbound.TryGetProperty("tag", out var tag) || tag.GetString() != "proxy" ||

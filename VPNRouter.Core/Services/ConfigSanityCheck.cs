@@ -172,7 +172,7 @@ public sealed class ConfigSanityCheck
     }
 
     internal async Task<ProbeResult> ProbeAsync(Uri controller, string? clashApiSecret, CancellationToken ct,
-        bool dnstt = false)
+        bool dnstt = false, bool preferHttps = false)
     {
         const string defaultProbeUrl = "http://www.gstatic.com/generate_204";
         int lastDelay = 0;
@@ -183,7 +183,7 @@ public sealed class ConfigSanityCheck
             ct.ThrowIfCancellationRequested();
 
             bool initialDnsttProbe = dnstt && attempt == 1;
-            var target = initialDnsttProbe ? DeepVerifyConstants.ProbeUrl : defaultProbeUrl;
+            var target = attempt == 1 && (dnstt || preferHttps) ? DeepVerifyConstants.ProbeUrl : defaultProbeUrl;
             // Leave room for a second destination inside the desktop warmup deadline.
             var probeTimeoutMs = !dnstt ? 5_000 :
                 initialDnsttProbe ? DnsttProbeTimeoutMs : DnsttFallbackTimeoutMs;

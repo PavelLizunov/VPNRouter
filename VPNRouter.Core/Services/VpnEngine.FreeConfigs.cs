@@ -30,9 +30,10 @@ public partial class VpnEngine
             var previousImport = _healthMonitor?.AcceptedImportJson;
             var previousHandle = _singBox?.OwnedProcessHandle;
             bool wasRunning = HasLiveOrStartingSingBox();
-            if (routeIntent != null && !IsAssistantSessionCurrent(routeIntent.Session)) return false;
+            if (routeIntent != null && !IsAssistantSessionCurrent(routeIntent.Session))
+                return RejectVerifiedCandidate("session-changed");
             if (wasRunning && (previous == null || previousHandle is not { HasExited: false }))
-                return false;
+                return RejectVerifiedCandidate("previous-session-unconfirmed");
 
             bool confirmed = false;
             _confirmingCandidate = true;
@@ -42,7 +43,7 @@ public partial class VpnEngine
                 {
                     // Strict generation resolves required rule sets before the owned process is replaced.
                     if (!await ApplyGatedAsync(candidate, ct, forceRestart: true, verifySelection: true).ConfigureAwait(false))
-                        return false;
+                        return RejectVerifiedCandidate("replacement");
                     _warmupConfirmed = false;
                 }
                 else
@@ -52,15 +53,26 @@ public partial class VpnEngine
                 }
 
                 var handle = _singBox?.OwnedProcessHandle;
-                if (handle is not { HasExited: false } || _sessionCts == null) return false;
+                var tunnel = AcceptedTunnel;
+                if (handle == null || tunnel == null || _sessionCts == null)
+                    return RejectVerifiedCandidate("startup");
+
+                bool IsCurrent() => !handle.HasExited && ReferenceEquals(handle, _singBox?.OwnedProcessHandle)
+                    && ReferenceEquals(tunnel, AcceptedTunnel) && ReferenceEquals(candidate, _failoverSettingsContext);
+                if (!IsCurrent()) return RejectVerifiedCandidate("candidate-changed");
+                if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.OnlyProcess))
+                    return RejectVerifiedCandidate("app-route");
+
                 using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct, _sessionCts.Token);
                 var sanity = _sanityCheck ??= new ConfigSanityCheck(_logger);
-                var probe = await sanity.ProbeAsync(ParseClashApiPort(candidate.SingBox.ClashApi),
-                    candidate.SingBox.ClashApiSecret, probeCts.Token).ConfigureAwait(false);
+                var probe = await ProbeCurrentStartAsync(IsCurrent,
+                    token => tunnel.ProbeProxyAsync(sanity, token, preferHttps: routeIntent != null),
+                    probeCts.Token).ConfigureAwait(false);
                 probeCts.Token.ThrowIfCancellationRequested();
-                if (probe.IsDead || handle.HasExited || !ReferenceEquals(handle, _singBox?.OwnedProcessHandle) ||
-                    !ReferenceEquals(candidate, _failoverSettingsContext) ||
-                    (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.OnlyProcess))) return false;
+                if (probe == null) return RejectVerifiedCandidate("candidate-changed");
+                if (probe.IsDead) return RejectVerifiedCandidate("proxy-health");
+                if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.OnlyProcess))
+                    return RejectVerifiedCandidate("app-route");
 
                 commitSelection();
                 confirmed = true;
@@ -100,5 +112,11 @@ public partial class VpnEngine
             _confirmingCandidate = false;
             _lifecycleGate.Release();
         }
+    }
+
+    private bool RejectVerifiedCandidate(string phase)
+    {
+        _logger?.Warning("[VpnEngine] Verified candidate rejected ({Phase})", phase);
+        return false;
     }
 }

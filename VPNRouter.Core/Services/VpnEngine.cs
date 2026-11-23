@@ -490,7 +490,7 @@ public partial class VpnEngine : IDisposable
                 : "[VpnEngine] Applying config via full restart");
 
             // Resolve the control endpoint before retiring a live tunnel.
-            var controller = _healthMonitor != null || ConfirmServiceReplacement != null
+            var controller = _healthMonitor != null || ConfirmServiceReplacement != null || verifySelection
                 ? ClashSingBoxApi.ReadLocalController(configJson) : ((Uri Endpoint, string? Secret)?)null;
             var tunnelInfo = new AcceptedTunnelInfo(settings, configJson, ActiveServerAddress, controller, result.ProxySources);
             if (controller is { } target)

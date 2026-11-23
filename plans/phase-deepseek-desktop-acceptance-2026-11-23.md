@@ -34,5 +34,20 @@ remains immutable.
 
 ## Outcome
 
-The released candidate failed the Disconnect and assistant Apply scenarios.
-Source changes and follow-up verification are pending.
+The connection controls move to a fixed footer outside the Simple page's
+ScrollViewer. The viewport fixture covers disconnected and connected
+states with the assistant expanded. The screenshot fixture uses a
+520 x 680 window and a synthetic subscription.
+
+Candidate verification now probes the controller from the accepted
+configuration. The previous path reconstructed an IPv4 controller from
+the configured port and could use stale credentials or the wrong address
+family. DeepSeek verification attempts HTTPS first and retains the
+bounded fallback. The operation checks the accepted session, process,
+configuration and exclusive route before it persists the settings.
+Rejections identify the verification stage in the log without exposing
+addresses, subscription data or proxy response text.
+
+This corrects source-level differences in verification. The cause of the
+published WINBRAT Apply failure still requires a repeat run. CI and
+live verification are pending.
