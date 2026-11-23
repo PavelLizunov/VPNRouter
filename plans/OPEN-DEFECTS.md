@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - Android VLESS with disabled TLS can abort libbox and remove the TUN. Reproduced with the released 2.50.2 ARM64 APK and a local profile on Android 14. Both the shipped 1.14.2-vpnctl.2 and current 1.14.4-vpnctl.2 sources construct a TLS dialer for a present but disabled TLS object. Preserve enabled TLS and omit disabled TLS objects before native startup. The Android 17 app-only complaint is not attributed to this crash. See [Android TUN policy review](phase-android-tun-review-2026-11-23.md).
+
 - [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
 
 - [x] **P1** - Arch source export omitted the macOS installer script embedded by VPNRouter.Core. The exact-main Arch build at `60c65c72` failed with CS1566 in run 44910872465. RESOLVED in source by including the tracked installer script. The export fixture and a real Git archive check passed for all five external Core resources. Hosted package confirmation is pending.
