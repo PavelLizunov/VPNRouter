@@ -42,4 +42,35 @@ commits to roll back source changes.
 
 ## Outcome
 
-Verification pending.
+Desktop repair is implemented on the dedicated branch. The repair control is
+outside the model action inventory. A user-triggered run checks the saved
+configuration and the accepted runtime before committing a change. It preserves
+manual selections, traffic routing policy and the previous settings if a
+candidate fails. The single-outbound follow-up `65f455f9` also honors the
+explicit row marker when the legacy auto-select checkbox is enabled.
+
+The Windows preview at `cec1937c` on WINBRAT passed four interactive cases.
+An invalid MTU of 9000 was corrected to 1420 in the live TUN and saved YAML
+after a successful proxy request. Disabled TUN automatic routing and an empty
+selected-app list produced specific diagnoses with the settings and stopped
+state preserved. A deliberately unreachable subscription with auto-select off
+left the selection unchanged and restored direct routing without a core or
+TUN. The original installation and config hash were restored and lease 98
+was released. Automated tests verify alternate-server eligibility. A live
+switch, Android, and recovery from unrecognized startup failures remain
+unverified.
+
+Exact hosted follow-up CI at `65f455f9` passed all six jobs in run
+`45173196488`. Linux recorded 3,931 passed tests, including 62 repair-specific
+cases. The Windows 520 x 680 headless capture of `38af31e8` from run
+`45172338584` showed the repair control and the visible Disconnect button.
+
+The separate WINBRAT replay used 132 unusual prompts with synthetic
+application state, including one local-only validation case. All 33 supported
+first decisions matched and 72 of 98 expected abstentions matched. The 26
+unintended action proposals included 19 projected VPN or routing settings
+changes. The experimental stricter prompt repeated the same inputs and
+matched 32 of 33 supported decisions and 89 of 98 abstentions. Nine proposals
+still changed simulated VPN or routing settings. No model reply was executed
+against the app. The stricter prompt remains an experiment, and the open
+text-action P1 remains a release blocker. No rollout or merge was performed.
