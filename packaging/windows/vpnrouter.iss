@@ -36,11 +36,19 @@ VersionInfoDescription=VPNRouter setup
 DefaultDirName={autopf}\VPNRouter
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
+#ifdef NinaBundleDir
+ArchitecturesAllowed=x64os
+#else
 ArchitecturesAllowed=x64compatible
+#endif
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#OutputDir}
+#ifdef NinaBundleDir
+OutputBaseFilename=VPNRouter-Setup-with-NINA-v{#AppVersion}
+#else
 OutputBaseFilename=VPNRouter-Setup-v{#AppVersion}
+#endif
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -62,6 +70,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [CustomMessages]
+#ifdef NinaBundleDir
+english.NinaInstallFailed=VPNRouter was installed. The optional NINA service setup could not be completed.
+russian.NinaInstallFailed=VPNRouter установлен. Не удалось установить дополнительную службу NINA.
+#endif
 english.TaskGroupStartup=Startup:
 english.TaskAutostart=Start VPNRouter when I sign in
 english.TaskService=Install the VPNRouter Windows service (starts with Windows)
@@ -84,6 +96,9 @@ Name: "service"; Description: "{cm:TaskService}"; GroupDescription: "{cm:TaskGro
 Name: "defender"; Description: "{cm:TaskDefender}"; GroupDescription: "{cm:TaskGroupSecurity}"; Flags: unchecked
 
 [Files]
+#ifdef NinaBundleDir
+Source: "{#NinaBundleDir}\*"; DestDir: "{tmp}\nina"; Flags: deleteafterinstall; Check: SystemChangesAllowed
+#endif
 Source: "installer\zapret-maintenance.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion restartreplace
 Source: "installer\stop-vpnrouter.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
@@ -225,6 +240,17 @@ begin
       Exec(ExpandConstant(PowerShellExe), '-NoProfile -ExecutionPolicy Bypass -File "' +
         ExpandConstant('{app}\installer\stop-vpnrouter.ps1') + '" -RestartService -InstallDir "' +
         ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
+#ifdef NinaBundleDir
+    if (not Exec(ExpandConstant(PowerShellExe),
+        '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
+        ExpandConstant('{tmp}\nina\nina-windows-install.ps1') + '" -Headless -BuildDir "' +
+        ExpandConstant('{tmp}\nina') + '" -BundleDir "' + ExpandConstant('{tmp}\nina') + '"',
+        '', SW_HIDE, ewWaitUntilTerminated, Code)) or (Code <> 0) then
+    begin
+      Log('The optional NINA setup failed.');
+      SuppressibleMsgBox(CustomMessage('NinaInstallFailed'), mbInformation, MB_OK, IDOK);
+    end;
+#endif
   end;
 end;
 

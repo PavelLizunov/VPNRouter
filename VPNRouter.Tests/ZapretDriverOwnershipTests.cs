@@ -73,4 +73,27 @@ public sealed class ZapretDriverOwnershipTests
         Assert.False(ZapretActions.HasDriverConflict(paths, (_, _) => null));
         Assert.True(ZapretActions.HasDriverConflict(paths, (_, _) => throw new Win32Exception(5)));
     }
+
+    [Fact]
+    public void OnlyIdenticalDriverAtTheProtectedNinaPathIsCompatible()
+    {
+        var scratch = Path.Combine(Path.GetTempPath(), "vpnrouter-driver-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var nina = Directory.CreateDirectory(Path.Combine(scratch, "nina")).FullName;
+            var zapret = Directory.CreateDirectory(Path.Combine(scratch, "zapret")).FullName;
+            var paths = new ZapretServiceOwnership("legacy", zapret);
+            var image = Path.Combine(nina, "WinDivert64.sys");
+            File.WriteAllBytes(image, [1, 2, 3]);
+            var installed = Path.Combine(zapret, "WinDivert64.sys");
+            File.WriteAllBytes(installed, [1, 2, 3]);
+
+            Assert.True(ZapretActions.CanShareNinaDriver(paths, nina, "WinDivert", image));
+            Assert.False(ZapretActions.CanShareNinaDriver(paths, nina, "WinDivert14", image));
+            Assert.False(ZapretActions.CanShareNinaDriver(paths, nina, "WinDivert", installed));
+            File.WriteAllBytes(installed, [1, 3, 2]);
+            Assert.False(ZapretActions.CanShareNinaDriver(paths, nina, "WinDivert", image));
+        }
+        finally { if (Directory.Exists(scratch)) Directory.Delete(scratch, recursive: true); }
+    }
 }

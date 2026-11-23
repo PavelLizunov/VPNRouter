@@ -24,3 +24,13 @@ The preview requires a headless NINA installation and the matching vpnctl route.
 4. Review the subscription transfer, process ownership and result handling.
 5. Check successful repair, no improvement and cancellation on WINBRAT.
 6. Check that the public MainWindowViewModel surface and legacy Zapret actions remain compatible.
+
+## Outcome
+
+On WINBRAT, the first integrated snapshot `03aac53b` passed 60 focused Windows tests. The optional combined installer compiled with Inno Setup from the full VPNRouter package and a verified NINA archive. A local NINA trial on `1bf1ff5a` entered ready capture, rolled back after stdin was closed and restored Discord Gateway access when allowed to finish using a seeded test profile.
+
+The test found that IP Helper assigned the same network GUID to the Ethernet and Tailscale interfaces. Profile reuse requires Windows Network List Manager's network ID for the selected route. The public picker route returned HTTP 404, so these checks did not exercise live DeepSeek.
+
+The corrected NINA snapshot `3d7e4570` passed the seeded-cache trial and restored Discord Gateway access with the two control sites reachable. The final VPNRouter code snapshot `4c1f89dc` passed 81 focused tests on WINBRAT and the combined installer built from NINA `cefd8da1`. SHA-256 of this preview installer is `8fab5b1e64d3d8180db091460cefeb8a54fd17361234d6b6aa61e7629269def2`.
+
+Independent review found that bundled setup failure could skip restoring the VPNRouter service. The optional setup now runs after restoration and reports its own failure separately. The preview preserves an older NINA directory while Windows keeps a handle to that driver's file. The live driver-handover fixture could not change the previous registration because Windows reported error 1072.

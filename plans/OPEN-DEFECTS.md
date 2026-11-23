@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P1** - A bundled NINA setup failure could skip restoring a running VPNRouter service. The optional step now runs after the service restore and reports its failure without aborting VPNRouter. RESOLVED in source. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
+- [x] **P2** - A NINA trial could overlap with VPN connection changes or legacy Zapret actions. Quit now requests rollback and waits for completion before it permits shutdown. RESOLVED in source. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
+- [ ] **P2** - WINBRAT retained a loaded WinDivert registration marked for deletion after capture stopped. Both controllers now accept an identical driver from the other protected runtime, with competing capture blocked. The unit test passed. A live handover between engines remains unverified. See [NINA repair](phase-nina-zapret-repair-2026-11-23.md).
+
 - [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
 
 - [x] **P1** - Arch source export omitted the macOS installer script embedded by VPNRouter.Core. The exact-main Arch build at `60c65c72` failed with CS1566 in run 44910872465. RESOLVED in source by including the tracked installer script. The export fixture and a real Git archive check passed for all five external Core resources. Hosted package confirmation is pending.

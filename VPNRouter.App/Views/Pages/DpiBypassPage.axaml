@@ -4,6 +4,7 @@
              xmlns:conv="using:VPNRouter.App"
              xmlns:icons="using:VPNRouter.App.Controls"
              xmlns:loc="using:VPNRouter.App.Localization"
+             xmlns:pages="using:VPNRouter.App.Views.Pages"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="600"
@@ -139,6 +140,8 @@
                                     BorderThickness="1"
                                     Foreground="{DynamicResource DangerSolidBrush}"/>
                         </StackPanel>
+
+                        <pages:NinaZapretPanel Margin="0,16,0,0"/>
 
                         <Border Classes="hk-card" Margin="0,16,0,0" Padding="14,12,14,12"
                                 IsVisible="{Binding HasZapretStrategiesForQuickStart}">

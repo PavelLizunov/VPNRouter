@@ -175,6 +175,11 @@ public partial class MainWindowViewModel
 
     private async Task ToggleConnectionCoreAsync(AppSettings? submitted)
     {
+        if (_ninaZapretRequest != null)
+        {
+            StatusText = Core.Localization.Strings.NinaZapretBusy;
+            return;
+        }
         var toggle = ConnectionSyncPolicy.DecideToggle(
             IsConnected,
             inTransition: IsConnecting || IsApplying || _isReconnecting,

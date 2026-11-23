@@ -12,6 +12,10 @@
   Inno Setup 6 (ISCC.exe) is looked up in -IsccPath, $env:ISCC, $env:INNO_SETUP, C:\android-build\tools\innosetup and the
   usual Program Files folders. It is not installed by this script.
 
+  For a local preview, pass -NinaBundleDir (generated NINA runtime) together
+  with -NinaExe (the matching compiled headless binary). This produces a
+  suffixed installer that installs the NINA service for the VPNRouter UI.
+
 .EXAMPLE
   .\tools\build-installer.ps1 -Version 2.50.0-r10 -PackageZip .\dist\VPNRouter-v2.50.0-r10-win.zip
 #>
@@ -27,7 +31,9 @@ param(
 
     [string]$OutputDir = '',
 
-    [string]$IsccPath = ''
+    [string]$IsccPath = '',
+    [string]$NinaBundleDir = '',
+    [string]$NinaExe = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +44,9 @@ if (-not (Test-Path $Script)) { throw "Installer script not found: $Script" }
 
 if (($PackageZip -eq '') -eq ($PackageDir -eq '')) {
     throw 'Pass exactly one of -PackageZip or -PackageDir.'
+}
+if (($NinaBundleDir -eq '') -ne ($NinaExe -eq '')) {
+    throw 'Pass both -NinaBundleDir and -NinaExe to include the headless NINA preview.'
 }
 if (-not $OutputDir) { $OutputDir = Join-Path $Root 'dist' }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
@@ -91,6 +100,20 @@ try {
         '/Q'
     )
     if (Test-Path $iconFile) { $isccArgs += "/DIconFile=$iconFile" }
+    if ($NinaBundleDir) {
+        $nina = Join-Path $work 'nina'
+        New-Item -ItemType Directory -Path $nina | Out-Null
+        foreach ($name in @('nina-windows-install.ps1', 'engine.lock.json', 'upstream.tar.gz',
+                'runtime.json', 'nina.lua', 'services.lua')) {
+            Copy-Item -LiteralPath (Join-Path $NinaBundleDir $name) -Destination $nina
+        }
+        $registry = Join-Path $NinaBundleDir 'registry.txt'
+        if (Test-Path -LiteralPath $registry -PathType Leaf) {
+            Copy-Item -LiteralPath $registry -Destination $nina
+        }
+        Copy-Item -LiteralPath $NinaExe -Destination (Join-Path $nina 'nina.exe')
+        $isccArgs += "/DNinaBundleDir=$nina"
+    }
     $isccArgs += $Script
 
     Write-Host "ISCC: $iscc"
@@ -100,7 +123,8 @@ try {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-$exe = Join-Path $OutputDir "VPNRouter-Setup-v$Version.exe"
+$installerName = if ($NinaBundleDir) { "VPNRouter-Setup-with-NINA-v$Version.exe" } else { "VPNRouter-Setup-v$Version.exe" }
+$exe = Join-Path $OutputDir $installerName
 if (-not (Test-Path $exe)) { throw "Expected installer not produced: $exe" }
 
 $hash = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToLowerInvariant()
