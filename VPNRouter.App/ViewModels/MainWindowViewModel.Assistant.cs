@@ -21,8 +21,9 @@ public partial class MainWindowViewModel
     private sealed record AssistantUndo(RoutingSelection Previous, RoutingSelection Applied, string Revision,
         bool WasConnected, AcceptedTunnelInfo? Session);
     private sealed record AssistantSnapshot(AppSettings Settings, string Revision, int RoutingRevision,
-        AcceptedTunnelInfo? Session);
-    private sealed record AssistantChangeResult(string? Error, bool SettingsChangedAfterCommit = false);
+        AcceptedTunnelInfo? Session, int? NormalizedMtu = null);
+    private sealed record AssistantChangeResult(string? Error, bool SettingsChangedAfterCommit = false,
+        bool ProxyHealthFailed = false);
 
     private sealed record RoutingSelection(string Mode, string AppsMode, bool Initialized, string[] Include, string[] Exclude,
         string Profile, bool BypassRussianTraffic)
@@ -309,14 +310,16 @@ public partial class MainWindowViewModel
         && !_isReconnecting && !IsServiceManagedVpn && (allowPendingChanges || !HasPendingAppChanges) && !_displayExternalTunnel
         && (!IsConnected || _engine.HasActiveTunnel);
 
-    private AssistantSnapshot? ReadAssistantSnapshot()
+    private AssistantSnapshot? ReadAssistantSnapshot(bool repairMtu = false)
     {
         string yaml;
         try { yaml = File.ReadAllText(AppPaths.ConfigYamlPath); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
-        var saved = SettingsLoader.ParseLiveCandidate(yaml);
+        int? normalizedMtu = null;
+        var saved = repairMtu ? SettingsLoader.ParseRepairCandidate(yaml, out normalizedMtu)
+            : SettingsLoader.ParseLiveCandidate(yaml);
         return saved == null ? null : new(saved, SettingsLoader.GetRevision(yaml),
-            Volatile.Read(ref _routingSettingsRevision), _engine.AcceptedTunnel);
+            Volatile.Read(ref _routingSettingsRevision), _engine.AcceptedTunnel, normalizedMtu);
     }
 
     private bool AssistantSnapshotStillCurrent(AssistantSnapshot snapshot) =>
@@ -331,7 +334,8 @@ public partial class MainWindowViewModel
 
     private async Task<AssistantChangeResult> ApplyAssistantSettingsAsync(AppSettings candidate,
         AssistantSnapshot snapshot, string? target, bool restoreWithoutStart, CancellationToken ct,
-        bool keepSavedSettings = false, bool direct = false, string? preference = null)
+        bool keepSavedSettings = false, bool direct = false, string? preference = null,
+        AssistantRepairServer? repairServer = null)
     {
         bool saveOnly = preference == "SetFlushDnsOnStart";
         var previousPid = _engine.SingBoxPid;
@@ -351,6 +355,7 @@ public partial class MainWindowViewModel
             budget.Token.ThrowIfCancellationRequested();
 
             bool applied;
+            bool proxyHealthFailed = false;
             if (saveOnly)
             {
                 applied = await Task.Run(() => _engine.SaveAssistantPreferenceAsync(snapshot.Session,
@@ -364,12 +369,23 @@ public partial class MainWindowViewModel
             else
             {
                 var runtime = VpnEngine.CopySessionSettings(candidate);
+                string? expectedRow = null;
+                if (repairServer != null)
+                {
+                    var feed = runtime.App.Subscriptions.FirstOrDefault(item => item.Enabled && item.Id == repairServer.FeedId);
+                    var row = feed?.FindExactRow(runtime.App.ActiveSubscriptionServer, runtime.App.ActiveSubscriptionRow);
+                    if (row == null) return new(Strings.AssistantSettingsChanged);
+                    // Pin the trial only. The saved subscription retains its own selection policy.
+                    row.UseAsSingleOutbound = true;
+                    expectedRow = runtime.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(row);
+                }
                 applied = await Task.Run(() => _engine.ConnectVerifiedAppRoutingAsync(runtime,
-                    new AssistantRouteIntent(snapshot.Session, target, direct),
+                    new AssistantRouteIntent(snapshot.Session, target, direct, expectedRow, repairServer?.FeedId,
+                        () => proxyHealthFailed = true),
                     () => Commit(runtime, budget.Token), _skipVpnConflictThisSession, budget.Token));
             }
 
-            if (!applied) return new(Strings.AssistantApplyFailed);
+            if (!applied) return new(Strings.AssistantApplyFailed, ProxyHealthFailed: proxyHealthFailed);
 
             if (target != null && savedRevision is { } revision)
                 _assistantUndo = new(RoutingSelection.Capture(snapshot.Settings), RoutingSelection.Capture(candidate),

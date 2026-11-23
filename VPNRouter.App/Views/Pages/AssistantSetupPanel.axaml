@@ -16,6 +16,8 @@
                         Click="RunAssistant_Click"/>
                 <Button x:Name="DiagnoseCrash" AutomationProperties.AutomationId="Assistant.DiagnoseCrash"
                         Click="DiagnoseCrash_Click"/>
+                <Button x:Name="RepairVpn" AutomationProperties.AutomationId="Assistant.Repair"
+                        Click="RepairVpn_Click"/>
                 <Button x:Name="CancelAssistant" AutomationProperties.AutomationId="Assistant.Cancel"
                         Click="CancelAssistant_Click" IsVisible="False"/>
                 <Button x:Name="UndoAssistant" AutomationProperties.AutomationId="Assistant.Undo"

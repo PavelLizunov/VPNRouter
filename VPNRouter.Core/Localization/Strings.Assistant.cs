@@ -41,6 +41,27 @@ public static partial class Strings
     public static string AssistantPageOpened => Ru ? "Раздел открыт." : "Section opened.";
     public static string AssistantVpnActive => Ru ? "VPN подключён." : "VPN connected.";
     public static string AssistantVpnStopped => Ru ? "VPN отключён." : "VPN disconnected.";
+    public static string AssistantRepair => Ru ? "Починить VPN" : "Repair VPN";
+    public static string AssistantRepairWorking => Ru ? "Проверяю настройки и подключение…" : "Checking settings and connectivity…";
+    public static string AssistantRepairFailed => Ru ? "Проверка VPN завершилась ошибкой." : "The VPN check failed.";
+    public static string AssistantRepairInvalidSettings => Ru ? "Конфигурация не прошла проверку. Откройте настройки сети." : "The configuration did not pass validation. Open Network settings.";
+    public static string AssistantRepairNoServers => Ru ? "Для этого профиля нет доступных серверов. Проверьте серверы или обновите подписку." : "This profile has no available servers. Check Servers or refresh the subscription.";
+    public static string AssistantRepairStartupFailed => Ru ? "Не удалось подтвердить запуск VPN. Подробности запуска есть в журнале." : "VPN startup could not be verified. See the startup log for details.";
+    public static string AssistantRepairCustom => Ru ? "Для ремонта пользовательского конфига нужен разбор его правил." : "The custom configuration needs a rule review.";
+    public static string AssistantRepairAutoRoute => Ru ? "Автоматическая маршрутизация TUN отключена. Проверьте её в настройках сети." : "TUN automatic routing is off. Check it in Network settings.";
+    public static string AssistantRepairEmptyInclude => Ru ? "Режим «Только выбранные» включён. Выберите приложения для VPN." : "Selected-only routing is enabled. Choose the apps that need VPN.";
+    public static string AssistantRepairReachable => Ru ? "Проверочный запрос через VPN прошёл." : "The VPN connectivity check succeeded.";
+    public static string AssistantRepairRunningUnreachable => Ru ? "Туннель запущен, но проверочный запрос через VPN не прошёл." : "The tunnel is running, but the VPN connectivity check failed.";
+    public static string AssistantRepairMtu(int mtu) => Ru ? $"VPN проверен с MTU {mtu}." : $"VPN connectivity verified with MTU {mtu}.";
+    public static string AssistantRepairAlternate(int? mtu) => mtu is int value
+        ? (Ru ? $"VPN проверен на другом сервере с MTU {value}." : $"VPN connectivity verified on another server with MTU {value}.")
+        : (Ru ? "VPN проверен на другом сервере этой подписки." : "VPN connectivity verified on another server in this subscription.");
+    public static string AssistantRepairNoAutomaticServer => Ru
+        ? "Проверка связи через VPN не прошла. В текущем выборе нет другого сервера для автоподключения."
+        : "The VPN check failed. The current selection has no eligible automatic alternative.";
+    public static string AssistantRepairNoReachableServer => Ru
+        ? "Проверенные альтернативы не подтвердили связь. Сохранены прежние настройки."
+        : "The tested alternatives did not verify connectivity. Existing settings were kept.";
     public static string AssistantDirectFullConflict => Ru
         ? "В режиме «Весь трафик» сохранены исключения. Выберите нужные исключения в настройках приложений."
         : "Full tunnel has saved exclusions. Choose which apps to exclude in application settings.";

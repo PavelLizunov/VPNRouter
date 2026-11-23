@@ -85,12 +85,14 @@ public partial class AssistantSetupPanel : UserControl
         AssistantNotice.Text = Strings.AssistantDataNotice;
         RunAssistant.Content = Strings.AssistantApply;
         DiagnoseCrash.Content = Strings.AssistantDiagnoseCrash;
+        RepairVpn.Content = Strings.AssistantRepair;
         CancelAssistant.Content = Strings.AssistantCancel;
         UndoAssistant.Content = Strings.AssistantUndo;
         AssistantGoal.IsVisible = canPlan;
         AssistantNotice.IsVisible = canPlan;
         RunAssistant.IsVisible = canPlan;
         DiagnoseCrash.IsVisible = canPlan;
+        RepairVpn.IsVisible = canPlan;
         UndoAssistant.IsVisible = canUndo;
     }
 
@@ -130,6 +132,12 @@ public partial class AssistantSetupPanel : UserControl
             await RunAsync(vm.DiagnoseAssistantCrashAsync, Strings.AssistantDiagnosingCrash, Strings.AssistantUnavailable);
     }
 
+    private async void RepairVpn_Click(object? sender, RoutedEventArgs args)
+    {
+        if (_viewModel is { } vm)
+            await RunAsync(vm.RepairAssistantVpnAsync, Strings.AssistantRepairWorking, Strings.AssistantRepairFailed);
+    }
+
     private void CancelFromWindow(object? sender, RoutedEventArgs args) => _request?.Cancel();
 
     private void CancelAssistant_Click(object? sender, RoutedEventArgs args) => _request?.Cancel();
@@ -139,7 +147,8 @@ public partial class AssistantSetupPanel : UserControl
         if (_request != null) return;
         using var request = new CancellationTokenSource();
         _request = request;
-        DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
+        RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
+            = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
         CancelAssistant.IsVisible = true;
         AssistantStatus.Text = progress ?? Strings.AssistantWorking;
         try
@@ -158,7 +167,8 @@ public partial class AssistantSetupPanel : UserControl
         {
             _request = null;
             CancelAssistant.IsVisible = false;
-            DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
+            RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
+                = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
             RefreshLabels();
         }
     }
