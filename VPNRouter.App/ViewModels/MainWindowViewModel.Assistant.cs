@@ -101,21 +101,39 @@ public partial class MainWindowViewModel
             void Add(string name, string kind, bool? active = null) =>
                 semantic.Add(new AssistantControl(semantic.Count + 1, name, kind, active));
 
+            string? resolvedApp = null;
             if (CanRunAssistantChange() && snapshot.Settings.App.ConfigMode is ("generated" or "subscribe")
                 && snapshot.Settings.App.CustomRules.All(rule => !rule.Enabled))
             {
-                var suffix = OperatingSystem.IsWindows() ? "ByWindowsExecutableName" : "ByProcessName";
-                Add("RouteOnlyApplication" + suffix, "text");
-                Add("RouteApplicationDirect" + suffix, "text");
+                if (AssistantApplicationTarget.MentionsRouting(goal))
+                    resolvedApp = AssistantApplicationTarget.ResolveRequested(goal, proposal: null);
+                if (resolvedApp != null)
+                {
+                    var suffix = AssistantApplicationTarget.IsDefaultBrowserRequest(goal)
+                        ? "ForDefaultBrowser" : "ForResolvedTarget";
+                    Add("RouteOnlyApplication" + suffix, "press");
+                    Add("RouteApplicationDirect" + suffix, "press");
+                }
+                else
+                {
+                    var suffix = OperatingSystem.IsWindows() ? "ByWindowsExecutableName" : "ByProcessName";
+                    Add("RouteOnlyApplication" + suffix, "text");
+                    Add("RouteApplicationDirect" + suffix, "text");
+                }
             }
-            Add("SetVpnConnected", "toggle", IsConnected);
-            if (snapshot.Settings.App.ConfigMode is "generated" or "subscribe")
-                Add("SetStrictDns", "toggle", snapshot.Settings.App.StrictDns);
-            Add("SetFlushDnsOnStart", "toggle", snapshot.Settings.App.FlushDnsOnStart);
-            for (int tab = 0; tab < AssistantSections.Length; tab++)
-                if (tab != 4 || IsToolsAvailable)
-                    Add(AssistantSections[tab], "press");
-            var controls = semantic.Concat(automation.Observe(semantic.Count + 1)).ToArray();
+
+            bool appScoped = AssistantApplicationTarget.IsAppScopedRoute(goal, resolvedApp != null);
+            if (!appScoped)
+            {
+                Add("SetVpnConnected", "toggle", IsConnected);
+                if (snapshot.Settings.App.ConfigMode is "generated" or "subscribe")
+                    Add("SetStrictDns", "toggle", snapshot.Settings.App.StrictDns);
+                Add("SetFlushDnsOnStart", "toggle", snapshot.Settings.App.FlushDnsOnStart);
+                for (int tab = 0; tab < AssistantSections.Length; tab++)
+                    if (tab != 4 || IsToolsAvailable)
+                        Add(AssistantSections[tab], "press");
+            }
+            var controls = appScoped ? semantic.ToArray() : semantic.Concat(automation.Observe(semantic.Count + 1)).ToArray();
             var observation = new AssistantObservation(IsConnected, false, IsSimpleMode, controls, previous);
 
             var step = await StepAssistantAsync(subscription.Url, goal, IsRussian, observation, token);
@@ -128,11 +146,18 @@ public partial class MainWindowViewModel
 
             if (step.Status != AssistantStepStatus.Act) return AssistantStepMessage(step.Status);
             if (step.Control is not { } target || !controls.Contains(target)) return Strings.AssistantUnavailable;
-            if (semantic.Contains(target) && target.Kind == "text")
+            if (semantic.Contains(target) && (target.Name.StartsWith("RouteOnlyApplication", StringComparison.Ordinal)
+                || target.Name.StartsWith("RouteApplicationDirect", StringComparison.Ordinal)))
             {
-                if (!CanRunAssistantChange() || step.Toggle != null || step.Text is not { } executable
-                    || AssistantApplicationTarget.ResolveRequested(goal, executable) is not { } process)
+                if (!CanRunAssistantChange() || step.Toggle != null)
                     return Strings.AssistantAppNeeded;
+                var process = target.Kind switch
+                {
+                    "text" when step.Text is { } executable => AssistantApplicationTarget.ResolveRequested(goal, executable),
+                    "press" when step.Text == null && AssistantApplicationTarget.ResolveRequested(goal, proposal: null) == resolvedApp => resolvedApp,
+                    _ => null,
+                };
+                if (process == null) return Strings.AssistantAppNeeded;
 
                 return await ApplyAssistantAppRouteAsync(snapshot, process, target.Name.StartsWith("RouteApplicationDirect", StringComparison.Ordinal), token);
             }

@@ -1,9 +1,11 @@
 # How the assistant identifies a VPN application
 
-The model proposes a routing action and an application name. VPNRouter binds
-the proposal to the original user request and checks the process on the
-device. The accepted process name is what goes into the routing rule. A guess
-from the model alone cannot supply that name.
+VPNRouter first tries to identify the application on the device. When one
+target is available, it advertises two action IDs bound to that target. DeepSeek
+selects the routing action by ID. Application-specific commands omit the
+whole-tunnel and general settings controls. With the older text action, the
+proposal must agree with the original user request and local evidence. The
+verified process name is what goes into the routing rule.
 
 ## Request examples
 
@@ -12,7 +14,7 @@ from the model alone cannot supply that name.
 | Only Microsoft Edge through the VPN, with other apps direct | The localized Edge aliases map to `msedge.exe`. Windows confirms its actual executable. |
 | Только Google Chrome через VPN | Chrome aliases map to `chrome.exe`. |
 | Telegram напрямую, остальные правила оставь как есть | Telegram aliases map to `Telegram.exe`. The bypass action has its own route policy check. |
-| Только браузер по умолчанию через VPN | Windows must identify the same supported executable for both HTTP and HTTPS. A missing or conflicting association requires a name. A specific proposal for a different browser is rejected. |
+| Только браузер по умолчанию через VPN | Windows must identify the same supported executable for both HTTP and HTTPS. A missing or conflicting association requires a name. The gateway can use a default-browser action ID without learning its executable. |
 | Use VPN only for Acme Editor | For an unfamiliar name, open the app. VPNRouter can match the displayed product name from the running executable or you can enter its exact basename, such as `AcmeWin.exe`. |
 | Только Chrome или Firefox через VPN | This mentions two distinct targets. Name one browser in a new request. |
 | Route only Chrome Canary through VPN | Process-name routing cannot distinguish editions that use the same executable basename. The assistant asks for a supported target. |

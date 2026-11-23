@@ -46,11 +46,20 @@ internal static class AssistantApplicationTarget
         """(?:"(?<exe>[\p{L}\p{N}_. -]{1,124}\.exe)"|(?<exe>[\p{L}\p{N}_.-]{1,124}\.exe))""" + NameEnd, NameOptions);
     private static readonly Regex Browser = new(NameStart +
         "(?:browser|браузер(?:а|у|ом|е)?)" + NameEnd, NameOptions);
+    private static readonly Regex ScopedRoute = new(NameStart +
+        @"(?:vpn|впн|tunnel|туннел(?:ь|я|ю|ем|е)|only|exclusively|direct(?:ly)?|bypass|exclude|только|исключительно|напрямую|мимо|в обход|прям(?:ое|ой))"
+        + NameEnd, NameOptions);
     private static readonly Regex SharedExecutableVariants = new(NameStart +
-        @"(?:(?:google\s+)?chrome\s+(?:canary|beta|dev|chromium)|хром\s+(?:канари|бета|дев)|(?:microsoft\s+)?edge\s+(?:canary|beta|dev|webview2?)|эдж\s+(?:канари|бета|дев|вебвью)|(?:mozilla\s+)?firefox\s+(?:developer(?:\s+edition)?|nightly|beta|esr)|opera\s+(?:gx|developer|beta|air|neon)|опера\s+(?:gx|джи\s+икс)|brave\s+(?:nightly|beta)|vivaldi\s+snapshot|discord\s+(?:canary|ptb)|telegram\s+(?:portable|beta)|(?:vs\s+code|visual\s+studio\s+code)\s+insiders)" +
+        @"(?:" +
+        @"(?:google\s+)?chrome\s+(?:canary|beta|dev|chromium)|хром\s+(?:канари|бета|дев)|" +
+        @"(?:microsoft\s+)?edge\s+(?:canary|beta|dev|webview2?)|эдж\s+(?:канари|бета|дев|вебвью)|" +
+        @"(?:mozilla\s+)?firefox\s+(?:developer(?:\s+edition)?|nightly|beta|esr)|" +
+        @"opera\s+(?:gx|developer|beta|air|neon)|опера\s+(?:gx|джи\s+икс)|" +
+        @"brave\s+(?:nightly|beta)|vivaldi\s+snapshot|discord\s+(?:canary|ptb)|" +
+        @"telegram\s+(?:portable|beta)|(?:vs\s+code|visual\s+studio\s+code)\s+insiders)" +
         NameEnd, NameOptions);
 
-    internal static string? ResolveRequested(string goal, string proposal)
+    internal static string? ResolveRequested(string goal, string? proposal)
     {
         var windows = OperatingSystem.IsWindows();
         var defaultBrowser = windows && Browser.IsMatch(goal) ? ReadWindowsDefaultBrowser() : null;
@@ -59,12 +68,12 @@ internal static class AssistantApplicationTarget
             defaultBrowser, windows ? ReadRunningApplications : null);
     }
 
-    internal static string? ResolveRequested(string goal, string proposal, bool windows,
+    internal static string? ResolveRequested(string goal, string? proposal, bool windows,
         Func<string, string?> findProcess, string? defaultBrowser = null,
         Func<IReadOnlyList<AssistantRunningApplication>>? readRunningApplications = null)
     {
-        proposal = proposal.Trim();
-        if (goal.Length > 768 || !ValidName(proposal) || goal.Any(c => char.GetUnicodeCategory(c) == UnicodeCategory.Format))
+        proposal = proposal?.Trim();
+        if (goal.Length > 768 || (proposal != null && !ValidName(proposal)) || goal.Any(c => char.GetUnicodeCategory(c) == UnicodeCategory.Format))
             return null;
         // Both Windows and Unix route on a process name. A file path, launcher argument, or
         // variant that shares a process name with a different edition cannot refine the rule.
@@ -72,11 +81,12 @@ internal static class AssistantApplicationTarget
             return null;
 
         if (!windows)
-            return ContainsName(goal, proposal) && !Browser.IsMatch(proposal)
+            return proposal != null && ContainsName(goal, proposal) && !Browser.IsMatch(proposal)
                 ? VerifyProcess(proposal, findProcess, StringComparison.Ordinal)
                 : null;
 
-        var target = WindowsNames.GetValueOrDefault(proposal) ?? RoutingAppListEditor.NormalizeManualProcessName(proposal, windows: true);
+        var target = proposal == null ? null :
+            WindowsNames.GetValueOrDefault(proposal) ?? RoutingAppListEditor.NormalizeManualProcessName(proposal, windows: true);
         var mentioned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (Match match in Executables.Matches(goal))
             mentioned.Add(match.Groups["exe"].Value);
@@ -87,33 +97,45 @@ internal static class AssistantApplicationTarget
         if (mentioned.Count == 0 && Browser.IsMatch(goal))
         {
             if (defaultBrowser == null || !WindowsBrowsers.Contains(defaultBrowser)
-                || (!IsBrowserPlaceholder(proposal) && !string.Equals(target, defaultBrowser, StringComparison.OrdinalIgnoreCase)))
+                || (proposal != null && !IsBrowserPlaceholder(proposal)
+                    && !string.Equals(target, defaultBrowser, StringComparison.OrdinalIgnoreCase)))
                 return null;
             return VerifyProcess(defaultBrowser, findProcess, StringComparison.OrdinalIgnoreCase);
         }
 
-        if (mentioned.Count == 0 && readRunningApplications != null && !IsBrowserPlaceholder(proposal))
+        if (mentioned.Count == 0 && readRunningApplications != null && (proposal == null || !IsBrowserPlaceholder(proposal)))
         {
             return ResolveRunningApplication(goal, proposal, target, readRunningApplications());
         }
 
-        if (target == null || mentioned.Count != 1 || !mentioned.Contains(target)
-            || (Browser.IsMatch(goal) && !WindowsBrowsers.Contains(target))
-            || (IsBrowserPlaceholder(proposal) && !proposal.Equals("browser.exe", StringComparison.OrdinalIgnoreCase)))
+        if (mentioned.Count != 1) return null;
+        var named = mentioned.Single();
+        if ((Browser.IsMatch(goal) && !WindowsBrowsers.Contains(named))
+            || (proposal != null && (!string.Equals(target, named, StringComparison.OrdinalIgnoreCase)
+                || (IsBrowserPlaceholder(proposal) && !proposal.Equals("browser.exe", StringComparison.OrdinalIgnoreCase)))))
         {
             return null;
         }
-        return VerifyProcess(target, findProcess, StringComparison.OrdinalIgnoreCase);
+        return VerifyProcess(named, findProcess, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? ResolveRunningApplication(string goal, string proposal, string? target,
+    internal static bool IsDefaultBrowserRequest(string goal) =>
+        Browser.IsMatch(goal) && !NamedApps.IsMatch(goal) && !Executables.IsMatch(goal);
+
+    internal static bool MentionsRouting(string goal) => ScopedRoute.IsMatch(goal);
+
+    internal static bool IsAppScopedRoute(string goal, bool hasResolvedTarget) =>
+        MentionsRouting(goal)
+        && (hasResolvedTarget || Browser.IsMatch(goal) || NamedApps.IsMatch(goal) || Executables.IsMatch(goal));
+
+    private static string? ResolveRunningApplication(string goal, string? proposal, string? target,
         IReadOnlyList<AssistantRunningApplication> apps)
     {
         var matches = apps.Where(app => NameMatches(app.ProductName, goal) || NameMatches(app.DisplayName, goal))
             .DistinctBy(app => app.Executable, StringComparer.OrdinalIgnoreCase).Take(2).ToArray();
         if (matches is not [var app] || !ValidName(app.Executable) || !app.Executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             return null;
-        return string.Equals(app.Executable, target, StringComparison.OrdinalIgnoreCase)
+        return proposal == null || string.Equals(app.Executable, target, StringComparison.OrdinalIgnoreCase)
             || NameMatches(app.ProductName, proposal, complete: true)
             || NameMatches(app.DisplayName, proposal, complete: true)
             ? app.Executable : null;

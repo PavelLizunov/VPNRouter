@@ -39,9 +39,12 @@ public sealed class AssistantSetupPanelTests
                     calls++;
                     Assert.DoesNotContain(observation.Controls, control => control.Name.Contains("Repair", StringComparison.Ordinal));
                     if (routeConflict)
+                    {
+                        Assert.All(observation.Controls, control => Assert.StartsWith("Route", control.Name));
                         return Task.FromResult(new AssistantStep(AssistantStepStatus.Act,
                             observation.Controls.Single(c => c.Name.StartsWith("RouteOnlyApplication", StringComparison.Ordinal)),
                             Path.GetFileName(Environment.ProcessPath!)));
+                    }
                     return Task.FromResult(navigate
                         ? new AssistantStep(AssistantStepStatus.Act, observation.Controls.Single(c => c.Name == "OpenApplications"))
                         : new AssistantStep(AssistantStepStatus.Finish));
@@ -57,7 +60,7 @@ public sealed class AssistantSetupPanelTests
                 var revision = File.ReadAllText(AppPaths.ConfigYamlPath);
                 routeConflict = true;
                 Assert.Equal(VPNRouter.Core.Localization.Strings.AssistantAppNeeded,
-                    await vm.RunAssistantGoalAsync("Route only Firefox through VPN", window, panel, default));
+                    await vm.RunAssistantGoalAsync("Route only synthetic-target.exe through VPN", window, panel, default));
                 Assert.Equal(revision, File.ReadAllText(AppPaths.ConfigYamlPath));
                 Assert.False(vm.IsConnected);
                 Assert.False(vm.HasAssistantUndo);

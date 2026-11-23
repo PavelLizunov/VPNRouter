@@ -11,7 +11,11 @@ preserve exact process spelling, and require a verified
 executable or Windows browser registration. A generic browser request can use
 the agreed Windows HTTP and HTTPS default if locally verified. Ambiguous,
 conflicting or unresolvable targets should ask for an explicit name. Keep the
-existing model request schema and route verification. Do not send process
+existing model request schema and route verification. The initial live replay
+showed that the existing prompt often clarifies a default-browser request and
+can offer a whole-tunnel toggle. Advertise the two process-bound press actions
+when the local target resolves. Scoped application routing exposes neither
+the whole-tunnel toggle nor arbitrary UI controls. Do not send process
 inventory, executable paths or registry contents. Revert the task commits to
 roll back the resolver.
 

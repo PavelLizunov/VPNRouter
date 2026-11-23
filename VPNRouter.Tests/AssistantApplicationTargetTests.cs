@@ -21,6 +21,13 @@ public sealed class AssistantApplicationTargetTests
 
         Assert.Equal(entry.Expected, AssistantApplicationTarget.ResolveRequested(entry.Goal, entry.Proposal,
             entry.Windows, FindProcess, entry.DefaultBrowser));
+
+        if (category == "generic-default")
+        {
+            Assert.Equal(entry.Expected, AssistantApplicationTarget.ResolveRequested(entry.Goal, proposal: null,
+                entry.Windows, FindProcess, entry.DefaultBrowser));
+            Assert.True(AssistantApplicationTarget.IsDefaultBrowserRequest(entry.Goal));
+        }
     }
 
     [Theory]
@@ -39,6 +46,17 @@ public sealed class AssistantApplicationTargetTests
 
         Assert.Equal(expected, AssistantApplicationTarget.ResolveRequested(goal, proposal, windows: true,
             _ => null, readRunningApplications: () => running));
+    }
+
+    [Theory]
+    [InlineData("Send traffic from my browser over VPN during the trip.", true)]
+    [InlineData("Нужен туннель для браузера по умолчанию.", true)]
+    [InlineData("Через ВПН только Firefox или Chrome.", true)]
+    [InlineData("Please connect the VPN.", false)]
+    [InlineData("Open the Applications page.", false)]
+    public void App_scoped_requests_constrain_the_available_vpn_actions(string goal, bool expected)
+    {
+        Assert.Equal(expected, AssistantApplicationTarget.IsAppScopedRoute(goal, hasResolvedTarget: false));
     }
 
     private static IReadOnlyDictionary<string, TargetCase> ReadCases()
