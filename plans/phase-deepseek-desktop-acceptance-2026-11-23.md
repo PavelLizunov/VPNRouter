@@ -73,3 +73,9 @@ Private preview only. The findings for the published `v2.51.0-r2` remain
 attached to its original artifact. The live evidence and preview are retained
 under `acceptance/deepseek-2.51.0-r2/followup-2890a246/` in the owner evidence
 directory.
+
+## Assistant notice
+
+Keep a short notice next to the request field that tells users where the text
+goes. The detailed data flow is documented in `PRIVACY.md`. Check the wording in both
+languages and inspect the existing assistant fixture and the Windows preview.

@@ -5,8 +5,8 @@ public static partial class Strings
     public static string AssistantTitle => Ru ? "Настроить с DeepSeek" : "Set up with DeepSeek";
     public static string AssistantGoalHint => Ru ? "Chrome через VPN, остальное напрямую" : "Chrome through the VPN, other apps direct";
     public static string AssistantDataNotice => Ru
-        ? "vpnctl проверяет подписку. DeepSeek получает текст команды и отметку, найдено ли приложение."
-        : "vpnctl checks your subscription. DeepSeek receives the request and whether an app was matched.";
+        ? "Текст команды отправляется в DeepSeek."
+        : "Your request is sent to DeepSeek.";
     public static string AssistantApply => Ru ? "Настроить" : "Apply";
     public static string AssistantUndo => Ru ? "Отменить изменения" : "Undo changes";
     public static string AssistantCancel => Ru ? "Прервать" : "Cancel";
