@@ -7,25 +7,57 @@ permissions:
   contents: read
 
 jobs:
-  assistant-panel:
+  windows-preview:
     runs-on: windows-latest
-    timeout-minutes: 12
+    timeout-minutes: 18
+    env:
+      PREVIEW_SOURCE: 09969ed167102e2a890715a7c831230c294285d7
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Checkout the exact preview source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 38af31e8d7a43048b9439731df6e18389033a1ef
+          ref: ${{ env.PREVIEW_SOURCE }}
           persist-credentials: false
-      - name: Confirm exact source
-        shell: bash
-        run: test "$(git rev-parse HEAD)" = 38af31e8d7a43048b9439731df6e18389033a1ef
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
+      - name: Set up pinned .NET SDK
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
         with:
           global-json-file: global.json
-      - name: Exercise and render the assistant panel
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter 'FullyQualifiedName=VPNRouter.Tests.PageScreenshotTests.SimplePage_ConnectedWithAssistantAt520x680' --logger 'console;verbosity=normal'
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      - name: Set up Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
         with:
-          name: deepseek-harness-window-38af31e8
-          path: VPNRouter.Tests/screenshots/simple-connected-with-assistant.png
+          go-version: 1.26.1
+      - name: Build unsigned Windows packages from the exact source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -cne $env:PREVIEW_SOURCE -or (git status --porcelain)) {
+            throw 'Preview source checkout is not the requested clean commit.'
+          }
+          $text = Get-Content VPNRouter.Core/AppVersion.cs -Raw
+          if ($text -notmatch 'string\s+Version\s*=\s*"([0-9.]+(?:-r[1-9][0-9]*)?)"') {
+            throw 'Cannot read preview version.'
+          }
+          $version = $Matches[1]
+          ./build.ps1 -Version $version -BundleSplitDriver
+          if ($LASTEXITCODE -ne 0) { throw "Build exited with $LASTEXITCODE" }
+          $output = Join-Path $env:RUNNER_TEMP 'windows-preview'
+          New-Item -Path $output -ItemType Directory | Out-Null
+          foreach ($name in @("VPNRouter-v$version-win.zip")) {
+            $sidecar = (Get-Content "$name.sha256" -Raw).Trim()
+            if ($sidecar -notmatch '^(?<hash>[0-9a-fA-F]{64})(?:\s+(?<file>.+))?$') {
+              throw "Invalid checksum sidecar for $name"
+            }
+            if ($Matches['file'] -and $Matches['file'] -cne $name) { throw "Wrong filename in sidecar for $name" }
+            if ($Matches['hash'] -ne (Get-FileHash $name -Algorithm SHA256).Hash) { throw "Checksum mismatch for $name" }
+            Move-Item -LiteralPath $name, "$name.sha256" -Destination $output
+          }
+          Set-Content -Path (Join-Path $output 'SOURCE_SHA.txt') -Value $head
+      - name: Retain verified Windows preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-simple-preview-${{ env.PREVIEW_SOURCE }}
+          path: ${{ runner.temp }}/windows-preview
           if-no-files-found: error
-          retention-days: 3
+          compression-level: 0
+          retention-days: 7
