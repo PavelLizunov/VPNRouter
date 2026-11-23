@@ -113,3 +113,17 @@ Portable candidate run `45124267977` passed and retained artifact
 `14795466280`. The latest public probe still returned JSON 401 for `/plan`
 and HTML 404 for `/step`. Activation still requires the daemon and ingress
 route update.
+
+### Production activation
+
+On 2026-11-23 the user authorized activating the reviewed gateway. The
+production daemon reports `0.9.0+968fde0`, and the HTTPS ingress now routes
+the exact new POST path. The server credential matched the saved OpenCode Go
+key. Live authenticated requests returned HTTP 200 for the original plan,
+an application action, and a synthetic crash diagnosis. Requests without
+credentials returned JSON 401 on both routes.
+
+The artifact ZIP, tarball, and installed file manifest were checked.
+The previous binaries, assets, and ingress config are retained for rollback.
+GitHub's PR connector returned 403. Production uses candidate `968fde02`
+and the upstream main branch remains at its base `ddaeb226`.
