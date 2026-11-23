@@ -375,7 +375,7 @@ public partial class MainWindowViewModel
                     var feed = runtime.App.Subscriptions.FirstOrDefault(item => item.Enabled && item.Id == repairServer.FeedId);
                     var row = feed?.FindExactRow(runtime.App.ActiveSubscriptionServer, runtime.App.ActiveSubscriptionRow);
                     if (row == null) return new(Strings.AssistantSettingsChanged);
-                    row.UseAsSingleOutboundForRepair = true;
+                    row.PinForRepair();
                     expectedRow = runtime.App.ActiveSubscriptionRow;
                 }
                 applied = await Task.Run(() => _engine.ConnectVerifiedAppRoutingAsync(runtime,

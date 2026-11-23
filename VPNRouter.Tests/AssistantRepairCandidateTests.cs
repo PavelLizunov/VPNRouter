@@ -67,7 +67,7 @@ public sealed class AssistantRepairCandidateTests
 
         var runtime = VpnEngine.CopySessionSettings(saved);
         var row = Assert.IsType<VlessServerEntry>(runtime.App.Subscriptions[0].FindExactRow(alternate.Entry.Name, rowKey));
-        row.UseAsSingleOutboundForRepair = true;
+        row.PinForRepair();
         var sources = new Dictionary<string, VlessServerEntry>();
         var json = ConfigPipeline.Generate(new Profile { Name = "repair" }, [], runtime, proxySources: sources);
         var tunnel = new AcceptedTunnelInfo(runtime, json, "", null, sources);
@@ -79,7 +79,7 @@ public sealed class AssistantRepairCandidateTests
         Assert.False(alternate.Entry.UseAsSingleOutbound);
         var reloaded = SettingsLoader.Copy(runtime);
         Assert.True(reloaded.Vless.AutoSelectBestServer);
-        Assert.False(reloaded.App.Subscriptions[0].Servers[1].UseAsSingleOutboundForRepair);
+        Assert.False(reloaded.App.Subscriptions[0].Servers[1].RequiresSingleOutbound());
         VlessServersResolver.Resolve(reloaded);
         Assert.True(reloaded.Vless.GetActiveServers().Count > 1);
         Assert.Same(alternate.Entry, saved.App.Subscriptions[0].FindExactRow(tunnel.Server.Name, tunnel.Server.RowKey));
