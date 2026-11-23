@@ -23,7 +23,7 @@ public partial class MainWindowViewModel
     private sealed record AssistantSnapshot(AppSettings Settings, string Revision, int RoutingRevision,
         AcceptedTunnelInfo? Session, int? NormalizedMtu = null);
     private sealed record AssistantChangeResult(string? Error, bool SettingsChangedAfterCommit = false,
-        bool ProxyHealthFailed = false);
+        AssistantCandidateRejection? Rejection = null);
 
     private sealed record RoutingSelection(string Mode, string AppsMode, bool Initialized, string[] Include, string[] Exclude,
         string Profile, bool BypassRussianTraffic)
@@ -355,7 +355,7 @@ public partial class MainWindowViewModel
             budget.Token.ThrowIfCancellationRequested();
 
             bool applied;
-            bool proxyHealthFailed = false;
+            AssistantCandidateRejection? rejection = null;
             if (saveOnly)
             {
                 applied = await Task.Run(() => _engine.SaveAssistantPreferenceAsync(snapshot.Session,
@@ -375,17 +375,16 @@ public partial class MainWindowViewModel
                     var feed = runtime.App.Subscriptions.FirstOrDefault(item => item.Enabled && item.Id == repairServer.FeedId);
                     var row = feed?.FindExactRow(runtime.App.ActiveSubscriptionServer, runtime.App.ActiveSubscriptionRow);
                     if (row == null) return new(Strings.AssistantSettingsChanged);
-                    // Pin the trial only. The saved subscription retains its own selection policy.
-                    row.UseAsSingleOutbound = true;
-                    expectedRow = runtime.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(row);
+                    row.UseAsSingleOutboundForRepair = true;
+                    expectedRow = runtime.App.ActiveSubscriptionRow;
                 }
                 applied = await Task.Run(() => _engine.ConnectVerifiedAppRoutingAsync(runtime,
                     new AssistantRouteIntent(snapshot.Session, target, direct, expectedRow, repairServer?.FeedId,
-                        () => proxyHealthFailed = true),
+                        reason => rejection = reason),
                     () => Commit(runtime, budget.Token), _skipVpnConflictThisSession, budget.Token));
             }
 
-            if (!applied) return new(Strings.AssistantApplyFailed, ProxyHealthFailed: proxyHealthFailed);
+            if (!applied) return new(Strings.AssistantApplyFailed, Rejection: rejection);
 
             if (target != null && savedRevision is { } revision)
                 _assistantUndo = new(RoutingSelection.Capture(snapshot.Settings), RoutingSelection.Capture(candidate),

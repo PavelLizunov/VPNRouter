@@ -649,10 +649,19 @@ public static class HealthCheck
     }
 
     [SupportedOSPlatform("windows")]
-    public static PathMtuProbeResult ProbePathMtuPayload()
+    public static PathMtuProbeResult ProbePathMtuPayload() => ProbePathMtuPayload(CancellationToken.None);
+
+    [SupportedOSPlatform("windows")]
+    internal static PathMtuProbeResult ProbePathMtuPayload(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (TunnelInterfaceUp())
             return new(null, false, SkippedTunnelUp: true);
+        return PingPathMtu(new ProcessRunner(), ct);
+    }
+
+    internal static PathMtuProbeResult PingPathMtu(IProcessRunner runner, CancellationToken ct)
+    {
         if (!PingOk(null))
             return new(null, true);
 
@@ -662,40 +671,22 @@ public static class HealthCheck
                 return new(payload, false);
         }
         return new(null, false);
-    }
 
-    [SupportedOSPlatform("windows")]
-    private static bool PingOk(int? payload)
-    {
-        using var proc = new Process();
-        proc.StartInfo.FileName = "ping.exe";
-        proc.StartInfo.UseShellExecute = false;
-        proc.StartInfo.CreateNoWindow = true;
-        proc.StartInfo.RedirectStandardOutput = true;
-        proc.StartInfo.RedirectStandardError = true;
-        proc.StartInfo.ArgumentList.Add("-n");
-        proc.StartInfo.ArgumentList.Add("1");
-        proc.StartInfo.ArgumentList.Add("-w");
-        proc.StartInfo.ArgumentList.Add("1000");
-        if (payload.HasValue)
+        bool PingOk(int? payload)
         {
-            proc.StartInfo.ArgumentList.Add("-f");
-            proc.StartInfo.ArgumentList.Add("-l");
-            proc.StartInfo.ArgumentList.Add(payload.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        }
-        proc.StartInfo.ArgumentList.Add("8.8.8.8");
+            ct.ThrowIfCancellationRequested();
+            List<string> args = ["-n", "1", "-w", "1000"];
+            if (payload.HasValue)
+                args.AddRange(["-f", "-l", payload.Value.ToString(CultureInfo.InvariantCulture)]);
+            args.Add("8.8.8.8");
 
-        if (!proc.Start()) return false;
-        var outputTask = proc.StandardOutput.ReadToEndAsync();
-        if (!proc.WaitForExit(2000))
-        {
-            try { proc.Kill(entireProcessTree: true); } catch { }
-            return false;
+            var result = runner.RunAsync(new ProcessRequest("ping.exe", args, Timeout: TimeSpan.FromSeconds(2)), ct)
+                .GetAwaiter().GetResult();
+            ct.ThrowIfCancellationRequested();
+            return !result.TimedOut && result.ExitCode == 0
+                && result.Stdout.Contains("TTL=", StringComparison.OrdinalIgnoreCase)
+                && !result.Stdout.Contains("fragmented", StringComparison.OrdinalIgnoreCase);
         }
-        var output = outputTask.GetAwaiter().GetResult();
-        return proc.ExitCode == 0 &&
-               output.Contains("TTL=", StringComparison.OrdinalIgnoreCase) &&
-               !output.Contains("fragmented", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TunnelInterfaceUp()

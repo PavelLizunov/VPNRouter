@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Verified VPN repair changes the runtime subscription row ID when it pins an alternate for the trial. The accepted server then fails to match the saved row in the desktop UI. An already pinned candidate can also change the saved pool semantics. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
+- [ ] **P2** - Cancelling a repair does not interrupt the Windows MTU ping sequence once started. Pass the repair token to the active process. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
+- [ ] **P3** - If a candidate starts on a different row, the repair stops before trying the remaining automatic alternates. Retry only a clean rejection after teardown. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
+
 - [x] **P2** - Repair could replace an explicitly single-outbound subscription row when the legacy auto-select checkbox was enabled. RESOLVED in source at `65f455f9` by honoring the single-outbound flag. Exact-head CI run `45173196488` passed. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
 
 - [ ] **P1** - The text assistant can return a mutating action for a question, quoted command, or a conditional request whose condition is unavailable. The sealed WINBRAT model replay proposed 26 actions in 98 cases that expected abstention, including 19 simulated connection or settings changes. A stricter prompt on the same cases still produced nine proposals that changed simulated VPN or routing settings. No reply was executed against the app. The explicit local repair button is outside the model inventory. Keep text-driven mutation on the release gate. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).

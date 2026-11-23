@@ -64,7 +64,10 @@ public partial class VpnEngine
                     return RejectVerifiedCandidate("app-route");
                 if (routeIntent?.ExpectedServerRow is { } expectedRow &&
                     (tunnel.UsesAutoGroup || tunnel.Server.RowKey != expectedRow || tunnel.Server.FeedId != routeIntent.ExpectedFeed))
+                {
+                    routeIntent.OnRejection?.Invoke(AssistantCandidateRejection.ServerMismatch);
                     return RejectVerifiedCandidate("server-changed");
+                }
 
                 using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct, _sessionCts.Token);
                 var sanity = _sanityCheck ??= new ConfigSanityCheck(_logger);
@@ -75,7 +78,7 @@ public partial class VpnEngine
                 if (probe == null) return RejectVerifiedCandidate("candidate-changed");
                 if (probe.IsDead)
                 {
-                    routeIntent?.ProxyHealthFailed?.Invoke();
+                    routeIntent?.OnRejection?.Invoke(AssistantCandidateRejection.ProxyHealth);
                     return RejectVerifiedCandidate("proxy-health");
                 }
                 if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.Process, routeIntent.Direct))

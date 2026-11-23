@@ -52,7 +52,7 @@ public partial class MainWindowViewModel
         var result = await ApplyAssistantSettingsAsync(baseline, snapshot, null, false, ct,
             keepSavedSettings: normalizedMtu == null);
         if (result.Error == null) return RepairSuccess(result, normalizedMtu);
-        if (!result.ProxyHealthFailed)
+        if (result.Rejection != AssistantCandidateRejection.ProxyHealth)
         {
             if (result.Error == Strings.AssistantApplyFailed)
                 return VlessServersResolver.DescribeEmptyReason(settings) != null
@@ -63,7 +63,7 @@ public partial class MainWindowViewModel
         int? trialMtu = normalizedMtu;
         if (OperatingSystem.IsWindows())
         {
-            var mtuProbe = await Task.Run(HealthCheck.ProbePathMtuPayload, ct);
+            var mtuProbe = await Task.Run(() => HealthCheck.ProbePathMtuPayload(ct), ct);
             if (!CanContinueRepair(snapshot, ct)) return Strings.AssistantSettingsChanged;
             trialMtu = AssistantRepairPolicy.SuggestMtu(settings.Tun, mtuProbe) ?? normalizedMtu;
             if (trialMtu is int smaller && smaller != baseline.Tun.Mtu)
@@ -72,7 +72,7 @@ public partial class MainWindowViewModel
                 trial.Tun.Mtu = smaller;
                 result = await ApplyAssistantSettingsAsync(trial, snapshot, null, false, ct);
                 if (result.Error == null) return RepairSuccess(result, smaller);
-                if (!result.ProxyHealthFailed) return result.Error;
+                if (result.Rejection != AssistantCandidateRejection.ProxyHealth) return result.Error;
             }
         }
 
@@ -94,7 +94,7 @@ public partial class MainWindowViewModel
             result = await ApplyAssistantSettingsAsync(candidate, snapshot, null, false, ct, repairServer: server);
             if (result.Error == null)
                 return result.SettingsChangedAfterCommit ? Strings.AssistantSettingsChanged : Strings.AssistantRepairAlternate(trialMtu);
-            if (!result.ProxyHealthFailed) return result.Error;
+            if (result.Rejection is not (AssistantCandidateRejection.ProxyHealth or AssistantCandidateRejection.ServerMismatch)) return result.Error;
         }
 
         return Strings.AssistantRepairNoReachableServer;

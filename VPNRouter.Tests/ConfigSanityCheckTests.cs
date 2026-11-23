@@ -258,6 +258,17 @@ public class ConfigSanityCheckTests
     }
 
     [Fact]
+    public async Task CandidateProbeWithoutAnAcceptedControllerDoesNotConfirmReadiness()
+    {
+        var tunnel = new AcceptedTunnelInfo(new AppSettings(), "{}", "", null,
+            new Dictionary<string, VlessServerEntry>());
+        var result = await tunnel.ProbeProxyAsync(new ConfigSanityCheck(),
+            TestContext.Current.CancellationToken, preferHttps: true);
+        Assert.True(result.IsDead);
+        Assert.Equal(0, result.LastDelayMs);
+    }
+
+    [Fact]
     public async Task CandidateProbeUsesTheAcceptedControllerAndHttpsDestination()
     {
         const string config = """

@@ -2,8 +2,10 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
+internal enum AssistantCandidateRejection { ProxyHealth, ServerMismatch }
+
 internal sealed record AssistantRouteIntent(AcceptedTunnelInfo? Session, string? Process, bool Direct = false,
-    string? ExpectedServerRow = null, string? ExpectedFeed = null, Action? ProxyHealthFailed = null);
+    string? ExpectedServerRow = null, string? ExpectedFeed = null, Action<AssistantCandidateRejection>? OnRejection = null);
 
 public partial class VpnEngine
 {

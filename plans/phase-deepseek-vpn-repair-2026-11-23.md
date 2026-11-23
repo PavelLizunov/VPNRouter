@@ -74,3 +74,16 @@ matched 32 of 33 supported decisions and 89 of 98 abstentions. Nine proposals
 still changed simulated VPN or routing settings. No model reply was executed
 against the app. The stricter prompt remains an experiment, and the open
 text-action P1 remains a release blocker. No rollout or merge was performed.
+
+
+## Independent review follow-up
+
+- Keep exact trial selection in memory without changing the saved subscription
+  row ID or automatic selection policy. Exclude pinned alternate rows.
+- Propagate cancellation to the Windows path-MTU child process and keep the
+  existing per-ping deadline. Preserve the no-argument diagnostics entry point.
+- Retry a different alternate only after a clean rejection for a changed server
+  or failed proxy check. Exceptions during cleanup or commit stop the repair.
+- Verify proxy checks fail closed without a controller. Cover row identity and
+  cancellation with focused tests and rerun hosted CI. Revert the follow-up
+  commit to roll back the changes.

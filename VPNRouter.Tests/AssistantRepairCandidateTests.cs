@@ -55,6 +55,44 @@ public sealed class AssistantRepairCandidateTests
         Assert.Empty(AssistantRepairPolicy.AlternateServers(settings));
     }
 
+    [Fact]
+    public void A_trial_routes_one_server_with_the_saved_row_identity_and_keeps_the_automatic_pool()
+    {
+        var saved = ServerSettings();
+        saved.App.BypassRussianTraffic = false;
+        var alternate = Assert.Single(AssistantRepairPolicy.AlternateServers(saved));
+        var rowKey = SubscriptionEntry.RowKey(alternate.Entry);
+        saved.App.ActiveSubscriptionServer = alternate.Entry.Name;
+        saved.App.ActiveSubscriptionRow = rowKey;
+
+        var runtime = VpnEngine.CopySessionSettings(saved);
+        var row = Assert.IsType<VlessServerEntry>(runtime.App.Subscriptions[0].FindExactRow(alternate.Entry.Name, rowKey));
+        row.UseAsSingleOutboundForRepair = true;
+        var sources = new Dictionary<string, VlessServerEntry>();
+        var json = ConfigPipeline.Generate(new Profile { Name = "repair" }, [], runtime, proxySources: sources);
+        var tunnel = new AcceptedTunnelInfo(runtime, json, "", null, sources);
+
+        Assert.False(tunnel.UsesAutoGroup);
+        Assert.Equal(alternate.FeedId, tunnel.Server.FeedId);
+        Assert.Equal(rowKey, tunnel.Server.RowKey);
+        Assert.Same(row, Assert.Single(runtime.Vless.GetActiveServers()));
+        Assert.False(alternate.Entry.UseAsSingleOutbound);
+        var reloaded = SettingsLoader.Copy(runtime);
+        Assert.True(reloaded.Vless.AutoSelectBestServer);
+        Assert.False(reloaded.App.Subscriptions[0].Servers[1].UseAsSingleOutboundForRepair);
+        VlessServersResolver.Resolve(reloaded);
+        Assert.True(reloaded.Vless.GetActiveServers().Count > 1);
+        Assert.Same(alternate.Entry, saved.App.Subscriptions[0].FindExactRow(tunnel.Server.Name, tunnel.Server.RowKey));
+    }
+
+    [Fact]
+    public void Server_trials_skip_an_alternate_with_its_own_explicit_pin()
+    {
+        var settings = ServerSettings();
+        settings.App.Subscriptions[0].Servers[1].UseAsSingleOutbound = true;
+        Assert.Empty(AssistantRepairPolicy.AlternateServers(settings));
+    }
+
     private static AppSettings ServerSettings()
     {
         var settings = new AppSettings();
@@ -79,6 +117,7 @@ public sealed class AssistantRepairCandidateTests
     {
         Name = name,
         Server = address,
+        Security = "none",
         Uuid = "530a76bd-f001-4f42-abb9-0ae363769ae7",
     };
 }
