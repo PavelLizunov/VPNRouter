@@ -58,6 +58,19 @@ public sealed class SubscriptionAssistantStepTests
         Assert.Equal(AssistantStepStatus.EndpointUnavailable, step.Status);
     }
 
+    [Fact]
+    public async Task OlderGatewayCanRejectTheCrashFieldWithoutBlamingTheUserGoal()
+    {
+        var http = new FakeHttpClient().Setup(Endpoint, "", 400);
+        var client = new SubscriptionAssistantClient(http);
+        var crash = new AssistantCrashEvidence(true, AssistantCrashFault.Unknown,
+            AssistantCrashArea.Unknown, AssistantCrashSignal.None);
+        var step = await client.StepAsync(Subscription, "Analyze the last VPNRouter crash", false,
+            new(false, false, true, [], null, crash), TestContext.Current.CancellationToken);
+
+        Assert.Equal(AssistantStepStatus.EndpointUnavailable, step.Status);
+    }
+
     [Theory]
     [InlineData("""{"operation":"diagnosis","summary":"Check the VPN adapter."}""", true)]
     [InlineData("""{"operation":"diagnosis","summary":"synthetic-assistant"}""", false)]

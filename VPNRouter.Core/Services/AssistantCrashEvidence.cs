@@ -17,20 +17,42 @@ internal sealed record AssistantCrashEvidence(bool Fatal, AssistantCrashFault Fa
 
     internal static AssistantCrashEvidence? ReadLatest(string dataDirectory)
     {
-        var directory = Path.Combine(dataDirectory, "crashes");
+        var directory = new DirectoryInfo(Path.Combine(dataDirectory, "crashes"));
         try
         {
-            if (!Directory.Exists(directory)) return null;
-            var path = Directory.EnumerateFiles(directory, "crash-*.txt")
-                .Where(file => (File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0)
-                .OrderByDescending(file => file, StringComparer.Ordinal)
-                .FirstOrDefault();
-            if (path == null) return null;
+            if (!directory.Exists) return null;
+            foreach (var report in directory.EnumerateFiles("crash-*.txt")
+                         .OrderByDescending(file => file.Name, StringComparer.Ordinal))
+            {
+                if (ReadReport(report) is { } evidence) return evidence;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+        return null;
+    }
 
-            using var file = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+    private static AssistantCrashEvidence? ReadReport(FileInfo report)
+    {
+        try
+        {
+            if ((report.Attributes & FileAttributes.ReparsePoint) != 0 || report.Length == 0) return null;
+
+            using var file = report.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             var bytes = new byte[ReadLimit];
             int length = file.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false);
-            return Parse(Encoding.UTF8.GetString(bytes, 0, length));
+            var head = Encoding.UTF8.GetString(bytes, 0, length);
+            if (file.Position >= file.Length) return Parse(head);
+
+            // Keep the header and exception frames from the start and check recent log lines at the end.
+            file.Position = Math.Max(file.Position, file.Length - ReadLimit) - 1;
+            bool startsAtLine = file.ReadByte() == '\n';
+            length = file.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false);
+            var tail = Encoding.UTF8.GetString(bytes, 0, length);
+            int tailStart = startsAtLine ? 0 : tail.IndexOf('\n') + 1;
+            if (!startsAtLine && tailStart == 0) return Parse(head);
+            return Parse(string.Concat(head.AsSpan(0, head.LastIndexOf('\n') + 1), tail.AsSpan(tailStart)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

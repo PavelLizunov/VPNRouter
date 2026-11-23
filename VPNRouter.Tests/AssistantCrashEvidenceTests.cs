@@ -4,8 +4,10 @@ namespace VPNRouter.Tests;
 
 public sealed class AssistantCrashEvidenceTests
 {
-    [Fact]
-    public void ReadsLatestCrashAndSummarizesItsExceptionAndLogTail()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(80 * 1024)]
+    public void ReadsLatestValidCrashAndSummarizesItsExceptionAndLogTail(int extraExceptionBytes)
     {
         var data = Directory.CreateTempSubdirectory("assistant-crash-");
         try
@@ -16,7 +18,7 @@ public sealed class AssistantCrashEvidenceTests
             File.WriteAllText(Path.Combine(reports.FullName, "crash-20261123-010000-000.txt"),
                 "VPNRouter crash report\nFatal: False\n");
             var current = Path.Combine(reports.FullName, "crash-20261123-020000-000.txt");
-            File.WriteAllText(current, """
+            File.WriteAllText(current, $"""
                 VPNRouter crash report
                 Version:   2.51.0-r2
                 Fatal:     True
@@ -24,10 +26,13 @@ public sealed class AssistantCrashEvidenceTests
                 ──── Exception ────
                 System.InvalidOperationException: secret-in-exception
                    at VPNRouter.Core.Services.StartupPipeline.RunAsync() in C:\private\path.cs:line 41
+                {new string('x', extraExceptionBytes)}
 
                 ──── Tail of vpnrouter.log (last 200 lines) ────
                 [WRN] TUN adapter busy with secret-in-log
                 """);
+            File.WriteAllText(Path.Combine(reports.FullName, "crash-20261123-030000-000.txt"),
+                "VPNRouter crash report\nVersion:");
 
             Assert.Equal(new AssistantCrashEvidence(true, AssistantCrashFault.InvalidOperation,
                 AssistantCrashArea.Startup, AssistantCrashSignal.TunBusy),

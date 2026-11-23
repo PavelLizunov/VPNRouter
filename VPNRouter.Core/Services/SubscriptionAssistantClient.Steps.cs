@@ -78,6 +78,7 @@ internal sealed partial class SubscriptionAssistantClient
             return response.StatusCode switch
             {
                 200 => DecodeStep(response.Body, controls, observation.Crash != null, ContainsCredential),
+                400 when observation.Crash != null => new(AssistantStepStatus.EndpointUnavailable),
                 400 or 413 => new(AssistantStepStatus.InvalidRequest),
                 401 or 403 => new(AssistantStepStatus.AccessDenied),
                 404 => new(AssistantStepStatus.EndpointUnavailable),
