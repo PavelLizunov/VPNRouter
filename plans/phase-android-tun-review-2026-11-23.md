@@ -108,3 +108,10 @@ per-app rules in custom profiles, and that a Connect rejected while the
 native tunnel closes must be retried. Those changes require separate
 runtime coverage. The review did not test the possible custom-profile
 listener exposure on a device.
+
+At 10cfdb16 the Java policy and lifecycle contracts passed on mm4 with
+Temurin 17. The picker source contract failed as expected with the
+pre-fix picker. The worker had 10 CPUs at load 1.47/1.44/1.56, about
+4.6 GiB of free pages, 1.87 GiB of swap in use, 43 GiB of free disk,
+and no active Java or .NET jobs. APK compilation and UI acceptance
+remain open under the build constraints above.
