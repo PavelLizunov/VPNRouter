@@ -65,5 +65,27 @@ playback still need a device and a path with working UDP.
   fetch failed at TLS, so the source and pinned JSON dependency were
   transferred with SHA-256 and the embedded Git archive commit verified.
 - The GitHub PR integration returned 403 for PR creation from the task
-  branch. The full Android compile workflow requires a PR. mm4 has no
-  compatible .NET SDK and VM100 is reserved by a separate task.
+  branch. The full Android compile workflow requires a PR.
+- Implementation f620ecb0 passed all six jobs of [hosted CI](https://github.com/PavelLizunov/VPNRouter/actions/runs/45235837471).
+  Ubuntu passed 3,835 tests and Windows passed 4,048. Both ran all four
+  VLESS serialization cases. The Java policy and lifecycle contracts
+  also passed on mm4 with the same commit. The new Java regression
+  failed at the intended assertion when paired with baseline policy.
+- Android APK build remains blocked by the toolchain. VM100 had an
+  Android 36 workload on .NET 10.0.301 and shared SDKs 10.0.302 and
+  10.0.400. Both global.json files require 10.0.404 with latestPatch.
+  VM100 had 8 CPUs at 3 percent load, 12,866,576 KiB free RAM,
+  108,516,859,904 bytes free on C:, and no active build processes.
+  VM101 had 4 CPUs at load 0.14/0.03/0.01, 11,254 MiB available RAM,
+  zero swap, 4.3 GiB free disk, and no .NET SDK in the standard or
+  Android worker tool directories. mm4 has Java 17 and no compatible
+  .NET SDK. The VM100 and VM101 preflight leases were released.
+- The Android 17 field logs capture TikTok-related DNS exchanges
+  inside the TUN in the 18:08 and 18:12 bundles. These logs do not
+  associate the requests with an app UID or show video delivery.
+  The 18:06 bundle records server URL-test failures including
+  timeouts. The November tails do not show the lab TLS panic.
+- Peer source comparison is recorded above. The independent review
+  was requested and had not reported at the time of this outcome.
+  No UI changed. Exact APK and live Android 17 verification are open.
+  Revert f620ecb0 to roll back the implementation.
