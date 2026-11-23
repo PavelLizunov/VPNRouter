@@ -11,7 +11,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 18
     env:
-      PREVIEW_SOURCE: 95c6238ecb1852e6d5d35a800308e6cf661903c5
+      PREVIEW_SOURCE: 2890a246f559d2cb5721749c319d49f2f583f136
     steps:
       - name: Checkout the exact preview source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -68,19 +68,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 95c6238ecb1852e6d5d35a800308e6cf661903c5
+          ref: 2890a246f559d2cb5721749c319d49f2f583f136
           persist-credentials: false
       - name: Confirm exact source
         shell: bash
-        run: test "$(git rev-parse HEAD)" = 95c6238ecb1852e6d5d35a800308e6cf661903c5
+        run: test "$(git rev-parse HEAD)" = 2890a246f559d2cb5721749c319d49f2f583f136
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
         with:
           global-json-file: global.json
       - name: Exercise and render the assistant panel
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter 'FullyQualifiedName=VPNRouter.Tests.PageScreenshotTests.Assistant_panel_follows_subscription_eligibility' --logger 'console;verbosity=normal'
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter 'FullyQualifiedName=VPNRouter.Tests.PageScreenshotTests.SimplePage_ConnectedWithAssistantAt520x680' --logger 'console;verbosity=normal'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: assistant-panel-95c6238e
-          path: VPNRouter.Tests/screenshots/assistant-setup-narrow360.png
+          name: deepseek-fixed-footer-2890a246
+          path: VPNRouter.Tests/screenshots/simple-connected-with-assistant.png
           if-no-files-found: error
           retention-days: 3
