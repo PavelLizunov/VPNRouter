@@ -7,8 +7,11 @@ namespace VPNRouter.Core.Services;
 
 internal sealed record AssistantControl(int Id, string Name, string Kind, bool? Active);
 internal sealed record AssistantObservation(bool Connected, bool Busy, bool Simple,
-    IReadOnlyList<AssistantControl> Controls, string? Previous);
-internal enum AssistantStepStatus { Act, Finish, Clarify, AccessDenied, RateLimited, InvalidRequest, Unavailable }
+    IReadOnlyList<AssistantControl> Controls, string? Previous, AssistantCrashEvidence? Crash = null);
+internal enum AssistantStepStatus
+{
+    Act, Finish, Clarify, Diagnosis, AccessDenied, RateLimited, InvalidRequest, EndpointUnavailable, Unavailable,
+}
 internal sealed record AssistantStep(AssistantStepStatus Status, AssistantControl? Control = null,
     string? Text = null, bool? Toggle = null);
 
@@ -20,6 +23,7 @@ internal sealed partial class SubscriptionAssistantClient
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
     internal async Task<AssistantStep> StepAsync(string subscriptionUrl, string goal, bool russian,
@@ -33,7 +37,8 @@ internal sealed partial class SubscriptionAssistantClient
         bool ContainsCredential(string text) => identity.Credential.Length >= 8
             && text.Contains(identity.Credential, StringComparison.Ordinal);
         if (Encoding.UTF8.GetByteCount(goal) is < 1 or > 768
-            || goal.Any(IsDisallowedGoalCharacter) || ContainsCredential(goal))
+            || goal.Any(IsDisallowedGoalCharacter) || ContainsCredential(goal)
+            || (observation.Crash != null && (observation.Controls.Count != 0 || observation.Previous != null)))
             return new(AssistantStepStatus.InvalidRequest);
 
         var controls = observation.Controls.Where(control => !ContainsCredential(control.Name)).Take(32).ToList();
@@ -51,6 +56,7 @@ internal sealed partial class SubscriptionAssistantClient
                 observation.Simple,
                 Controls = controls,
                 Previous = previous,
+                observation.Crash,
             }, StepJson);
             if (body.Length <= RequestLimit) break;
             if (controls.Count == 0) return new(AssistantStepStatus.InvalidRequest);
@@ -71,9 +77,10 @@ internal sealed partial class SubscriptionAssistantClient
 
             return response.StatusCode switch
             {
-                200 => DecodeStep(response.Body, controls, ContainsCredential),
+                200 => DecodeStep(response.Body, controls, observation.Crash != null, ContainsCredential),
                 400 or 413 => new(AssistantStepStatus.InvalidRequest),
                 401 or 403 => new(AssistantStepStatus.AccessDenied),
+                404 => new(AssistantStepStatus.EndpointUnavailable),
                 429 => new(AssistantStepStatus.RateLimited),
                 _ => new(AssistantStepStatus.Unavailable),
             };
@@ -84,7 +91,7 @@ internal sealed partial class SubscriptionAssistantClient
         }
     }
 
-    private static AssistantStep DecodeStep(byte[] body, IReadOnlyList<AssistantControl> controls,
+    private static AssistantStep DecodeStep(byte[] body, IReadOnlyList<AssistantControl> controls, bool diagnosing,
         Func<string, bool> containsCredential)
     {
         using var document = JsonDocument.Parse(body);
@@ -96,6 +103,16 @@ internal sealed partial class SubscriptionAssistantClient
             return new(AssistantStepStatus.Unavailable);
 
         var operation = ReadString(result, "operation");
+        if (diagnosing)
+        {
+            var summary = ReadString(result, "summary")?.Trim();
+            if (operation == "diagnosis" && HasProperties(result, 2) && summary is { Length: > 0 }
+                && Encoding.UTF8.GetByteCount(summary) <= 384
+                && !summary.Any(c => char.IsControl(c) || IsDisallowedGoalCharacter(c))
+                && !containsCredential(summary))
+                return new(AssistantStepStatus.Diagnosis, Text: summary);
+            return new(AssistantStepStatus.Unavailable);
+        }
         if (HasProperties(result, 1))
             return operation switch
             {

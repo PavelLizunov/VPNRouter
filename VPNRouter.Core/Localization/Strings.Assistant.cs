@@ -7,6 +7,9 @@ public static partial class Strings
     public static string AssistantDataNotice => Ru
         ? "Текст команды отправляется в DeepSeek."
         : "Your request is sent to DeepSeek.";
+    public static string AssistantDiagnoseCrash => Ru ? "Разобрать сбой" : "Analyze crash";
+    public static string AssistantDiagnosingCrash => Ru ? "Проверяю отчёт о последнем сбое…" : "Checking the last crash report…";
+    public static string AssistantNoCrash => Ru ? "Сохранённый отчёт о сбое не найден." : "No saved crash report was found.";
     public static string AssistantApply => Ru ? "Настроить" : "Apply";
     public static string AssistantUndo => Ru ? "Отменить изменения" : "Undo changes";
     public static string AssistantCancel => Ru ? "Прервать" : "Cancel";
@@ -33,12 +36,15 @@ public static partial class Strings
         ? "Маршрут помощника отключён. Более поздние правки настроек сохранены."
         : "The assistant's route was stopped. Your later settings edits were kept.";
     public static string AssistantAppNeeded => Ru ? "Запустите приложение или укажите точное имя его процесса." : "Run the application or specify its exact process name.";
-    public static string AssistantUnsupportedGoal => Ru ? "Пока можно настроить Что настроить в VPNRouter?." : "Specify what you want VPNRouter to do.";
+    public static string AssistantUnsupportedGoal => Ru ? "Уточните, что нужно сделать в VPNRouter." : "Specify what you want VPNRouter to do.";
     public static string AssistantFinished => Ru ? "Помощник завершил шаги." : "The assistant finished its steps.";
     public static string AssistantNoChanges => Ru ? "Изменений не потребовалось." : "No changes were needed.";
     public static string AssistantStepLimit => Ru ? "Достигнут лимит шагов. Уточните оставшуюся задачу." : "The step limit was reached. Specify what remains.";
     public static string AssistantRateLimited => Ru ? "Лимит запросов исчерпан. Попробуйте позже." : "Request limit reached. Try again later.";
     public static string AssistantInvalidGoal => Ru ? "Введите короткую команду без данных подписки." : "Enter a short request without subscription details.";
     public static string AssistantUnavailable => Ru ? "DeepSeek недоступен. Попробуйте позже." : "DeepSeek is unavailable. Try again later.";
+    public static string AssistantEndpointUnavailable => Ru
+        ? "Сервер подписки пока не поддерживает эту версию помощника."
+        : "The subscription server does not support this assistant version yet.";
     public static string AssistantCancelled => Ru ? "Команда прервана. Проверьте состояние VPN." : "Request cancelled. Check the VPN status.";
 }

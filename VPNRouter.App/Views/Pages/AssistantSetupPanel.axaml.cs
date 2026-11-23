@@ -84,11 +84,13 @@ public partial class AssistantSetupPanel : UserControl
         AutomationProperties.SetName(AssistantGoal, Strings.AssistantGoalHint);
         AssistantNotice.Text = Strings.AssistantDataNotice;
         RunAssistant.Content = Strings.AssistantApply;
+        DiagnoseCrash.Content = Strings.AssistantDiagnoseCrash;
         CancelAssistant.Content = Strings.AssistantCancel;
         UndoAssistant.Content = Strings.AssistantUndo;
         AssistantGoal.IsVisible = canPlan;
         AssistantNotice.IsVisible = canPlan;
         RunAssistant.IsVisible = canPlan;
+        DiagnoseCrash.IsVisible = canPlan;
         UndoAssistant.IsVisible = canUndo;
     }
 
@@ -122,18 +124,24 @@ public partial class AssistantSetupPanel : UserControl
         if (_viewModel is { } vm) await RunAsync(vm.UndoAssistantGoalAsync);
     }
 
+    private async void DiagnoseCrash_Click(object? sender, RoutedEventArgs args)
+    {
+        if (_viewModel is { } vm)
+            await RunAsync(vm.DiagnoseAssistantCrashAsync, Strings.AssistantDiagnosingCrash, Strings.AssistantUnavailable);
+    }
+
     private void CancelFromWindow(object? sender, RoutedEventArgs args) => _request?.Cancel();
 
     private void CancelAssistant_Click(object? sender, RoutedEventArgs args) => _request?.Cancel();
 
-    private async Task RunAsync(Func<CancellationToken, Task<string>> action)
+    private async Task RunAsync(Func<CancellationToken, Task<string>> action, string? progress = null, string? error = null)
     {
         if (_request != null) return;
         using var request = new CancellationTokenSource();
         _request = request;
-        RunAssistant.IsEnabled = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
+        DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
         CancelAssistant.IsVisible = true;
-        AssistantStatus.Text = Strings.AssistantWorking;
+        AssistantStatus.Text = progress ?? Strings.AssistantWorking;
         try
         {
             AssistantStatus.Text = await action(request.Token);
@@ -144,13 +152,13 @@ public partial class AssistantSetupPanel : UserControl
         }
         catch (Exception)
         {
-            AssistantStatus.Text = Strings.AssistantApplyFailed;
+            AssistantStatus.Text = error ?? Strings.AssistantApplyFailed;
         }
         finally
         {
             _request = null;
             CancelAssistant.IsVisible = false;
-            RunAssistant.IsEnabled = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
+            DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
             RefreshLabels();
         }
     }

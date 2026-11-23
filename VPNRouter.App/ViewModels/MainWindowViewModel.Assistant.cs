@@ -59,6 +59,21 @@ public partial class MainWindowViewModel
             ?? (eligible.Length == 1 ? eligible[0] : null);
     }
 
+    internal async Task<string> DiagnoseAssistantCrashAsync(CancellationToken ct)
+    {
+        var evidence = await Task.Run(() => AssistantCrashEvidence.ReadLatest(AppPaths.DataDir), ct);
+        if (evidence == null) return Strings.AssistantNoCrash;
+        var subscription = SelectAssistantSubscription(_settings.App);
+        if (subscription == null) return Strings.AssistantSubscription;
+
+        var result = await StepAssistantAsync(subscription.Url, "Analyze the last VPNRouter crash", IsRussian,
+            new AssistantObservation(IsConnected, IsConnecting, IsSimpleMode, [], null, evidence), ct);
+        ct.ThrowIfCancellationRequested();
+        return result is { Status: AssistantStepStatus.Diagnosis, Text: { } summary }
+            ? summary
+            : AssistantStepMessage(result.Status, acted: false);
+    }
+
     internal async Task<string> RunAssistantGoalAsync(string goal, Window window, Control source, CancellationToken ct)
     {
         if (IsServiceManagedVpn || _displayExternalTunnel) return Strings.AssistantServiceManaged;
@@ -360,6 +375,7 @@ public partial class MainWindowViewModel
         AssistantStepStatus.Finish => acted ? Strings.AssistantFinished : Strings.AssistantNoChanges,
         AssistantStepStatus.Clarify => Strings.AssistantUnsupportedGoal,
         AssistantStepStatus.AccessDenied => Strings.AssistantAccessDenied,
+        AssistantStepStatus.EndpointUnavailable => Strings.AssistantEndpointUnavailable,
         AssistantStepStatus.RateLimited => Strings.AssistantRateLimited,
         AssistantStepStatus.InvalidRequest => Strings.AssistantInvalidGoal,
         _ => Strings.AssistantUnavailable,

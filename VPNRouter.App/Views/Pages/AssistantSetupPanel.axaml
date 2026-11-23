@@ -14,6 +14,8 @@
             <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
                 <Button x:Name="RunAssistant" AutomationProperties.AutomationId="Assistant.Run"
                         Click="RunAssistant_Click"/>
+                <Button x:Name="DiagnoseCrash" AutomationProperties.AutomationId="Assistant.DiagnoseCrash"
+                        Click="DiagnoseCrash_Click"/>
                 <Button x:Name="CancelAssistant" AutomationProperties.AutomationId="Assistant.Cancel"
                         Click="CancelAssistant_Click" IsVisible="False"/>
                 <Button x:Name="UndoAssistant" AutomationProperties.AutomationId="Assistant.Undo"
