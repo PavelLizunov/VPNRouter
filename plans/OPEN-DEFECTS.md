@@ -17,6 +17,7 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 ## Open
 
 - [ ] **P1** - Android VLESS with disabled TLS can abort libbox and remove the TUN. Reproduced with the released 2.50.2 ARM64 APK and a local profile on Android 14. Both the shipped 1.14.2-vpnctl.2 and current 1.14.4-vpnctl.2 sources construct a TLS dialer for a present but disabled TLS object. The review branch omits disabled VLESS TLS from generated and canonical Android config. Exact APK and live Android verification remain open. The Android 17 app-only complaint is not attributed to this crash. See [Android TUN policy review](phase-android-tun-review-2026-11-23.md).
+- [ ] **P2** - An uninstalled app in the saved Android VPN exclusions can block Connect and disappear from the picker. The review branch lets users remove saved packages that are absent from the app scan. APK verification remains open. See [Android TUN policy review](phase-android-tun-review-2026-11-23.md#independent-review-follow-up).
 
 - [ ] **P2** - An imported VMess row can report TLS failure in the quick probe because it uses the inherited Reality name in place of the profile TLS name. The Windows guest reproduces the difference on the same TLS endpoint. See `plans/phase-vmess-quick-probe-tls-sni-2026-11-22.md`.
 

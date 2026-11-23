@@ -45,6 +45,11 @@ public final class AndroidTunnelLifecycleTest {
         String picker = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.ServerList.cs"));
         requireOrdered(picker, "var selected = AndroidStorage.SelectedSubscriptionRow()?.In(source);",
                 "BuildServerRow(source, srv, selected)", "_srvRemoveBtn.IsEnabled = selected != null");
+        String appPicker = Files.readString(root.resolve("VPNRouter.Android/AndroidApp.PerAppFilter.cs"));
+        requireOrdered(appPicker, "var savedOutsideScan = _appPickerSelected", ".Except(_appPickerCache.Select",
+                ".Concat(savedOutsideScan)", "selectedRows.Add(app)", "BuildAppRow(app)");
+        requireOrdered(appPicker, "private Control BuildAppRow(", "_appPickerSelected.Remove(app.PackageName);",
+                "AndroidStorage.SetPerAppPackages(_appPickerSelected);");
         requireOrdered(activity, "var resolved = AndroidStorage.GetActiveServer(command);",
                 "BuildConfigJson(entry, singboxLogPath, OnMissingRuleSet)", "if (!AndroidStorage.IsCurrentUiCommand(command)) return;");
         String builder = Files.readString(root.resolve("VPNRouter.Android/AndroidConfigBuilder.cs"));

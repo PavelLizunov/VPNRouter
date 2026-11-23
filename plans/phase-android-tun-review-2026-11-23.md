@@ -85,7 +85,26 @@ playback still need a device and a path with working UDP.
   associate the requests with an app UID or show video delivery.
   The 18:06 bundle records server URL-test failures including
   timeouts. The November tails do not show the lab TLS panic.
-- Peer source comparison is recorded above. The independent review
-  was requested and had not reported at the time of this outcome.
-  No UI changed. Exact APK and live Android 17 verification are open.
-  Revert f620ecb0 to roll back the implementation.
+- No UI changed in f620ecb0. Exact APK and live Android 17 verification
+  are open. Revert f620ecb0 to roll back the TLS and config changes.
+
+## Independent review follow-up
+
+The independent review examined the original d50cfb2f blobs. It confirmed
+the disabled VLESS TLS object and the duplicate DNS preference behavior.
+Its main additional finding was an exclusion that survives uninstall:
+the tunnel requires the saved package, but the picker shows only apps
+from its current scan.
+
+Show saved packages absent from the scan in the existing picker. Keep
+them checked until the user removes them, including when a scan fails or
+the system-app filter hides a package. Keep native validation strict.
+Make the exclusion error explain the recovery action. Verify the picker
+population, search and uncheck path, then check removal and reconnection
+on a built Android APK when available.
+
+The source also confirms that the active picker takes priority over
+per-app rules in custom profiles, and that a Connect rejected while the
+native tunnel closes must be retried. Those changes require separate
+runtime coverage. The review did not test the possible custom-profile
+listener exposure on a device.
