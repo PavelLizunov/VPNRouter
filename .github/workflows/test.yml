@@ -11,7 +11,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 18
     env:
-      PREVIEW_SOURCE: 9d15537843bf5995ff78789ba3f1b3c8d09cfd64
+      PREVIEW_SOURCE: c2f1463183970b40a2713986b9e33939dedafe7a
     steps:
       - name: Checkout the exact preview source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
