@@ -10,6 +10,8 @@ internal enum AssistantCrashFault
 internal enum AssistantCrashArea { Unknown, Ui, Startup, Routing, Settings }
 internal enum AssistantCrashSignal { None, ProxyUnreachable, TunBusy, StopUnconfirmed }
 
+internal sealed record AssistantCrashReport(AssistantCrashEvidence Evidence, string? SourceIdentity, DateTime WrittenUtc);
+
 internal sealed record AssistantCrashEvidence(bool Fatal, AssistantCrashFault Fault,
     AssistantCrashArea Area, AssistantCrashSignal Signal)
 {
@@ -24,7 +26,7 @@ internal sealed record AssistantCrashEvidence(bool Fatal, AssistantCrashFault Fa
             foreach (var report in directory.EnumerateFiles("crash-*.txt")
                          .OrderByDescending(file => file.Name, StringComparer.Ordinal))
             {
-                if (ReadReport(report) is { } evidence) return evidence;
+                if (ReadReport(report) is { } reportData) return reportData.Evidence;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -33,7 +35,28 @@ internal sealed record AssistantCrashEvidence(bool Fatal, AssistantCrashFault Fa
         return null;
     }
 
-    private static AssistantCrashEvidence? ReadReport(FileInfo report)
+    internal static AssistantCrashReport? ReadLatestReport(string dataDirectory, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        try
+        {
+            var directory = new DirectoryInfo(Path.Combine(dataDirectory, "crashes"));
+            if (!directory.Exists) return null;
+            FileInfo? latest = null;
+            foreach (var report in directory.EnumerateFiles("crash-*.txt"))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (latest == null || string.CompareOrdinal(report.Name, latest.Name) > 0) latest = report;
+            }
+            return latest == null ? null : ReadReport(latest);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static AssistantCrashReport? ReadReport(FileInfo report)
     {
         try
         {
@@ -43,7 +66,7 @@ internal sealed record AssistantCrashEvidence(bool Fatal, AssistantCrashFault Fa
             var bytes = new byte[ReadLimit];
             int length = file.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false);
             var head = Encoding.UTF8.GetString(bytes, 0, length);
-            if (file.Position >= file.Length) return Parse(head);
+            if (file.Position >= file.Length) return Parse(head, report.LastWriteTimeUtc);
 
             // Keep the header and exception frames from the start and check recent log lines at the end.
             file.Position = Math.Max(file.Position, file.Length - ReadLimit) - 1;
@@ -51,8 +74,8 @@ internal sealed record AssistantCrashEvidence(bool Fatal, AssistantCrashFault Fa
             length = file.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false);
             var tail = Encoding.UTF8.GetString(bytes, 0, length);
             int tailStart = startsAtLine ? 0 : tail.IndexOf('\n') + 1;
-            if (!startsAtLine && tailStart == 0) return Parse(head);
-            return Parse(string.Concat(head.AsSpan(0, head.LastIndexOf('\n') + 1), tail.AsSpan(tailStart)));
+            if (!startsAtLine && tailStart == 0) return Parse(head, report.LastWriteTimeUtc);
+            return Parse(string.Concat(head.AsSpan(0, head.LastIndexOf('\n') + 1), tail.AsSpan(tailStart)), report.LastWriteTimeUtc);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -60,17 +83,22 @@ internal sealed record AssistantCrashEvidence(bool Fatal, AssistantCrashFault Fa
         }
     }
 
-    private static AssistantCrashEvidence? Parse(string report)
+    private static AssistantCrashReport? Parse(string report, DateTime writtenUtc)
     {
         using var lines = new StringReader(report);
         if (lines.ReadLine() != "VPNRouter crash report") return null;
         bool? fatal = null;
+        string? sourceIdentity = null;
+        bool header = true;
         var fault = AssistantCrashFault.Unknown;
         var area = AssistantCrashArea.Unknown;
         var signal = AssistantCrashSignal.None;
         bool inException = false, inLog = false;
         while (lines.ReadLine() is { } line)
         {
+            if (line.Length == 0) header = false;
+            if (header && !inException && !inLog && line.StartsWith("Source build: ", StringComparison.Ordinal))
+                sourceIdentity = line[14..];
             if (line == "──── Exception ────" && !inLog)
             {
                 inException = true;
@@ -97,7 +125,7 @@ internal sealed record AssistantCrashEvidence(bool Fatal, AssistantCrashFault Fa
                 fatal = terminating;
             }
         }
-        return fatal is { } value ? new(value, fault, area, signal) : null;
+        return fatal is { } value ? new(new(value, fault, area, signal), sourceIdentity, writtenUtc) : null;
     }
 
     private static AssistantCrashFault ReadFault(string line)

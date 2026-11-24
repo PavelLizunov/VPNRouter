@@ -67,7 +67,7 @@ internal sealed partial class SubscriptionAssistantClient
         {
             ["Authorization"] = $"Bearer {identity.Credential}",
             ["X-Vpnctl-Identity"] = identity.Kind,
-        }, body, "application/json", TimeSpan.FromSeconds(20)) { MaxResponseBytes = ResponseLimit };
+        }, body, "application/json", TimeSpan.FromSeconds(20)) { MaxResponseBytes = ResponseLimit, ReadErrorBody = false };
 
         try
         {

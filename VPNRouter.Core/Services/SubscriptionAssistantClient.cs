@@ -58,7 +58,7 @@ internal sealed partial class SubscriptionAssistantClient(IHttpClient http)
             },
             body, "application/json", TimeSpan.FromSeconds(20))
         {
-            MaxResponseBytes = ResponseLimit,
+            MaxResponseBytes = ResponseLimit, ReadErrorBody = false,
         };
 
         try

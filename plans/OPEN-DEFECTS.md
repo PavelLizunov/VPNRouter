@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P1** - Independent review of source diagnosis found that a partial latest report could select older evidence and unclassified input could produce a confident answer. The candidate reads only the newest report for this operation, requires an actionable classification and shows its local time and severity before sharing. Ordinary crash analysis retains its legacy selection. Packaged acceptance remains in the [Standard prerelease record](phase-standard-prerelease-r3-2026-11-24.md).
+
 - [x] **P2** - Verified VPN repair changes the runtime subscription row ID when it pins an alternate for the trial. The accepted server then fails to match the saved row in the desktop UI. An already pinned candidate can also change the saved pool semantics. RESOLVED at `09969ed1` with CI run `45176953517`. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
 - [x] **P2** - Cancelling a repair does not interrupt the Windows MTU ping sequence once started. Pass the repair token to the active process. RESOLVED at `09969ed1` with CI run `45176953517`. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).
 - [x] **P3** - If a candidate starts on a different row, the repair stops before trying the remaining automatic alternates. Retry only a clean rejection after teardown. RESOLVED at `09969ed1` with CI run `45176953517`. See [verified VPN repair](phase-deepseek-vpn-repair-2026-11-23.md).

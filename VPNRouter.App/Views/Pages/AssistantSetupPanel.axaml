@@ -28,6 +28,13 @@
                 <Button x:Name="UndoAssistant" AutomationProperties.AutomationId="Assistant.Undo"
                         Click="UndoAssistant_Click" IsVisible="False"/>
             </WrapPanel>
+            <Expander x:Name="SourceDiagnosisDetails" HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="SourceDiagnosisNotice" TextWrapping="Wrap"/>
+                    <Button x:Name="DiagnoseSource" HorizontalAlignment="Left"
+                            AutomationProperties.AutomationId="Assistant.DiagnoseSource" Click="DiagnoseSource_Click"/>
+                </StackPanel>
+            </Expander>
         </StackPanel>
     </StackPanel>
 </UserControl>

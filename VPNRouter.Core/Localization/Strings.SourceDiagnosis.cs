@@ -1,0 +1,57 @@
+using VPNRouter.Core.Services;
+
+namespace VPNRouter.Core.Localization;
+
+public static partial class Strings
+{
+    internal static string SourceDiagnosisTitle => Ru ? "Разбор по исходному коду" : "Analyze with source code";
+    internal static string SourceDiagnosisNotice => Ru
+        ? "DeepSeek получит версию приложения, систему, архитектуру и признаки последнего сбоя. Шлюз подберёт строки кода из этой сборки."
+        : "DeepSeek receives the app build, OS, architecture and the last crash indicators. The gateway selects source lines from this build.";
+    internal static string SourceDiagnosisPreview => Ru ? "Выбрать последний отчёт" : "Review latest report";
+    internal static string SourceDiagnosisNoReport => Ru ? "Нет доступного отчёта о последнем сбое." : "A readable crash report is unavailable.";
+    internal static string SourceDiagnosisInsufficient => Ru
+        ? "В отчёте не удалось определить ни тип ошибки, ни место сбоя, ни состояние подключения."
+        : "The report contains no recognized error, failing component or connection signal.";
+    internal static string SourceDiagnosisDeclined => Ru ? "Признаки сбоя остались на устройстве." : "Crash indicators stayed on this device.";
+    internal static string SourceDiagnosisDoNotSend => Ru ? "Не отправлять" : "Keep on device";
+    internal static string SourceDiagnosisConsent(AssistantCrashReport report)
+    {
+        var time = report.WrittenUtc.ToLocalTime().ToString("g", Ru
+            ? System.Globalization.CultureInfo.GetCultureInfo("ru-RU") : System.Globalization.CultureInfo.CurrentCulture);
+        var kind = report.Evidence.Fatal ? (Ru ? "аварийное завершение" : "fatal error") : (Ru ? "обработанный сбой" : "nonfatal error");
+        return Ru ? $"Отчёт от {time} ({kind}). Отправить сведения о сборке и признаки этого сбоя для разбора?"
+            : $"Report from {time} ({kind}). Send this build and the crash indicators for source analysis?";
+    }
+
+    internal static string SourceDiagnosisSend => Ru ? "Отправить признаки сбоя" : "Send crash indicators";
+    internal static string SourceDiagnosisMismatch => Ru
+        ? "Не удалось связать последний отчёт с установленной сборкой. Можно воспользоваться обычным разбором сбоя."
+        : "The last report could not be matched to this installation. You can still use Analyze crash.";
+    internal static string SourceDiagnosisUnknown => Ru
+        ? "В каталоге пока нет исходников этой сборки. Доступен обычный разбор сбоя."
+        : "Source for this build is unavailable in the catalog. You can still use Analyze crash.";
+    internal static string SourceDiagnosisWorking => Ru ? "Сопоставляю сбой с исходниками сборки…" : "Matching the crash to this build’s source…";
+
+    internal static string SourceDiagnosisText(AssistantSourceDiagnosis report)
+    {
+        var confidence = report.Confidence switch
+        {
+            "low" => Ru ? "низкая" : "low",
+            "medium" => Ru ? "средняя" : "medium",
+            "high" => Ru ? "высокая" : "high",
+            _ => throw new ArgumentOutOfRangeException(nameof(report)),
+        };
+        var check = report.Check switch
+        {
+            "view_connection_status" => Ru ? "Посмотрите состояние подключения в главном окне." : "View the connection status in the main window.",
+            "review_settings" => Ru ? "Сверьте текущие настройки подключения." : "Review the current connection settings.",
+            "view_last_crash" => Ru ? "Сверьте вывод с последним локальным отчётом о сбое." : "Compare this explanation with your last local crash report.",
+            _ => throw new ArgumentOutOfRangeException(nameof(report)),
+        };
+        var sources = string.Join("\n", report.Citations.Select(c => $"{c.Path} · L{c.First}–{c.Last}"));
+        return Ru
+            ? $"Возможная причина: {report.Hypothesis}\nОснование: {report.Basis}\nУверенность: {confidence}. {check}\n\nИсходники {report.Citations[0].Commit}\n{sources}"
+            : $"Possible cause: {report.Hypothesis}\nEvidence: {report.Basis}\nConfidence: {confidence}. {check}\n\nSource {report.Citations[0].Commit}\n{sources}";
+    }
+}

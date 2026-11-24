@@ -25,3 +25,7 @@ Use the existing stable installer and settings backup to restore test machines. 
 ## Observed outcomes
 
 PR 730 passed nine checks at 8f568e59 and merged as 0e29e063. The real Windows panel passed 54 checks on e9d3be76. This branch combines that work with Android 71df6fae. Acceptance of the combined binary is pending.
+
+The published r2 APK has package com.ninitux.vpnrouter, versionName 2.51.0-r2 and versionCode 2051000. Its SHA-256 is 9bf4f6269f1653eb10a7c21b0f064012ec4b521b365785af165fc883387cb5e0. Choose 2.51.1-r1 (2051001) because the Android project excludes the candidate suffix when deriving its install code. Verify that number and the signing identity in the final APK.
+
+The source diagnosis request is explicit in the desktop panel. New crash reports record the originating revision. An older or mismatched report stays eligible for ordinary diagnosis. The release Android job retains the resolved restore graph alongside the APK digest as a CI artifact for dependency review.

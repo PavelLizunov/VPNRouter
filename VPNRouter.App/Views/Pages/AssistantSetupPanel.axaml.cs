@@ -15,6 +15,7 @@ public partial class AssistantSetupPanel : UserControl
     private MainWindowViewModel? _viewModel;
     private readonly List<SubscriptionViewModel> _subscriptions = [];
     private CancellationTokenSource? _request;
+    private bool _diagnosingSource;
     private TaskCompletionSource<bool>? _confirmation;
 
     public AssistantSetupPanel()
@@ -55,7 +56,7 @@ public partial class AssistantSetupPanel : UserControl
 
     private void SubscriptionsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (_confirmation != null) _request?.Cancel();
+        if (_confirmation != null || _diagnosingSource) _request?.Cancel();
         TrackSubscriptions();
         RefreshLabels();
     }
@@ -75,7 +76,7 @@ public partial class AssistantSetupPanel : UserControl
     {
         if (args.PropertyName is nameof(SubscriptionViewModel.Url) or nameof(SubscriptionViewModel.Enabled))
         {
-            if (_confirmation != null) _request?.Cancel();
+            if (_confirmation != null || _diagnosingSource) _request?.Cancel();
             RefreshLabels();
         }
     }
@@ -90,10 +91,15 @@ public partial class AssistantSetupPanel : UserControl
         AutomationProperties.SetName(AssistantGoal, Strings.AssistantGoalHint);
         AssistantNotice.Text = Strings.AssistantDataNotice;
         RunAssistant.Content = Strings.AssistantPlan;
-        ConfirmAssistant.Content = Strings.AssistantConfirm;
+        ConfirmAssistant.Content = _diagnosingSource ? Strings.SourceDiagnosisSend : Strings.AssistantConfirm;
         DiagnoseCrash.Content = Strings.AssistantDiagnoseCrash;
+        SourceDiagnosisDetails.Header = Strings.SourceDiagnosisTitle;
+        SourceDiagnosisDetails.IsVisible = canPlan;
+        SourceDiagnosisNotice.Text = Strings.SourceDiagnosisNotice;
+        DiagnoseSource.Content = Strings.SourceDiagnosisPreview;
         RepairVpn.Content = Strings.AssistantRepair;
-        CancelAssistant.Content = _confirmation != null ? Strings.AssistantDecline : Strings.AssistantCancel;
+        CancelAssistant.Content = _confirmation == null ? Strings.AssistantCancel :
+            _diagnosingSource ? Strings.SourceDiagnosisDoNotSend : Strings.AssistantDecline;
         UndoAssistant.Content = Strings.AssistantUndo;
         AssistantGoal.IsVisible = canPlan;
         AssistantNotice.IsVisible = canPlan;
@@ -139,6 +145,25 @@ public partial class AssistantSetupPanel : UserControl
             await RunAsync(vm.DiagnoseAssistantCrashAsync, Strings.AssistantDiagnosingCrash, Strings.AssistantUnavailable);
     }
 
+    private async void DiagnoseSource_Click(object? sender, RoutedEventArgs args)
+    {
+        if (_viewModel is not { } vm || _request != null || TopLevel.GetTopLevel(this) is not Window window) return;
+        _diagnosingSource = true;
+        window.AddHandler(InputElement.KeyDownEvent, CancelFromWindow, RoutingStrategies.Tunnel);
+        window.AddHandler(InputElement.PointerPressedEvent, CancelFromWindow, RoutingStrategies.Tunnel);
+        try
+        {
+            await RunAsync(ct => vm.DiagnoseAssistantSourceAsync(ConfirmChangeAsync, ct), Strings.SourceDiagnosisWorking, Strings.AssistantUnavailable);
+        }
+        finally
+        {
+            window.RemoveHandler(InputElement.KeyDownEvent, CancelFromWindow);
+            window.RemoveHandler(InputElement.PointerPressedEvent, CancelFromWindow);
+            _diagnosingSource = false;
+            RefreshLabels();
+        }
+    }
+
     private async void RepairVpn_Click(object? sender, RoutedEventArgs args)
     {
         if (_viewModel is { } vm)
@@ -151,7 +176,8 @@ public partial class AssistantSetupPanel : UserControl
         var choice = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _confirmation = choice;
         AssistantStatus.Text = description;
-        CancelAssistant.Content = Strings.AssistantDecline;
+        CancelAssistant.Content = _diagnosingSource ? Strings.SourceDiagnosisDoNotSend : Strings.AssistantDecline;
+        ConfirmAssistant.Content = _diagnosingSource ? Strings.SourceDiagnosisSend : Strings.AssistantConfirm;
         ConfirmAssistant.IsVisible = true;
         CancelAssistant.Focus();
         try
@@ -171,7 +197,7 @@ public partial class AssistantSetupPanel : UserControl
         if (_confirmation?.TrySetResult(true) == true)
         {
             ConfirmAssistant.IsVisible = false;
-            AssistantStatus.Text = Strings.AssistantWorking;
+            AssistantStatus.Text = _diagnosingSource ? Strings.SourceDiagnosisWorking : Strings.AssistantWorking;
         }
     }
 
@@ -195,7 +221,7 @@ public partial class AssistantSetupPanel : UserControl
         if (_request != null) return;
         using var request = new CancellationTokenSource();
         _request = request;
-        RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
+        DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
             = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
         CancelAssistant.IsVisible = true;
         AssistantStatus.Text = progress ?? Strings.AssistantWorking;
@@ -215,7 +241,7 @@ public partial class AssistantSetupPanel : UserControl
         {
             _request = null;
             CancelAssistant.IsVisible = false;
-            RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
+            DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
                 = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
             RefreshLabels();
         }
