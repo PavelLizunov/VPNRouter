@@ -105,3 +105,13 @@ Preserve proof of the original profile across rotations and restarts. Test
 the pasted link with a second saved server, an unrelated same-id link, and
 an authoritative removal. Check that local grant metadata leaves the
 connection fingerprint used for rollback assistance unchanged.
+
+All ten hosted checks passed at `c2f14631`. The installed Windows x64
+package from run 45457391717 refreshed the stale subscription profile,
+connected after the original link was pasted again, and reconnected after
+restart. The Advanced selection and the second saved row survived. HTTPS
+and DNS over UDP passed. STUN timed out on this network. The installed
+suite passed 28 checks, with three documented limits. The parsed missing
+and ambiguous feed cases passed in hosted tests. WINBRAT returned to its
+original application and settings. The only remaining P1 disposition for
+this prerelease is the owner's Windows/Linux Cronet exception above.
