@@ -83,6 +83,9 @@
     <EmbeddedResource Include="../packaging/windows/installer/zapret-maintenance.ps1" LogicalName="VPNRouter.Update.zapret-maintenance.ps1" />
     <EmbeddedResource Include="../packaging/windows/installer/repair-environment.ps1" LogicalName="VPNRouter.Update.repair-environment.ps1" />
     <EmbeddedResource Include="../packaging/windows/installer/stop-vpnrouter.ps1" LogicalName="VPNRouter.Update.stop-vpnrouter.ps1" />
+    <EmbeddedResource Include="Recovery/publisher.pem" LogicalName="VPNRouter.Recovery.publisher.pem" />
+    <EmbeddedResource Include="Recovery/windows-2.50.5.json" LogicalName="VPNRouter.Recovery.windows-2.50.5.json" />
+    <EmbeddedResource Include="Recovery/windows-2.50.5.sig" LogicalName="VPNRouter.Recovery.windows-2.50.5.sig" />
   </ItemGroup>
 
 </Project>

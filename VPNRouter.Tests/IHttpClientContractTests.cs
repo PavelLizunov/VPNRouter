@@ -213,6 +213,20 @@ public sealed class IHttpClientContractTests
         Assert.Equal(0, handler.CallCount);
     }
 
+    [Fact]
+    public async Task Status_only_errors_preserve_headers_without_reading_a_large_proxy_error_page()
+    {
+        var handler = StubHandler.Sync((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent(new string('x', 8192)),
+        });
+        using var http = new PolicyHttpClient(new HttpClient(handler));
+        var request = new HttpRequest(HttpMethod.Get, new Uri(TestUrl)) { MaxResponseBytes = 4096, ReadErrorBody = false };
+        var response = await http.SendAsync(request, TestContext.Current.CancellationToken);
+        Assert.Equal(404, response.StatusCode);
+        Assert.Empty(response.Body);
+    }
+
     private sealed class StubHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _respond;

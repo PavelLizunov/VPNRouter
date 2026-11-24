@@ -304,10 +304,17 @@ public class VPNRouterService : BackgroundService
         {
             if (!TgProxyUpdater.IsInstalled(Serilog.Log.Logger))
             {
-                _logger.LogWarning("[Service] TgProxy not installed, skipping autostart");
+                var runtimeFilesPresent = TgProxyUpdater.HasRuntimeFiles();
+                _logger.LogWarning(
+                    runtimeFilesPresent
+                        ? "[Service] TgProxy runtime files are present but Python or dependencies are missing or outdated, skipping autostart"
+                        : "[Service] TgProxy not installed, skipping autostart");
                 WriteEventLog(
-                    "TgProxy autostart skipped: tg-ws-proxy is not installed. " +
-                    "Open the Telegram tab in the desktop app and click Install.",
+                    runtimeFilesPresent
+                        ? "TgProxy autostart skipped: Python or dependencies are missing or outdated. " +
+                          "Open the Telegram tab in the desktop app and click Update."
+                        : "TgProxy autostart skipped: tg-ws-proxy is not installed. " +
+                          "Open the Telegram tab in the desktop app and click Install.",
                     EventLogEntryType.Warning);
                 return;
             }

@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
@@ -155,14 +156,23 @@ public sealed class UpdateNotificationViewModelTests
     {
         var olderA = SampleInfo("2.49.2");
         var olderB = SampleInfo("2.49.1");
-        var fake = new FakeUpdateSource
-        {
-            StableReleases = new[] { olderA, olderB },
-        };
+        var pending = new TaskCompletionSource<IReadOnlyList<UpdateSourceInfo>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var fake = new FakeUpdateSource { PendingStableReleases = pending.Task };
         var vm = new UpdateNotificationViewModel(DefaultSettings(), DefaultLogger(), fake);
+        var publishedOnUi = new List<bool>();
+        vm.StableVersions.CollectionChanged += (_, args) =>
+        {
+            if (args.NewItems?.OfType<RollbackReleaseItemViewModel>().Any(row => !row.IsInstalled) == true)
+                publishedOnUi.Add(Dispatcher.UIThread.CheckAccess());
+        };
 
-        await vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+        var listing = vm.ToggleVersionHistoryCommand.ExecuteAsync(null);
+        Assert.True(vm.IsLoadingVersionHistory);
+        pending.SetResult(new[] { olderA, olderB });
+        await listing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
+        Assert.Equal(new[] { true, true }, publishedOnUi.ToArray());
         Assert.True(vm.IsVersionHistoryVisible);
         Assert.Equal(1, fake.ListStableCallCount);
         Assert.Equal(3, vm.StableVersions.Count);
@@ -182,6 +192,8 @@ public sealed class UpdateNotificationViewModelTests
         vm.StableVersions[1].SelectCommand.Execute(null);
 
         Assert.True(vm.IsRollbackConfirmationVisible);
+        Assert.True(vm.IsHistoryRollbackConfirmationVisible);
+        Assert.False(vm.IsAssistedRollbackConfirmationVisible);
         Assert.Same(older, vm.SelectedRollback);
         Assert.Contains("2.49.2", vm.RollbackConfirmationText);
         Assert.Equal(0, fake.DownloadCallCount);

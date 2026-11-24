@@ -235,6 +235,28 @@ jobs:
           sha256sum "$APK" | awk '{print $1"  "$2}' > "${APK}.sha256"
           echo "→ $(cat "${APK}.sha256")"
 
+      - name: Record resolved Android dependencies for this APK
+        env:
+          APK: ${{ steps.apk.outputs.apk }}
+        run: |
+          set -euo pipefail
+          jq -e --arg sha "$GITHUB_SHA" --arg apk "$(sha256sum "$APK" | cut -d' ' -f1)" '
+            select(.targets | type == "object" and length > 0)
+            | {commit: $sha, apk_sha256: $apk,
+               targets: (.targets | map_values(map_values({type, dependencies}))),
+               packages: (.libraries | with_entries(select(.value.type == "package"))
+                 | map_values({sha512}))}
+            | select(.packages | length > 0)
+          ' VPNRouter.Android/obj/project.assets.json > android-dependencies.json
+
+      - name: Retain the dependency inventory
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: android-dependencies-${{ github.sha }}
+          path: android-dependencies.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload as workflow artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:

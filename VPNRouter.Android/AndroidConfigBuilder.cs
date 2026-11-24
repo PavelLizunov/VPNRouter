@@ -17,18 +17,7 @@ public static class AndroidConfigBuilder
 
     internal static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath, Action<string>? onMissingRuleSet)
     {
-        var settings = new AppSettings();
-        settings.App.RoutingMode = "full";
-        settings.App.LogLevel = "info";
-        settings.App.ConfigMode = "generated";
-        settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
-        settings.App.BlockAds = AndroidStorage.GetBlockAds();
-        settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
-        {
-            "prefer_ipv6" => false,
-            "prefer_ipv4" => false,
-            _ => true,
-        };
+        var settings = CreateAndroidSettings("generated");
         if (!string.IsNullOrEmpty(entry.DetourVia) || (!entry.UseAsSingleOutbound && AndroidStorage.GetAutoSelectBestServer()))
             AndroidStorage.PrepareServerPool(settings.Vless, entry);
         else
@@ -64,9 +53,7 @@ public static class AndroidConfigBuilder
 
         var json = ConfigGenerator.Serialize(sbConfig);
 
-        var patched = PatchLogPathForAndroid(json, logOutputPath);
-
-        return InjectDpiBypass(patched, AndroidStorage.GetDpiBypassMode());
+        return InjectDpiBypass(PatchLogPathForAndroid(json, logOutputPath), AndroidStorage.GetDpiBypassMode());
     }
 
     public static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath = null) =>
@@ -74,26 +61,22 @@ public static class AndroidConfigBuilder
 
     internal static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath, Action<string>? onMissingRuleSet)
     {
+        var settings = CreateAndroidSettings("custom");
+        var processNames = System.Array.Empty<string>();
+        var injectedJson = CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet);
+        return InjectDpiBypass(PatchLogPathForAndroid(injectedJson, logOutputPath), AndroidStorage.GetDpiBypassMode());
+    }
+
+    private static AppSettings CreateAndroidSettings(string configMode)
+    {
         var settings = new AppSettings();
         settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
-        settings.App.ConfigMode = "custom";
+        settings.App.ConfigMode = configMode;
         settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
         settings.App.BlockAds = AndroidStorage.GetBlockAds();
-        settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
-        {
-            "prefer_ipv6" => false,
-            "prefer_ipv4" => false,
-            _ => true,
-        };
-
-        var processNames = System.Array.Empty<string>();
-
-        var injectedJson = CustomConfigInjector.Inject(rawJson, processNames, settings, onMissingRuleSet);
-
-        var patched = PatchLogPathForAndroid(injectedJson, logOutputPath);
-
-        return InjectDpiBypass(patched, AndroidStorage.GetDpiBypassMode());
+        settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() is not ("prefer_ipv4" or "prefer_ipv6");
+        return settings;
     }
 
     public static string InjectDpiBypass(string json, string mode)

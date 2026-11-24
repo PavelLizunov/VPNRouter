@@ -49,13 +49,15 @@ public partial class UpdateChecker
     private static string WindowsInstallDir => UpdateBackup.SnapshotInstallDirectory(AppContext.BaseDirectory)
         ?? Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
 
-    public static string? CheckInstallReceipt(string currentVersion)
+    public static string? CheckInstallReceipt(string currentVersion, string? receiptPathOverride = null)
     {
         try
         {
             var protectedReceipt = UseProtectedWindowsReceipt ? Path.Combine(WindowsInstallDir, ".update-installed-version") : null;
-            var receiptPath = protectedReceipt != null && File.Exists(protectedReceipt)
-                ? protectedReceipt : Path.Combine(AppPaths.DataDir, ".update-installed-version");
+            var receiptPath = receiptPathOverride ??
+                (protectedReceipt != null && File.Exists(protectedReceipt)
+                    ? protectedReceipt
+                    : Path.Combine(AppPaths.DataDir, ".update-installed-version"));
             if (!File.Exists(receiptPath))
                 return null;
 
@@ -72,6 +74,11 @@ public partial class UpdateChecker
 
             if (cur.CompareTo(prev) > 0)
             {
+                // Capture the confirmed previous installation before the receipt
+                // is consumed. This is evidence for the rollback assistant, not
+                // proof that the old configuration worked.
+                ConnectionRollbackHistory.CapturePreviousInstalledVersion(
+                    previousVersion, "update-receipt");
                 TryDelete(receiptPath);
                 return null;
             }

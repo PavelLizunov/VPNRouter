@@ -478,9 +478,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public MainWindowViewModel(ISettingsStore? settingsStore) : this(settingsStore, null) { }
 
     internal MainWindowViewModel(ISettingsStore? settingsStore, ILogger? logger,
-        VPNRouter.Core.Services.UpdateSources.IUpdateSource? updateSource = null, Action<int>? exitApplication = null)
+        VPNRouter.Core.Services.UpdateSources.IUpdateSource? updateSource = null, Action<int>? exitApplication = null,
+        ConnectionRollbackHistory? rollbackHistory = null)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
+        _rollbackHistory = rollbackHistory ?? new ConnectionRollbackHistory();
 
         _logger = logger ?? new LoggerConfiguration()
             .WriteTo.File(
@@ -513,8 +515,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WireServersOrphanTracking();
         WireSimpleHomeNotifications();
 
-        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger, updateSource, exitApplication);
+        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger, updateSource, exitApplication, _rollbackHistory);
         UpdateVm.ReserveRestart = ReserveRestart;
+        UpdateVm.RunLocalDiagnostics = ExportDiagnosticsAsync;
+        UpdateVm.MatchesRollbackConfig = fingerprint => !IsConnected && !IsConnecting &&
+            !_engine.HasActiveTunnel && ConnectionRollbackHistory.ComputeConfigFingerprint(_settings) == fingerprint;
+        UpdateVm.ActiveConfigIncompatibility = ActiveRollbackIncompatibility;
+        RefreshRollbackAssistance();
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 

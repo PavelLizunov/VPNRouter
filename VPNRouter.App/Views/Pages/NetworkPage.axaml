@@ -1725,7 +1725,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
-              <Border IsVisible="{Binding UpdateVm.IsRollbackConfirmationVisible}"
+              <Border IsVisible="{Binding UpdateVm.IsHistoryRollbackConfirmationVisible}"
                       Padding="8" CornerRadius="{StaticResource RadiusSm}"
                       Background="{DynamicResource WarningBgBrush}"
                       BorderBrush="{DynamicResource WarningBorderBrush}"

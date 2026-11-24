@@ -53,9 +53,18 @@ public partial class MainWindowViewModel
 
             if (!TgProxyUpdater.IsInstalled())
             {
-                _logger.Information(
-                    "[App-Autostart] TgProxy: not installed, skipping autostart " +
-                    "(user must run the Telegram tab once to download tg-ws-proxy)");
+                if (TgProxyUpdater.HasRuntimeFiles())
+                {
+                    _logger.Information(
+                        "[App-Autostart] TgProxy: runtime files are present but Python or dependencies " +
+                        "are missing or outdated, skipping autostart (update from the Telegram tab)");
+                }
+                else
+                {
+                    _logger.Information(
+                        "[App-Autostart] TgProxy: not installed, skipping autostart " +
+                        "(user must run the Telegram tab once to download tg-ws-proxy)");
+                }
                 return;
             }
 

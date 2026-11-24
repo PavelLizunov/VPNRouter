@@ -17,4 +17,5 @@ public class UpdateInfo
     public string? FullChecksumUrl { get; init; }
     public string? LiteChecksumUrl { get; init; }
     public string? FullChecksumSha256 { get; init; }
+    public bool RequireExactSize { get; init; }
 }

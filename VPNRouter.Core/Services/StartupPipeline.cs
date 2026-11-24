@@ -7,6 +7,11 @@ using VPNRouter.Core.Platform.macOS;
 
 namespace VPNRouter.Core.Services;
 
+internal sealed class TunnelExitedDuringStartupException() :
+    InvalidOperationException("The tunnel exited before its startup settings could be accepted.")
+{
+}
+
 public sealed record StartupContext(
     AppSettings Settings,
     StartupMode Mode,
@@ -272,7 +277,7 @@ internal sealed class StartupPipeline
         {
             ct.ThrowIfCancellationRequested();
             if (!_host.IsCurrentStart(pid))
-                throw new InvalidOperationException("The tunnel exited before its startup settings could be accepted.");
+                throw new TunnelExitedDuringStartupException();
             publishAcceptedImport?.Invoke();
             _host.CommitTunnelInfo(tunnelInfo);
         }
