@@ -2,6 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text.Json;
+using VPNRouter.Core.Json;
 using Serilog;
 using VPNRouter.Core.Models;
 
@@ -10,14 +14,26 @@ namespace VPNRouter.Core.Services;
 // A generated-mode DNSTT row can be a copy of a subscription grant: the user imported
 // the dnstt:// link before the feed rotated its domain, Noise key or SSH fields. A later
 // refresh must not replace an arbitrary generated row, so capture binds the old row to
-// exactly one enabled HTTPS registration whose previous cache contains that exact grant
-// (including the client credential) and exactly one matching outbound id. The apply step
-// repeats the same checks against the live settings and the published feed.
+// exactly one enabled HTTPS registration and an exact old grant, including the client
+// credential. A saved binding hash retains that match when a feed displaces another row.
+// The apply step checks the live selection and requires a unique replacement id.
 internal static class DnsttSelectionRefresh
 {
     internal enum RefreshOutcome
     {
+        // The binding no longer describes the live selection, settings or feed registrations.
         Invalid,
+
+        // The feed could not be fetched or parsed. An empty body or zero parsed rows is not
+        // proof that the grant was revoked, so the caller keeps the old cache and may retry.
+        FetchFailed,
+
+        // The feed parsed successfully but no longer advertises the selected outbound id.
+        Missing,
+
+        // The feed parsed successfully but advertises more than one matching outbound id or
+        // an unusable replacement, so it cannot be reconciled safely.
+        Ambiguous,
 
         Unchanged,
 
@@ -44,6 +60,32 @@ internal static class DnsttSelectionRefresh
         string OutboundId,
         GrantProfile Profile);
 
+    internal static string? KeyOf(Binding? binding) =>
+        binding == null ? null : BindingHash(binding.FeedId, binding.FeedUrl, binding.Profile);
+
+    private static string BindingHash(string feedId, string url, GrantProfile profile)
+    {
+        List<string> fields = [feedId, url, profile.OutboundId, profile.Protocol, profile.Security,
+            profile.Server, profile.Port.ToString(CultureInfo.InvariantCulture), profile.Domain,
+            profile.NoiseKey, profile.SshHostKey, profile.SshPrivateKey];
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(fields, AppJsonContext.Default.ListString);
+        try { return Convert.ToHexString(SHA256.HashData(bytes)); }
+        finally { CryptographicOperations.ZeroMemory(bytes); }
+    }
+
+    private static SubscriptionEntry? SingleFeed(AppSettings settings)
+    {
+        var enabled = settings.App?.Subscriptions?.Where(feed => feed is { Enabled: true }).Take(2).ToArray();
+        return enabled is { Length: 1 } && IsHttps(enabled[0].Url) ? enabled[0] : null;
+    }
+
+    private static bool MatchesCachedGrant(IEnumerable<VlessServerEntry> rows, GrantProfile profile)
+    {
+        var matches = rows.Where(row => string.Equals(row?.OutboundId, profile.OutboundId,
+            StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+        return matches.Length == 1 && ProfileOf(matches[0]) == profile;
+    }
+
     internal static Binding? Capture(AppSettings settings)
     {
         if (settings?.Vless?.Servers is not { } servers ||
@@ -63,29 +105,51 @@ internal static class DnsttSelectionRefresh
         if (servers.Count(row => string.Equals(row?.OutboundId, active.OutboundId, StringComparison.OrdinalIgnoreCase)) != 1)
             return null;
 
-        var enabled = (settings.App?.Subscriptions ?? new List<SubscriptionEntry>())
-            .Where(feed => feed is { Enabled: true })
-            .ToList();
-        // A second enabled registration could own a grant with the same opaque id. Do not choose one,
-        // and DNSTT grants are imported only from an HTTPS response.
-        if (enabled.Count != 1 || !IsHttps(enabled[0].Url)) return null;
-        var feed = enabled[0];
-        if (feed.Servers is not { Count: > 0 } previous) return null;
-
-        var exact = previous
-            .Where(row => row is not null && ProfileOf(row) == profile)
-            .Take(2)
-            .ToArray();
-        if (exact.Length != 1) return null;
-        if (previous.Count(row => string.Equals(row?.OutboundId, active.OutboundId, StringComparison.OrdinalIgnoreCase)) != 1)
-            return null;
+        var feed = SingleFeed(settings);
+        if (feed?.Servers is not { } previous) return null;
+        if (!MatchesCachedGrant(previous, profile) &&
+            active.DnsttRefreshBinding != BindingHash(feed.Id, feed.Url, profile)) return null;
 
         return new Binding(feed.Id, feed.Url, previous, active, active.Name, active.OutboundId, profile);
     }
 
+    internal static bool MatchesRegisteredGrant(AppSettings settings, VlessServerEntry candidate)
+    {
+        if (!IsOpaqueGrantId(candidate.OutboundId) || ProfileOf(candidate) is not { } profile ||
+            SingleFeed(settings) is not { Servers: not null } feed) return false;
+        if (MatchesCachedGrant(feed.Servers, profile)) return true;
+        var key = BindingHash(feed.Id, feed.Url, profile);
+        return settings.Vless.Servers.Any(row => row?.DnsttRefreshBinding == key && ProfileOf(row) == profile);
+    }
+
+    internal static bool SameGrant(VlessServerEntry? left, VlessServerEntry? right) =>
+        ProfileOf(left) is { } profile && ProfileOf(right) == profile;
+
+    // Keep proof of the previous exact match for other saved rows if this publication
+    // removes or rotates them. Only the selected row may receive replacement credentials.
+    internal static void RememberDisplacedGrants(AppSettings settings, SubscriptionCacheUpdate update)
+    {
+        if (update.Failed || !IsGenerated(settings.App.ConfigMode) ||
+            !ReferenceEquals(SingleFeed(settings), update.Origin) ||
+            !settings.Vless.Servers.Any(row => row?.Dnstt != null)) return;
+        var previous = update.PreviousRows.ToLookup(row => row?.OutboundId, StringComparer.OrdinalIgnoreCase);
+        var current = update.Candidate.Servers.ToLookup(row => row?.OutboundId, StringComparer.OrdinalIgnoreCase);
+        foreach (var row in settings.Vless.Servers)
+        {
+            if (row?.Dnstt == null || !IsOpaqueGrantId(row.OutboundId) || ProfileOf(row) is not { } profile)
+                continue;
+            if (MatchesCachedGrant(previous[profile.OutboundId], profile) &&
+                !MatchesCachedGrant(current[profile.OutboundId], profile))
+                row.DnsttRefreshBinding = BindingHash(update.Origin.Id, update.Origin.Url, profile);
+        }
+    }
+
     // Evaluated before the feed replacement is published. Invalid means the replacement would
-    // destroy the only binding to the old cache (selection/edit race, ambiguity or a missing grant),
-    // so the caller must retain the previous cache.
+    // destroy the only binding to the old cache (selection/edit race or a changed registration),
+    // so the caller must retain the previous cache. FetchFailed is a transient or unparseable
+    // answer (including an empty body); only a successfully parsed feed can report Missing or
+    // Ambiguous. Both are blocking for a manual connect because the old credential is no longer
+    // known to be valid.
     internal static RefreshOutcome Evaluate(
         AppSettings settings,
         Binding? binding,
@@ -136,22 +200,29 @@ internal static class DnsttSelectionRefresh
 
         if (update.Candidate.Servers is not { } nextRows)
             return RefreshOutcome.Invalid;
+        // FetchAsync marks a failed fetch, an empty body and a body that parsed to zero usable
+        // rows as Failed. None of those is an authoritative removal of the grant, so keep the
+        // old cache and let the next ordinary refresh or connect retry.
+        if (update.Failed)
+            return RefreshOutcome.FetchFailed;
+
         var matches = nextRows
             .Where(row => row is { Dnstt: not null } &&
                 string.Equals(row.OutboundId, binding.OutboundId, StringComparison.OrdinalIgnoreCase))
             .Take(2)
             .ToArray();
-        if (matches.Length != 1) return RefreshOutcome.Invalid;
+        if (matches.Length == 0) return RefreshOutcome.Missing;
+        if (matches.Length != 1) return RefreshOutcome.Ambiguous;
         if (nextRows.Count(row => string.Equals(row?.OutboundId, binding.OutboundId, StringComparison.OrdinalIgnoreCase)) != 1)
-            return RefreshOutcome.Invalid;
+            return RefreshOutcome.Ambiguous;
 
         var next = matches[0];
         if (ProfileOf(next) is not { } nextProfile)
-            return RefreshOutcome.Invalid;
+            return RefreshOutcome.Ambiguous;
         if (string.IsNullOrWhiteSpace(next.Server) || next.Port is <= 0 or > 65535 ||
             string.IsNullOrWhiteSpace(nextProfile.Domain) || string.IsNullOrWhiteSpace(nextProfile.NoiseKey) ||
             string.IsNullOrWhiteSpace(nextProfile.SshHostKey) || string.IsNullOrWhiteSpace(nextProfile.SshPrivateKey))
-            return RefreshOutcome.Invalid;
+            return RefreshOutcome.Ambiguous;
 
         return nextProfile == binding.Profile ? RefreshOutcome.Unchanged : RefreshOutcome.Applied;
     }
@@ -213,7 +284,7 @@ internal static class DnsttSelectionRefresh
             grant.SshPrivateKey ?? string.Empty);
     }
 
-    private static bool IsGenerated(string? mode) =>
+    internal static bool IsGenerated(string? mode) =>
         (mode ?? "generated").Trim().Equals("generated", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsOpaqueGrantId(string? outboundId) =>

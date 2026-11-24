@@ -1,7 +1,9 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
@@ -89,6 +91,571 @@ public sealed class DnsttGeneratedRefreshTests : IDisposable
 
     private static VlessServerEntry Active(AppSettings settings) =>
         Assert.Single(settings.Vless.GetActiveServers());
+
+    private static List<AppSettings> CaptureStarts(MainWindowViewModel vm)
+    {
+        var starts = new List<AppSettings>();
+        vm.SimpleTunnelStart = (submission, _, _) =>
+        {
+            starts.Add(submission);
+            return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.Connected));
+        };
+        return starts;
+    }
+
+    [AvaloniaFact]
+    public async Task PastedStaleGrantIsConsumedAndKeepsTheRotatedRowAndManualRows()
+    {
+        var active = ServerUriParser.Parse(Link(OldDomain, 'a'));
+        var manual = ServerUriParser.Parse(Link(OtherDomain, 'c', "manual", "Manual DNSTT"));
+        var settings = GeneratedSettings(active,
+            FeedEntry(Feed, ServerUriParser.Parse(Link(OldDomain, 'a'))));
+        settings.Vless.Servers.Add(manual);
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        vm.SmpInput = Link(OldDomain, 'a');
+        var starts = CaptureStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(http.SentRequests);
+        var first = Assert.Single(starts);
+        Assert.Equal(2, first.Vless.Servers.Count);
+        Assert.Equal(NewDomain, Active(first).Dnstt!.Domain);
+        Assert.Contains(first.Vless.Servers, row => row.Name == "Manual DNSTT");
+        var saved = Recovery(store);
+        Assert.Equal(2, saved.Vless.Servers.Count);
+        Assert.Equal(NewDomain, Active(saved).Dnstt!.Domain);
+        Assert.Contains(saved.Vless.Servers, row => row.Name == "Manual DNSTT");
+
+        // The retained input must not be re-imported over the rotated row on the next Connect.
+        vm.IsConnected = false;
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(http.SentRequests);
+        Assert.Equal(2, starts.Count);
+        Assert.Equal(NewDomain, Active(starts[1]).Dnstt!.Domain);
+        Assert.Equal(2, starts[1].Vless.Servers.Count);
+        Assert.Contains(starts[1].Vless.Servers, row => row.Name == "Manual DNSTT");
+    }
+
+    [AvaloniaTheory]
+    [InlineData("other", "SENKO DNSTT", true)]
+    [InlineData("senko", "Other name", true)]
+    [InlineData("other", "SENKO DNSTT", false)]
+    [InlineData("senko", "Other name", false)]
+    public async Task PastedSubscriptionGrantRefusesConflictingSavedRows(
+        string otherId, string otherName, bool alreadySaved)
+    {
+        var pasted = Link(OldDomain, 'a');
+        var other = ServerUriParser.Parse(Link(OtherDomain, 'c', otherId, otherName));
+        var settings = GeneratedSettings(other, FeedEntry(Feed, ServerUriParser.Parse(pasted)));
+        if (alreadySaved) settings.Vless.Servers.Add(ServerUriParser.Parse(pasted));
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        var selectedBefore = vm.SelectedServer;
+        var rowsBefore = vm.Servers.ToArray();
+        var starts = CaptureStarts(vm);
+        vm.SmpInput = pasted;
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Empty(starts);
+        Assert.Empty(http.SentRequests);
+        Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
+        Assert.Same(selectedBefore, vm.SelectedServer);
+        Assert.Equal(rowsBefore, vm.Servers.ToArray());
+        Assert.Equal(OtherDomain, Recovery(store).Vless.Servers[0].Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task PastedManualDnsttThatDoesNotMatchTheCacheIsImported()
+    {
+        var settings = GeneratedSettings(
+            ServerUriParser.Parse(Link(OldDomain, 'a')),
+            FeedEntry(Feed, ServerUriParser.Parse(Link(OldDomain, 'a'))));
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        vm.SmpInput = Link(OtherDomain, 'c', "manual", "Manual DNSTT");
+        var starts = CaptureStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Empty(http.SentRequests);
+        var started = Assert.Single(starts);
+        Assert.Equal("Manual DNSTT", started.Vless.ActiveServer);
+        Assert.Equal(OtherDomain, Active(started).Dnstt!.Domain);
+        Assert.Equal(Link(OtherDomain, 'c', "manual", "Manual DNSTT"), vm.SmpInput);
+    }
+
+    [AvaloniaFact]
+    public async Task SecondGeneratedSelectionRefreshesItsOwnGrantOnly()
+    {
+        const string bNew = "b-new.example.test";
+        var a = ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT"));
+        var b = ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"));
+        var settings = GeneratedSettings(a,
+            FeedEntry(Feed,
+                ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT")),
+                ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"))));
+        settings.Vless.Servers.Add(b);
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var firstHttp = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(NewDomain, 'b', "grant-a", "A DNSTT"),
+                Link(OtherDomain, 'c', "grant-b", "B DNSTT")));
+        SubscriptionFetcher.Http = firstHttp;
+        using var vm = new MainWindowViewModel(store);
+        var starts = CaptureStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(firstHttp.SentRequests);
+        Assert.Equal(NewDomain, Active(starts[0]).Dnstt!.Domain);
+
+        vm.IsConnected = false;
+        vm.SelectedServer = vm.Servers.Single(row => row.Name == "B DNSTT");
+        var secondHttp = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(NewDomain, 'b', "grant-a", "A DNSTT"),
+                Link(bNew, 'd', "grant-b", "B DNSTT")));
+        SubscriptionFetcher.Http = secondHttp;
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(secondHttp.SentRequests);
+        Assert.Equal(2, starts.Count);
+        var second = starts[1];
+        Assert.Equal("B DNSTT", second.Vless.ActiveServer);
+        Assert.Equal(bNew, Active(second).Dnstt!.Domain);
+        Assert.Equal(NewDomain,
+            second.Vless.Servers.Single(row => row.Name == "A DNSTT").Dnstt!.Domain);
+        var savedSecond = Recovery(store);
+        var savedB = savedSecond.App.Subscriptions.Single().Servers.Single(row => row.Name == "B DNSTT");
+        Assert.Equal(bNew, savedB.Dnstt!.Domain);
+        Assert.Equal(new string('d', 64), savedB.Dnstt.NoiseKey);
+        Assert.False(string.IsNullOrWhiteSpace(savedB.Dnstt.SshHostKey));
+        Assert.False(string.IsNullOrWhiteSpace(savedB.Dnstt.SshPrivateKey));
+    }
+
+    [AvaloniaFact]
+    public async Task AdvancedImmediateSelectionRefreshesTheVisibleRow()
+    {
+        const string bNew = "b-new.example.test";
+        var a = ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT"));
+        var b = ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"));
+        var settings = GeneratedSettings(a,
+            FeedEntry(Feed,
+                ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT")),
+                ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"))));
+        settings.Vless.Servers.Add(b);
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(OldDomain, 'a', "grant-a", "A DNSTT"),
+                Link(bNew, 'd', "grant-b", "B DNSTT")));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        vm.SelectedServer = vm.Servers.Single(row => row.Name == "B DNSTT");
+        var starts = CaptureStarts(vm);
+
+        await vm.ToggleConnectionCommand.ExecuteAsync(null);
+
+        Assert.Single(http.SentRequests);
+        var started = Assert.Single(starts);
+        Assert.Equal("B DNSTT", started.Vless.ActiveServer);
+        Assert.Equal(bNew, Active(started).Dnstt!.Domain);
+        Assert.Equal(OldDomain,
+            started.Vless.Servers.Single(row => row.Name == "A DNSTT").Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task AdvancedSecondConnectAfterReloadRefreshesTheNextSelection()
+    {
+        const string aNew = "a-new.example.test";
+        const string bNew = "b-new.example.test";
+        var a = ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT"));
+        var b = ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"));
+        var settings = GeneratedSettings(a,
+            FeedEntry(Feed,
+                ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT")),
+                ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"))));
+        settings.Vless.Servers.Add(b);
+        var store = new SerializingSettingsStore(new InMemorySettingsStore());
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var firstHttp = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(aNew, 'b', "grant-a", "A DNSTT"),
+                Link(bNew, 'd', "grant-b", "B DNSTT")));
+        SubscriptionFetcher.Http = firstHttp;
+        using var vm = new MainWindowViewModel(store);
+        vm.SelectedServer = vm.Servers.Single(row => row.Name == "B DNSTT");
+        var starts = CaptureStarts(vm);
+
+        await vm.ToggleConnectionCommand.ExecuteAsync(null);
+
+        Assert.Single(firstHttp.SentRequests);
+        Assert.Equal(bNew, Active(starts[0]).Dnstt!.Domain);
+        Assert.Equal(OldDomain, starts[0].Vless.Servers.Single(row => row.Name == "A DNSTT").Dnstt!.Domain);
+
+        // The command reloads settings after the first connect. Select the other grant and
+        // connect again; the live feed graph must still be the one the views own.
+        vm.IsConnected = false;
+        vm.SelectedServer = vm.Servers.Single(row => row.Name == "A DNSTT");
+        var secondHttp = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(aNew, 'b', "grant-a", "A DNSTT"),
+                Link(bNew, 'd', "grant-b", "B DNSTT")));
+        SubscriptionFetcher.Http = secondHttp;
+
+        await vm.ToggleConnectionCommand.ExecuteAsync(null);
+
+        Assert.Single(secondHttp.SentRequests);
+        Assert.Equal(2, starts.Count);
+        Assert.Equal("A DNSTT", starts[1].Vless.ActiveServer);
+        Assert.Equal(aNew, Active(starts[1]).Dnstt!.Domain);
+        Assert.Equal(bNew,
+            starts[1].Vless.Servers.Single(row => row.Name == "B DNSTT").Dnstt!.Domain);
+        var saved = SettingsLoader.Copy(store.Load(AppPaths.ConfigYamlPath));
+        Assert.Equal(aNew, Active(saved).Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task AdvancedUnsavedEditIsNotReplacedByTheFeed()
+    {
+        var a = ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT"));
+        var b = ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"));
+        var settings = GeneratedSettings(a,
+            FeedEntry(Feed,
+                ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT")),
+                ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"))));
+        settings.Vless.Servers.Add(b);
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(OldDomain, 'a', "grant-a", "A DNSTT"),
+                Link("b-new.example.test", 'd', "grant-b", "B DNSTT")));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        vm.SelectedServer = vm.Servers.Single(row => row.Name == "B DNSTT");
+        vm.SelectedServer.Server = "203.0.113.9";
+        var starts = CaptureStarts(vm);
+
+        await vm.ToggleConnectionCommand.ExecuteAsync(null);
+
+        Assert.Empty(http.SentRequests);
+        var started = Assert.Single(starts);
+        Assert.Equal("B DNSTT", started.Vless.ActiveServer);
+        Assert.Equal("203.0.113.9", Active(started).Server);
+        Assert.Equal(OtherDomain, Active(started).Dnstt!.Domain);
+        Assert.Equal(OtherDomain,
+            Recovery(store).App.Subscriptions.Single().Servers.Single(row => row.Name == "B DNSTT").Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task SecondSelectionDuringFetchPreventsTheFirstResponseFromApplying()
+    {
+        const string bNew = "b-new.example.test";
+        var a = ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT"));
+        var b = ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"));
+        var settings = GeneratedSettings(a,
+            FeedEntry(Feed,
+                ServerUriParser.Parse(Link(OldDomain, 'a', "grant-a", "A DNSTT")),
+                ServerUriParser.Parse(Link(OtherDomain, 'c', "grant-b", "B DNSTT"))));
+        settings.Vless.Servers.Add(b);
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(NewDomain, 'b', "grant-a", "A DNSTT"),
+                Link(OtherDomain, 'c', "grant-b", "B DNSTT")));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        SubscriptionFetcher.Http = new WaitForEdit(http, entered, release.Task);
+        using var vm = new MainWindowViewModel(store);
+        var source = Assert.Single(vm.Subscriptions);
+        var starts = CaptureStarts(vm);
+        var ct = TestContext.Current.CancellationToken;
+        var command = vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+            vm.SelectedServer = vm.Servers.Single(row => row.Name == "B DNSTT");
+        }
+        finally
+        {
+            release.TrySetResult();
+            await command.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        }
+
+        Assert.Single(http.SentRequests);
+        Assert.True(source.LastRefreshFailed);
+        Assert.Empty(starts);
+        Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
+        Assert.Equal(OldDomain,
+            Recovery(store).App.Subscriptions.Single().Servers.Single(row => row.Name == "A DNSTT").Dnstt!.Domain);
+
+        vm.IsConnected = false;
+        var secondHttp = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(OldDomain, 'a', "grant-a", "A DNSTT"),
+                Link(bNew, 'd', "grant-b", "B DNSTT")));
+        SubscriptionFetcher.Http = secondHttp;
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(secondHttp.SentRequests);
+        Assert.Single(starts);
+        Assert.Equal(bNew, Active(starts[0]).Dnstt!.Domain);
+        Assert.Equal(OldDomain,
+            starts[0].Vless.Servers.Single(row => row.Name == "A DNSTT").Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task ConnectDuringOrdinaryRefreshRefusesAndRetriesAfterItSettles()
+    {
+        var active = ServerUriParser.Parse(Link(OldDomain, 'a'));
+        var store = new InMemorySettingsStore();
+        store.Save(GeneratedSettings(active,
+            FeedEntry(Feed, ServerUriParser.Parse(Link(OldDomain, 'a')))), AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        SubscriptionFetcher.Http = new WaitForEdit(http, entered, release.Task);
+        using var vm = new MainWindowViewModel(store);
+        var source = Assert.Single(vm.Subscriptions);
+        var starts = CaptureStarts(vm);
+        var ct = TestContext.Current.CancellationToken;
+        var refreshing = vm.RefreshSubscriptionCommand.ExecuteAsync(source);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+            var connect = vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            await connect.WaitAsync(TimeSpan.FromSeconds(5), ct);
+            Assert.Empty(starts);
+            Assert.False(vm.IsConnecting);
+            Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
+        }
+        finally
+        {
+            release.TrySetResult();
+            await refreshing.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        }
+
+        // The superseded ordinary refresh must not publish its rotated row.
+        Assert.Equal(OldDomain, vm.SelectedServer!.SourceEntry.Dnstt!.Domain);
+        Assert.Equal(OldDomain,
+            Recovery(store).App.Subscriptions.Single().Servers.Single().Dnstt!.Domain);
+
+        var retry = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = retry;
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(retry.SentRequests);
+        Assert.Single(starts);
+        Assert.Equal(NewDomain, Active(starts[0]).Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task RemovedGrantKeepsTheCacheAndBlocksTheManualConnect()
+    {
+        var active = ServerUriParser.Parse(Link(OldDomain, 'a'));
+        var store = new InMemorySettingsStore();
+        store.Save(GeneratedSettings(active,
+            FeedEntry(Feed, ServerUriParser.Parse(Link(OldDomain, 'a')))), AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, Link(OtherDomain, 'c', "other", "Other DNSTT"));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        var source = Assert.Single(vm.Subscriptions);
+        var starts = CaptureStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Empty(starts);
+        Assert.False(vm.IsConnected);
+        Assert.False(vm.IsConnecting);
+        Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
+        Assert.True(source.LastRefreshFailed);
+        var saved = Recovery(store);
+        Assert.Equal(OldDomain, Active(saved).Dnstt!.Domain);
+        Assert.Equal(OldDomain,
+            saved.App.Subscriptions.Single().Servers.Single().Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task OfflineRetryAfterRemovalKeepsTheRefusalAcrossRestart()
+    {
+        var store = new SerializingSettingsStore(new InMemorySettingsStore());
+        var link = Link(OldDomain, 'a');
+        store.Save(GeneratedSettings(ServerUriParser.Parse(link),
+            FeedEntry(Feed, ServerUriParser.Parse(link))), AppPaths.ConfigYamlPath);
+        SubscriptionFetcher.Http = new FakeHttpClient().Setup(Feed, Link(OtherDomain, 'c', "other"));
+        using (var vm = new MainWindowViewModel(store))
+        {
+            var starts = CaptureStarts(vm);
+            await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            Assert.Empty(starts);
+        }
+
+        using var restarted = new MainWindowViewModel(store);
+        var retried = CaptureStarts(restarted);
+        restarted.SmpInput = link;
+        SubscriptionFetcher.Http = new FakeHttpClient().ThrowOn(Feed, new HttpRequestException("offline"));
+        await restarted.SmpToggleConnectCommand.ExecuteAsync(null);
+        Assert.Empty(retried);
+        Assert.False(string.IsNullOrWhiteSpace(restarted.SmpErrorText));
+
+        SubscriptionFetcher.Http = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        await restarted.SmpToggleConnectCommand.ExecuteAsync(null);
+        Assert.Equal(NewDomain, Active(Assert.Single(retried)).Dnstt!.Domain);
+        Assert.Null(Active(store.Load(AppPaths.ConfigYamlPath)).DnsttRefreshBinding);
+    }
+
+    [AvaloniaFact]
+    public async Task RemovedGrantAfterASuccessfulRotationIsRefetchedAndBlocked()
+    {
+        var active = ServerUriParser.Parse(Link(OldDomain, 'a'));
+        var store = new InMemorySettingsStore();
+        store.Save(GeneratedSettings(active,
+            FeedEntry(Feed, ServerUriParser.Parse(Link(OldDomain, 'a')))), AppPaths.ConfigYamlPath);
+        var firstHttp = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = firstHttp;
+        using var vm = new MainWindowViewModel(store);
+        var source = Assert.Single(vm.Subscriptions);
+        var starts = CaptureStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(starts);
+        Assert.Equal(NewDomain, Active(starts[0]).Dnstt!.Domain);
+
+        vm.IsConnected = false;
+        var ordinaryRemoval = new FakeHttpClient().Setup(Feed,
+            Link(OtherDomain, 'c', "other", "Other DNSTT"));
+        SubscriptionFetcher.Http = ordinaryRemoval;
+
+        await vm.RefreshSubscriptionCommand.ExecuteAsync(source);
+
+        Assert.Single(ordinaryRemoval.SentRequests);
+        Assert.True(source.LastRefreshFailed);
+        Assert.Equal(NewDomain, vm.SelectedServer!.SourceEntry.Dnstt!.Domain);
+        Assert.Equal(NewDomain,
+            Recovery(store).App.Subscriptions.Single().Servers.Single().Dnstt!.Domain);
+
+        var connectRemoval = new FakeHttpClient().Setup(Feed,
+            Link(OtherDomain, 'c', "other", "Other DNSTT"));
+        SubscriptionFetcher.Http = connectRemoval;
+        var blockedStarts = CaptureStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(connectRemoval.SentRequests);
+        Assert.Empty(blockedStarts);
+        Assert.False(vm.IsConnected);
+        Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
+        Assert.Equal(NewDomain, Recovery(store).Vless.Servers.Single().Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task AmbiguousGrantKeepsTheCacheAndBlocksTheManualConnect()
+    {
+        var active = ServerUriParser.Parse(Link(OldDomain, 'a'));
+        var store = new InMemorySettingsStore();
+        store.Save(GeneratedSettings(active,
+            FeedEntry(Feed, ServerUriParser.Parse(Link(OldDomain, 'a')))), AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed,
+            string.Join('\n', Link(NewDomain, 'b'), Link(OtherDomain, 'c')));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        var starts = CaptureStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(http.SentRequests);
+        Assert.Empty(starts);
+        Assert.False(vm.IsConnected);
+        Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
+        Assert.Equal(OldDomain, Recovery(store).Vless.Servers.Single().Dnstt!.Domain);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("empty")]
+    [InlineData("throw")]
+    public async Task TransientFeedFailureKeepsTheOldGrantAndTheNextConnectRetries(string failure)
+    {
+        var active = ServerUriParser.Parse(Link(OldDomain, 'a'));
+        var store = new InMemorySettingsStore();
+        store.Save(GeneratedSettings(active,
+            FeedEntry(Feed, ServerUriParser.Parse(Link(OldDomain, 'a')))), AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient();
+        if (failure == "empty") http.Setup(Feed, string.Empty);
+        else http.ThrowOn(Feed, new HttpRequestException("fixture"));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        var source = Assert.Single(vm.Subscriptions);
+        var starts = CaptureStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(http.SentRequests);
+        Assert.Single(starts);
+        Assert.Equal(OldDomain, Active(starts[0]).Dnstt!.Domain);
+        Assert.True(source.LastRefreshFailed);
+
+        vm.IsConnected = false;
+        var retry = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = retry;
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(retry.SentRequests);
+        Assert.Equal(2, starts.Count);
+        Assert.Equal(NewDomain, Active(starts[1]).Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
+    public async Task FailedSaveLeavesTheFirstConnectRetryable()
+    {
+        var active = ServerUriParser.Parse(Link(OldDomain, 'a'));
+        var settings = GeneratedSettings(active,
+            FeedEntry(Feed, ServerUriParser.Parse(Link(OldDomain, 'a'))));
+        settings.App.Language = "en";
+        var inner = new InMemorySettingsStore();
+        var store = new FailingSettingsStore(inner);
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = http;
+        using var vm = new MainWindowViewModel(store);
+        var starts = CaptureStarts(vm);
+
+        store.FailNextSave = true;
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(http.SentRequests);
+        Assert.Single(starts);
+        Assert.Equal(NewDomain, Active(starts[0]).Dnstt!.Domain);
+        Assert.Equal(NewDomain,
+            Active(SettingsLoader.Copy(store.Load(AppPaths.ConfigYamlPath))).Dnstt!.Domain);
+
+        // The in-refresh save failed, so the one-shot skip must be unset and the next connect
+        // must fetch and save again rather than relying on memory only.
+        vm.IsConnected = false;
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, http.SentRequests.Count);
+        Assert.Equal(2, starts.Count);
+        Assert.Equal(NewDomain, Active(SettingsLoader.Copy(store.Load(AppPaths.ConfigYamlPath))).Dnstt!.Domain);
+
+        vm.IsConnected = false;
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, http.SentRequests.Count);
+        Assert.Equal(3, starts.Count);
+    }
 
     [AvaloniaFact]
     public async Task OrdinaryGeneratedRefreshRotatesTheSelectedRowAndPersists()
@@ -430,6 +997,55 @@ public sealed class DnsttGeneratedRefreshTests : IDisposable
 
         Assert.Empty(http.SentRequests);
         Assert.Equal(OldDomain, vm.SelectedServer!.SourceEntry.Dnstt!.Domain);
+    }
+
+    private sealed class SerializingSettingsStore(ISettingsStore inner) : ISettingsStore
+    {
+        public AppSettings Load(string? path = null) => SettingsLoader.Copy(inner.Load(path));
+
+        public void Save(AppSettings settings, string? path = null) =>
+            inner.Save(SettingsLoader.Copy(settings), path);
+
+        public string? ResetToDefaults(string? path = null) => inner.ResetToDefaults(path);
+
+        public string? ConsumeRecoveryNotice() => inner.ConsumeRecoveryNotice();
+
+        public (int Count, string AtUtc) ConsumePlaceholderPruneNotice(AppSettings settings) =>
+            inner.ConsumePlaceholderPruneNotice(settings);
+
+        public void StartWatching(string? path = null, Action<AppSettings>? onReload = null) =>
+            inner.StartWatching(path, onReload);
+
+        public void StopWatching() => inner.StopWatching();
+    }
+
+    private sealed class FailingSettingsStore(ISettingsStore inner) : ISettingsStore
+    {
+        public bool FailNextSave { get; set; }
+
+        public AppSettings Load(string? path = null) => inner.Load(path);
+
+        public void Save(AppSettings settings, string? path = null)
+        {
+            if (FailNextSave)
+            {
+                FailNextSave = false;
+                throw new IOException("fixture save failure");
+            }
+            inner.Save(settings, path);
+        }
+
+        public string? ResetToDefaults(string? path = null) => inner.ResetToDefaults(path);
+
+        public string? ConsumeRecoveryNotice() => inner.ConsumeRecoveryNotice();
+
+        public (int Count, string AtUtc) ConsumePlaceholderPruneNotice(AppSettings settings) =>
+            inner.ConsumePlaceholderPruneNotice(settings);
+
+        public void StartWatching(string? path = null, Action<AppSettings>? onReload = null) =>
+            inner.StartWatching(path, onReload);
+
+        public void StopWatching() => inner.StopWatching();
     }
 
     private sealed class WaitForEdit(IHttpClient http, TaskCompletionSource entered, Task release) : IHttpClient

@@ -244,7 +244,10 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var startOverride = submitted == null ? null : SimpleTunnelStart;
+        // Tests replace the two-phase start for user-initiated connects. Production leaves this
+        // null; Simple submissions and the manual Advanced command share the same seam, while
+        // assistant-driven state changes keep the real engine path.
+        var startOverride = (manual || submitted != null) ? SimpleTunnelStart : null;
 #if PLATFORM_WINDOWS
         if (startOverride == null && VPNRouter.App.Services.WindowsServiceHelper.IsRunning()
             && TunOwnershipLock.IsOwnedByAnyone())
@@ -268,8 +271,16 @@ public partial class MainWindowViewModel
             if (manual && submitted == null)
             {
                 var generation = _connectionGeneration;
-                await RefreshGeneratedDnsttSelectionAsync(generation, cancellationToken);
+                var blocked = await RefreshGeneratedDnsttSelectionAsync(generation, cancellationToken);
                 if (!IsCurrentConnectionPreparation(generation)) return;
+                if (blocked != null)
+                {
+                    SmpErrorText = blocked;
+                    StatusText = blocked;
+                    IsConnecting = false;
+                    ConnectButtonText = Strings.StartVPN;
+                    return;
+                }
             }
 
             if (submitted == null)

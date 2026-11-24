@@ -193,6 +193,73 @@ public sealed class DnsttSelectionRefreshTests
     }
 
     [Fact]
+    public void EvaluateReportsAFailedOrEmptyFetchAsTransient()
+    {
+        var active = Grant();
+        var feed = FeedEntry(Grant());
+        var settings = Settings(feed, active);
+        var binding = DnsttSelectionRefresh.Capture(settings);
+        var candidate = new SubscriptionEntry
+        {
+            Id = feed.Id,
+            Url = feed.Url,
+            Enabled = feed.Enabled,
+            Servers = feed.Servers,
+        };
+        var update = new SubscriptionCacheUpdate(feed, feed.Servers, candidate, true);
+
+        Assert.Equal(
+            DnsttSelectionRefresh.RefreshOutcome.FetchFailed,
+            DnsttSelectionRefresh.Evaluate(settings, binding, update));
+    }
+
+    [Fact]
+    public void EvaluateReportsARemovedGrantAsMissing()
+    {
+        var active = Grant();
+        var feed = FeedEntry(Grant());
+        var settings = Settings(feed, active);
+        var binding = DnsttSelectionRefresh.Capture(settings);
+        var candidate = new SubscriptionEntry
+        {
+            Id = feed.Id,
+            Url = feed.Url,
+            Enabled = feed.Enabled,
+            Servers = [Grant(domain: "new.example.test", outboundId: "dnstt:other")],
+        };
+        var update = new SubscriptionCacheUpdate(feed, feed.Servers, candidate, false);
+
+        Assert.Equal(
+            DnsttSelectionRefresh.RefreshOutcome.Missing,
+            DnsttSelectionRefresh.Evaluate(settings, binding, update));
+    }
+
+    [Fact]
+    public void EvaluateReportsDuplicateGrantIdsAsAmbiguous()
+    {
+        var active = Grant();
+        var feed = FeedEntry(Grant());
+        var settings = Settings(feed, active);
+        var binding = DnsttSelectionRefresh.Capture(settings);
+        var candidate = new SubscriptionEntry
+        {
+            Id = feed.Id,
+            Url = feed.Url,
+            Enabled = feed.Enabled,
+            Servers =
+            [
+                Grant(domain: "new.example.test"),
+                Grant(domain: "other.example.test"),
+            ],
+        };
+        var update = new SubscriptionCacheUpdate(feed, feed.Servers, candidate, false);
+
+        Assert.Equal(
+            DnsttSelectionRefresh.RefreshOutcome.Ambiguous,
+            DnsttSelectionRefresh.Evaluate(settings, binding, update));
+    }
+
+    [Fact]
     public void ApplyRotatesOnlyTheSelectedGrant()
     {
         var active = Grant();

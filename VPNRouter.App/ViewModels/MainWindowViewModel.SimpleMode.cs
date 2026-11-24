@@ -349,9 +349,15 @@ public partial class MainWindowViewModel
 
             // A generated-mode home connect has no subscription URL input to refresh. Fetch the
             // single enabled registration once so a rotated imported DNSTT grant is current.
-            if (kind == SmpInputKind.Invalid)
-                await RefreshGeneratedDnsttSelectionAsync(generation, CancellationToken.None);
+            // This also covers a retained dnstt:// link, which may be a stale copy of an owned
+            // grant: Capture returns null for a genuinely manual or different row.
+            var blocked = await RefreshGeneratedDnsttSelectionAsync(generation, CancellationToken.None);
             if (!Preparing()) return;
+            if (blocked != null)
+            {
+                SmpErrorText = blocked;
+                return;
+            }
 
             if (IsSplitTunnel) _settings.ActiveProfile = SimpleSplitProfile;
             SaveSettings();
@@ -378,7 +384,7 @@ public partial class MainWindowViewModel
                 {
                     var updates = await FetchSubscriptionRowsAsync(rows, CancellationToken.None);
                     if (!Preparing()) return;
-                    if (!PublishSubscriptionRows(rows, updates, submitted))
+                    if (!PublishSubscriptionRows(rows, updates, submitted).Accepted)
                     {
                         SmpErrorText = Strings.SyncEmpty;
                         return;
@@ -603,6 +609,31 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
+    private string? _consumedServerInput;
+    private VlessServerEntry? _consumedServerEntry;
+
+    // The home screen keeps a pasted server link in the input after Connect. Once that link has
+    // been applied, a later Connect must use the saved row (which may have been rotated by the
+    // feed) instead of re-importing the stale text and dropping other rows. The entry reference
+    // also makes removing the saved row re-enable the import.
+    private bool IsConsumedServerUri(string uri) =>
+        _consumedServerInput != null &&
+        _consumedServerEntry != null &&
+        string.Equals(uri.Trim(), _consumedServerInput, StringComparison.Ordinal) &&
+        DnsttSelectionRefresh.IsGenerated(_settings.App.ConfigMode) &&
+        Servers.Any(vm => ReferenceEquals(vm.SourceEntry, _consumedServerEntry)) &&
+        SelectedServer != null;
+
+    partial void OnSmpInputChanged(string value)
+    {
+        if (_consumedServerInput != null &&
+            !string.Equals(value?.Trim(), _consumedServerInput, StringComparison.Ordinal))
+        {
+            _consumedServerInput = null;
+            _consumedServerEntry = null;
+        }
+    }
+
     private bool TryApplyVless(string uri)
     {
         try
@@ -622,7 +653,40 @@ public partial class MainWindowViewModel
                 return false;
             }
 
+            if (IsConsumedServerUri(uri)) return true;
+
             var entry = ServerUriParser.Parse(uri);
+
+            // Keep the saved row and its refresh history when the pasted profile belongs
+            // to the registered feed. A new row uses the independently parsed link.
+            if (entry.Dnstt != null &&
+                DnsttSelectionRefresh.MatchesRegisteredGrant(_settings, entry))
+            {
+                var row = Servers.FirstOrDefault(vm =>
+                    DnsttSelectionRefresh.SameGrant(vm.SourceEntry, entry));
+                if (HasConflictingDnsttRow(row, entry))
+                {
+                    SmpErrorText = GeneratedDnsttRowConflict;
+                    return false;
+                }
+                if (row == null)
+                {
+                    row = new ServerViewModel(entry);
+                    Servers.Add(row);
+                }
+                if (string.IsNullOrWhiteSpace(row.Name) && !string.IsNullOrWhiteSpace(entry.Name))
+                    row.Name = entry.Name;
+                SelectedServer = row;
+                _settings.Vless.ActiveServer = row.Name ?? string.Empty;
+                _settings.App.ConfigMode = "generated";
+                _settings.App.ActiveSubscriptionServer = string.Empty;
+                IsSubscribeMode = false;
+                IsVlessMode = true;
+                ApplyServersToSettings();
+                _consumedServerInput = uri.Trim();
+                _consumedServerEntry = row.SourceEntry;
+                return true;
+            }
 
             _settings.Vless.Servers = new List<VlessServerEntry> { entry };
             _settings.Vless.ActiveServer = entry.Name ?? string.Empty;
@@ -636,6 +700,8 @@ public partial class MainWindowViewModel
             _settings.App.ActiveSubscriptionServer = string.Empty;
             IsSubscribeMode = false;
             IsVlessMode = true;
+            _consumedServerInput = null;
+            _consumedServerEntry = null;
             return true;
         }
         catch (Exception)
