@@ -52,3 +52,23 @@ still matches the preview. The exact resolver has Windows and Unix cases.
 The 98-case fixture checks both the parser and the ViewModel and pins the
 ordered UTF-8 texts independently of checkout line endings. Generic UI
 automation is now a test helper.
+
+## Acceptance
+
+All nine PR checks passed on `e9d3be7638edfb47beb6a59bd686f2b31ecdbdb1`.
+Linux passed 4,321 tests, including the 98 original abstention cases. Windows
+passed 4,534 tests with 31 skips. [CI run](https://github.com/PavelLizunov/VPNRouter/actions/runs/45293010039)
+
+The installed Windows preview matched that commit and the verified package
+checksum. On November 24 the desktop panel passed 54 checks on WINBRAT using
+the registered test subscription and the authenticated step endpoint.
+Questions and quotations left the configuration unchanged. Declining kept
+the original bytes, confirming changed only the requested DNS preference,
+and repeating the enabled preference produced a local no-op. Confirming the
+opposite value restored the original bytes. The original installation was
+restored and the test lease released. [Preview build](https://github.com/PavelLizunov/VPNRouter/actions/runs/45293092689)
+
+An earlier harness attempt assumed that two different informational requests
+would return different messages. The corrected check waits for completion.
+The focused acceptance closes the text-action P1 for this source revision.
+The combined Standard prerelease has separate integration and release gates.
