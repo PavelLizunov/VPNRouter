@@ -657,13 +657,20 @@ public partial class MainWindowViewModel
 
             var entry = ServerUriParser.Parse(uri);
 
-            // Keep the saved row and its refresh history when the pasted profile belongs
-            // to the registered feed. A new row uses the independently parsed link.
-            if (entry.Dnstt != null &&
-                DnsttSelectionRefresh.MatchesRegisteredGrant(_settings, entry))
+            var row = entry.Dnstt == null ? null : Servers.FirstOrDefault(vm =>
+                string.Equals(vm.SourceEntry.OutboundId, entry.OutboundId, StringComparison.OrdinalIgnoreCase));
+            if (row != null && !DnsttSelectionRefresh.SameGrant(row.SourceEntry, entry) &&
+                !DnsttSelectionRefresh.MatchesOriginalGrant(_settings, row.SourceEntry, entry))
             {
-                var row = Servers.FirstOrDefault(vm =>
-                    DnsttSelectionRefresh.SameGrant(vm.SourceEntry, entry));
+                SmpErrorText = IsRussian
+                    ? "Ссылка содержит другие параметры для сохранённого идентификатора DNSTT. Сверьте профиль с подпиской."
+                    : "This link has different settings for a saved DNSTT ID. Check the profile against its subscription.";
+                return false;
+            }
+
+            if (entry.Dnstt != null &&
+                (row != null || DnsttSelectionRefresh.MatchesRegisteredGrant(_settings, entry)))
+            {
                 if (HasConflictingDnsttRow(row, entry))
                 {
                     SmpErrorText = GeneratedDnsttRowConflict;

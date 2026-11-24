@@ -445,6 +445,25 @@ public sealed class ConnectionRollbackHistoryTests
     }
 
     [Fact]
+    public void Fingerprint_IgnoresLocalDnsttGrantBindingsAndPreservesThemOnTheOriginal()
+    {
+        var settings = Settings("one.example");
+        var row = Assert.Single(settings.Vless.Servers);
+        row.Protocol = "dnstt";
+        row.Dnstt = new DnsttProfile { Domain = "first.example.test" };
+        var before = ConnectionRollbackHistory.ComputeConfigFingerprint(settings);
+        Assert.NotNull(before);
+        row.DnsttRefreshBinding = new string('A', 64);
+        row.DnsttOriginalBinding = new string('B', 64);
+
+        Assert.Equal(before, ConnectionRollbackHistory.ComputeConfigFingerprint(settings));
+        Assert.Equal(new string('A', 64), row.DnsttRefreshBinding);
+        Assert.Equal(new string('B', 64), row.DnsttOriginalBinding);
+        row.Dnstt.Domain = "second.example.test";
+        Assert.NotEqual(before, ConnectionRollbackHistory.ComputeConfigFingerprint(settings));
+    }
+
+    [Fact]
     public void Fingerprint_DistinguishesRuleContentDnsAndProcesses_IgnoresUiPreferences()
     {
         var settings = Settings("one.example");

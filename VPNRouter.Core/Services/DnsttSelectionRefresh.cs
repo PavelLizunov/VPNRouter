@@ -125,6 +125,15 @@ internal static class DnsttSelectionRefresh
     internal static bool SameGrant(VlessServerEntry? left, VlessServerEntry? right) =>
         ProfileOf(left) is { } profile && ProfileOf(right) == profile;
 
+    internal static bool MatchesOriginalGrant(AppSettings settings, VlessServerEntry saved, VlessServerEntry pasted)
+    {
+        if (saved.DnsttOriginalBinding == null || ProfileOf(pasted) is not { } profile ||
+            !string.Equals(saved.OutboundId, pasted.OutboundId, StringComparison.OrdinalIgnoreCase) ||
+            SingleFeed(settings) is not { } feed) return false;
+        return saved.DnsttOriginalBinding == BindingHash(feed.Id, feed.Url, profile) &&
+            MatchesRegisteredGrant(settings, saved);
+    }
+
     // Keep proof of the previous exact match for other saved rows if this publication
     // removes or rotates them. Only the selected row may receive replacement credentials.
     internal static void RememberDisplacedGrants(AppSettings settings, SubscriptionCacheUpdate update)
@@ -242,6 +251,7 @@ internal static class DnsttSelectionRefresh
             return false;
 
         // Keep the user's label. The opaque id, endpoint and grant fields are the profile.
+        active.DnsttOriginalBinding ??= KeyOf(binding);
         active.OutboundId = next.OutboundId;
         active.Server = next.Server;
         active.Port = next.Port;

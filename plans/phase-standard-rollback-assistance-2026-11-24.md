@@ -157,3 +157,26 @@ delayed release listing in the UI tests, including a profile or compatibility
 change. Limit the restart message to the requested and observed versions.
 Run the usual staging cleanup when an update check is suppressed. WINBRAT
 remains the source of evidence for actual installation and restart.
+
+## WINBRAT acceptance on 24 November
+
+The installed Windows x64 preview reported commit `8fe3eb9c`. Actions run
+45415698640 built the preview from that pinned source. The candidate consumed
+a previous-version receipt seeded in the published 2.50.5 format. Three manual
+attempts with a disposable test engine triggered the prior-success question
+only on the third failure. A real local conflict left the count at zero.
+With the real engine, two Phase B failures were followed by a successful
+connection that cleared the count.
+
+Prior-success testimony and final installation consent were separate steps.
+Cancel preserved the installed preview and settings. After explicit confirmation
+the updater launched official 2.50.5 at commit `097393a7`. The installed EXE
+and DLL matched the corresponding files in the 72,127,549-byte release ZIP.
+The active settings and their retained backup matched the pre-install bytes.
+The healthy target removed the temporary application backup after 30 seconds.
+
+The tester returned to its original `2890a246` installation and settings,
+with the application stopped. This run covers the installed flow on
+`8fe3eb9c`. Hosted tests on `d61971a6` cover the later revalidation after
+the release list loads. The three-failure threshold used a test engine, and
+the seeded receipt supplies installation history only.

@@ -93,3 +93,23 @@ module paths, a blocked launch, interrupted publication and retention of
 unrelated directories. The five archive SHA-256 digests and CRC checks passed.
 The embedded probe parses as Python. Hosted compilation and a Windows run are
 required to verify the implementation.
+
+## Installed Windows verification on 24 November
+
+WINBRAT ran the Windows x64 preview built from `9d155378` by Actions run
+45424948743. The installed PE carried that revision. The suite passed 41 checks.
+Avalonia UI automation did not expose the statistics text, so its live
+rendering remains unverified.
+
+Fresh installation, explicit migration from the runtime installed by official
+2.51.0-r2, repair of a truncated standard library and cryptography module,
+and recovery from interrupted activation passed. The installed verifier
+matched all 223 pinned hashes after installation and repair. The CFFI and
+AES-CTR checks passed. Autostart skipped the old runtime and subsequently
+used the repaired runtime on the configured port 1444. The fresh-install
+listener on port 1443 closed on Stop.
+
+An installed interpreter running as the user or SYSTEM prevented replacement.
+The service was absent on the test host. After the run, the restore verified
+all 298 application files and 15,292 data files against the original manifests
+and checked the directory ACLs and settings digest.

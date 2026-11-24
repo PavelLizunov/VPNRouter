@@ -404,6 +404,11 @@ public sealed class ConnectionRollbackHistory
                 ActiveServer = snapshot.Vless.ActiveServer,
                 AutoSelectBestServer = snapshot.Vless.AutoSelectBestServer,
             };
+            foreach (var server in snapshot.Vless.Servers)
+            {
+                server.DnsttRefreshBinding = null;
+                server.DnsttOriginalBinding = null;
+            }
             app.CustomConfig = string.Empty;
         }
         app.CustomConfigs = [];

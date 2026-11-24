@@ -175,6 +175,87 @@ public sealed class DnsttGeneratedRefreshTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task RepastingTheOriginalLinkKeepsSavedRowsAcrossRotationsAndRestart()
+    {
+        var original = Link(OldDomain, 'a');
+        var store = new SerializingSettingsStore(new InMemorySettingsStore());
+        var settings = GeneratedSettings(ServerUriParser.Parse(original),
+            FeedEntry(Feed, ServerUriParser.Parse(original)));
+        settings.Vless.Servers.Add(ServerUriParser.Parse(Link(OtherDomain, 'c', "manual", "Manual")));
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = http;
+        using (var vm = new MainWindowViewModel(store))
+        {
+            var starts = CaptureStarts(vm);
+            vm.SmpInput = original;
+            await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            Assert.Equal(NewDomain, Active(Assert.Single(starts)).Dnstt!.Domain);
+
+            vm.IsConnected = false;
+            vm.SmpInput = string.Empty;
+            vm.SmpInput = original;
+            await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+            Assert.Equal(2, starts.Count);
+            Assert.Equal(NewDomain, Active(starts[1]).Dnstt!.Domain);
+            Assert.Single(http.SentRequests);
+            Assert.Equal(2, store.Load(AppPaths.ConfigYamlPath).Vless.Servers.Count);
+        }
+
+        const string latest = "latest.example.test";
+        using (var restarted = new MainWindowViewModel(store))
+        {
+            var starts = CaptureStarts(restarted);
+            restarted.SmpInput = original;
+            SubscriptionFetcher.Http = new FakeHttpClient().Setup(Feed, Link(latest, 'd'));
+            await restarted.SmpToggleConnectCommand.ExecuteAsync(null);
+            Assert.Equal(latest, Active(Assert.Single(starts)).Dnstt!.Domain);
+            var saved = store.Load(AppPaths.ConfigYamlPath);
+            Assert.Equal(2, saved.Vless.Servers.Count);
+            Assert.Contains(saved.Vless.Servers, row => row.Name == "Manual" && row.Dnstt!.Domain == OtherDomain);
+        }
+
+        using var afterRemoval = new MainWindowViewModel(store);
+        var refused = CaptureStarts(afterRemoval);
+        afterRemoval.SmpInput = original;
+        http = new FakeHttpClient().Setup(Feed, Link(OtherDomain, 'c', "different"));
+        SubscriptionFetcher.Http = http;
+        await afterRemoval.SmpToggleConnectCommand.ExecuteAsync(null);
+        Assert.Single(http.SentRequests);
+        Assert.Empty(refused);
+        Assert.False(string.IsNullOrWhiteSpace(afterRemoval.SmpErrorText));
+        Assert.Equal(latest, Active(store.Load(AppPaths.ConfigYamlPath)).Dnstt!.Domain);
+        Assert.Equal(2, afterRemoval.Servers.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task PastedUnrelatedCredentialsWithTheSameIdCannotReplaceOrSelectASavedGrant()
+    {
+        var original = Link(OldDomain, 'a');
+        var settings = GeneratedSettings(ServerUriParser.Parse(original),
+            FeedEntry(Feed, ServerUriParser.Parse(original)));
+        settings.Vless.Servers.Add(ServerUriParser.Parse(Link(OtherDomain, 'c', "manual", "Manual")));
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store);
+        var http = new FakeHttpClient().Setup(Feed, Link(NewDomain, 'b'));
+        SubscriptionFetcher.Http = http;
+        var starts = CaptureStarts(vm);
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        Assert.Equal(NewDomain, Active(Assert.Single(starts)).Dnstt!.Domain);
+
+        vm.IsConnected = false;
+        vm.SmpInput = Link(OtherDomain, 'c');
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Single(http.SentRequests);
+        Assert.Single(starts);
+        Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
+        Assert.Equal(2, vm.Servers.Count);
+        Assert.Equal(NewDomain, Active(Recovery(store)).Dnstt!.Domain);
+    }
+
+    [AvaloniaFact]
     public async Task PastedManualDnsttThatDoesNotMatchTheCacheIsImported()
     {
         var settings = GeneratedSettings(

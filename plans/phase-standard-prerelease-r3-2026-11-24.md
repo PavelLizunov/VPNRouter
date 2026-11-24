@@ -70,7 +70,9 @@ The Telegram proxy source archive, CPython 3.14.10 embeddable and four pinned
 wheels passed independent digest verification. The acceptance inventory derives
 223 expected installed-file hashes from those archives. The candidate stages
 and probes the source with the chosen Python before replacing any live files.
-Tests and WINBRAT installation, migration, retry and launch remain outstanding.
+Hosted checks passed at `9d155378`. The installed WINBRAT preview passed fresh
+installation, migration from r2, explicit repair, launch and Stop. See the
+[Telegram acceptance record](phase-tgproxy-dependency-refresh-2026-11-24.md).
 
 
 CI run 45411075994 on PR head `0ba04a30` executed 4,477 tests in the Linux
@@ -96,3 +98,10 @@ check confirmed it. The headless cases cover the retained pasted link, a second
 selected grant, unsaved edits, an overlapping refresh and a failed settings
 save. For a pasted grant, check saved names and outbound ids before changing
 the selected row, and exercise both collisions through Simple Connect.
+
+Review of `40362d8b` found that clearing the input and pasting the same
+link after a rotation could replace every saved server with the old grant.
+Preserve proof of the original profile across rotations and restarts. Test
+the pasted link with a second saved server, an unrelated same-id link, and
+an authoritative removal. Check that local grant metadata leaves the
+connection fingerprint used for rollback assistance unchanged.
