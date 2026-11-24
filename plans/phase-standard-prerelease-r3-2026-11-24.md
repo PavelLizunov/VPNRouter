@@ -61,10 +61,19 @@ The Windows and Linux Cronet libraries match the core's 246 required exports.
 Both upstream core tags v1.14.4-vpnctl.2 and .3 use the same Chromium
 154.0.8037.49. The checked official libraries and bindings have no release
 covering CVE-2026-76029. Full stable observed on 24 November was 158.0.8127.89.
-NaiveProxy is supported on Windows and Linux. Release disposition remains open.
+On 24 November the owner accepted the residual Cronet risk solely for the
+Windows and Linux Standard 2.51.1-r1 prerelease. Keep NaiveProxy enabled
+with the matched core and library. The finding remains open for stable and
+future candidates. The package and dataplane checks still apply.
 
 The Telegram proxy source archive, CPython 3.14.10 embeddable and four pinned
 wheels passed independent digest verification. The acceptance inventory derives
 223 expected installed-file hashes from those archives. The candidate stages
 and probes the source with the chosen Python before replacing any live files.
 Tests and WINBRAT installation, migration, retry and launch remain outstanding.
+
+
+CI run 45411075994 on PR head `0ba04a30` executed 4,477 tests in the Linux
+test job. The only failure was an English literal in the rollback confidence
+assertion while the UI displayed the Russian translation. The test now checks
+the decision's confidence and the localized label for that value.

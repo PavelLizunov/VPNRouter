@@ -103,7 +103,9 @@ public sealed class UpdateNotificationViewModelRollbackAssistanceTests
         Assert.False(vm.IsRollbackAssistanceDiagnosticsOnly);
         Assert.Contains("3", vm.RollbackAssistanceBody);
         Assert.Contains(TargetVersion, vm.RollbackAssistanceBody);
-        Assert.Contains("medium", vm.RollbackAssistanceConfidenceText, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(RollbackConfidence.Medium, decision.Confidence);
+        Assert.Equal(VPNRouter.Core.Localization.Strings.RollbackAssistanceConfidenceMedium,
+            vm.RollbackAssistanceConfidenceText);
 
         vm.DismissRollbackAssistanceCommand.Execute(null);
 
