@@ -13,6 +13,7 @@ public class TgProxyManager : IDisposable
 {
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
+    private readonly string _runtimeRoot;
     private IProcessHandle? _handle;
     private readonly StringBuilder _capturedStderr = new();
     private readonly object _stderrGate = new();
@@ -63,9 +64,13 @@ public class TgProxyManager : IDisposable
     public event Action<string>? StatsUpdated;
 
     public TgProxyManager(ILogger? logger = null, IProcessRunner? runner = null)
+        : this(logger, runner, TgProxyUpdater.TgProxyDir) { }
+
+    internal TgProxyManager(ILogger? logger, IProcessRunner? runner, string runtimeRoot)
     {
         _logger = logger ?? Log.Logger;
         _runner = runner ?? Runner;
+        _runtimeRoot = runtimeRoot;
     }
 
     public void Start(int port, string secret, bool verbose = false)
@@ -85,11 +90,11 @@ public class TgProxyManager : IDisposable
             }
         }
 
-        if (!File.Exists(TgProxyUpdater.PythonExePath))
-            throw new FileNotFoundException("Python not found. Download tg-ws-proxy first.");
-
-        if (!Directory.Exists(TgProxyUpdater.ProxySourceDir))
-            throw new FileNotFoundException("Proxy source not found. Download tg-ws-proxy first.");
+        if (!Directory.Exists(_runtimeRoot))
+            throw new FileNotFoundException(Localization.Strings.TgProxyUpdateRequired);
+        using var launchLock = TgProxyUpdater.LockRuntimeAt(_runtimeRoot, updating: false);
+        if (!TgProxyUpdater.IsInstalledAt(_runtimeRoot, _logger))
+            throw new InvalidOperationException(Localization.Strings.TgProxyUpdateRequired);
 
         if (!IsPortAvailable(port))
         {
@@ -115,9 +120,9 @@ public class TgProxyManager : IDisposable
         if (verbose) argv.Add("--verbose");
 
         var request = new ProcessRequest(
-            ExecutablePath: TgProxyUpdater.PythonExePath,
+            ExecutablePath: Path.Combine(_runtimeRoot, "python", "python.exe"),
             Arguments: argv,
-            WorkingDirectory: TgProxyUpdater.TgProxyDir,
+            WorkingDirectory: _runtimeRoot,
             CaptureStdout: true,
             CaptureStderr: true);
 

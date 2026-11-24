@@ -110,12 +110,16 @@ public sealed class AutostartContractTests
         Assert.False(TgProxyUpdater.IsInstalledAt(sandbox.Root));
     }
 
-    private static void SeedPinnedRuntime(string root, string pythonVersion = TgProxyUpdater.PythonVersion)
+    internal static void SeedPinnedRuntime(string root, string pythonVersion = TgProxyUpdater.PythonVersion)
     {
         var pythonDir = Path.Combine(root, "python");
         Directory.CreateDirectory(pythonDir);
-        File.WriteAllText(Path.Combine(pythonDir, "python.exe"), "stub");
-        File.WriteAllText(Path.Combine(pythonDir, "python314.dll"), "stub");
+        foreach (var (name, size) in TgProxyUpdater.PythonRuntimeFiles)
+        {
+            using var file = File.Create(Path.Combine(pythonDir, name));
+            file.SetLength(size);
+        }
+        File.WriteAllLines(Path.Combine(pythonDir, "python314._pth"), ["python314.zip", ".", "..", "Lib"]);
         File.WriteAllText(
             Path.Combine(pythonDir, TgProxyUpdater.PythonVersionMarkerFileName),
             pythonVersion);

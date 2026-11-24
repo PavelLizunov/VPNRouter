@@ -692,7 +692,8 @@ public partial class MainWindowViewModel
 
         TgProxyPort = _settings.App.TgProxyPort > 0 ? _settings.App.TgProxyPort : 1443;
         TgProxySecret = _settings.App.TgProxySecret;
-        TgProxyVersionText = TgProxyUpdater.HasRuntimeFiles()
+        var hasTgRuntime = TgProxyUpdater.HasRuntimeFiles();
+        TgProxyVersionText = hasTgRuntime
             ? (TgProxyUpdater.GetLocalVersion() ?? "?")
             : (IsRussian ? "Не установлен" : "Not installed");
         if (_tgProxy?.IsRunning == true)
@@ -705,7 +706,8 @@ public partial class MainWindowViewModel
         else
         {
             TgProxyEnabled = false;
-            TgProxyStatus = Strings.Stopped;
+            TgProxyStatus = hasTgRuntime && !TgProxyUpdater.IsInstalled()
+                ? VPNRouter.Core.Localization.Strings.TgProxyUpdateRequired : Strings.Stopped;
         }
 #endif
     }

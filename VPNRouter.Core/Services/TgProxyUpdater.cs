@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
@@ -18,8 +19,17 @@ public class TgProxyUpdater
     internal const string PythonVersionMarkerFileName = ".vpnrouter-python-version";
     private const string PythonZipUrl = $"https://www.python.org/ftp/python/{PythonVersion}/python-{PythonVersion}-embed-amd64.zip";
     private const string PythonZipSha256 = "90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159";
-    private static readonly string PythonRuntimeDllName =
-        "python" + string.Concat(PythonVersion.Split('.').Take(2)) + ".dll";
+    // Uncompressed sizes in the pinned python.org archive.
+    internal static IReadOnlyList<(string Name, int Size)> PythonRuntimeFiles { get; } =
+    [
+        ("python.exe", 106_208),
+        ("python314.dll", 6_816_992),
+        ("python3.dll", 73_952),
+        ("vcruntime140.dll", 178_616),
+        ("vcruntime140_1.dll", 50_112),
+        ("python314.zip", 4_158_438),
+    ];
+    private static readonly string[] PythonSearchPaths = ["python314.zip", ".", "..", "Lib"];
 
     private sealed record PinnedDependency(
         string Name,
@@ -116,7 +126,7 @@ public class TgProxyUpdater
         var proxySourceExists = Directory.Exists(proxyDir);
         var pythonCurrent = IsPythonCurrentAt(baseDir, logger);
         var dependenciesCurrent = IsDependenciesCurrentAt(baseDir, logger);
-        var sourceCurrent = File.Exists(Path.Combine(proxyDir, "tg_ws_proxy.py"))
+        var sourceCurrent = HasContent(Path.Combine(proxyDir, "tg_ws_proxy.py"))
             && ReadVersionAt(baseDir) == SupportedProxyVersion;
         var overall = pythonExeExists && sourceCurrent && pythonCurrent && dependenciesCurrent
             && !Directory.Exists(Path.Combine(baseDir, ActivationDirectory));
@@ -131,26 +141,20 @@ public class TgProxyUpdater
     internal static bool IsPythonCurrentAt(string baseDir, ILogger? logger = null)
     {
         var pythonDir = Path.Combine(baseDir, "python");
-        var pythonExe = Path.Combine(pythonDir, "python.exe");
-        if (!File.Exists(pythonExe))
-        {
-            logger?.Information(
-                "[TgProxy] Python version check: python.exe missing at {PythonExePath}", pythonExe);
-            return false;
-        }
-
-        var runtimeDll = Path.Combine(pythonDir, PythonRuntimeDllName);
-        if (!File.Exists(runtimeDll))
-        {
-            logger?.Information(
-                "[TgProxy] Python version check: {PythonDllName} missing at {RuntimeDllPath}",
-                PythonRuntimeDllName, runtimeDll);
-            return false;
-        }
-
-        var markerPath = Path.Combine(pythonDir, PythonVersionMarkerFileName);
         try
         {
+            foreach (var (name, size) in PythonRuntimeFiles)
+            {
+                var file = new FileInfo(Path.Combine(pythonDir, name));
+                if (!file.Exists || file.Length != size) return false;
+            }
+
+            var pth = Path.Combine(pythonDir, "python314._pth");
+            if (!File.Exists(pth)) return false;
+            var paths = File.ReadAllLines(pth).Select(line => line.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!PythonSearchPaths.All(paths.Contains)) return false;
+
+            var markerPath = Path.Combine(pythonDir, PythonVersionMarkerFileName);
             if (!File.Exists(markerPath))
             {
                 logger?.Information(
@@ -177,6 +181,12 @@ public class TgProxyUpdater
         }
     }
 
+    private static bool HasContent(string path)
+    {
+        try { return new FileInfo(path) is { Exists: true, Length: > 0 }; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
+
     internal static bool IsDependenciesCurrentAt(string baseDir, ILogger? logger = null)
     {
         var libDir = Path.Combine(baseDir, "python", "Lib");
@@ -193,7 +203,7 @@ public class TgProxyUpdater
                 foreach (var relativePath in package.RequiredFiles)
                 {
                     var requiredPath = Path.Combine(libDir, relativePath);
-                    if (!File.Exists(requiredPath))
+                    if (!HasContent(requiredPath))
                     {
                         logger?.Information(
                             "[TgProxy] Dependency check: {Package} {Version} is missing {RequiredPath}",
@@ -221,7 +231,7 @@ public class TgProxyUpdater
                 {
                     var uniqueFiles = Directory.GetFiles(
                         libDir, package.UniqueFilePattern, SearchOption.TopDirectoryOnly);
-                    if (uniqueFiles.Length != 1 ||
+                    if (uniqueFiles.Length != 1 || !HasContent(uniqueFiles[0]) ||
                         !string.Equals(
                             Path.GetFileName(uniqueFiles[0]),
                             package.UniqueFile,
@@ -259,28 +269,25 @@ public class TgProxyUpdater
     {
         Directory.CreateDirectory(TgProxyDir);
 
-        using var updateLock = new FileStream(Path.Combine(TgProxyDir, ".update.lock"),
-            FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        using var updateLock = LockRuntimeAt(TgProxyDir, updating: true);
+        EnsureInterpreterIdle(TgProxyDir);
         RestoreInterruptedActivationAt(TgProxyDir, _logger);
+        CleanInactiveStages(TgProxyDir, _logger);
 
         var stage = Path.Combine(TgProxyDir, $".stage-{Guid.NewGuid():N}");
         Directory.CreateDirectory(stage);
         try
         {
-            var python = PythonExePath;
-            if (!IsPythonCurrentAt(TgProxyDir, _logger) || !IsDependenciesCurrentAt(TgProxyDir, _logger))
-            {
-                var stagedPython = Path.Combine(stage, "python");
-                await StagePythonAsync(stagedPython, ct).ConfigureAwait(false);
-                await InstallDependenciesAsync(stagedPython, ct).ConfigureAwait(false);
-                File.WriteAllText(Path.Combine(stagedPython, PythonVersionMarkerFileName), PythonVersion);
-                if (!IsPythonCurrentAt(stage) || !IsDependenciesCurrentAt(stage))
-                    throw new InvalidDataException("The downloaded Python runtime is incomplete.");
-                python = Path.Combine(stagedPython, "python.exe");
-            }
+            File.WriteAllText(Path.Combine(stage, StageMarker), string.Empty);
+            var stagedPython = Path.Combine(stage, "python");
+            await StagePythonAsync(stagedPython, ct).ConfigureAwait(false);
+            await InstallDependenciesAsync(stagedPython, ct).ConfigureAwait(false);
+            File.WriteAllText(Path.Combine(stagedPython, PythonVersionMarkerFileName), PythonVersion);
+            if (!IsPythonCurrentAt(stage) || !IsDependenciesCurrentAt(stage))
+                throw new InvalidDataException("The downloaded Python runtime is incomplete.");
 
             await StageProxySourceAsync(stage, ct).ConfigureAwait(false);
-            await SmokeTestAsync(stage, python, ct).ConfigureAwait(false);
+            await SmokeTestAsync(stage, Path.Combine(stagedPython, "python.exe"), ct).ConfigureAwait(false);
             File.WriteAllText(Path.Combine(stage, "version.txt"), SupportedProxyVersion);
             ct.ThrowIfCancellationRequested();
             ActivateRuntimeAt(TgProxyDir, stage, _logger);
@@ -523,15 +530,14 @@ public class TgProxyUpdater
             import sys
             from pathlib import Path
             from importlib.metadata import version
-            stage = Path(sys.argv[1])
-            lib = Path(sys.executable).parent / "Lib"
-            sys.path[:0] = [str(stage), str(lib)]
+            stage = Path(sys.argv[1]).resolve()
+            lib = (stage / "python" / "Lib").resolve()
             import certifi, cffi, cryptography, pycparser, _cffi_backend
             from cryptography.hazmat.bindings import _rust
             from cryptography.hazmat.primitives import hashes
-            from cryptography.hazmat.primitives.ciphers import algorithms
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             from proxy import tg_ws_proxy
-            assert tg_ws_proxy.__file__ and Path(tg_ws_proxy.__file__).resolve() == stage / "proxy" / "tg_ws_proxy.py"
+            assert tg_ws_proxy.__file__ and Path(tg_ws_proxy.__file__).resolve() == (stage / "proxy" / "tg_ws_proxy.py").resolve()
             for module in (certifi, cffi, cryptography, pycparser, _cffi_backend, _rust):
                 assert Path(module.__file__).resolve().is_relative_to(lib), module.__name__
             assert sys.version_info[:3] == tuple(map(int, sys.argv[2].split(".")))
@@ -540,7 +546,8 @@ public class TgProxyUpdater
                 assert version(name) == expected, name
             cffi.FFI()
             hashes.Hash(hashes.SHA256()).update(b"x")
-            algorithms.AES(b"0" * 32)
+            ctr = Cipher(algorithms.AES(bytes(16)), modes.CTR(bytes(16))).encryptor()
+            assert (ctr.update(bytes(16)) + ctr.finalize()).hex() == "66e94bd4ef8a2c3b884cfa59ca342b2e"
             """;
         string[] args = ["-B", "-c", probeScript, stageRoot, PythonVersion,
             .. PinnedDependencies.Select(package => $"{package.Name}={package.Version}")];
@@ -561,6 +568,63 @@ public class TgProxyUpdater
         }
     }
 
+    internal static FileStream LockRuntimeAt(string root, bool updating)
+    {
+        try
+        {
+            return new FileStream(Path.Combine(root, ".update.lock"), FileMode.OpenOrCreate,
+                updating ? FileAccess.ReadWrite : FileAccess.Read, updating ? FileShare.None : FileShare.ReadWrite);
+        }
+        catch (IOException ex) when ((ex.HResult & 0xffff) is 32 or 33)
+        {
+            throw new IOException(Localization.Strings.TgProxyRuntimeBusy, ex);
+        }
+    }
+
+    private static void EnsureInterpreterIdle(string root)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var python = Path.Combine(root, "python", "python.exe");
+        var processes = Process.GetProcessesByName("python");
+        try
+        {
+            if (processes.Any(p => ProcessOwnership.IsSamePath(ProcessOwnership.ImagePathOf(p), python)))
+                throw new IOException(Localization.Strings.TgProxyRuntimeBusy);
+        }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
+    }
+
+    private const string StageMarker = ".vpnrouter-tgproxy-stage";
+    internal static void CleanInactiveStages(string root, ILogger? logger = null)
+    {
+        foreach (var dir in new DirectoryInfo(root).EnumerateDirectories())
+        {
+            var name = dir.Name;
+            var start = name.StartsWith(".stage-", StringComparison.Ordinal) ? 7 :
+                name.StartsWith(".restored-", StringComparison.Ordinal) ? 10 : 0;
+            if (start == 0 || !Guid.TryParseExact(name[start..], "N", out _) ||
+                dir.Attributes.HasFlag(FileAttributes.ReparsePoint) || !File.Exists(Path.Combine(dir.FullName, StageMarker)))
+                continue;
+
+            // A stage is disposable only while it contains ordinary files and directories.
+            // Stop traversal at any link, including junctions in an old interpreter tree.
+            try
+            {
+                if (!ContainsLink(dir)) DeleteStage(dir.FullName, logger);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger?.Warning(ex, "[TgProxy] Could not inspect inactive stage {Stage}", name);
+            }
+        }
+    }
+
+    private static bool ContainsLink(DirectoryInfo dir) => dir.EnumerateFileSystemInfos().Any(entry =>
+        entry.Attributes.HasFlag(FileAttributes.ReparsePoint) || entry is DirectoryInfo child && ContainsLink(child));
+
     private const string ActivationDirectory = ".activating";
     private static readonly string[] RuntimeEntries = ["python", "proxy", "version.txt"];
 
@@ -579,14 +643,20 @@ public class TgProxyUpdater
         Directory.Move(stage, journal);
         try
         {
+            // Retire Python first. An older service can still try to launch the legacy executable
+            // without taking .update.lock. Test the retired image before touching its source.
             foreach (var name in RuntimeEntries)
             {
-                var staged = Path.Combine(journal, name);
-                if (!Path.Exists(staged)) continue;
                 var live = Path.Combine(root, name);
-                if (Path.Exists(live))
-                    MoveEntry(live, Path.Combine(journal, ".previous", name));
-                MoveEntry(staged, live);
+                if (!Path.Exists(Path.Combine(journal, name)) || !Path.Exists(live)) continue;
+                var retired = Path.Combine(journal, ".previous", name);
+                RetireEntry(live, retired, name);
+            }
+            // Publish the launchable interpreter only after its source and version are in place.
+            foreach (var name in RuntimeEntries.Reverse())
+            {
+                var staged = Path.Combine(journal, name);
+                if (Path.Exists(staged)) MoveEntry(staged, Path.Combine(root, name));
             }
             Directory.Move(journal, stage);
         }
@@ -608,13 +678,41 @@ public class TgProxyUpdater
             var live = Path.Combine(root, name);
             var staged = Path.Combine(journal, name);
             if (!Path.Exists(prior) && !File.Exists(prior + ".absent")) continue;
-            if (!Path.Exists(staged) && Path.Exists(live)) MoveEntry(live, staged);
-            if (Path.Exists(prior)) MoveEntry(prior, live);
+            if (!Path.Exists(staged) && Path.Exists(live)) RetireEntry(live, staged, name);
+        }
+        foreach (var name in RuntimeEntries.Reverse())
+        {
+            var prior = Path.Combine(journal, ".previous", name);
+            if (Path.Exists(prior)) MoveEntry(prior, Path.Combine(root, name));
         }
 
         var restored = Path.Combine(root, $".restored-{Guid.NewGuid():N}");
         Directory.Move(journal, restored);
         DeleteStage(restored, logger);
+    }
+
+    private static void RetireEntry(string live, string retired, string name)
+    {
+        try
+        {
+            MoveEntry(live, retired);
+            if (name != "python" || !OperatingSystem.IsWindows()) return;
+            var image = Path.Combine(retired, "python.exe");
+            if (!File.Exists(image)) return;
+            try
+            {
+                using var idle = File.Open(image, FileMode.Open, FileAccess.Write, FileShare.None);
+            }
+            catch
+            {
+                MoveEntry(retired, live);
+                throw;
+            }
+        }
+        catch (IOException ex) when ((ex.HResult & 0xffff) is 32 or 33)
+        {
+            throw new IOException(Localization.Strings.TgProxyRuntimeBusy, ex);
+        }
     }
 
     private static void MoveEntry(string from, string to)

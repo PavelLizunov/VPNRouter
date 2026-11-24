@@ -52,15 +52,14 @@ defect ledger.
   `_rust.pyd`, `cffi/__init__.py`, the single cffi `cp314` ABI binary, the
   pycparser module and exactly one expected dist-info directory per package.
   Old cffi ABI files or conflicting dist-info directories force repair.
-- Migration stages a clean Python tree with all four verified wheels whenever
-  the current Python or dependencies are stale. An explicit source update can
-  reuse a current Python. Both paths import the hash-verified source using
-  the selected interpreter and verify module paths, package versions, cffi and AES.
-- After the probe succeeds, a same-volume journal covers python (if replaced),
-  proxy and version.txt. A file lock serializes installers across
-  application instances. Readiness requires the current source version and entry
-  point and rejects a pending activation. A retry restores the previous entries
-  before any network request. Other files in the runtime directory are preserved.
+- Every explicit install or repair stages the pinned interpreter, four wheels
+  and proxy source. The probe imports them with the installed search paths and
+  checks a known AES-CTR result before publishing.
+- A shared launch lock excludes the installer. On Windows the installer checks
+  the running image path and the retired interpreter for continued use, including
+  during journal recovery. It retires Python first and publishes it last.
+  A retry restores an interrupted journal before downloading. Cleanup recognizes
+  GUID-named stages with the installer marker and skips linked trees.
 - A legacy installation requires one online repair. Desktop and service autostart
   skip stale files, and the settings page offers Update.
 
@@ -80,3 +79,17 @@ defect ledger.
 - Regression tests cover source-only and full activation, restart with a partially
   moved interpreter or source, conflicting journals, and a stale source marker.
   The native inventory lists the five replacement artifacts.
+
+The independent review found that a service-owned interpreter could race the
+installer, and a marker-current but damaged interpreter was reused on every
+repair. Share startup exclusion with the service, check running installed images,
+stage a fresh pinned runtime for explicit repair, and exercise the actual module
+search path and AES-CTR operation before publishing. Test missing files, partial
+activation, and simultaneous access. Existing connection settings must survive.
+
+On 24 November the six interpreter file lengths were checked against the pinned
+python.org ZIP. Regression cases cover a truncated standard library, missing
+module paths, a blocked launch, interrupted publication and retention of
+unrelated directories. The five archive SHA-256 digests and CRC checks passed.
+The embedded probe parses as Python. Hosted compilation and a Windows run are
+required to verify the implementation.
