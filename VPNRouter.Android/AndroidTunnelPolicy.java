@@ -139,7 +139,20 @@ final class AndroidTunnelPolicy {
         }
         JSONObject dns = root.optJSONObject("dns");
         if (dns != null) checkRules(dns.optJSONArray("rules"), false);
+        omitDisabledVlessTls(root.optJSONArray("outbounds"));
         return root.toString();
+    }
+
+    private static void omitDisabledVlessTls(JSONArray outbounds) throws JSONException {
+        for (int i = 0; outbounds != null && i < outbounds.length(); i++) {
+            JSONObject outbound = outbounds.getJSONObject(i);
+            if (!"vless".equals(outbound.optString("type"))) continue;
+            JSONObject tls = outbound.optJSONObject("tls");
+            // libbox's canonical JSON can omit the false enabled flag.
+            if (tls != null && (!tls.has("enabled") || Boolean.FALSE.equals(tls.opt("enabled")))) {
+                outbound.remove("tls");
+            }
+        }
     }
 
     private static void checkSplitListeners(JSONObject root) throws JSONException {

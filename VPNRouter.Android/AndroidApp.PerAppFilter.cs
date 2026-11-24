@@ -214,7 +214,15 @@ public partial class AndroidApp
         if (_appPickerList is null) return;
         var search = _appPickerSearch?.Text?.Trim() ?? string.Empty;
 
-        IEnumerable<AppListLoader.AppEntry> scoped = ScopeAppsToActiveCategory(_appPickerCache);
+        var savedOutsideScan = _appPickerSelected
+            .Except(_appPickerCache.Select(app => app.PackageName), StringComparer.OrdinalIgnoreCase)
+            .Where(package => !string.IsNullOrWhiteSpace(package))
+            .Select(package => new AppListLoader.AppEntry
+            {
+                PackageName = package,
+                Label = Localization.PerAppSavedPackage,
+            });
+        var scoped = ScopeAppsToActiveCategory(_appPickerCache).Concat(savedOutsideScan);
 
         var filtered = string.IsNullOrEmpty(search)
             ? scoped
@@ -352,6 +360,10 @@ public partial class AndroidApp
 
             UpdateAppPickerCount();
             UpdateAllCategoryCounts();
+
+            if (checkbox.IsChecked != true && !_appPickerCache.Any(
+                    entry => StringComparer.OrdinalIgnoreCase.Equals(entry.PackageName, app.PackageName)))
+                ApplyAppPickerFilter();
         };
 
         var iconImage = new Image
