@@ -46,7 +46,7 @@ public partial class MainWindowViewModel
             var entries = enabled.SelectMany(s => s.UnderlyingEntry.Servers);
             var selected = SubscriptionRefreshDiff.FindRegisteredServer(source?.UnderlyingEntry, entries, name, key,
                 previous?.SourceEntry, SelectedSubscriptionRoute()?.Route);
-            if (selected == null && source != null &&
+            if (selected == null && IsSubscribeConfig(_settings.App.ConfigMode) && source != null &&
                 (previous?.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia)))
             {
                 foreach (var row in SubscriptionServers.Where(row => enabled.All(feed => feed.Id != row.SubscriptionId)).ToArray())
@@ -172,6 +172,7 @@ public partial class MainWindowViewModel
 
         var previous = SelectedSubscriptionServer;
         var previousRoute = SelectedSubscriptionRoute();
+        var generatedGrant = DnsttSelectionRefresh.Capture(_settings);
         var generation = _connectionGeneration;
         var applyGeneration = _subscriptionRefreshApplyGeneration;
         foreach (var row in targets) row.IsRefreshing = true;
@@ -181,7 +182,9 @@ public partial class MainWindowViewModel
             var updates = await FetchSubscriptionRowsAsync(targets, ct);
             if (_disposed || ct.IsCancellationRequested || !SmpCanRefreshSubscriptions || _isReconnecting ||
                 generation != _connectionGeneration || applyGeneration != _subscriptionRefreshApplyGeneration) return;
-            if (!PublishSubscriptionRows(targets, updates)) return;
+            if (!PublishSubscriptionRows(targets, updates, generatedGrant: generatedGrant)) return;
+            if (generatedGrant != null && updates.All(update => !update.Failed))
+                _generatedDnsttRefreshCompleted = true;
         }
         finally
         {
@@ -215,16 +218,34 @@ public partial class MainWindowViewModel
         Task.WhenAll(rows.Select(s => SubscriptionCacheUpdate.FetchAsync(s.ToEntry(), _logger, ct)));
 
     private bool PublishSubscriptionRows(List<SubscriptionViewModel> rows, SubscriptionCacheUpdate[] updates,
-        AppSettings? submission = null)
+        AppSettings? submission = null, DnsttSelectionRefresh.Binding? generatedGrant = null)
     {
         var feeds = submission?.App.Subscriptions ?? Subscriptions.Select(s => s.ToEntry()).ToList();
         var chain = submission == null ? null : SubscriptionChainSelection.Capture(submission.App);
-        if (submission == null && SelectedSubscriptionServer is { } row &&
-            (row.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(row.SourceEntry.DetourVia)) &&
-            feeds.FirstOrDefault(s => s.Id == row.SubscriptionId) is { } source)
-            chain = new(source.Id, source.Url, row.SourceEntry, SelectedSubscriptionRoute()?.Route);
+        // A generated-mode row is not selected from the subscription pool; that pool selection must
+        // not veto a feed replacement or a legacy DNSTT reconciliation.
+        if (submission == null && IsSubscribeConfig(_settings.App.ConfigMode) && SelectedSubscriptionServer is { } selectedRow &&
+            (selectedRow.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(selectedRow.SourceEntry.DetourVia)) &&
+            feeds.FirstOrDefault(s => s.Id == selectedRow.SubscriptionId) is { } source)
+            chain = new(source.Id, source.Url, selectedRow.SourceEntry, SelectedSubscriptionRoute()?.Route);
 
-        var accepted = SubscriptionCacheUpdate.TryPublish(updates, feeds, chain, out _);
+        // generatedGrant was captured before the await; re-capturing here could bind to a foreign
+        // grant or lose the only link to the old cache after an in-flight selection/edit.
+        var binding = submission == null ? generatedGrant : null;
+        var bindingUpdate = binding == null
+            ? null
+            : updates.FirstOrDefault(candidate => candidate.Origin.Id == binding.FeedId);
+        ServerViewModel? editorRow = null;
+        var outcome = DnsttSelectionRefresh.RefreshOutcome.Invalid;
+        bool PublishRows() => SubscriptionCacheUpdate.TryPublish(updates, feeds, chain, out _);
+        var accepted = binding == null
+            ? PublishRows()
+            : bindingUpdate != null &&
+                CanApplyGeneratedDnsttRefresh(binding!, out editorRow) &&
+                (outcome = DnsttSelectionRefresh.Evaluate(_settings, binding!, bindingUpdate!)) !=
+                DnsttSelectionRefresh.RefreshOutcome.Invalid &&
+                PublishRows();
+
         foreach (var (view, update) in rows.Zip(updates))
         {
             view.LastRefreshFailed = !accepted || update.Failed;
@@ -232,7 +253,37 @@ public partial class MainWindowViewModel
             view.LastRefreshedAt = update.Origin.LastRefreshedAt;
             view.LastServerCount = update.Origin.Servers.Count;
         }
+        if (accepted && binding != null && outcome == DnsttSelectionRefresh.RefreshOutcome.Applied &&
+            DnsttSelectionRefresh.TryApply(_settings, binding, bindingUpdate!, _logger))
+        {
+            editorRow!.Server = binding.Active.Server;
+            editorRow.Port = binding.Active.Port;
+            editorRow.Security = binding.Active.Security;
+        }
+        if (!accepted && binding != null)
+        {
+            _logger.Information(
+                "[DnsttSelectionRefresh] Kept the previous subscription cache; the selected generated grant changed or is ambiguous");
+        }
         return accepted;
+    }
+
+    private static bool IsSubscribeConfig(string? mode) =>
+        string.Equals(mode, "subscribe", StringComparison.OrdinalIgnoreCase);
+
+    private bool CanApplyGeneratedDnsttRefresh(DnsttSelectionRefresh.Binding binding, out ServerViewModel? row)
+    {
+        row = Servers.FirstOrDefault(view => ReferenceEquals(view.SourceEntry, binding.Active));
+        // The editor must still show the selected row without an unsaved edit; otherwise the
+        // next SaveSettings would write the user's value over the rotated grant.
+        return row != null &&
+            ReferenceEquals(SelectedServer ?? Servers.FirstOrDefault(), row) &&
+            row.Name == binding.Active.Name &&
+            row.Server == binding.Active.Server &&
+            row.Port == binding.Active.Port &&
+            row.Uuid == binding.Active.Uuid &&
+            row.Flow == binding.Active.Flow &&
+            row.Security == binding.Active.Security;
     }
 
     [RelayCommand]
@@ -336,6 +387,49 @@ public partial class MainWindowViewModel
     {
         _subRefreshTimer?.Dispose();
         _subRefreshTimer = null;
+    }
+
+    private bool _generatedDnsttRefreshCompleted;
+
+    // Generated mode has no background refresh timer. Do one user-initiated fetch on the first
+    // manual connect so a stale imported DNSTT grant is replaced before the candidate starts.
+    private async Task RefreshGeneratedDnsttSelectionAsync(int generation, CancellationToken ct)
+    {
+        if (_generatedDnsttRefreshCompleted || ct.IsCancellationRequested || !IsCurrentConnectionPreparation(generation))
+            return;
+
+        var binding = DnsttSelectionRefresh.Capture(_settings);
+        if (binding == null) return;
+        if (Subscriptions.Any(row => row.IsRefreshing)) return;
+        var feed = Subscriptions.FirstOrDefault(row => row.Enabled && row.Id == binding.FeedId &&
+            SimpleConnectPolicy.SameUrl(row.Url, binding.FeedUrl));
+        if (feed == null) return;
+
+        feed.IsRefreshing = true;
+        NotifySubscriptionRefreshState();
+        try
+        {
+            var update = await SubscriptionCacheUpdate.FetchAsync(feed.ToEntry(), _logger, ct);
+            if (ct.IsCancellationRequested || !IsCurrentConnectionPreparation(generation)) return;
+            if (!PublishSubscriptionRows([feed], [update], generatedGrant: binding)) return;
+            if (!update.Failed) _generatedDnsttRefreshCompleted = true;
+            RebuildSubscriptionPool();
+            SaveSettings();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                "[DnsttSelectionRefresh] Generated DNSTT refresh failed ({ExceptionType})",
+                ex.GetType().Name);
+        }
+        finally
+        {
+            feed.IsRefreshing = false;
+            NotifySubscriptionRefreshState();
+        }
     }
 
     internal async Task RefreshSubscriptionSilentAsync()

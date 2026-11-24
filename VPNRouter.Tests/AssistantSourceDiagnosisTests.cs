@@ -44,6 +44,33 @@ public sealed class AssistantSourceDiagnosisTests
     }
 
     [Theory]
+    [InlineData("StartupTimeout", "startup_timeout")]
+    [InlineData("ReadinessTimeout", "readiness_timeout")]
+    [InlineData("UnexpectedStop", "unexpected_stop")]
+    [InlineData("TunBusy", "tun_busy")]
+    public async Task Connection_diagnosis_sends_only_the_observed_code_and_build(string name, string wire)
+    {
+        var http = Stub(ValidResult());
+        var client = new SubscriptionAssistantClient(http);
+        var failure = Enum.Parse<SourceConnectionFailure>(name);
+        var reply = await client.DiagnoseSourceAsync(Url, Build, null, true, TestContext.Current.CancellationToken, failure);
+        Assert.Equal(SourceDiagnosisStatus.Available, reply.Status);
+        using var doc = JsonDocument.Parse(Assert.Single(http.SentRequests).Body!);
+        Assert.Equal(wire, doc.RootElement.GetProperty("connection").GetString());
+        Assert.False(doc.RootElement.TryGetProperty("crash", out _));
+        Assert.DoesNotContain(Credential, doc.RootElement.GetRawText());
+
+        foreach (var crash in new AssistantCrashEvidence?[] { null, Evidence })
+        {
+            var invalidHttp = new FakeHttpClient();
+            var invalid = await new SubscriptionAssistantClient(invalidHttp).DiagnoseSourceAsync(Url, Build, crash, false,
+                TestContext.Current.CancellationToken, crash == null ? null : failure);
+            Assert.Equal(SourceDiagnosisStatus.InsufficientEvidence, invalid.Status);
+            Assert.Empty(invalidHttp.SentRequests);
+        }
+    }
+
+    [Theory]
     [InlineData("commit")]
     [InlineData("outside")]
     [InlineData("traversal")]
@@ -80,6 +107,9 @@ public sealed class AssistantSourceDiagnosisTests
     {
         var unknown = await Request(Stub(new JsonObject { ["operation"] = "unknown_build" }));
         Assert.Equal(SourceDiagnosisStatus.UnknownBuild, unknown.Status);
+        var unmatched = await Request(Stub(new JsonObject { ["operation"] = "insufficient_evidence" }));
+        Assert.Equal(SourceDiagnosisStatus.InsufficientEvidence, unmatched.Status);
+        Assert.Null(unmatched.Diagnosis);
         foreach (var (code, status) in new[] { (404, SourceDiagnosisStatus.Unsupported), (429, SourceDiagnosisStatus.RateLimited) })
             Assert.Equal(status, (await Request(new FakeHttpClient().Setup(SubscriptionAssistantClient.SourceEndpoint, "", code))).Status);
     }

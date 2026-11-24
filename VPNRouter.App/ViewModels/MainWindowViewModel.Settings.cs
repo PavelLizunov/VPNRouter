@@ -692,7 +692,7 @@ public partial class MainWindowViewModel
 
         TgProxyPort = _settings.App.TgProxyPort > 0 ? _settings.App.TgProxyPort : 1443;
         TgProxySecret = _settings.App.TgProxySecret;
-        TgProxyVersionText = TgProxyUpdater.IsInstalled()
+        TgProxyVersionText = TgProxyUpdater.HasRuntimeFiles()
             ? (TgProxyUpdater.GetLocalVersion() ?? "?")
             : (IsRussian ? "Не установлен" : "Not installed");
         if (_tgProxy?.IsRunning == true)

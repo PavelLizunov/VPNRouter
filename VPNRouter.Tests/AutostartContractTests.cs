@@ -40,18 +40,11 @@ public sealed class AutostartContractTests
     public void IsInstalled_TrueWhenBothPresent()
     {
         using var sandbox = new TempSandbox();
-
-        var pythonDir = Path.Combine(sandbox.Root, "python");
-        Directory.CreateDirectory(pythonDir);
-        File.WriteAllText(Path.Combine(pythonDir, "python.exe"), "stub");
-        var certifiDir = Path.Combine(pythonDir, "Lib", "certifi");
-        Directory.CreateDirectory(certifiDir);
-        File.WriteAllText(Path.Combine(certifiDir, "__init__.py"), "stub");
-        Directory.CreateDirectory(Path.Combine(sandbox.Root, "proxy"));
+        SeedPinnedRuntime(sandbox.Root);
 
         Assert.True(
             TgProxyUpdater.IsInstalledAt(sandbox.Root),
-            "IsInstalled should be true when both python.exe and proxy/ are present.");
+            "IsInstalled should be true when python.exe, proxy/ and pinned dependencies are present.");
     }
 
     [Fact]
@@ -65,6 +58,93 @@ public sealed class AutostartContractTests
 
         Assert.False(TgProxyUpdater.IsInstalledAt(sandbox.Root));
     }
+
+    [Fact]
+    public void IsInstalled_FalseForLegacyMarkerOnlyRuntime()
+    {
+        using var sandbox = new TempSandbox();
+        var pythonDir = Path.Combine(sandbox.Root, "python");
+        Directory.CreateDirectory(pythonDir);
+        File.WriteAllText(Path.Combine(pythonDir, "python.exe"), "stub");
+        Directory.CreateDirectory(Path.Combine(pythonDir, "Lib", "certifi"));
+        File.WriteAllText(Path.Combine(pythonDir, "Lib", "certifi", "__init__.py"), "stub");
+        Directory.CreateDirectory(Path.Combine(sandbox.Root, "proxy"));
+
+        Assert.False(
+            TgProxyUpdater.IsInstalledAt(sandbox.Root),
+            "An old certifi __init__.py marker must not make the vulnerable runtime appear installed.");
+    }
+
+    [Fact]
+    public void IsInstalled_FalseForLegacyPythonVersion()
+    {
+        using var sandbox = new TempSandbox();
+        SeedPinnedRuntime(sandbox.Root, pythonVersion: "3.12.7");
+
+        Assert.False(
+            TgProxyUpdater.IsInstalledAt(sandbox.Root),
+            "A legacy Python embeddable must be upgraded before the runtime is launched.");
+    }
+
+    [Fact]
+    public void IsInstalled_FalseWhenCryptographyBinaryMissing()
+    {
+        using var sandbox = new TempSandbox();
+        SeedPinnedRuntime(sandbox.Root);
+        File.Delete(Path.Combine(
+            sandbox.Root, "python", "Lib", "cryptography", "hazmat", "bindings", "_rust.pyd"));
+
+        Assert.False(TgProxyUpdater.IsInstalledAt(sandbox.Root));
+    }
+
+    [Fact]
+    public void IsInstalled_RejectsStaleSourceAndAnInterruptedActivation()
+    {
+        using var sandbox = new TempSandbox();
+        SeedPinnedRuntime(sandbox.Root);
+        var version = Path.Combine(sandbox.Root, "version.txt");
+        File.WriteAllText(version, "older");
+        Assert.False(TgProxyUpdater.IsInstalledAt(sandbox.Root));
+        File.WriteAllText(version, TgProxyUpdater.SupportedProxyVersion);
+        Directory.CreateDirectory(Path.Combine(sandbox.Root, ".activating"));
+        Assert.False(TgProxyUpdater.IsInstalledAt(sandbox.Root));
+    }
+
+    private static void SeedPinnedRuntime(string root, string pythonVersion = TgProxyUpdater.PythonVersion)
+    {
+        var pythonDir = Path.Combine(root, "python");
+        Directory.CreateDirectory(pythonDir);
+        File.WriteAllText(Path.Combine(pythonDir, "python.exe"), "stub");
+        File.WriteAllText(Path.Combine(pythonDir, "python314.dll"), "stub");
+        File.WriteAllText(
+            Path.Combine(pythonDir, TgProxyUpdater.PythonVersionMarkerFileName),
+            pythonVersion);
+        SeedFile(root, "proxy/tg_ws_proxy.py");
+        File.WriteAllText(Path.Combine(root, "version.txt"), TgProxyUpdater.SupportedProxyVersion);
+
+        var lib = Path.Combine(pythonDir, "Lib");
+        SeedFile(lib, "certifi/__init__.py");
+        SeedFile(lib, "certifi/cacert.pem");
+        SeedFile(lib, "cryptography/__init__.py");
+        SeedFile(lib, "cryptography/hazmat/bindings/_rust.pyd");
+        SeedFile(lib, "cffi/__init__.py");
+        SeedFile(lib, "_cffi_backend.cp314-win_amd64.pyd");
+        SeedFile(lib, "pycparser/__init__.py");
+        SeedDirectory(lib, "certifi-2026.11.20.dist-info");
+        SeedDirectory(lib, "cryptography-50.0.2.dist-info");
+        SeedDirectory(lib, "cffi-2.1.1.dist-info");
+        SeedDirectory(lib, "pycparser-3.0.dist-info");
+    }
+
+    private static void SeedFile(string root, string relativePath)
+    {
+        var path = Path.Combine(root, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "stub");
+    }
+
+    private static void SeedDirectory(string root, string relativePath) =>
+        Directory.CreateDirectory(Path.Combine(root, relativePath));
 
     private static string? ReadVpnRouterServiceSourceOrSkip()
     {

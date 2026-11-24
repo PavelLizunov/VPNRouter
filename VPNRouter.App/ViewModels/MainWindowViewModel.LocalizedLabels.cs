@@ -134,8 +134,8 @@ public partial class MainWindowViewModel
 
     public string L_TgProxyReopenInTelegram => Strings.TgProxyReopenInTelegram;
     public string LblUpdateTgProxy => IsRussian
-        ? (TgProxyUpdater.IsInstalled() ? "Обновить TgProxy" : "Скачать TgProxy")
-        : (TgProxyUpdater.IsInstalled() ? "Update TgProxy" : "Download TgProxy");
+        ? (TgProxyUpdater.HasRuntimeFiles() ? "Обновить TgProxy" : "Скачать TgProxy")
+        : (TgProxyUpdater.HasRuntimeFiles() ? "Update TgProxy" : "Download TgProxy");
 
     public string L_TgProxySchemeMissingWarning => Strings.TgProxySchemeMissingWarning;
     public string L_TgProxyDismiss => IsRussian ? "Скрыть" : "Dismiss";

@@ -115,3 +115,11 @@ pre-fix picker. The worker had 10 CPUs at load 1.47/1.44/1.56, about
 4.6 GiB of free pages, 1.87 GiB of swap in use, 43 GiB of free disk,
 and no active Java or .NET jobs. APK compilation and UI acceptance
 remain open under the build constraints above.
+
+## Combined candidate acceptance
+
+PR 731 at `a12760bf` passed three connections on the Android 14 ARM64
+emulator with VLESS TLS disabled, including the saved-exclusion removal
+and reconnect path. The installed APK matched the Actions artifact. The
+[Standard prerelease record](phase-standard-prerelease-r3-2026-11-24.md)
+tracks the production-signed upgrade and final routing checks.

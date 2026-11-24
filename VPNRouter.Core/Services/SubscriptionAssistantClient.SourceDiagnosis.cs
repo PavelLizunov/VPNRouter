@@ -6,7 +6,8 @@ namespace VPNRouter.Core.Services;
 internal sealed record AssistantSourceCitation(string Commit, string Path, int First, int Last);
 internal sealed record AssistantSourceDiagnosis(string Hypothesis, string Basis, string Confidence, string Check,
     IReadOnlyList<AssistantSourceCitation> Citations);
-internal enum SourceDiagnosisStatus { Available, UnknownBuild, AccessDenied, RateLimited, Unsupported, Unavailable }
+internal enum SourceConnectionFailure { StartupTimeout, ReadinessTimeout, UnexpectedStop, TunBusy }
+internal enum SourceDiagnosisStatus { Available, UnknownBuild, InsufficientEvidence, AccessDenied, RateLimited, Unsupported, Unavailable }
 internal sealed record SourceDiagnosisReply(SourceDiagnosisStatus Status, AssistantSourceDiagnosis? Diagnosis = null);
 
 internal sealed partial class SubscriptionAssistantClient
@@ -15,14 +16,17 @@ internal sealed partial class SubscriptionAssistantClient
     private const int SourceResponseLimit = 4096;
 
     internal async Task<SourceDiagnosisReply> DiagnoseSourceAsync(string subscriptionUrl, AssistantSourceBuild build,
-        AssistantCrashEvidence crash, bool russian, CancellationToken ct)
+        AssistantCrashEvidence? crash, bool russian, CancellationToken ct, SourceConnectionFailure? connection = null)
     {
         ct.ThrowIfCancellationRequested();
         if (ReadIdentity(subscriptionUrl) is not { } identity) return new(SourceDiagnosisStatus.AccessDenied);
 
+        if ((crash == null) == (connection == null) || (connection is { } kind && !Enum.IsDefined(kind)))
+            return new(SourceDiagnosisStatus.InsufficientEvidence);
+
         var body = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            Schema = 1, Locale = russian ? "ru" : "en", build.Version, build.Commit, build.Platform, build.Arch, Crash = crash,
+            Schema = 1, Locale = russian ? "ru" : "en", build.Version, build.Commit, build.Platform, build.Arch, Crash = crash, Connection = connection,
         }, StepJson);
         var request = new HttpRequest(HttpMethod.Post, new Uri(SourceEndpoint), new Dictionary<string, string>
         {
@@ -60,7 +64,13 @@ internal sealed partial class SubscriptionAssistantClient
             || schema.ValueKind != JsonValueKind.Number || !schema.TryGetInt32(out int version) || version != 1
             || !root.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object) return invalid;
         var operation = ReadString(result, "operation");
-        if (operation == "unknown_build" && HasProperties(result, 1)) return new(SourceDiagnosisStatus.UnknownBuild);
+        if (HasProperties(result, 1))
+            return operation switch
+            {
+                "unknown_build" => new(SourceDiagnosisStatus.UnknownBuild),
+                "insufficient_evidence" => new(SourceDiagnosisStatus.InsufficientEvidence),
+                _ => invalid,
+            };
         if (operation != "source_diagnosis" || !HasProperties(result, 6)
             || ReadString(result, "hypothesis") is not { } hypothesis || !ValidText(hypothesis)
             || ReadString(result, "basis") is not { } basis || !ValidText(basis)

@@ -288,6 +288,10 @@ public partial class MainWindowViewModel
     internal Func<AppSettings, CancellationToken, bool,
         Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)>>? SimpleTunnelStart { get; set; }
 
+    private bool IsCurrentConnectionPreparation(int generation) =>
+        !_disposed && IsConnecting && !IsConnected && !IsApplying && !_isReconnecting
+        && generation == _connectionGeneration;
+
     [RelayCommand]
     private async Task SmpToggleConnectAsync()
     {
@@ -315,8 +319,7 @@ public partial class MainWindowViewModel
         var editorInput = input;
         var revision = _routingSettingsRevision;
         Func<bool>? choiceUnchanged = null;
-        bool Preparing() => !_disposed && IsConnecting && !IsConnected && !IsApplying && !_isReconnecting
-            && generation == _connectionGeneration;
+        bool Preparing() => IsCurrentConnectionPreparation(generation);
         try
         {
             var kind = SimpleInputDetector.Classify(input);
@@ -343,6 +346,12 @@ public partial class MainWindowViewModel
                     : "Paste a server link (vless:// / vmess:// / hysteria2:// / tuic:// / ss:// / naive://) or a subscription URL (http:// / https://).";
                 return;
             }
+
+            // A generated-mode home connect has no subscription URL input to refresh. Fetch the
+            // single enabled registration once so a rotated imported DNSTT grant is current.
+            if (kind == SmpInputKind.Invalid)
+                await RefreshGeneratedDnsttSelectionAsync(generation, CancellationToken.None);
+            if (!Preparing()) return;
 
             if (IsSplitTunnel) _settings.ActiveProfile = SimpleSplitProfile;
             SaveSettings();
@@ -450,7 +459,7 @@ public partial class MainWindowViewModel
 
             if (!Preparing()) return;
             IsConnecting = false;
-            await ToggleConnectionCoreAsync(submitted);
+            await ToggleConnectionCoreAsync(submitted, manual: true);
         }
         finally
         {

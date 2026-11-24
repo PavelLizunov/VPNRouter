@@ -182,6 +182,8 @@ public sealed class UpdateNotificationViewModelTests
         vm.StableVersions[1].SelectCommand.Execute(null);
 
         Assert.True(vm.IsRollbackConfirmationVisible);
+        Assert.True(vm.IsHistoryRollbackConfirmationVisible);
+        Assert.False(vm.IsAssistedRollbackConfirmationVisible);
         Assert.Same(older, vm.SelectedRollback);
         Assert.Contains("2.49.2", vm.RollbackConfirmationText);
         Assert.Equal(0, fake.DownloadCallCount);

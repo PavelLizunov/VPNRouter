@@ -51,7 +51,8 @@ public partial class AssistantSetupPanel : UserControl
     {
         if (args.PropertyName == nameof(MainWindowViewModel.IsSimpleMode) && _viewModel is { IsSimpleMode: false, IsInvokingAssistantControl: false })
             _request?.Cancel();
-        if (args.PropertyName == nameof(MainWindowViewModel.IsRussian)) RefreshLabels();
+        if (args.PropertyName is nameof(MainWindowViewModel.IsRussian) or nameof(MainWindowViewModel.HasSourceConnection))
+            RefreshLabels();
     }
 
     private void SubscriptionsChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -97,6 +98,8 @@ public partial class AssistantSetupPanel : UserControl
         SourceDiagnosisDetails.IsVisible = canPlan;
         SourceDiagnosisNotice.Text = Strings.SourceDiagnosisNotice;
         DiagnoseSource.Content = Strings.SourceDiagnosisPreview;
+        DiagnoseConnection.Content = Strings.SourceConnectionPreview;
+        DiagnoseConnection.IsVisible = canPlan && _viewModel?.HasSourceConnection == true;
         RepairVpn.Content = Strings.AssistantRepair;
         CancelAssistant.Content = _confirmation == null ? Strings.AssistantCancel :
             _diagnosingSource ? Strings.SourceDiagnosisDoNotSend : Strings.AssistantDecline;
@@ -153,7 +156,7 @@ public partial class AssistantSetupPanel : UserControl
         window.AddHandler(InputElement.PointerPressedEvent, CancelFromWindow, RoutingStrategies.Tunnel);
         try
         {
-            await RunAsync(ct => vm.DiagnoseAssistantSourceAsync(ConfirmChangeAsync, ct), Strings.SourceDiagnosisWorking, Strings.AssistantUnavailable);
+            await RunAsync(ct => vm.DiagnoseAssistantSourceAsync(ReferenceEquals(sender, DiagnoseConnection), ConfirmChangeAsync, ct), Strings.SourceDiagnosisWorking, Strings.AssistantUnavailable);
         }
         finally
         {
@@ -221,7 +224,7 @@ public partial class AssistantSetupPanel : UserControl
         if (_request != null) return;
         using var request = new CancellationTokenSource();
         _request = request;
-        DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
+        DiagnoseConnection.IsEnabled = DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
             = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
         CancelAssistant.IsVisible = true;
         AssistantStatus.Text = progress ?? Strings.AssistantWorking;
@@ -241,7 +244,7 @@ public partial class AssistantSetupPanel : UserControl
         {
             _request = null;
             CancelAssistant.IsVisible = false;
-            DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
+            DiagnoseConnection.IsEnabled = DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
                 = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
             RefreshLabels();
         }

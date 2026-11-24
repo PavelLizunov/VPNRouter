@@ -47,7 +47,8 @@ public sealed record UpdateSourceInfo(
     long AssetSize,
     string? AssetSha256,
     bool IsPrerelease,
-    string ReleaseNotes);
+    string ReleaseNotes,
+    bool RequireExactSize = false);
 
 public sealed record DownloadProgress(long BytesReceived, long? TotalBytes)
 {

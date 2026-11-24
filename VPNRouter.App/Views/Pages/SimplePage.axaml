@@ -426,6 +426,136 @@
 
                 <pages:AssistantSetupPanel Name="SetupAssistant"/>
 
+                <Border IsVisible="{Binding UpdateVm.IsRollbackAssistanceVisible}"
+                        Margin="0,20,0,0"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource WarningBorderBrush}"
+                        Background="{DynamicResource WarningBgBrush}"
+                        CornerRadius="{StaticResource RadiusXl}"
+                        Padding="16,12">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <icons:Pictogram Id="shield-alert" Width="16" Height="16"
+                                             VerticalAlignment="Center"
+                                             Foreground="{DynamicResource WarningFgBrush}"/>
+                            <TextBlock Text="{Binding UpdateVm.RollbackAssistanceTitle}"
+                                       FontWeight="Bold"
+                                       FontSize="{StaticResource FsMd}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource WarningFgBrush}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding UpdateVm.RollbackAssistanceBody}"
+                                   FontSize="{StaticResource FsSm}"
+                                   LineHeight="16"
+                                   Foreground="{DynamicResource WarningFgBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding UpdateVm.RollbackAssistanceConfidenceText}"
+                                   IsVisible="{Binding UpdateVm.HasRollbackAssistanceConfidence}"
+                                   FontSize="{StaticResource FsSm}"
+                                   Foreground="{DynamicResource WarningFgBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding UpdateVm.RollbackAssistanceError}"
+                                   IsVisible="{Binding UpdateVm.HasRollbackAssistanceError}"
+                                   FontSize="{StaticResource FsSm}"
+                                   Foreground="{DynamicResource DangerFgBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding UpdateVm.RollbackAssistanceBusyText}"
+                                   IsVisible="{Binding UpdateVm.IsRollbackAssistanceBusy}"
+                                   FontSize="{StaticResource FsSm}"
+                                   Foreground="{DynamicResource WarningFgBrush}"
+                                   TextWrapping="Wrap"/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    IsVisible="{Binding UpdateVm.IsRollbackAssistanceChoiceVisible}">
+                            <Button Command="{Binding UpdateVm.RunRollbackAssistancePrimaryCommand}"
+                                    FontSize="11"
+                                    Padding="10,5"
+                                    CornerRadius="{StaticResource RadiusLg}"
+                                    AutomationProperties.AutomationId="RollbackAssistancePrimaryButton">
+                                <TextBlock Text="{Binding UpdateVm.RollbackAssistancePrimaryText}"
+                                           TextWrapping="Wrap"/>
+                            </Button>
+                            <Button Command="{Binding UpdateVm.DismissRollbackAssistanceCommand}"
+                                    FontSize="11"
+                                    Padding="10,5"
+                                    CornerRadius="{StaticResource RadiusLg}"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource WarningBorderBrush}"
+                                    BorderThickness="1"
+                                    AutomationProperties.AutomationId="RollbackAssistanceDismissButton">
+                                <TextBlock Text="{Binding UpdateVm.RollbackAssistanceSecondaryText}"
+                                           TextWrapping="Wrap"/>
+                            </Button>
+                        </StackPanel>
+
+                        <Border IsVisible="{Binding UpdateVm.IsAssistedRollbackConfirmationVisible}"
+                                Padding="10"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Background="{DynamicResource SurfaceBaseBrush}"
+                                BorderBrush="{DynamicResource WarningBorderBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="7">
+                                <TextBlock Text="{Binding UpdateVm.RollbackAssistanceConfirmationText}"
+                                           FontSize="{StaticResource FsSm}"
+                                           LineHeight="16"
+                                           Foreground="{DynamicResource WarningFgBrush}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding UpdateVm.RollbackAssistanceProvenanceText}"
+                                           FontSize="{StaticResource FsSm}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           TextWrapping="Wrap"/>
+                                <StackPanel Spacing="6">
+                                    <Button Classes="solid"
+                                            Command="{Binding UpdateVm.ConfirmRollbackCommand}"
+                                            Background="{DynamicResource WarningSolidBrush}"
+                                            Foreground="White"
+                                            HorizontalAlignment="Stretch"
+                                            FontSize="11"
+                                            Padding="10,5"
+                                            AutomationProperties.AutomationId="RollbackAssistanceConfirmButton">
+                                        <TextBlock Text="{Binding UpdateVm.RollbackAssistanceInstallText}"
+                                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                                    </Button>
+                                    <Button Command="{Binding UpdateVm.CancelRollbackCommand}"
+                                            HorizontalAlignment="Stretch"
+                                            FontSize="11"
+                                            Padding="10,5"
+                                            AutomationProperties.AutomationId="RollbackAssistanceCancelButton">
+                                        <TextBlock Text="{Binding UpdateVm.CancelRollbackText}"
+                                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border IsVisible="{Binding UpdateVm.IsRollbackStatusVisible}"
+                        Margin="0,12,0,0"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        CornerRadius="{StaticResource RadiusXl}"
+                        Padding="16,12">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding UpdateVm.RollbackStatusText}"
+                                   FontSize="{StaticResource FsSm}"
+                                   LineHeight="16"
+                                   TextWrapping="Wrap"/>
+                        <Button Grid.Column="1"
+                                Command="{Binding UpdateVm.DismissRollbackStatusCommand}"
+                                FontSize="11"
+                                Padding="10,5"
+                                VerticalAlignment="Top"
+                                AutomationProperties.AutomationId="RollbackStatusDismissButton">
+                            <TextBlock Text="{Binding UpdateVm.RollbackAssistanceStatusDismissText}"
+                                       TextWrapping="Wrap"/>
+                        </Button>
+                    </Grid>
+                </Border>
+
                 <!-- Problems card: what is wrong in plain words, one Fix button, then the result with Undo. -->
                 <Border IsVisible="{Binding IsProblemsCardVisible}"
                         Margin="0,20,0,0"

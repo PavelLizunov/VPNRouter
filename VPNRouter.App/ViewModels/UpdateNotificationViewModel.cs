@@ -13,6 +13,7 @@ using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.UpdateSources;
 using VPNRouter.App.Localization;
+using CoreStrings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -27,12 +28,15 @@ public partial class UpdateNotificationViewModel : ObservableObject
     private readonly UpdateChecker _updateChecker;
     private readonly IUpdateSource _updateSource;
     private readonly Action<int> _exitApplication;
+    private readonly ConnectionRollbackHistory? _rollbackHistory;
     internal Func<Action<bool>>? ReserveRestart { get; set; }
     private System.Threading.CancellationTokenSource? _resetCheckStateCts;
 
     [ObservableProperty] private bool _isVisible;
     [ObservableProperty] private string _message = string.Empty;
-    [ObservableProperty] private bool _isDownloading;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRollbackAssistanceChoiceVisible))]
+    private bool _isDownloading;
     [ObservableProperty] private int _downloadProgress;
 
     public enum UpdateCheckState { Default, Checking, UpToDate, Found, Failed }
@@ -58,6 +62,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
         OnPropertyChanged(nameof(RollbackConfirmationText));
         OnPropertyChanged(nameof(ConfirmRollbackText));
         OnPropertyChanged(nameof(CancelRollbackText));
+        RefreshRollbackLocalization();
         foreach (var item in StableVersions)
             item.NotifyLangChanged();
     }
@@ -86,9 +91,14 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RollbackConfirmationText))]
+    [NotifyPropertyChangedFor(nameof(RollbackAssistanceConfirmationText))]
     private UpdateSourceInfo? _selectedRollback;
 
-    [ObservableProperty] private bool _isRollbackConfirmationVisible;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRollbackAssistanceChoiceVisible))]
+    [NotifyPropertyChangedFor(nameof(IsAssistedRollbackConfirmationVisible))]
+    [NotifyPropertyChangedFor(nameof(IsHistoryRollbackConfirmationVisible))]
+    private bool _isRollbackConfirmationVisible;
 
     public string VersionHistoryButtonText => IsVersionHistoryVisible
         ? Strings.HideOlderVersions
@@ -106,7 +116,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
     private volatile bool _errorLocked;
 
     public UpdateNotificationViewModel(UpdateSettings settings, ILogger logger)
-        : this(settings, logger, updateSource: null, exitApplication: null)
+        : this(settings, logger, updateSource: null, exitApplication: null, rollbackHistory: null)
     {
     }
 
@@ -114,10 +124,12 @@ public partial class UpdateNotificationViewModel : ObservableObject
         UpdateSettings settings,
         ILogger logger,
         IUpdateSource? updateSource,
-        Action<int>? exitApplication = null)
+        Action<int>? exitApplication = null,
+        ConnectionRollbackHistory? rollbackHistory = null)
     {
         _settings = settings;
         _logger = logger;
+        _rollbackHistory = rollbackHistory;
         _updateChecker = new UpdateChecker(settings, AppVersion.Version);
         _updateSource = updateSource ?? PlatformServices.CreateUpdateSource(
             settings,
@@ -137,6 +149,12 @@ public partial class UpdateNotificationViewModel : ObservableObject
     {
         try
         {
+            CompleteRollbackHandoff();
+            if (_rollbackHistory?.ShouldSuppressAutomaticUpdates() == true)
+            {
+                _logger.Information("[UpdateVm] Automatic update check skipped after a deliberate rollback");
+                return;
+            }
             _updateChecker.CleanupStagingDir();
             var info = await _updateSource.CheckAsync().ConfigureAwait(false);
             if (info != null)
@@ -212,7 +230,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
     [RelayCommand]
     private async Task ToggleVersionHistoryAsync()
     {
-        if (IsDownloading || IsLoadingVersionHistory)
+        if (IsDownloading || IsLoadingVersionHistory || IsRollbackAssistanceBusy)
             return;
 
         if (IsVersionHistoryVisible)
@@ -262,8 +280,11 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     private void SelectRollback(UpdateSourceInfo info)
     {
-        if (IsDownloading || IsLoadingVersionHistory)
+        if (IsDownloading || IsLoadingVersionHistory || IsRollbackAssistanceBusy)
             return;
+        if (_rollbackAssistanceFlow)
+            CancelRollback();
+        _assistedListedRelease = null;
         SelectedRollback = info;
         IsRollbackConfirmationVisible = true;
     }
@@ -279,13 +300,51 @@ public partial class UpdateNotificationViewModel : ObservableObject
     [RelayCommand]
     private async Task ConfirmRollbackAsync()
     {
-        if (SelectedRollback == null || IsDownloading)
+        if (!IsRollbackConfirmationVisible || SelectedRollback is not { } target || IsDownloading)
             return;
-        _pendingUpdate = SelectedRollback;
+
+        RollbackAssistDecision? approved = null;
+        if (_rollbackAssistanceFlow)
+        {
+            approved = _rollbackDecision;
+            if (approved?.Kind != RollbackAssistKind.OfferRollback || !IsCurrentRecoveryDecision(approved))
+            {
+                RollbackAssistanceError = CoreStrings.RollbackAssistanceExpired;
+                return;
+            }
+            if (!IsRollbackHostSupported())
+            {
+                RollbackAssistanceError = CoreStrings.RollbackAssistanceUnavailable;
+                return;
+            }
+            var incompatibility = ActiveConfigIncompatibility();
+            if (!string.IsNullOrWhiteSpace(incompatibility))
+            {
+                RollbackAssistanceError = CoreStrings.RollbackAssistanceIncompatibleBody(incompatibility);
+                return;
+            }
+            var verdict = RollbackArtifactPolicy.CreateSignedRecoveryArtifact(
+                AppVersion.Version,
+                _settings.IsExperimental,
+                listedRelease: _assistedListedRelease,
+                isWindows: true);
+            if (!verdict.Eligible || verdict.Artifact is not { } artifact ||
+                !Equals(artifact, target))
+            {
+                RollbackAssistanceError = verdict.Eligible
+                    ? CoreStrings.RollbackAssistanceFailed(CoreStrings.RollbackAssistanceNoCompatible)
+                    : RollbackArtifactErrorText(verdict);
+                return;
+            }
+        }
+
+        if (approved == null)
+            _pendingUpdate = target;
         IsRollbackConfirmationVisible = false;
         IsVersionHistoryVisible = false;
-        IsVisible = true;
-        await DownloadAndApplyAsync();
+        IsVisible = approved == null;
+        IsRollbackAssistanceBusy = approved != null;
+        await ApplyUpdateAsync(target, approved);
     }
 
     [RelayCommand]
@@ -293,32 +352,54 @@ public partial class UpdateNotificationViewModel : ObservableObject
     {
         SelectedRollback = null;
         IsRollbackConfirmationVisible = false;
+        _rollbackAssistanceFlow = false;
+        _assistedListedRelease = null;
     }
 
     [RelayCommand]
-    private async Task DownloadAndApplyAsync()
-    {
-        var target = _pendingUpdate;
-        if (target == null) return;
+    private Task DownloadAndApplyAsync() => !IsDownloading && _pendingUpdate is { } update
+        ? ApplyUpdateAsync(update, null)
+        : Task.CompletedTask;
 
+    private async Task ApplyUpdateAsync(UpdateSourceInfo target, RollbackAssistDecision? approved)
+    {
         _errorLocked = false;
         IsDownloading = true;
         DownloadProgress = 0;
         Message = Strings.UpdateDownloading;
 
+        var handoffStarted = false;
         try
         {
             var extractedDir = await _updateSource.DownloadAsync(target, progress: null).ConfigureAwait(false);
+            if (approved != null && (SignedRecoveryManifestTrust.Manifest is not { } manifest ||
+                manifest.Version != target.Version || !VerifyStagedManifest(extractedDir, manifest)))
+                throw new InvalidOperationException(CoreStrings.RollbackAssistanceManifestUnavailable);
             var finish = await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                if (approved != null)
+                {
+                    if (!IsCurrentRecoveryDecision(approved))
+                        throw new InvalidOperationException(CoreStrings.RollbackAssistanceExpired);
+                    if (ActiveConfigIncompatibility() is { } reason)
+                        throw new InvalidOperationException(CoreStrings.RollbackAssistanceIncompatibleBody(reason));
+                }
                 Message = Strings.UpdateApplying;
                 return ReserveRestart?.Invoke();
             });
             bool applied = false;
             try
             {
+                if (approved != null && _rollbackHistory != null)
+                {
+                    _rollbackHistory.BeginRollbackHandoff(target.Version, approved.ConfigFingerprint);
+                    handoffStarted = true;
+                }
+
                 applied = await _updateSource.ApplyAsync(target, extractedDir).ConfigureAwait(false);
                 if (!applied) throw new InvalidOperationException(Core.Localization.Strings.UpdateInstallNotStarted);
+                if (approved == null)
+                    _rollbackHistory?.ClearRollbackChoice();
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     Message = Strings.UpdateRestarting;
@@ -336,6 +417,13 @@ public partial class UpdateNotificationViewModel : ObservableObject
             _errorLocked = true;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                if (approved != null)
+                {
+                    if (handoffStarted)
+                        _rollbackHistory?.FailRollbackHandoff(target.Version);
+                    IsRollbackAssistanceBusy = false;
+                    RollbackAssistanceError = CoreStrings.RollbackAssistanceFailed(ex.Message);
+                }
                 Message = string.Format(Strings.UpdateFailed, ex.Message);
                 IsDownloading = false;
                 DownloadProgress = 0;

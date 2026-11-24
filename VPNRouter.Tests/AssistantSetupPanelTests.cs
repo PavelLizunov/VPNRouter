@@ -116,6 +116,48 @@ public sealed class AssistantSetupPanelTests
         }
     }
 
+    [AvaloniaFact]
+    public void Connection_diagnosis_is_available_only_for_the_subscription_used_by_the_attempt()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            const string current = "https://ninitux.com/sub/synthetic-current";
+            const string other = "https://ninitux.com/sub/synthetic-other";
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions = [new() { Url = current, Enabled = true }];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger);
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Content = panel };
+            window.Show();
+            try
+            {
+                var button = panel.FindControl<Button>("DiagnoseConnection")!;
+                vm.SetSourceConnectionObservation("tun-owned", other);
+                Assert.False(button.IsVisible);
+                vm.SetSourceConnectionObservation("phase-b-timeout", current);
+                Assert.True(button.IsVisible);
+                vm.SetSourceConnectionObservation(null);
+                Assert.False(button.IsVisible);
+                vm.SetSourceConnectionObservation("cancelled", current);
+                Assert.False(button.IsVisible);
+                Assert.False(vm.IsConnected);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
     private static Task<bool> UnexpectedConfirmation(string text, CancellationToken ct) =>
         throw new InvalidOperationException("This request cannot authorize a change.");
 

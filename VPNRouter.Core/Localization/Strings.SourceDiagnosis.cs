@@ -6,9 +6,26 @@ public static partial class Strings
 {
     internal static string SourceDiagnosisTitle => Ru ? "Разбор по исходному коду" : "Analyze with source code";
     internal static string SourceDiagnosisNotice => Ru
-        ? "DeepSeek получит версию приложения, систему, архитектуру и признаки последнего сбоя. Шлюз подберёт строки кода из этой сборки."
-        : "DeepSeek receives the app build, OS, architecture and the last crash indicators. The gateway selects source lines from this build.";
+        ? "DeepSeek получит версию приложения, систему, архитектуру и признаки выбранного сбоя. Шлюз подберёт строки кода из этой сборки."
+        : "DeepSeek receives the app build, OS, architecture and the selected failure indicators. The gateway selects source lines from this build.";
     internal static string SourceDiagnosisPreview => Ru ? "Выбрать последний отчёт" : "Review latest report";
+    internal static string SourceConnectionPreview => Ru ? "Разобрать последнее подключение" : "Review last failed connection";
+    internal static string SourceConnectionExpired => Ru ? "Состояние подключения изменилось. Выберите актуальный сбой." : "The connection state changed. Select the current failure.";
+    internal static string SourceConnectionConsent(SourceConnectionFailure failure, DateTime utc)
+    {
+        var what = failure switch
+        {
+            SourceConnectionFailure.StartupTimeout => Ru ? "истекло время запуска VPN" : "VPN startup timed out",
+            SourceConnectionFailure.ReadinessTimeout => Ru ? "VPN запустился, но подключение не подтвердилось вовремя" : "the VPN started but did not become ready in time",
+            SourceConnectionFailure.UnexpectedStop => Ru ? "ядро остановилось во время подключения" : "the engine stopped while connecting",
+            SourceConnectionFailure.TunBusy => Ru ? "адаптер уже занят" : "the tunnel adapter was already in use",
+            _ => throw new ArgumentOutOfRangeException(nameof(failure)),
+        };
+        var time = utc.ToLocalTime().ToString("g", Ru
+            ? System.Globalization.CultureInfo.GetCultureInfo("ru-RU") : System.Globalization.CultureInfo.CurrentCulture);
+        return Ru ? $"{time} — {what}. Передать этот признак и сведения о сборке?"
+            : $"{time} — {what}. Send this indicator and the build details?";
+    }
     internal static string SourceDiagnosisNoReport => Ru ? "Нет доступного отчёта о последнем сбое." : "A readable crash report is unavailable.";
     internal static string SourceDiagnosisInsufficient => Ru
         ? "В отчёте не удалось определить ни тип ошибки, ни место сбоя, ни состояние подключения."
@@ -28,6 +45,9 @@ public static partial class Strings
     internal static string SourceDiagnosisMismatch => Ru
         ? "Не удалось связать последний отчёт с установленной сборкой. Можно воспользоваться обычным разбором сбоя."
         : "The last report could not be matched to this installation. You can still use Analyze crash.";
+    internal static string SourceDiagnosisNoMatch => Ru
+        ? "Сборка найдена, но доступных фрагментов кода недостаточно для объяснения этого сбоя."
+        : "This build is registered, but the available source does not explain the reported crash.";
     internal static string SourceDiagnosisUnknown => Ru
         ? "В каталоге пока нет исходников этой сборки. Доступен обычный разбор сбоя."
         : "Source for this build is unavailable in the catalog. You can still use Analyze crash.";
