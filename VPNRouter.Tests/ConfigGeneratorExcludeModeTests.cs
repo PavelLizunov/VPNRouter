@@ -80,6 +80,49 @@ public class ConfigGeneratorExcludeModeTests
     }
 
     [Fact]
+    public void ExcludeMode_RoutesExcludedAppBeforeDefaultUdpProxy()
+    {
+        var settings = BuildSettings(exclude: ["Steam.exe"]);
+        settings.Vless.Servers.Add(new VlessServerEntry
+        {
+            Name = "udp",
+            Server = "1.2.3.4",
+            Port = 8443,
+            Uuid = "def",
+            Security = "reality",
+            Reality = new VlessRealityConfig { PublicKey = "key2", ShortId = "bb" },
+        });
+
+        var config = ConfigGenerator.Generate(EmptyProfile(), [], settings);
+
+        Assert.Contains(config.Outbounds, outbound => outbound.Tag == "proxy-udp");
+        int exclusion = config.Route.Rules.FindIndex(rule =>
+            rule.Outbound == "direct" && rule.ProcessName?.Contains("Steam.exe") == true);
+        int udpDefault = config.Route.Rules.FindIndex(rule =>
+            rule.Outbound == "proxy-udp" && rule.Network == "udp" && rule.ProcessName == null);
+        Assert.True(exclusion >= 0 && udpDefault > exclusion);
+        Assert.Equal("proxy", config.Route.Final);
+    }
+
+    [Fact]
+    public void ExcludeMode_RoutesExcludedAppBeforeProxyQuicRejection()
+    {
+        var settings = BuildSettings(exclude: ["Browser.exe"]);
+        settings.App.BlockQuicOnTcpProxy = true;
+        var config = ConfigGenerator.Generate(EmptyProfile(), [], settings);
+
+        int exclusion = config.Route.Rules.FindIndex(rule =>
+            rule.Outbound == "direct" && rule.ProcessName?.Contains("Browser.exe") == true);
+        int quicBlock = config.Route.Rules.FindIndex(rule =>
+            rule.Protocol == "quic" && rule.Action == "reject");
+        Assert.True(exclusion >= 0 && quicBlock > exclusion);
+        var tunnel = new AcceptedTunnelInfo(settings, ConfigGenerator.Serialize(config), "", null,
+            new Dictionary<string, VlessServerEntry>());
+        Assert.True(tunnel.RoutesAppDirect("Browser.exe"));
+        Assert.False(tunnel.RoutesAppDirect("Work.exe"));
+    }
+
+    [Fact]
     public void ExcludeMode_DnsRulesRouteSelectedAppsToLocalResolver()
     {
         var settings = BuildSettings(

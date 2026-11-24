@@ -13,6 +13,13 @@ public class VlessServerEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UseAsSingleOutbound { get; set; }
 
+    // Repair must select one row without changing the stored row fingerprint.
+    private bool _singleOutboundForRepair;
+
+    internal void PinForRepair() => _singleOutboundForRepair = true;
+
+    internal bool RequiresSingleOutbound() => UseAsSingleOutbound || _singleOutboundForRepair;
+
     [YamlMember(Alias = "protocol")]
     public string Protocol { get; set; } = "vless";
 

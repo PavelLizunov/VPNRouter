@@ -9,9 +9,8 @@
              x:DataType="vm:MainWindowViewModel">
 
     <!-- Home screen, direction A "status emblem": one centred column (max 400 px) with the status emblem as the hero,
-         the state word and one sub-line under it, the pill Connect / Disconnect button, then the connection card
-         (config row + routing segments) and a quiet list of secondary rows. Spacing uses the 4 px scale (4, 8, 12, 16,
-         24); every card uses RadiusXl and every control inside a card RadiusLg, so corners stay concentric. -->
+         the state word and one sub-line under it, the connection card (config row + routing segments)
+         and a quiet list of secondary rows. The Connect / Disconnect button stays in a fixed footer. -->
     <UserControl.Styles>
 
         <!-- Status emblem: halo, track, state ring, connecting arc, mascot tile and a shield badge at six o'clock. -->
@@ -322,11 +321,11 @@
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                  VerticalScrollBarVisibility="Auto"
-                  AllowAutoHide="False">
-        <Grid Margin="16,16,16,16">
-            <StackPanel MaxWidth="400" HorizontalAlignment="Stretch">
+    <Grid RowDefinitions="*,Auto">
+        <ScrollViewer Name="SimpleContentScroll" HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto" AllowAutoHide="False"
+                      HorizontalContentAlignment="Stretch">
+            <StackPanel MaxWidth="400" HorizontalAlignment="Stretch" Margin="16">
 
                 <!-- Hero: emblem, state word, sub-line, live traffic. -->
                 <Grid Classes="emblem"
@@ -425,7 +424,7 @@
                     </StackPanel>
                 </Border>
 
-                <pages:AssistantSetupPanel/>
+                <pages:AssistantSetupPanel Name="SetupAssistant"/>
 
                 <!-- Problems card: what is wrong in plain words, one Fix button, then the result with Undo. -->
                 <Border IsVisible="{Binding IsProblemsCardVisible}"
@@ -523,8 +522,7 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Config input of the first-run step (no saved config); it sits above the button so the flow reads top-down: paste, then connect.
-                     "Change" on the connection card opens its own panel inside that card, so the emblem and the button never move. -->
+                <!-- First-run config input. "Change" on the connection card opens its own editor. -->
                 <Border Classes="card"
                         IsVisible="{Binding SmpFirstRunEditorVisible}"
                         Margin="0,24,0,0"
@@ -550,48 +548,6 @@
                         <TextBlock Classes="hint" Text="{Binding L_SmpInputHint}"/>
                     </StackPanel>
                 </Border>
-
-                <!-- Primary action. Exactly one of the three is visible; the UI Automation name is the visible text
-                     ("Connect" / "Disconnect", tools/brat-stability.ps1 finds the button by it). -->
-                <Panel Margin="0,18,0,0">
-                    <Button Classes="cta go solid"
-                            Command="{Binding SmpToggleConnectCommand}"
-                            IsVisible="{Binding SimpleCtaIsDisconnected}"
-                            IsEnabled="{Binding SmpCanConnect}"
-                            AutomationProperties.Name="{Binding SimpleCtaText}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <icons:Pictogram Id="power"/>
-                            <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Classes="cta stop danger-soft"
-                            Command="{Binding SmpToggleConnectCommand}"
-                            IsVisible="{Binding SimpleCtaIsConnected}"
-                            AutomationProperties.Name="{Binding SimpleCtaText}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <icons:Pictogram Id="power"/>
-                            <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Classes="cta wait"
-                            Command="{Binding SmpToggleConnectCommand}"
-                            IsVisible="{Binding SimpleCtaIsConnecting}"
-                            IsEnabled="False"
-                            AutomationProperties.Name="{Binding L_SmpCtaWait}">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Arc Classes="spinner"
-                                 Classes.spin="{Binding SmpHeroIsBusy}"
-                                 IsVisible="{Binding SmpHeroIsBusy}"
-                                 Width="16" Height="16" StrokeThickness="2"
-                                 VerticalAlignment="Center">
-                                <Arc.RenderTransform>
-                                    <RotateTransform/>
-                                </Arc.RenderTransform>
-                            </Arc>
-                            <TextBlock Text="{Binding L_SmpCtaWait}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                </Panel>
 
                 <!-- Current connection: which config, and what goes through it. -->
                 <Border Classes="card" Margin="0,14,0,0">
@@ -765,6 +721,7 @@
                 <Border Classes="quiet" Margin="0,12,0,0">
                     <StackPanel>
                         <Button Classes="row"
+                                AutomationProperties.AutomationId="AssistantAction.OpenAutostartSettings"
                                 Command="{Binding OpenAutostartSettingsCommand}"
                                 ToolTip.Tip="{Binding L_SmpTipAutostart}"
                                 AutomationProperties.Name="{Binding L_SmpAutostartCardTitle}">
@@ -819,6 +776,7 @@
                             </Grid>
                         </Button>
                         <Button Classes="row"
+                                AutomationProperties.AutomationId="AssistantAction.OpenAdvanced"
                                 Command="{Binding ToggleUiModeCommand}"
                                 ToolTip.Tip="{Binding UiModeToggleTooltip}"
                                 AutomationProperties.Name="{Binding L_SmpAdvCardTitle}">
@@ -840,6 +798,53 @@
                 </Border>
 
             </StackPanel>
-        </Grid>
-    </ScrollViewer>
+        </ScrollViewer>
+
+        <!-- Keep the connection action accessible while the page content scrolls. -->
+        <Border Grid.Row="1" Padding="16,12" BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                Background="{DynamicResource SurfaceAppBrush}">
+            <Panel Name="SimpleConnectionActions" MaxWidth="400" HorizontalAlignment="Stretch">
+                <Button Classes="cta go solid"
+                        Command="{Binding SmpToggleConnectCommand}"
+                        AutomationProperties.AutomationId="AssistantAction.ConnectVpn"
+                        IsVisible="{Binding SimpleCtaIsDisconnected}"
+                        IsEnabled="{Binding SmpCanConnect}"
+                        AutomationProperties.Name="{Binding SimpleCtaText}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <icons:Pictogram Id="power"/>
+                        <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="cta stop danger-soft"
+                        Command="{Binding SmpToggleConnectCommand}"
+                        AutomationProperties.AutomationId="AssistantAction.DisconnectVpn"
+                        IsVisible="{Binding SimpleCtaIsConnected}"
+                        AutomationProperties.Name="{Binding SimpleCtaText}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <icons:Pictogram Id="power"/>
+                        <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="cta wait"
+                        Command="{Binding SmpToggleConnectCommand}"
+                        IsVisible="{Binding SimpleCtaIsConnecting}"
+                        IsEnabled="False"
+                        AutomationProperties.Name="{Binding L_SmpCtaWait}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Arc Classes="spinner"
+                             Classes.spin="{Binding SmpHeroIsBusy}"
+                             IsVisible="{Binding SmpHeroIsBusy}"
+                             Width="16" Height="16" StrokeThickness="2"
+                             VerticalAlignment="Center">
+                            <Arc.RenderTransform>
+                                <RotateTransform/>
+                            </Arc.RenderTransform>
+                        </Arc>
+                        <TextBlock Text="{Binding L_SmpCtaWait}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Panel>
+        </Border>
+    </Grid>
 </UserControl>

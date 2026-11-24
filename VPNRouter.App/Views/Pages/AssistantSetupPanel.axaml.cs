@@ -3,6 +3,8 @@ using System.ComponentModel;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 using Strings = VPNRouter.Core.Localization.Strings;
 
@@ -13,6 +15,7 @@ public partial class AssistantSetupPanel : UserControl
     private MainWindowViewModel? _viewModel;
     private readonly List<SubscriptionViewModel> _subscriptions = [];
     private CancellationTokenSource? _request;
+    private TaskCompletionSource<bool>? _confirmation;
 
     public AssistantSetupPanel()
     {
@@ -45,13 +48,14 @@ public partial class AssistantSetupPanel : UserControl
 
     private void ViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(MainWindowViewModel.IsSimpleMode) && _viewModel?.IsSimpleMode == false)
+        if (args.PropertyName == nameof(MainWindowViewModel.IsSimpleMode) && _viewModel is { IsSimpleMode: false, IsInvokingAssistantControl: false })
             _request?.Cancel();
         if (args.PropertyName == nameof(MainWindowViewModel.IsRussian)) RefreshLabels();
     }
 
     private void SubscriptionsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
+        if (_confirmation != null) _request?.Cancel();
         TrackSubscriptions();
         RefreshLabels();
     }
@@ -70,7 +74,10 @@ public partial class AssistantSetupPanel : UserControl
     private void SubscriptionChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is nameof(SubscriptionViewModel.Url) or nameof(SubscriptionViewModel.Enabled))
+        {
+            if (_confirmation != null) _request?.Cancel();
             RefreshLabels();
+        }
     }
 
     private void RefreshLabels()
@@ -82,12 +89,17 @@ public partial class AssistantSetupPanel : UserControl
         AssistantGoal.Watermark = Strings.AssistantGoalHint;
         AutomationProperties.SetName(AssistantGoal, Strings.AssistantGoalHint);
         AssistantNotice.Text = Strings.AssistantDataNotice;
-        RunAssistant.Content = Strings.AssistantApply;
-        CancelAssistant.Content = Strings.AssistantCancel;
+        RunAssistant.Content = Strings.AssistantPlan;
+        ConfirmAssistant.Content = Strings.AssistantConfirm;
+        DiagnoseCrash.Content = Strings.AssistantDiagnoseCrash;
+        RepairVpn.Content = Strings.AssistantRepair;
+        CancelAssistant.Content = _confirmation != null ? Strings.AssistantDecline : Strings.AssistantCancel;
         UndoAssistant.Content = Strings.AssistantUndo;
         AssistantGoal.IsVisible = canPlan;
         AssistantNotice.IsVisible = canPlan;
         RunAssistant.IsVisible = canPlan;
+        DiagnoseCrash.IsVisible = canPlan;
+        RepairVpn.IsVisible = canPlan;
         UndoAssistant.IsVisible = canUndo;
     }
 
@@ -100,8 +112,20 @@ public partial class AssistantSetupPanel : UserControl
     private async void RunAssistant_Click(object? sender, RoutedEventArgs args)
     {
         var goal = AssistantGoal.Text;
-        if (_viewModel is not { } vm || string.IsNullOrWhiteSpace(goal)) return;
-        await RunAsync(ct => vm.RunAssistantGoalAsync(goal, ct));
+        if (_viewModel is not { } vm || string.IsNullOrWhiteSpace(goal)
+            || TopLevel.GetTopLevel(this) is not Window window) return;
+        window.AddHandler(InputElement.KeyDownEvent, CancelFromWindow, RoutingStrategies.Tunnel);
+        window.AddHandler(InputElement.PointerPressedEvent, CancelFromWindow, RoutingStrategies.Tunnel);
+        try
+        {
+            await RunAsync(ct => vm.RunAssistantGoalAsync(goal, window, this, ConfirmChangeAsync, ct), Strings.AssistantPlanning);
+            if (!vm.IsSimpleMode) vm.StatusText = AssistantStatus.Text ?? string.Empty;
+        }
+        finally
+        {
+            window.RemoveHandler(InputElement.KeyDownEvent, CancelFromWindow);
+            window.RemoveHandler(InputElement.PointerPressedEvent, CancelFromWindow);
+        }
     }
 
     private async void UndoAssistant_Click(object? sender, RoutedEventArgs args)
@@ -109,16 +133,72 @@ public partial class AssistantSetupPanel : UserControl
         if (_viewModel is { } vm) await RunAsync(vm.UndoAssistantGoalAsync);
     }
 
-    private void CancelAssistant_Click(object? sender, RoutedEventArgs args) => _request?.Cancel();
+    private async void DiagnoseCrash_Click(object? sender, RoutedEventArgs args)
+    {
+        if (_viewModel is { } vm)
+            await RunAsync(vm.DiagnoseAssistantCrashAsync, Strings.AssistantDiagnosingCrash, Strings.AssistantUnavailable);
+    }
 
-    private async Task RunAsync(Func<CancellationToken, Task<string>> action)
+    private async void RepairVpn_Click(object? sender, RoutedEventArgs args)
+    {
+        if (_viewModel is { } vm)
+            await RunAsync(vm.RepairAssistantVpnAsync, Strings.AssistantRepairWorking, Strings.AssistantRepairFailed);
+    }
+
+    private async Task<bool> ConfirmChangeAsync(string description, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var choice = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _confirmation = choice;
+        AssistantStatus.Text = description;
+        CancelAssistant.Content = Strings.AssistantDecline;
+        ConfirmAssistant.IsVisible = true;
+        CancelAssistant.Focus();
+        try
+        {
+            return await choice.Task.WaitAsync(ct);
+        }
+        finally
+        {
+            _confirmation = null;
+            CancelAssistant.Content = Strings.AssistantCancel;
+            ConfirmAssistant.IsVisible = false;
+        }
+    }
+
+    private void ConfirmAssistant_Click(object? sender, RoutedEventArgs args)
+    {
+        if (_confirmation?.TrySetResult(true) == true)
+        {
+            ConfirmAssistant.IsVisible = false;
+            AssistantStatus.Text = Strings.AssistantWorking;
+        }
+    }
+
+    private void CancelFromWindow(object? sender, RoutedEventArgs args)
+    {
+        if (_confirmation != null && args.Source is Avalonia.Visual origin
+            && (ReferenceEquals(origin, this) || origin.GetVisualAncestors().Contains(this))
+            && args is not KeyEventArgs { Key: Key.Escape }) return;
+        DeclineOrCancel();
+    }
+
+    private void CancelAssistant_Click(object? sender, RoutedEventArgs args) => DeclineOrCancel();
+
+    private void DeclineOrCancel()
+    {
+        if (_confirmation?.TrySetResult(false) != true) _request?.Cancel();
+    }
+
+    private async Task RunAsync(Func<CancellationToken, Task<string>> action, string? progress = null, string? error = null)
     {
         if (_request != null) return;
         using var request = new CancellationTokenSource();
         _request = request;
-        RunAssistant.IsEnabled = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
+        RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
+            = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
         CancelAssistant.IsVisible = true;
-        AssistantStatus.Text = Strings.AssistantWorking;
+        AssistantStatus.Text = progress ?? Strings.AssistantWorking;
         try
         {
             AssistantStatus.Text = await action(request.Token);
@@ -129,13 +209,14 @@ public partial class AssistantSetupPanel : UserControl
         }
         catch (Exception)
         {
-            AssistantStatus.Text = Strings.AssistantApplyFailed;
+            AssistantStatus.Text = error ?? Strings.AssistantApplyFailed;
         }
         finally
         {
             _request = null;
             CancelAssistant.IsVisible = false;
-            RunAssistant.IsEnabled = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
+            RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
+                = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
             RefreshLabels();
         }
     }

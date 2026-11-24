@@ -173,7 +173,7 @@ public partial class MainWindowViewModel
         StatusText = Strings.TunnelStopUnconfirmed;
     }
 
-    private async Task ToggleConnectionCoreAsync(AppSettings? submitted)
+    private async Task ToggleConnectionCoreAsync(AppSettings? submitted, CancellationToken cancellationToken = default)
     {
         var toggle = ConnectionSyncPolicy.DecideToggle(
             IsConnected,
@@ -284,7 +284,8 @@ public partial class MainWindowViewModel
                 if (startOverride == null)
                     await PrepareColdStartAsync();
 
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
                 var start = startOverride ?? RunTwoPhaseStartAsync;

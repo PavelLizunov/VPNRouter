@@ -1,0 +1,129 @@
+# DeepSeek application harness
+
+## Goal
+
+Use the existing Avalonia automation driver as the model's application
+interface. Discover supported interactions from the live window so that
+connection, navigation and settings use the same mechanism. The model
+selects a current control and the app executes its normal interaction.
+
+## Scope and invariants
+
+- Share local control traversal and execution with `AppAutomationDriver`.
+  Keep the opt-in developer listener and its wire contract compatible.
+- The user starts a bounded operation in the assistant. The model receives the
+  goal, connection state and available control metadata. The local session
+  holds control references and values. Model requests carry no automatic
+  screenshots, raw field values, logs or subscription credentials.
+- Use a versioned planning contract through the existing vpnctl subscription
+  gateway. Accept one action at a time. Each reply can act only on a control
+  from that request. Re-check window, enabled state and visibility before
+  executing. Take a fresh observation before the next action.
+- Discover controls explicitly marked for assistant use. Built-in navigation,
+  connection and settings actions use reusable interaction types. Verify
+  requested process names against running apps and registered Windows paths.
+  Retain normal command guards, pending changes and operating system prompts. Native
+  dialogs and programs outside VPNRouter are outside the window surface.
+- Preserve existing published clients and names. Keep rollback by reverting
+  the client change and serving the previous planning endpoint.
+
+## Verification
+
+1. Build an exact Windows candidate and compile the gateway in CI.
+2. Test discovery and execution across unrelated controls with a fake model.
+   Cover stale controls, disabled controls, unknown IDs and payload limits.
+3. Update the privacy disclosure for the new metadata.
+4. Review the model boundary and normal command behavior independently.
+5. Verify the representative connection and application routing commands in
+   a disposable Windows fixture.
+6. Check the developer automation and previous assistant protocol for
+   compatibility.
+
+## Outcome
+
+The assistant discovers named actions from the live window. It runs the
+same controls used for connection, tab navigation and selected app and DNS
+settings. For exclusive app routing, the model supplies an executable name.
+The client resolves it locally and uses the existing route verifier and Undo.
+The privacy notice is a single sentence. The complete data flow is in
+`PRIVACY.md`.
+
+Review led to positive control marking and local verification of executable
+names. The gateway validates decoded text before returning it, including
+escaped credential rejection. The model gets up to six steps per request.
+
+The desktop candidate is `b8b0e9e3`. Its Windows package and screen capture
+passed hosted run `45120648117`. All six jobs in run `45120583469` passed,
+including Linux and Windows tests. The tests exercised the Simple Connect
+button through the window automation and validated an Edge process argument
+from the same planner contract.
+The gateway is `d6128ad3`. Candidate build `45120298423` and all 19 contract
+tests in run `45120484348` passed, with coverage of both protocol versions.
+
+The running subscription service accepted the original route at the
+authentication boundary and returned 404 for the step route. That separates
+the hosted verification from activation and the live DeepSeek routing
+scenario. GitHub's connector declined both draft PR requests with 403.
+
+## Follow-up: missing gateway route and crash diagnosis
+
+The installed gateway responds to POST /plan with 401 without credentials
+and to POST /step with 404. A direct synthetic request to DeepSeek Flash
+with an archived OpenCode Go key returned 200. Give the desktop a distinct
+response for the missing gateway route.
+
+After restart the assistant can analyze the latest managed crash report.
+Use the existing report and log tail to build a bounded set of diagnostic
+codes locally. The crash analysis request is read-only and carries no raw
+report text. Normal configuration still uses the application driver.
+Rollback by reverting this follow-up in the client and gateway separately.
+
+Verify the release build and existing tests at exact hosted revisions,
+crash parsing and wire validation with synthetic fixtures, model-boundary
+review, privacy text, and the desktop panel separately. No mechanical
+split or Android change is in scope.
+
+### Verified follow-up
+
+Public health still identifies `0.9.0+ddaeb22`. The public POST to `/plan`
+returns a 401 JSON response from vpnctl. The public POST to `/step` returns
+the HTML site 404. Activation requires both the updated daemon and an
+ingress match for the exact new POST path.
+
+The desktop source is `b6b0f8c0`. All six checks in hosted run
+`45123013984` passed. Exact-source Windows preview and 520x680 panel capture
+passed in `45123128818`. The screenshot shows the new action and the
+Disconnect control in the same viewport.
+
+Direct synthetic OpenCode Go tests returned HTTP 200. The first Russian
+diagnostic overran the byte limit. With the shorter prompt, Russian and
+English replies fit at 184 and 119 bytes and match the diagnosis envelope.
+Independent review prompted three desktop fixes: explain the older gateway's
+400 response, read the end of long reports, and continue to the latest valid
+report if the newest one is unreadable or incomplete.
+
+Desktop source `484c4942` passed all six jobs in run `45124356685`.
+Windows passed 4,065 tests with 31 skipped, and Linux passed 3,852 with 86
+skipped. Exact-source Windows packaging and screenshot passed in
+`45124437702` (artifacts `14794669495` and `14794818837`).
+
+Gateway source `968fde02` passed all five checks in `45124263631`, including
+the full workspace test suite and 30 VPNRouter assistant contract tests.
+Portable candidate run `45124267977` passed and retained artifact
+`14795466280`. The latest public probe still returned JSON 401 for `/plan`
+and HTML 404 for `/step`. Activation still requires the daemon and ingress
+route update.
+
+### Production activation
+
+On 2026-11-23 the user authorized activating the reviewed gateway. The
+production daemon reports `0.9.0+968fde0`, and the HTTPS ingress now routes
+the exact new POST path. The server credential matched the saved OpenCode Go
+key. Live authenticated requests returned HTTP 200 for the original plan,
+an application action, and a synthetic crash diagnosis. Requests without
+credentials returned JSON 401 on both routes.
+
+The artifact ZIP, tarball, and installed file manifest were checked.
+The previous binaries, assets, and ingress config are retained for rollback.
+GitHub's PR connector returned 403. Production uses candidate `968fde02`
+and the upstream main branch remains at its base `ddaeb226`.

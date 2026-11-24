@@ -34,10 +34,14 @@ for each feature.
   from that URL (the provider you chose).
 - **DeepSeek setup assistant** — when you submit a request, VPNRouter
   authenticates to the official vpnctl endpoint with your saved subscription.
-  vpnctl forwards the request text, interface language and whether an app
-  was matched to the configured model. The subscription credential goes
-  only to vpnctl. VPNRouter keeps its settings, app list and routing changes
-  on your device.
+  vpnctl forwards the request text, interface language, connection state and
+  identifiers for available window controls to the configured model. The
+  subscription credential goes only to vpnctl. VPNRouter keeps field
+  contents, screenshots, the app list and routing settings on your device.
+  When you choose crash analysis, VPNRouter reads the most recent saved
+  crash report and sends the model four diagnostic fields: whether the
+  error was fatal, its category, the affected component and a recognized
+  log signal. The crash report and log text stay on your device.
 - **Free Configs** — if you use that tab, a pre-aggregated `pool.json` is
   fetched from this project's GitHub releases, and candidate servers may be
   probed (TCP/TLS) to test reachability. If `pool.json` is unavailable, the app
