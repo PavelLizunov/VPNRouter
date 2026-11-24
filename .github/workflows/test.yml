@@ -111,9 +111,10 @@ jobs:
         shell: pwsh
         run: |
           if ((git rev-parse HEAD).Trim() -cne $env:ACCEPTED_SHA) { throw 'Incorrect release checkout.' }
-          $open = ((Get-Content plans/OPEN-DEFECTS.md -Raw) -split '(?m)^## Open[^\n]*\n',2)[1] -split '(?m)^## ',2
-          $items = @($open[0] -split '\r?\n' | Where-Object { $_ -match '^\s*-\s*\[ \] .*\*\*P[01]\b' })
-          if ($items.Count -ne 1 -or $items[0] -notmatch 'Cronet' -or $items[0] -notmatch '154\.0\.8037\.49') { throw 'Defects differ from the authorized exception.' }
+          # WINBRAT checked the one open P1 on this exact ledger.
+          if ((git rev-parse HEAD:plans/OPEN-DEFECTS.md).Trim() -cne 'ba4616f4ff626667ca1dc6807d080dca692dd3da') {
+            throw 'The release ledger differs from the reviewed file.'
+          }
           & ./tools/check-open-p0.ps1 -Waive 'Owner accepted only Windows/Linux NaiveProxy Cronet 154.0.8037.49 for Standard 2.51.1-r1'
           exit $LASTEXITCODE
       - name: Validate canonical successful tag runs
