@@ -1,63 +1,131 @@
-name: Build and verify the Windows DeepSeek preview
-
+name: Windows candidate packaging
 on:
   workflow_dispatch:
-
+    inputs:
+      accepted_sha:
+        description: Accepted main and immutable tag commit
+        required: true
+        type: string
+      gate_only:
+        description: Run only the canonical prerelease CI and defect gates
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
-
 jobs:
-  windows-preview:
+  windows-unsigned-candidate:
+    if: ${{ !inputs.gate_only }}
     runs-on: windows-latest
-    timeout-minutes: 18
+    timeout-minutes: 30
     env:
-      PREVIEW_SOURCE: c2f1463183970b40a2713986b9e33939dedafe7a
+      ACCEPTED_SHA: ${{ inputs.accepted_sha }}
+      RELEASE_TAG: v2.51.1-r1
+      RELEASE_VERSION: 2.51.1-r1
     steps:
-      - name: Checkout the exact preview source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ env.PREVIEW_SOURCE }}
+          ref: v2.51.1-r1
           persist-credentials: false
-      - name: Set up pinned .NET SDK
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
         with:
-          global-json-file: global.json
-      - name: Set up Go
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
-        with:
-          go-version: 1.26.1
-      - name: Build unsigned Windows packages from the exact source
+          go-version: '1.26.1'
+      - name: Verify the hosted worker and exact release source
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:ACCEPTED_SHA -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'Expected a hosted runner and exact accepted SHA.'
+          }
           $head = (git rev-parse HEAD).Trim()
-          if ($head -cne $env:PREVIEW_SOURCE -or (git status --porcelain)) {
-            throw 'Preview source checkout is not the requested clean commit.'
-          }
-          $text = Get-Content VPNRouter.Core/AppVersion.cs -Raw
-          if ($text -notmatch 'string\s+Version\s*=\s*"([0-9.]+(?:-r[1-9][0-9]*)?)"') {
-            throw 'Cannot read preview version.'
-          }
-          $version = $Matches[1]
-          ./build.ps1 -Version $version -BundleSplitDriver
-          if ($LASTEXITCODE -ne 0) { throw "Build exited with $LASTEXITCODE" }
-          $output = Join-Path $env:RUNNER_TEMP 'windows-preview'
-          New-Item -Path $output -ItemType Directory | Out-Null
-          foreach ($name in @("VPNRouter-v$version-win.zip")) {
-            $sidecar = (Get-Content "$name.sha256" -Raw).Trim()
-            if ($sidecar -notmatch '^(?<hash>[0-9a-fA-F]{64})(?:\s+(?<file>.+))?$') {
-              throw "Invalid checksum sidecar for $name"
+          if ($LASTEXITCODE -ne 0 -or $head -cne $env:ACCEPTED_SHA) { throw 'Wrong checkout.' }
+          $main = git ls-remote origin refs/heads/main
+          if ($LASTEXITCODE -ne 0 -or ($main -split '\s+')[0] -cne $head) { throw 'HEAD differs from accepted main.' }
+          $tag = git ls-remote origin "refs/tags/$($env:RELEASE_TAG)^{}"
+          if ($LASTEXITCODE -ne 0 -or ($tag -split '\s+')[0] -cne $head) { throw 'Tag does not peel to HEAD.' }
+          if (git status --porcelain --untracked-files=all) { throw 'Source tree is dirty.' }
+          Get-CimInstance Win32_Processor | Select-Object Name, LoadPercentage, NumberOfLogicalProcessors
+          Get-CimInstance Win32_OperatingSystem | Select-Object FreePhysicalMemory, FreeVirtualMemory
+          Get-PSDrive C | Select-Object Used, Free
+          Get-Process dotnet, msbuild, iscc -ErrorAction SilentlyContinue | Select-Object Id, ProcessName
+          if (-not (Test-Path (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'))) { throw 'Inno Setup 6 is missing.' }
+          go version
+          if ($LASTEXITCODE -ne 0) { throw 'Go is missing.' }
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
+        with:
+          global-json-file: global.json
+      - name: Package Windows ZIPs and installer without publishing
+        shell: powershell
+        run: |
+          dotnet --version
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned SDK is unavailable.' }
+          ./build.ps1 -Version $env:RELEASE_VERSION -BundleSplitDriver -Installer
+          $output = Join-Path $env:RUNNER_TEMP 'vpnrouter-release-output'
+          New-Item -ItemType Directory -Path $output | Out-Null
+          $packages = @(
+            "VPNRouter-v$($env:RELEASE_VERSION)-win.zip"
+            "VPNRouter-update-v$($env:RELEASE_VERSION)-win.zip"
+            "VPNRouter-Setup-v$($env:RELEASE_VERSION).exe"
+          )
+          foreach ($package in $packages) {
+            $sidecar = "$package.sha256"
+            $line = (Get-Content -LiteralPath $sidecar -Raw).Trim()
+            $match = [regex]::Match($line, '\A([0-9a-fA-F]{64})(?:[ \t]+\*?([^\r\n]+))?\z')
+            if (-not $match.Success -or ($match.Groups[2].Success -and $match.Groups[2].Value -cne $package)) {
+                throw "Malformed SHA-256 sidecar for $package."
             }
-            if ($Matches['file'] -and $Matches['file'] -cne $name) { throw "Wrong filename in sidecar for $name" }
-            if ($Matches['hash'] -ne (Get-FileHash $name -Algorithm SHA256).Hash) { throw "Checksum mismatch for $name" }
-            Move-Item -LiteralPath $name, "$name.sha256" -Destination $output
+            $expected = $match.Groups[1].Value.ToLowerInvariant()
+            $actual = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($expected -cne $actual) { throw "SHA-256 mismatch for $package." }
+            Move-Item -LiteralPath $package, $sidecar -Destination $output
           }
-          Set-Content -Path (Join-Path $output 'SOURCE_SHA.txt') -Value $head
-      - name: Retain verified Windows preview
+          $changes = git status --porcelain --untracked-files=all
+          if ($LASTEXITCODE -ne 0 -or $changes) {
+            $changes | Write-Output
+            throw 'Source changed during packaging.'
+          }
+      - name: Retain the six Windows files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: windows-simple-preview-${{ env.PREVIEW_SOURCE }}
-          path: ${{ runner.temp }}/windows-preview
+          name: windows-unsigned-v2.51.1-r1-${{ inputs.accepted_sha }}
+          path: ${{ runner.temp }}/vpnrouter-release-output/*
           if-no-files-found: error
           compression-level: 0
-          retention-days: 7
+          retention-days: 3
+
+  prepublication-gate:
+    if: ${{ inputs.gate_only }}
+    runs-on: windows-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    env:
+      ACCEPTED_SHA: ${{ inputs.accepted_sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: v2.51.1-r1
+          persist-credentials: false
+      - name: Validate P0 and P1 ledger on exact tag
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -cne $env:ACCEPTED_SHA) { throw 'Incorrect release checkout.' }
+          $open = ((Get-Content plans/OPEN-DEFECTS.md -Raw) -split '(?m)^## Open[^\n]*\n',2)[1] -split '(?m)^## ',2
+          $items = @($open[0] -split '\r?\n' | Where-Object { $_ -match '^\s*-\s*\[ \] .*\*\*P[01]\b' })
+          if ($items.Count -ne 1 -or $items[0] -notmatch 'Cronet' -or $items[0] -notmatch '154\.0\.8037\.49') { throw 'Defects differ from the authorized exception.' }
+          & ./tools/check-open-p0.ps1 -Waive 'Owner accepted only Windows/Linux NaiveProxy Cronet 154.0.8037.49 for Standard 2.51.1-r1'
+          exit $LASTEXITCODE
+      - name: Validate canonical successful tag runs
+        shell: pwsh
+        run: |
+          $options = @{
+            Commit = $env:ACCEPTED_SHA
+            Repo = $env:GITHUB_REPOSITORY
+            ReleaseTag = 'v2.51.1-r1'
+            Strict = $true
+            RequiredSuccess = 'build=3,verify=1,test-update=1,test=1,go-test-windows=1,characterization-windows=1'
+            RequiredWorkflows = 'Build macOS DMG,Build Android APK,Build Linux AppImage + .deb,Verify Release Integrity,Auto-Update Integration Test (Windows),dotnet test'
+          }
+          & ./tools/verify-last-commit-ci.ps1 @options
+          exit $LASTEXITCODE
