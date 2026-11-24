@@ -20,18 +20,28 @@ public partial class MainWindowViewModel
 
     internal ConnectionRollbackHistory RollbackHistory => _rollbackHistory;
 
-    private string BeginManualRollbackAttempt(AppSettings settings)
+    private string? BeginManualRollbackAttempt(AppSettings settings)
     {
+        _manualRollbackAttempt = null;
         SetSourceConnectionObservation(null);
-        var supported = RollbackArtifactPolicy.IsSupportedHost();
-        var attempt = new ManualRollbackAttempt(
-            Guid.NewGuid().ToString("N"),
-            supported ? ConnectionRollbackHistory.ComputeConfigFingerprint(settings) : null,
-            SelectAssistantSubscription(settings.App)?.Url,
-            supported ? RollbackConfigCompatibility.CheckActiveConfig(
-                settings, VerifiedRecoveryVersion()) : null);
-        _manualRollbackAttempt = attempt;
-        return attempt.Id;
+        try
+        {
+            var fingerprint = RollbackArtifactPolicy.IsSupportedHost()
+                ? ConnectionRollbackHistory.ComputeConfigFingerprint(settings)
+                : null;
+            _manualRollbackAttempt = new ManualRollbackAttempt(
+                Guid.NewGuid().ToString("N"), fingerprint,
+                SelectAssistantSubscription(settings.App)?.Url,
+                fingerprint == null ? null : RollbackConfigCompatibility.CheckActiveConfig(
+                    settings, VerifiedRecoveryVersion()));
+            return _manualRollbackAttempt.Id;
+        }
+        catch (Exception ex)
+        {
+            // Optional recovery evidence must not prevent the requested connection.
+            _logger.Debug("[VM] Connection recovery evidence unavailable ({ErrorType})", ex.GetType().Name);
+            return null;
+        }
     }
 
     private void CompleteManualRollbackSuccess(string? attemptId)

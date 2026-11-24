@@ -213,9 +213,16 @@ public partial class UpdateNotificationViewModel
         {
             var includeCandidates = _settings.IsExperimental;
             var releases = await _updateSource.ListStableAsync(StableHistoryLimit);
-            if (!IsCurrentRecoveryDecision(decision))
+            if (!ReferenceEquals(decision, _rollbackDecision)) return;
+            if (!MatchesRollbackConfig(decision.ConfigFingerprint))
             {
                 RollbackAssistanceError = CoreStrings.RollbackAssistanceExpired;
+                return;
+            }
+            incompatibility = ActiveConfigIncompatibility();
+            if (!string.IsNullOrWhiteSpace(incompatibility))
+            {
+                RollbackAssistanceError = CoreStrings.RollbackAssistanceIncompatibleBody(incompatibility);
                 return;
             }
             var listed = releases.FirstOrDefault(release =>
@@ -242,7 +249,8 @@ public partial class UpdateNotificationViewModel
         catch (Exception ex)
         {
             _logger.Warning(ex, "[UpdateVm] Assisted rollback history load failed");
-            RollbackAssistanceError = CoreStrings.RollbackAssistanceNoCompatible;
+            if (ReferenceEquals(decision, _rollbackDecision))
+                RollbackAssistanceError = CoreStrings.RollbackAssistanceNoCompatible;
         }
         finally
         {

@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -183,6 +184,44 @@ public sealed class UpdateNotificationViewModelRollbackAssistanceTests
         Assert.False(vm.IsHistoryRollbackConfirmationVisible);
         Assert.Contains(AppVersion.Version, vm.RollbackAssistanceConfirmationText);
         Assert.Contains(TargetVersion, vm.RollbackAssistanceConfirmationText);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PendingListing_RechecksProfileAndRuntimeBeforeShowingConsent(bool changedProfile)
+    {
+        var history = History(HistoryPath());
+        var pending = new TaskCompletionSource<IReadOnlyList<UpdateSourceInfo>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new FakeUpdateSource { PendingStableReleases = pending.Task };
+        var vm = ViewModel(source, history);
+        vm.ShowConnectionRollbackSuggestion(OfferedDecision(history));
+        var errorOnUi = false;
+        vm.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(vm.RollbackAssistanceError) && vm.HasRollbackAssistanceError)
+                errorOnUi = Dispatcher.UIThread.CheckAccess();
+        };
+
+        var listing = vm.RunRollbackAssistancePrimaryCommand.ExecuteAsync(null);
+        Assert.True(vm.IsRollbackAssistanceBusy);
+        if (changedProfile)
+            vm.MatchesRollbackConfig = _ => false;
+        else
+            vm.ActiveConfigIncompatibility = () => RollbackConfigCompatibility.LegacyTelegramAutostart;
+        pending.SetResult(new[] { Listed() });
+        await listing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        Assert.True(errorOnUi);
+        Assert.Equal(changedProfile
+            ? VPNRouter.Core.Localization.Strings.RollbackAssistanceExpired
+            : VPNRouter.Core.Localization.Strings.RollbackAssistanceIncompatibleBody(RollbackConfigCompatibility.LegacyTelegramAutostart),
+            vm.RollbackAssistanceError);
+        Assert.False(vm.IsRollbackAssistanceBusy);
+        Assert.False(vm.IsRollbackConfirmationVisible);
+        Assert.Null(vm.SelectedRollback);
+        Assert.Equal(0, source.DownloadCallCount);
     }
 
     [AvaloniaFact]

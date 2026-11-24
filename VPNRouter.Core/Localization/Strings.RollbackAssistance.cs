@@ -76,8 +76,8 @@ public static partial class Strings
                 _ => "the active configuration is not compatible with the older build.",
             });
         return Ru
-            ? $"Откат не предложен: {detail} Настройки и резервная копия сохранены; соберите локальную диагностику."
-            : $"Rollback was not offered: {detail} Settings and the backup are preserved; run local diagnostics.";
+            ? $"Откат не предложен: {detail} Соберите локальную диагностику."
+            : $"Rollback was not offered: {detail} Run local diagnostics.";
     }
 
     public static string RollbackAssistanceDiagnosticsBody(int failures, string currentVersion) => Ru
@@ -148,8 +148,8 @@ public static partial class Strings
         : $"Rollback to v{targetVersion} was confirmed after restart.";
 
     public static string RollbackAssistanceNotConfirmed(string targetVersion, string observedVersion) => Ru
-        ? $"Откат на v{targetVersion} был запущен, но запущена v{observedVersion}. Исходная сборка и копия настроек сохранены. Проверьте версию в разделе «О программе»; целевая сборка могла быть выпущена до появления этой проверки."
-        : $"Rollback to v{targetVersion} was started, but v{observedVersion} is running. The original build and settings backup are preserved. Check the version in About; the target build may predate this verification.";
+        ? $"Вы запросили установку v{targetVersion}. Сейчас запущена v{observedVersion}. Подтверждение запуска v{targetVersion} отсутствует."
+        : $"You requested v{targetVersion}. This session is running v{observedVersion}. Startup of v{targetVersion} is unconfirmed.";
 
     public static string RollbackAssistanceStatusDismiss => Ru
         ? "Скрыть"

@@ -106,16 +106,15 @@ requirement.
   verifies that manifest before the automatic rollback path can run. Authenticode
   publisher identity is still absent for the published desktop binaries; the
   signed manifest is the trusted provenance route.
-- The release API has no revocation or security-minimum metadata. A local
-  revocation list and the settings-schema floor are the available client-side
-  gates.
-- The 2.50.5 build predates the custom history writer, so there is no local
-  "this configuration connected" record. The signed manifest is artifact
-  provenance, not proof of configuration health; the UI says so and uses medium
-  confidence. A later local success on 2.50.5 raises confidence.
-- A target build that predates this feature cannot report its own version after
-  relaunch. The handoff record is verified by the next build that contains this
-  code; older targets remain a documented limitation.
+- The client requires the target to appear in the official stable release history
+  and enforces a settings-schema floor. The artifact policy accepts an optional
+  revocation list in tests. The production caller supplies no revocation feed.
+- Version 2.50.5 predates local connection history. A matching receipt identifies
+  the immediately preceding installation. A user who confirms that the same
+  configuration worked on 2.50.5 can receive a medium-confidence offer.
+- Version 2.50.5 also predates restart verification. A later supporting build
+  reports its own version and the requested target. The sequence of intermediate
+  launches cannot be reconstructed from this record.
 
 ## Observed outcomes
 
@@ -149,3 +148,12 @@ Verify the Windows job and the installed consent flow.
 After the checkout attributes change, all three Git autocrlf modes produced
 the signed 293-byte JSON (SHA-256 `6032a12f353805e657732b69f31da02ee6a5c90094fb4bbfdca193cb49b83713`).
 OpenSSL accepted every checkout and rejected the deliberately changed newline.
+
+
+## Follow-up to the Windows acceptance review
+
+At `9d155378` all ten hosted checks passed. Cover the continuation after a
+delayed release listing in the UI tests, including a profile or compatibility
+change. Limit the restart message to the requested and observed versions.
+Run the usual staging cleanup when an update check is suppressed. WINBRAT
+remains the source of evidence for actual installation and restart.

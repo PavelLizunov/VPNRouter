@@ -150,12 +150,12 @@ public partial class UpdateNotificationViewModel : ObservableObject
         try
         {
             CompleteRollbackHandoff();
+            _updateChecker.CleanupStagingDir();
             if (_rollbackHistory?.ShouldSuppressAutomaticUpdates() == true)
             {
                 _logger.Information("[UpdateVm] Automatic update check skipped after a deliberate rollback");
                 return;
             }
-            _updateChecker.CleanupStagingDir();
             var info = await _updateSource.CheckAsync().ConfigureAwait(false);
             if (info != null)
             {
