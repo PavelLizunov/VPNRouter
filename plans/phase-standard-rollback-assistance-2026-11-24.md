@@ -138,3 +138,14 @@ The connection fingerprint now covers routing rule contents, process lists, TUN 
 The 2.50.5 client can start a Telegram proxy whose Python and certifi marker files exist. Assisted recovery checks the runtime when Telegram autostart is enabled. The confirmation discloses that installing the optional proxy afresh on 2.50.5 fetches an older CA bundle. Targeted tests also cover a compatible detour chain and a missing or ambiguous upstream.
 
 The embedded P-256 signature verified with OpenSSL on 24 November. Both confirmation views, the source-diagnosis panel and the Core project XML parsed. Compiled regression tests and physical installation/relaunch on WINBRAT are pending.
+
+Windows CI on `115ab275` failed to select the recovery target and the stale-decision
+test then waited until the four-minute runner timeout. With the Git Windows
+checkout filter, the 293-byte signed manifest became 294 bytes and OpenSSL
+rejected its signature. Preserve the committed manifest and signature bytes on
+checkout. Bound the test wait and check the confirmation before the download.
+Verify the Windows job and the installed consent flow.
+
+After the checkout attributes change, all three Git autocrlf modes produced
+the signed 293-byte JSON (SHA-256 `6032a12f353805e657732b69f31da02ee6a5c90094fb4bbfdca193cb49b83713`).
+OpenSSL accepted every checkout and rejected the deliberately changed newline.

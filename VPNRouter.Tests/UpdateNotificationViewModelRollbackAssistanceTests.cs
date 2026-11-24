@@ -247,14 +247,24 @@ public sealed class UpdateNotificationViewModelRollbackAssistanceTests
         var vm = ViewModel(source, history);
         vm.ShowConnectionRollbackSuggestion(decision);
         await vm.RunRollbackAssistancePrimaryCommand.ExecuteAsync(null);
+        Assert.True(vm.IsAssistedRollbackConfirmationVisible, vm.RollbackAssistanceError);
+        var ct = TestContext.Current.CancellationToken;
+        var timeout = TimeSpan.FromSeconds(10);
         var install = vm.ConfirmRollbackCommand.ExecuteAsync(null);
-        await entered.Task;
-        if (changedProfile)
-            vm.MatchesRollbackConfig = _ => false;
-        else
-            vm.ClearConnectionRollbackSuggestion();
-        finish.SetResult("synthetic-stage");
-        await install;
+        try
+        {
+            var first = await Task.WhenAny(entered.Task, install).WaitAsync(timeout, ct);
+            Assert.Same(entered.Task, first);
+            if (changedProfile)
+                vm.MatchesRollbackConfig = _ => false;
+            else
+                vm.ClearConnectionRollbackSuggestion();
+        }
+        finally
+        {
+            finish.TrySetResult("synthetic-stage");
+        }
+        await install.WaitAsync(timeout, ct);
         await vm.DownloadAndApplyCommand.ExecuteAsync(null);
         Assert.Equal(1, source.DownloadCallCount);
         Assert.Equal(0, source.ApplyCallCount);

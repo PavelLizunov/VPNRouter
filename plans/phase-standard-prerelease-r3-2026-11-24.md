@@ -77,3 +77,11 @@ CI run 45411075994 on PR head `0ba04a30` executed 4,477 tests in the Linux
 test job. The only failure was an English literal in the rollback confidence
 assertion while the UI displayed the Russian translation. The test now checks
 the decision's confidence and the localized label for that value.
+
+The public gateway passed acceptance at `7dfb59c8` on 24 November. All 42
+installed binary and asset digests matched the verified main package. Public
+`/plan` and `/step` remained operational. For the Windows x64 preview
+`0ba04a30`, `/source-diagnosis` cited the checked Git lines for a connection
+failure and a settings crash. It returned distinct unknown-build and
+insufficient-evidence results, HTTP 400 for an invalid report and 413 at 2,049
+bytes. Final client registration and installed Windows acceptance are pending.
