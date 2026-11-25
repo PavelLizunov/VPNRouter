@@ -334,7 +334,7 @@ public sealed class BusinessLanguageAndLayoutTests
     [InlineData(420, "ru")]
     [InlineData(340, "en")]
     [InlineData(420, "en")]
-    public void CompactWindow_KeepsSecondaryActionsInMenu_AndMainControlsReachable(int width, string language)
+    public void CompactWindow_KeepsHomeSettingsReachable_AndSupportInMenu(int width, string language)
     {
         using var fixture = new Fixture(width, language);
         var window = fixture.Window;
@@ -345,43 +345,56 @@ public sealed class BusinessLanguageAndLayoutTests
         Assert.False(fixture.Services.IsRefreshStatusVisible);
         var scroll = Assert.IsType<ScrollViewer>(window.Content);
         FlushLayout(window);
-        AssertInsideViewport(ConnectionButton(fixture), scroll);
-        var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
-        var menuFlyout = (Flyout)window.FindControl<Button>("BusinessMenuButton")!.Flyout!;
-        Assert.False(menuFlyout.IsOpen);
-        Assert.DoesNotContain(window.GetVisualDescendants(), visual => ReferenceEquals(visual, selector));
-        Assert.DoesNotContain(window.GetVisualDescendants().OfType<RadioButton>(),
-            radio => radio.IsEffectivelyVisible);
         var menu = window.FindControl<Button>("BusinessMenuButton")!;
+        var serverButton = window.FindControl<Button>("BusinessServerMenuButton")!;
+        var modeButton = window.FindControl<Button>("BusinessModeMenuButton")!;
+        var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
+        var modePanel = window.FindControl<Border>("BusinessModePanel")!;
+
+        AssertInsideViewport(ConnectionButton(fixture), scroll);
+        AssertInsideViewport(serverButton, scroll);
+        AssertInsideViewport(modeButton, scroll);
         AssertInsideViewport(menu, scroll);
+        Assert.Equal(Strings.BusinessServerMenu, AutomationProperties.GetName(serverButton));
+        Assert.Equal(Strings.BusinessModeMenu, AutomationProperties.GetName(modeButton));
+        Assert.False(selector.IsEffectivelyVisible);
+        Assert.False(modePanel.IsEffectivelyVisible);
         Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-        scroll.Offset = new(0, scroll.Extent.Height);
-        FlushLayout(window);
-        Assert.True(scroll.Offset.Y + scroll.Viewport.Height >= scroll.Extent.Height - 1);
-        scroll.Offset = default;
+
         var flyout = OpenMenu(window);
-        window.OpenServerPanel();
-        window.OpenModePanel();
         var menuScroll = window.FindControl<ScrollViewer>("BusinessMenuScroll")!;
         Assert.True(Send(window).IsEffectivelyEnabled);
         AssertInsideViewport(Send(window), menuScroll);
         AssertInsideViewport(Language(window), menuScroll);
         Assert.Equal(Strings.BusinessDiagnosticsHint, ToolTip.GetTip(Send(window)));
-        window.FindControl<Border>("BusinessServerPanel")!.BringIntoView();
-        FlushLayout(window);
-        AssertInsideViewport(window.FindControl<ComboBox>("BusinessServerSelector")!, menuScroll);
         menuScroll.Offset = new(0, menuScroll.Extent.Height);
         FlushLayout(window);
         Assert.True(menuScroll.Offset.Y + menuScroll.Viewport.Height >= menuScroll.Extent.Height - 1);
-        AssertInsideViewport(window.FindControl<Border>("BusinessModePanel")!, menuScroll);
         AssertInsideViewport(window.FindControl<StackPanel>("BusinessSubscriptionActions")!, menuScroll);
         Assert.True(menuScroll.Extent.Width <= menuScroll.Viewport.Width + 1);
         flyout.Hide();
+
+        window.OpenServerPanel();
+        selector.BringIntoView();
         FlushLayout(window);
+        AssertInsideViewport(selector, scroll);
+        Assert.False(flyout.IsOpen);
+
+        window.OpenModePanel();
+        FlushLayout(window);
+        Assert.False(selector.IsEffectivelyVisible);
+        AssertInsideViewport(modePanel, scroll);
         AssertInsideViewport(ConnectionButton(fixture), scroll);
-        AssertInsideViewport(menu, scroll);
+        AssertInsideViewport(modeButton, scroll);
+        Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
+        scroll.Offset = new(0, scroll.Extent.Height);
+        FlushLayout(window);
+        Assert.True(scroll.Offset.Y + scroll.Viewport.Height >= scroll.Extent.Height - 1);
+        AssertInsideViewport(modePanel, scroll);
+        scroll.Offset = default;
+        FlushLayout(window);
         // Capture closes the window, so it must follow all live-window assertions.
-        ScreenshotHelper.Capture(window, $"business-compact-{language}-{width}");
+        ScreenshotHelper.Capture(window, $"business-home-mode-{language}-{width}");
     }
 
     private static Button Send(BusinessWindow window) => Assert.Single(

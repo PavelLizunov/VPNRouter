@@ -197,11 +197,13 @@ public partial class BusinessWindow : Window
     private void OnBusinessServerMenuToggle(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         BusinessServerPanel.IsVisible = !BusinessServerPanel.IsVisible;
+        BusinessModePanel.IsVisible = false;
     }
 
     private void OnBusinessModeMenuToggle(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         BusinessModePanel.IsVisible = !BusinessModePanel.IsVisible;
+        BusinessServerPanel.IsVisible = false;
     }
 
     private void OnBusinessServerRefresh(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
