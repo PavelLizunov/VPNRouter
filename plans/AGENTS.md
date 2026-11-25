@@ -17,9 +17,16 @@ references and runbooks belong in `docs/`.
 Historical plans, reports, evidence and designs were moved out of the tree on
 2026-09-28 (H-1). They remain in Git: read one with
 `git show 6491be4c:plans/<file>` or list them with
-`git ls-tree -r --name-only 6491be4c plans/`. A code comment or ledger entry that
-cites a missing `plans/` file refers to that snapshot. Do not restore history
-files into the tree as current guidance.
+`git ls-tree -r --name-only 6491be4c plans/`.
+
+Superseded historical plans from late September through mid-November 2026 were
+archived out of the tree on 2026-11-25 (H-2). They remain in Git: read one with
+`git show 4e8aa796:plans/<file>` or list them with
+`git ls-tree -r --name-only 4e8aa796 plans/`.
+
+A code comment or ledger entry that cites a missing `plans/` file refers to one
+of those snapshots. Do not restore history files into the tree as current
+guidance.
 
 ## References
 
