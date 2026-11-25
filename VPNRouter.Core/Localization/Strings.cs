@@ -133,10 +133,6 @@ public static partial class Strings
         ? "Не удалось остановить (проверьте права)"
         : "Couldn't stop (check permissions)";
 
-    public static string RuleParserMissingValue => Ru ? "нет value" : "missing value";
-    public static string RuleParserUnknownType(string type) => Ru
-        ? $"неизвестный тип «{type}»"
-        : $"unknown type «{type}»";
     public static string RulesAllDeleted => Ru ? "✓ Удалено все правила" : "✓ All rules deleted";
     public static string RulesAlreadySorted => Ru ? "Уже отсортировано" : "Already sorted";
     public static string RulesEmptyValue => Ru ? "Пустое значение" : "Empty value";
@@ -302,9 +298,6 @@ public static partial class Strings
     public static string RulesImported(int count, string format) => Ru
         ? $"Импортировано правил: {count} [{format}]"
         : $"Imported {count} rule(s) [{format}]";
-    public static string RulesImportWithWarnings(int count) => Ru
-        ? $" — {count} предупреждение(й) (см. лог)"
-        : $" — {count} warning(s) (see app log)";
     public static string RulesImportError(string err) => Ru
         ? $"Ошибка импорта: {err}"
         : $"Import error: {err}";

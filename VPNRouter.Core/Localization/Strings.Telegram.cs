@@ -54,16 +54,6 @@ public static partial class Strings
         ? "Telegram Desktop не найден. Прокси работает, но открыть его автоматически нельзя — скопируйте ссылку и добавьте вручную в Telegram (на этом или другом устройстве)."
         : "Telegram Desktop not found. The proxy is running, but auto-open isn't available — copy the link below and add it manually in Telegram (here or on another device).";
 
-    public static string TgProxyDownloadStep1Python => Ru
-        ? "Шаг 1/3: Загрузка Python 3.12 (~11 МБ)..."
-        : "Step 1/3: Downloading Python 3.12 (~11 MB)...";
-    public static string TgProxyDownloadStep2Wheels => Ru
-        ? "Шаг 2/3: Установка зависимостей (cryptography, cffi, pycparser)..."
-        : "Step 2/3: Installing dependencies (cryptography, cffi, pycparser)...";
-    public static string TgProxyDownloadStep3Source => Ru
-        ? "Шаг 3/3: Загрузка proxy source с GitHub..."
-        : "Step 3/3: Downloading proxy source from GitHub...";
-
     public static string TgProxyOneTapTitleStopped => Ru
         ? "Включить Telegram"
         : "Activate Telegram";
@@ -156,9 +146,6 @@ public static partial class Strings
     public static string ZapretOneTapAllFailedToast => Ru
         ? "Авто-подбор не сработал. Открой «Тонкую настройку» и выбери стратегию вручную."
         : "Auto-pick failed. Open \"Advanced settings\" to choose a strategy manually.";
-    public static string ZapretOneTapNoSignalToast => Ru
-        ? "Похоже, интернет недоступен. Проверь соединение и повтори."
-        : "Looks like no internet. Check the connection and retry.";
 
     public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
     public static string OpenGitHub => "GitHub";

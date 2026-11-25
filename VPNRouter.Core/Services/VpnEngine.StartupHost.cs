@@ -88,7 +88,8 @@ public partial class VpnEngine
             var token = _engine._sessionCts?.Token ?? CancellationToken.None;
             var captured = _engine._failoverSettingsContext ?? CapturedSettings();
             var generation = _engine._failoverGeneration;
-            var failover = WireFailoverWithStop(new ConfigSanityCheck(_engine._logger));
+            var sanity = _engine._sanityCheck ??= new ConfigSanityCheck(_engine._logger);
+            var failover = WireFailoverWithStop(sanity);
             _ = Task.Run(async () =>
             {
                 try

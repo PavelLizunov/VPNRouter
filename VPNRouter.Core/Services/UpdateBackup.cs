@@ -397,21 +397,8 @@ public static class UpdateBackup
         return ok;
     }
 
-    public static bool HasFailureMarker(string installDir) =>
-        !string.IsNullOrWhiteSpace(installDir) && HasApplicationFailureMarker(Path.Combine(installDir, "app"));
-
     internal static bool HasApplicationFailureMarker(string applicationDir) =>
         File.Exists(Path.Combine(applicationDir, FailureMarkerName));
-
-    public static void ClearFailureMarker(string installDir)
-    {
-        if (string.IsNullOrWhiteSpace(installDir)) return;
-        try { File.Delete(Path.Combine(installDir, "app", FailureMarkerName)); }
-        catch { }
-    }
-
-    public static string ReadFailureMarker(string installDir) =>
-        string.IsNullOrWhiteSpace(installDir) ? string.Empty : ReadApplicationFailureMarker(Path.Combine(installDir, "app"));
 
     internal static string ReadApplicationFailureMarker(string applicationDir)
     {

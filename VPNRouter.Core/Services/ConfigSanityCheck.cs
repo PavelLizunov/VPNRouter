@@ -5,21 +5,32 @@ using Serilog;
 
 namespace VPNRouter.Core.Services;
 
-public sealed class ConfigSanityCheck
+public sealed class ConfigSanityCheck : IDisposable
 {
     private const int DnsttProbeTimeoutMs = 8_000;
     private const int DnsttFallbackTimeoutMs = 6_000;
     private const int ControllerResponseAllowanceMs = 1_000;
     private readonly ILogger? _logger;
     private readonly HttpClient _http;
+    private readonly bool _ownsHttp;
+    private bool _disposed;
 
     public ConfigSanityCheck(ILogger? logger = null, HttpClient? httpClient = null)
     {
         _logger = logger;
+        _ownsHttp = httpClient == null;
         _http = httpClient ?? new HttpClient(ClashSingBoxApi.CreateControllerHandler())
         {
             Timeout = TimeSpan.FromMilliseconds(DnsttProbeTimeoutMs + ControllerResponseAllowanceMs)
         };
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsHttp)
+            _http.Dispose();
     }
 
     public PreStartCheckResult CheckBeforeStart(JsonObject singboxConfig)

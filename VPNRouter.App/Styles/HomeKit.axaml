@@ -166,10 +166,6 @@
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusXl}"/>
         <Setter Property="BoxShadow" Value="{DynamicResource ShadowXs}"/>
     </Style>
-    <Style Selector="Border.hk-divider">
-        <Setter Property="Height" Value="1"/>
-        <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}"/>
-    </Style>
     <Style Selector="TextBlock.hk-label">
         <Setter Property="FontSize" Value="{DynamicResource FsSm}"/>
         <Setter Property="FontWeight" Value="SemiBold"/>

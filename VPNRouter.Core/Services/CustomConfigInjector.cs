@@ -78,13 +78,13 @@ public static partial class CustomConfigInjector
             InjectGeoBypassRules(config, isActionBased, proxyTag);
         }
 
-        StripUnsupportedFeatures(config, settings.Tun.GetEffectiveRouteExcludeAddress(), settings.App.ForceIpv4Only, settings.App.StrictDns, settings.Tun.Ipv6Enabled);
+        StripUnsupportedFeatures(config, settings.Tun.GetEffectiveRouteExcludeAddress(), settings.App.ForceIpv4Only, settings.App.StrictDns, settings.Tun.Ipv6Enabled, settings.Dns.LocalDns);
 
         SetRouteFinal(config, isFullTunnel, isExcludeMode, proxyTag);
 
         SetDnsFinal(config, settings, isFullTunnel, isExcludeMode, proxyTag);
 
-        EnsureDefaultDomainResolver(config);
+        EnsureDefaultDomainResolver(config, settings.Dns.LocalDns);
         EnsureClashApi(config, settings.SingBox.ClashApi, settings.SingBox.ClashApiSecret);
         EnsureUrltest(config);
         if (settings.App.BlockAds) InjectAdBlock(config, adBlockPath);

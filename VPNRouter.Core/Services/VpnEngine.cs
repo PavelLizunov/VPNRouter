@@ -139,7 +139,6 @@ public partial class VpnEngine : IDisposable
     public event Action<bool>? TrueSplitEngagedChanged;
     public event Action<TrueSplitState, string>? TrueSplitStateChanged;
 
-    public bool IsTrueSplitEngaged => _splitDriver?.IsEngaged ?? false;
     public TrueSplitState CurrentTrueSplitState { get; private set; } = TrueSplitState.NotApplicable;
 
     [Obsolete(
@@ -660,7 +659,8 @@ public partial class VpnEngine : IDisposable
         try
         {
             // A child with unreadable exit status still belongs to its manager.
-            if (!onlyOwnedSession || _singBox != null || _healthMonitor != null || _slipstream != null)
+            if (!onlyOwnedSession || _singBox != null || _healthMonitor != null || _etw != null
+                || _slipstream != null || _connHealthStream != null || _firewall != null)
                 EndSession();
         }
         finally
@@ -731,13 +731,31 @@ public partial class VpnEngine : IDisposable
         _logger?.Information("[VpnEngine] Stopped");
     }
 
-    public void Dispose()
+    public void Dispose() => Dispose(onlyOwnedSession: false);
+
+    internal void DisposeOwnedSession() => Dispose(onlyOwnedSession: true);
+
+    private void Dispose(bool onlyOwnedSession)
     {
         if (_disposed) return;
 
-        if (_singBox != null) Stop();
+        if (onlyOwnedSession)
+        {
+            StopOwnedSession();
+        }
+        else if (_singBox != null)
+        {
+            Stop();
+        }
         else
         {
+            try { _healthMonitor?.Dispose(); } catch { }
+            _healthMonitor = null;
+            try { _etw?.Dispose(); } catch { }
+            _etw = null;
+            try { _connHealthStream?.Stop(); } catch { }
+            try { _connHealthStream?.Dispose(); } catch { }
+            _connHealthStream = null;
             try { _dnsHardening.Restore(_logger); } catch { }
             try { _unixDns.Restore(_logger); } catch { }
             try { _firewall?.Dispose(); } catch { }
@@ -746,6 +764,8 @@ public partial class VpnEngine : IDisposable
             _slipstream = null;
         }
         _disposed = true;
+        try { _sanityCheck?.Dispose(); } catch { }
+        _sanityCheck = null;
         try { _splitDriver?.Dispose(); } catch { }
         try { _probeCts?.Cancel(); } catch { }
         try { _probeCts?.Dispose(); } catch { }

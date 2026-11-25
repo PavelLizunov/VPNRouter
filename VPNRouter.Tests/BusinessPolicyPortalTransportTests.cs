@@ -98,6 +98,7 @@ public sealed class BusinessPolicyPortalTransportTests
         var settings = Settings(mode);
         settings.App.BypassRussianTraffic = true;
         settings.App.BlockQuicOnTcpProxy = blockQuic;
+        settings.Dns.LocalDns = "https://resolver.example.net/dns-query";
         settings.App.CustomRules.Insert(0, new CustomRule
         {
             Type = "domain_suffix", Value = "ninitux.com", Action = "direct", Enabled = true
@@ -123,6 +124,13 @@ public sealed class BusinessPolicyPortalTransportTests
             Assert.Equal("proxy", config.Route.Final);
         Assert.Contains(config.Route.Rules, r => r.IpCidr?.Contains("195.211.120.35/32") == true && r.Outbound == "direct");
         Assert.Contains(config.Dns.Rules, r => r.DomainSuffix?.Contains("uiscom.ru") == true && r.Server == "local-dns");
+        var localDns = Assert.Single(config.Dns.Servers, s => s.Tag == "local-dns");
+        Assert.Equal("resolver.example.net", localDns.Server);
+        Assert.Equal("dns-direct", localDns.Detour);
+        var bootstrap = Assert.Single(config.Dns.Servers, s => s.Tag == localDns.DomainResolver!.Server);
+        Assert.Equal("local", bootstrap.Type);
+        Assert.Null(bootstrap.Detour);
+        AssertExactPortal(config, settings.Vless.Servers[0]);
     }
 
     [Theory]

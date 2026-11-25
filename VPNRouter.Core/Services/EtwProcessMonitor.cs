@@ -10,15 +10,14 @@ namespace VPNRouter.Core.Services;
 public class EtwProcessMonitor : IProcessMonitor
 {
     private const string SessionName = "VPNRouterETW";
+    internal const int SessionBufferSizeMB = 4;
 
     private readonly ILogger _logger;
-    private readonly IProcessRunner _processRunner;
+    private readonly object _gate = new();
     private TraceEventSession? _session;
     private Thread? _sessionThread;
+    private bool _stopRequested;
     private bool _disposed;
-
-    // Signals that RunSession assigned _session, so a fast Start/Stop cannot skip session.Stop() and leave the worker blocked.
-    private readonly ManualResetEventSlim _sessionReady = new(false);
 
     public event EventHandler<ProcessEventArgs>? ProcessStarted;
     public event EventHandler<ProcessEventArgs>? ProcessStopped;
@@ -26,46 +25,54 @@ public class EtwProcessMonitor : IProcessMonitor
     public EtwProcessMonitor(ILogger? logger = null, IProcessRunner? processRunner = null)
     {
         _logger = logger ?? Log.Logger;
-        _processRunner = processRunner ?? new ProcessRunner();
+        _ = processRunner;
     }
 
     public void Start()
     {
-        if (_session != null) return;
-
-        _logger.Information("[ETW] Starting process monitor session");
-        _sessionReady.Reset();
-
-        _sessionThread = new Thread(RunSession)
+        if (ProcessStarted == null && ProcessStopped == null)
         {
-            Name = "VPNRouter-ETW",
-            IsBackground = true
-        };
-        _sessionThread.Start();
+            _logger.Information("[ETW] No process event subscribers — skipping kernel ETW session");
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (_disposed || _session != null || _sessionThread != null) return;
+
+            _logger.Information("[ETW] Starting process monitor session (buffer={BufferMB} MiB)", SessionBufferSizeMB);
+            _stopRequested = false;
+            _sessionThread = new Thread(RunSession)
+            {
+                Name = "VPNRouter-ETW",
+                IsBackground = true
+            };
+            _sessionThread.Start();
+        }
     }
 
     public void Stop()
     {
-        _logger.Information("[ETW] Stopping process monitor");
-        // Capture references first; stopping the session unblocks Process(), then join with a bounded timeout.
-        var thread = _sessionThread;
-        if (!_sessionReady.Wait(TimeSpan.FromSeconds(1)))
+        Thread? thread;
+        TraceEventSession? session;
+        lock (_gate)
         {
-            _logger.Warning("[ETW] session never became ready within 1s — skipping Stop");
-            _sessionThread = null;
-            return;
+            _stopRequested = true;
+            thread = _sessionThread;
+            session = _session;
+            _session = null;
         }
-        var session = _session;
-        _session = null;
-        _sessionThread = null;
+        if (thread == null && session == null) return;
 
+        _logger.Information("[ETW] Stopping process monitor");
         try { session?.Stop(); }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[ETW] session.Stop threw — best-effort, continuing");
         }
 
-        if (thread != null && thread.IsAlive)
+        // Keep the worker registered until it exits, even after a join timeout.
+        if (thread != null && thread != Thread.CurrentThread && thread.IsAlive)
         {
             if (!thread.Join(TimeSpan.FromSeconds(2)))
             {
@@ -76,8 +83,14 @@ public class EtwProcessMonitor : IProcessMonitor
 
     private void RunSession()
     {
+        TraceEventSession? ownedSession = null;
         try
         {
+            lock (_gate)
+            {
+                if (_stopRequested || _disposed) return;
+            }
+
             if (TraceEventSession.GetActiveSessionNames().Contains(SessionName))
             {
                 _logger.Warning("[ETW] Found orphaned session '{Name}', disposing", SessionName);
@@ -85,20 +98,25 @@ public class EtwProcessMonitor : IProcessMonitor
                 old.Stop();
             }
 
-            using var session = new TraceEventSession(SessionName);
-            _session = session;
-            _sessionReady.Set();
+            using var session = new TraceEventSession(SessionName)
+            {
+                BufferSizeMB = SessionBufferSizeMB
+            };
+            ownedSession = session;
 
             session.EnableKernelProvider(
                 KernelTraceEventParser.Keywords.Process,
                 KernelTraceEventParser.Keywords.None);
 
-            session.Source.Kernel.ProcessStart += data =>
+            var source = session.Source;
+            source.Kernel.ProcessStart += data =>
             {
+                var handler = ProcessStarted;
+                if (handler == null) return;
                 try
                 {
                     var args = TranslateProcessEvent(data.ProcessID, data.ImageFileName, data.ParentID);
-                    ProcessStarted?.Invoke(this, args);
+                    handler.Invoke(this, args);
                 }
                 catch (Exception ex)
                 {
@@ -106,12 +124,14 @@ public class EtwProcessMonitor : IProcessMonitor
                 }
             };
 
-            session.Source.Kernel.ProcessStop += data =>
+            source.Kernel.ProcessStop += data =>
             {
+                var handler = ProcessStopped;
+                if (handler == null) return;
                 try
                 {
                     var args = TranslateProcessEvent(data.ProcessID, data.ImageFileName, data.ParentID);
-                    ProcessStopped?.Invoke(this, args);
+                    handler.Invoke(this, args);
                 }
                 catch (Exception ex)
                 {
@@ -119,8 +139,15 @@ public class EtwProcessMonitor : IProcessMonitor
                 }
             };
 
+            lock (_gate)
+            {
+                // Stop takes the same lock. If setup is still in flight, returning here disposes the session.
+                if (_stopRequested || _disposed) return;
+                _session = session;
+            }
+
             _logger.Information("[ETW] Session active, listening for process events");
-            session.Source.Process();
+            source.Process();
         }
         catch (Exception ex)
         {
@@ -128,7 +155,13 @@ public class EtwProcessMonitor : IProcessMonitor
         }
         finally
         {
-            _sessionReady.Set();
+            lock (_gate)
+            {
+                if (ReferenceEquals(_session, ownedSession))
+                    _session = null;
+                if (ReferenceEquals(_sessionThread, Thread.CurrentThread))
+                    _sessionThread = null;
+            }
         }
     }
 
@@ -144,10 +177,12 @@ public class EtwProcessMonitor : IProcessMonitor
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
         Stop();
-        try { _sessionReady.Dispose(); } catch { }
     }
 }
 #endif

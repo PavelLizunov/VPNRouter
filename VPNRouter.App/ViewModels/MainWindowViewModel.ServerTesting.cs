@@ -19,7 +19,6 @@ public partial class MainWindowViewModel
         OperatingSystem.IsWindows() && TcpTlsProbe.OutboundInterfaceIndex() is > 0;
 
     private const int ServerTestConcurrency = 20;
-    private const int ServerDeepConcurrency = 5;
 
     [ObservableProperty] private string _serverTestProgressText = string.Empty;
 
@@ -135,7 +134,7 @@ public partial class MainWindowViewModel
 
         foreach (var s in servers) s.IsTesting = true;
 
-        var sem = new SemaphoreSlim(ServerTestConcurrency);
+        using var sem = new SemaphoreSlim(ServerTestConcurrency);
         var done = 0;
         var total = servers.Count;
 

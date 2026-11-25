@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
@@ -94,7 +96,7 @@ public static class DiagnosticsExporter
         "wherever you already get support (Discord / Telegram / GitHub issue).",
         "",
         "Contents:",
-        "  summary.txt            - version, OS, channel, connected state, health check",
+        "  summary.txt            - version, OS, channel, connected state, memory, health check",
         "  windows-services.txt   - Windows service/driver state for VPNRouter + True Split",
         "  config.redacted.yaml   - your settings (secrets removed)",
         "  current.redacted.json  - the config sing-box actually loaded (secrets removed)",
@@ -124,6 +126,8 @@ public static class DiagnosticsExporter
         sb.AppendLine($"Connected:  {connected}");
         sb.AppendLine($"Generated:  {timestamp:o} (local) / {timestamp.ToUniversalTime():o} (UTC)");
         sb.AppendLine();
+        AppendMemorySection(sb, warnings);
+        sb.AppendLine();
         sb.AppendLine("──── Health check ────");
         try
         {
@@ -136,6 +140,80 @@ public static class DiagnosticsExporter
         }
         return sb.ToString();
     }
+
+    private static void AppendMemorySection(StringBuilder sb, List<string> warnings)
+    {
+        sb.AppendLine("──── Memory ────");
+        try
+        {
+            using var current = Process.GetCurrentProcess();
+            var workingSet = current.WorkingSet64;
+            var privateMemory = current.PrivateMemorySize64;
+            var managedHeap = GC.GetTotalMemory(forceFullCollection: false);
+            var gcInfo = GC.GetGCMemoryInfo();
+            var gen0 = GC.CollectionCount(0);
+            var gen1 = GC.CollectionCount(1);
+            var gen2 = GC.CollectionCount(2);
+
+            sb.AppendLine(
+                $"CurrentProcess: PID={current.Id} WorkingSet={FormatMiB(workingSet)} PrivateMemory={FormatMiB(privateMemory)} " +
+                $"ManagedGC={FormatMiB(managedHeap)} GCCommitted={FormatMiB(gcInfo.TotalCommittedBytes)} " +
+                $"GC(Gen0={gen0}, Gen1={gen1}, Gen2={gen2})");
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"memory telemetry failed: {ex.GetType().Name}");
+            sb.AppendLine("(current process memory unavailable)");
+        }
+
+        var singBoxFound = false;
+        var seenPids = new HashSet<int>();
+        foreach (var procName in new[] { "sing-box", "sing-box-lx" })
+        {
+            Process[]? procs = null;
+            try
+            {
+                procs = Process.GetProcessesByName(procName);
+                foreach (var proc in procs)
+                {
+                    try
+                    {
+                        var pid = proc.Id;
+                        if (!seenPids.Add(pid)) continue;
+                        var ws = proc.WorkingSet64;
+                        var pm = proc.PrivateMemorySize64;
+                        sb.AppendLine($"sing-box ({procName}): PID={pid} WorkingSet={FormatMiB(ws)} PrivateMemory={FormatMiB(pm)}");
+                        singBoxFound = true;
+                    }
+                    catch
+                    {
+                        // Process may have exited or denied access between enumeration and read.
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"sing-box memory query ({procName}) failed: {ex.GetType().Name}");
+            }
+            finally
+            {
+                if (procs != null)
+                {
+                    foreach (var proc in procs)
+                    {
+                        try { proc.Dispose(); }
+                        catch { }
+                    }
+                }
+            }
+        }
+
+        if (!singBoxFound)
+            sb.AppendLine("sing-box: (not running)");
+    }
+
+    private static string FormatMiB(long bytes) =>
+        (bytes / (1024.0 * 1024.0)).ToString("0.0", CultureInfo.InvariantCulture) + " MiB";
 
     private static string BuildWindowsServicesSnapshot(List<string> warnings)
     {
@@ -532,17 +610,39 @@ public static class DiagnosticsExporter
         return sr.ReadToEnd();
     }
 
-    internal static string TailLines(string path, int maxLines)
+    internal static string TailLines(string path, int maxLines, long maxReadBytes = MaxTailReadBytes)
     {
+        if (maxLines <= 0) return string.Empty;
+        if (maxReadBytes <= 0) maxReadBytes = MaxTailReadBytes;
+
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        bool seeked = fs.Length > MaxTailReadBytes;
-        if (seeked) fs.Seek(-MaxTailReadBytes, SeekOrigin.End);
+        bool seeked = fs.Length > maxReadBytes;
+        if (seeked) fs.Seek(-maxReadBytes, SeekOrigin.End);
+
         using var sr = new StreamReader(fs);
-        var text = sr.ReadToEnd();
-        var all = text.Replace("\r\n", "\n").Split('\n');
-        if (seeked && all.Length > 1) all = all.Skip(1).ToArray();
-        if (all.Length <= maxLines) return string.Join(Environment.NewLine, all);
-        return string.Join(Environment.NewLine, all.Skip(all.Length - maxLines));
+        string? discardedFirstLine = seeked ? sr.ReadLine() : null;
+
+        var ring = new string[maxLines];
+        int count = 0;
+        string? line;
+        while ((line = sr.ReadLine()) != null)
+        {
+            ring[count % maxLines] = line;
+            count++;
+        }
+
+        if (count == 0)
+            return discardedFirstLine ?? string.Empty;
+
+        int keep = Math.Min(count, maxLines);
+        int start = count >= maxLines ? count % maxLines : 0;
+        var sb = new StringBuilder();
+        for (int i = 0; i < keep; i++)
+        {
+            if (i > 0) sb.Append(Environment.NewLine);
+            sb.Append(ring[(start + i) % maxLines]);
+        }
+        return sb.ToString();
     }
 
     private static string ResolveDestination(string? destinationDir)

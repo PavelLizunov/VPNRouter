@@ -9,7 +9,6 @@ public sealed class AutoFailoverEngine
     public const int MaxAttempts = 3;
 
     private readonly AppSettings _settings;
-    private readonly ConfigSanityCheck _sanity;
     private readonly ILogger? _logger;
     private readonly Func<CancellationToken, Task<bool>>? _restart;
     private readonly ISettingsStore _store;
@@ -36,7 +35,7 @@ public sealed class AutoFailoverEngine
         ISettingsStore? store = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _sanity = sanity ?? throw new ArgumentNullException(nameof(sanity));
+        ArgumentNullException.ThrowIfNull(sanity);
         _restart = restart;
         _logger = logger;
         _store = store ?? RealSettingsStore.Instance;

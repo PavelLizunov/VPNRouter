@@ -70,8 +70,6 @@ public class HealthMonitor : IDisposable
 
     private static readonly TimeSpan DeferredDisableMaxWait = TimeSpan.FromSeconds(45);
 
-    public event EventHandler? VpnStarted;
-    public event EventHandler? VpnStopped;
     public event EventHandler<int>? RestartAttempted;
 
     public HealthMonitor(
@@ -333,7 +331,6 @@ public class HealthMonitor : IDisposable
                 _restartAttempts = 0;
                 _failoverRequested = false;
                 _logger.Information("[HealthMonitor] VPN is up");
-                VpnStarted?.Invoke(this, EventArgs.Empty);
             }
             else if (isHealthy)
             {
@@ -474,7 +471,6 @@ public class HealthMonitor : IDisposable
         _unhealthyHealthProbeStreak = 0;
         _servingConfirmed = false; _wedgeStreak = 0;
         _vpnWasRunning = false;
-        VpnStopped?.Invoke(this, EventArgs.Empty);
 
         try { _firewall.EnableBlockRules(); }
         catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to enable firewall block rules on crash"); }
@@ -651,7 +647,6 @@ public class HealthMonitor : IDisposable
                 }
 
                 _logger.Information("[HealthMonitor] sing-box restarted successfully");
-                VpnStarted?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
             {

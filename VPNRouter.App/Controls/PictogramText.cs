@@ -43,20 +43,27 @@ public sealed class PictogramText : AvaloniaObject
         {
             if (!control.IsSet(AutomationProperties.NameProperty))
                 control.Bind(AutomationProperties.NameProperty, control.GetObservable(ContentProperty));
-            var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+            if (control.Content is not TextBlock text || !text.IsSet(TextProperty))
+            {
+                text = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+                control.Content = text;
+            }
             SetText(text, GetContent(control));
-            control.Content = text;
         });
         TipProperty.Changed.AddClassHandler<Control>((control, _) =>
         {
-            var text = new TextBlock { MaxWidth = 360, TextWrapping = Avalonia.Media.TextWrapping.Wrap };
-            SetIcons(text, "retest,check,warning,error,untested,timer");
+            if (ToolTip.GetTip(control) is not TextBlock text || !text.IsSet(TextProperty))
+            {
+                text = new TextBlock { MaxWidth = 360, TextWrapping = Avalonia.Media.TextWrapping.Wrap };
+                SetIcons(text, "retest,check,warning,error,untested,timer");
+                ToolTip.SetTip(control, text);
+            }
             SetText(text, GetTip(control));
-            ToolTip.SetTip(control, text);
         });
         IconsProperty.Changed.AddClassHandler<TextBlock>((control, _) => Update(control));
         PrefixOnlyProperty.Changed.AddClassHandler<TextBlock>((control, _) => Update(control));
         TextBlock.FontSizeProperty.Changed.AddClassHandler<TextBlock>((control, _) => Update(control));
+        TextBlock.ForegroundProperty.Changed.AddClassHandler<TextBlock>((control, _) => UpdateForeground(control));
     }
 
     private static readonly IReadOnlyDictionary<string, string[]> Symbols = new Dictionary<string, string[]>
@@ -115,7 +122,7 @@ public sealed class PictogramText : AvaloniaObject
             // zero-width measure now, so that a render before the first layout finds it unchanged; the real layout pass
             // then measures it normally.
             icon.Measure(new Size(0, double.PositiveInfinity));
-            icon.Bind(Pictogram.ForegroundProperty, control.GetObservable(TextBlock.ForegroundProperty));
+            icon.Foreground = control.Foreground;
             inlines.Add(new InlineUIContainer { Child = icon, BaselineAlignment = BaselineAlignment.Center });
             i += length - 1;
             if (i + 1 < source.Length && source[i + 1] == '\ufe0f') i++;
@@ -123,5 +130,14 @@ public sealed class PictogramText : AvaloniaObject
         }
         if (start < source.Length) inlines.Add(new Run(source[start..]));
         control.Inlines = inlines;
+    }
+
+    private static void UpdateForeground(TextBlock control)
+    {
+        if (!control.IsSet(TextProperty) || control.Inlines is not { Count: > 0 } inlines) return;
+        var foreground = control.Foreground;
+        foreach (var inline in inlines)
+            if (inline is InlineUIContainer { Child: Pictogram icon })
+                icon.Foreground = foreground;
     }
 }

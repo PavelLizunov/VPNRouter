@@ -165,6 +165,28 @@ public sealed class ProblemDetectorTests
         Assert.False(ProblemDetector.PlanFix(problems, connected: false).Reconnect);
         Assert.True(ProblemDetector.PlanFix(System.Array.Empty<DetectedProblem>(), connected: true).IsEmpty);
     }
+
+    [Fact]
+    public void StreamingLogScanners_HandleCrlfAndLfIdentically()
+    {
+        var lfLog = FullTunnelGameSession.Replace("\r\n", "\n");
+        var crlfLog = lfLog.Replace("\n", "\r\n");
+
+        Assert.Equal(
+            ProblemDetector.CountProxiedGamePorts(ProblemDetector.CurrentSession(lfLog)),
+            ProblemDetector.CountProxiedGamePorts(ProblemDetector.CurrentSession(crlfLog)));
+
+        var endpoints = HealthCheck.ExtractProxyEndpointsFromCurrentJson(CurrentJson);
+        const string timeoutLf =
+            "+0300 2026-10-17 11:19:38 ERROR outbound/urltest[proxy]: dial tcp 192.0.2.101:443: i/o timeout\n" +
+            "+0300 2026-10-17 11:20:00 WARN dns: exchange discord.com context deadline exceeded\n";
+        var timeoutCrlf = timeoutLf.Replace("\n", "\r\n");
+
+        Assert.Equal(1, HealthCheck.CountProxyDialTimeouts(timeoutLf, endpoints));
+        Assert.Equal(1, HealthCheck.CountProxyDialTimeouts(timeoutCrlf, endpoints));
+        Assert.Equal(1, HealthCheck.CountDiscordDnsStalls(timeoutLf));
+        Assert.Equal(1, HealthCheck.CountDiscordDnsStalls(timeoutCrlf));
+    }
 }
 
 public sealed class HelpVideoLinkTests

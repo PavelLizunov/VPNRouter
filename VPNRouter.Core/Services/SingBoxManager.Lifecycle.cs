@@ -740,7 +740,8 @@ public partial class SingBoxManager
             ExecutablePath: spawnExe,
             Arguments: spawnArgs,
             CaptureStdout: true,
-            CaptureStderr: true);
+            CaptureStderr: true,
+            EnvironmentOverrides: BuildGoMemLimitOverride());
 
         // Last-moment disposal re-check at the spawn point: Dispose can race past the entry guard.
         if (Volatile.Read(ref _disposed) != 0)
@@ -779,6 +780,20 @@ public partial class SingBoxManager
         _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", startedHandle.Pid);
         NotifyPolicyAcceptance();
         Started?.Invoke(startedHandle.Pid);
+    }
+
+    internal const string DefaultGoMemLimit = "256MiB";
+    internal const string DeepVerifyGoMemLimit = "64MiB";
+
+    internal static IReadOnlyDictionary<string, string>? BuildGoMemLimitOverride(
+        string defaultLimit = DefaultGoMemLimit,
+        string? existingEnvValue = null,
+        bool useProcessEnv = true)
+    {
+        var current = useProcessEnv ? Environment.GetEnvironmentVariable("GOMEMLIMIT") : existingEnvValue;
+        if (!string.IsNullOrWhiteSpace(current))
+            return null;
+        return new Dictionary<string, string> { ["GOMEMLIMIT"] = defaultLimit };
     }
 
     private string WriteJsonToDisk(string json)

@@ -13,6 +13,8 @@ public partial class App : Application
 {
     private MainWindowViewModel? _viewModel;
     private TrayIcon? _trayIcon;
+    private Avalonia.Threading.DispatcherTimer? _trayWatchTimer;
+    private VPNRouter.App.Services.TrayMemoryTrimmer? _trayMemoryTrimmer;
 
     public override void Initialize()
     {
@@ -32,6 +34,7 @@ public partial class App : Application
             {
                 SkiaSharp.SKGraphics.SetFontCacheLimit(4 * 1024 * 1024);
                 SkiaSharp.SKGraphics.SetFontCacheCountLimit(64);
+                SkiaSharp.SKGraphics.SetResourceCacheTotalByteLimit(16 * 1024 * 1024);
             }
             catch { }
 
@@ -126,15 +129,22 @@ public partial class App : Application
 
             desktop.Exit += (_, _) =>
             {
+                try { _trayMemoryTrimmer?.Dispose(); _trayMemoryTrimmer = null; } catch { }
+                try { _trayWatchTimer?.Stop(); _trayWatchTimer = null; } catch { }
                 VPNRouter.App.Services.AppAutomationDriver.Stop();
                 try { VPNRouter.Core.Services.LockFile.Release(Serilog.Log.Logger); } catch { }
                 try { VPNRouter.App.Services.SingleInstance.Release(); } catch { }
+                try { Serilog.Log.CloseAndFlush(); } catch { }
             };
 
             if (Program.StartMinimized)
                 mainWindow.Hide();
             else
                 mainWindow.Show();
+
+            _trayMemoryTrimmer = new VPNRouter.App.Services.TrayMemoryTrimmer(
+                mainWindow,
+                () => _viewModel?.ForceRefreshRuntimeStatus());
 
 #if PLATFORM_WINDOWS
             if (!string.IsNullOrEmpty(Program.PendingRouteAppPath))
@@ -186,9 +196,10 @@ public partial class App : Application
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(quitItem);
 
+        using var initialIconStream = AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant)));
         _trayIcon = new TrayIcon
         {
-            Icon = new WindowIcon(AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant)))),
+            Icon = new WindowIcon(initialIconStream),
             ToolTipText = VPNRouter.Core.ProductEdition.Name,
             Menu = menu,
             IsVisible = true
@@ -203,7 +214,8 @@ public partial class App : Application
             {
                 if (_trayIcon != null)
                 {
-                    _trayIcon.Icon = new WindowIcon(AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant))));
+                    using var themeIconStream = AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant)));
+                    _trayIcon.Icon = new WindowIcon(themeIconStream);
                 }
             }
             catch { }
@@ -242,10 +254,12 @@ public partial class App : Application
         {
             Serilog.Log.Warning("[Tray] the icon cannot be added to the notification area; window minimized to the taskbar instead of hidden");
             window.WindowState = WindowState.Minimized;
+            _trayMemoryTrimmer?.ScheduleTrim();
             return;
         }
 
         window.Hide();
+        _trayMemoryTrimmer?.ScheduleTrim();
         Serilog.Log.Information("[Tray] window hidden to the tray (icon in the notification area: {Registered})", registered?.ToString() ?? "unknown");
 
         if (VPNRouter.App.Services.TrayGuard.ShouldShowHint(registered, VPNRouter.App.Services.TrayGuard.HintShownBefore()))
@@ -264,6 +278,7 @@ public partial class App : Application
 
         bool? lastState = null;
         var timer = new Avalonia.Threading.DispatcherTimer { Interval = System.TimeSpan.FromSeconds(10) };
+        _trayWatchTimer = timer;
         timer.Tick += (_, _) =>
         {
             timer.Interval = System.TimeSpan.FromMinutes(2);

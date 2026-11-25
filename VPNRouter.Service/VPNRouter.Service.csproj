@@ -7,6 +7,11 @@
     <UserSecretsId>dotnet-VPNRouter.Service-523ddb06-2069-47bd-8c7b-8a4b913ea37f</UserSecretsId>
   </PropertyGroup>
 
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="9" />
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" />
+  </ItemGroup>
+
   <!-- Phase 4 (2026-05-18): Newtonsoft.Json dropped — Service had no
        direct Newtonsoft usage in its source; the package was a vestigial
        transitive bring-in. -->
