@@ -346,7 +346,10 @@ public sealed class BusinessLanguageAndLayoutTests
         var scroll = Assert.IsType<ScrollViewer>(window.Content);
         FlushLayout(window);
         AssertInsideViewport(ConnectionButton(fixture), scroll);
-        Assert.False(window.FindControl<ComboBox>("BusinessServerSelector")!.IsEffectivelyVisible);
+        var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
+        var menuFlyout = (Flyout)window.FindControl<Button>("BusinessMenuButton")!.Flyout!;
+        Assert.False(menuFlyout.IsOpen);
+        Assert.DoesNotContain(window.GetVisualDescendants(), visual => ReferenceEquals(visual, selector));
         Assert.DoesNotContain(window.GetVisualDescendants().OfType<RadioButton>(),
             radio => radio.IsEffectivelyVisible);
         var menu = window.FindControl<Button>("BusinessMenuButton")!;
@@ -426,7 +429,7 @@ public sealed class BusinessLanguageAndLayoutTests
     private static void AssertConnectionLabels(Fixture fixture, bool connecting, string expectedStatus, string? expectedButton = null)
     {
         var button = ConnectionButton(fixture);
-        expectedButton ??= connecting ? Strings.ButtonConnecting : Strings.StopVPN;
+        expectedButton ??= connecting ? Strings.ButtonConnecting : Strings.BusinessDisconnect;
         Assert.Equal(expectedButton, fixture.Window.Texts.ConnectButton);
         Assert.Equal(expectedButton, AutomationProperties.GetName(button));
         Assert.Contains(button.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == expectedButton);

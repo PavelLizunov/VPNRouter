@@ -41,6 +41,7 @@ internal static class BusinessWindowTestExtensions
     private static void Flush(BusinessWindow window)
     {
         Dispatcher.UIThread.RunJobs();
+        window.FindControl<ScrollViewer>("BusinessMenuScroll")?.UpdateLayout();
         window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
     }

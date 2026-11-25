@@ -304,9 +304,10 @@ public partial class MainWindowViewModel
 
     internal bool ReplaceBusinessServers(string connection, string sourceHash)
     {
-        if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting || _engine.IsRunning) return false;
+        if (!CanRefreshBusinessServers) return false;
         var entries = BusinessDefaults.ParseConnection(connection);
-        var next = BusinessDefaults.CreateServerPool(entries, _settings.Vless, requireSelectedDnstt: true);
+        var next = BusinessDefaults.CreateServerPool(entries, _settings.Vless,
+            requireSelectedDnstt: BusinessServerSelectionMode.IsManual(_settings.App.BusinessServerSelectionMode));
         var rows = entries.Select(s => new ServerViewModel(s)).ToArray();
         ServerViewModel.RefreshUdpSiblingFlags(rows);
         ServerViewModel.RefreshProviderRiskFlags(rows);
@@ -327,16 +328,10 @@ public partial class MainWindowViewModel
         _isLoadingUI = true;
         try
         {
-            var currentName = SelectedServer?.Name;
             Servers.Clear();
             foreach (var row in rows) Servers.Add(row);
-            var desiredName = !string.IsNullOrEmpty(currentName) &&
-                rows.Any(row => string.Equals(row.Name, currentName, StringComparison.OrdinalIgnoreCase))
-                    ? currentName
-                    : next.ActiveServer;
-            if (string.IsNullOrEmpty(desiredName)) desiredName = rows[0].Name;
             SelectedServer = rows.First(row =>
-                string.Equals(row.Name, desiredName, StringComparison.OrdinalIgnoreCase));
+                string.Equals(row.Name, next.ActiveServer, StringComparison.OrdinalIgnoreCase));
         }
         finally { _isLoadingUI = false; }
         OnBusinessServersReplaced();

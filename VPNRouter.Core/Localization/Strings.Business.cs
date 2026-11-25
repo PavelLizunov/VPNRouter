@@ -89,6 +89,8 @@ public static partial class Strings
     public static string BusinessDiagnostics => Ru ? "Сохранить диагностику" : "Save diagnostics";
     public static string BusinessOpen => Ru ? "Открыть VPNRouter Business" : "Open VPNRouter Business";
     public static string BusinessServer => Ru ? "Сервер VPN" : "VPN server";
+    public static string BusinessConnect => Ru ? "Подключиться" : "Connect";
+    public static string BusinessDisconnect => Ru ? "Отключиться" : "Disconnect";
     public static string BusinessServerMenu => Ru ? "Сервер" : "Server";
     public static string BusinessModeMenu => Ru ? "Режим VPN" : "VPN mode";
     public static string BusinessServerRefresh => Ru ? "Обновить проверку" : "Refresh check";

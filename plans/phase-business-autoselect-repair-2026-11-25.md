@@ -42,3 +42,17 @@ The isolated loopback fixture reached the same TCP port with two synthetic
 VLESS identities. Only the valid identity reached the HTTP trace responder
 through the proxy. The fixture also checked that the direct listener received
 no request. The same scenario runs in the Business Linux CI job.
+
+## Subscription refresh before connection
+
+Connect can currently cancel a scheduled subscription fetch at the start of a
+connection, then use the previous pool. Share the Business window's current
+HTTPS refresh with Connect and Repair. If there is no current refresh and the
+last successful one is older than the hourly interval or absent, try one fetch
+before selecting a profile. Keep the accepted settings and profile pool on
+fetch, validation, or persistence failure. Preserve the manual DNSTT settings
+guard while allowing an automatic pool to rotate its previous DNSTT entry.
+
+Exercise delayed success, cache fallback, and manual preference with synthetic
+Business fixtures. Verify exact-head build and focused regression results in
+PR CI. Revert this follow-up to restore the previous refresh scheduling.

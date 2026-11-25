@@ -212,9 +212,8 @@ public partial class MainWindowViewModel
     private async Task ToggleConnectionCoreAsync(AppSettings? submitted, bool useSimpleStart = true,
         CancellationToken ct = default)
     {
-        _pinnedStartRequested = false;
-        _pinnedStartOwnedByUs = false;
         if (ProductEdition.IsBusiness && UpdateVm.IsDownloading) return;
+        if (submitted == null && IsBusinessRepairInProgress && !IsConnected) return;
         if (_businessPolicyApplyActive)
         {
             if (submitted == null) await StopBusinessPolicyApplicationAsync();
@@ -287,7 +286,16 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (submitted == null && TryHandleExternalTunnelOwnership()) return;
+        if (submitted == null)
+        {
+            if (TryHandleExternalTunnelOwnership()) return;
+            if (RefreshBusinessSubscriptionBeforeConnect != null &&
+                (!await PrepareBusinessSubscriptionAsync(ct) || IsConnected || IsApplying ||
+                 _isReconnecting || _engine.HasActiveTunnel || UpdateVm.IsDownloading ||
+                 _businessPolicyApplyActive || _businessPolicyStartupBlocked ||
+                 TryHandleExternalTunnelOwnership()))
+                return;
+        }
 
         if (submitted == null && IsBusinessAutomaticSelection)
         {

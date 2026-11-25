@@ -23,7 +23,7 @@ internal sealed partial class BusinessServicesViewModel
     };
     private bool RepairAvailable => _visible && !_disposed && !_vm.IsConnecting && !_vm.IsApplying && !_vm.UpdateVm.IsDownloading;
     private bool CanOpenRepair() => RepairAvailable && !IsRepairOpen && !IsDiagnosticBusy && _repairAttempt == null &&
-        (_vm.IsConnected ? _configuration.SupportEndpoint != null : !IsRefreshing);
+        (!_vm.IsConnected || _configuration.SupportEndpoint != null);
     private bool CanAnalyzeRepair() => RepairAvailable && ShowAnalyze && !IsDiagnosticBusy && _repairAttempt == null;
 
     [RelayCommand(CanExecute = nameof(CanAnalyzeRepair))]

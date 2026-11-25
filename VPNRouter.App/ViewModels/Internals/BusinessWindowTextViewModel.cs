@@ -9,7 +9,7 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     private bool _languageSaveFailed;
     public string ConnectButton => _client?.IsConnecting == true && IsStoppingStatus(_client.StatusText) ? Strings.Stopping
         : _client?.IsConnecting == true ? Strings.ButtonConnecting
-        : _client?.IsConnected == true ? Strings.StopVPN : Strings.StartVPN;
+        : _client?.IsConnected == true ? Strings.BusinessDisconnect : Strings.BusinessConnect;
     public string ConnectionStatus => _languageSaveFailed ? Strings.BusinessLanguageSaveFailed
         : _client?.IsConnecting == true && IsStoppingStatus(_client.StatusText) ? Strings.Stopping
         : _client?.IsConnecting == true && IsNeutralStartingStatus(_client.StatusText) ? Strings.ButtonConnecting

@@ -13,6 +13,8 @@ internal static class BusinessServerSelectionMode
     internal static bool IsAutomatic(string? value) =>
         string.Equals(value, Automatic, StringComparison.OrdinalIgnoreCase);
 
-    internal static string Normalize(string? value) =>
-        string.Equals(value, Manual, StringComparison.OrdinalIgnoreCase) ? Manual : Automatic;
+    internal static string Normalize(string? value) => IsManual(value) ? Manual : Automatic;
+
+    internal static bool IsManual(string? value) =>
+        string.Equals(value, Manual, StringComparison.OrdinalIgnoreCase);
 }

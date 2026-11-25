@@ -36,6 +36,7 @@ public partial class MainWindowViewModel
     }
 
     private bool _businessAutoSelect;
+    private bool _businessRepairInProgress;
 
     internal bool BusinessAutoSelect
     {
@@ -77,6 +78,47 @@ public partial class MainWindowViewModel
     // submission produced by automatic selection or the verified-connect hook.
     internal Func<AppSettings, CancellationToken, bool,
         Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)>>? BusinessConnectStart { get; set; }
+
+    internal Func<CancellationToken, Task>? RefreshBusinessSubscriptionBeforeConnect { get; set; }
+    internal bool IsBusinessSubscriptionPreflight { get; private set; }
+
+    internal bool IsBusinessRepairInProgress
+    {
+        get => _businessRepairInProgress;
+        private set => SetProperty(ref _businessRepairInProgress, value);
+    }
+
+    internal bool CanRefreshBusinessServers =>
+        !_disposed && !_isLoadingUI && !_isReconnecting && !IsConnected &&
+        (!IsConnecting || IsBusinessSubscriptionPreflight) && !IsApplying &&
+        !UpdateVm.IsDownloading && !_engine.HasActiveTunnel && !HasExternalTunnelOwned();
+
+    private async Task<bool> PrepareBusinessSubscriptionAsync(CancellationToken ct)
+    {
+        if (RefreshBusinessSubscriptionBeforeConnect is not { } refresh)
+            return !ct.IsCancellationRequested;
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _businessAutoLifetimeCts.Token);
+        if (linked.IsCancellationRequested) return false;
+
+        IsBusinessSubscriptionPreflight = true;
+        IsConnecting = true;
+        try
+        {
+            await refresh(linked.Token);
+            return !linked.IsCancellationRequested && !_disposed &&
+                RefreshBusinessSubscriptionBeforeConnect == refresh;
+        }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested)
+        {
+            return false;
+        }
+        finally
+        {
+            IsBusinessSubscriptionPreflight = false;
+            IsConnecting = false;
+        }
+    }
 
     private void OnBusinessAutoSelectChanged(bool value)
     {
@@ -175,8 +217,17 @@ public partial class MainWindowViewModel
         return probeResult;
     }
 
-    internal Task<bool> ConnectVerifiedBusinessServerAsync(CancellationToken ct) =>
-        ConnectVerifiedBusinessServerCoreAsync(ct);
+    internal async Task<bool> ConnectVerifiedBusinessServerAsync(CancellationToken ct)
+    {
+        if (IsBusinessRepairInProgress || !CanStartVerifiedBusinessConnect()) return false;
+        IsBusinessRepairInProgress = true;
+        try
+        {
+            return await PrepareBusinessSubscriptionAsync(ct) &&
+                await ConnectVerifiedBusinessServerCoreAsync(ct);
+        }
+        finally { IsBusinessRepairInProgress = false; }
+    }
 
     private async Task<bool> ConnectVerifiedBusinessServerCoreAsync(CancellationToken ct)
     {
