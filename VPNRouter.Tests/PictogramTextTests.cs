@@ -1,7 +1,9 @@
+using System.Runtime.CompilerServices;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using VPNRouter.App.Controls;
 
 namespace VPNRouter.Tests;
@@ -88,5 +90,97 @@ public class PictogramTextTests
         PictogramText.SetText(text, "\u2715");
         Assert.Equal(new[] { "delete" }, Ids(text));
         Assert.Equal("Remove server", AutomationProperties.GetName(text));
+    }
+
+    [AvaloniaFact]
+    public void RepeatedTextUpdates_DoNotRetainAbandonedPictogramControls()
+    {
+        var text = new TextBlock { FontSize = 12, Foreground = Brushes.White };
+        PictogramText.SetIcons(text, "arrow-down,arrow-up");
+
+        var abandoned = UpdateAndCaptureAbandonedIcons(text, iterations: 200);
+
+        for (var i = 0; i < 4; i++)
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+
+        GC.KeepAlive(text);
+        Assert.NotEmpty(abandoned);
+        Assert.All(abandoned, weak => Assert.False(weak.TryGetTarget(out _)));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static List<WeakReference<Pictogram>> UpdateAndCaptureAbandonedIcons(TextBlock text, int iterations)
+    {
+        var abandoned = new List<WeakReference<Pictogram>>(iterations * 2);
+        for (var i = 0; i < iterations; i++)
+        {
+            PictogramText.SetText(text, $"\u2193 {i} KB/s \u2191 {i + 1} KB/s");
+            foreach (var inline in text.Inlines!)
+            {
+                if (inline is InlineUIContainer { Child: Pictogram icon })
+                    abandoned.Add(new WeakReference<Pictogram>(icon));
+            }
+        }
+
+        // Replace with a final value so every captured Pictogram above is abandoned.
+        PictogramText.SetText(text, "\u2193 final \u2191 final");
+        return abandoned;
+    }
+
+    [AvaloniaFact]
+    public void ForegroundChange_DirectAndInherited_UpdatesInlinePictograms()
+    {
+        var direct = new TextBlock { Foreground = Brushes.Red };
+        PictogramText.SetIcons(direct, "arrow-down,arrow-up");
+        PictogramText.SetText(direct, "\u2193 1 \u2191 2");
+        var directIcons = direct.Inlines!.OfType<InlineUIContainer>().Select(x => Assert.IsType<Pictogram>(x.Child)).ToArray();
+        Assert.Equal(2, directIcons.Length);
+        Assert.All(directIcons, icon => Assert.Same(Brushes.Red, icon.Foreground));
+
+        direct.Foreground = Brushes.Blue;
+        Assert.All(directIcons, icon => Assert.Same(Brushes.Blue, icon.Foreground));
+
+        var child = new TextBlock();
+        var host = new ContentControl { Content = child };
+        var window = new Window { Content = host };
+        window.Show();
+        try
+        {
+            PictogramText.SetIcons(child, "check");
+            PictogramText.SetText(child, "\u2713 ok");
+            TextElement.SetForeground(host, Brushes.Green);
+            var inheritedIcon = Assert.Single(child.Inlines!.OfType<InlineUIContainer>().Select(x => Assert.IsType<Pictogram>(x.Child)));
+            Assert.Same(Brushes.Green, inheritedIcon.Foreground);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public void ContentAndTipUpdates_ReuseOwnedTextBlock()
+    {
+        var button = new Button();
+        PictogramText.SetIcons(button, "play,stop");
+        PictogramText.SetContent(button, "\u25b6 Start");
+        var firstContent = Assert.IsType<TextBlock>(button.Content);
+        Assert.Equal(new[] { "play" }, Ids(firstContent));
+
+        PictogramText.SetContent(button, "\u23f9 Stop");
+        Assert.Same(firstContent, button.Content);
+        Assert.Equal(new[] { "stop" }, Ids(firstContent));
+        Assert.Equal("\u23f9 Stop", AutomationProperties.GetName(button));
+
+        PictogramText.SetTip(button, "\u2713 ready");
+        var firstTip = Assert.IsType<TextBlock>(ToolTip.GetTip(button));
+        Assert.Equal(new[] { "check" }, Ids(firstTip));
+
+        PictogramText.SetTip(button, "\u26a0 warn");
+        Assert.Same(firstTip, ToolTip.GetTip(button));
+        Assert.Equal(new[] { "warning" }, Ids(firstTip));
     }
 }

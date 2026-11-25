@@ -131,26 +131,30 @@ public class ProcessScanner : IProcessScanner
         {
             using var searcher = new ManagementObjectSearcher(
                 "SELECT ProcessId, ParentProcessId, Name FROM Win32_Process");
-            foreach (ManagementObject obj in searcher.Get())
+            using var results = searcher.Get();
+            foreach (ManagementObject obj in results)
             {
-                int pid, parent;
-                string name;
-                try
+                using (obj)
                 {
-                    pid = Convert.ToInt32(obj["ProcessId"]);
-                    parent = Convert.ToInt32(obj["ParentProcessId"]);
-                    name = obj["Name"]?.ToString() ?? string.Empty;
-                }
-                catch { continue; }
+                    int pid, parent;
+                    string name;
+                    try
+                    {
+                        pid = Convert.ToInt32(obj["ProcessId"]);
+                        parent = Convert.ToInt32(obj["ParentProcessId"]);
+                        name = obj["Name"]?.ToString() ?? string.Empty;
+                    }
+                    catch { continue; }
 
-                if (pid <= 0) continue;
-                nameByPid[pid] = name;
-                if (!childrenByParent.TryGetValue(parent, out var list))
-                {
-                    list = new List<int>();
-                    childrenByParent[parent] = list;
+                    if (pid <= 0) continue;
+                    nameByPid[pid] = name;
+                    if (!childrenByParent.TryGetValue(parent, out var list))
+                    {
+                        list = new List<int>();
+                        childrenByParent[parent] = list;
+                    }
+                    list.Add(pid);
                 }
-                list.Add(pid);
             }
         }
         catch (Exception ex)

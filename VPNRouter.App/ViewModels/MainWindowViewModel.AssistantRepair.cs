@@ -40,7 +40,8 @@ public partial class MainWindowViewModel
             if (_engine.SingBoxPid is not { } pid) return Strings.AssistantSettingsChanged;
             var isCurrent = _engine.CaptureReadinessGuard(pid);
             if (!isCurrent()) return Strings.AssistantSettingsChanged;
-            var probe = await session.ProbeProxyAsync(new ConfigSanityCheck(_logger), ct, preferHttps: true);
+            using var sanity = new ConfigSanityCheck(_logger);
+            var probe = await session.ProbeProxyAsync(sanity, ct, preferHttps: true);
             ct.ThrowIfCancellationRequested();
             if (!isCurrent() || !AssistantSnapshotStillCurrent(snapshot))
                 return Strings.AssistantSettingsChanged;

@@ -85,6 +85,11 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
             Assert.Equal("run", spawnedRequest.Arguments[0]);
             Assert.Equal("-c", spawnedRequest.Arguments[1]);
             Assert.EndsWith("current.json", spawnedRequest.Arguments[2]);
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GOMEMLIMIT")))
+            {
+                Assert.NotNull(spawnedRequest.EnvironmentOverrides);
+                Assert.Equal(SingBoxManager.DefaultGoMemLimit, spawnedRequest.EnvironmentOverrides!["GOMEMLIMIT"]);
+            }
 
             Assert.Single(fake.StartCalls);
 
@@ -352,5 +357,20 @@ public sealed class SingBoxManagerProcessRunnerTests : IDisposable
         {
             try { File.Delete(exe); } catch { }
         }
+    }
+
+    [Fact]
+    public void BuildGoMemLimitOverride_DefaultsTo256MiBAndRespectsExistingEnv()
+    {
+        var defaultEnv = SingBoxManager.BuildGoMemLimitOverride(existingEnvValue: null, useProcessEnv: false);
+        Assert.NotNull(defaultEnv);
+        Assert.Equal(SingBoxManager.DefaultGoMemLimit, defaultEnv!["GOMEMLIMIT"]);
+
+        var deepVerifyEnv = SingBoxManager.BuildGoMemLimitOverride(
+            SingBoxManager.DeepVerifyGoMemLimit, existingEnvValue: null, useProcessEnv: false);
+        Assert.NotNull(deepVerifyEnv);
+        Assert.Equal(SingBoxManager.DeepVerifyGoMemLimit, deepVerifyEnv!["GOMEMLIMIT"]);
+
+        Assert.Null(SingBoxManager.BuildGoMemLimitOverride(existingEnvValue: "512MiB", useProcessEnv: false));
     }
 }

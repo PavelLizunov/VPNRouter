@@ -105,7 +105,8 @@ public static class ProblemDetector
     internal static int CountProxiedGamePorts(string log)
     {
         var ports = new HashSet<int>();
-        foreach (var line in log.Replace("\r\n", "\n").Split('\n'))
+        using var reader = new StringReader(log);
+        while (reader.ReadLine() is { } line)
         {
             var match = OutboundLine.Match(line);
             if (!match.Success) continue;
