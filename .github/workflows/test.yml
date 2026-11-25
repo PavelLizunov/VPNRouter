@@ -4,7 +4,6 @@ name: dotnet test
 on:
   push:
     branches: [main, v3.0-prep]
-    tags: ['v*']
   pull_request:
     branches: [main, v3.0-prep]
   workflow_dispatch:
@@ -25,6 +24,8 @@ jobs:
 
       - name: Record selected SDK and bundled VSTest
         run: python .github/scripts/report-test-sdk.py
+      - name: Release preparation unit tests
+        run: python3 -B -m unittest discover -s .github/scripts/tests
       - name: Restore
         run: dotnet restore VPNRouter.sln
 
@@ -132,18 +133,7 @@ jobs:
       - name: Compile Windows installer scripts with a test payload
         shell: pwsh
         run: |
-          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (!(Test-Path -LiteralPath $compiler -PathType Leaf)) {
-            $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.4.exe'
-            Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $setup
-            if ((Get-FileHash -Algorithm SHA256 $setup).Hash -ne 'a549929319f9120716677c685535ca4671e4b937b5fdc87e2585f32d8eb30e8c') {
-              throw 'Inno Setup installer checksum mismatch'
-            }
-            $toolsDir = Join-Path $env:RUNNER_TEMP 'inno-test-compiler'
-            $install = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /DIR=`"$toolsDir`"" -Wait -PassThru
-            if ($install.ExitCode -ne 0) { throw "Inno Setup installation failed with $($install.ExitCode)" }
-            $compiler = Join-Path $toolsDir 'ISCC.exe'
-          }
+          $compiler = & ./.github/scripts/setup-inno.ps1
           $payload = Join-Path $env:RUNNER_TEMP 'installer-test-payload'
           $output = Join-Path $env:RUNNER_TEMP 'installer-test-output'
           New-Item -ItemType Directory -Path "$payload\app", $output | Out-Null

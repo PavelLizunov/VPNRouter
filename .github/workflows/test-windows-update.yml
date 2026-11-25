@@ -1,5 +1,5 @@
 name: Auto-Update Integration Test (Windows)
-
+run-name: ${{ inputs.release_artifacts && format('Windows release packages {0}', github.ref_name) || format('Windows updater test {0}', github.ref_name) }}
 
 on:
   workflow_dispatch:
@@ -9,11 +9,10 @@ on:
         required: false
         default: ""
         type: string
-  release:
-    types: [published]
-  push:
-    tags:
-      - "v*"
+      release_artifacts:
+        description: "Build the installer and retain the tested Windows packages for an existing release draft"
+        default: false
+        type: boolean
   pull_request:
     paths:
       - "VPNRouter.Core/Services/UpdateChecker*.cs"
@@ -22,6 +21,10 @@ on:
       - "VPNRouter.CLI/Program.cs"
       - "VPNRouter.Core/AppVersion.cs"
       - "build.ps1"
+      - "packaging/windows/*.iss"
+      - "tools/build-installer.ps1"
+      - ".github/scripts/setup-inno.ps1"
+      - ".github/scripts/stamp_release_version.py"
       - ".github/workflows/test-windows-update.yml"
 
 permissions:
@@ -31,6 +34,9 @@ jobs:
   test-update:
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      BUILD_INSTALLER: ${{ inputs.release_artifacts || github.event_name == 'pull_request' }}
+      RELEASE_ARTIFACTS: ${{ inputs.release_artifacts }}
 
     steps:
       - name: Checkout
@@ -67,12 +73,21 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $line = Get-Content VPNRouter.Core/AppVersion.cs |
-                  Select-String 'string Version =' |
-                  Select-Object -First 1
-          if (-not $line) { throw "Could not find AppVersion.Version in VPNRouter.Core/AppVersion.cs" }
-          if ($line -notmatch '"([^"]+)"') { throw "Could not parse AppVersion line: $line" }
-          $v = $Matches[1]
+          if ($env:RELEASE_ARTIFACTS -eq 'true' -and $env:GITHUB_REF_TYPE -ne 'tag') {
+            throw 'Windows release packages require an exact release tag.'
+          }
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $v = $env:GITHUB_REF_NAME.Substring(1)
+            python .github/scripts/stamp_release_version.py $v
+            if ($LASTEXITCODE -ne 0) { throw 'Release version stamping failed.' }
+          } else {
+            $line = Get-Content VPNRouter.Core/AppVersion.cs -Raw
+            if ($line -notmatch 'string Version = "([^"]+)";') { throw 'Could not read AppVersion.Version.' }
+            $v = $Matches[1]
+          }
+          if ($v -cnotmatch '^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-r[1-9][0-9]*)?$') {
+            throw 'AppVersion.Version does not match the release version format.'
+          }
           Write-Host "Resolved AppVersion: $v"
           "version=$v" >> $env:GITHUB_OUTPUT
 
@@ -82,9 +97,26 @@ jobs:
 
       - name: Build Windows install + update ZIPs
         shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           ./VPNRouter.Tests/Windows/Test-WindowsUpdatePublisher.ps1
-          ./build.ps1 -Version "${{ steps.ver.outputs.version }}"
+          if ($env:BUILD_INSTALLER -eq 'true') {
+            $env:ISCC = & ./.github/scripts/setup-inno.ps1
+            ./build.ps1 -Version $env:VERSION -BundleSplitDriver -Installer
+            foreach ($name in @(
+                "VPNRouter-v$env:VERSION-win.zip",
+                "VPNRouter-update-v$env:VERSION-win.zip",
+                "VPNRouter-Setup-v$env:VERSION.exe"
+            )) {
+              $sidecar = (Get-Content -LiteralPath "$name.sha256" -Raw).Trim().Split(' ')[0]
+              if ((Get-FileHash -LiteralPath $name -Algorithm SHA256).Hash -ne $sidecar) {
+                throw "Asset checksum mismatch for $name"
+              }
+            }
+          } else {
+            ./build.ps1 -Version $env:VERSION
+          }
 
       - name: Validate libcronet.dll and sing-box naive check
         shell: pwsh
@@ -357,6 +389,22 @@ jobs:
           if ($timestamp -lt [DateTimeOffset]::UtcNow.AddMinutes(-30) -or $timestamp -gt [DateTimeOffset]::UtcNow.AddMinutes(1)) {
               throw 'Receipt timestamp is outside this test run.'
           }
+
+      - name: Retain tested Windows release packages
+        if: github.event_name == 'workflow_dispatch' && inputs.release_artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: windows-release-${{ github.ref_name }}-${{ github.run_attempt }}
+          path: |
+            VPNRouter-v${{ steps.ver.outputs.version }}-win.zip
+            VPNRouter-v${{ steps.ver.outputs.version }}-win.zip.sha256
+            VPNRouter-update-v${{ steps.ver.outputs.version }}-win.zip
+            VPNRouter-update-v${{ steps.ver.outputs.version }}-win.zip.sha256
+            VPNRouter-Setup-v${{ steps.ver.outputs.version }}.exe
+            VPNRouter-Setup-v${{ steps.ver.outputs.version }}.exe.sha256
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Capture logs as artifact
         if: always()

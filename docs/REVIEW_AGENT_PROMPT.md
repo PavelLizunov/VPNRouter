@@ -28,7 +28,7 @@ Read the project contract and affected zone instructions. Check current source
 and platform build pins rather than treating a historical map as current truth.
 
 Invariants to check where applicable:
-- AppVersion.Version must equal the release tag exactly, including -rN.
+- Release binaries must embed AppVersion.Version from the exact release tag, including -rN. The checked-in value is the development default.
 - Preserve process_name casing; deduplicate with StringComparer.OrdinalIgnoreCase.
 - Dispose Process handles; use ProcessQuery.AnyAlive/CountAlive for supported queries.
 - Resolve subscription servers before ConfigGenerator.Generate; inspect the actual

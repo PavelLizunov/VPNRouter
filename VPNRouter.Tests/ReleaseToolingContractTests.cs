@@ -143,7 +143,12 @@ public sealed class ReleaseToolingContractTests
         Assert.Contains("Dispatch signing using --ref vVERSION", workflow);
         Assert.Contains("Remote signing tag changed", workflow);
         Assert.DoesNotContain("--clobber", workflow);
-        Assert.Contains("AppVersion/tag mismatch", workflow);
+        Assert.Contains("Stamp the verified release version", workflow);
+        Assert.Contains("stamp_release_version.py", workflow);
+        var stamp = Read(".github", "scripts", "stamp_release_version.py");
+        Assert.Contains("GITHUB_REF", stamp);
+        Assert.Contains("GITHUB_SHA", stamp);
+        Assert.Contains("head != sha or commit != sha", stamp);
         Assert.Contains("steps.upload-unsigned.outputs.artifact-id", workflow);
         Assert.DoesNotContain("gh release download", workflow);
         Assert.Contains("actions: read", workflow);

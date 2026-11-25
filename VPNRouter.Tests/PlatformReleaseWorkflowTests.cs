@@ -21,7 +21,6 @@ public sealed class PlatformReleaseWorkflowTests
         Assert.DoesNotContain("${{", script);
         Assert.Contains("set -euo pipefail", script);
         Assert.Contains("VERSION=\"$INPUT_VERSION\"", script);
-        Assert.Contains("VERSION=\"${GITHUB_REF_NAME#v}\"", script);
         Assert.Contains("[ \"$GITHUB_REF\" != \"refs/tags/$TAG\" ]", script);
         Assert.Contains("--ref $TAG", script);
         Assert.Equal(2, Regex.Matches(script, "exit 1").Count);
@@ -38,15 +37,9 @@ public sealed class PlatformReleaseWorkflowTests
         Assert.StartsWith("actions/checkout@", Text(steps[1], "uses"));
         var checkout = (YamlMappingNode)steps[1].Children[new YamlScalarNode("with")];
         Assert.Equal("${{ github.sha }}", Text(checkout, "ref"));
-        Assert.Equal("Verify requested tag and full AppVersion", Text(steps[2], "name"));
-        var provenance = Text(steps[2], "run");
-        Assert.Contains("git fetch --no-tags origin \"refs/tags/$TAG\"", provenance);
-        Assert.Contains("git rev-parse 'FETCH_HEAD^{commit}'", provenance);
-        Assert.Contains("[ \"$TAG_SHA\" != \"$GITHUB_SHA\" ]", provenance);
-        Assert.Contains("[ \"$(git rev-parse HEAD)\" != \"$GITHUB_SHA\" ]", provenance);
-        Assert.Contains("VPNRouter.Core/AppVersion.cs", provenance);
-        Assert.Contains("[ \"$APPVER\" != \"$VERSION\" ]", provenance);
-        Assert.Equal(2, Regex.Matches(provenance, "exit 1").Count);
+        Assert.Equal("Stamp the verified release version", Text(steps[2], "name"));
+        Assert.Equal("python3 .github/scripts/stamp_release_version.py \"$VERSION\"",
+            Text(steps[2], "run"));
     }
 
     [Theory]
@@ -57,7 +50,7 @@ public sealed class PlatformReleaseWorkflowTests
     {
         var steps = Steps(platform);
         var upload = steps.Single(step => Text(step, "name") == "Upload to GitHub Release");
-        Assert.Equal("github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.upload_to_release)",
+        Assert.Equal("inputs.upload_to_release",
             Text(upload, "if").Trim());
         var script = Text(upload, "run");
         Assert.Contains("set -euo pipefail", script);
@@ -105,23 +98,21 @@ public sealed class PlatformReleaseWorkflowTests
     }
 
     [Fact]
-    public void MacWorkflow_DraftStagingDoesNotNotifyHomebrew()
+    public void HomebrewNotificationRunsFromPublishedStable()
     {
-        var script = Text(Steps("mac").Single(step => Text(step, "name") == "Trigger Homebrew Cask update (stable only)"), "run");
-        Assert.Contains("--json isDraft --jq '.isDraft'", script);
-        var guard = script.IndexOf("[ \"$IS_DRAFT\" = \"true\" ]", StringComparison.Ordinal);
-        var stop = script.IndexOf("exit 0", guard, StringComparison.Ordinal);
-        var dispatch = script.IndexOf("curl -fsSL -X POST", StringComparison.Ordinal);
-        Assert.True(guard >= 0 && stop > guard && dispatch > stop);
+        Assert.DoesNotContain(Steps("mac"), step => Text(step, "run").Contains("homebrew-vpnrouter"));
+        var root = RepoRoot();
+        var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "notify-homebrew.yml"));
+        Assert.Contains("types: [published]", workflow);
+        Assert.Contains("!github.event.release.prerelease", workflow);
+        Assert.Contains("test \"$latest\" = \"$tag\"", workflow);
+        Assert.Contains(".isDraft == false and .isPrerelease == false", workflow);
+        Assert.Contains("repos/PavelLizunov/homebrew-vpnrouter/dispatches", workflow);
     }
 
     private static List<YamlMappingNode> Steps(string platform)
     {
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root != null && !File.Exists(Path.Combine(root.FullName, "VPNRouter.sln")))
-            root = root.Parent;
-        Assert.NotNull(root);
-        using var reader = File.OpenText(Path.Combine(root!.FullName, ".github", "workflows", $"build-{platform}.yml"));
+        using var reader = File.OpenText(Path.Combine(RepoRoot(), ".github", "workflows", $"build-{platform}.yml"));
         var yaml = new YamlStream();
         yaml.Load(reader);
         Assert.Single(yaml.Documents);
@@ -129,6 +120,15 @@ public sealed class PlatformReleaseWorkflowTests
         var jobs = (YamlMappingNode)document.Children[new YamlScalarNode("jobs")];
         var build = (YamlMappingNode)jobs.Children[new YamlScalarNode("build")];
         return ((YamlSequenceNode)build.Children[new YamlScalarNode("steps")]).Children.Cast<YamlMappingNode>().ToList();
+    }
+
+    private static string RepoRoot()
+    {
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root != null && !File.Exists(Path.Combine(root.FullName, "VPNRouter.sln")))
+            root = root.Parent;
+        Assert.NotNull(root);
+        return root!.FullName;
     }
 
     private static string Text(YamlMappingNode mapping, string key) =>

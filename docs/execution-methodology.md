@@ -141,7 +141,7 @@ Parallelize only independent assignments with disjoint write scopes.
 
 The detailed list lives in `docs/agent-contract.md`, zone `AGENTS.md` files, and `docs/REVIEW_AGENT_PROMPT.md`. At minimum:
 
-- `AppVersion.Version` exactly matches a release tag, including `-rN`.
+- Release binaries embed `AppVersion.Version` from the exact tag, including `-rN`. See [the release strategy](release-strategy.md).
 - `process_name` values preserve filesystem casing.
 - VLESS subscription servers are resolved before config generation.
 - sing-box routing and DNS remain fail-closed.
@@ -157,7 +157,7 @@ v3.0 development readiness is not release authority.
 - Use `ship-rolling-candidate` only after an explicit candidate command.
 - Use `post-ship-mcp-verify` after every candidate or stable ship.
 - Use `cut-stable` only after explicit stable authorization and all hard gates.
-- Require the exact 16-asset release contract, exact-SHA CI, sidecar verification, fixed-WINBRAT verification, two connection cycles, cleanup, and the open-defect gate where applicable.
+- Require the [canonical 18-asset release inventory](release-strategy.md#canonical-inventory-18-assets), exact-SHA CI, sidecar verification, fixed-WINBRAT verification, two connection cycles, cleanup, and the open-defect gate where applicable.
 
 ## 10. Stop-the-line conditions
 
