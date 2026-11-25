@@ -374,6 +374,11 @@ public sealed class BusinessNodeMetadataWindowTests
             image.Bounds.Width > 0 && image.Bounds.Height > 0);
         Assert.Contains(fixture.Selector.GetVisualDescendants().OfType<TextBlock>(),
             text => text.Text == selected.MetricsText && text.IsEffectivelyVisible);
+        var meter = fixture.Selector.GetVisualDescendants().OfType<Border>()
+            .Where(border => border.Classes.Contains("load-seg")).ToList();
+        Assert.Equal(3, meter.Count);
+        Assert.All(meter, segment => Assert.True(segment.IsEffectivelyVisible));
+        Assert.Contains(meter, segment => segment.Classes.Contains("low"));
         var scroll = Assert.IsType<ScrollViewer>(fixture.Window.Content);
         Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
         var menu = OpenMenu(fixture.Window);

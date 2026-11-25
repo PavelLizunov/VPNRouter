@@ -33,6 +33,8 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
     public bool IsActivityLow => ActivityLevel == BusinessNodeActivityLevel.Low;
     public bool IsActivityMedium => ActivityLevel == BusinessNodeActivityLevel.Medium;
     public bool IsActivityHigh => ActivityLevel == BusinessNodeActivityLevel.High;
+    public bool HasKnownActivity => ActivityLevel is BusinessNodeActivityLevel.Low
+        or BusinessNodeActivityLevel.Medium or BusinessNodeActivityLevel.High;
     public string MetricsText => ActivityLevel switch
     {
         BusinessNodeActivityLevel.Low => Strings.BusinessNodeActivityLow,
@@ -120,6 +122,7 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsActivityLow));
         OnPropertyChanged(nameof(IsActivityMedium));
         OnPropertyChanged(nameof(IsActivityHigh));
+        OnPropertyChanged(nameof(HasKnownActivity));
     }
 
     internal void Update(ServerProbeResult result, bool checking = false)

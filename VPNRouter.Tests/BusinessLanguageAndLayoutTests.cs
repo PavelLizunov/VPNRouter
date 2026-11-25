@@ -366,6 +366,13 @@ public sealed class BusinessLanguageAndLayoutTests
         var modePanel = window.FindControl<Border>("BusinessModePanel")!;
 
         AssertInsideViewport(ConnectionButton(fixture), scroll);
+        var cta = ConnectionButton(fixture);
+        Assert.Contains("solid", cta.Classes);
+        Assert.DoesNotContain("business-outline", cta.Classes);
+        var solidAccent = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(
+            window.FindResource("AccentSolidBrush"));
+        var ctaBackground = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(cta.Background);
+        Assert.Equal(solidAccent.Color, ctaBackground.Color);
         AssertInsideViewport(serverButton, scroll);
         AssertInsideViewport(modeButton, scroll);
         AssertInsideViewport(menu, scroll);

@@ -70,6 +70,40 @@
         <Style Selector="Ellipse.business-health-dot.bad">
             <Setter Property="Fill" Value="{DynamicResource DangerSolidBrush}"/>
         </Style>
+        <Style Selector="TextBlock.setting-summary">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.setting-summary.active-tag">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessFgBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="TextBlock.setting-summary.warn-tag">
+            <Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/>
+        </Style>
+        <Style Selector="Border.load-seg">
+            <Setter Property="Width" Value="7"/>
+            <Setter Property="Height" Value="4"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="Background" Value="{DynamicResource BorderStrongBrush}"/>
+            <Setter Property="Opacity" Value="0.45"/>
+        </Style>
+        <Style Selector="Border.load-seg.low">
+            <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Border.load-seg.medium">
+            <Setter Property="Background" Value="{DynamicResource WarningSolidBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Border.load-seg.high">
+            <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Button.solid">
+            <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
         <Style Selector="Button.business-ghost">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
@@ -89,6 +123,11 @@
             <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderAccentBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="Button.business-cta.business-outline:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
         </Style>
         <Style Selector="Button.business-warning-action">
             <Setter Property="Background" Value="{DynamicResource WarningActionSolidBrush}"/>
@@ -111,6 +150,10 @@
             <Setter Property="Background" Value="{DynamicResource InfoBgBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource InfoBorderBrush}"/>
         </Style>
+        <Style Selector="Border.business-status.error">
+            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+        </Style>
         <Style Selector="Ellipse.business-status-dot">
             <Setter Property="Fill" Value="{DynamicResource TextMutedBrush}"/>
         </Style>
@@ -119,6 +162,18 @@
         </Style>
         <Style Selector="Border.business-status.busy Ellipse.business-status-dot">
             <Setter Property="Fill" Value="{DynamicResource InfoSolidBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status.error Ellipse.business-status-dot">
+            <Setter Property="Fill" Value="{DynamicResource DangerSolidBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status.error TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status.connected TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessFgBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status.busy TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource InfoFgBrush}"/>
         </Style>
         <Style Selector="Border.business-policy">
             <Setter Property="Background" Value="{DynamicResource WarningBgBrush}"/>
@@ -311,8 +366,9 @@
                 </StackPanel>
             </Border>
             <StackPanel Spacing="8">
-                <Border Classes="business-status" Classes.connected="{Binding IsConnected}"
+                <Border x:Name="BusinessStatusPill" Classes="business-status" Classes.connected="{Binding IsConnected}"
                         Classes.busy="{Binding #BusinessWindowRoot.Texts.IsConnectionBusy}"
+                        Classes.error="{Binding #BusinessWindowRoot.Texts.IsConnectionFailure}"
                         Padding="10,5" BorderThickness="1" HorizontalAlignment="Center"
                         CornerRadius="{StaticResource RadiusPill}">
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
@@ -332,7 +388,7 @@
                 </Border>
             </StackPanel>
             <Border IsEnabled="{Binding !UpdateVm.IsDownloading}">
-                <Button x:Name="BusinessConnectButton" Command="{Binding ToggleConnectionCommand}"
+                <Button x:Name="BusinessConnectButton" Classes="business-cta" Command="{Binding ToggleConnectionCommand}"
                         IsEnabled="{Binding #BusinessWindowRoot.Texts.CanToggleConnection}"
                         Classes.solid="{Binding !IsConnected}" Classes.business-outline="{Binding IsConnected}"
                         MinHeight="48" CornerRadius="{StaticResource RadiusPill}"
@@ -343,8 +399,10 @@
                 </Button>
             </Border>
             <StackPanel x:Name="BusinessRepairActions" x:DataType="business:BusinessServicesViewModel" Spacing="6">
-                <Button x:Name="BusinessRepairButton" Classes="business-ghost" Click="OnBusinessRepairClick"
-                        Content="{Binding #BusinessWindowRoot.Texts.RepairTitle}" Command="{Binding OpenRepairCommand}"
+                <Button x:Name="BusinessRepairButton" Command="{Binding OpenRepairCommand}"
+                        Classes.business-ghost="{Binding #BusinessWindowRoot.Texts.IsConnectionHealthy}"
+                        Classes.business-outline="{Binding #BusinessWindowRoot.Texts.IsConnectionFailure}"
+                        Click="OnBusinessRepairClick" Content="{Binding #BusinessWindowRoot.Texts.RepairTitle}"
                         IsVisible="{Binding !IsRepairOpen}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                         AutomationProperties.AutomationId="BusinessRepairOpen"/>
                 <Border Classes="business-repair" Classes.error="{Binding IsRepairError}"
@@ -408,8 +466,10 @@
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                             <TextBlock VerticalAlignment="Center" Text="{Binding #BusinessWindowRoot.Texts.ServerMenu}"/>
                             <TextBlock Grid.Column="1" VerticalAlignment="Center" TextAlignment="Right"
+                                       Classes="setting-summary"
+                                       Classes.active-tag="{Binding #BusinessWindowRoot.Texts.IsServerSummaryActive}"
+                                       Classes.warn-tag="{Binding #BusinessWindowRoot.Texts.IsServerSummaryWarning}"
                                        TextTrimming="CharacterEllipsis" FontSize="12"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"
                                        Text="{Binding #BusinessWindowRoot.Texts.ServerSummary}"
                                        ToolTip.Tip="{Binding #BusinessWindowRoot.Texts.ServerSummary}"
                                        AutomationProperties.AutomationId="BusinessServerSummary"/>
@@ -454,8 +514,17 @@
                                                         <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayName}"/>
                                                         <TextBlock Text="{Binding CountryName}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasCountry}"
                                                                    FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                                        <TextBlock Text="{Binding MetricsText}" IsVisible="{Binding HasMetadata}" TextTrimming="CharacterEllipsis"
-                                                                   ToolTip.Tip="{Binding MetricsHint}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                                            <StackPanel Orientation="Horizontal" Spacing="2"
+                                                                        IsVisible="{Binding HasKnownActivity}" VerticalAlignment="Center">
+                                                                <Border Classes="load-seg" Classes.low="{Binding IsActivityLow}"/>
+                                                                <Border Classes="load-seg" Classes.medium="{Binding IsActivityMedium}"/>
+                                                                <Border Classes="load-seg" Classes.high="{Binding IsActivityHigh}"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding MetricsText}" IsVisible="{Binding HasMetadata}"
+                                                                       TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding MetricsHint}"
+                                                                       FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                                        </StackPanel>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="3" VerticalAlignment="Center" MaxWidth="94">
                                                         <TextBlock Text="{Binding PingText}" FontSize="11" TextWrapping="Wrap" TextAlignment="Right"/>

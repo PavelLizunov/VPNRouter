@@ -94,4 +94,72 @@ strings and synthetic headless fixtures.
 
 ## Outcome
 
-Pending implementation.
+### Ported from r4
+
+- `#728` (`a782ec18`): the Standard desktop, macOS, Linux, Arch and Android
+  pins now use `v1.14.4-vpnctl.3` (Windows Business was already on `.3`). The
+  Windows update cache key, libbox AAR pins, Arch notice metadata, dependency
+  inventory and guide notes moved together. `ProtocolGroups` now classifies
+  native `dnstt` and managed `Dnstt` profiles as emergency with a regression.
+- `#743` (`50e12e4a`): the Business automatic check now requires a fresh HTTPS
+  trace, a 204 control response and, for games/voice protocols, a UDP STUN
+  exchange through the candidate. The isolated resolver follows
+  `Dns.LocalDns` instead of always using the hardcoded DoH server. The existing
+  generation counter and cancellation guards remain the only writers of the
+  cached outcome.
+- `#741`/`#742`: verified as already present in the base; no duplicate port.
+
+### Deliberate exclusions
+
+- The Standard picker, category filters, country-flag assets,
+  `SubscriptionServerPreference`, Simple-mode copy and their tests are not
+  imported. Business selection is policy-driven and has no matching category
+  or flag surface.
+- `#740` release preparation and publication workflow is not imported; it is
+  Standard publication only. The core pin hunks in existing workflows were
+  applied without their release-flow changes.
+- The connected-category physical-interface bypass from `#743` is not added:
+  the Business picker and repair cancel or refuse to run while a tunnel is
+  connected or starting (`BusinessServerHealthMonitor.CanProbe`,
+  `CanStartVerifiedBusinessConnect`), so the Business scenario does not exist.
+  The Standard category verification and its service-Apply recheck are
+  Standard-only.
+- `#735`, GC/tray and the applicable cleanup from `#736`/`#737`/`#738` are
+  already in the base per `#742`; they were checked, not reapplied.
+
+### Neon interface closure
+
+- Added the missing solid-primary base role in the Business window so Connect
+  and Update render as approved; the connected CTA remains an outline action
+  with the danger hover from the sketch.
+- Added the active/warning semantic tag to the Home server summary and the
+  approved three-segment load meter to the server row, both from existing
+  `Tokens.axaml` roles.
+- Added the failure treatment for the status pill and promoted the repair entry
+  from ghost to outline after a known terminal connection failure. The
+  classifier is presentation-only and does not alter connection or recovery
+  state.
+- Reused the existing consent, repair, receipt, menu, update and rollback
+  implementations; their approval and delivery behavior was traced but not
+  rewritten.
+
+### Verification
+
+- Static only in this handoff: `git diff --check`; XML parse of the Business
+  window; YAML parse of the four touched workflows; JSON parse of the Arch
+  catalog; Python AST parse of the Arch packaging script; brace/paren balance
+  of touched C# files; reference sketch SHA-256 confirmed as
+  `3dc81a57c8bb153b0f8e548691313ea51944c937eec701c5996b59a79a7e8433`.
+- Pin values were compared with the verified `#728` merge; no live download or
+  SDK build was run on the workstation.
+- GitHub CI at the exact PR head is the build/test oracle and is pending at
+  this handoff. Headless Business captures at 340/360/420 px are produced by
+  that CI run, including the new load meter and role assertions.
+- No live install, real logs or production data were used.
+
+### Follow-ups
+
+- The status-pill failure classifier intentionally covers the current known
+  terminal messages; a future new message keeps the neutral treatment until it
+  is added. This is recorded as a presentation limitation, not a connection
+  state change.
