@@ -140,7 +140,7 @@ public partial class MainWindowViewModel
 
         foreach (var s in servers) s.IsTesting = true;
 
-        var sem = new SemaphoreSlim(ServerTestConcurrency);
+        using var sem = new SemaphoreSlim(ServerTestConcurrency);
         var done = 0;
         var total = servers.Count;
 

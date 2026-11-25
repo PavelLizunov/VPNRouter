@@ -971,18 +971,21 @@ internal sealed class StartupPipeline
             clashApiSecret: controller.Secret) { AcceptedImportJson = importJson };
         _host.SetHealthMonitor(healthMonitor);
 
-        etw.ProcessStarted += (_, e) =>
+        if (profile.Processes.Count > 0)
         {
-            var isTargeted = profile.Processes
-                .Any(r => r.ScanPatterns
-                    .Any(p => ProcessScanner.MatchesPattern(e.ProcessName + ".exe", p)));
-
-            if (isTargeted)
+            etw.ProcessStarted += (_, e) =>
             {
-                _host.OnProcessDetected(e.ProcessName, e.ProcessId);
-                healthMonitor.OnNewProcessDetected(e.ProcessName);
-            }
-        };
+                var isTargeted = profile.Processes
+                    .Any(r => r.ScanPatterns
+                        .Any(p => ProcessScanner.MatchesPattern(e.ProcessName + ".exe", p)));
+
+                if (isTargeted)
+                {
+                    _host.OnProcessDetected(e.ProcessName, e.ProcessId);
+                    healthMonitor.OnNewProcessDetected(e.ProcessName);
+                }
+            };
+        }
 
         healthMonitor.RestartAttempted += (_, attempt) =>
             _host.OnRestartAttempted(attempt, settings.Monitoring.MaxRestartAttempts);

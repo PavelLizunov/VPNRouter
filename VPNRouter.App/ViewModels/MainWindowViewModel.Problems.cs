@@ -91,12 +91,23 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(ProblemsTitleText));
     }
 
+    private const long ProblemScanMaxTailReadBytes = 2L * 1024 * 1024;
+
+    private void CancelProblemScan()
+    {
+        var previous = Interlocked.Exchange(ref _problemScanCts, null);
+        if (previous != null)
+        {
+            try { previous.Cancel(); }
+            catch (ObjectDisposedException) { }
+        }
+    }
+
     /// <summary>Called from <c>OnIsConnectedChanged</c>: a new connect starts a fresh delayed scan.</summary>
     private void OnConnectedForProblems(bool connected)
     {
         Interlocked.Increment(ref _connectionGeneration);
-        _problemScanCts?.Cancel();
-        _problemScanCts = null;
+        CancelProblemScan();
         if (AppContext.TryGetSwitch("VPNRouter.Tests.DisableBackgroundServices", out var disabled) && disabled) return;
         if (!connected)
         {
@@ -110,31 +121,39 @@ public partial class MainWindowViewModel
         _logger.Information("[Problems] scan scheduled in {Delay}s", ProblemScanDelay.TotalSeconds);
         var cts = new CancellationTokenSource();
         _problemScanCts = cts;
-        _ = ScanProblemsAfterDelayAsync(cts.Token);
+        _ = ScanProblemsAfterDelayAsync(cts);
     }
 
-    private async Task ScanProblemsAfterDelayAsync(CancellationToken token)
+    private async Task ScanProblemsAfterDelayAsync(CancellationTokenSource cts)
     {
-        try
+        using (cts)
         {
-            // First look shortly after the connect, then again while connected: a mode change mid-session
-            // restarts the core without a new connect.
-            await Task.Delay(ProblemScanDelay, token).ConfigureAwait(false);
-            while (true)
+            var token = cts.Token;
+            try
             {
-                if (!IsFixingProblems)
+                // First look shortly after the connect, then again while connected: a mode change mid-session
+                // restarts the core without a new connect.
+                await Task.Delay(ProblemScanDelay, token).ConfigureAwait(false);
+                while (true)
                 {
-                    try { await ScanProblemsAsync(token).ConfigureAwait(false); }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    if (!IsFixingProblems)
                     {
-                        _logger.Warning(ex, "[Problems] scan failed");
+                        try { await ScanProblemsAsync(token).ConfigureAwait(false); }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            _logger.Warning(ex, "[Problems] scan failed");
+                        }
                     }
+                    await Task.Delay(ProblemScanInterval, token).ConfigureAwait(false);
                 }
-                await Task.Delay(ProblemScanInterval, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { _logger.Warning(ex, "[Problems] scan failed"); }
+            finally
+            {
+                Interlocked.CompareExchange(ref _problemScanCts, null, cts);
             }
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { _logger.Warning(ex, "[Problems] scan failed"); }
     }
 
     private async Task ScanProblemsAsync(CancellationToken token)
@@ -203,7 +222,7 @@ public partial class MainWindowViewModel
             if (File.Exists(AppPaths.CurrentConfigPath))
                 json = File.ReadAllText(AppPaths.CurrentConfigPath);
             if (File.Exists(AppPaths.SingBoxLogPath))
-                log = DiagnosticsExporter.TailLines(AppPaths.SingBoxLogPath, 4_000);
+                log = DiagnosticsExporter.TailLines(AppPaths.SingBoxLogPath, 4_000, ProblemScanMaxTailReadBytes);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -218,7 +237,7 @@ public partial class MainWindowViewModel
 
         IsFixingProblems = true;
         ProblemFixStatus = CoreStrings.ProblemsFixing;
-        _problemScanCts?.Cancel();
+        CancelProblemScan();
         var snapshot = new ProblemFixSnapshot(IsSplitTunnel, _settings.App.RoutingMode ?? string.Empty,
             _settings.ActiveProfile ?? string.Empty, TunMtu);
         try

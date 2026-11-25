@@ -7,14 +7,17 @@ using Serilog;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-public sealed class FreeConfigGeoIp
+public sealed class FreeConfigGeoIp : IDisposable
 {
+    internal const int MaxCacheEntries = 20_000;
+
     private readonly HttpClient _http;
     private readonly ILogger _logger;
     private readonly IFreeConfigCountryLookup? _offlineLookup;
     private readonly ConcurrentDictionary<string, string> _ipToCountry = new();
     private readonly SemaphoreSlim _rateLimit = new(1, 1);
     private DateTime _lastBatchAt = DateTime.MinValue;
+    private bool _disposed;
 
     private static readonly TimeSpan MinDelayBetweenBatches = TimeSpan.FromMilliseconds(1500);
 
@@ -25,6 +28,14 @@ public sealed class FreeConfigGeoIp
         _logger = logger;
         _offlineLookup = offlineLookup;
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _http.Dispose();
+        _rateLimit.Dispose();
     }
 
     public async Task EnrichAsync(IReadOnlyList<FreeConfigEntry> configs, CancellationToken ct = default)
@@ -174,7 +185,11 @@ public sealed class FreeConfigGeoIp
                     ? ccp.GetString() ?? ""
                     : "";
                 if (!string.IsNullOrEmpty(cc))
+                {
+                    if (_ipToCountry.Count >= MaxCacheEntries)
+                        _ipToCountry.Clear();
                     _ipToCountry[ip] = cc;
+                }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

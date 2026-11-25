@@ -60,7 +60,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
         catch { }
 
-        try { _refreshCts?.Cancel(); _refreshCts?.Dispose(); }
+        var cts = Interlocked.Exchange(ref _refreshCts, null);
+        if (cts != null)
+        {
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
+        }
+
+        try { _aggregator.Dispose(); }
         catch { }
     }
 
@@ -119,8 +126,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     {
         if (IsBusy) return;
         IsBusy = true;
-        _refreshCts = new CancellationTokenSource();
-        var ct = _refreshCts.Token;
+        using var refreshCts = new CancellationTokenSource();
+        _refreshCts = refreshCts;
+        var ct = refreshCts.Token;
 
         var target = Math.Clamp(LatencyGoalTarget ?? 10, 1, 50);
         var maxPing = (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
@@ -167,7 +175,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var deepCap = ComputeAdaptiveDeepCap();
             _logger.Information("[FreeConfigs] adaptive deep-verify cap = {cap} (CPU cores: {cpu})",
                 deepCap, Environment.ProcessorCount);
-            var deepSem = new SemaphoreSlim(deepCap);
+            using var deepSem = new SemaphoreSlim(deepCap);
             var batchSize = FreeConfigAggregator.DefaultBatchSize;
             var processedCount = 0;
             var totalBatches = (queue.Count + batchSize - 1) / batchSize;
@@ -341,6 +349,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
         finally
         {
+            Interlocked.CompareExchange(ref _refreshCts, null, refreshCts);
             IsBusy = false;
             ProgressTotal = 0;
             ProgressDone = 0;
@@ -352,10 +361,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     {
         if (IsBusy) return;
         IsBusy = true;
-        _refreshCts = new CancellationTokenSource();
+        using var refreshCts = new CancellationTokenSource();
+        _refreshCts = refreshCts;
         try
         {
-            var fresh = await Task.Run(() => _aggregator.RetestAsync(_refreshCts.Token));
+            var fresh = await Task.Run(() => _aggregator.RetestAsync(refreshCts.Token));
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _allConfigs = fresh;
@@ -374,6 +384,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
         finally
         {
+            Interlocked.CompareExchange(ref _refreshCts, null, refreshCts);
             IsBusy = false;
             ProgressTotal = 0;
             ProgressDone = 0;
@@ -383,7 +394,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Cancel()
     {
-        _refreshCts?.Cancel();
+        try { _refreshCts?.Cancel(); }
+        catch (ObjectDisposedException) { }
     }
 
     [RelayCommand]

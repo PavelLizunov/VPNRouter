@@ -35,7 +35,11 @@ public partial class MainWindowViewModel
 
     private static Bitmap? TryLoadAsset(string uri)
     {
-        try { return new Bitmap(AssetLoader.Open(new System.Uri(uri))); }
+        try
+        {
+            using var stream = AssetLoader.Open(new System.Uri(uri));
+            return new Bitmap(stream);
+        }
         catch { return null; }
     }
 

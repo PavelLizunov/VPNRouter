@@ -532,17 +532,39 @@ public static class DiagnosticsExporter
         return sr.ReadToEnd();
     }
 
-    internal static string TailLines(string path, int maxLines)
+    internal static string TailLines(string path, int maxLines, long maxReadBytes = MaxTailReadBytes)
     {
+        if (maxLines <= 0) return string.Empty;
+        if (maxReadBytes <= 0) maxReadBytes = MaxTailReadBytes;
+
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        bool seeked = fs.Length > MaxTailReadBytes;
-        if (seeked) fs.Seek(-MaxTailReadBytes, SeekOrigin.End);
+        bool seeked = fs.Length > maxReadBytes;
+        if (seeked) fs.Seek(-maxReadBytes, SeekOrigin.End);
+
         using var sr = new StreamReader(fs);
-        var text = sr.ReadToEnd();
-        var all = text.Replace("\r\n", "\n").Split('\n');
-        if (seeked && all.Length > 1) all = all.Skip(1).ToArray();
-        if (all.Length <= maxLines) return string.Join(Environment.NewLine, all);
-        return string.Join(Environment.NewLine, all.Skip(all.Length - maxLines));
+        string? discardedFirstLine = seeked ? sr.ReadLine() : null;
+
+        var ring = new string[maxLines];
+        int count = 0;
+        string? line;
+        while ((line = sr.ReadLine()) != null)
+        {
+            ring[count % maxLines] = line;
+            count++;
+        }
+
+        if (count == 0)
+            return discardedFirstLine ?? string.Empty;
+
+        int keep = Math.Min(count, maxLines);
+        int start = count >= maxLines ? count % maxLines : 0;
+        var sb = new StringBuilder();
+        for (int i = 0; i < keep; i++)
+        {
+            if (i > 0) sb.Append(Environment.NewLine);
+            sb.Append(ring[(start + i) % maxLines]);
+        }
+        return sb.ToString();
     }
 
     private static string ResolveDestination(string? destinationDir)

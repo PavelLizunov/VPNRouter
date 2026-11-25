@@ -39,6 +39,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private Task? _tgProxyPostStartRecheckTask;
 #endif
     private readonly ILogger _logger;
+    private readonly IDisposable? _ownedLogger;
     private readonly ISettingsStore _settingsStore;
     private AppSettings _settings;
     private bool _isLoadingUI;
@@ -484,13 +485,27 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
         _rollbackHistory = rollbackHistory ?? new ConnectionRollbackHistory();
 
-        _logger = logger ?? new LoggerConfiguration()
-            .WriteTo.File(
-                Path.Combine(AppPaths.LogsDir, "vpnrouter.log"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 7)
-            .WriteTo.Console()
-            .CreateLogger();
+        if (logger != null)
+        {
+            _logger = logger;
+        }
+        else if (Serilog.Log.Logger != null &&
+                 !string.Equals(Serilog.Log.Logger.GetType().Name, "SilentLogger", StringComparison.Ordinal))
+        {
+            _logger = Serilog.Log.Logger;
+        }
+        else
+        {
+            var created = new LoggerConfiguration()
+                .WriteTo.File(
+                    Path.Combine(AppPaths.LogsDir, "vpnrouter.log"),
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 7)
+                .WriteTo.Console()
+                .CreateLogger();
+            _logger = created;
+            _ownedLogger = created;
+        }
 
         TcpTlsProbe.Logger = _logger;
 
@@ -818,7 +833,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         if (!TryReleaseZapretForShutdown())
             throw new InvalidOperationException(Core.Localization.Strings.ZapretQuitPending);
-        _engine.StopOwnedSession();
+        _engine.DisposeOwnedSession();
         _disposed = true;
 
 #if PLATFORM_WINDOWS
@@ -904,10 +919,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _rulesToastCts?.Dispose();
             _rulesToastCts = null;
             _tgProxyToastToken++;
-            _problemScanCts?.Cancel();
-            _problemScanCts = null;
+            CancelProblemScan();
+            try { _serverTestCts?.Cancel(); } catch (ObjectDisposedException) { }
+            try { _serverDeepCts?.Cancel(); } catch (ObjectDisposedException) { }
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: toast CTS cleanup failed"); }
+
+        try { _ownedLogger?.Dispose(); }
+        catch { }
     }
 
     private void RefreshLocalization()

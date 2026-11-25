@@ -6,7 +6,7 @@ using Serilog;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-public sealed class FreeConfigPoolFetcher
+public sealed class FreeConfigPoolFetcher : IDisposable
 {
     private const string ReleaseBase =
         "https://github.com/PavelLizunov/VPNRouter/releases/download/free-pool-latest/";
@@ -21,6 +21,7 @@ public sealed class FreeConfigPoolFetcher
     private readonly string _gzEtagPath;
     private readonly HttpClient _http;
     private readonly ILogger _logger;
+    private bool _disposed;
 
     public FreeConfigPoolFetcher(ILogger logger)
         : this(logger, new HttpClientHandler { AutomaticDecompression = DecompressionMethods.None }) { }
@@ -36,6 +37,13 @@ public sealed class FreeConfigPoolFetcher
             Timeout = TimeSpan.FromSeconds(30),
             DefaultRequestHeaders = { { "User-Agent", "VPNRouter/2.39 pool-fetcher" } },
         };
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _http.Dispose();
     }
 
     private enum Outcome { Success, NotModified, Failed }
