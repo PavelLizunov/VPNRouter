@@ -1,42 +1,133 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="using:VPNRouter.App.Controls"
              x:Class="VPNRouter.App.Views.Pages.AssistantSetupPanel"
              IsVisible="False">
+    <UserControl.Styles>
+        <Style Selector="Button.assistant-primary">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.assistant-quiet">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+        <Style Selector="Button.assistant-quiet:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.assistant-quiet:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.assistant-label">
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.assistant-hint">
+            <Setter Property="FontSize" Value="{StaticResource FsXs}"/>
+            <Setter Property="LineHeight" Value="14"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </UserControl.Styles>
     <StackPanel Spacing="8" Margin="0,16,0,0">
         <Button x:Name="OpenAssistant" Click="OpenAssistant_Click"
                 AutomationProperties.AutomationId="Assistant.Open"
                 HorizontalAlignment="Left"/>
-        <StackPanel x:Name="AssistantFields" IsVisible="False" Spacing="8">
-            <TextBox x:Name="AssistantGoal" AutomationProperties.AutomationId="Assistant.Goal"
-                     AcceptsReturn="False" MaxLength="384"/>
-            <TextBlock x:Name="AssistantNotice" FontSize="{StaticResource FsSm}"
-                       Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+        <StackPanel x:Name="AssistantFields" IsVisible="False" Spacing="10">
+            <StackPanel Spacing="5">
+                <TextBlock x:Name="AssistantGoalLabel" Classes="assistant-label"/>
+                <TextBox x:Name="AssistantGoal" AutomationProperties.AutomationId="Assistant.Goal"
+                         AcceptsReturn="False" MaxLength="384"/>
+                <TextBlock x:Name="AssistantNotice" Classes="assistant-hint"/>
+            </StackPanel>
+            <Button x:Name="RunAssistant" Classes="assistant-primary solid"
+                    AutomationProperties.AutomationId="Assistant.Run"
+                    Click="RunAssistant_Click"/>
             <TextBlock x:Name="AssistantStatus" TextWrapping="Wrap"
                        AutomationProperties.AutomationId="Assistant.Status"
                        AutomationProperties.LiveSetting="Polite"/>
-            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
-                <Button x:Name="RunAssistant" AutomationProperties.AutomationId="Assistant.Run"
-                        Click="RunAssistant_Click"/>
-                <Button x:Name="DiagnoseCrash" AutomationProperties.AutomationId="Assistant.DiagnoseCrash"
-                        Click="DiagnoseCrash_Click"/>
-                <Button x:Name="RepairVpn" AutomationProperties.AutomationId="Assistant.Repair"
-                        Click="RepairVpn_Click"/>
-                <Button x:Name="ConfirmAssistant" AutomationProperties.AutomationId="Assistant.Confirm"
-                        Click="ConfirmAssistant_Click" IsVisible="False"/>
-                <Button x:Name="CancelAssistant" AutomationProperties.AutomationId="Assistant.Cancel"
-                        Click="CancelAssistant_Click" IsVisible="False"/>
-                <Button x:Name="UndoAssistant" AutomationProperties.AutomationId="Assistant.Undo"
-                        Click="UndoAssistant_Click" IsVisible="False"/>
-            </WrapPanel>
-            <Expander x:Name="SourceDiagnosisDetails" HorizontalContentAlignment="Stretch">
-                <StackPanel Spacing="6">
-                    <TextBlock x:Name="SourceDiagnosisNotice" TextWrapping="Wrap"/>
-                    <Button x:Name="DiagnoseConnection" HorizontalAlignment="Left"
-                            AutomationProperties.AutomationId="Assistant.DiagnoseConnection" Click="DiagnoseSource_Click"/>
-                    <Button x:Name="DiagnoseSource" HorizontalAlignment="Left"
-                            AutomationProperties.AutomationId="Assistant.DiagnoseSource" Click="DiagnoseSource_Click"/>
+            <Border x:Name="AssistantConsent" IsVisible="False"
+                    Background="{DynamicResource AccentBgSubtleBrush}"
+                    BorderBrush="{DynamicResource AccentBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="10">
+                <StackPanel Spacing="7">
+                    <TextBlock x:Name="AssistantConsentText" TextWrapping="Wrap"
+                               FontSize="{StaticResource FsSm}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <TextBlock x:Name="AssistantConsentNotice" Classes="assistant-hint"/>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                        <Button x:Name="ConfirmAssistant" Classes="assistant-primary solid"
+                                HorizontalAlignment="Left"
+                                AutomationProperties.AutomationId="Assistant.Confirm"
+                                Click="ConfirmAssistant_Click" IsVisible="False"/>
+                        <Button x:Name="CancelAssistant"
+                                HorizontalAlignment="Left"
+                                AutomationProperties.AutomationId="Assistant.Cancel"
+                                Click="CancelAssistant_Click" IsVisible="False"/>
+                    </WrapPanel>
                 </StackPanel>
-            </Expander>
+            </Border>
+            <Button x:Name="CancelRun" Click="CancelRun_Click"
+                    HorizontalAlignment="Left"
+                    AutomationProperties.AutomationId="Assistant.CancelRun"
+                    IsVisible="False"/>
+            <Border Height="1" Background="{DynamicResource BorderSubtleBrush}"/>
+            <Button x:Name="MoreChecksToggle" Click="MoreChecksToggle_Click"
+                    Classes="assistant-quiet"
+                    AutomationProperties.AutomationId="Assistant.MoreChecks">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock x:Name="MoreChecksLabel"
+                               FontSize="{StaticResource FsSm}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               VerticalAlignment="Center"/>
+                    <icons:Pictogram x:Name="MoreChecksChevron" Id="chevron-down" Classes="disclosure"/>
+                </StackPanel>
+            </Button>
+            <StackPanel x:Name="MoreChecks" IsVisible="False" Spacing="8">
+                <TextBlock x:Name="MoreChecksHint" Classes="assistant-hint"/>
+                <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                    <Button x:Name="RepairVpn" AutomationProperties.AutomationId="Assistant.Repair"
+                            Click="RepairVpn_Click"/>
+                    <Button x:Name="DiagnoseCrash" AutomationProperties.AutomationId="Assistant.DiagnoseCrash"
+                            Click="DiagnoseCrash_Click"/>
+                </WrapPanel>
+                <Border x:Name="SourceDiagnosisDetails"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        CornerRadius="{StaticResource RadiusLg}"
+                        Padding="10">
+                    <StackPanel Spacing="6">
+                        <TextBlock x:Name="SourceDiagnosisTitle"
+                                   FontSize="{StaticResource FsSm}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock x:Name="SourceDiagnosisNotice" Classes="assistant-hint"/>
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                            <Button x:Name="DiagnoseConnection" HorizontalAlignment="Left"
+                                    AutomationProperties.AutomationId="Assistant.DiagnoseConnection"
+                                    Click="DiagnoseSource_Click"/>
+                            <Button x:Name="DiagnoseSource" HorizontalAlignment="Left"
+                                    AutomationProperties.AutomationId="Assistant.DiagnoseSource"
+                                    Click="DiagnoseSource_Click"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </StackPanel>
+        <Button x:Name="UndoAssistant" Click="UndoAssistant_Click"
+                HorizontalAlignment="Left"
+                AutomationProperties.AutomationId="Assistant.Undo"
+                IsVisible="False"/>
     </StackPanel>
 </UserControl>

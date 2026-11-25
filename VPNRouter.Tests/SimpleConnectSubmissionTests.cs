@@ -269,6 +269,8 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
                 await running.RefreshSubscriptionSilentAsync();
                 Assert.Equal(new[] { b.Server, a.Server }, running.SubscriptionServers.Select(s => s.Server));
                 Assert.Equal(a.Server, running.SelectedSubscriptionServer?.Server);
+                Assert.Equal(running.SubscriptionServers.Count, running.SimpleServerRows.Count);
+                Assert.Equal(a.Server, running.SelectedSimpleServer?.Server);
             }
 
             using var editor = new MainWindowViewModel(store);
@@ -287,6 +289,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
             Assert.Equal(new[] { a.Server }, probes[0]);
             Assert.Equal(expected, Assert.Single(EngineSelection(Assert.Single(starts))).Server);
             Assert.Equal(expected, editor.SelectedSubscriptionServer?.Server);
+            Assert.Equal(expected, editor.SelectedSimpleServer?.Server);
             Assert.Equal(new[] { b.Server, a.Server }, Assert.Single(store.Load(AppPaths.ConfigYamlPath).App.Subscriptions).Servers.Select(row => row.Server));
             Assert.Single(http.SentRequests);
         }

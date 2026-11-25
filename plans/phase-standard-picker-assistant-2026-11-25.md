@@ -16,3 +16,11 @@ RU/EN and narrow-window headless screenshots, the Release build and PR tests.
 Inspect the two surfaces against the supplied screenshots using synthetic data.
 Verify the installed client after a separately authorized release. Revert the
 interface and test changes to roll back.
+
+## Implementation
+
+The Simple list presents localized use-case headings while retaining each
+subscription row as the selectable item. Rebuilding the subscription pool
+keeps the selected feed and row identities. The DeepSeek panel presents
+command entry first, with recovery and diagnostic tools available on demand.
+The confirmation and undo actions remain accessible when needed.

@@ -33,6 +33,10 @@ public partial class ServerViewModel : ViewModelBase
 
     [ObservableProperty] private bool _isActive;
 
+    // The Simple picker renders one visible heading per ProtocolGroup. The heading belongs to the
+    // first row of its group, so the same flat list keeps native selection, scrolling and keyboard navigation.
+    [ObservableProperty] private bool _isSimpleCategoryStart;
+
     [ObservableProperty] private bool _isOrphanFromSubscription;
 
     [ObservableProperty]
@@ -149,6 +153,7 @@ public partial class ServerViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(ProtocolUseCase));
         OnPropertyChanged(nameof(ProtocolUseCaseTooltip));
+        OnPropertyChanged(nameof(SimpleCategoryName));
         OnPropertyChanged(nameof(HealthVerdictText));
         OnPropertyChanged(nameof(HealthTooltip));
     }
@@ -473,6 +478,20 @@ public partial class ServerViewModel : ViewModelBase
     {
         ProtocolGroup.GamesVoice => Strings.ProtocolUseGamesVoice,
         ProtocolGroup.WebOnly => HasUdpSibling ? Strings.ProtocolUseWebUdpPair : Strings.ProtocolUseWebOnly,
+        ProtocolGroup.LowPing => Strings.ProtocolUseLowLatency,
+        ProtocolGroup.Emergency => Strings.ProtocolUseEmergency,
+        ProtocolGroup.Fallback => Strings.ProtocolUseFallback,
+        ProtocolGroup.StealthWeb => Strings.ProtocolUseStealthWeb,
+        ProtocolGroup.WebFallback => Strings.ProtocolUseWebFallback,
+        _ => Strings.ProtocolUseDaily,
+    };
+
+    /// <summary>The visible group heading of the Simple server picker. Unlike the row hint, it stays the same
+    /// when a Naive server gains a UDP sibling, because it names the destination category.</summary>
+    public string SimpleCategoryName => ProtocolGroup switch
+    {
+        ProtocolGroup.GamesVoice => Strings.ProtocolUseGamesVoice,
+        ProtocolGroup.WebOnly => Strings.ProtocolUseWebOnly,
         ProtocolGroup.LowPing => Strings.ProtocolUseLowLatency,
         ProtocolGroup.Emergency => Strings.ProtocolUseEmergency,
         ProtocolGroup.Fallback => Strings.ProtocolUseFallback,

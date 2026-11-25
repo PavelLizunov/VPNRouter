@@ -3,10 +3,21 @@ namespace VPNRouter.Core.Localization;
 public static partial class Strings
 {
     public static string AssistantTitle => Ru ? "Настроить с DeepSeek" : "Set up with DeepSeek";
+    public static string AssistantGoalLabel => Ru ? "Одно действие" : "One action";
     public static string AssistantGoalHint => Ru ? "Что настроить в VPNRouter?" : "What should VPNRouter do?";
     public static string AssistantDataNotice => Ru
-        ? "Текст команды отправляется в DeepSeek."
-        : "Your request is sent to DeepSeek.";
+        ? "При проверке текст команды отправляется в DeepSeek."
+        : "When you review it, the command text is sent to DeepSeek.";
+    public static string AssistantMoreChecks => Ru ? "Дополнительные проверки" : "More checks";
+    public static string AssistantMoreChecksHint => Ru
+        ? "Если команда не помогла: проверьте подключение или последний сбой."
+        : "If the command did not help, check the connection or the last crash.";
+    public static string AssistantConfirmWaiting => Ru
+        ? "Проверьте изменение и подтвердите."
+        : "Review the change and confirm.";
+    public static string AssistantConfirmNotice => Ru
+        ? "Изменение применится только после подтверждения."
+        : "The change is applied only after you confirm.";
     public static string AssistantDiagnoseCrash => Ru ? "Разобрать сбой" : "Analyze crash";
     public static string AssistantDiagnosingCrash => Ru ? "Проверяю отчёт о последнем сбое…" : "Checking the last crash report…";
     public static string AssistantNoCrash => Ru ? "Сохранённый отчёт о сбое не найден." : "No saved crash report was found.";

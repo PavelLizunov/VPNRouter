@@ -158,6 +158,113 @@ public sealed class AssistantSetupPanelTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task Undo_stays_reachable_when_the_last_eligible_feed_disappears()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "en";
+            settings.App.FlushDnsOnStart = false;
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-undo", Enabled = true }
+            ];
+            SettingsLoader.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
+            {
+                StepAssistantAsync = (_, _, _, observation, _) =>
+                    Task.FromResult(new AssistantStep(AssistantStepStatus.Act,
+                        Assert.Single(observation.Controls), Toggle: true)),
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Width = 360, Height = 560, Content = panel };
+            window.Show();
+            try
+            {
+                Assert.Equal(Strings.AssistantPreferenceSaved,
+                    await vm.RunAssistantGoalAsync("Enable DNS flushing on startup", window, panel,
+                        (_, _) => Task.FromResult(true), TestContext.Current.CancellationToken));
+                Assert.True(vm.HasAssistantUndo);
+
+                vm.Subscriptions.Single().Enabled = false;
+                window.UpdateLayout();
+
+                var open = panel.FindControl<Button>("OpenAssistant")!;
+                var undo = panel.FindControl<Button>("UndoAssistant")!;
+                Assert.True(panel.IsVisible);
+                Assert.False(open.IsEffectivelyVisible);
+                Assert.True(undo.IsEffectivelyVisible);
+                Assert.True(undo.IsEnabled);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
+    [AvaloniaFact]
+    public void Assistant_starts_with_one_primary_action_and_reveals_checks_on_demand()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "en";
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-panel", Enabled = true }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger);
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Width = 360, Height = 560, Content = panel };
+            window.Show();
+            try
+            {
+                var open = panel.FindControl<Button>("OpenAssistant")!;
+                var run = panel.FindControl<Button>("RunAssistant")!;
+                var moreToggle = panel.FindControl<Button>("MoreChecksToggle")!;
+                var more = panel.FindControl<StackPanel>("MoreChecks")!;
+                var repair = panel.FindControl<Button>("RepairVpn")!;
+                var crash = panel.FindControl<Button>("DiagnoseCrash")!;
+
+                open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.UpdateLayout();
+                Assert.True(run.IsEffectivelyVisible);
+                Assert.False(more.IsVisible);
+                Assert.False(repair.IsEffectivelyVisible);
+                Assert.False(crash.IsEffectivelyVisible);
+
+                moreToggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.UpdateLayout();
+                Assert.True(more.IsVisible);
+                Assert.True(repair.IsEffectivelyVisible);
+                Assert.True(crash.IsEffectivelyVisible);
+                Assert.True(panel.FindControl<Border>("SourceDiagnosisDetails")!.IsEffectivelyVisible);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
     private static Task<bool> UnexpectedConfirmation(string text, CancellationToken ct) =>
         throw new InvalidOperationException("This request cannot authorize a change.");
 
@@ -332,7 +439,9 @@ public sealed class AssistantSetupPanelTests
                 Assert.False(confirm.IsVisible);
                 run.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.True(confirm.IsVisible);
-                Assert.Equal(Strings.AssistantChangeDescription("SetFlushDnsOnStart", true, null, false), status.Text);
+                Assert.Equal(Strings.AssistantChangeDescription("SetFlushDnsOnStart", true, null, false),
+                    panel.FindControl<TextBlock>("AssistantConsentText")!.Text);
+                Assert.Equal(Strings.AssistantConfirmWaiting, status.Text);
                 Assert.False(SettingsLoader.Load(AppPaths.ConfigYamlPath).App.FlushDnsOnStart);
                 switch (response)
                 {

@@ -51,6 +51,75 @@ public class PageScreenshotTests
         ScreenshotHelper.CapturePage(page, "simple-connected-with-assistant", width: 520, height: 680);
     }
 
+    private static VlessServerEntry PickerEntry(string name, string protocol = "vless", string transport = "tcp") =>
+        new()
+        {
+            Name = name,
+            Server = $"{name.Replace(' ', '-').ToLowerInvariant()}.invalid",
+            Port = 443,
+            Protocol = protocol,
+            Security = "none",
+            Uuid = "00000000-0000-4000-8000-000000000001",
+            Transport = new VPNRouter.Core.Models.VlessTransportConfig { Type = transport },
+        };
+
+    [AvaloniaTheory]
+    [InlineData(520, 720)]
+    [InlineData(360, 640)]
+    public void SimplePage_ServerCategories(int width, int height)
+    {
+        using var vm = GetVm();
+        foreach (var entry in new[]
+                 {
+                     PickerEntry("Aruba Cloud VLESS"),
+                     PickerEntry("ACDN VLESS"),
+                     PickerEntry("BitFolk VLESS"),
+                     PickerEntry("TINYSERVERS VLESS"),
+                     PickerEntry("TRANSP VLESS"),
+                     PickerEntry("BitFolk WS", transport: "ws"),
+                     PickerEntry("BitFolk XHTTP", transport: "xhttp"),
+                     PickerEntry("Hysteria Games", protocol: "hysteria2"),
+                     PickerEntry("Naive Web", protocol: "naive"),
+                 })
+            vm.SubscriptionServers.Add(new ServerViewModel(entry));
+        vm.OpenConfigPickerCommand.Execute(null);
+        ScreenshotHelper.CapturePage(new SimplePage { DataContext = vm },
+            $"simple-server-categories-{width}", width, height);
+    }
+
+    [AvaloniaFact]
+    public void Assistant_one_primary_step_520()
+    {
+        using var vm = GetVm();
+        vm.Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry
+        {
+            Name = "Fixture subscription",
+            Url = "https://ninitux.com/sub/synthetic-panel",
+            Enabled = true
+        }));
+        var page = new SimplePage { DataContext = vm };
+        var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        ScreenshotHelper.CapturePage(page, "assistant-one-step-520", 520, 720);
+    }
+
+    [AvaloniaFact]
+    public void Assistant_more_checks_360()
+    {
+        using var vm = GetVm();
+        vm.Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry
+        {
+            Name = "Fixture subscription",
+            Url = "https://ninitux.com/sub/synthetic-panel",
+            Enabled = true
+        }));
+        var page = new SimplePage { DataContext = vm };
+        var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        assistant.FindControl<Button>("MoreChecksToggle")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        ScreenshotHelper.CapturePage(page, "assistant-more-checks-360", 360, 720);
+    }
+
     [AvaloniaFact]
     public void Assistant_panel_follows_subscription_eligibility()
     {
