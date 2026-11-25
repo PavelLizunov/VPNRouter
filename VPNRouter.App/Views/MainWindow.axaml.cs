@@ -1,6 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
 using Avalonia.Platform;
+using Avalonia.VisualTree;
+using VPNRouter.App.Controls;
 using VPNRouter.App.ViewModels;
 using VPNRouter.Core.Services;
 
@@ -124,5 +127,36 @@ public partial class MainWindow : Window
         if (_mainTabs is not { } tabs) return;
         var russian = (DataContext as MainWindowViewModel)?.IsRussian == true;
         tabs.Classes.Set("compact", ShouldCompactTabs(ClientSize.Width, russian));
+    }
+
+    internal int ReleaseInactivePages()
+    {
+        var seen = new HashSet<object?>(ReferenceEqualityComparer.Instance);
+        var toUnload = new List<DeferredPage>();
+
+        void Consider(DeferredPage page)
+        {
+            if (seen.Add(page) && !page.IsActive && page.Content != null)
+                toUnload.Add(page);
+        }
+
+        foreach (var page in this.GetLogicalDescendants().OfType<DeferredPage>())
+            Consider(page);
+
+        foreach (var page in this.GetVisualDescendants().OfType<DeferredPage>())
+            Consider(page);
+
+        var released = 0;
+        foreach (var page in toUnload)
+        {
+            if (!page.IsActive && page.Content != null)
+            {
+                page.UnloadIfInactive();
+                if (page.Content == null)
+                    released++;
+            }
+        }
+
+        return released;
     }
 }

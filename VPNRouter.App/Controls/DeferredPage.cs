@@ -39,6 +39,12 @@ public class DeferredPage : ContentControl
         UpdateState(IsActive);
     }
 
+    internal void UnloadIfInactive()
+    {
+        if (!IsActive && Content != null)
+            Content = null;
+    }
+
     private void UpdateState(bool active)
     {
         IsVisible = active;
