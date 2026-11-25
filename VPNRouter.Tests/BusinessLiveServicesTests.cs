@@ -228,6 +228,8 @@ public sealed class BusinessLiveServicesTests
             var send = Assert.Single(content.GetVisualDescendants().OfType<Button>().Where(b => AutomationProperties.GetAutomationId(b) == "BusinessDiagnosticsSend"));
             Assert.True(send.IsEffectivelyEnabled);
             Assert.True(send.IsEffectivelyVisible);
+            Assert.True(services!.IsRefreshStatusVisible);
+            Assert.Equal(Strings.BusinessSubscriptionUpdated(4), services.RefreshStatus);
             var top = send.TranslatePoint(default, menuScroll);
             Assert.True(top.HasValue && top.Value.Y >= 0 && top.Value.Y + send.Bounds.Height <= menuScroll.Viewport.Height);
             flyout.Hide();
@@ -259,7 +261,9 @@ public sealed class BusinessLiveServicesTests
     {
         store = new(); var settings = new AppSettings();
         BusinessDefaults.Apply(settings, BusinessClientConfigurationTests.Three, BusinessBootstrap.ReadRules());
-        settings.App.Language = "ru"; store.Save(settings, AppPaths.ConfigYamlPath);
+        settings.App.Language = "ru";
+        settings.App.BusinessServerSelectionMode = BusinessServerSelectionMode.Manual;
+        store.Save(settings, AppPaths.ConfigYamlPath);
         return new(store);
     }
     private static BusinessClientConfiguration Configuration() => BusinessClientConfiguration.Parse(BusinessClientConfigurationTests.Bundle());

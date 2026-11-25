@@ -17,9 +17,12 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
     // A deep check spawns an independent sing-box outbound. It must not run
     // through, or contend with, an active or starting tunnel.
     private bool CanProbe => _deepChoices.Length > 0 && !_disposed && _visible && !_vm.IsConnecting &&
-        !_vm.IsConnected;
+        !_vm.IsConnected && !_vm.IsBusinessRepairInProgress;
 
     internal IReadOnlyList<BusinessServerChoiceViewModel> Choices { get; }
+    internal event Action? Updated;
+    internal bool HasProbeTargets => _deepChoices.Length > 0;
+    internal bool IsChecking => _enabled && _round != null;
 
     internal BusinessServerHealthMonitor(MainWindowViewModel vm,
         Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>>? probe)
@@ -42,7 +45,7 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected)
-            or nameof(MainWindowViewModel.IsSplitTunnel))
+            or nameof(MainWindowViewModel.IsSplitTunnel) or nameof(MainWindowViewModel.IsBusinessRepairInProgress))
         {
             if (Dispatcher.UIThread.CheckAccess()) UpdateAvailability();
             else Dispatcher.UIThread.Post(UpdateAvailability);
@@ -64,6 +67,7 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
             _timer.Stop();
             _round?.Cancellation.Cancel();
             foreach (var choice in _deepChoices) choice.Update(ServerProbeResult.Unknown);
+            Updated?.Invoke();
         }
     }
 
@@ -77,6 +81,7 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
         var round = new Round();
         _round = round;
         foreach (var choice in _deepChoices) choice.Update(ServerProbeResult.Unknown, checking: true);
+        Updated?.Invoke();
         _ = RunRoundAsync(round);
         return round.Completion.Task;
     }
@@ -102,7 +107,10 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
                             await Dispatcher.UIThread.InvokeAsync(() =>
                             {
                                 if (CanProbe && _enabled && !round.Cancellation.IsCancellationRequested)
+                                {
                                     choice.Update(result);
+                                    Updated?.Invoke();
+                                }
                             });
                         }
                         else missing.Add(choice);
@@ -124,6 +132,7 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
                 var cancelled = round.Cancellation.IsCancellationRequested;
                 _round = null;
                 round.Cancellation.Dispose();
+                Updated?.Invoke();
                 round.Completion.TrySetResult();
                 // A disconnect/show can happen before a cancelled socket finishes.
                 // Wait for that round, then refresh; never overlap old and new work.
@@ -147,7 +156,10 @@ internal sealed class BusinessServerHealthMonitor : IDisposable
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             if (CanProbe && _enabled && !round.Cancellation.IsCancellationRequested)
+            {
                 choice.Update(result);
+                Updated?.Invoke();
+            }
         });
     }
 

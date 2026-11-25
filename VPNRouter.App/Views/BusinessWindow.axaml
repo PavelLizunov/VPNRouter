@@ -5,7 +5,7 @@
         xmlns:loc="using:VPNRouter.Core.Localization"
         xmlns:icons="using:VPNRouter.App.Controls"
         x:Class="VPNRouter.App.Views.BusinessWindow"
-        x:Name="BusinessWindowRoot"
+        x:Name="BusinessWindowRoot" KeyDown="OnBusinessKeyDown"
         x:DataType="vm:MainWindowViewModel"
         Title="VPNRouter Business" Width="420" Height="500" MinWidth="340" MinHeight="480"
         Background="{DynamicResource SurfaceAppBrush}"
@@ -70,32 +70,102 @@
         <Style Selector="Ellipse.business-health-dot.bad">
             <Setter Property="Fill" Value="{DynamicResource DangerSolidBrush}"/>
         </Style>
-        <Style Selector="Border.business-activity-bar">
-            <Setter Property="Background" Value="{DynamicResource TextMutedBrush}"/>
-            <Setter Property="Opacity" Value="0.35"/>
+        <Style Selector="Button.business-ghost">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
         </Style>
-        <Style Selector="Border.business-activity-bar.low">
-            <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
-            <Setter Property="Opacity" Value="1"/>
+        <Style Selector="Button.business-ghost:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
-        <Style Selector="Border.business-activity-bar.medium">
-            <Setter Property="Background" Value="{DynamicResource WarningSolidBrush}"/>
-            <Setter Property="Opacity" Value="1"/>
+        <Style Selector="Button.business-outline">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
         </Style>
-        <Style Selector="Border.business-activity-bar.high">
-            <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
-            <Setter Property="Opacity" Value="1"/>
+        <Style Selector="Button.business-outline:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderAccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="Button.business-warning-action">
+            <Setter Property="Background" Value="{DynamicResource WarningActionSolidBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource WarningActionOnSolidBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.business-warning-action:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource WarningActionSolidHoverBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource WarningActionOnSolidBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status.connected">
+            <Setter Property="Background" Value="{DynamicResource SuccessBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SuccessBorderBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status.busy">
+            <Setter Property="Background" Value="{DynamicResource InfoBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InfoBorderBrush}"/>
+        </Style>
+        <Style Selector="Ellipse.business-status-dot">
+            <Setter Property="Fill" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status.connected Ellipse.business-status-dot">
+            <Setter Property="Fill" Value="{DynamicResource SuccessSolidBrush}"/>
+        </Style>
+        <Style Selector="Border.business-status.busy Ellipse.business-status-dot">
+            <Setter Property="Fill" Value="{DynamicResource InfoSolidBrush}"/>
+        </Style>
+        <Style Selector="Border.business-policy">
+            <Setter Property="Background" Value="{DynamicResource WarningBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource WarningBorderBrush}"/>
+        </Style>
+        <Style Selector="Border.business-policy.applying">
+            <Setter Property="Background" Value="{DynamicResource InfoBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InfoBorderBrush}"/>
+        </Style>
+        <Style Selector="Border.business-policy.danger">
+            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+        </Style>
+        <Style Selector="Border.business-repair">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        </Style>
+        <Style Selector="Border.business-repair.error">
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+        </Style>
+        <Style Selector="Border.business-repair.receipt">
+            <Setter Property="BorderBrush" Value="{DynamicResource SuccessBorderBrush}"/>
+        </Style>
+        <Style Selector="Border.business-repair.error TextBlock.repair-heading">
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        </Style>
+        <Style Selector="Border.repair-advice">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+            <Setter Property="Padding" Value="8"/>
+        </Style>
+        <Style Selector="Border.business-repair.receipt TextBlock.repair-heading">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessFgBrush}"/>
         </Style>
     </Window.Styles>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="20" Spacing="12" MaxWidth="400" HorizontalAlignment="Stretch">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                <Image Source="{Binding LogoSource}" Width="36" Height="36" Stretch="Uniform"
-                       RenderOptions.BitmapInterpolationMode="HighQuality"/>
+        <StackPanel Margin="20,18,20,20" Spacing="12" MaxWidth="400" HorizontalAlignment="Stretch">
+            <Grid ColumnDefinitions="32,*,32" ColumnSpacing="10">
+                <Border Width="32" Height="32" Background="{DynamicResource SurfaceBaseBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}">
+                    <icons:Pictogram Id="shield-check" Width="20" Height="20" HorizontalAlignment="Center"
+                                     VerticalAlignment="Center" Foreground="{DynamicResource AccentFgBrush}"/>
+                </Border>
                 <TextBlock Grid.Column="1" Text="{Binding AppVersionShortText, StringFormat='VPNRouter Business {0}'}"
-                           AutomationProperties.AutomationId="BusinessProductVersion" FontSize="16" FontWeight="SemiBold"
+                           AutomationProperties.AutomationId="BusinessProductVersion" FontSize="15" FontWeight="SemiBold"
                            TextWrapping="Wrap" VerticalAlignment="Center"/>
-                <Button Grid.Column="2" x:Name="BusinessMenuButton" Width="28" Height="28" Padding="0"
+                <Button Grid.Column="2" x:Name="BusinessMenuButton" Classes="business-ghost" Width="32" Height="32" Padding="0"
                         Background="Transparent" BorderThickness="0"
                         CornerRadius="{StaticResource RadiusSm}"
                         Foreground="{DynamicResource TextSecondaryBrush}"
@@ -111,7 +181,7 @@
                     </icons:Pictogram>
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight"
-                                ShowMode="TransientWithDismissOnPointerMoveAway"
+                                ShowMode="Standard"
                                 FlyoutPresenterClasses="naked">
                             <Border Width="280" DataContext="{Binding #BusinessWindowRoot.DataContext}"
                                     Background="{DynamicResource SurfaceBaseBrush}"
@@ -136,7 +206,8 @@
                                         <Border x:Name="BusinessActions" x:DataType="business:BusinessServicesViewModel">
                                             <StackPanel Spacing="1">
                                                 <Button Classes="menu-item" Content="{Binding #BusinessWindowRoot.Texts.DiagnosticsSend}"
-                                                        Command="{Binding SendCommand}" AutomationProperties.AutomationId="BusinessDiagnosticsSend"
+                                                        Command="{Binding SendCommand}" Click="OnBusinessDiagnosticMenuClick"
+                                                        AutomationProperties.AutomationId="BusinessDiagnosticsSend"
                                                         ToolTip.Tip="{Binding #BusinessWindowRoot.Texts.DiagnosticsHint}"/>
                                                 <Button Classes="menu-item" Content="{Binding #BusinessWindowRoot.Texts.DiagnosticsCollect}"
                                                         Command="{Binding CollectCommand}" AutomationProperties.AutomationId="BusinessDiagnosticsCollect"/>
@@ -189,15 +260,17 @@
                                                         <StackPanel Spacing="7">
                                                             <TextBlock Text="{Binding UpdateVm.RollbackConfirmationText}" TextWrapping="Wrap" FontSize="11"
                                                                        Foreground="{DynamicResource WarningFgBrush}"/>
-                                                            <Button Classes="solid" Command="{Binding UpdateVm.ConfirmRollbackCommand}"
-                                                                    Background="{DynamicResource WarningSolidBrush}" Foreground="{DynamicResource TextInverseBrush}" MinHeight="0" Padding="8,5"
-                                                                    AutomationProperties.AutomationId="BusinessRollbackConfirm">
-                                                                <TextBlock Text="{Binding UpdateVm.ConfirmRollbackText}" TextWrapping="Wrap" TextAlignment="Center" FontSize="11"/>
-                                                            </Button>
-                                                            <Button Command="{Binding UpdateVm.CancelRollbackCommand}" MinHeight="0" Padding="8,5"
-                                                                    AutomationProperties.AutomationId="BusinessRollbackCancel">
-                                                                <TextBlock Text="{Binding UpdateVm.CancelRollbackText}" TextWrapping="Wrap" TextAlignment="Center" FontSize="11"/>
-                                                            </Button>
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                                <Button Classes="business-warning-action" Command="{Binding UpdateVm.ConfirmRollbackCommand}"
+                                                                        MinHeight="0" Padding="8,5" HorizontalAlignment="Stretch"
+                                                                        AutomationProperties.AutomationId="BusinessRollbackConfirm">
+                                                                    <TextBlock Text="{Binding UpdateVm.ConfirmRollbackText}" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"/>
+                                                                </Button>
+                                                                <Button Grid.Column="1" Classes="business-ghost" Command="{Binding UpdateVm.CancelRollbackCommand}"
+                                                                        MinHeight="0" Padding="8,5" AutomationProperties.AutomationId="BusinessRollbackCancel">
+                                                                    <TextBlock Text="{Binding UpdateVm.CancelRollbackText}" FontSize="12"/>
+                                                                </Button>
+                                                            </Grid>
                                                         </StackPanel>
                                                     </Border>
                                                 </StackPanel>
@@ -225,166 +298,224 @@
                     CornerRadius="{StaticResource RadiusMd}"
                     AutomationProperties.AutomationId="BusinessUpdateNotice">
                 <StackPanel Spacing="6">
-                    <TextBlock Text="{Binding UpdateVm.Message}" TextWrapping="Wrap" FontSize="12"/>
+                    <TextBlock Text="{Binding UpdateVm.Message}" TextWrapping="Wrap" FontSize="13" FontWeight="SemiBold"
+                               AutomationProperties.LiveSetting="Polite"/>
+                    <TextBlock Text="{Binding #BusinessWindowRoot.Texts.UpdateStopNote}" TextWrapping="Wrap"
+                               FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" IsVisible="{Binding !UpdateVm.IsDownloading}"/>
                     <ProgressBar Height="3" Value="{Binding UpdateVm.DownloadProgress}" IsVisible="{Binding UpdateVm.IsDownloading}"/>
                     <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !UpdateVm.IsDownloading}">
-                        <Button Content="{Binding #BusinessWindowRoot.Texts.InstallUpdate}" Command="{Binding UpdateVm.DownloadAndApplyCommand}"
+                        <Button Classes="solid" Content="{Binding #BusinessWindowRoot.Texts.InstallUpdate}" Command="{Binding UpdateVm.DownloadAndApplyCommand}"
                                 AutomationProperties.AutomationId="BusinessUpdateInstall"/>
-                        <Button Content="{Binding #BusinessWindowRoot.Texts.LaterUpdate}" Command="{Binding UpdateVm.DismissCommand}"/>
+                        <Button Classes="business-ghost" Content="{Binding #BusinessWindowRoot.Texts.LaterUpdate}" Command="{Binding UpdateVm.DismissCommand}"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
-            <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ConnectionStatus}" TextWrapping="Wrap" TextAlignment="Center"
-                       MinHeight="24" Foreground="{DynamicResource TextSecondaryBrush}"/>
-            <TextBlock Text="{Binding #BusinessWindowRoot.Texts.PolicyStatus}" IsVisible="{Binding #BusinessWindowRoot.Texts.HasPolicyStatus}"
-                       AutomationProperties.AutomationId="BusinessPolicyStatus" TextWrapping="Wrap" TextAlignment="Center"
-                       FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+            <StackPanel Spacing="8">
+                <Border Classes="business-status" Classes.connected="{Binding IsConnected}"
+                        Classes.busy="{Binding #BusinessWindowRoot.Texts.IsConnectionBusy}"
+                        Padding="10,5" BorderThickness="1" HorizontalAlignment="Center"
+                        CornerRadius="{StaticResource RadiusPill}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
+                        <Ellipse Classes="business-status-dot" Width="8" Height="8" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" AutomationProperties.AutomationId="BusinessConnectionStatus"
+                                   Text="{Binding #BusinessWindowRoot.Texts.ConnectionStatus}"
+                                   TextWrapping="Wrap" TextAlignment="Center" FontSize="12" FontWeight="SemiBold"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                    </Grid>
+                </Border>
+                <Border IsVisible="{Binding #BusinessWindowRoot.Texts.HasPolicyStatus}"
+                        Classes="business-policy" Classes.danger="{Binding #BusinessWindowRoot.Texts.IsPolicyDanger}"
+                        Classes.applying="{Binding #BusinessWindowRoot.Texts.IsPolicyApplying}"
+                        Padding="10,7" BorderThickness="1" CornerRadius="{StaticResource RadiusSm}">
+                    <TextBlock Text="{Binding #BusinessWindowRoot.Texts.PolicyStatus}" TextWrapping="Wrap" FontSize="12"
+                               AutomationProperties.AutomationId="BusinessPolicyStatus" AutomationProperties.LiveSetting="Polite"/>
+                </Border>
+            </StackPanel>
             <Border IsEnabled="{Binding !UpdateVm.IsDownloading}">
-            <Button Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding !IsConnecting}"
-                    Classes="solid" MinHeight="48" CornerRadius="{StaticResource RadiusPill}"
-                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                    AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.ConnectButton}">
-                <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ConnectButton}" FontSize="18" VerticalAlignment="Center"/>
-            </Button>
+                <Button x:Name="BusinessConnectButton" Command="{Binding ToggleConnectionCommand}"
+                        IsEnabled="{Binding #BusinessWindowRoot.Texts.CanToggleConnection}"
+                        Classes.solid="{Binding !IsConnected}" Classes.business-outline="{Binding IsConnected}"
+                        MinHeight="48" CornerRadius="{StaticResource RadiusPill}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.ConnectButton}">
+                    <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ConnectButton}" FontSize="16"
+                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </Button>
             </Border>
             <StackPanel x:Name="BusinessRepairActions" x:DataType="business:BusinessServicesViewModel" Spacing="6">
-                <Button Content="{Binding #BusinessWindowRoot.Texts.RepairTitle}" Command="{Binding OpenRepairCommand}"
+                <Button x:Name="BusinessRepairButton" Classes="business-ghost" Click="OnBusinessRepairClick"
+                        Content="{Binding #BusinessWindowRoot.Texts.RepairTitle}" Command="{Binding OpenRepairCommand}"
                         IsVisible="{Binding !IsRepairOpen}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                         AutomationProperties.AutomationId="BusinessRepairOpen"/>
-                <Grid IsVisible="{Binding IsRepairOpen}" ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                    <StackPanel Spacing="6" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding RepairHint}" IsVisible="{Binding HasRepairHint}" TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding DiagnosticStatus}" IsVisible="{Binding ShowRepairAnalysis}" TextWrapping="Wrap"
-                                   AutomationProperties.AutomationId="BusinessRepairAnalysis"/>
-                        <TextBlock Text="{Binding #BusinessWindowRoot.Texts.RepairConsent}" IsVisible="{Binding ShowAnalyze}"
-                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="{StaticResource FsSm}" TextWrapping="Wrap"/>
-                        <Button Content="{Binding #BusinessWindowRoot.Texts.RepairAnalyze}" Command="{Binding AnalyzeRepairCommand}"
-                                IsVisible="{Binding ShowAnalyze}" AutomationProperties.AutomationId="BusinessRepairAnalyze"/>
-                    </StackPanel>
-                    <Button Grid.Column="1" Content="×" MinWidth="32" Height="32" VerticalAlignment="Top"
-                            Command="{Binding CloseRepairCommand}" ToolTip.Tip="{Binding #BusinessWindowRoot.Texts.RepairClose}"
-                            AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.RepairClose}"
-                            AutomationProperties.AutomationId="BusinessRepairClose"/>
-                </Grid>
-            </StackPanel>
-            <StackPanel Spacing="6">
-                <Border BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
-                        Background="{DynamicResource SurfaceBaseBrush}" CornerRadius="{StaticResource RadiusMd}">
-                    <StackPanel>
-                        <Button x:Name="BusinessServerMenuButton" Classes="home-setting"
-                                Click="OnBusinessServerMenuToggle"
-                                AutomationProperties.AutomationId="BusinessServerMenu"
-                                AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.ServerMenu}">
-                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <TextBlock VerticalAlignment="Center" Text="{Binding #BusinessWindowRoot.Texts.ServerMenu}"/>
-                                <icons:Pictogram Grid.Column="1" Id="chevron-down" Classes="setting-chevron"
-                                                 Classes.expanded="{Binding #BusinessServerPanel.IsVisible}"/>
-                            </Grid>
-                        </Button>
-                        <Border Height="1" Margin="10,0" Background="{DynamicResource BorderSubtleBrush}"/>
-                        <Button x:Name="BusinessModeMenuButton" Classes="home-setting"
-                                Click="OnBusinessModeMenuToggle"
-                                AutomationProperties.AutomationId="BusinessModeMenu"
-                                AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.ModeMenu}">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                <TextBlock VerticalAlignment="Center" Text="{Binding #BusinessWindowRoot.Texts.ModeMenu}"/>
-                                <Panel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock IsVisible="{Binding IsSplitTunnel}" TextAlignment="Right" TextWrapping="Wrap"
-                                               FontSize="{StaticResource FsSm}" Foreground="{DynamicResource TextSecondaryBrush}"
-                                               Text="{Binding #BusinessWindowRoot.Texts.Split}"/>
-                                    <TextBlock IsVisible="{Binding !IsSplitTunnel}" TextAlignment="Right" TextWrapping="Wrap"
-                                               FontSize="{StaticResource FsSm}" Foreground="{DynamicResource TextSecondaryBrush}"
-                                               Text="{Binding #BusinessWindowRoot.Texts.FullCompact}"/>
+                <Border Classes="business-repair" Classes.error="{Binding IsRepairError}"
+                        Classes.receipt="{Binding IsRepairReceipt}"
+                        IsVisible="{Binding IsRepairOpen}" BorderThickness="1"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        CornerRadius="{StaticResource RadiusMd}" Padding="12,9">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                                <Panel VerticalAlignment="Center">
+                                    <icons:Pictogram Id="warning" Width="16" Height="16" IsVisible="{Binding IsRepairError}"
+                                                     Foreground="{DynamicResource DangerFgBrush}"/>
+                                    <icons:Pictogram Id="check" Width="16" Height="16" IsVisible="{Binding IsRepairReceipt}"
+                                                     Foreground="{DynamicResource SuccessFgBrush}"/>
                                 </Panel>
-                                <icons:Pictogram Grid.Column="2" Id="chevron-down" Classes="setting-chevron"
-                                                 Classes.expanded="{Binding #BusinessModePanel.IsVisible}"/>
+                                <TextBlock Grid.Column="1" Classes="repair-heading" Text="{Binding RepairHeading}"
+                                           FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"
+                                           AutomationProperties.LiveSetting="Polite"/>
                             </Grid>
-                        </Button>
-                    </StackPanel>
-                </Border>
-                <Border x:Name="BusinessServerPanel" IsVisible="False"
-                        Padding="10,8"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        CornerRadius="{StaticResource RadiusSm}">
-                    <StackPanel Spacing="6" IsEnabled="{Binding !IsConnected}">
-                        <CheckBox IsChecked="{Binding #BusinessWindowRoot.Texts.AutoSelectEnabled, Mode=TwoWay}"
-                                  IsEnabled="{Binding !IsConnecting}"
-                                  MinHeight="0" Padding="4,0"
-                                  ToolTip.Tip="{Binding #BusinessWindowRoot.Texts.AutoSelectHint}"
-                                  AutomationProperties.AutomationId="BusinessAutoSelect"
-                                  AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.AutoSelect}">
-                            <TextBlock Text="{Binding #BusinessWindowRoot.Texts.AutoSelect}" TextWrapping="Wrap" FontSize="11"/>
-                        </CheckBox>
-                        <TextBlock Text="{Binding #BusinessWindowRoot.Texts.AutoSelectStatus}"
-                                   IsVisible="{Binding #BusinessWindowRoot.Texts.HasAutoSelectStatus}"
-                                   TextWrapping="Wrap" FontSize="10"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                   AutomationProperties.AutomationId="BusinessAutoSelectStatus"/>
-                        <ComboBox x:Name="BusinessServerSelector" SelectionChanged="OnBusinessServerSelectionChanged"
-                                  IsEnabled="{Binding !IsConnecting}" MinHeight="48"
-                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                  AutomationProperties.AutomationId="BusinessServerSelector"
-                                  AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.Server}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="business:BusinessServerChoiceViewModel">
-                                    <Grid ColumnDefinitions="12,24,*,Auto" ColumnSpacing="6" ToolTip.Tip="{Binding StatusText}">
-                                        <Ellipse Classes="business-health-dot" Width="8" Height="8"
-                                                 Classes.good="{Binding IsGood}" Classes.warning="{Binding IsWarning}"
-                                                 Classes.bad="{Binding IsBad}" VerticalAlignment="Center"/>
-                                        <Image Grid.Column="1" Source="{Binding CountryFlag}" Width="24" Height="16"
-                                               IsVisible="{Binding HasCountry}" VerticalAlignment="Center" ToolTip.Tip="{Binding CountryName}"/>
-                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayName}"/>
-                                            <TextBlock Text="{Binding CountryName}" FontSize="10" TextTrimming="CharacterEllipsis"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="5" IsVisible="{Binding HasMetadata}"
-                                                  ToolTip.Tip="{Binding MetricsHint}">
-                                                <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Height="10">
-                                                    <Border Classes="business-activity-bar" Width="3" Height="4" VerticalAlignment="Bottom"
-                                                            Classes.low="{Binding IsActivityLow}" Classes.medium="{Binding IsActivityMedium}"
-                                                            Classes.high="{Binding IsActivityHigh}"/>
-                                                    <Border Classes="business-activity-bar" Width="3" Height="7" VerticalAlignment="Bottom"
-                                                            Classes.medium="{Binding IsActivityMedium}" Classes.high="{Binding IsActivityHigh}"/>
-                                                    <Border Classes="business-activity-bar" Width="3" Height="10" VerticalAlignment="Bottom"
-                                                            Classes.high="{Binding IsActivityHigh}"/>
-                                                </StackPanel>
-                                                <TextBlock Grid.Column="1" Text="{Binding MetricsText}" FontSize="9"
-                                                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                            </Grid>
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="3" Text="{Binding PingText}" FontSize="11"
-                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ServerHint}"
-                                   TextWrapping="Wrap" FontSize="10"
-                                   Foreground="{DynamicResource TextMutedBrush}"/>
-                        <Button x:Name="BusinessServerRefresh" Classes="menu-item"
-                                Content="{Binding #BusinessWindowRoot.Texts.ServerRefresh}"
-                                Click="OnBusinessServerRefresh"
-                                IsEnabled="{Binding !IsConnecting}"
-                                AutomationProperties.AutomationId="BusinessServerRefresh"/>
-                    </StackPanel>
-                </Border>
-                <Border x:Name="BusinessModePanel" IsVisible="False"
-                        Padding="10,8"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        CornerRadius="{StaticResource RadiusSm}">
-                    <StackPanel Spacing="8" IsEnabled="{Binding !IsConnected}">
-                        <RadioButton GroupName="BusinessMode" IsChecked="{Binding IsSplitTunnel}"
-                                     IsEnabled="{Binding !IsConnecting}">
-                            <TextBlock Text="{Binding #BusinessWindowRoot.Texts.Split}" TextWrapping="Wrap"/>
-                        </RadioButton>
-                        <RadioButton GroupName="BusinessMode" IsChecked="{Binding !IsSplitTunnel, Mode=OneWay}"
-                                     IsEnabled="{Binding !IsConnecting}">
-                            <TextBlock Text="{Binding #BusinessWindowRoot.Texts.FullCompact}" TextWrapping="Wrap"/>
-                        </RadioButton>
+                            <Button Grid.Column="1" Classes="business-ghost" Width="32" Height="32" Padding="0"
+                                    Command="{Binding CloseRepairCommand}" ToolTip.Tip="{Binding RepairDismissText}"
+                                    AutomationProperties.Name="{Binding RepairDismissText}"
+                                    AutomationProperties.AutomationId="BusinessRepairClose">
+                                <icons:Pictogram Id="close" Width="15" Height="15"/>
+                            </Button>
+                        </Grid>
+                        <ProgressBar Height="3" IsIndeterminate="True" IsVisible="{Binding IsRepairBusy}"/>
+                        <Border Classes.repair-advice="{Binding HasRepairAdvice}">
+                            <TextBlock Text="{Binding RepairBody}" TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" AutomationProperties.LiveSetting="Polite"
+                                       AutomationProperties.AutomationId="BusinessRepairAnalysis"/>
+                        </Border>
+                        <TextBlock Text="{Binding RepairAdviceFooter}" IsVisible="{Binding HasRepairAdvice}"
+                                   TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <WrapPanel ItemSpacing="4" LineSpacing="4">
+                            <Button Command="{Binding RepairPrimaryCommand}" Click="OnBusinessRepairActionClick"
+                                    IsVisible="{Binding HasRepairPrimaryAction}"
+                                    AutomationProperties.AutomationId="BusinessRepairAnalyze">
+                                <TextBlock Text="{Binding RepairActionText}" TextWrapping="Wrap"/>
+                            </Button>
+                            <Button Classes="business-ghost" Command="{Binding RetryRepairSearchCommand}"
+                                    Click="OnBusinessRepairActionClick" IsVisible="{Binding HasRepairRetrySearchAction}"
+                                    AutomationProperties.AutomationId="BusinessRepairRetrySearch">
+                                <TextBlock Text="{Binding RepairRetrySearchText}" TextWrapping="Wrap"/>
+                            </Button>
+                            <Button x:Name="BusinessRepairDismiss" Classes="business-ghost" Content="{Binding RepairDismissText}"
+                                    Command="{Binding CloseRepairCommand}"/>
+                        </WrapPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>
+            <Border BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
+                    Background="{DynamicResource SurfaceBaseBrush}" CornerRadius="{StaticResource RadiusMd}">
+                <StackPanel>
+                    <Button x:Name="BusinessServerMenuButton" Classes="home-setting"
+                            Click="OnBusinessServerMenuToggle"
+                            AutomationProperties.AutomationId="BusinessServerMenu"
+                            AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.ServerMenu}"
+                            AutomationProperties.ItemStatus="{Binding #BusinessWindowRoot.Texts.ServerSummary}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <TextBlock VerticalAlignment="Center" Text="{Binding #BusinessWindowRoot.Texts.ServerMenu}"/>
+                            <TextBlock Grid.Column="1" VerticalAlignment="Center" TextAlignment="Right"
+                                       TextTrimming="CharacterEllipsis" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Text="{Binding #BusinessWindowRoot.Texts.ServerSummary}"
+                                       ToolTip.Tip="{Binding #BusinessWindowRoot.Texts.ServerSummary}"
+                                       AutomationProperties.AutomationId="BusinessServerSummary"/>
+                            <icons:Pictogram Grid.Column="2" Id="chevron-down" Classes="setting-chevron"
+                                             Classes.expanded="{Binding #BusinessServerPanel.IsVisible}"/>
+                        </Grid>
+                    </Button>
+                    <Border x:Name="BusinessServerPanel" IsVisible="False" Padding="10,8"
+                            Background="{DynamicResource SurfaceSunkenBrush}">
+                        <StackPanel Spacing="7">
+                            <TextBlock IsVisible="{Binding IsConnected}" TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Text="{Binding #BusinessWindowRoot.Texts.ServerLocked}"/>
+                            <StackPanel Spacing="7" IsEnabled="{Binding #BusinessWindowRoot.Texts.CanToggleConnection}">
+                                <StackPanel Spacing="7" IsEnabled="{Binding !IsConnected}">
+                                    <CheckBox IsChecked="{Binding #BusinessWindowRoot.Texts.AutoSelectEnabled, Mode=TwoWay}"
+                                              MinHeight="0" Padding="4,0" ToolTip.Tip="{Binding #BusinessWindowRoot.Texts.AutoSelectHint}"
+                                              AutomationProperties.AutomationId="BusinessAutoSelect"
+                                              AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.AutoSelect}">
+                                        <TextBlock Text="{Binding #BusinessWindowRoot.Texts.AutoSelect}" TextWrapping="Wrap" FontSize="12"/>
+                                    </CheckBox>
+                                    <TextBlock Text="{Binding #BusinessWindowRoot.Texts.AutoSelectStatus}"
+                                               IsVisible="{Binding #BusinessWindowRoot.Texts.HasAutoSelectStatus}" TextWrapping="Wrap"
+                                               FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
+                                               AutomationProperties.AutomationId="BusinessAutoSelectStatus"/>
+                                    <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ServerPickerCaption}" TextWrapping="Wrap"
+                                               FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <ComboBox x:Name="BusinessServerSelector" SelectionChanged="OnBusinessServerSelectionChanged"
+                                              PlaceholderText="{Binding #BusinessWindowRoot.Texts.ServerPickerPlaceholder}"
+                                              MinHeight="48" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                              AutomationProperties.AutomationId="BusinessServerSelector"
+                                              AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.Server}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="business:BusinessServerChoiceViewModel">
+                                                <Grid ColumnDefinitions="8,Auto,*,Auto" ColumnSpacing="6" ToolTip.Tip="{Binding StatusText}">
+                                                    <Ellipse Classes="business-health-dot" Width="8" Height="8"
+                                                             Classes.good="{Binding IsGood}" Classes.warning="{Binding IsWarning}"
+                                                             Classes.bad="{Binding IsBad}" VerticalAlignment="Center"/>
+                                                    <Image Grid.Column="1" Source="{Binding CountryFlag}" Width="21" Height="14"
+                                                           IsVisible="{Binding HasCountry}" VerticalAlignment="Center" ToolTip.Tip="{Binding CountryName}"/>
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayName}"/>
+                                                        <TextBlock Text="{Binding CountryName}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasCountry}"
+                                                                   FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                                        <TextBlock Text="{Binding MetricsText}" IsVisible="{Binding HasMetadata}" TextTrimming="CharacterEllipsis"
+                                                                   ToolTip.Tip="{Binding MetricsHint}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="3" VerticalAlignment="Center" MaxWidth="94">
+                                                        <TextBlock Text="{Binding PingText}" FontSize="11" TextWrapping="Wrap" TextAlignment="Right"/>
+                                                        <TextBlock Text="{Binding SlowBadgeText}" IsVisible="{Binding IsSlow}" FontSize="11"
+                                                                   Foreground="{DynamicResource WarningFgBrush}" TextAlignment="Right"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button x:Name="BusinessServerRefresh" Classes="business-outline" HorizontalAlignment="Left"
+                                            Content="{Binding #BusinessWindowRoot.Texts.ServerRefresh}" Click="OnBusinessServerRefresh"
+                                            IsEnabled="{Binding #BusinessWindowRoot.Texts.CanTestServers}"
+                                            AutomationProperties.AutomationId="BusinessServerRefresh"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border Height="1" Margin="10,0" Background="{DynamicResource BorderSubtleBrush}"/>
+                    <Button x:Name="BusinessModeMenuButton" Classes="home-setting"
+                            Click="OnBusinessModeMenuToggle"
+                            AutomationProperties.AutomationId="BusinessModeMenu"
+                            AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.ModeMenu}"
+                            AutomationProperties.ItemStatus="{Binding #BusinessWindowRoot.Texts.ModeSummary}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <TextBlock VerticalAlignment="Center" Text="{Binding #BusinessWindowRoot.Texts.ModeMenu}"/>
+                            <TextBlock Grid.Column="1" VerticalAlignment="Center" TextAlignment="Right" TextWrapping="Wrap"
+                                       FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Text="{Binding #BusinessWindowRoot.Texts.ModeSummary}"/>
+                            <icons:Pictogram Grid.Column="2" Id="chevron-down" Classes="setting-chevron"
+                                             Classes.expanded="{Binding #BusinessModePanel.IsVisible}"/>
+                        </Grid>
+                    </Button>
+                    <Border x:Name="BusinessModePanel" IsVisible="False" Padding="10,8"
+                            Background="{DynamicResource SurfaceSunkenBrush}">
+                        <StackPanel Spacing="7">
+                            <TextBlock IsVisible="{Binding IsConnected}" TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Text="{Binding #BusinessWindowRoot.Texts.ModeLocked}"/>
+                            <StackPanel Spacing="8" IsEnabled="{Binding #BusinessWindowRoot.Texts.CanToggleConnection}"
+                                        IsVisible="{Binding !IsConnected}">
+                                <RadioButton GroupName="BusinessMode" IsChecked="{Binding IsSplitTunnel}" IsEnabled="{Binding !IsConnected}">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding #BusinessWindowRoot.Texts.Split}" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding #BusinessWindowRoot.Texts.SplitDescription}" TextWrapping="Wrap" FontSize="11"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </StackPanel>
+                                </RadioButton>
+                                <RadioButton GroupName="BusinessMode" IsChecked="{Binding !IsSplitTunnel, Mode=OneWay}" IsEnabled="{Binding !IsConnected}">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding #BusinessWindowRoot.Texts.FullCompact}" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding #BusinessWindowRoot.Texts.FullDescription}" TextWrapping="Wrap" FontSize="11"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </StackPanel>
+                                </RadioButton>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </Window>

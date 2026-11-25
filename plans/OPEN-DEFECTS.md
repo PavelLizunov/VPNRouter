@@ -26,10 +26,22 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P1** - Business repair hides the resend action after report failure and can leave Connect visibly available while a recovery attempt owns it. Review at released 2.51.2. See phase-business-neon-ui-2026-11-25.md.
-- [ ] **P1** - Business menu diagnostics can send directly with disclosure only on hover; transient menu dismissal hides the workflow. Use visible consent and stable controls. See phase-business-neon-ui-2026-11-25.md.
-- [ ] **P2** - Business Home omits the current server selection mode, places the expanded server content below VPN mode, and gives two different refresh actions similar labels. Some narrow rows truncate key text. See phase-business-neon-ui-2026-11-25.md.
-- [ ] **P2** - Business update and rollback controls and connection feedback have weak visual hierarchy. Keep destructive confirmation and legible controls, and show operation status. See phase-business-neon-ui-2026-11-25.md.
+- [x] **P1** - Business repair calls the diagnostics core without its required cancellation argument, and a preflight subscription refresh can cancel the repair that requested it when the saved server row is replaced. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P1** - Dismissing a report during the upload acknowledgement handoff can lose the visible receipt. A disposed controller can also publish a late delivery result. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P2** - The repair card omits the approved offline search retry, receipt styling and separate advice detail. Its keyboard focus can be lost when the primary button disappears. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P2** - The narrow layout fixture expects the successful startup refresh to stay hidden. The compiled Business matrix had no Home settings screenshots. The selected repair fixture now captures both inline settings at 360 px. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P2** - The condensed server summary can retain a visually fresh winner past the cache lifetime. The refresh button stays enabled when the build has no probe-compatible rows. See phase-business-neon-ui-2026-11-25.md. The summary checks expiry on refresh and on opening the picker, and the button requires probe targets. CI verification pending.
+
+- [x] **P1** - Business picker probes can consume the shared verifier slots during a local recovery. Pause and cancel picker probes while recovery owns the connection. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P2** - Selecting the saved server again in automatic mode leaves auto enabled, and server checks lack action feedback. Use an unselected picker with the saved label in automatic mode, and expose round progress. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P2** - The Business repair card can drop keyboard focus when its launcher or dismiss action disappears. Move focus to Cancel on open and restore the launcher on close when enabled, with a reachable control as fallback. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+
+- [x] **P1** - The Business redesign can display the configured VPN mode as the active mode of an adopted tunnel. Use accepted tunnel metadata or an unavailable label while connected. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+
+- [x] **P1** - Business repair hides the resend action after report failure and can leave Connect visibly available while a recovery attempt owns it. Review at released 2.51.2. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P1** - Business menu diagnostics can send directly with disclosure only on hover; transient menu dismissal hides the workflow. Use visible consent and stable controls. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P2** - Business Home omits the current server selection mode, places the expanded server content below VPN mode, and gives two different refresh actions similar labels. Some narrow rows truncate key text. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
+- [x] **P2** - Business update and rollback controls and connection feedback have weak visual hierarchy. Keep destructive confirmation and legible controls, and show operation status. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
 
 - [x] **P2** - A failed automatic start can reuse the same cached winner, and a subsequent failover can persist a transient selection over a manual preference. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
 
@@ -1014,4 +1026,4 @@ Corp2.50.11 delivery and necessary builds are explicitly owner-authorized.
 Scope and verification: phase-business-server-country-flags-2026-11-17.md.
 The separate null-country metadata behavior is not the observed two-node cause.
 
-- [ ] **P2** - The compact Business heading omits the installed version, so an employee cannot read it from the main screen. Bind the existing short version in the heading. Source change under review in #693.
+- [x] **P2** - The compact Business heading omitted the installed version. The Business window binds the short installed version in its heading. See #693 and phase-business-neon-ui-2026-11-25.md.

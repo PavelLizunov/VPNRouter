@@ -25,6 +25,7 @@ public partial class MainWindowViewModel
             if (_engine.IsRunning)
                 throw new InvalidOperationException(Strings.BusinessUpdateStopFailed);
             IsConnected = false;
+            SetBusinessConnectedServerName(null);
             ConnectButtonText = Strings.StartVPN;
             StatusText = Strings.NotConnected;
             _lastSuccessfulConnectAt = DateTime.MinValue;

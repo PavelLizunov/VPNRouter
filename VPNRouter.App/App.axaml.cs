@@ -176,11 +176,12 @@ public partial class App : Application
         menu.Items.Add(showItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(connectItem);
+        NativeMenuItem? businessDiagnosticsItem = null;
         if (VPNRouter.Core.ProductEdition.IsBusiness)
         {
-            var diagnostics = new NativeMenuItem(VPNRouter.Core.Localization.Strings.BusinessDiagnostics);
-            diagnostics.Click += (_, _) => _viewModel?.ExportDiagnosticsCommand.Execute(null);
-            menu.Items.Add(diagnostics);
+            businessDiagnosticsItem = new NativeMenuItem(VPNRouter.Core.Localization.Strings.BusinessDiagnostics);
+            businessDiagnosticsItem.Click += (_, _) => _viewModel?.ExportDiagnosticsCommand.Execute(null);
+            menu.Items.Add(businessDiagnosticsItem);
         }
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(quitItem);
@@ -217,10 +218,15 @@ public partial class App : Application
                 {
                     showItem.Header = VPNRouter.Core.ProductEdition.IsBusiness
                         ? VPNRouter.Core.Localization.Strings.BusinessOpen : Localization.Strings.TraySettings;
+                    if (businessDiagnosticsItem != null)
+                        businessDiagnosticsItem.Header = VPNRouter.Core.Localization.Strings.BusinessDiagnostics;
                     quitItem.Header = Localization.Strings.TrayExit;
                     connectItem.Header = _viewModel.IsConnected ? Localization.Strings.TrayStop : Localization.Strings.TrayStart;
+                    var connectedSuffix = VPNRouter.Core.ProductEdition.IsBusiness
+                        ? VPNRouter.Core.Localization.Strings.BusinessConnected
+                        : "Connected";
                     _trayIcon.ToolTipText = _viewModel.IsConnected
-                        ? VPNRouter.Core.ProductEdition.Name + " - Connected" : VPNRouter.Core.ProductEdition.Name;
+                        ? VPNRouter.Core.ProductEdition.Name + " - " + connectedSuffix : VPNRouter.Core.ProductEdition.Name;
                 }
             };
         }

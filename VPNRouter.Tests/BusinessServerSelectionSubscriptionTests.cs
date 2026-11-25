@@ -56,6 +56,9 @@ public sealed class BusinessServerSelectionSubscriptionTests
         Assert.Equal(CachedServer, fixture.Saved.Vless.ActiveServer);
         Assert.Equal(repair ? BusinessServerSelectionMode.Manual : BusinessServerSelectionMode.Automatic,
             fixture.Saved.App.BusinessServerSelectionMode);
+        // The fake start never reports a connected tunnel. The repair must
+        // still reach its failure UI after starting with the refreshed pool.
+        Assert.Equal(repair, services.IsRepairOpen);
     }
 
     [AvaloniaTheory]

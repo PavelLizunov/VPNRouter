@@ -37,6 +37,7 @@ public partial class MainWindowViewModel
 
     private bool _businessAutoSelect;
     private bool _businessRepairInProgress;
+    private string? _businessConnectedServerName;
 
     internal bool BusinessAutoSelect
     {
@@ -48,12 +49,48 @@ public partial class MainWindowViewModel
         }
     }
 
+    internal string? BusinessActiveServerName
+    {
+        get
+        {
+            if (!IsConnected) return null;
+            if (DisplayedTunnel is { } tunnel)
+                return DisplayedServer(tunnel)?.Name is { } name && !string.IsNullOrWhiteSpace(name) ? name : null;
+            return _displayExternalTunnel ? null : _businessConnectedServerName;
+        }
+    }
+
+    internal void SetBusinessConnectedServerName(string? name)
+    {
+        var normalized = string.IsNullOrWhiteSpace(name) ? null : name;
+        if (string.Equals(_businessConnectedServerName, normalized, StringComparison.Ordinal)) return;
+        _businessConnectedServerName = normalized;
+        OnPropertyChanged(nameof(BusinessActiveServerName));
+    }
+
+    internal bool IsBusinessAutoWinnerFresh =>
+        _businessAutoState == BusinessAutoState.Winner &&
+        _businessAutoWinnerName != null &&
+        _businessAutoCachedOutcome?.Winner?.Name == _businessAutoWinnerName &&
+        DateTimeOffset.UtcNow - _businessAutoCachedAt < BusinessAutoResultTtl;
+
+    internal (string Name, int LatencyMs)? BusinessFreshAutoWinner =>
+        IsBusinessAutoWinnerFresh && _businessAutoWinnerName != null
+            ? (_businessAutoWinnerName, _businessAutoWinnerLatencyMs)
+            : null;
+
+    internal bool IsBusinessAutoChecking => _businessAutoState == BusinessAutoState.Checking;
+    internal bool IsBusinessAutoProblem => _businessAutoState is BusinessAutoState.None or BusinessAutoState.Unavailable;
+    internal bool IsBusinessServiceManaged => IsServiceManagedVpn;
+    internal string? BusinessActiveRoutingMode => DisplayedTunnel?.RoutingMode;
+
     internal string BusinessAutoSelectStatusText => _businessAutoState switch
     {
         BusinessAutoState.Checking => Core.Localization.Strings.BusinessAutoSelecting,
-        BusinessAutoState.Winner when _businessAutoWinnerName != null =>
+        BusinessAutoState.Winner when IsBusinessAutoWinnerFresh && _businessAutoWinnerName != null =>
             Core.Localization.Strings.BusinessAutoFastest(
                 _businessAutoWinnerName, _businessAutoWinnerLatencyMs),
+        BusinessAutoState.Winner => Core.Localization.Strings.BusinessServerAutoStale,
         BusinessAutoState.None => Core.Localization.Strings.BusinessAutoNoneWorking,
         BusinessAutoState.Unavailable => Core.Localization.Strings.BusinessAutoCheckUnavailable,
         _ => string.Empty

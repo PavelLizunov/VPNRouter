@@ -33,6 +33,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     private int _refreshedCount;
     private enum RefreshState { None, NotConfigured, Updating, Updated, Failed, Cancelled }
     private enum DiagnosticState { Ready, LocalOnly, Collecting, Sending, Collected, Delivered, CollectFailed, SendFailed, Cancelled, OpenFailed }
+    private enum DiagnosticOutcome { Ignored, Collected, Delivered, CollectFailed, SendFailed, Cancelled }
 
     public string RefreshStatus => _refreshState switch
     {
@@ -43,7 +44,8 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         RefreshState.Cancelled => Strings.BusinessSubscriptionCancelled,
         _ => string.Empty
     };
-    public bool IsRefreshStatusVisible => _refreshState is RefreshState.Updating or RefreshState.Failed or RefreshState.Cancelled;
+    public bool IsRefreshStatusVisible => _refreshState is RefreshState.NotConfigured
+        or RefreshState.Updating or RefreshState.Updated or RefreshState.Failed or RefreshState.Cancelled;
     public string DiagnosticStatus => _diagnosticState switch
     {
         DiagnosticState.LocalOnly => Strings.BusinessDiagnosticsLocalOnly,
@@ -67,11 +69,19 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     private void SetDiagnosticState(DiagnosticState state)
     {
         _diagnosticState = state;
+        SyncRepairFromDiagnosticState(state);
         RefreshLocalization();
     }
     internal void RefreshLocalization()
     {
         OnPropertyChanged(nameof(RepairHint));
+        OnPropertyChanged(nameof(HasRepairHint));
+        OnPropertyChanged(nameof(RepairHeading));
+        OnPropertyChanged(nameof(RepairBody));
+        OnPropertyChanged(nameof(RepairActionText));
+        OnPropertyChanged(nameof(RepairDismissText));
+        OnPropertyChanged(nameof(RepairAdviceFooter));
+        OnPropertyChanged(nameof(RepairRetrySearchText));
         OnPropertyChanged(nameof(RefreshStatus));
         OnPropertyChanged(nameof(IsRefreshStatusVisible));
         OnPropertyChanged(nameof(DiagnosticStatus));
@@ -94,7 +104,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         _diagnostics = diagnostics ?? new BusinessDiagnostics(configuration, http);
         RefreshListCommand = new(RefreshListAsync, CanRefresh);
         CollectCommand = new(() => RunDiagnosticsAsync(false), () => !_disposed && !IsRepairOpen && !IsDiagnosticBusy);
-        SendCommand = new(() => RunDiagnosticsAsync(true), () => !_disposed && !IsRepairOpen && !IsDiagnosticBusy && configuration.SupportEndpoint != null);
+        SendCommand = new(OpenRepairConsentFromMenuAsync, CanSend);
         CancelDiagnosticCommand = new(() => _diagnostic?.Cancel(), () => !_disposed && IsDiagnosticBusy);
         OpenReportCommand = new(OpenReport, () => !_disposed && !IsDiagnosticBusy && _report != null);
         _vm.PropertyChanged += OnVmChanged;
@@ -108,6 +118,18 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     private bool CanRefresh() => _visible && _refresh == null &&
         !_vm.IsBusinessSubscriptionPreflight && !_vm.IsBusinessRepairInProgress && CanRefreshPool;
 
+    private bool CanSend() => RepairAvailable && !IsRepairOpen && !IsDiagnosticBusy &&
+        _repairAttempt == null && !_repairSendActive && _configuration.SupportEndpoint != null;
+
+    private Task OpenRepairConsentFromMenuAsync()
+    {
+        if (!CanSend()) return Task.CompletedTask;
+        // The menu item routes to the visible consent card. Collection and the
+        // network upload happen only from the card's explicit primary action.
+        BeginRepairWorkflow(RepairStep.Consent);
+        return Task.CompletedTask;
+    }
+
     private bool CanRefreshPool => !_disposed && _configuration.Subscription != null &&
         (_visible || _vm.IsBusinessSubscriptionPreflight) && _vm.CanRefreshBusinessServers;
 
@@ -119,7 +141,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         _visible = visible;
         if (!visible)
         {
-            CloseRepair();
+            CloseRepairForHide();
             _timer.Stop();
             if (!_vm.IsBusinessSubscriptionPreflight) _refresh?.Cancellation.Cancel();
         }
@@ -151,10 +173,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
             RefreshListCommand.NotifyCanExecuteChanged();
             return;
         }
-        if (_repairStep is RepairStep.Analyzing or RepairStep.Advice or RepairStep.Failed ||
-            (_repairStep == RepairStep.Consent && e.PropertyName != nameof(MainWindowViewModel.SelectedServer)))
-            CloseRepair();
-        NotifyRepairCommands();
+        OnRepairHostChanged(e.PropertyName);
         if (e.PropertyName == nameof(MainWindowViewModel.SelectedServer)) return;
         if (_refresh != null && !CanRefreshPool) _refresh.Cancellation.Cancel();
         if (!_started) _ = RefreshListAsync();
@@ -245,16 +264,25 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         internal readonly TaskCompletionSource Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    internal async Task RunDiagnosticsAsync(bool send, bool fresh = false, CancellationToken cancellationToken = default)
+    internal Task RunDiagnosticsAsync(bool send, bool fresh = false,
+        CancellationToken cancellationToken = default) =>
+        RunDiagnosticsCoreAsync(send, fresh, cancellationToken);
+
+    private async Task<DiagnosticOutcome> RunDiagnosticsCoreAsync(bool send, bool fresh,
+        CancellationToken cancellationToken)
     {
-        if (_disposed || IsDiagnosticBusy || (IsRepairOpen && !fresh) || (send && _configuration.SupportEndpoint == null)) return;
-        IsDiagnosticBusy = true; NotifyDiagnosticCommands();
+        if (_disposed || IsDiagnosticBusy || ((IsRepairOpen && !fresh) && !_repairSendActive) ||
+            (send && _configuration.SupportEndpoint == null)) return DiagnosticOutcome.Ignored;
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
         _diagnostic = operation;
+        IsDiagnosticBusy = true;
+        NotifyDiagnosticCommands();
         var uploading = false;
         var acknowledged = false;
+        var outcome = DiagnosticOutcome.Ignored;
         try
         {
+            operation.Token.ThrowIfCancellationRequested();
             // Retry sends the same saved archive, allowing receiver deduplication.
             if (fresh || !send || _report == null || _delivered)
             {
@@ -269,13 +297,16 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
             if (send)
             {
                 uploading = true;
+                _supportReply = null;
                 SetDiagnosticState(DiagnosticState.Sending);
-                _supportReply = await _diagnostics.SendWithReplyAsync(_report!, () =>
+                operation.Token.ThrowIfCancellationRequested();
+                var reply = await _diagnostics.SendWithReplyAsync(_report!, () =>
                 {
-                    acknowledged = true;
+                    Volatile.Write(ref acknowledged, true);
                     void ShowReceipt()
                     {
-                        if (_disposed || _diagnostic != operation || _supportReply != null) return;
+                        if (_disposed || _diagnostic != operation || _supportReply != null ||
+                            operation.IsCancellationRequested) return;
                         _delivered = true;
                         _supportReply = BusinessSupportReply.Pending;
                         SetDiagnosticState(DiagnosticState.Delivered);
@@ -283,21 +314,60 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
                     if (Dispatcher.UIThread.CheckAccess()) ShowReceipt();
                     else Dispatcher.UIThread.Post(ShowReceipt);
                 }, operation.Token);
+                if (_disposed) return DiagnosticOutcome.Ignored;
+                _supportReply = operation.IsCancellationRequested && Volatile.Read(ref acknowledged)
+                    ? BusinessSupportReply.WaitCancelled
+                    : reply;
                 _delivered = true;
+                outcome = DiagnosticOutcome.Delivered;
+            }
+            else
+            {
+                outcome = DiagnosticOutcome.Collected;
             }
             if (!_disposed) SetDiagnosticState(send ? DiagnosticState.Delivered : DiagnosticState.Collected);
         }
-        catch (OperationCanceledException) { if (!_disposed) FinishFailure(DiagnosticState.Cancelled); }
-        catch { if (!_disposed) FinishFailure(uploading ? DiagnosticState.SendFailed : DiagnosticState.CollectFailed); }
+        catch (OperationCanceledException) when (operation.IsCancellationRequested)
+        {
+            if (_disposed) return DiagnosticOutcome.Ignored;
+            if (Volatile.Read(ref acknowledged))
+            {
+                // The upload was accepted before the wait stopped. Keep that
+                // receipt instead of reporting a delivery failure.
+                _delivered = true;
+                _supportReply = BusinessSupportReply.WaitCancelled;
+                outcome = DiagnosticOutcome.Delivered;
+                if (!_disposed) SetDiagnosticState(DiagnosticState.Delivered);
+            }
+            else
+            {
+                outcome = DiagnosticOutcome.Cancelled;
+                if (!_disposed) FinishFailure(DiagnosticState.Cancelled);
+            }
+        }
+        catch
+        {
+            outcome = Volatile.Read(ref acknowledged) ? DiagnosticOutcome.Delivered
+                : uploading ? DiagnosticOutcome.SendFailed : DiagnosticOutcome.CollectFailed;
+            if (!_disposed) FinishFailure(uploading ? DiagnosticState.SendFailed : DiagnosticState.CollectFailed);
+        }
         finally
         {
             _diagnostic = null;
             if (!_disposed) { IsDiagnosticBusy = false; NotifyDiagnosticCommands(); }
         }
+        return outcome;
         void FinishFailure(DiagnosticState state)
         {
-            if (acknowledged) { _delivered = true; _supportReply = BusinessSupportReply.Unavailable; }
-            SetDiagnosticState(acknowledged ? DiagnosticState.Delivered : state);
+            var delivered = Volatile.Read(ref acknowledged);
+            if (delivered)
+            {
+                _delivered = true;
+                _supportReply = operation.IsCancellationRequested
+                    ? BusinessSupportReply.WaitCancelled
+                    : BusinessSupportReply.Unavailable;
+            }
+            SetDiagnosticState(delivered ? DiagnosticState.Delivered : state);
         }
     }
 

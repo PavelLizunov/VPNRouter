@@ -89,6 +89,8 @@ public partial class UpdateNotificationViewModel : ObservableObject
     public string VersionHistoryMessage => _versionHistoryState switch
     {
         VersionHistoryState.Loading => Strings.LoadingVersions,
+        VersionHistoryState.Ready when _updateSource is BusinessUpdateSource =>
+            VPNRouter.Core.Localization.Strings.BusinessRollbackSafetyHint,
         VersionHistoryState.Ready => IncludeVersionHistoryCandidates ? Strings.RollbackSafetyHintCandidates : Strings.RollbackSafetyHint,
         VersionHistoryState.Empty => Strings.NoOlderVersions,
         VersionHistoryState.Failed => Strings.VersionHistoryFailed,
@@ -103,18 +105,22 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     public string VersionHistoryButtonText => IsVersionHistoryVisible
         ? Strings.HideOlderVersions
-        : Strings.OtherVersions;
+        : _updateSource is BusinessUpdateSource
+            ? VPNRouter.Core.Localization.Strings.BusinessPreviousVersions
+            : Strings.OtherVersions;
 
     public string RollbackConfirmationText => SelectedRollback == null
         ? string.Empty
         : string.Format(Strings.RollbackConfirmation, SelectedRollback.Version);
-    public string ConfirmRollbackText => Strings.ConfirmRollback;
+    public string ConfirmRollbackText => _updateSource is BusinessUpdateSource
+        ? Strings.RollbackAction : Strings.ConfirmRollback;
     public string CancelRollbackText => Strings.Cancel;
 
     private UpdateSourceInfo? _pendingUpdate;
 
     // Once an error is shown, a late async status post must not overwrite it.
     private volatile bool _errorLocked;
+    private bool _businessUpdateDownloading;
 
     public UpdateNotificationViewModel(UpdateSettings settings, ILogger logger)
         : this(settings, logger, updateSource: null, exitApplication: null)
@@ -144,9 +150,9 @@ public partial class UpdateNotificationViewModel : ObservableObject
         _updateChecker.DownloadProgress += progress =>
             Dispatcher.UIThread.Post(() =>
             {
-                if (_errorLocked) return;
+                if (_errorLocked || (_updateSource is BusinessUpdateSource && !IsDownloading)) return;
                 DownloadProgress = progress;
-                if (_updateSource is BusinessUpdateSource)
+                if (_updateSource is BusinessUpdateSource && _businessUpdateDownloading)
                     Message = string.Format(Strings.UpdateDownloading, progress);
             });
 
@@ -326,6 +332,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
         if (target == null) return;
 
         _errorLocked = false;
+        _businessUpdateDownloading = _updateSource is BusinessUpdateSource;
         IsDownloading = true;
         DownloadProgress = 0;
         Message = string.Format(Strings.UpdateDownloading, 0);
@@ -335,7 +342,9 @@ public partial class UpdateNotificationViewModel : ObservableObject
             var extractedDir = await _updateSource.DownloadAsync(target, progress: null).ConfigureAwait(false);
             var finish = await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Message = Strings.UpdateApplying;
+                _businessUpdateDownloading = false;
+                Message = _updateSource is BusinessUpdateSource
+                    ? VPNRouter.Core.Localization.Strings.BusinessUpdateApplying : Strings.UpdateApplying;
                 return ReserveRestart?.Invoke();
             });
             bool applied = false;
@@ -360,6 +369,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
             _errorLocked = true;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                _businessUpdateDownloading = false;
                 Message = string.Format(Strings.UpdateFailed, ex.Message);
                 IsDownloading = false;
                 DownloadProgress = 0;

@@ -9,14 +9,19 @@ internal sealed record BusinessSupportReply(string State, string? MessageRu = nu
     internal static readonly BusinessSupportReply Legacy = new("legacy");
     internal static readonly BusinessSupportReply Pending = new("pending");
     internal static readonly BusinessSupportReply Unavailable = new("unavailable");
+    internal static readonly BusinessSupportReply WaitCancelled = new("wait_cancelled");
+    internal bool IsReadyAdvice => State == "ready" && (MessageRu != null || MessageEn != null);
+    internal bool IsPendingAnalysis => State == "pending";
+    internal string? AdviceText => IsReadyAdvice
+        ? Strings.Lang.Equals("ru", StringComparison.OrdinalIgnoreCase) ? MessageRu ?? MessageEn : MessageEn ?? MessageRu
+        : null;
     internal string Message => State switch
     {
         "legacy" => Strings.BusinessDiagnosticsDelivered,
         "pending" => Strings.BusinessDiagnosticsReplyPending,
         "queued" => Strings.BusinessDiagnosticsReplyQueued,
         "wait_cancelled" => Strings.BusinessDiagnosticsReplyWaitCancelled,
-        "ready" when (Strings.Lang.Equals("ru", StringComparison.OrdinalIgnoreCase) ? MessageRu ?? MessageEn : MessageEn ?? MessageRu) is { } text
-            => Strings.BusinessDiagnosticsReceived + " " + text,
+        "ready" when AdviceText is { } text => Strings.BusinessDiagnosticsReceived + " " + text,
         _ => Strings.BusinessDiagnosticsReplyUnavailable
     };
 

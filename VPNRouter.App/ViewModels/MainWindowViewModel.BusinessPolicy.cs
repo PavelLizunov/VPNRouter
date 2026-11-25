@@ -27,6 +27,22 @@ public partial class MainWindowViewModel
         _businessPolicyApplied is { } receipt && _engine.IsPolicyReceiptCurrent(receipt) ? receipt : null;
     internal BusinessPolicyAppliedReceipt? HistoricalBusinessPolicy => _businessPolicyAppliedHistory;
 
+    internal bool IsBusinessPolicyDanger => _businessPolicyStartupBlocked || _businessPolicyRuntimeBlocked;
+    internal bool IsBusinessPolicyApplying => !IsBusinessPolicyDanger && _businessPolicy != null && _businessPolicyApplyActive;
+    internal bool HasHomeBusinessPolicyNotice
+    {
+        get
+        {
+            if (IsBusinessPolicyDanger) return true;
+            if (_businessPolicy == null) return false;
+            if (_businessPolicyApplyActive || _businessPolicy.IsUnavailable) return true;
+            if (_businessPolicy.Current is not { } accepted) return false;
+            return AppliedBusinessPolicy is not { } applied ||
+                applied.Revision != accepted.Revision ||
+                applied.EffectiveDigest != accepted.EffectiveDigest;
+        }
+    }
+
     internal string BusinessPolicyStatusText
     {
         get
@@ -217,6 +233,7 @@ public partial class MainWindowViewModel
             _businessPolicyStopRequested = false;
             IsConnected = false;
             IsConnecting = false;
+            SetBusinessConnectedServerName(null);
             ConnectButtonText = PolicyStrings.StartVPN;
             StatusText = PolicyStrings.NotConnected;
             _lastSuccessfulConnectAt = DateTime.MinValue;
