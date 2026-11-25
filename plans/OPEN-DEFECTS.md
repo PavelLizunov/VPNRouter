@@ -26,6 +26,11 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - Business repair hides the resend action after report failure and can leave Connect visibly available while a recovery attempt owns it. Review at released 2.51.2. See phase-business-neon-ui-2026-11-25.md.
+- [ ] **P1** - Business menu diagnostics can send directly with disclosure only on hover; transient menu dismissal hides the workflow. Use visible consent and stable controls. See phase-business-neon-ui-2026-11-25.md.
+- [ ] **P2** - Business Home omits the current server selection mode, places the expanded server content below VPN mode, and gives two different refresh actions similar labels. Some narrow rows truncate key text. See phase-business-neon-ui-2026-11-25.md.
+- [ ] **P2** - Business update and rollback controls and connection feedback have weak visual hierarchy. Keep destructive confirmation and legible controls, and show operation status. See phase-business-neon-ui-2026-11-25.md.
+
 - [x] **P2** - A failed automatic start can reuse the same cached winner, and a subsequent failover can persist a transient selection over a manual preference. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
 
 - [x] **P1** - The proposed Business probe can omit HTTP Upgrade or TLS ALPN while verifying a direct VLESS profile. Use the same outbound as the eventual VPN session and validate its serialized transport. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
