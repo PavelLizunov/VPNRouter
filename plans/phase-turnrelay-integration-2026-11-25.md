@@ -55,9 +55,32 @@ Branch: `feat/turnrelay-integration` from `origin/main` `ac85310f`.
   sanitizer build stalled inside the macOS ASAN runtime initializer on this
   worker, before the test binary could run; that is an environment limitation,
   not a contract failure.
-- `windows-worker` was stopped and the sequential pool was leased by
-  `vpnctl-turnrelay-20261125` during implementation; a queued request for VM100
-  was submitted. The .NET suite result is recorded below once that lease clears.
+- `windows-worker` (VM100, 8 logical CPUs, 12.7 GiB free RAM, 100.5 GB free on
+  C:, no running build jobs) at `f36d6ef8` with SDK `10.0.400` instead of the
+  pinned `10.0.404` (that exact patch is absent; the test checkout used a
+  temporary `global.json` pin, the repository commit is unchanged):
+  - Focused TurnRelay/P0/chain/diagnostic suites: 541 passed, 0 failed,
+    10 skipped (`ProtocolGroupsTests` excluded because its non-Avalonia tests
+    initialize the Pictogram platform only when a full-suite run has already
+    started Avalonia; the class passed in the full run).
+  - Full CI filter (`!~Headless`, `!~PageScreenshot`, `!~VisualDiff`):
+    4830 passed, 10 failed, 31 skipped in 6m11s. All 10 failures are host
+    environment failures unrelated to this change: nine
+    `VpnctlPackagingCharacterizationTests` cases launch a temporary
+    `powershell -File` fixture that the worker's execution policy blocks
+    (`running scripts is disabled on this system`), and
+    `ReleaseToolingContractTests.WindowsMaintenanceFixtureCompletes`
+    (`Test-InstallerRepair.ps1`) fails deleting its own temp tree ("directory is
+    not empty"). No TurnRelay/P0 test failed.
+  - Android Java checks on `mac-worker` with Temurin 17:
+    `NativeEngineSlotTest`, `NativeReportPrivacyTest`,
+    `AndroidTunnelLifecycleTest` all passed.
+- WINBRAT Android readiness: `adb`, SDK 36 and emulator exist; AEHD reports
+  "installed and usable"; AVDs under `C:\android-build\avd` include
+  `pixel6-api34`, `pixel9pro-api36`, `pixel9pro-api37`, `pixel3a-api29`,
+  `huawei-nogms-api33`, `redmi-budget-api34`. `libbox.aar` is not in the repo,
+  so the APK build waits for the new core archive. `harness-test` itself has no
+  SDK/adb/emulator/dotnet and remains control-plane only.
 
 ## Unknowns
 
