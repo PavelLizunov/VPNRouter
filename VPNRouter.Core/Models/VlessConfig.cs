@@ -74,7 +74,8 @@ public class VlessConfig
             active = all.FirstOrDefault(s =>
                 s.Name?.Equals(ActiveServer, StringComparison.OrdinalIgnoreCase) == true);
 
-        active ??= all[0];
+        // Never auto-select a TurnRelay hop: it is only meaningful through its target.
+        active ??= all.FirstOrDefault(s => !s.IsTurnRelay) ?? all[0];
 
         if (!string.IsNullOrEmpty(active.DetourVia))
             return WithRequiredHop(active, all);

@@ -51,7 +51,17 @@ public partial class SingBoxManager
     /// </summary>
     private bool VerifyAppliedConfigTags(string configJson)
     {
-        var expected = ReadProxyTags(configJson);
+        HashSet<string> expected;
+        try
+        {
+            expected = ReadProxyTags(configJson);
+        }
+        catch (JsonException)
+        {
+            _logger.Warning("[SingBoxManager] Restart verification skipped — the applied document is not valid JSON");
+            return false;
+        }
+
         if (expected.Count == 0)
             return true;
 

@@ -59,7 +59,8 @@ public static class VlessServersResolver
 
                 if (!matchByName)
                 {
-                    var newActive = subscriptionAggregated[0].Name;
+                    var newActive = (subscriptionAggregated.FirstOrDefault(s => !s.IsTurnRelay)
+                        ?? subscriptionAggregated[0]).Name;
                     logger?.Warning(
                         "[VlessServersResolver] Active server outside subscription scope, using first available server");
                     settings.Vless.ActiveServer = newActive;
