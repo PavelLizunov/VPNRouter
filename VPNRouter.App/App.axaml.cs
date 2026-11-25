@@ -14,6 +14,7 @@ public partial class App : Application
     private MainWindowViewModel? _viewModel;
     private TrayIcon? _trayIcon;
     private Avalonia.Threading.DispatcherTimer? _trayWatchTimer;
+    private VPNRouter.App.Services.TrayMemoryTrimmer? _trayMemoryTrimmer;
 
     public override void Initialize()
     {
@@ -126,6 +127,7 @@ public partial class App : Application
 
             desktop.Exit += (_, _) =>
             {
+                try { _trayMemoryTrimmer?.Dispose(); _trayMemoryTrimmer = null; } catch { }
                 try { _trayWatchTimer?.Stop(); _trayWatchTimer = null; } catch { }
                 VPNRouter.App.Services.AppAutomationDriver.Stop();
                 try { VPNRouter.Core.Services.LockFile.Release(Serilog.Log.Logger); } catch { }
@@ -137,6 +139,10 @@ public partial class App : Application
                 mainWindow.Hide();
             else
                 mainWindow.Show();
+
+            _trayMemoryTrimmer = new VPNRouter.App.Services.TrayMemoryTrimmer(
+                mainWindow,
+                () => _viewModel?.ForceRefreshRuntimeStatus());
 
 #if PLATFORM_WINDOWS
             if (!string.IsNullOrEmpty(Program.PendingRouteAppPath))
@@ -232,10 +238,12 @@ public partial class App : Application
         {
             Serilog.Log.Warning("[Tray] the icon cannot be added to the notification area; window minimized to the taskbar instead of hidden");
             window.WindowState = WindowState.Minimized;
+            _trayMemoryTrimmer?.ScheduleTrim();
             return;
         }
 
         window.Hide();
+        _trayMemoryTrimmer?.ScheduleTrim();
         Serilog.Log.Information("[Tray] window hidden to the tray (icon in the notification area: {Registered})", registered?.ToString() ?? "unknown");
 
         if (VPNRouter.App.Services.TrayGuard.ShouldShowHint(registered, VPNRouter.App.Services.TrayGuard.HintShownBefore()))

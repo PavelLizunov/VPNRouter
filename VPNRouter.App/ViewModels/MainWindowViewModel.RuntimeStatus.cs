@@ -17,6 +17,13 @@ public partial class MainWindowViewModel
 
     private int _runtimeSkipRemaining;
 
+    private static readonly IBrush FallbackRunningBrush =
+        new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A));
+    private static readonly IBrush FallbackFailedBrush =
+        new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26));
+    private static readonly IBrush FallbackIdleBrush =
+        new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromRgb(0x94, 0xA0, 0xB2));
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(VpnBadgeText))]
     [NotifyPropertyChangedFor(nameof(VpnBadgeBrush))]
@@ -87,7 +94,7 @@ public partial class MainWindowViewModel
 
             if (isHidden)
             {
-                _runtimeSkipRemaining = 4;
+                _runtimeSkipRemaining = 14;
             }
             else if (vpnRunning || zapretRunning || tgProxyRunning)
             {
@@ -215,9 +222,9 @@ public partial class MainWindowViewModel
 
         return status switch
         {
-            ComponentRuntimeStatus.Running => new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A)),
-            ComponentRuntimeStatus.Failed  => new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
-            _                              => new SolidColorBrush(Color.FromRgb(0x94, 0xA0, 0xB2))
+            ComponentRuntimeStatus.Running => FallbackRunningBrush,
+            ComponentRuntimeStatus.Failed  => FallbackFailedBrush,
+            _                              => FallbackIdleBrush
         };
     }
 
