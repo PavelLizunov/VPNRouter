@@ -5,9 +5,12 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.UpdateSources;
 using VPNRouter.Tests.Fakes;
+using Strings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.Tests;
 
@@ -74,11 +77,6 @@ public class PageScreenshotTests
             foreach (var entry in new[]
                      {
                          PickerEntry("Aruba Cloud VLESS"),
-                         PickerEntry("ACDN VLESS"),
-                         PickerEntry("BitFolk VLESS"),
-                         PickerEntry("TINYSERVERS VLESS"),
-                         PickerEntry("TRANSP VLESS"),
-                         PickerEntry("BitFolk WS", transport: "ws"),
                          PickerEntry("BitFolk XHTTP", transport: "xhttp"),
                          PickerEntry("Hysteria Games", protocol: "hysteria2"),
                          PickerEntry("Naive Web", protocol: "naive"),
@@ -134,12 +132,76 @@ public class PageScreenshotTests
             vm.SubscriptionServers.Add(new ServerViewModel(PickerEntry("Fixture server")));
             var page = new SimplePage { DataContext = vm };
             var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+            assistant.DataContext = vm;
             assistant.FindControl<Button>("MoreChecksToggle")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             ScreenshotHelper.CapturePage(page, "assistant-more-checks-360", 360, 720);
         }
         finally
         {
             VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Assistant_consent_360()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            var crashes = Directory.CreateDirectory(Path.Combine(directory.FullName, "crashes"));
+            File.WriteAllText(Path.Combine(crashes.FullName, "crash-001.txt"), """
+                VPNRouter crash report
+                Version:   2.51.1-r1
+                Fatal:     True
+
+                ──── Exception ────
+                System.InvalidOperationException: synthetic crash
+                """);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "ru";
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-consent", Enabled = true }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = new MainWindowViewModel(store)
+            {
+                StepAssistantAsync = (_, _, _, _, _) =>
+                    Task.FromResult(new AssistantStep(AssistantStepStatus.Diagnosis, Text: "unexpected")),
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Width = 360, Height = 360, Content = panel };
+            window.Show();
+            try
+            {
+                var consent = panel.FindControl<Border>("AssistantConsent")!;
+                var consentText = panel.FindControl<TextBlock>("AssistantConsentText")!;
+                var shown = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                consentText.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == TextBlock.TextProperty && !string.IsNullOrEmpty(consentText.Text))
+                        shown.TrySetResult(true);
+                };
+                panel.FindControl<Button>("MoreChecksToggle")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                panel.FindControl<Button>("DiagnoseCrash")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await shown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+                window.UpdateLayout();
+                Assert.True(consent.IsVisible);
+                Assert.Equal(Strings.AssistantCrashConsent, consentText.Text);
+                ScreenshotHelper.Capture(window, "assistant-consent-360");
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
         }
     }
 

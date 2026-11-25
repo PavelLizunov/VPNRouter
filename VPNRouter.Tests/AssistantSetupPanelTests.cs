@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
@@ -18,6 +19,18 @@ namespace VPNRouter.Tests;
 [Collection(SafeModeStateCollection.Name)]
 public sealed class AssistantSetupPanelTests
 {
+    private static void WriteCrashReport(string dataDir)
+    {
+        var crashes = Directory.CreateDirectory(Path.Combine(dataDir, "crashes"));
+        File.WriteAllText(Path.Combine(crashes.FullName, "crash-001.txt"), """
+            VPNRouter crash report
+            Version:   2.51.1-r1
+            Fatal:     True
+
+            ──── Exception ────
+            System.InvalidOperationException: synthetic crash
+            """);
+    }
     [Theory]
     [InlineData("Подключи VPN.", "SetVpnConnected", true, null)]
     [InlineData("Disconnect the VPN", "SetVpnConnected", false, null)]
@@ -225,7 +238,7 @@ public sealed class AssistantSetupPanelTests
                 Assert.Equal(original.App.RoutingMode, restored.App.RoutingMode);
                 Assert.Equal(original.ActiveProfile, restored.ActiveProfile);
                 Assert.Equal(original.App.RoutingAppsMode, restored.App.RoutingAppsMode);
-                Assert.Equal(original.App.RoutingAppsExclude, restored.App.RoutingAppsExclude);
+                Assert.True(original.App.RoutingAppsExclude.SequenceEqual(restored.App.RoutingAppsExclude));
                 Assert.False(Assert.Single(restored.App.Subscriptions).Enabled);
             }
             finally { window.Close(); }
@@ -284,6 +297,123 @@ public sealed class AssistantSetupPanelTests
                 Assert.True(crash.IsEffectivelyVisible);
             }
             finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Crash_analysis_requires_consent_and_does_not_send_when_declined()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            WriteCrashReport(directory.FullName);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "en";
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-crash", Enabled = true }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            int providerCalls = 0;
+            using var vm = new MainWindowViewModel(store, logger)
+            {
+                StepAssistantAsync = (_, _, _, _, _) =>
+                {
+                    providerCalls++;
+                    return Task.FromResult(new AssistantStep(AssistantStepStatus.Diagnosis, Text: "unexpected"));
+                },
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Width = 360, Height = 400, Content = panel };
+            window.Show();
+            try
+            {
+                var consent = panel.FindControl<Border>("AssistantConsent")!;
+                var consentText = panel.FindControl<TextBlock>("AssistantConsentText")!;
+                var confirm = panel.FindControl<Button>("ConfirmAssistant")!;
+                var decline = panel.FindControl<Button>("CancelAssistant")!;
+                var crash = panel.FindControl<Button>("DiagnoseCrash")!;
+                var status = panel.FindControl<TextBlock>("AssistantStatus")!;
+                var shown = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                consentText.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == TextBlock.TextProperty && !string.IsNullOrEmpty(consentText.Text))
+                        shown.TrySetResult(true);
+                };
+                crash.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == InputElement.IsEnabledProperty && crash.IsEnabled)
+                        completed.TrySetResult(true);
+                };
+
+                panel.FindControl<Button>("MoreChecksToggle")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                crash.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await shown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+                Assert.True(consent.IsVisible);
+                Assert.Equal(Strings.AssistantCrashConsent, consentText.Text);
+                Assert.Equal(AutomationLiveSetting.Assertive, AutomationProperties.GetLiveSetting(consentText));
+                Assert.Equal(Strings.AssistantSend, confirm.Content);
+                Assert.Equal(Strings.SourceDiagnosisDoNotSend, decline.Content);
+
+                decline.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+                Assert.Equal(0, providerCalls);
+                Assert.Equal(Strings.AssistantDiagnosisDeclined, status.Text);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
+    [Fact]
+    public async Task Crash_analysis_rechecks_the_feed_after_consent()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            WriteCrashReport(directory.FullName);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-crash-after", Enabled = true }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger)
+            {
+                StepAssistantAsync = (_, _, _, _, _) =>
+                    throw new InvalidOperationException("The provider must not be called."),
+            };
+
+            var result = await vm.DiagnoseAssistantCrashAsync((question, _) =>
+            {
+                Assert.Equal(Strings.AssistantCrashConsent, question);
+                vm.Subscriptions.Single().Enabled = false;
+                return Task.FromResult(true);
+            }, TestContext.Current.CancellationToken);
+
+            Assert.Equal(Strings.AssistantSubscription, result);
         }
         finally
         {

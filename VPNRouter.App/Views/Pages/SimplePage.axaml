@@ -750,7 +750,7 @@
                                                 <StackPanel IsVisible="{Binding IsSimpleCategoryStart}"
                                                             Spacing="3" Margin="4,6,4,1">
                                                     <TextBlock Text="{Binding SimpleCategoryName}"
-                                                               FontSize="{StaticResource FsXs}"
+                                                               FontSize="{StaticResource FsSm}"
                                                                FontWeight="SemiBold"
                                                                Foreground="{DynamicResource TextMutedBrush}"
                                                                TextWrapping="Wrap"/>

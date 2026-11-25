@@ -53,11 +53,11 @@ jobs:
       - name: Test
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"
 
-      # The visual suite stays out of the main test filter. These four captures cover the two owner-reported
+      # The visual suite stays out of the main test filter. These five captures cover the two owner-reported
       # surfaces, reuse the build above, and are uploaded for review without another compile.
       - name: UI snapshots (Simple picker and assistant)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~PageScreenshotTests.SimplePage_ServerCategories|FullyQualifiedName~PageScreenshotTests.Assistant_one_primary_step_520|FullyQualifiedName~PageScreenshotTests.Assistant_more_checks_360" --logger "console;verbosity=normal"
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~PageScreenshotTests.SimplePage_ServerCategories|FullyQualifiedName~PageScreenshotTests.Assistant_one_primary_step_520|FullyQualifiedName~PageScreenshotTests.Assistant_more_checks_360|FullyQualifiedName~PageScreenshotTests.Assistant_consent_360" --logger "console;verbosity=normal"
 
       - name: Upload UI snapshots
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -68,6 +68,7 @@ jobs:
             VPNRouter.Tests/screenshots/simple-server-categories-*.png
             VPNRouter.Tests/screenshots/assistant-one-step-520.png
             VPNRouter.Tests/screenshots/assistant-more-checks-360.png
+            VPNRouter.Tests/screenshots/assistant-consent-360.png
           if-no-files-found: error
           retention-days: 14
 

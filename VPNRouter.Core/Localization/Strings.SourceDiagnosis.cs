@@ -4,8 +4,8 @@ namespace VPNRouter.Core.Localization;
 
 public static partial class Strings
 {
-    internal static string SourceDiagnosisPreview => Ru ? "Выбрать последний отчёт" : "Review latest report";
-    internal static string SourceConnectionPreview => Ru ? "Разобрать последнее подключение" : "Review last failed connection";
+    internal static string SourceDiagnosisPreview => Ru ? "Отчёт о сбое" : "Crash report";
+    internal static string SourceConnectionPreview => Ru ? "Последнее подключение" : "Last connection";
     internal static string SourceConnectionExpired => Ru ? "Состояние подключения изменилось. Выберите актуальный сбой." : "The connection state changed. Select the current failure.";
     internal static string SourceConnectionConsent(SourceConnectionFailure failure, DateTime utc)
     {
@@ -26,7 +26,6 @@ public static partial class Strings
     internal static string SourceDiagnosisInsufficient => Ru
         ? "В отчёте не удалось определить ни тип ошибки, ни место сбоя, ни состояние подключения."
         : "The report contains no recognized error, failing component or connection signal.";
-    internal static string SourceDiagnosisDeclined => Ru ? "Признаки сбоя остались на устройстве." : "Crash indicators stayed on this device.";
     internal static string SourceDiagnosisDoNotSend => Ru ? "Не отправлять" : "Keep on device";
     internal static string SourceDiagnosisConsent(AssistantCrashReport report)
     {
@@ -37,7 +36,6 @@ public static partial class Strings
             : $"Report from {time} ({kind}). Send this build and the crash indicators for source analysis?";
     }
 
-    internal static string SourceDiagnosisSend => Ru ? "Отправить признаки сбоя" : "Send crash indicators";
     internal static string SourceDiagnosisMismatch => Ru
         ? "Не удалось связать последний отчёт с установленной сборкой. Можно воспользоваться обычным разбором сбоя."
         : "The last report could not be matched to this installation. You can still use Analyze crash.";

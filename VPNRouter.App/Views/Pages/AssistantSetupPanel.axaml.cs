@@ -15,7 +15,8 @@ public partial class AssistantSetupPanel : UserControl
     private MainWindowViewModel? _viewModel;
     private readonly List<SubscriptionViewModel> _subscriptions = [];
     private CancellationTokenSource? _request;
-    private bool _diagnosingSource;
+    private bool _diagnosticConsent;
+    private string? _diagnosticWorking;
     private bool _moreChecksExpanded;
     private TaskCompletionSource<bool>? _confirmation;
 
@@ -58,7 +59,7 @@ public partial class AssistantSetupPanel : UserControl
 
     private void SubscriptionsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (_confirmation != null || _diagnosingSource) _request?.Cancel();
+        if (_confirmation != null || _diagnosticConsent) _request?.Cancel();
         TrackSubscriptions();
         RefreshLabels();
     }
@@ -78,7 +79,7 @@ public partial class AssistantSetupPanel : UserControl
     {
         if (args.PropertyName is nameof(SubscriptionViewModel.Url) or nameof(SubscriptionViewModel.Enabled))
         {
-            if (_confirmation != null || _diagnosingSource) _request?.Cancel();
+            if (_confirmation != null || _diagnosticConsent) _request?.Cancel();
             RefreshLabels();
         }
     }
@@ -89,6 +90,7 @@ public partial class AssistantSetupPanel : UserControl
         var canUndo = _viewModel?.HasAssistantUndo == true;
         var running = _request != null;
         var consent = _confirmation != null;
+        var composer = canPlan && !running && !consent;
         var hasStatus = !string.IsNullOrWhiteSpace(AssistantStatus.Text);
         IsVisible = canPlan || canUndo || running || consent || hasStatus;
         AutomationProperties.SetName(this, Strings.AssistantTitle);
@@ -101,15 +103,16 @@ public partial class AssistantSetupPanel : UserControl
         AutomationProperties.SetName(MoreChecksToggle, Strings.AssistantMoreChecks);
         UndoAssistant.Content = Strings.AssistantUndo;
         CancelRun.Content = Strings.AssistantCancel;
-        ConfirmAssistant.Content = _diagnosingSource ? Strings.SourceDiagnosisSend : Strings.AssistantConfirm;
-        CancelAssistant.Content = _diagnosingSource ? Strings.SourceDiagnosisDoNotSend : Strings.AssistantDecline;
+        ConfirmAssistant.Content = _diagnosticConsent ? Strings.AssistantSend : Strings.AssistantConfirm;
+        CancelAssistant.Content = _diagnosticConsent ? Strings.SourceDiagnosisDoNotSend : Strings.AssistantDecline;
         DiagnoseSource.Content = Strings.SourceDiagnosisPreview;
         DiagnoseConnection.Content = Strings.SourceConnectionPreview;
         DiagnoseCrash.Content = Strings.AssistantDiagnoseCrash;
         RepairVpn.Content = Strings.AssistantRepair;
 
-        AssistantGoal.IsVisible = canPlan && !running && !consent;
-        RunAssistant.IsVisible = canPlan && !running && !consent;
+        AssistantComposer.IsVisible = composer;
+        AssistantGoal.IsVisible = composer;
+        RunAssistant.IsVisible = composer;
         AssistantStatus.IsVisible = !consent && hasStatus;
         CancelRun.IsVisible = running && !consent;
         UndoAssistant.IsVisible = canUndo && !running && !consent;
@@ -135,8 +138,15 @@ public partial class AssistantSetupPanel : UserControl
     private async void RunAssistant_Click(object? sender, RoutedEventArgs args)
     {
         var goal = AssistantGoal.Text;
-        if (_viewModel is not { } vm || string.IsNullOrWhiteSpace(goal)
-            || TopLevel.GetTopLevel(this) is not Window window) return;
+        if (_viewModel is not { } vm) return;
+        if (string.IsNullOrWhiteSpace(goal))
+        {
+            AssistantStatus.Text = Strings.AssistantInvalidGoal;
+            RefreshLabels();
+            AssistantGoal.Focus();
+            return;
+        }
+        if (TopLevel.GetTopLevel(this) is not Window window) return;
         window.AddHandler(InputElement.KeyDownEvent, CancelFromWindow, RoutingStrategies.Tunnel);
         window.AddHandler(InputElement.PointerPressedEvent, CancelFromWindow, RoutingStrategies.Tunnel);
         try
@@ -158,14 +168,31 @@ public partial class AssistantSetupPanel : UserControl
 
     private async void DiagnoseCrash_Click(object? sender, RoutedEventArgs args)
     {
-        if (_viewModel is { } vm)
-            await RunAsync(vm.DiagnoseAssistantCrashAsync, Strings.AssistantDiagnosingCrash, Strings.AssistantUnavailable);
+        if (_viewModel is not { } vm || TopLevel.GetTopLevel(this) is not Window window) return;
+        _diagnosticConsent = true;
+        _diagnosticWorking = Strings.AssistantDiagnosingCrash;
+        window.AddHandler(InputElement.KeyDownEvent, CancelFromWindow, RoutingStrategies.Tunnel);
+        window.AddHandler(InputElement.PointerPressedEvent, CancelFromWindow, RoutingStrategies.Tunnel);
+        try
+        {
+            await RunAsync(ct => vm.DiagnoseAssistantCrashAsync(ConfirmChangeAsync, ct),
+                Strings.AssistantDiagnosingCrash, Strings.AssistantUnavailable);
+        }
+        finally
+        {
+            window.RemoveHandler(InputElement.KeyDownEvent, CancelFromWindow);
+            window.RemoveHandler(InputElement.PointerPressedEvent, CancelFromWindow);
+            _diagnosticConsent = false;
+            _diagnosticWorking = null;
+            RefreshLabels();
+        }
     }
 
     private async void DiagnoseSource_Click(object? sender, RoutedEventArgs args)
     {
         if (_viewModel is not { } vm || _request != null || TopLevel.GetTopLevel(this) is not Window window) return;
-        _diagnosingSource = true;
+        _diagnosticConsent = true;
+        _diagnosticWorking = Strings.SourceDiagnosisWorking;
         window.AddHandler(InputElement.KeyDownEvent, CancelFromWindow, RoutingStrategies.Tunnel);
         window.AddHandler(InputElement.PointerPressedEvent, CancelFromWindow, RoutingStrategies.Tunnel);
         try
@@ -176,7 +203,8 @@ public partial class AssistantSetupPanel : UserControl
         {
             window.RemoveHandler(InputElement.KeyDownEvent, CancelFromWindow);
             window.RemoveHandler(InputElement.PointerPressedEvent, CancelFromWindow);
-            _diagnosingSource = false;
+            _diagnosticConsent = false;
+            _diagnosticWorking = null;
             RefreshLabels();
         }
     }
@@ -192,13 +220,16 @@ public partial class AssistantSetupPanel : UserControl
         ct.ThrowIfCancellationRequested();
         var choice = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _confirmation = choice;
-        AssistantConsentText.Text = description;
+        AssistantConsentText.Text = string.Empty;
         AssistantStatus.Text = string.Empty;
-        ConfirmAssistant.Content = _diagnosingSource ? Strings.SourceDiagnosisSend : Strings.AssistantConfirm;
-        CancelAssistant.Content = _diagnosingSource ? Strings.SourceDiagnosisDoNotSend : Strings.AssistantDecline;
+        ConfirmAssistant.Content = _diagnosticConsent ? Strings.AssistantSend : Strings.AssistantConfirm;
+        CancelAssistant.Content = _diagnosticConsent ? Strings.SourceDiagnosisDoNotSend : Strings.AssistantDecline;
         ConfirmAssistant.IsEnabled = true;
         CancelAssistant.IsEnabled = true;
         RefreshLabels();
+        // Publish the question only after the live region is visible so screen readers announce it.
+        AssistantConsentText.Text = description;
+        AutomationProperties.SetName(AssistantConsentText, description);
         CancelAssistant.Focus();
         try
         {
@@ -215,12 +246,11 @@ public partial class AssistantSetupPanel : UserControl
     {
         if (_confirmation?.TrySetResult(true) == true)
         {
-            AssistantConsent.IsVisible = false;
-            ConfirmAssistant.IsVisible = false;
-            CancelAssistant.IsVisible = false;
-            CancelRun.IsVisible = _request != null;
-            AssistantStatus.Text = _diagnosingSource ? Strings.SourceDiagnosisWorking : Strings.AssistantWorking;
-            AssistantStatus.IsVisible = true;
+            _confirmation = null;
+            AssistantStatus.Text = _diagnosticConsent
+                ? _diagnosticWorking ?? Strings.AssistantWorking
+                : Strings.AssistantWorking;
+            RefreshLabels();
         }
     }
 
@@ -246,6 +276,7 @@ public partial class AssistantSetupPanel : UserControl
         if (_request != null) return;
         using var request = new CancellationTokenSource();
         _request = request;
+        _moreChecksExpanded = false;
         DiagnoseConnection.IsEnabled = DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
             = UndoAssistant.IsEnabled = AssistantGoal.IsEnabled = MoreChecksToggle.IsEnabled = false;
         AssistantStatus.Text = progress ?? Strings.AssistantWorking;

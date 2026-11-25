@@ -62,16 +62,26 @@ public partial class MainWindowViewModel
             ?? (eligible.Length == 1 ? eligible[0] : null);
     }
 
-    internal async Task<string> DiagnoseAssistantCrashAsync(CancellationToken ct)
+    internal async Task<string> DiagnoseAssistantCrashAsync(
+        Func<string, CancellationToken, Task<bool>> consent, CancellationToken ct)
     {
-        var evidence = await Task.Run(() => AssistantCrashEvidence.ReadLatest(AppPaths.DataDir), ct);
-        if (evidence == null) return Strings.AssistantNoCrash;
-        var subscription = SelectAssistantSubscription(_settings.App);
-        if (subscription == null) return Strings.AssistantSubscription;
+        ct.ThrowIfCancellationRequested();
+        var url = SelectAssistantSubscription(_settings.App)?.Url;
+        if (url == null) return Strings.AssistantSubscription;
 
-        var result = await StepAssistantAsync(subscription.Url, "Analyze the last VPNRouter crash", IsRussian,
+        var evidence = await Task.Run(() => AssistantCrashEvidence.ReadLatest(AppPaths.DataDir), ct);
+        ct.ThrowIfCancellationRequested();
+        if (evidence == null) return Strings.AssistantNoCrash;
+        if (SelectAssistantSubscription(_settings.App)?.Url != url) return Strings.AssistantSubscription;
+
+        if (!await consent(Strings.AssistantCrashConsent, ct)) return Strings.AssistantDiagnosisDeclined;
+        ct.ThrowIfCancellationRequested();
+        if (SelectAssistantSubscription(_settings.App)?.Url != url) return Strings.AssistantSubscription;
+
+        var result = await StepAssistantAsync(url, "Analyze the last VPNRouter crash", IsRussian,
             new AssistantObservation(IsConnected, IsConnecting, IsSimpleMode, [], null, evidence), ct);
         ct.ThrowIfCancellationRequested();
+        if (SelectAssistantSubscription(_settings.App)?.Url != url) return Strings.AssistantSubscription;
         return result is { Status: AssistantStepStatus.Diagnosis, Text: { } summary }
             ? summary
             : AssistantStepMessage(result.Status);
