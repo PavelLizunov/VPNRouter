@@ -54,7 +54,10 @@ public sealed class TurnRelayUriParserTests : IDisposable
         };
         if (overrides != null)
             foreach (var pair in overrides)
-                payload[pair.Key] = pair.Value;
+            {
+                if (pair.Value is null) payload.Remove(pair.Key);
+                else payload[pair.Key] = pair.Value;
+            }
         return BuildLink(payload, name);
     }
 
