@@ -97,48 +97,38 @@ public class AndroidSubscriptionRefreshTests
     [Fact]
     public void SaveServerLinks_KeepsTheHopAndSelectsTheChainedTarget()
     {
-        var previous = SingBoxFeatures.OverrideTurnRelay;
-        SingBoxFeatures.OverrideTurnRelay = true;
-        try
+        var hop = new VlessServerEntry
         {
-            var payload = new Dictionary<string, object?>
+            Name = "relay",
+            Protocol = "turnrelay",
+            Server = "203.0.113.20",
+            Port = 53492,
+            OutboundId = "turnrelay-hop-1",
+            TurnRelay = new TurnRelayConfig
             {
-                ["id"] = "turnrelay-hop-1",
-                ["provider"] = "static",
-                ["server_type"] = "exit",
-                ["server"] = "203.0.113.20",
-                ["server_port"] = 53492,
-                ["turn_server"] = "192.0.2.10:3478",
-                ["turn_username"] = "user",
-                ["turn_password"] = "secret",
-                ["password"] = "exit-secret",
-                ["server_fingerprint"] = new string('a', 64),
-                ["connections"] = 2,
-                ["mode"] = "dtls",
-                ["udp"] = true,
-            };
-            var json = JsonSerializer.SerializeToUtf8Bytes(payload);
-            var encoded = Convert.ToBase64String(json).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-            var hop = ServerUriParser.Parse($"turnrelay://{encoded}#relay");
-            var target = VlessUriParser.Parse(
-                "vless://00000000-0000-4000-8000-000000000001@exit.invalid:443?security=none" +
-                "&outbound=target-1&detour=turnrelay-hop-1#exit");
+                TurnServer = "192.0.2.10:3478",
+                TurnUsername = "user",
+                TurnPassword = "secret",
+                Password = "exit-secret",
+                ServerFingerprint = new string('a', 64),
+                Connections = 2,
+                Mode = "dtls",
+            },
+        };
+        var target = VlessUriParser.Parse(
+            "vless://00000000-0000-4000-8000-000000000001@exit.invalid:443?security=none" +
+            "&outbound=target-1&detour=turnrelay-hop-1#exit");
 
-            using var prefs = new PreferenceFile(new());
-            var saved = AndroidSubscriptionRefresh.SaveServerLinks(
-                new[] { hop, target }, "target-uri", "qr-command",
-                prefs.Read, prefs.Commit, JsonSerializerOptions.Default);
+        using var prefs = new PreferenceFile(new());
+        var saved = AndroidSubscriptionRefresh.SaveServerLinks(
+            new[] { hop, target }, "target-uri", "qr-command",
+            prefs.Read, prefs.Commit, JsonSerializerOptions.Default);
 
-            Assert.True(saved);
-            Assert.Equal(2, prefs.Standalone.Count);
-            Assert.Equal("exit", prefs.Read(AndroidSubscriptionRefresh.SelectedName));
-            Assert.Equal("target-uri", prefs.Read(AndroidSubscriptionRefresh.ManualUri));
-            Assert.Equal("manual", prefs.Read(AndroidSubscriptionRefresh.ConfigMode));
-        }
-        finally
-        {
-            SingBoxFeatures.OverrideTurnRelay = previous;
-        }
+        Assert.True(saved);
+        Assert.Equal(2, prefs.Standalone.Count);
+        Assert.Equal("exit", prefs.Read(AndroidSubscriptionRefresh.SelectedName));
+        Assert.Equal("target-uri", prefs.Read(AndroidSubscriptionRefresh.ManualUri));
+        Assert.Equal("manual", prefs.Read(AndroidSubscriptionRefresh.ConfigMode));
     }
 
     [Fact]
