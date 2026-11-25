@@ -842,6 +842,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _engine.DisposeOwnedSession();
         _disposed = true;
 
+        try { CancelCategoryVerification(); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: category verification cancellation failed"); }
+
 #if PLATFORM_WINDOWS
         try { _tgProxyLifetimeCts.Cancel(); }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: TgProxy cancellation failed"); }

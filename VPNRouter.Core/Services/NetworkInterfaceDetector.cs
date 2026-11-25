@@ -96,7 +96,10 @@ public static class NetworkInterfaceDetector
         return pick is { Index: > 0 } ? pick.Value.Index : null;
     }
 
-    private static NicSnapshot? PickInternetNic(string ownTunName, ILogger? logger)
+    internal static string? GetInternetInterfaceName(string ownTunName, ILogger? logger = null) =>
+        PickInternetNic(ownTunName, logger, excludeTunnels: true)?.Name;
+
+    private static NicSnapshot? PickInternetNic(string ownTunName, ILogger? logger, bool excludeTunnels = false)
     {
         var snapshots = new List<NicSnapshot>();
         try
@@ -104,6 +107,8 @@ public static class NetworkInterfaceDetector
             foreach (var iface in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (iface.Name.Equals(ownTunName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (excludeTunnels && iface.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
                     continue;
 
                 IPAddress? v4 = null, v6 = null;

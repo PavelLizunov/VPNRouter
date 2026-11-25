@@ -297,20 +297,55 @@ public partial class MainWindowViewModel
         ConfirmSimplePreference(new() { FeedId = feedId, RowKey = SubscriptionEntry.RowKey(row.SourceEntry) }, row);
     }
 
-    internal void ConfirmSimpleCategory(ProtocolGroup category)
+    internal async Task ConfirmSimpleCategoryAsync(ProtocolGroup category)
     {
-        var row = SelectedSubscriptionServer is { } selected && SubscriptionServers.Contains(selected) &&
-            selected.ProtocolGroup == category && SubscriptionServerPreference.CanAutoSelect(selected.SourceEntry)
-            ? selected : SubscriptionServers.FirstOrDefault(row => row.ProtocolGroup == category &&
-                SubscriptionServerPreference.CanAutoSelect(row.SourceEntry));
-        if (row != null) ConfirmSimplePreference(SubscriptionServerPreference.InCategory(category), row);
+        if (!CanConfirmSimplePreference() || _categoryProbeCts != null) return;
+        var rows = GetCategoryRows(category);
+        if (rows.Count == 0) return;
+
+        var row = SelectedSubscriptionServer is { } selected && rows.Contains(selected) ? selected : rows[0];
+        if (IsConnected)
+        {
+            var choiceUnchanged = CaptureSimpleChoice(out _, includePresentation: false);
+            var revision = _routingSettingsRevision;
+            var generation = _connectionGeneration;
+            try
+            {
+                var winner = await VerifyCategoryRowsAsync(rows);
+                if (_disposed || !IsConnected || generation != _connectionGeneration ||
+                    revision != _routingSettingsRevision || !choiceUnchanged()) return;
+                if (winner == null)
+                {
+                    ShowCategoryVerificationFailure();
+                    return;
+                }
+                ClearCategoryVerificationFailure();
+                row = winner;
+            }
+            catch (OperationCanceledException) { return; }
+        }
+
+        ConfirmSimplePreference(SubscriptionServerPreference.InCategory(category), row);
+    }
+
+    private bool CanConfirmSimplePreference() =>
+        !_disposed && !_isLoadingUI && !SimpleCtaIsConnecting && !_isReconnecting &&
+        (IsSimpleMode ? CanPickSimpleSubscriptionServer : IsSubscribeMode);
+
+    private List<ServerViewModel> GetCategoryRows(ProtocolGroup category) =>
+        SubscriptionServers.Where(row => row.ProtocolGroup == category &&
+            SubscriptionServerPreference.CanAutoSelect(row.SourceEntry)).ToList();
+
+    private async Task<ServerViewModel?> VerifyCategoryRowsAsync(List<ServerViewModel> rows)
+    {
+        var winner = await PickCategoryServerAsync(rows.Select(row => row.SourceEntry).ToList(), _settings.Dns.LocalDns);
+        return rows.FirstOrDefault(row => ReferenceEquals(row.SourceEntry, winner));
     }
 
     private void ConfirmSimplePreference(SubscriptionServerPreference preference, ServerViewModel row)
     {
-        if (_isLoadingUI || SimpleCtaIsConnecting || _isReconnecting ||
-            (IsSimpleMode ? !CanPickSimpleSubscriptionServer : !IsSubscribeMode))
-            return;
+        if (!CanConfirmSimplePreference() || !SubscriptionServers.Contains(row)) return;
+        CancelCategoryVerification();
 
         if (IsSimpleMode) SmpFormExpanded = false;
         if (SimpleServerPreference == preference && ReferenceEquals(SelectedSubscriptionServer, row)) return;
@@ -320,14 +355,9 @@ public partial class MainWindowViewModel
         AutoSelectBestServer = false;
         _settings.App.ConfigMode = "subscribe";
         _settings.App.SubscriptionPreference = preference;
-        _updatingServerPickerSelection = true;
-        try { SelectedSubscriptionServer = row; }
-        finally { _updatingServerPickerSelection = false; }
+        SetSubscriptionPickerRow(row);
 
-        if (Subscriptions.FirstOrDefault(feed => feed.Id == row.SubscriptionId) is { } source)
-            SmpInput = source.Url;
-
-        SmpErrorText = string.Empty;
+        ClearCategoryVerificationFailure();
         MarkRoutingSettingsChanged();
         RaiseSimpleHomeProps();
 
@@ -345,6 +375,16 @@ public partial class MainWindowViewModel
             _logger.Warning("[Simple] Server selection save failed ({ErrorType})", ex.GetType().Name);
             SmpErrorText = Strings.ApplyFailed;
         }
+    }
+
+    private void SetSubscriptionPickerRow(ServerViewModel row)
+    {
+        _updatingServerPickerSelection = true;
+        try { SelectedSubscriptionServer = row; }
+        finally { _updatingServerPickerSelection = false; }
+
+        if (Subscriptions.FirstOrDefault(feed => feed.Id == row.SubscriptionId) is { } source)
+            SmpInput = source.Url;
     }
 
     internal static string SimpleCategoryName(ProtocolGroup group) => group switch
@@ -373,8 +413,10 @@ public partial class MainWindowViewModel
 
     // Only the command that raised IsConnecting may release it after pre-flight.
     private int? _simplePreparationGeneration;
+    private CancellationTokenSource? _categoryProbeCts;
 
     internal Func<IReadOnlyList<VlessServerEntry>, TimeSpan, Task<List<ServerLiveness>>>? SimpleProbe { get; set; }
+    internal Func<VlessServerEntry, string?, CancellationToken, Task<DeepVerifyResult>>? CategoryProbe { get; set; }
     internal Func<AppSettings, CancellationToken, bool,
         Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)>>? SimpleTunnelStart { get; set; }
 
@@ -526,7 +568,7 @@ public partial class MainWindowViewModel
                 StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                 // A direct probe of an exit cannot judge the selected route through its required hop.
                 var chosen = preference?.CategoryName != null
-                    ? await PickCategoryServerAsync(candidates, preferred)
+                    ? await PickCategoryServerAsync(candidates, submitted.Dns.LocalDns)
                     : preference != null || preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia)
                         ? preferred
                         : await PickSimpleServerAsync(candidates.Where(server => server.Dnstt == null).ToList(),
@@ -535,7 +577,8 @@ public partial class MainWindowViewModel
                     (preference != null && (revision != _routingSettingsRevision || !choiceUnchanged()))) return;
                 if (chosen == null)
                 {
-                    SmpErrorText = IsRussian
+                    if (preference?.CategoryName != null) ShowCategoryVerificationFailure();
+                    else SmpErrorText = IsRussian
                         ? "Все серверы недоступны — проверь подписку или интернет."
                         : "All servers are unreachable — check your subscription or internet.";
                     return;
@@ -575,6 +618,7 @@ public partial class MainWindowViewModel
             IsConnecting = false;
             await ToggleConnectionCoreAsync(submitted, manual: true);
         }
+        catch (OperationCanceledException) when (!Preparing()) { }
         finally
         {
             if (_simplePreparationGeneration == generation) IsConnecting = false;
@@ -611,21 +655,77 @@ public partial class MainWindowViewModel
         SaveSettingsFromControls(preserveConfigMode: SimpleServerPreference != null);
     }
 
-    private async Task<VlessServerEntry> PickCategoryServerAsync(List<VlessServerEntry> candidates, VlessServerEntry preferred)
+    private async Task<VlessServerEntry?> PickCategoryServerAsync(List<VlessServerEntry> candidates, string? localDns)
     {
-        if (candidates.Count < 2) return preferred;
+        const int concurrency = 2;
+        var probe = CategoryProbe;
+        if (probe == null)
+        {
+            var tunName = OperatingSystem.IsMacOS() ? "utun99" : _settings.Tun.InterfaceName;
+            var outboundInterface = IsConnected ? NetworkInterfaceDetector.GetInternetInterfaceName(tunName, _logger) : null;
+            if (IsConnected && outboundInterface == null) return null;
+            var verifier = new VlessDeepVerifier(_logger) { MaxConcurrency = concurrency };
+            probe = (entry, dns, token) => verifier.VerifyForSelectionAsync(entry, dns, outboundInterface, token);
+        }
 
+        using var request = new CancellationTokenSource();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(request.Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        var results = new DeepVerifyResult?[candidates.Count];
+        CancelCategoryVerification();
+        _categoryProbeCts = request;
         try
         {
-            var probe = SimpleProbe ?? ((servers, timeout) => new ServerHealthProbe(_logger).ProbeAllAsync(servers, timeout));
-            var results = await probe(candidates, TimeSpan.FromSeconds(4));
-            return ServerHealthProbe.PickBest(results.Where(result => candidates.Contains(result.Server))) ?? preferred;
+            await Parallel.ForEachAsync(Enumerable.Range(0, candidates.Count), new ParallelOptions
+            {
+                CancellationToken = deadline.Token,
+                MaxDegreeOfParallelism = concurrency
+            }, async (index, token) =>
+            {
+                results[index] = await probe(candidates[index], localDns, token);
+            });
         }
-        catch (Exception)
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
+        catch (Exception ex)
         {
-            _logger.Warning("[SmartConnect] Category probe failed, using the preferred server");
-            return preferred;
+            _logger.Warning("[SmartConnect] Category verification failed ({ErrorType})", ex.GetType().Name);
         }
+        finally
+        {
+            if (ReferenceEquals(_categoryProbeCts, request)) _categoryProbeCts = null;
+        }
+
+        request.Token.ThrowIfCancellationRequested();
+        return Enumerable.Range(0, candidates.Count)
+            .Where(index => results[index]?.Ok == true)
+            .OrderBy(index => results[index]!.HttpLatencyMs)
+            .Select(index => candidates[index])
+            .FirstOrDefault();
+    }
+
+    private void CancelCategoryVerification()
+    {
+        try { _categoryProbeCts?.Cancel(); }
+        catch (ObjectDisposedException) { }
+    }
+
+    private void ShowCategoryVerificationFailure()
+    {
+        SmpErrorText = Core.Localization.Strings.SmpNoVerifiedServerInCategory;
+        StatusText = SmpErrorText;
+        if (!IsConnected) return;
+        _lastConnectionAlert = SmpErrorText;
+        RaiseSimpleAlertProps();
+    }
+
+    private void ClearCategoryVerificationFailure()
+    {
+        if (HasConnectionAlert && _lastConnectionAlert == SmpErrorText)
+        {
+            _lastConnectionAlert = null;
+            RaiseSimpleAlertProps();
+        }
+        SmpErrorText = string.Empty;
     }
 
     private async Task<VlessServerEntry?> PickSimpleServerAsync(List<VlessServerEntry> candidates,

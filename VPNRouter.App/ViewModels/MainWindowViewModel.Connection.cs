@@ -213,6 +213,7 @@ public partial class MainWindowViewModel
         if (toggle == ToggleAction.Stop)
         {
             if (submitted != null) return;
+            CancelCategoryVerification();
             SmpErrorText = string.Empty;
             IsConnecting = true;
             StatusText = Strings.Stopping;

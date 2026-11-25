@@ -24,7 +24,11 @@ public partial class MainWindowViewModel
 
     partial void OnIsConnectedChanged(bool value)
     {
-        if (!value) _displayExternalTunnel = false;
+        if (!value)
+        {
+            _displayExternalTunnel = false;
+            CancelCategoryVerification();
+        }
         SyncStatsTunnel();
         RefreshActiveIndicator();
         OnConnectedForProblems(value);

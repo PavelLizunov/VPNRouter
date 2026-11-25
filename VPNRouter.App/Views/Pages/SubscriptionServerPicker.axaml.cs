@@ -228,11 +228,11 @@ public partial class SubscriptionServerPicker : UserControl
             item.IsExpanded = item.Category == _expandedServerGroup;
     }
 
-    private void ChooseServerCategory(object? sender, RoutedEventArgs args)
+    private async void ChooseServerCategory(object? sender, RoutedEventArgs args)
     {
-        if (sender is not Button { DataContext: SimpleServerGroup group }) return;
-        _viewModel?.ConfirmSimpleCategory(group.Category);
-        ChoiceConfirmed?.Invoke();
+        if (sender is not Button { DataContext: SimpleServerGroup group } || _viewModel is not { } vm) return;
+        await vm.ConfirmSimpleCategoryAsync(group.Category);
+        if (ReferenceEquals(vm, _viewModel)) ChoiceConfirmed?.Invoke();
     }
 
     private void WireGroupServerList(object? sender, RoutedEventArgs args)

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Automation;
@@ -584,9 +585,10 @@ public sealed class SimpleConnectStatusTests
     }
 
     [AvaloniaTheory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ConnectPicksWithinTheCategoryAcrossAModeSwitch(bool startInAdvanced)
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task ConnectRequiresVerifiedTrafficWithinTheCategory(bool startInAdvanced, bool verified)
     {
         var slow = Entry("slow", "slow.invalid");
         var fast = Entry("fast", "fast.invalid");
@@ -595,6 +597,7 @@ public sealed class SimpleConnectStatusTests
         var settings = new AppSettings();
         settings.App.ConfigMode = "subscribe";
         settings.App.UiMode = "simple";
+        settings.Dns.LocalDns = "system";
         settings.App.Subscriptions =
         [
             new() { Url = "https://feed.invalid/auto", Servers = [slow, fast, other] }
@@ -603,17 +606,15 @@ public sealed class SimpleConnectStatusTests
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = CreateVm(store);
 
-        vm.ConfirmSimpleCategory(ProtocolGroup.Daily);
+        await vm.ConfirmSimpleCategoryAsync(ProtocolGroup.Daily);
         if (startInAdvanced) vm.ToggleUiModeCommand.Execute(null);
-        string[]? probed = null;
-        List<ServerLiveness>? results = null;
-        var probe = new TaskCompletionSource<List<ServerLiveness>>(TaskCreationOptions.RunContinuationsAsynchronously);
-        vm.SimpleProbe = (rows, _) =>
+        var probed = new ConcurrentBag<(string Name, string? Dns)>();
+        var probe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.CategoryProbe = async (entry, dns, token) =>
         {
-            probed = rows.Select(row => row.Name).ToArray();
-            results = rows.Select(row =>
-                new ServerLiveness(row, Alive: true, LatencyMs: row.Name == fast.Name ? 20 : 100)).ToList();
-            return probe.Task;
+            probed.Add((entry.Name, dns));
+            await probe.Task.WaitAsync(token);
+            return new DeepVerifyResult(verified, entry.Name == fast.Name ? 20 : 100, null, null);
         };
         var starts = 0;
         AcceptedTunnelInfo? started = null;
@@ -631,13 +632,96 @@ public sealed class SimpleConnectStatusTests
         vm.ToggleUiModeCommand.Execute(null);
         Assert.Equal(preference, vm.SimpleServerPreference);
         Assert.Equal(0, starts);
-        probe.SetResult(Assert.IsType<List<ServerLiveness>>(results));
+        probe.SetResult();
         await connecting;
-        Assert.Equal(1, starts);
 
-        Assert.Equal(new[] { slow.Name, fast.Name }, probed);
-        Assert.Equal(fast.Server, Assert.IsType<AcceptedTunnelInfo>(started).Server.Address);
+        Assert.Equal(new[] { fast.Name, slow.Name }, probed.Select(item => item.Name).OrderBy(name => name));
+        Assert.All(probed, item => Assert.Equal("system", item.Dns));
+        Assert.Equal(verified ? 1 : 0, starts);
+        if (verified) Assert.Equal(fast.Server, Assert.IsType<AcceptedTunnelInfo>(started).Server.Address);
+        else Assert.Equal(Strings.SmpNoVerifiedServerInCategory, vm.SmpErrorText);
         Assert.Equal(ProtocolGroup.Daily, store.Load(AppPaths.ConfigYamlPath).App.SubscriptionPreference?.GetCategory());
+    }
+
+    [AvaloniaTheory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task ConnectedCategoryChoiceSavesOnlyACurrentVerifiedWinner(bool verified, bool disconnectDuringProbe)
+    {
+        var unverified = Entry("first", "first.invalid");
+        var working = Entry("second", "second.invalid");
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.UiMode = "simple";
+        settings.App.Subscriptions = [new()
+        {
+            Url = "https://feed.invalid/connected",
+            Servers = verified ? [unverified, working] : [unverified]
+        }];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        vm.IsConnected = true;
+        var releaseProbe = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.CategoryProbe = async (entry, _, token) =>
+        {
+            await releaseProbe.Task.WaitAsync(token);
+            return new DeepVerifyResult(verified && entry.Server == working.Server, 20, null, null);
+        };
+
+        var selection = vm.ConfirmSimpleCategoryAsync(ProtocolGroup.Daily);
+        Assert.False(selection.IsCompleted);
+        Assert.True(vm.SimpleCtaIsConnected);
+        if (disconnectDuringProbe) vm.IsConnected = false;
+        releaseProbe.SetResult();
+        await selection;
+
+        Assert.False(vm.IsConnecting);
+        var saved = store.Load(AppPaths.ConfigYamlPath);
+        if (verified && !disconnectDuringProbe)
+        {
+            Assert.Equal(ProtocolGroup.Daily, saved.App.SubscriptionPreference?.GetCategory());
+            Assert.Equal(SubscriptionEntry.RowKey(working), saved.App.ActiveSubscriptionRow);
+        }
+        else
+        {
+            Assert.Null(saved.App.SubscriptionPreference);
+            if (!verified) Assert.Equal(Strings.SmpNoVerifiedServerInCategory, vm.StatusText);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ServiceApplyDoesNotSaveAnUnverifiedReplacementFromTheCategory()
+    {
+        var replacement = Entry("replacement", "replacement.invalid");
+        var removed = Entry("removed", "removed.invalid");
+        var feed = new SubscriptionEntry { Url = "https://feed.invalid/service", Servers = [replacement] };
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.Subscriptions = [feed];
+        settings.App.SubscriptionPreference = SubscriptionServerPreference.InCategory(ProtocolGroup.Daily);
+        settings.App.ActiveSubscriptionId = feed.Id;
+        settings.App.ActiveSubscriptionServer = removed.Name;
+        settings.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(removed);
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        vm.IsConnected = true;
+        var probed = new ConcurrentBag<string>();
+        vm.CategoryProbe = (entry, _, _) =>
+        {
+            probed.Add(entry.Server);
+            return Task.FromResult(DeepVerifyResult.Failed("no control response"));
+        };
+        var saves = store.SaveCount;
+
+        await vm.ApplyPendingChangesCommand.ExecuteAsync(null);
+
+        Assert.Equal(replacement.Server, Assert.Single(probed));
+        Assert.Equal(saves, store.SaveCount);
+        Assert.Equal(Strings.SmpNoVerifiedServerInCategory, vm.StatusText);
+        Assert.True(vm.IsConnected);
     }
 
     [AvaloniaFact]
@@ -831,7 +915,7 @@ public sealed class SimpleConnectStatusTests
     [AvaloniaTheory]
     [InlineData(360, false)]
     [InlineData(450, true)]
-    public void SubscriptionPickersSharePolicyAndKeepTheRunningSession(int width, bool connected)
+    public async Task SubscriptionPickersSharePolicyAndKeepTheRunningSession(int width, bool connected)
     {
         var language = VPNRouter.App.Localization.Strings.Lang;
         try
@@ -970,9 +1054,9 @@ public sealed class SimpleConnectStatusTests
                     BoundText(simple, "ConfigKind"));
                 Capture(window, $"simple-picker-unified-simple-manual-{width}");
 
-                FindGroupButton(simpleGroups, ProtocolGroup.Daily, disclosure: false)
-                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Dispatcher.UIThread.RunJobs();
+                vm.CategoryProbe = (entry, _, _) => Task.FromResult(new DeepVerifyResult(true,
+                    entry.Server == dailySecond.Server ? 20 : 100, null, null));
+                await vm.ConfirmSimpleCategoryAsync(ProtocolGroup.Daily);
                 Assert.Equal(ProtocolGroup.Daily, vm.SimpleServerPreference?.GetCategory());
                 Assert.False(vm.IsConnecting);
             }

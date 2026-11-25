@@ -94,13 +94,65 @@ public sealed class VerificationProxyLoopbackTests
         Assert.False(await rejected);
     });
 
+    [Theory]
+    [InlineData("204 No Content", true)]
+    [InlineData("200 OK", false)]
+    [InlineData("302 Found", false)]
+    public Task SelectionControlRequiresExactNoContentResponse(string status, bool expected) => WithOwnedProxyAsync(async (proxy, ct) =>
+    {
+        using var origin = new TcpListener(IPAddress.Loopback, 0);
+        origin.Start();
+        var probe = DeepVerifyProbe.ProbeViaProxyAsync(proxy, TimeSpan.FromSeconds(5), ct,
+            $"http://{origin.LocalEndpoint}/control", expectNoContent: true);
+        using var connection = await origin.AcceptTcpClientAsync(ct);
+        await ReadOriginRequestAsync(connection.GetStream(), "/control", ct);
+        await ReplyAsync(connection, status, ct);
+
+        Assert.Equal(expected, (await probe).ok);
+    });
+
+    [Fact]
+    public async Task SelectionStunRetriesThroughTheSingBoxUdpInbound()
+    {
+        using var target = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var targetPort = ((IPEndPoint)target.Client.LocalEndPoint!).Port;
+        var probePort = NetPortUtil.FindFreeUdpPort();
+        await WithOwnedProxyAsync(async (_, ct) =>
+        {
+            var probe = DeepVerifyProbe.ProbeStunAsync(probePort, ct);
+            var dropped = await target.ReceiveAsync(ct);
+            var retried = await target.ReceiveAsync(ct);
+            Assert.Equal(dropped.Buffer, retried.Buffer);
+
+            var response = new byte[32];
+            retried.Buffer.CopyTo(response, 0);
+            response[0] = 1;
+            response[3] = 12;
+            response[21] = 0x20;
+            response[23] = 8;
+            response[25] = 1;
+            await target.SendAsync(response.AsMemory(), retried.RemoteEndPoint, ct);
+            Assert.True(await probe);
+        }, proxy =>
+        {
+            var config = JsonNode.Parse(VlessDeepVerifier.BuildSingleOutboundConfig(
+                VlessDeepVerifierTests.CleanVlessEntry(), proxy, udpPort: probePort))!.AsObject();
+            var inbound = config["inbounds"]![1]!;
+            inbound["override_address"] = "127.0.0.1";
+            inbound["override_port"] = targetPort;
+            config["outbounds"]![0] = new JsonObject { ["type"] = "direct", ["tag"] = "proxy" };
+            return config;
+        });
+    }
+
     private static async Task ReplyAsync(TcpClient client, string statusAndHeaders, CancellationToken ct)
     {
         var response = $"HTTP/1.1 {statusAndHeaders}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
         await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(response), ct);
     }
 
-    private static async Task WithOwnedProxyAsync(Func<VerificationProxy, CancellationToken, Task> test)
+    private static async Task WithOwnedProxyAsync(Func<VerificationProxy, CancellationToken, Task> test,
+        Func<VerificationProxy, JsonObject>? buildConfig = null)
     {
         var runtime = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
         Assert.SkipUnless(!string.IsNullOrEmpty(runtime), "Requires the verified sing-box fixture");
@@ -109,7 +161,7 @@ public sealed class VerificationProxyLoopbackTests
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(20));
         var proxy = new VerificationProxy(NetPortUtil.FindFreePort());
-        var config = new JsonObject
+        var config = buildConfig?.Invoke(proxy) ?? new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "info" },
             ["inbounds"] = new JsonArray(proxy.CreateInbound()),

@@ -801,6 +801,7 @@ public partial class MainWindowViewModel
     private async Task<bool> ApplyPendingChangesInternalAsync(bool forceRestart)
     {
         if (!CanApplyAppChanges) return false;
+        CancelCategoryVerification();
         IsApplying = true;
         var appliedRevision = Volatile.Read(ref _routingSettingsRevision);
         try
@@ -811,7 +812,10 @@ public partial class MainWindowViewModel
                 var service = await Task.Run(Services.WindowsServiceHelper.GetState);
                 var serviceName = Services.WindowsServiceHelper.ServiceName;
                 var previous = ServiceSettingsReceipt.Read(serviceName)?.FirstOrDefault();
+#endif
+                if (!await VerifyServiceCategoryBeforeApplyAsync(appliedRevision)) return false;
                 SaveSettings();
+#if PLATFORM_WINDOWS
                 var revision = SettingsLoader.GetSubmittedRevision(_settings);
                 if (service.Running && service.Pid is int managerPid)
                 {
@@ -837,8 +841,6 @@ public partial class MainWindowViewModel
                         return true;
                     }
                 }
-#else
-                SaveSettings();
 #endif
                 StatusText = IsRussian
                     ? "Настройки сохранены. Служба не подтвердила их применение."
@@ -861,6 +863,7 @@ public partial class MainWindowViewModel
             }
             return ok;
         }
+        catch (OperationCanceledException) { return false; }
         catch (Exception ex)
         {
             _logger.Error("[VM] ApplyPendingChanges failed ({ErrorType})", ex.GetType().Name);
@@ -868,6 +871,27 @@ public partial class MainWindowViewModel
             return false;
         }
         finally { IsApplying = false; }
+    }
+
+    private async Task<bool> VerifyServiceCategoryBeforeApplyAsync(int appliedRevision)
+    {
+        if (_disposed || !IsServiceManagedVpn || appliedRevision != _routingSettingsRevision) return false;
+        if (SimpleServerPreference?.GetCategory() is not { } category) return true;
+
+        var generation = _connectionGeneration;
+        var choiceUnchanged = CaptureSimpleChoice(out _, includePresentation: false);
+        var winner = await VerifyCategoryRowsAsync(GetCategoryRows(category));
+        if (_disposed || !IsServiceManagedVpn || generation != _connectionGeneration ||
+            appliedRevision != _routingSettingsRevision || !choiceUnchanged()) return false;
+        if (winner == null || !SubscriptionServers.Contains(winner))
+        {
+            ShowCategoryVerificationFailure();
+            return false;
+        }
+
+        ClearCategoryVerificationFailure();
+        SetSubscriptionPickerRow(winner);
+        return true;
     }
 
     private void SaveSettings() => SaveSettingsFromControls();
