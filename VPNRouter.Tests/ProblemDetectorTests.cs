@@ -178,7 +178,7 @@ public sealed class ProblemDetectorTests
 
         var endpoints = HealthCheck.ExtractProxyEndpointsFromCurrentJson(CurrentJson);
         const string timeoutLf =
-            "+0300 2026-10-17 11:19:38 ERROR outbound/urltest[proxy]: dial tcp 155.4.244.204:443: i/o timeout\n" +
+            "+0300 2026-10-17 11:19:38 ERROR outbound/urltest[proxy]: dial tcp 192.0.2.101:443: i/o timeout\n" +
             "+0300 2026-10-17 11:20:00 WARN dns: exchange discord.com context deadline exceeded\n";
         var timeoutCrlf = timeoutLf.Replace("\n", "\r\n");
 
