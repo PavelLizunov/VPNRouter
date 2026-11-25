@@ -72,7 +72,8 @@ public partial class SingBoxManager
         {
             controllerRequest = ControllerRequest(ClashSingBoxApi.ReadLocalController(configJson), "/configs");
         }
-        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException or JsonException)
+        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException or
+            JsonException or InvalidDataException)
         {
             controllerRequest = CurrentControllerRequest;
         }
