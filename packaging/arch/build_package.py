@@ -38,10 +38,10 @@ except ImportError as err:
 
 RUNTIME_URL: str = (
     "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/"
-    "v1.14.4-vpnctl.2/sing-box-1.14.4-vpnctl.2-linux-amd64.tar.gz"
+    "v1.14.4-vpnctl.3/sing-box-1.14.4-vpnctl.3-linux-amd64.tar.gz"
 )
-RUNTIME_SHA256: str = "cc0ea9a46498aaca9d283411ca1fb71c70693bb60c27ffca6832889ca3953c4e"
-RUNTIME_VERSION: str = "1.14.4-vpnctl.2"
+RUNTIME_SHA256: str = "62c7d4ab2ec93fc6a51790facbcc50436d1183d8bf6f9c84b07d1d75e1618eae"
+RUNTIME_VERSION: str = "1.14.4-vpnctl.3"
 
 CRONET_URL: str = (
     "https://raw.githubusercontent.com/SagerNet/cronet-go/4ecba4761b201f6c552aabd0462a94fe2a8f833c/"
