@@ -149,10 +149,30 @@ public partial class MainWindowViewModel
         ServerViewModel server, CancellationToken ct)
     {
         var pool = _settings.Vless.GetEffectiveServers();
-        var entry = server.ToEntry();
+        var entry = server.SourceEntry;
+        var cached = _businessAutoCachedOutcome;
+        var checksWinner = cached?.Winner is { } winner && SubscriptionEntry.RowKey(winner) == SubscriptionEntry.RowKey(entry);
+        var generation = Volatile.Read(ref _businessAutoGeneration);
         var result = await VerifyBusinessEntryAsync(entry, pool, ct, runCanaries: false)
             .ConfigureAwait(false);
-        return BusinessServerAutoSelection.ToProbeResult(result);
+        var probeResult = BusinessServerAutoSelection.ToProbeResult(result);
+
+        // A current picker failure for the exact cached winner invalidates the
+        // startup result before the next ordinary Connect. A stale/cancelled
+        // probe, a replaced selection outcome, or another profile never does.
+        if (checksWinner && !result.Ok && result.FailurePhase != DeepVerifyFailurePhase.Cancelled)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (_disposed || ct.IsCancellationRequested) return;
+                if (generation != Volatile.Read(ref _businessAutoGeneration)) return;
+                if (!ReferenceEquals(_businessAutoCachedOutcome, cached)) return;
+                if (!IsBusinessAutomaticSelection) return;
+                InvalidateBusinessAutoOutcome();
+            });
+        }
+
+        return probeResult;
     }
 
     internal Task<bool> ConnectVerifiedBusinessServerAsync(CancellationToken ct) =>

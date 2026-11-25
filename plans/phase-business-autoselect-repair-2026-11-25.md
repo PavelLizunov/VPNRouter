@@ -31,10 +31,12 @@ published packages and credentials are outside this change.
   a working proxied request. Review concurrent starts, cancellation, profile
   changes, and policy capture against the integrated diff while PR CI runs.
 
-The shared Business support channel returns bounded advisory text. Opening
-recovery sends nothing. The employee can request analysis of a fresh report
-and independently approve a verified connection attempt. A connected client
-can request analysis without interrupting its tunnel.
+On first use and after upgrading a legacy installation, Connect automatically
+uses the fastest verified Business choice. The server menu retains an explicit
+manual override. An employee can press Fix connection once to retry locally.
+If that fails, a second, labelled action sends a fresh diagnostic report to
+company support for DeepSeek analysis. An already connected client can use
+that action while its current tunnel stays active.
 
 The isolated loopback fixture reached the same TCP port with two synthetic
 VLESS identities. Only the valid identity reached the HTTP trace responder

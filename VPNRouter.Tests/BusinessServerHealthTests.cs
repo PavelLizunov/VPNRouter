@@ -248,6 +248,7 @@ public sealed class BusinessServerHealthTests
         window.Show();
         try
         {
+            window.OpenServerPanel();
             var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
             selector.SelectedIndex = selected;
             Dispatcher.UIThread.RunJobs();
@@ -278,7 +279,7 @@ public sealed class BusinessServerHealthTests
 
     private static Button RefreshButton(BusinessWindow window)
     {
-        OpenMenu(window);
+        window.OpenServerPanel();
         return window.FindControl<Button>("BusinessServerRefresh")!;
     }
 

@@ -59,6 +59,8 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     public bool HasPolicyStatus => !string.IsNullOrEmpty(PolicyStatus);
     public string Language => Strings.BusinessLanguage;
     public string Server => Strings.BusinessServer;
+    public string ServerMenu => Strings.BusinessServerMenu;
+    public string ModeMenu => Strings.BusinessModeMenu;
     public string AutoSelect => Strings.BusinessAutoSelectServer;
     public string AutoSelectHint => Strings.BusinessAutoSelectHint;
     public bool AutoSelectEnabled
@@ -78,7 +80,7 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     public string LaterUpdate => Strings.UpdateButtonDismiss;
     public string RepairTitle => Strings.BusinessRepairTitle;
     public string RepairAnalyze => Strings.BusinessRepairAnalyze;
-    public string RepairConnect => Strings.BusinessRepairConnect;
+    public string RepairConsent => Strings.BusinessRepairConsent;
     public string RepairClose => Strings.BusinessRepairClose;
     public string DiagnosticsHeader => Strings.BusinessDiagnosticsHeader;
     public string DiagnosticsCollect => Strings.BusinessDiagnosticsCollect;

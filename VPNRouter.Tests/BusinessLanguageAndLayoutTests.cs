@@ -26,6 +26,7 @@ public sealed class BusinessLanguageAndLayoutTests
     {
         using var fixture = new Fixture();
         var window = fixture.Window;
+        window.OpenServerPanel();
         var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
         var choice = Assert.IsType<BusinessServerChoiceViewModel>(selector.SelectedItem);
         choice.Update(new(ServerProbeStatus.Ok, 12, null));
@@ -235,7 +236,7 @@ public sealed class BusinessLanguageAndLayoutTests
         using var fixture = new Fixture();
         await fixture.Window.RefreshBusinessServersAsync();
         var language = Language(fixture.Window);
-        OpenMenu(fixture.Window).Hide();
+        fixture.Window.OpenServerPanel();
         var selector = fixture.Window.FindControl<ComboBox>("BusinessServerSelector")!;
         var slow = Assert.IsType<BusinessServerChoiceViewModel>(selector.Items[1]);
         var unavailable = Assert.IsType<BusinessServerChoiceViewModel>(selector.Items[2]);
@@ -345,7 +346,9 @@ public sealed class BusinessLanguageAndLayoutTests
         var scroll = Assert.IsType<ScrollViewer>(window.Content);
         FlushLayout(window);
         AssertInsideViewport(ConnectionButton(fixture), scroll);
-        AssertInsideViewport(window.FindControl<ComboBox>("BusinessServerSelector")!, scroll);
+        Assert.False(window.FindControl<ComboBox>("BusinessServerSelector")!.IsEffectivelyVisible);
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<RadioButton>(),
+            radio => radio.IsEffectivelyVisible);
         var menu = window.FindControl<Button>("BusinessMenuButton")!;
         AssertInsideViewport(menu, scroll);
         Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
@@ -354,14 +357,20 @@ public sealed class BusinessLanguageAndLayoutTests
         Assert.True(scroll.Offset.Y + scroll.Viewport.Height >= scroll.Extent.Height - 1);
         scroll.Offset = default;
         var flyout = OpenMenu(window);
+        window.OpenServerPanel();
+        window.OpenModePanel();
         var menuScroll = window.FindControl<ScrollViewer>("BusinessMenuScroll")!;
         Assert.True(Send(window).IsEffectivelyEnabled);
         AssertInsideViewport(Send(window), menuScroll);
         AssertInsideViewport(Language(window), menuScroll);
         Assert.Equal(Strings.BusinessDiagnosticsHint, ToolTip.GetTip(Send(window)));
+        window.FindControl<Border>("BusinessServerPanel")!.BringIntoView();
+        FlushLayout(window);
+        AssertInsideViewport(window.FindControl<ComboBox>("BusinessServerSelector")!, menuScroll);
         menuScroll.Offset = new(0, menuScroll.Extent.Height);
         FlushLayout(window);
         Assert.True(menuScroll.Offset.Y + menuScroll.Viewport.Height >= menuScroll.Extent.Height - 1);
+        AssertInsideViewport(window.FindControl<Border>("BusinessModePanel")!, menuScroll);
         AssertInsideViewport(window.FindControl<StackPanel>("BusinessSubscriptionActions")!, menuScroll);
         Assert.True(menuScroll.Extent.Width <= menuScroll.Viewport.Width + 1);
         flyout.Hide();

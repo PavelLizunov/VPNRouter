@@ -196,6 +196,7 @@ public sealed class BusinessLiveServicesTests
         try
         {
             await Idle(services!);
+            window.OpenServerPanel();
             var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
             Assert.Equal(4, selector.Items.Count);
             var choice = Assert.IsType<BusinessServerChoiceViewModel>(selector.SelectedItem);

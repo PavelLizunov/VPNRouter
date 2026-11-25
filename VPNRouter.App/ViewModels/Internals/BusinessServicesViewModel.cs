@@ -68,7 +68,6 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     internal void RefreshLocalization()
     {
         OnPropertyChanged(nameof(RepairHint));
-        OnPropertyChanged(nameof(RepairActionHint));
         OnPropertyChanged(nameof(RefreshStatus));
         OnPropertyChanged(nameof(IsRefreshStatusVisible));
         OnPropertyChanged(nameof(DiagnosticStatus));
@@ -128,7 +127,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
             or nameof(MainWindowViewModel.IsApplying) or nameof(MainWindowViewModel.SelectedServer) or nameof(_vm.UpdateVm.IsDownloading))) return;
         if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => OnVmChanged(sender, e)); return; }
         if (_disposed) return;
-        if (_repairStep is RepairStep.Analyzing or RepairStep.Advice or RepairStep.Connected or RepairStep.Failed ||
+        if (_repairStep is RepairStep.Analyzing or RepairStep.Advice or RepairStep.Failed ||
             (_repairStep == RepairStep.Consent && e.PropertyName != nameof(MainWindowViewModel.SelectedServer)))
             CloseRepair();
         NotifyRepairCommands();

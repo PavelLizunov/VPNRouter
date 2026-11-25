@@ -66,6 +66,8 @@ public partial class BusinessWindow : Window
         BusinessActions.DataContext = null;
         BusinessSubscriptionActions.DataContext = null;
         BusinessRepairActions.DataContext = null;
+        BusinessServerPanel.IsVisible = false;
+        BusinessModePanel.IsVisible = false;
         _services = null;
         _health = null;
         _vm = null;
@@ -190,6 +192,16 @@ public partial class BusinessWindow : Window
             vm.SelectBusinessServer(choice.Server);
             SyncSelection();
         }
+    }
+
+    private void OnBusinessServerMenuToggle(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        BusinessServerPanel.IsVisible = !BusinessServerPanel.IsVisible;
+    }
+
+    private void OnBusinessModeMenuToggle(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        BusinessModePanel.IsVisible = !BusinessModePanel.IsVisible;
     }
 
     private void OnBusinessServerRefresh(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

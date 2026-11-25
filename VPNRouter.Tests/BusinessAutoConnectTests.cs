@@ -54,6 +54,7 @@ public sealed class BusinessAutoConnectTests
         try
         {
             await window.RefreshBusinessServersAsync();
+            window.OpenServerPanel();
             var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
             var choices = selector.Items.Cast<BusinessServerChoiceViewModel>().ToArray();
             Assert.Equal(2, calls);
@@ -85,6 +86,75 @@ public sealed class BusinessAutoConnectTests
         Assert.Equal(saves, store.SaveCount);
         Assert.Contains("Pilot", vm.BusinessAutoSelectStatusText);
         Assert.Contains("35", vm.BusinessAutoSelectStatusText);
+    }
+
+    [AvaloniaFact]
+    public async Task PickerFailureForCachedWinner_ForcesNextConnectToChooseAnAvailablePeer()
+    {
+        using var vm = CreateVm(out var store, automatic: true);
+        var reserve = vm.Servers.Single(server => server.Name == BusinessDefaultsTests.ReserveName);
+        vm.BusinessServerVerifier = (entry, _, _) =>
+            Task.FromResult(entry.Name == BusinessDefaultsTests.ReserveName ? Ok(10) : Ok(50));
+        vm.StartBusinessAutoSelectionIfConfigured();
+        await vm.WaitForBusinessAutoSelectionAsync(TestContext.Current.CancellationToken);
+
+        // The periodic picker probe reports the cached winner as failed.
+        vm.BusinessServerVerifier = (entry, _, _) => Task.FromResult(
+            entry.Name == BusinessDefaultsTests.ReserveName ? Failed() : Ok(15));
+        var picker = await vm.ProbeBusinessServerAsync(
+            reserve, TestContext.Current.CancellationToken);
+        Assert.False(picker.IsReachable);
+
+        var saves = store.SaveCount;
+        AppSettings? captured = null;
+        vm.BusinessConnectStart = (settings, _, _) =>
+        {
+            captured = settings;
+            return Task.FromResult((Task.CompletedTask,
+                VPNRouter.App.ViewModels.Internals.TwoPhaseStartOutcome.Connected));
+        };
+        await vm.ToggleConnectionCommand.ExecuteAsync(null);
+
+        Assert.NotNull(captured);
+        Assert.Equal("Pilot", captured!.Vless.ActiveServer);
+        Assert.True(vm.IsConnected);
+        Assert.Equal(saves, store.SaveCount); // The winner is transient and never persisted.
+    }
+
+    [AvaloniaFact]
+    public async Task StalePickerFailureCannotInvalidateANewerCachedWinner()
+    {
+        using var vm = CreateVm(out _, automatic: true);
+        var reserve = vm.Servers.Single(server => server.Name == BusinessDefaultsTests.ReserveName);
+        vm.BusinessServerVerifier = (entry, _, _) =>
+            Task.FromResult(entry.Name == BusinessDefaultsTests.ReserveName ? Ok(10) : Ok(50));
+        vm.StartBusinessAutoSelectionIfConfigured();
+        await vm.WaitForBusinessAutoSelectionAsync(TestContext.Current.CancellationToken);
+
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource<DeepVerifyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.BusinessServerVerifier = async (_, _, ct) =>
+        {
+            started.TrySetResult();
+            return await gate.Task.WaitAsync(ct);
+        };
+        var stale = vm.ProbeBusinessServerAsync(reserve, TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+
+        // A newer automatic outcome replaces the cached winner while the old
+        // picker probe is still in flight.
+        vm.BusinessServerVerifier = (entry, _, _) =>
+            Task.FromResult(entry.Name == BusinessDefaultsTests.ReserveName ? Ok(11) : Ok(50));
+        vm.StartBusinessAutoSelectionIfConfigured();
+        await vm.WaitForBusinessAutoSelectionAsync(TestContext.Current.CancellationToken);
+
+        gate.SetResult(Failed());
+        Assert.False((await stale.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken)).IsReachable);
+        var cached = vm.GetBusinessAutoPickerResults();
+        Assert.NotNull(cached);
+        Assert.True(cached![BusinessDefaultsTests.ReserveName].IsReachable);
     }
 
     [AvaloniaFact]
@@ -360,7 +430,7 @@ public sealed class BusinessAutoConnectTests
     }
 
     [AvaloniaFact]
-    public void FreshInstallDefaultsToAutomatic_ExistingNamedChoiceStaysManual()
+    public void LegacyNamedChoiceWithoutExplicitMode_BecomesAutomatic()
     {
         var fresh = new AppSettings();
         BusinessDefaults.Apply(fresh, BusinessDefaultsTests.MultiServerConnection,
@@ -368,9 +438,9 @@ public sealed class BusinessAutoConnectTests
         Assert.Equal(BusinessServerSelectionMode.Automatic,
             fresh.App.BusinessServerSelectionMode);
 
-        var existing = new AppSettings();
-        existing.Vless.ActiveServer = BusinessDefaultsTests.ReserveName;
-        existing.Vless.Servers = [new VlessServerEntry
+        var legacy = new AppSettings();
+        legacy.Vless.ActiveServer = BusinessDefaultsTests.ReserveName;
+        legacy.Vless.Servers = [new VlessServerEntry
         {
             Name = BusinessDefaultsTests.ReserveName,
             Protocol = "vless",
@@ -379,10 +449,16 @@ public sealed class BusinessAutoConnectTests
             Uuid = "old",
             Security = "tls",
         }];
-        BusinessDefaults.Apply(existing, BusinessDefaultsTests.MultiServerConnection,
+        BusinessDefaults.Apply(legacy, BusinessDefaultsTests.MultiServerConnection,
+            BusinessBootstrap.ReadRules());
+        Assert.Equal(BusinessServerSelectionMode.Automatic,
+            legacy.App.BusinessServerSelectionMode);
+        Assert.Equal(BusinessDefaultsTests.ReserveName, legacy.Vless.ActiveServer);
+
+        legacy.App.BusinessServerSelectionMode = BusinessServerSelectionMode.Manual;
+        BusinessDefaults.Apply(legacy, BusinessDefaultsTests.MultiServerConnection,
             BusinessBootstrap.ReadRules());
         Assert.Equal(BusinessServerSelectionMode.Manual,
-            existing.App.BusinessServerSelectionMode);
-        Assert.Equal(BusinessDefaultsTests.ReserveName, existing.Vless.ActiveServer);
+            legacy.App.BusinessServerSelectionMode);
     }
 }

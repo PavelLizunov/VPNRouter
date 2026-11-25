@@ -136,11 +136,12 @@ public sealed class BusinessNodeMetadataWindowTests
     public async Task DnsttChoiceUsesDelegatedDomainMetadataAndDoesNotProbeResolverTcp()
     {
         var tcpProbes = new List<string>();
-        using var fixture = new Fixture(includeDnstt: true, probe: (server, _) =>
-        {
-            tcpProbes.Add(server.Server);
-            return Task.FromResult(new ServerProbeResult(ServerProbeStatus.Ok, 23, null));
-        });
+        using var fixture = new Fixture(includeDnstt: true, dnsttAvailable: false,
+            probe: (server, _) =>
+            {
+                tcpProbes.Add(server.Server);
+                return Task.FromResult(new ServerProbeResult(ServerProbeStatus.Ok, 23, null));
+            });
         var choice = Assert.Single(fixture.Choices.Where(row => row.Server.SourceEntry.Dnstt != null));
         var round = fixture.Controller!.RefreshAsync();
         (await fixture.Fetch.NextAsync()).Result.SetResult(Snapshot(
@@ -438,14 +439,30 @@ public sealed class BusinessNodeMetadataWindowTests
         internal BusinessServicesViewModel Services { get; private set; } = null!;
         internal Action? RebuildPool { get; private set; }
         internal int FactoryCalls, Disposals;
-        internal ComboBox Selector => Window.FindControl<ComboBox>("BusinessServerSelector")!;
+        internal ComboBox Selector
+        {
+            get
+            {
+                OpenMenu(Window);
+                Window.OpenServerPanel();
+                return Window.FindControl<ComboBox>("BusinessServerSelector")!;
+            }
+        }
         internal BusinessServerChoiceViewModel[] Choices => Selector.Items.Cast<BusinessServerChoiceViewModel>().ToArray();
         private readonly string _previousLanguage = Strings.Lang;
+        private readonly bool? _previousDnstt = SingBoxFeatures.OverrideDnstt;
+        private readonly bool _changedDnstt;
         private readonly HttpClient _http = new(new NoNetwork());
 
         internal Fixture(bool metadata = true, int width = 420, string language = "en",
-            bool includeDnstt = false, Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>>? probe = null)
+            bool includeDnstt = false, Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>>? probe = null,
+            bool? dnsttAvailable = null)
         {
+            if (dnsttAvailable.HasValue)
+            {
+                SingBoxFeatures.OverrideDnstt = dnsttAvailable;
+                _changedDnstt = true;
+            }
             Vm = CreateViewModel(Store, language);
             if (includeDnstt)
                 Vm.Servers.Add(new ServerViewModel(new VlessServerEntry
@@ -482,6 +499,7 @@ public sealed class BusinessNodeMetadataWindowTests
             Fetch.Dispose();
             _http.Dispose();
             Strings.Lang = _previousLanguage;
+            if (_changedDnstt) SingBoxFeatures.OverrideDnstt = _previousDnstt;
         }
     }
 

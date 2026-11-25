@@ -7,7 +7,8 @@ internal static class BusinessServerSelectionMode
     internal const string Manual = "manual";
 
     internal static bool IsConfigured(string? value) =>
-        value is Automatic or Manual;
+        string.Equals(value, Automatic, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(value, Manual, StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsAutomatic(string? value) =>
         string.Equals(value, Automatic, StringComparison.OrdinalIgnoreCase);

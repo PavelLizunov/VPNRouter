@@ -1,9 +1,11 @@
 using System.Text.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class BusinessAutoSelectionTests
 {
     private static VlessServerEntry Entry(string name, string host = "192.0.2.1", int port = 443) => new()

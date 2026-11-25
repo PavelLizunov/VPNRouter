@@ -10,6 +10,7 @@ using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
+[Collection(SafeModeStateCollection.Name)]
 public sealed class BusinessConnectionRepairTests
 {
     private sealed class Diagnostics : IBusinessDiagnostics
@@ -34,7 +35,7 @@ public sealed class BusinessConnectionRepairTests
         """{"business":{"support":{"endpoint":"https://support.example.invalid/api/reports","token":"fixture"}}}""");
 
     [AvaloniaFact]
-    public async Task HomeButtonOpensConsentAndFreshAnalysisNeverConnectsUntilConfirmed()
+    public async Task OneClickRepairsLocallyAndOnlyAnExplicitSecondClickSendsAFreshReport()
     {
         using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
         var diagnostics = new Diagnostics();
@@ -45,8 +46,7 @@ public sealed class BusinessConnectionRepairTests
             {
                 ct.ThrowIfCancellationRequested();
                 starts++;
-                model.IsConnected = true;
-                return Task.FromResult(true);
+                return Task.FromResult(false);
             })) { DataContext = vm };
         window.Show();
         try
@@ -55,21 +55,18 @@ public sealed class BusinessConnectionRepairTests
             var open = Assert.IsType<Button>(repair.Children[0]);
             Assert.True(open.IsEffectivelyVisible);
             Assert.True(open.Command!.CanExecute(null));
+            await services!.RunDiagnosticsAsync(false);
             open.Command.Execute(null);
-            Assert.True(services!.ShowAnalyze);
+            await services.OpenRepairCommand.ExecutionTask!;
+            Assert.Equal(1, starts);
+            Assert.True(services.ShowAnalyze);
             Assert.Empty(diagnostics.Sent);
-            services.CloseRepairCommand.Execute(null);
-            await services.RunDiagnosticsAsync(false);
-            services.OpenRepairCommand.Execute(null);
             await services.AnalyzeRepairCommand.ExecuteAsync(null);
             Assert.Equal(new[] { "report-2.zip" }, diagnostics.Sent);
             Assert.True(services.ShowRepairAnalysis);
             Assert.Contains(Strings.Lang == "ru" ? "другой сервер" : "different server", services.DiagnosticStatus);
-            Assert.Equal(0, starts);
-            await services.ConnectRepairCommand.ExecuteAsync(null);
             Assert.Equal(1, starts);
-            Assert.Equal(Strings.BusinessRepairConnected, services.RepairHint);
-            Assert.False(services.ConnectRepairCommand.CanExecute(null));
+            Assert.False(services.ShowAnalyze);
         }
         finally { window.Close(); }
     }
@@ -77,11 +74,15 @@ public sealed class BusinessConnectionRepairTests
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NarrowWindowKeepsRepairUnderConnect(bool expand)
+    public async Task NarrowWindowKeepsRepairUnderConnect(bool expand)
     {
+        var previousLanguage = Strings.Lang;
         using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
+        vm.SetLanguageRussianCommand.Execute(null);
+        BusinessServicesViewModel? services = null;
         var window = new BusinessWindow(static (_, _) => Task.FromResult(ServerProbeResult.Unknown),
-            (model, changed) => new(model, SupportOnly(), new BusinessClientHttp(), changed, new Diagnostics()))
+            (model, changed) => services = new(model, SupportOnly(), new BusinessClientHttp(), changed, new Diagnostics(),
+                _ => Task.FromResult(false)))
             { Width = 360, DataContext = vm };
         window.Show();
         try
@@ -90,13 +91,13 @@ public sealed class BusinessConnectionRepairTests
             var siblings = Assert.IsType<StackPanel>(repair.Parent).Children;
             var before = Assert.IsType<Border>(siblings[siblings.IndexOf(repair) - 1]);
             Assert.Same(vm.ToggleConnectionCommand, Assert.IsType<Button>(before.Child).Command);
-            if (expand) Assert.IsType<Button>(repair.Children[0]).Command!.Execute(null);
+            if (expand) await services!.OpenRepairCommand.ExecuteAsync(null);
             window.UpdateLayout();
             var scroll = Assert.IsType<ScrollViewer>(window.Content);
             Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
             ScreenshotHelper.Capture(window, expand ? "business-repair-consent-360" : "business-repair-home-360");
         }
-        finally { window.Close(); }
+        finally { window.Close(); Strings.Lang = previousLanguage; }
     }
 
     [AvaloniaTheory]
@@ -107,36 +108,45 @@ public sealed class BusinessConnectionRepairTests
         using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
         vm.IsConnected = initiallyConnected;
         var diagnostics = new Diagnostics { Reply = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var localAttempts = 0;
         using var services = new BusinessServicesViewModel(vm, SupportOnly(), new BusinessClientHttp(), () => { },
-            diagnostics, _ => throw new InvalidOperationException("Must not start a tunnel"));
+            diagnostics, _ => { localAttempts++; return Task.FromResult(false); });
         services.SetVisible(true);
-        services.OpenRepairCommand.Execute(null);
+        await services.OpenRepairCommand.ExecuteAsync(null);
+        Assert.Equal(initiallyConnected ? 0 : 1, localAttempts);
         var pending = services.AnalyzeRepairCommand.ExecuteAsync(null);
         Assert.Single(diagnostics.Sent);
         if (!initiallyConnected) services.SetVisible(false);
         diagnostics.Reply.SetResult(BusinessSupportReply.Unavailable);
         await pending;
-        Assert.False(services.ConnectRepairCommand.CanExecute(null));
+        Assert.False(services.OpenRepairCommand.CanExecute(null));
         Assert.Equal(initiallyConnected, services.IsRepairOpen);
         Assert.Equal(initiallyConnected, vm.IsConnected);
         if (initiallyConnected) Assert.Equal(Strings.BusinessDiagnosticsReplyUnavailable, services.DiagnosticStatus);
     }
 
-    [AvaloniaFact]
-    public async Task LocalRepairWorksWithoutAnAnalysisEndpointAndReportsFailure()
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LocalRepairIsOneClickWithoutAnAnalysisEndpoint(bool succeeds)
     {
         using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
         var diagnostics = new Diagnostics();
         var attempts = 0;
         using var services = new BusinessServicesViewModel(vm, BusinessClientConfiguration.Empty,
-            new BusinessClientHttp(), () => { }, diagnostics, _ => { attempts++; return Task.FromResult(false); });
+            new BusinessClientHttp(), () => { }, diagnostics, _ =>
+            {
+                attempts++;
+                vm.IsConnected = succeeds;
+                return Task.FromResult(succeeds);
+            });
         services.SetVisible(true);
-        services.OpenRepairCommand.Execute(null);
+        await services.OpenRepairCommand.ExecuteAsync(null);
         Assert.False(services.ShowAnalyze);
-        Assert.True(services.ConnectRepairCommand.CanExecute(null));
-        await services.ConnectRepairCommand.ExecuteAsync(null);
         Assert.Equal(1, attempts);
-        Assert.Equal(Strings.BusinessRepairFailed, services.RepairHint);
+        Assert.Equal(succeeds, vm.IsConnected);
+        Assert.Equal(!succeeds, services.IsRepairOpen);
+        Assert.Equal(succeeds ? string.Empty : Strings.BusinessRepairFailed, services.RepairHint);
         Assert.Equal(0, diagnostics.Collected);
     }
 }

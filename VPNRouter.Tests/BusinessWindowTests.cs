@@ -31,6 +31,10 @@ public sealed class BusinessWindowTests
         window.Show();
         try
         {
+            window.OpenServerPanel();
+            window.OpenModePanel();
+            Assert.True(window.FindControl<Border>("BusinessServerPanel")!.IsVisible);
+            Assert.True(window.FindControl<Border>("BusinessModePanel")!.IsVisible);
             var controls = window.GetVisualDescendants().ToList();
             Assert.Single(controls.OfType<Button>().Where(b => b.Command == vm.ToggleConnectionCommand));
             Assert.Empty(controls.OfType<TextBox>().Where(t => t.IsEffectivelyVisible));
@@ -114,6 +118,7 @@ public sealed class BusinessWindowTests
         window.Show();
         try
         {
+            window.OpenServerPanel();
             var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
             Assert.Equal(4, vm.Servers.Count);
             Assert.Equal(new[] { "Primary", "Reserve" }, selector.Items.Cast<BusinessServerChoiceViewModel>().Select(s => s.DisplayName));
