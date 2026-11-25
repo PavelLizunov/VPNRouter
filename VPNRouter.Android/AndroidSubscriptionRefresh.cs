@@ -448,6 +448,15 @@ internal static class AndroidSubscriptionRefresh
         {
             var manual = ServerUriParser.TryParse(uri);
             if (manual == null) return null;
+            if (!string.IsNullOrEmpty(manual.DetourVia))
+            {
+                // A pasted hop + target pair is stored as plain rows; SelectOrAdd
+                // rejects chained targets because it verifies standalone rows.
+                var linked = FindLegacyRow(standalone, subscriptions, name);
+                if (linked == null) return null;
+                SelectedSources.AddOrUpdate(linked, FeedSource.Capture(null, linked));
+                return linked;
+            }
             // Old Simple saves could persist the fallback feed name when drawing the summary.
             var previous = standalone.Find(s => s != null && s.Name == name && s.UseAsSingleOutbound);
             var index = VPNRouter.Core.Services.FreeConfigs.FreeConfigSelection.SelectOrAdd(standalone, manual);

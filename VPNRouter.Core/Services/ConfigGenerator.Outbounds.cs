@@ -272,7 +272,8 @@ public static partial class ConfigGenerator
                 "ConfigGenerator: chained upstream uses unsupported protocol/transport — only VLESS and TurnRelay are supported.");
         }
 
-        if (!SubscriptionChainSelection.IsUsableChainUpstream(upstream))
+        if ((upstream.IsTurnRelay || targetProto == "vmess") &&
+            !SubscriptionChainSelection.IsUsableChainUpstream(upstream))
         {
             throw new InvalidOperationException(
                 "ConfigGenerator: chained target references an unusable upstream.");

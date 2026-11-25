@@ -115,13 +115,14 @@ public class AndroidSubscriptionRefreshTests
                 Mode = "dtls",
             },
         };
-        var target = VlessUriParser.Parse(
+        const string targetUri =
             "vless://00000000-0000-4000-8000-000000000001@exit.invalid:443?security=none" +
-            "&outbound=target-1&detour=turnrelay-hop-1#exit");
+            "&outbound=target-1&detour=turnrelay-hop-1#exit";
+        var target = VlessUriParser.Parse(targetUri);
 
         using var prefs = new PreferenceFile(new());
         var saved = AndroidSubscriptionRefresh.SaveServerLinks(
-            new[] { hop, target }, "target-uri", "qr-command",
+            new[] { hop, target }, targetUri, "qr-command",
             prefs.Read, prefs.Commit, JsonSerializerOptions.Default);
 
         Assert.True(saved);
