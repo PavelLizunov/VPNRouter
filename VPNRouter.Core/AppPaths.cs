@@ -4,6 +4,11 @@ using System.Security.Principal;
 
 namespace VPNRouter.Core;
 
+internal readonly record struct SingBoxDeployment(string Bundled, string Deployed)
+{
+    internal string Source => AppPaths.SingBoxDeploymentSource(Bundled, Deployed);
+}
+
 public static class AppPaths
 {
     internal const UnixFileMode PrivateUnixDirectoryMode =
@@ -42,17 +47,37 @@ public static class AppPaths
     internal static string BundledSingBoxExePath => Path.Combine(AppContext.BaseDirectory,
         OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
 
+    internal static SingBoxDeployment DefaultSingBoxDeployment => new(BundledSingBoxExePath, SingBoxExePath);
+
     internal static string DeployedSingBoxExePath(Models.SingBoxSettings? settings) =>
         OperatingSystem.IsWindows() && settings != null
             ? Environment.ExpandEnvironmentVariables(settings.ExecutablePath)
             : SingBoxExePath;
 
-    // Startup keeps a same-size deployment and copies the bundle when the deployment is absent or differs.
     internal static string SingBoxDeploymentSource(string bundled, string deployed)
     {
         var bundle = new FileInfo(bundled);
         var installed = new FileInfo(deployed);
-        return bundle.Exists && (!installed.Exists || installed.Length != bundle.Length) ? bundled : deployed;
+        if (!bundle.Exists || bundle.FullName == installed.FullName) return deployed;
+        if (!installed.Exists || installed.Length != bundle.Length) return bundled;
+        if (OperatingSystem.IsWindows() && ProductEdition.IsBusiness && !HaveSameContents(bundle, installed))
+            return bundled;
+        return deployed;
+    }
+
+    private static bool HaveSameContents(FileInfo bundle, FileInfo installed)
+    {
+        using var source = bundle.OpenRead();
+        using var target = installed.OpenRead();
+        Span<byte> sourceBuffer = stackalloc byte[16 * 1024];
+        Span<byte> targetBuffer = stackalloc byte[16 * 1024];
+        while (true)
+        {
+            var count = source.ReadAtLeast(sourceBuffer, sourceBuffer.Length, throwOnEndOfStream: false);
+            var other = target.ReadAtLeast(targetBuffer, targetBuffer.Length, throwOnEndOfStream: false);
+            if (count != other || !sourceBuffer[..count].SequenceEqual(targetBuffer[..other])) return false;
+            if (count == 0) return true;
+        }
     }
 
     public static string SlipstreamDir => Path.Combine(DataDir, "slipstream");

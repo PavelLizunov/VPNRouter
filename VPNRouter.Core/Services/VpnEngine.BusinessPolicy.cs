@@ -118,6 +118,13 @@ public partial class VpnEngine
             var manager = _singBox;
             if (manager == null || !await manager.WaitForPolicyReadyAsync(linked.Token).ConfigureAwait(false) ||
                 !IsCurrentPolicySession(expectedSession) || !ReferenceEquals(_singBox, manager)) return null;
+            // The desktop retains its manual preference even when this session uses
+            // a different, verified outbound. A policy refresh changes routing only.
+            if (_failoverSettingsContext is { } running)
+            {
+                settings = CopySessionSettings(settings);
+                settings.Vless = CopySessionSettings(running).Vless;
+            }
             if (!await ApplyGatedAsync(settings, linked.Token, forceRestart: true).ConfigureAwait(false)) return null;
             var receipt = Volatile.Read(ref _policyReceipt);
             return receipt != null && ReferenceEquals(receipt.Session, expectedSession) &&

@@ -38,7 +38,7 @@ public sealed record DeepVerifyResult(
 public sealed class VlessDeepVerifier
 {
     private readonly ILogger _logger;
-    private readonly string _singBoxPath;
+    private readonly SingBoxDeployment _deployment;
     private readonly IProcessRunner _runner;
     private SingBoxRuntimePolicy? _policy;
 
@@ -58,22 +58,20 @@ public sealed class VlessDeepVerifier
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
 
     public VlessDeepVerifier(ILogger logger, IProcessRunner? runner = null)
-    {
-        _logger = logger;
-        _policy = SingBoxRuntimePolicy.Current;
-        _singBoxPath = _policy?.SelectedExecutablePath ?? AppPaths.SingBoxExePath;
-        _runner = runner ?? Runner;
-    }
+        : this(logger, AppPaths.DefaultSingBoxDeployment, runner) { }
 
     internal VlessDeepVerifier(ILogger logger, string singBoxPath, IProcessRunner? runner = null)
+        : this(logger, new SingBoxDeployment(singBoxPath, singBoxPath), runner) { }
+
+    internal VlessDeepVerifier(ILogger logger, SingBoxDeployment deployment, IProcessRunner? runner = null)
     {
         _logger = logger;
         _policy = SingBoxRuntimePolicy.Current;
-        _singBoxPath = _policy?.SelectedExecutablePath ?? singBoxPath;
+        _deployment = deployment;
         _runner = runner ?? Runner;
     }
 
-    public bool IsAvailable => EffectivePolicy != null ? EffectivePolicy.IsAvailable : File.Exists(_singBoxPath);
+    public bool IsAvailable => EffectivePolicy is { } policy ? policy.IsAvailable : File.Exists(_deployment.Source);
 
     public async Task VerifyBatchAsync(
         IReadOnlyList<VlessServerEntry> servers,
@@ -96,7 +94,7 @@ public sealed class VlessDeepVerifier
         }
         else if (!IsAvailable)
         {
-            _logger.Warning("[VlessDeepVerifier] sing-box not found at {Path}", _singBoxPath);
+            _logger.Warning("[VlessDeepVerifier] sing-box binary missing");
             foreach (var s in servers)
                 onOneDone(s, DeepVerifyResult.Failed("sing-box binary missing", DeepVerifyFailurePhase.LocalSpawn));
             return;
@@ -134,15 +132,54 @@ public sealed class VlessDeepVerifier
         await Task.WhenAll(tasks);
     }
 
-    public async Task<DeepVerifyResult> VerifyAsync(
+    public Task<DeepVerifyResult> VerifyAsync(
         VlessServerEntry entry,
         bool measureBandwidth,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool runCanaries = true)
     {
+        // Preserve the standalone contract: a detour cannot be verified without
+        // its configured upstream, and this overload never guesses one.
+        if (!string.IsNullOrEmpty(entry.DetourVia))
+            return Task.FromResult(DeepVerifyResult.Failed(
+                DeepVerifyConstants.DetourNote, DeepVerifyFailurePhase.UnsupportedByVerifier));
+        return VerifyConfiguredAsync(entry, null, measureBandwidth, runCanaries, ct);
+    }
+
+    // Business auto-selection verifies the exact configured route, including a
+    // required chain upstream from the same trusted server pool.
+    public Task<DeepVerifyResult> VerifyAsync(
+        VlessServerEntry entry,
+        IReadOnlyList<VlessServerEntry> pool,
+        bool measureBandwidth,
+        CancellationToken ct = default,
+        bool runCanaries = true) =>
+        VerifyConfiguredAsync(entry, pool, measureBandwidth, runCanaries, ct);
+
+    internal static VlessServerEntry? ResolveChainUpstream(
+        VlessServerEntry entry, IReadOnlyList<VlessServerEntry>? pool)
+    {
+        if (string.IsNullOrEmpty(entry.DetourVia) || pool == null) return null;
+        var matches = pool.Where(server =>
+                string.IsNullOrEmpty(server.DetourVia) &&
+                !string.IsNullOrEmpty(server.OutboundId) &&
+                string.Equals(server.OutboundId, entry.DetourVia, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    private async Task<DeepVerifyResult> VerifyConfiguredAsync(
+        VlessServerEntry entry,
+        IReadOnlyList<VlessServerEntry>? pool,
+        bool measureBandwidth,
+        bool runCanaries,
+        CancellationToken ct)
+    {
+        var chainUpstream = ResolveChainUpstream(entry, pool);
         var protocol = (entry.Protocol ?? "vless").Trim().ToLowerInvariant();
         ct.ThrowIfCancellationRequested();
-        if (!string.IsNullOrEmpty(entry.DetourVia))
-            return DeepVerifyResult.Failed(DeepVerifyConstants.DetourNote, DeepVerifyFailurePhase.UnsupportedByVerifier);
+        if (!string.IsNullOrEmpty(entry.DetourVia) && chainUpstream == null)
+            return DeepVerifyResult.Failed(DeepVerifyConstants.DetourNote, DeepVerifyFailurePhase.Precondition);
 
         var placeholderField = PlaceholderDefense.Inspect(entry);
         if (placeholderField != null)
@@ -168,11 +205,27 @@ public sealed class VlessDeepVerifier
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
 
-        if (entry.IsDnsTunnel)
+        if (entry.IsDnsTunnel || protocol == "dnstt")
         {
-            _logger.Information("[VlessDeepVerifier] dns-tunnel deep verify unsupported (needs slipstream sidecar)");
-            return DeepVerifyResult.Failed("deep verify: dns-tunnel needs the slipstream sidecar",
-                DeepVerifyFailurePhase.UnsupportedByVerifier);
+            // Native dnstt is generated by BuildDnsttProxyPair and can be checked
+            // through its configured outbound. The legacy dns-tunnel profile needs
+            // the user-scoped slipstream sidecar, which the standalone verifier
+            // does not launch.
+            var nativeDnstt = string.Equals(protocol, "dnstt", StringComparison.OrdinalIgnoreCase) &&
+                entry.Dnstt != null;
+            if (!nativeDnstt)
+            {
+                _logger.Information(
+                    "[VlessDeepVerifier] legacy dns-tunnel deep verify unsupported (needs slipstream sidecar)");
+                return DeepVerifyResult.Failed("deep verify: dns-tunnel needs the slipstream sidecar",
+                    DeepVerifyFailurePhase.UnsupportedByVerifier);
+            }
+            if (!SingBoxFeatures.DnsttAvailable)
+            {
+                _logger.Information("[VlessDeepVerifier] native dnstt unsupported (core lacks dnstt runtime)");
+                return DeepVerifyResult.Failed("deep verify: dnstt needs the vpnctl core runtime",
+                    DeepVerifyFailurePhase.UnsupportedByVerifier);
+            }
         }
 
         var policy = EffectivePolicy;
@@ -188,22 +241,24 @@ public sealed class VlessDeepVerifier
                 return DeepVerifyResult.Failed("sing-box runtime is unavailable or untrusted", DeepVerifyFailurePhase.LocalSpawn);
             }
         }
-        else if (!IsAvailable)
+        var executable = policy?.SelectedExecutablePath ?? _deployment.Source;
+        if (policy == null && !File.Exists(executable))
         {
             _logger.Warning("[VlessDeepVerifier] sing-box binary missing");
             return DeepVerifyResult.Failed("sing-box binary missing", DeepVerifyFailurePhase.LocalSpawn);
         }
 
-        if ("naive".Equals(entry.Protocol, StringComparison.OrdinalIgnoreCase))
+        var isNaive = "naive".Equals(entry.Protocol, StringComparison.OrdinalIgnoreCase);
+        if (isNaive && !ServerUriParser.NaiveRuntimeAvailable)
         {
-            if (!ServerUriParser.NaiveRuntimeAvailable)
-            {
-                _logger.Warning("[VlessDeepVerifier] naive unsupported on this platform (needs libcronet)");
-                return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
-                    DeepVerifyFailurePhase.UnsupportedByVerifier);
-            }
-            if (policy == null)
-                SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
+            _logger.Warning("[VlessDeepVerifier] naive unsupported on this platform (needs libcronet)");
+            return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
+                DeepVerifyFailurePhase.UnsupportedByVerifier);
+        }
+        if (policy == null && (isNaive || (pool != null && OperatingSystem.IsWindows())))
+        {
+            var libraryDirectory = pool == null ? AppContext.BaseDirectory : Path.GetDirectoryName(_deployment.Bundled);
+            SingBoxManager.TryColocateCronet(executable, libraryDirectory ?? AppContext.BaseDirectory, _logger);
         }
 
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
@@ -217,13 +272,14 @@ public sealed class VlessDeepVerifier
 
         try
         {
-            var configJson = BuildSingleOutboundConfig(entry, proxy);
+            var configJson = BuildSingleOutboundConfig(entry, proxy, chainUpstream: chainUpstream,
+                useConfiguredOutbound: pool != null);
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-dv-{Guid.NewGuid():N}.json");
             await using (var writer = new StreamWriter(AppPaths.CreatePrivateFile(tmpConfigPath, FileMode.CreateNew)))
                 await writer.WriteAsync(configJson.AsMemory(), overallCts.Token);
 
             var request = new ProcessRequest(
-                ExecutablePath: policy?.SelectedExecutablePath ?? _singBoxPath,
+                ExecutablePath: executable,
                 Arguments: new[] { "run", "-c", tmpConfigPath },
                 CaptureStdout: true,
                 CaptureStderr: true);
@@ -252,7 +308,9 @@ public sealed class VlessDeepVerifier
                 return DeepVerifyResult.Failed(httpErr ?? "http failed", DeepVerifyFailurePhase.ProxiedHttp);
             }
 
-            var canary = await ProbeCanariesViaProxyAsync(proxy, overallCts.Token);
+            var canary = runCanaries
+                ? await ProbeCanariesViaProxyAsync(proxy, overallCts.Token)
+                : PhaseOutcome.Unknown;
 
             double? mbps = null;
             if (measureBandwidth)
@@ -316,16 +374,31 @@ public sealed class VlessDeepVerifier
         }
     }
 
-    internal static string BuildSingleOutboundConfig(VlessServerEntry s, VerificationProxy proxy, bool embedded = false)
+    internal static string BuildSingleOutboundConfig(VlessServerEntry s, VerificationProxy proxy,
+        bool embedded = false, VlessServerEntry? chainUpstream = null, bool useConfiguredOutbound = false)
     {
-        if (!string.IsNullOrEmpty(s.DetourVia))
+        if (!string.IsNullOrEmpty(s.DetourVia) && chainUpstream == null)
+            throw new InvalidOperationException(DeepVerifyConstants.DetourNote);
+        if (chainUpstream != null && string.IsNullOrEmpty(s.DetourVia))
             throw new InvalidOperationException(DeepVerifyConstants.DetourNote);
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
         JsonObject? outbound = null;
         JsonNode? awgEndpoint = null;
 
         var outboundsArray = new JsonArray();
-        if (protocol == "dnstt")
+        if (chainUpstream != null)
+        {
+            // Reuse the configured route builder so credentials, transport and
+            // the detour between target and required upstream stay identical.
+            var chained = ConfigGenerator.BuildChainedOutbounds([s, chainUpstream], [s]);
+            foreach (var item in chained)
+                outboundsArray.Add(VerificationOutbound(item));
+        }
+        else if (useConfiguredOutbound && protocol == "vless")
+        {
+            outboundsArray.Add(VerificationOutbound(ConfigGenerator.BuildVlessOutbound(s, "proxy")));
+        }
+        else if (protocol == "dnstt")
         {
             foreach (var item in ConfigGenerator.BuildDnsttProxyPair(s))
                 outboundsArray.Add(JsonSerializer.SerializeToNode(item, AppJsonContext.Default.SingBoxOutbound));
@@ -423,6 +496,15 @@ public sealed class VlessDeepVerifier
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return false; }
+    }
+
+    private static JsonObject VerificationOutbound(SingBoxOutbound outbound)
+    {
+        var node = JsonSerializer.SerializeToNode(outbound, AppJsonContext.Default.SingBoxOutbound)!.AsObject();
+        // Keep the session transport and credentials, resolving hostnames through
+        // the HTTPS bootstrap declared by this isolated verifier.
+        if (node.ContainsKey("domain_resolver")) node["domain_resolver"] = "dns-google";
+        return node;
     }
 
     internal static JsonObject BuildVlessOutbound(VlessServerEntry s)

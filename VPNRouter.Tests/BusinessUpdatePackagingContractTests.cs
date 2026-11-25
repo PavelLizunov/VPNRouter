@@ -57,6 +57,37 @@ public sealed class BusinessUpdatePackagingContractTests
     }
 
     [Fact]
+    public void BusinessPackaging_UsesOneOfficialWindowsCorePin()
+    {
+        var root = FindRoot();
+        var pin = File.ReadAllText(Path.Combine(root, "packaging", "windows", "business-core.ps1"));
+        Assert.Contains("$BusinessSingBoxVersion = '1.14.4-vpnctl.3'", pin);
+        Assert.Contains("$BusinessSingBoxAsset = 'sing-box-1.14.4-vpnctl.3-windows-amd64.zip'", pin);
+        Assert.Contains(
+            "$BusinessSingBoxSha256 = '11f5194ea8bf7b1796c9cfa3a160adf8748b2fd26b22bbaa1b1ff4b42f715825'",
+            pin);
+
+        foreach (var script in new[] { "build-business.ps1", "build-business-update.ps1" })
+        {
+            var text = File.ReadAllText(Path.Combine(root, "tools", script));
+            Assert.Contains("business-core.ps1", text);
+            Assert.Contains(
+                "-SingBoxVersion $BusinessSingBoxVersion -SingBoxSha256 $BusinessSingBoxSha256", text);
+        }
+
+        var verifier = File.ReadAllText(Path.Combine(root, "tools", "verify-business-core.ps1"));
+        Assert.Contains("business-core.ps1", verifier);
+        Assert.Contains("sing-box.exe", BusinessUpdatePackage.RequiredFiles);
+
+        // The Standard Windows pin stays a separate build.ps1 parameter.
+        var standard = File.ReadAllText(Path.Combine(root, "build.ps1"));
+        Assert.Contains("[string]$SingBoxVersion = \"", standard);
+        Assert.DoesNotContain("BusinessSingBoxVersion", standard);
+        var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "build-ui-mcp.yml"));
+        Assert.Contains("./tools/verify-business-core.ps1", workflow);
+    }
+
+    [Fact]
     public void SharedPublishedAssemblies_AreBusinessAndContainNoEmbeddedConnection()
     {
         var directory = Environment.GetEnvironmentVariable("VPNROUTER_BUSINESS_SHARED_PAYLOAD_DIR");
@@ -74,9 +105,37 @@ public sealed class BusinessUpdatePackagingContractTests
         {
             BusinessUpdatePackage.ValidateArchive(zip!);
             ZipFile.ExtractToDirectory(zip!, directory);
-            Assert.Equal(Path.Combine(directory, "app"), BusinessUpdatePackage.ValidateStaged(directory, AppVersion.Version));
+            var app = Path.Combine(directory, "app");
+            Assert.Equal(app, BusinessUpdatePackage.ValidateStaged(directory, AppVersion.Version));
+            if (OperatingSystem.IsWindows())
+                Assert.Equal("sing-box version 1.14.4-vpnctl.3", ReadCoreVersion(app));
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
+    }
+
+    private static string ReadCoreVersion(string appDirectory)
+    {
+        var core = Path.Combine(appDirectory, "sing-box.exe");
+        Assert.True(File.Exists(core) && new FileInfo(core).Length > 0, "Packaged core is missing.");
+        var start = new ProcessStartInfo(core)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        start.ArgumentList.Add("version");
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Packaged core did not start.");
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        Assert.True(process.WaitForExit(5000), "Packaged core version inspection timed out.");
+        Assert.True(Task.WaitAll(new Task[] { stdout, stderr }, 5000),
+            "Packaged core version output did not finish.");
+        Assert.Equal(0, process.ExitCode);
+        var line = stdout.GetAwaiter().GetResult().Split('\n')
+            .Select(value => value.Trim())
+            .FirstOrDefault(value => value.StartsWith("sing-box version ", StringComparison.Ordinal));
+        return line ?? throw new InvalidOperationException("Packaged core did not report its version.");
     }
 
     private static string FindRoot()

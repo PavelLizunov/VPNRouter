@@ -7,9 +7,14 @@ Go and PowerShell 7.2 or newer already available:
 ./tools/build-business-update.ps1 -OutputDir <new-task-output-directory>
 ```
 
-The script reuses `build.ps1` and its verified native dependency packaging. It
-sets `VPNRouterEdition=Business` and `BusinessSharedUpdate=true`, excludes the
-consumer GUI/CLI/Service entry points, adds the Russian geo rules and emits:
+The script reuses `build.ps1` and its verified native dependency packaging. The
+Windows Business core is pinned separately in `packaging/windows/business-core.ps1`
+(`1.14.4-vpnctl.3`, official `windows-amd64` archive SHA256
+`11f5194ea8bf7b1796c9cfa3a160adf8748b2fd26b22bbaa1b1ff4b42f715825`); both the
+private installer and this shared update consume that one pin, while the Standard
+Windows pin in `build.ps1` is unchanged. It sets `VPNRouterEdition=Business` and
+`BusinessSharedUpdate=true`, excludes the consumer GUI/CLI/Service entry points,
+adds the Russian geo rules and emits:
 
 - `VPNRouterBusiness-update-v<version>-win-x64.zip`, containing only `app/`;
 - its `.sha256` sidecar and `source-sha.txt`;
@@ -17,9 +22,10 @@ consumer GUI/CLI/Service entry points, adds the Russian geo rules and emits:
   architecture, the source version and external provisioning.
 
 The package validation tests inspect the actual Core/App PE metadata, the full ZIP
-layout and required runtime files before a SHA sidecar is written. No application
-binary is launched for validation. Only a validated ZIP and sidecar are delivery
-artifacts; `payload/` is task-owned staging.
+layout and required runtime files before a SHA sidecar is written. No managed
+application binary is launched for validation; the packaged native core is only
+asked for its `version` to prove the pinned `.3` replacement. Only a validated ZIP
+and sidecar are delivery artifacts; `payload/` is task-owned staging.
 
 Shared mode refuses `BusinessConnectionFile` and cannot embed a connection resource.
 The existing `tools/build-business.ps1` remains the private first-install bridge:

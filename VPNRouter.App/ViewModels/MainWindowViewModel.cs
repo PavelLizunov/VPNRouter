@@ -598,6 +598,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _ = BootstrapAutostartAsync();
 
             ScheduleMtuMeasurement(TimeSpan.FromSeconds(2));
+
+            // Non-blocking: the first Connect can join this run or start a fresh one.
+            StartBusinessAutoSelectionIfConfigured();
         }
 
         ConsumeSettingsRecoveryNotice();
@@ -849,6 +852,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _engine.StopOwnedSession();
         _disposed = true;
         DisposeBusinessPolicy();
+        DisposeBusinessAutoSelection();
 
 #if PLATFORM_WINDOWS
         try { _tgProxyLifetimeCts.Cancel(); }

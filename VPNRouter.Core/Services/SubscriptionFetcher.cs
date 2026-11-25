@@ -27,7 +27,10 @@ public static class SubscriptionFetcher
         };
 
     internal static IReadOnlyDictionary<string, string> GetSubscriptionHeaders(bool secure) =>
-        secure && SingBoxFeatures.DnsttAvailable
+        CapabilityHeaders(secure && SingBoxFeatures.DnsttAvailable);
+
+    internal static IReadOnlyDictionary<string, string> CapabilityHeaders(bool dnsttAvailable) =>
+        dnsttAvailable
             ? new Dictionary<string, string> { ["X-VPNRouter-Capabilities"] = "detour-v1, dnstt-v1" }
             : SubscriptionHeaders;
 

@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace VPNRouter.Core.Services;
@@ -8,10 +9,12 @@ namespace VPNRouter.Core.Services;
 public static class SingBoxFeatures
 {
     private static readonly object _gate = new();
-    private static bool _probed;
-    private static bool _awg;
-    private static bool _xhttp;
-    private static bool _dnstt;
+    internal sealed record DesktopFeatures(bool Awg, bool Xhttp, string? Version)
+    {
+        internal static readonly DesktopFeatures Unknown = new(false, false, null);
+    }
+
+    private static volatile DesktopFeatures? _desktop;
     private static bool _embeddedDnstt;
 
     internal static bool EmbeddedCore { get; set; } = OperatingSystem.IsAndroid();
@@ -22,7 +25,7 @@ public static class SingBoxFeatures
         {
             var policy = SingBoxRuntimePolicy.Current;
             if (policy != null) return policy.AwgAvailable;
-            return OverrideAwg ?? Probe().awg;
+            return OverrideAwg ?? Probe().Awg;
         }
     }
 
@@ -32,7 +35,7 @@ public static class SingBoxFeatures
         {
             var policy = SingBoxRuntimePolicy.Current;
             if (policy != null) return policy.XhttpAvailable;
-            return OverrideXhttp ?? Probe().xhttp;
+            return OverrideXhttp ?? Probe().Xhttp;
         }
     }
 
@@ -43,8 +46,7 @@ public static class SingBoxFeatures
             if (OverrideDnstt is bool value) return value;
             if (EmbeddedCore) return _embeddedDnstt;
             if (SingBoxRuntimePolicy.Current is { } policy) return policy.DnsttAvailable;
-            _ = Probe();
-            return _dnstt;
+            return Probe().Version is { } version && HasDnsttVersion(version);
         }
     }
 
@@ -75,10 +77,7 @@ public static class SingBoxFeatures
     {
         lock (_gate)
         {
-            _probed = false;
-            _awg = false;
-            _xhttp = false;
-            _dnstt = false;
+            _desktop = null;
             _embeddedDnstt = false;
             OverrideDnstt = null;
             EmbeddedCore = OperatingSystem.IsAndroid();
@@ -87,53 +86,52 @@ public static class SingBoxFeatures
         }
     }
 
-    private static (bool awg, bool xhttp) Probe()
+    // Subscription negotiation refreshes the same feature snapshot consumed by the parser.
+    internal static string? ReadDesktopVersion() => Probe(refresh: true).Version;
+
+    private static DesktopFeatures Probe(bool refresh = false)
     {
         var policy = SingBoxRuntimePolicy.Current;
-        if (policy != null) return (policy.AwgAvailable, policy.XhttpAvailable);
-        // Android runs the core inside the app (libbox, built with with_awg and with_xhttp, checked in CI); no executable to ask.
-        if (EmbeddedCore) return (true, true);
-        if (_probed) return (_awg, _xhttp);
+        if (policy != null) return new(policy.AwgAvailable, policy.XhttpAvailable, null);
+        if (EmbeddedCore) return new(true, true, null);
+        if (!refresh && _desktop is { } current) return current;
         lock (_gate)
         {
-            if (_probed) return (_awg, _xhttp);
+            if (!refresh && _desktop is { } cached) return cached;
+            DesktopFeatures result;
             try
             {
-                var path = ResolveBinaryPath();
-                if (path != null && File.Exists(path))
-                {
-                    var output = ReadVersionOutput(path);
-                    const string prefix = "sing-box version ";
-                    var lines = output.Split('\n');
-                    var tags = Array.Find(lines, line => line.TrimStart().StartsWith("Tags:", StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
-                    var version = Array.Find(lines, line => line.StartsWith(prefix, StringComparison.Ordinal));
-                    _dnstt = version != null && HasDnsttVersion(version[prefix.Length..]);
-                    _awg = tags.Contains("with_awg", StringComparison.Ordinal);
-                    _xhttp = tags.Contains("with_xhttp", StringComparison.Ordinal);
-                }
+                result = ReadDesktopFeatures(AppPaths.DefaultSingBoxDeployment, ReadVersionOutput);
             }
             catch
             {
-                // Any probe failure keeps the safe default: fork protocols stay rejected.
-                _awg = false;
-                _xhttp = false;
-                _dnstt = false;
+                result = DesktopFeatures.Unknown;
             }
-            _probed = true;
-            return (_awg, _xhttp);
+            _desktop = result;
+            return result;
         }
     }
 
-    private static string ResolveBinaryPath()
+    internal static DesktopFeatures ReadDesktopFeatures(
+        SingBoxDeployment deployment, Func<string, string> readVersionOutput)
     {
-        try
-        {
-            var bundled = Path.Combine(AppContext.BaseDirectory,
-                OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
-            if (File.Exists(bundled)) return bundled;
-        }
-        catch { }
-        return AppPaths.SingBoxExePath;
+        var path = deployment.Source;
+        if (!File.Exists(path)) return DesktopFeatures.Unknown;
+        var lines = readVersionOutput(path).Split('\n');
+        var tags = Array.Find(lines, line => line.TrimStart().StartsWith("Tags:", StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+        return new(tags.Contains("with_awg", StringComparison.Ordinal),
+            tags.Contains("with_xhttp", StringComparison.Ordinal), ParseVersion(lines));
+    }
+
+    private static string? ParseVersion(string[] lines)
+    {
+        const string prefix = "sing-box version ";
+        var line = Array.Find(lines, text => text.StartsWith(prefix, StringComparison.Ordinal));
+        if (line == null) return null;
+        var version = line[prefix.Length..].Trim();
+        return version.Length is > 0 and <= 96 &&
+            Regex.IsMatch(version, @"\A[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?(?:\+[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*)?\z",
+                RegexOptions.CultureInvariant | RegexOptions.NonBacktracking) ? version : null;
     }
 
     private static string ReadVersionOutput(string path)

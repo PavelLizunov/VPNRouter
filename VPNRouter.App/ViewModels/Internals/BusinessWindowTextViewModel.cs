@@ -9,7 +9,7 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     private bool _languageSaveFailed;
     public string ConnectButton => _client?.IsConnecting == true && IsStoppingStatus(_client.StatusText) ? Strings.Stopping
         : _client?.IsConnecting == true ? Strings.ButtonConnecting
-        : _client?.IsConnected == true ? Strings.StopVPN : Strings.StartVPN;
+        : _client?.IsConnected == true ? Strings.BusinessDisconnect : Strings.BusinessConnect;
     public string ConnectionStatus => _languageSaveFailed ? Strings.BusinessLanguageSaveFailed
         : _client?.IsConnecting == true && IsStoppingStatus(_client.StatusText) ? Strings.Stopping
         : _client?.IsConnecting == true && IsNeutralStartingStatus(_client.StatusText) ? Strings.ButtonConnecting
@@ -47,15 +47,41 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     }
     internal void SetLanguageSaveFailed(bool failed) { _languageSaveFailed = failed; Refresh(); }
 
+    internal void RefreshAutoSelect()
+    {
+        OnPropertyChanged(nameof(AutoSelectEnabled));
+        OnPropertyChanged(nameof(AutoSelectStatus));
+        OnPropertyChanged(nameof(HasAutoSelectStatus));
+    }
+
     public string Menu => Strings.BusinessMenu;
     public string PolicyStatus => _client?.BusinessPolicyStatusText ?? string.Empty;
     public bool HasPolicyStatus => !string.IsNullOrEmpty(PolicyStatus);
     public string Language => Strings.BusinessLanguage;
     public string Server => Strings.BusinessServer;
+    public string ServerMenu => Strings.BusinessServerMenu;
+    public string ModeMenu => Strings.BusinessModeMenu;
+    public string AutoSelect => Strings.BusinessAutoSelectServer;
+    public string AutoSelectHint => Strings.BusinessAutoSelectHint;
+    public bool AutoSelectEnabled
+    {
+        get => _client?.BusinessAutoSelect == true;
+        set
+        {
+            if (_client != null && _client.BusinessAutoSelect != value)
+                _client.SetBusinessAutoSelect(value);
+        }
+    }
+    public string AutoSelectStatus => _client?.BusinessAutoSelectStatusText ?? string.Empty;
+    public bool HasAutoSelectStatus => _client?.HasBusinessAutoSelectStatus == true;
     public string ServerRefresh => Strings.BusinessServerRefresh;
     public string UpdateServers => Strings.BusinessUpdateServers;
     public string InstallUpdate => Strings.UpdateButton;
     public string LaterUpdate => Strings.UpdateButtonDismiss;
+    public string RepairTitle => Strings.BusinessRepairTitle;
+    public string RepairAnalyze => Strings.BusinessRepairAnalyze;
+    public string RepairConsent => Strings.BusinessRepairConsent;
+    public string RepairClose => Strings.BusinessRepairClose;
     public string DiagnosticsHeader => Strings.BusinessDiagnosticsHeader;
     public string DiagnosticsCollect => Strings.BusinessDiagnosticsCollect;
     public string DiagnosticsSend => Strings.BusinessDiagnosticsSend;

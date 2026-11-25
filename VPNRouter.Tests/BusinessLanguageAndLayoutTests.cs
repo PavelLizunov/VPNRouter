@@ -26,6 +26,7 @@ public sealed class BusinessLanguageAndLayoutTests
     {
         using var fixture = new Fixture();
         var window = fixture.Window;
+        window.OpenServerPanel();
         var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
         var choice = Assert.IsType<BusinessServerChoiceViewModel>(selector.SelectedItem);
         choice.Update(new(ServerProbeStatus.Ok, 12, null));
@@ -235,7 +236,7 @@ public sealed class BusinessLanguageAndLayoutTests
         using var fixture = new Fixture();
         await fixture.Window.RefreshBusinessServersAsync();
         var language = Language(fixture.Window);
-        OpenMenu(fixture.Window).Hide();
+        fixture.Window.OpenServerPanel();
         var selector = fixture.Window.FindControl<ComboBox>("BusinessServerSelector")!;
         var slow = Assert.IsType<BusinessServerChoiceViewModel>(selector.Items[1]);
         var unavailable = Assert.IsType<BusinessServerChoiceViewModel>(selector.Items[2]);
@@ -258,9 +259,9 @@ public sealed class BusinessLanguageAndLayoutTests
                 Assert.True(unavailableRow.IsEffectivelyVisible);
                 Assert.Same(slow, slowRow.DataContext);
                 Assert.Same(unavailable, unavailableRow.DataContext);
-                AssertHealthTooltip(slowRow, index == 0 ? "Медленный ответ" : "Slow response",
+                AssertHealthTooltip(slowRow, index == 0 ? "Медленный VPN" : "Slow VPN",
                     fixture.Window.Texts.ConnectionStatus);
-                AssertHealthTooltip(unavailableRow, index == 0 ? "Нет ответа" : "No response",
+                AssertHealthTooltip(unavailableRow, index == 0 ? "Проверка не прошла" : "Check failed",
                     fixture.Window.Texts.ConnectionStatus);
                 Assert.Equal(index == 0 ? "930 мс" : "930 ms", slow.PingText);
                 Assert.True(slow.IsWarning);
@@ -345,7 +346,12 @@ public sealed class BusinessLanguageAndLayoutTests
         var scroll = Assert.IsType<ScrollViewer>(window.Content);
         FlushLayout(window);
         AssertInsideViewport(ConnectionButton(fixture), scroll);
-        AssertInsideViewport(window.FindControl<ComboBox>("BusinessServerSelector")!, scroll);
+        var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
+        var menuFlyout = (Flyout)window.FindControl<Button>("BusinessMenuButton")!.Flyout!;
+        Assert.False(menuFlyout.IsOpen);
+        Assert.DoesNotContain(window.GetVisualDescendants(), visual => ReferenceEquals(visual, selector));
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<RadioButton>(),
+            radio => radio.IsEffectivelyVisible);
         var menu = window.FindControl<Button>("BusinessMenuButton")!;
         AssertInsideViewport(menu, scroll);
         Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
@@ -354,14 +360,20 @@ public sealed class BusinessLanguageAndLayoutTests
         Assert.True(scroll.Offset.Y + scroll.Viewport.Height >= scroll.Extent.Height - 1);
         scroll.Offset = default;
         var flyout = OpenMenu(window);
+        window.OpenServerPanel();
+        window.OpenModePanel();
         var menuScroll = window.FindControl<ScrollViewer>("BusinessMenuScroll")!;
         Assert.True(Send(window).IsEffectivelyEnabled);
         AssertInsideViewport(Send(window), menuScroll);
         AssertInsideViewport(Language(window), menuScroll);
         Assert.Equal(Strings.BusinessDiagnosticsHint, ToolTip.GetTip(Send(window)));
+        window.FindControl<Border>("BusinessServerPanel")!.BringIntoView();
+        FlushLayout(window);
+        AssertInsideViewport(window.FindControl<ComboBox>("BusinessServerSelector")!, menuScroll);
         menuScroll.Offset = new(0, menuScroll.Extent.Height);
         FlushLayout(window);
         Assert.True(menuScroll.Offset.Y + menuScroll.Viewport.Height >= menuScroll.Extent.Height - 1);
+        AssertInsideViewport(window.FindControl<Border>("BusinessModePanel")!, menuScroll);
         AssertInsideViewport(window.FindControl<StackPanel>("BusinessSubscriptionActions")!, menuScroll);
         Assert.True(menuScroll.Extent.Width <= menuScroll.Viewport.Width + 1);
         flyout.Hide();
@@ -417,7 +429,7 @@ public sealed class BusinessLanguageAndLayoutTests
     private static void AssertConnectionLabels(Fixture fixture, bool connecting, string expectedStatus, string? expectedButton = null)
     {
         var button = ConnectionButton(fixture);
-        expectedButton ??= connecting ? Strings.ButtonConnecting : Strings.StopVPN;
+        expectedButton ??= connecting ? Strings.ButtonConnecting : Strings.BusinessDisconnect;
         Assert.Equal(expectedButton, fixture.Window.Texts.ConnectButton);
         Assert.Equal(expectedButton, AutomationProperties.GetName(button));
         Assert.Contains(button.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == expectedButton);

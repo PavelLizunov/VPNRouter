@@ -52,7 +52,7 @@ public static partial class ConfigGenerator
         }
     }
 
-    private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
+    internal static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
     {
         var protocol = (entry.Protocol ?? "vless").ToLowerInvariant();
         var outbound = protocol switch

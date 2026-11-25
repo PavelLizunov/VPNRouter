@@ -108,6 +108,38 @@ public sealed class AutoFailoverRecoveryAndPersistTests
     }
 
     [Fact]
+    public async Task TransientBusinessFailoverKeepsTheSavedManualSelection()
+    {
+        var saved = new AppSettings();
+        saved.App.BusinessServerSelectionMode = BusinessServerSelectionMode.Manual;
+        saved.Vless.ActiveServer = "A";
+        saved.Vless.Servers =
+        [
+            new() { Name = "B", Server = "192.0.2.2" },
+            new() { Name = "C", Server = "192.0.2.3" },
+            new() { Name = "A", Server = "192.0.2.1" },
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(saved);
+        var submission = VpnEngine.CopySessionSettings(saved);
+        submission.Vless.ActiveServer = "B";
+        submission.Vless.Servers.Single(server => server.Name == "B").UseAsSingleOutbound = true;
+        submission.Vless.IsTransientBusinessSelection = true;
+        Assert.False(SettingsLoader.Copy(submission).Vless.IsTransientBusinessSelection);
+
+        var session = VpnEngine.CopySessionSettings(submission);
+        var engine = new AutoFailoverEngine(session, new ConfigSanityCheck(),
+            restart: _ => Task.FromResult(session.Vless.ActiveServer == "C"), store: store)
+            { IsSelectionConfirmed = () => true };
+        var outcome = await engine.HandleDeadConfigAsync("fixture", TestContext.Current.CancellationToken);
+
+        Assert.True(outcome.Switched);
+        Assert.Equal("C", session.Vless.ActiveServer);
+        Assert.Equal("A", store.Load().Vless.ActiveServer);
+        Assert.Equal(1, store.SaveCount);
+    }
+
+    [Fact]
     public async Task Persist_DoesNotLeakResolverAggregateIntoVlessServers()
     {
         var store = new InMemorySettingsStore();

@@ -14,7 +14,15 @@ internal static class BusinessDefaults
 
         rules = BusinessPolicyRouting.Compose(rules, policy);
 
+        // Automatic is the default for fresh installs and for legacy Business
+        // settings that predate the explicit manual preference. Only an explicit
+        // stored manual mode keeps a named legacy node.
+        var selectionMode = BusinessServerSelectionMode.IsConfigured(settings.App.BusinessServerSelectionMode)
+            ? settings.App.BusinessServerSelectionMode
+            : BusinessServerSelectionMode.Automatic;
+
         settings.Vless = CreateServerPool(servers, settings.Vless);
+        settings.App.BusinessServerSelectionMode = selectionMode;
         settings.ActiveProfile = string.Empty;
         settings.CustomApps.Clear();
         settings.ExcludedApps.Clear();

@@ -291,6 +291,8 @@ public partial class MainWindowViewModel
         if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting ||
             server == null || !GetBusinessServerChoices().Contains(server)) return;
 
+        MarkBusinessSelectionManual();
+        _settings.App.BusinessServerSelectionMode = BusinessServerSelectionMode.Manual;
         SelectedServer = server;
         try { SaveSettings(); }
         catch (Exception)
@@ -302,9 +304,10 @@ public partial class MainWindowViewModel
 
     internal bool ReplaceBusinessServers(string connection, string sourceHash)
     {
-        if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting || _engine.IsRunning) return false;
+        if (!CanRefreshBusinessServers) return false;
         var entries = BusinessDefaults.ParseConnection(connection);
-        var next = BusinessDefaults.CreateServerPool(entries, _settings.Vless, requireSelectedDnstt: true);
+        var next = BusinessDefaults.CreateServerPool(entries, _settings.Vless,
+            requireSelectedDnstt: !BusinessServerSelectionMode.IsAutomatic(_settings.App.BusinessServerSelectionMode));
         var rows = entries.Select(s => new ServerViewModel(s)).ToArray();
         ServerViewModel.RefreshUdpSiblingFlags(rows);
         ServerViewModel.RefreshProviderRiskFlags(rows);
@@ -327,9 +330,11 @@ public partial class MainWindowViewModel
         {
             Servers.Clear();
             foreach (var row in rows) Servers.Add(row);
-            SelectedServer = rows.First(s => s.Name == next.ActiveServer);
+            SelectedServer = rows.First(row =>
+                string.Equals(row.Name, next.ActiveServer, StringComparison.OrdinalIgnoreCase));
         }
         finally { _isLoadingUI = false; }
+        OnBusinessServersReplaced();
         return true;
     }
 

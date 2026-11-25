@@ -662,6 +662,8 @@ public partial class MainWindowViewModel
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
         AutoSelectBestServer = _settings.Vless.AutoSelectBestServer;
+        BusinessAutoSelect = BusinessServerSelectionMode.IsAutomatic(
+            _settings.App.BusinessServerSelectionMode);
         ConnectionIntentIndex = IntentToIndex(_settings.App.ConnectionIntent);
         IsDnsLeakLockdownEnabled = _settings.App.DnsLeakLockdown;
 
@@ -1011,6 +1013,10 @@ public partial class MainWindowViewModel
         _settings.App.StrictDns = StrictDns;
         _settings.App.BlockAds = BlockAds;
         _settings.Vless.AutoSelectBestServer = AutoSelectBestServer;
+        if (BusinessServerSelectionMode.IsConfigured(_settings.App.BusinessServerSelectionMode))
+            _settings.App.BusinessServerSelectionMode = BusinessAutoSelect
+                ? BusinessServerSelectionMode.Automatic
+                : BusinessServerSelectionMode.Manual;
         _settings.App.ConnectionIntent = IntentFromIndex(ConnectionIntentIndex);
         _settings.App.DnsLeakLockdown = IsDnsLeakLockdownEnabled;
         _settings.App.AutostartVpn = AutostartVpn;

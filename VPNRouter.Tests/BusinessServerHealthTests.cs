@@ -248,17 +248,20 @@ public sealed class BusinessServerHealthTests
         window.Show();
         try
         {
+            window.OpenServerPanel();
             var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
             selector.SelectedIndex = selected;
             Dispatcher.UIThread.RunJobs();
+            var menu = (Flyout)window.FindControl<Button>("BusinessMenuButton")!.Flyout!;
+            var menuControls = Assert.IsAssignableFrom<Control>(menu.Content).GetVisualDescendants().ToList();
             var choices = selector.Items.Cast<BusinessServerChoiceViewModel>().ToArray();
             Assert.True(choices[0].IsGood);
             Assert.True(choices[1].IsWarning);
             Assert.True(choices[2].IsBad);
-            var texts = window.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+            var texts = menuControls.OfType<TextBlock>().Select(t => t.Text).ToArray();
             Assert.Contains(choices[selected].PingText, texts);
             Assert.DoesNotContain(texts, t => t?.Contains("192.0.2.") == true || t?.Contains("private error") == true);
-            var dot = Assert.Single(window.GetVisualDescendants().OfType<Ellipse>().Where(e => e.Classes.Contains("business-health-dot")));
+            var dot = Assert.Single(menuControls.OfType<Ellipse>().Where(e => e.Classes.Contains("business-health-dot")));
             Assert.True(window.TryFindResource(brushKey, window.ActualThemeVariant, out var brush));
             Assert.Equal(Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color, Assert.IsAssignableFrom<ISolidColorBrush>(dot.Fill).Color);
             var scroll = Assert.IsType<ScrollViewer>(window.Content);
@@ -278,7 +281,7 @@ public sealed class BusinessServerHealthTests
 
     private static Button RefreshButton(BusinessWindow window)
     {
-        OpenMenu(window);
+        window.OpenServerPanel();
         return window.FindControl<Button>("BusinessServerRefresh")!;
     }
 

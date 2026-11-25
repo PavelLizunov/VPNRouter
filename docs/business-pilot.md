@@ -117,6 +117,9 @@ Run `tools/build-business.ps1` only in exact-SHA CI or an authorized preflighted
 worker. It calls the existing `build.ps1`, bundles Russian geo files and builds
 `packaging/windows/business.iss` with Inno Setup. The result is an unsigned pilot
 installer, not a public release. Source version remains `AppVersion.Version`.
+The Windows Business core is pinned only in `packaging/windows/business-core.ps1`;
+this installer and the shared update consume the same `1.14.4-vpnctl.3` archive
+and SHA256, independently of the Standard Windows pin.
 
 The packaging job in `build-ui-mcp.yml` is explicitly dispatched with
 `business_pilot=true`. It reads individual config and an ephemeral delivery key

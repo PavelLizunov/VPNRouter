@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using VPNRouter.Core;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.Services;
@@ -10,11 +11,14 @@ internal sealed class BusinessClientHttp : IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsClient;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<(bool IsWindows, string? CoreVersion)> _subscriptionRuntime;
 
-    internal BusinessClientHttp(HttpClient? http = null, TimeProvider? timeProvider = null)
+    internal BusinessClientHttp(HttpClient? http = null, TimeProvider? timeProvider = null,
+        Func<(bool IsWindows, string? CoreVersion)>? subscriptionRuntime = null)
     {
         _ownsClient = http == null;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _subscriptionRuntime = subscriptionRuntime ?? (() => (OperatingSystem.IsWindows(), SingBoxFeatures.ReadDesktopVersion()));
         _http = http ?? new HttpClient(new SocketsHttpHandler
         {
             AllowAutoRedirect = false, UseCookies = false,
@@ -28,8 +32,11 @@ internal sealed class BusinessClientHttp : IDisposable
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(15));
         using var request = new HttpRequestMessage(HttpMethod.Get, source);
-        request.Headers.UserAgent.ParseAdd("VPNRouterBusiness");
-        foreach (var (name, value) in SubscriptionFetcher.GetSubscriptionHeaders(secure: true))
+        var (isWindows, version) = await Task.Run(_subscriptionRuntime, timeout.Token).ConfigureAwait(false);
+        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("VPNRouterBusiness", AppVersion.Version));
+        if (isWindows) request.Headers.Add("X-VPNRouter-Platform", "windows");
+        if (version != null) request.Headers.Add("X-VPNRouter-Core-Version", version);
+        foreach (var (name, value) in SubscriptionFetcher.CapabilityHeaders(version != null && SingBoxFeatures.HasDnsttVersion(version)))
             request.Headers.Add(name, value);
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode) throw new IOException("Subscription not received.");

@@ -8,7 +8,10 @@ namespace VPNRouter.App.ViewModels.Internals;
 public sealed class BusinessServerChoiceViewModel : ViewModelBase
 {
     internal ServerViewModel Server { get; }
-    internal bool SupportsTcpProbe => Server.SourceEntry.Dnstt == null;
+    internal bool SupportsEndToEndProbe =>
+        string.Equals(Server.SourceEntry.Protocol, "dnstt", StringComparison.OrdinalIgnoreCase)
+            ? Server.SourceEntry.Dnstt != null && SingBoxFeatures.DnsttAvailable
+            : !Server.SourceEntry.IsDnsTunnel;
     public string DisplayName => Server.SourceEntry.Dnstt != null &&
         !Server.DisplayName.Contains("DNSTT", StringComparison.OrdinalIgnoreCase)
         ? $"{Server.DisplayName} · DNSTT" : Server.DisplayName;
@@ -51,7 +54,9 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
     public bool IsWarning => !_checking && _result.Status is ServerProbeStatus.Slow or ServerProbeStatus.Implausible;
     public bool IsBad => !_checking && _result.Status is ServerProbeStatus.Unreachable or ServerProbeStatus.Timeout or ServerProbeStatus.TlsFailed;
 
-    public string StatusText => _checking ? Strings.BusinessServerChecking : _result.Status switch
+    public string StatusText => _checking ? Strings.BusinessServerChecking
+        : !SupportsEndToEndProbe ? Strings.BusinessServerUnsupportedByCheck
+        : _result.Status switch
     {
         ServerProbeStatus.Ok => Strings.BusinessServerReachable,
         ServerProbeStatus.Slow => Strings.BusinessServerSlow,
@@ -60,7 +65,9 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         _ => Strings.BusinessServerNotChecked
     };
 
-    public string PingText => _checking ? Strings.BusinessServerChecking : _result.Status switch
+    public string PingText => _checking ? Strings.BusinessServerChecking
+        : !SupportsEndToEndProbe ? Strings.BusinessServerUnsupportedByCheck
+        : _result.Status switch
     {
         ServerProbeStatus.Ok or ServerProbeStatus.Slow => _result.LatencyMs > 0
             ? Strings.BusinessServerLatency(_result.LatencyMs) : Strings.BusinessServerSubMillisecond,

@@ -11,6 +11,9 @@ public class AppConfig
     [YamlMember(Alias = "business_subscription_cache", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
     public string? BusinessSubscriptionCache { get; set; }
 
+    [YamlMember(Alias = "business_server_selection_mode", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? BusinessServerSelectionMode { get; set; }
+
     [YamlMember(Alias = "log_level")]
     public string LogLevel { get; set; } = "info";
 

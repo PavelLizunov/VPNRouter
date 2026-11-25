@@ -111,7 +111,12 @@ public sealed class BusinessPilotValidationTests
             Assert.True(process.WaitForExit(5000), "Packaged native core capability inspection timed out.");
             Assert.True(Task.WaitAll(new Task[] { stdout, stderr }, 5000), "Packaged native core capability output did not finish.");
             Assert.True(process.ExitCode == 0, "Packaged native core capability inspection failed.");
-            var tags = stdout.GetAwaiter().GetResult().Split('\n')
+            var output = stdout.GetAwaiter().GetResult();
+            var version = output.Split('\n').Select(line => line.Trim())
+                .FirstOrDefault(line => line.StartsWith("sing-box version ", StringComparison.Ordinal));
+            Assert.Equal("sing-box version 1.14.4-vpnctl.3",
+                version ?? throw new InvalidOperationException("Packaged native core did not report its version."));
+            var tags = output.Split('\n')
                 .Select(line => line.Trim()).Where(line => line.StartsWith("Tags:", StringComparison.OrdinalIgnoreCase)).ToArray();
             Assert.True(tags.Length == 1, "Packaged native core must report one capability-tag line.");
             var declared = tags[0]["Tags:".Length..].Split([',', ' ', '\t'],

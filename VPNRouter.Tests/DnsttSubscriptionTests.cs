@@ -163,7 +163,8 @@ public sealed class DnsttSubscriptionTests
                     Content = new System.Net.Http.StringContent(body)
                 });
             }));
-            using var http = new VPNRouter.App.Services.BusinessClientHttp(client);
+            using var http = new VPNRouter.App.Services.BusinessClientHttp(client,
+                subscriptionRuntime: () => (true, "1.14.4-vpnctl.3"));
             var imported = BusinessDefaults.ParseConnection(await http.FetchAsync(new Uri("https://provider.example/sub"),
                 TestContext.Current.CancellationToken));
             Assert.Equal(2, BusinessDefaults.GetServerChoices(imported).Count);

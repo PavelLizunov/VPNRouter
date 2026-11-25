@@ -14,9 +14,13 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     private readonly BusinessClientHttp _http;
     private readonly IBusinessDiagnostics _diagnostics;
     private readonly Action _poolChanged;
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromHours(1) };
+    private readonly TimeProvider _timeProvider;
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromHours(1);
+    private readonly DispatcherTimer _timer = new() { Interval = RefreshInterval };
     private readonly CancellationTokenSource _lifetime = new();
-    private CancellationTokenSource? _refresh, _diagnostic;
+    private RefreshOperation? _refresh;
+    private CancellationTokenSource? _diagnostic;
+    private long? _lastSuccessfulRefresh;
     private bool _visible, _disposed, _started, _delivered;
     private string? _report;
     private BusinessSupportReply? _supportReply;
@@ -67,6 +71,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     }
     internal void RefreshLocalization()
     {
+        OnPropertyChanged(nameof(RepairHint));
         OnPropertyChanged(nameof(RefreshStatus));
         OnPropertyChanged(nameof(IsRefreshStatusVisible));
         OnPropertyChanged(nameof(DiagnosticStatus));
@@ -80,87 +85,178 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     public RelayCommand OpenReportCommand { get; }
 
     internal BusinessServicesViewModel(MainWindowViewModel vm, BusinessClientConfiguration configuration,
-        BusinessClientHttp http, Action poolChanged, IBusinessDiagnostics? diagnostics = null)
+        BusinessClientHttp http, Action poolChanged, IBusinessDiagnostics? diagnostics = null,
+        Func<CancellationToken, Task<bool>>? connectVerified = null, TimeProvider? timeProvider = null)
     {
         _vm = vm; _configuration = configuration; _http = http; _poolChanged = poolChanged;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _connectVerified = connectVerified ?? vm.ConnectVerifiedBusinessServerAsync;
         _diagnostics = diagnostics ?? new BusinessDiagnostics(configuration, http);
         RefreshListCommand = new(RefreshListAsync, CanRefresh);
-        CollectCommand = new(() => RunDiagnosticsAsync(false), () => !_disposed && !IsDiagnosticBusy);
-        SendCommand = new(() => RunDiagnosticsAsync(true), () => !_disposed && !IsDiagnosticBusy && configuration.SupportEndpoint != null);
+        CollectCommand = new(() => RunDiagnosticsAsync(false), () => !_disposed && !IsRepairOpen && !IsDiagnosticBusy);
+        SendCommand = new(() => RunDiagnosticsAsync(true), () => !_disposed && !IsRepairOpen && !IsDiagnosticBusy && configuration.SupportEndpoint != null);
         CancelDiagnosticCommand = new(() => _diagnostic?.Cancel(), () => !_disposed && IsDiagnosticBusy);
         OpenReportCommand = new(OpenReport, () => !_disposed && !IsDiagnosticBusy && _report != null);
         _vm.PropertyChanged += OnVmChanged;
+        _vm.UpdateVm.PropertyChanged += OnUpdateChanged;
         _timer.Tick += OnTimer;
         if (configuration.Subscription == null) SetRefreshState(RefreshState.NotConfigured);
+        else _vm.RefreshBusinessSubscriptionBeforeConnect = RefreshForConnectAsync;
         if (configuration.SupportEndpoint == null) SetDiagnosticState(DiagnosticState.LocalOnly);
     }
 
-    private bool CanRefresh() => !_disposed && _visible && !IsRefreshing &&
-        !_vm.IsConnecting && !_vm.IsConnected && _configuration.Subscription != null;
+    private bool CanRefresh() => _visible && _refresh == null &&
+        !_vm.IsBusinessSubscriptionPreflight && !_vm.IsBusinessRepairInProgress && CanRefreshPool;
+
+    private bool CanRefreshPool => !_disposed && _configuration.Subscription != null &&
+        (_visible || _vm.IsBusinessSubscriptionPreflight) && _vm.CanRefreshBusinessServers;
+
+    private bool NeedsRefresh => _lastSuccessfulRefresh is not { } stamp ||
+        _timeProvider.GetElapsedTime(stamp) >= RefreshInterval;
 
     internal void SetVisible(bool visible)
     {
         _visible = visible;
-        if (!visible) { _timer.Stop(); _refresh?.Cancel(); }
+        if (!visible)
+        {
+            CloseRepair();
+            _timer.Stop();
+            if (!_vm.IsBusinessSubscriptionPreflight) _refresh?.Cancellation.Cancel();
+        }
         else if (!_disposed)
         {
             _timer.Start();
-            if (!_started && CanRefresh()) { _started = true; _ = RefreshListAsync(); }
+            if (!_started) _ = RefreshListAsync();
         }
         RefreshListCommand.NotifyCanExecuteChanged();
+        NotifyRepairCommands();
     }
 
-    private void OnTimer(object? sender, EventArgs e) { if (CanRefresh()) _ = RefreshListAsync(); }
+    private void OnUpdateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(_vm.UpdateVm.IsDownloading)) OnVmChanged(sender, e);
+    }
+
+    private void OnTimer(object? sender, EventArgs e) => _ = RefreshListAsync();
+
     private void OnVmChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not (nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected))) return;
+        if (e.PropertyName is not (nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected)
+            or nameof(MainWindowViewModel.IsApplying) or nameof(MainWindowViewModel.SelectedServer)
+            or nameof(MainWindowViewModel.IsBusinessRepairInProgress) or nameof(_vm.UpdateVm.IsDownloading))) return;
         if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => OnVmChanged(sender, e)); return; }
         if (_disposed) return;
-        if (_vm.IsConnecting || _vm.IsConnected) _refresh?.Cancel();
-        if (!_started && CanRefresh()) { _started = true; _ = RefreshListAsync(); }
+        if (e.PropertyName == nameof(MainWindowViewModel.IsBusinessRepairInProgress))
+        {
+            RefreshListCommand.NotifyCanExecuteChanged();
+            return;
+        }
+        if (_repairStep is RepairStep.Analyzing or RepairStep.Advice or RepairStep.Failed ||
+            (_repairStep == RepairStep.Consent && e.PropertyName != nameof(MainWindowViewModel.SelectedServer)))
+            CloseRepair();
+        NotifyRepairCommands();
+        if (e.PropertyName == nameof(MainWindowViewModel.SelectedServer)) return;
+        if (_refresh != null && !CanRefreshPool) _refresh.Cancellation.Cancel();
+        if (!_started) _ = RefreshListAsync();
         RefreshListCommand.NotifyCanExecuteChanged();
     }
 
-    internal async Task RefreshListAsync()
+    internal Task RefreshListAsync() => CanRefresh() ? StartRefresh() : Task.CompletedTask;
+
+    private async Task RefreshForConnectAsync(CancellationToken ct)
     {
-        if (!CanRefresh()) return;
-        IsRefreshing = true;
-        RefreshListCommand.NotifyCanExecuteChanged();
-        using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        _refresh = operation;
-        SetRefreshState(RefreshState.Updating);
         try
         {
-            var body = await _http.FetchAsync(_configuration.Subscription!, operation.Token);
-            operation.Token.ThrowIfCancellationRequested();
-            if (_disposed || !_visible || _vm.IsConnected || _vm.IsConnecting) return;
-            if (!_vm.ReplaceBusinessServers(body, _configuration.SourceHash!))
-                throw new InvalidOperationException("Server pool is busy.");
+            if (_refresh is { } current)
+            {
+                var alreadyCancelled = current.Cancellation.IsCancellationRequested;
+                await current.Completion.Task.WaitAsync(ct);
+                // A hidden window may already have cancelled the periodic fetch.
+                // After it drains, allow a single connection-owned attempt.
+                if (!alreadyCancelled) return;
+            }
+            ct.ThrowIfCancellationRequested();
+            if (CanRefreshPool && NeedsRefresh) await StartRefresh().WaitAsync(ct);
+        }
+        finally
+        {
+            if (!_visible) _refresh?.Cancellation.Cancel();
+        }
+    }
+
+    private Task StartRefresh()
+    {
+        var operation = new RefreshOperation(_lifetime.Token);
+        _refresh = operation;
+        _started = true;
+        _ = RunRefreshAsync(operation);
+        return operation.Completion.Task;
+    }
+
+    private async Task RunRefreshAsync(RefreshOperation operation)
+    {
+        var ct = operation.Cancellation.Token;
+        try
+        {
+            IsRefreshing = true;
+            NotifyRepairCommands();
+            RefreshListCommand.NotifyCanExecuteChanged();
+            SetRefreshState(RefreshState.Updating);
+
+            var body = await _http.FetchAsync(_configuration.Subscription!, ct);
+            ct.ThrowIfCancellationRequested();
+            if (!CanRefreshPool || !_vm.ReplaceBusinessServers(body, _configuration.SourceHash!))
+            {
+                if (!_disposed) SetRefreshState(RefreshState.Cancelled);
+                return;
+            }
+            _lastSuccessfulRefresh = _timeProvider.GetTimestamp();
+            if (_visible)
+            {
+                _timer.Stop();
+                _timer.Start();
+            }
             _poolChanged();
             _refreshedCount = _vm.GetBusinessServerChoices().Count;
             SetRefreshState(RefreshState.Updated);
         }
-        catch (OperationCanceledException) { if (!_disposed) SetRefreshState(RefreshState.Cancelled); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            if (!_disposed) SetRefreshState(RefreshState.Cancelled);
+        }
         catch { if (!_disposed) SetRefreshState(RefreshState.Failed); }
         finally
         {
             _refresh = null;
-            if (!_disposed) { IsRefreshing = false; RefreshListCommand.NotifyCanExecuteChanged(); }
+            operation.Cancellation.Dispose();
+            if (!_disposed)
+            {
+                IsRefreshing = false;
+                RefreshListCommand.NotifyCanExecuteChanged();
+                NotifyRepairCommands();
+            }
+            operation.Completion.TrySetResult();
         }
     }
 
-    internal async Task RunDiagnosticsAsync(bool send)
+    private sealed class RefreshOperation(CancellationToken lifetime)
     {
-        if (_disposed || IsDiagnosticBusy || (send && _configuration.SupportEndpoint == null)) return;
+        internal readonly CancellationTokenSource Cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+        internal readonly TaskCompletionSource Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    internal async Task RunDiagnosticsAsync(bool send, bool fresh = false, CancellationToken cancellationToken = default)
+    {
+        if (_disposed || IsDiagnosticBusy || (IsRepairOpen && !fresh) || (send && _configuration.SupportEndpoint == null)) return;
         IsDiagnosticBusy = true; NotifyDiagnosticCommands();
-        using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
         _diagnostic = operation;
         var uploading = false;
         var acknowledged = false;
         try
         {
             // Retry sends the same saved archive, allowing receiver deduplication.
-            if (!send || _report == null || _delivered)
+            if (fresh || !send || _report == null || _delivered)
             {
                 SetDiagnosticState(DiagnosticState.Collecting);
                 var report = await _diagnostics.CollectAsync(operation.Token);
@@ -209,6 +305,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     {
         CollectCommand.NotifyCanExecuteChanged(); SendCommand.NotifyCanExecuteChanged();
         CancelDiagnosticCommand.NotifyCanExecuteChanged(); OpenReportCommand.NotifyCanExecuteChanged();
+        NotifyRepairCommands();
     }
 
     private void OpenReport()
@@ -224,6 +321,9 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         _disposed = true;
         _timer.Stop(); _timer.Tick -= OnTimer;
         _vm.PropertyChanged -= OnVmChanged;
+        if (_vm.RefreshBusinessSubscriptionBeforeConnect == RefreshForConnectAsync)
+            _vm.RefreshBusinessSubscriptionBeforeConnect = null;
+        _vm.UpdateVm.PropertyChanged -= OnUpdateChanged;
         _lifetime.Cancel();
         // Active operations own/dispose their linked sources after completion.
         _http.Dispose();

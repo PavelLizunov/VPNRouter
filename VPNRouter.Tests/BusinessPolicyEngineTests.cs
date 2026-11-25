@@ -37,6 +37,10 @@ public sealed class BusinessPolicyEngineTests
         });
         var first = GeneratedSettings(fixture.Executable, 7, includeOldSite: true);
         var next = GeneratedSettings(fixture.Executable, 8, includeOldSite: false);
+        var liveServer = first.Vless.Servers.Single();
+        liveServer.UseAsSingleOutbound = true;
+        var savedServer = next.Vless.Servers.Single();
+        savedServer.Server = "192.0.2.99";
         var profile = new Profile { Name = "Fixture", DnsMode = "vpn_only" };
         var originalJson = ConfigPipeline.Generate(profile, [], first, ConfigPipeline.ValidationMode.Strict);
         var hostType = typeof(VpnEngine).GetNestedType("VpnEngineStartupHost", BindingFlags.NonPublic)!;
@@ -66,6 +70,8 @@ public sealed class BusinessPolicyEngineTests
             Assert.Equal(2, loaded.Count);
             Assert.Contains("old.example.com", loaded[0]);
             Assert.DoesNotContain("old.example.com", loaded[1]);
+            AssertActiveProxy(loaded[1], liveServer.Server);
+            Assert.Equal("192.0.2.99", next.Vless.Servers.Single().Server);
             Assert.Equal(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(loaded[1]))), applied.ConfigurationDigest);
 
             // This is the real stale monitor, still retaining the N settings.
@@ -82,6 +88,7 @@ public sealed class BusinessPolicyEngineTests
             var recovery = await recovered.Task.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
             Assert.Equal(3, loaded.Count);
             Assert.DoesNotContain("old.example.com", loaded[2]);
+            AssertActiveProxy(loaded[2], liveServer.Server);
             Assert.Equal(8, recovery.Revision);
             Assert.Equal(next.BusinessPolicy.PayloadDigest, recovery.PayloadDigest);
             Assert.True(fixture.Engine.IsPolicyReceiptCurrent(recovery));
@@ -313,6 +320,14 @@ public sealed class BusinessPolicyEngineTests
             Set(fixture.Manager, "_policyLaunch", null);
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static void AssertActiveProxy(string json, string expectedServer)
+    {
+        using var config = JsonDocument.Parse(json);
+        var proxy = Assert.Single(config.RootElement.GetProperty("outbounds").EnumerateArray(),
+            item => item.GetProperty("tag").GetString() == "proxy");
+        Assert.Equal(expectedServer, proxy.GetProperty("server").GetString());
     }
 
     private static void Set(object target, string name, object? value) =>
