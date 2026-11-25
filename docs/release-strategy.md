@@ -10,13 +10,13 @@ exceptions. Publication does not authorize deleting older releases or tags.
 
 The experimental updater channel discovers prereleases; the stable channel
 ignores them. `UpdateChecker` orders `X.Y.Z-r1 < X.Y.Z-r2 < X.Y.Z`, so
-AppVersion must match the complete tag version, including `-rN`.
+released binaries must embed the complete tag version in `AppVersion.Version`, including `-rN`.
 
 - Iterate within the same logical release by incrementing `rN`.
 - After a stable release, a new fix starts a new patch cycle at `-r1`.
-- A stable cut creates a new no-suffix AppVersion commit through branch/PR/CI,
-  then rebuilds all platforms from its new immutable stable tag. Merely changing
-  the candidate's prerelease flag does not produce a stable binary.
+- A stable cut tags the accepted commit of the verified candidate. GitHub-hosted
+  builds compile fresh packages with the no-suffix version from the stable tag.
+  The candidate and stable retain distinct tags, binaries and updater channels.
 - Every tag, release, merge and stable cut needs explicit owner authority.
   A hotfix does not waive tests, candidate verification or the live-update gate.
 
@@ -25,78 +25,81 @@ AppVersion must match the complete tag version, including `-rN`.
 `.dsh/skills/cut-stable/SKILL.md` and
 `.dsh/skills/post-ship-mcp-verify/SKILL.md`.
 
-## Draft-first publication order
+## Prepare a Standard draft
 
-1. Obtain release authorization. Record the accepted main commit SHA, require a
-   clean checkout at that SHA and exact full AppVersion, then create/push only
-   the new annotated, immutable tag. Resolve the remote tag to its peeled commit
-   and compare it with the accepted SHA before creating a release.
-2. Create a draft using `gh release create TAG --verify-tag --draft
-   --latest=false` with release notes. Add `--prerelease` for a candidate.
-   Inspect an existing tag/draft rather than replacing it. No builder creates
-   releases or implicitly publishes assets.
-3. Inspect SignPath configuration without revealing values. Any SignPath secret
-   or `SIGNPATH_EXPECTED_SUBJECT` variable, even partial configuration, requires
-   the signed path: `gh workflow run sign-windows.yml --ref TAG -f version=VERSION`.
-   It builds exact-tag Windows sources and verifies signatures before staging.
-   Missing enrollment or failed signing means STOP, never unsigned fallback.
-4. Only with all SignPath settings absent, run `build.ps1 -Version VERSION
-   -Upload` on the authorized exact-SHA worker; it bundles the pinned
-   `sing-box-vpnctl` release (`-SingBoxPath` is local-only and rejected with
-   `-Upload`). Upload only stages unsigned
-   Windows ZIPs/sidecars to the existing correct-channel draft; it requires
-   `HEAD == accepted main == tag SHA`, never creates/publishes, and never clobbers.
-5. Wait for tag-triggered `build-mac.yml`, `build-linux.yml`, `build-android.yml`,
-   `test.yml` and `test-windows-update.yml`. If the tag push preceded draft
-   creation, staging can fail safely because the draft was absent. Inspect runs
-   and existing assets first, then explicitly dispatch missing platform work
-   with `--ref TAG -f version=VERSION` and `-f upload_to_release=true` where
-   offered. Test workflows take `--ref TAG` without a version input.
-   Legacy `sign-android.yml` is disabled; use `build-android.yml`.
-6. Before publication, require all platform staging and tag-bound test/update
-   jobs green, exactly the 18 canonical assets below, all hashes matching and
-   both Windows True Split bundles. Explicitly dispatch and await:
+Run the repository command from an exact, clean accepted checkout with Git,
+Python 3.11 or newer and an authenticated GitHub CLI. The account needs release
+and Actions write permissions and access to inspect repository signing settings.
+Follow the authorization and test preconditions in the release skills. The first
+release using this procedure is a candidate from a main commit containing the
+preparation command and workflows.
 
-   ```sh
-   gh workflow run verify-release-integrity.yml --ref TAG -f tag=TAG -f auto_draft_on_failure=false
-   ```
+```sh
+python3 .github/scripts/prepare_release.py vX.Y.Z-rN --notes /path/to/release-notes.md
+python3 .github/scripts/prepare_release.py vX.Y.Z --from-candidate vX.Y.Z-rN --notes /path/to/release-notes.md
+```
 
-   Strict CI requires `-Commit SHA -ReleaseTag TAG -Strict`: canonical workflow
-   paths, tag/SHA, allowed events, latest run attempts and their jobs. Unrelated
-   same-SHA checks cannot satisfy the gate. Use the explicit prepublication
-   requirements in `ship-rolling-candidate`, not bare strict defaults (which
-   include APT). APT and full post-ship verification are not prepublication
-   prerequisites.
-7. Reconfirm owner authority, then publish with explicit channel/Latest flags:
+A new candidate uses current GitHub `main`. A stable cut uses the verified,
+published candidate's exact commit in accepted main history. The command
+creates or validates the annotated tag, then creates or validates the
+correct-channel draft. Only after that does it dispatch the macOS, Linux and
+Android builds and both test workflows against the exact tag. The build
+workflows stamp the full tag version in their temporary checkouts before
+compilation. Ordinary development builds read the checked-in version.
+
+Without SignPath configuration, the Windows update integration job builds the
+installer and both True Split ZIPs. The command stages the six files from that
+job's successful run and attempt after checking their hashes. When signing is
+configured, the command dispatches Sign Windows instead. The current SignPath
+workflow stages the signed ZIPs and their sidecars. Signed preparation stops
+there until an approved installer signing path can prove the installer
+provenance. Partial signing enrollment blocks staging.
+
+After the platform and test runs pass and all 18 assets exist, the command
+dispatches the read-only integrity check. Its success verifies the checksums,
+Windows embedded version and both True Split bundles. Keep the exact
+tag/SHA/run evidence and apply the strict checks in the release skills before
+publication.
+
+## Publish and verify
+
+1. Use the explicit owner authorization and the applicable release skill.
+   Publish the existing draft with explicit channel and Latest flags.
 
    ```sh
-   # Candidate: keep the previous stable as Latest.
    gh release edit TAG --draft=false --prerelease --latest=false
-   # Stable: only after the separately authorized stable-cut gates.
    gh release edit TAG --draft=false --prerelease=false --latest
    ```
 
-8. Verify public state and tagged download URLs. Await postpublication integrity
-   and APT. Publication by workflow token may suppress downstream events; if
-   absent, explicitly dispatch both at the published tag:
+2. Verify the public state and tagged download URLs. Await the postpublication
+   integrity and APT runs. For a stable, also await the Homebrew notification
+   and confirm the tap updates to the same version and DMG hash. The workflows
+   start together on publication. The already verified Windows integration
+   run stays bound to the tag and its tested packages. If publication suppresses events, dispatch
+   the missing workflow at the published tag.
 
    ```sh
    gh workflow run verify-release-integrity.yml --ref TAG -f tag=TAG -f auto_draft_on_failure=false
    gh workflow run publish-pages.yml --ref TAG -f tag=TAG
+   gh workflow run notify-homebrew.yml --ref TAG  # stable only
    ```
 
-   APT retains/reindexes the latest published canonical stable only, selected
-   before asset validation. A missing DEB or sidecar fails closed; it never
-   falls back to an older eligible stable. Candidate-tag runs prove provenance
-   and stable-feed health, not candidate DEB inclusion.
-9. Run the full fixed-WINBRAT post-ship gate after every candidate and stable
-   publication. No Core-only or tiny-change exemption applies. Stable Homebrew
-   notification is explicit after publication: draft staging in `build-mac.yml`
-   suppresses the tap event. Follow `cut-stable` for the `vpnrouter-release`
-   repository dispatch, then verify the tap run and cask version/hash. Never
-   rerun a public-release uploader just to notify the tap.
+   APT selects the latest published canonical stable before validating its
+   assets. Missing assets fail the job. A candidate run checks provenance and
+   the stable feed. Homebrew verifies that the tag is the public Latest stable
+   before dispatching to the tap.
+3. Run the full fixed-WINBRAT gate after every publication. Stable also
+   requires the previous-stable to candidate live-update gate before the cut.
 
 ## Recovery and integrity
+
+Use one preparation command at a time per tag. To resume after interruption,
+rerun it with the same tag, accepted SHA and candidate input. It reuses
+successful runs when the expected staged assets are present. Use
+`--wait-minutes` to allow more time for queued or approval-bound workflows.
+For hosted Windows
+it reuses the exact retained artifact, compares existing bytes using GitHub
+asset digests and uploads only matching-run files that are missing.
 
 Missing, extra, malformed or partial assets fail closed. Inspect names, hashes
 and exact-tag provenance before explicitly staging only missing verified files;
@@ -105,7 +108,7 @@ If consistency cannot be proven, STOP. Published corrections require a new
 version/tag; never move a tag, replace public binaries or bypass failed gates.
 
 `verify-release-integrity.yml` checks the exact inventory, validates every
-sidecar and recomputes all eight hashes before inspecting archive contents.
+sidecar and recomputes all nine hashes before inspecting archive contents.
 Windows embedded AppVersion is a hard gate. Other platforms retain limited
 embedded-version inspection because trimming/compression can remove literals;
 AppImage payloads are never executed to inspect their version. SHA sidecars
@@ -144,9 +147,9 @@ sidecars. Replace `X.Y.Z` with the full version, including `-rN` when applicable
 
 | Platform | Binary | Producer |
 |---|---|---|
-| Windows | `VPNRouter-vX.Y.Z-win.zip` | unsigned `build.ps1` or exact-tag `sign-windows.yml` |
-| Windows | `VPNRouter-update-vX.Y.Z-win.zip` | unsigned `build.ps1` or exact-tag `sign-windows.yml` |
-| Windows | `VPNRouter-Setup-vX.Y.Z.exe` | unsigned Inno Setup installer from `build.ps1 -Upload` (`tools/build-installer.ps1`) |
+| Windows | `VPNRouter-vX.Y.Z-win.zip` | hosted `test-windows-update.yml` or `sign-windows.yml` |
+| Windows | `VPNRouter-update-vX.Y.Z-win.zip` | hosted `test-windows-update.yml` or `sign-windows.yml` |
+| Windows | `VPNRouter-Setup-vX.Y.Z.exe` | hosted unsigned Inno Setup package from `test-windows-update.yml` |
 | macOS | `VPNRouter-vX.Y.Z-mac.dmg` | `build-mac.yml` |
 | macOS | `VPNRouter-vX.Y.Z-mac.zip` | `build-mac.yml` |
 | Linux | `VPNRouter-vX.Y.Z-linux-amd64.deb` | `build-linux.yml` |

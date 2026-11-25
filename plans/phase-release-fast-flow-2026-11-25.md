@@ -51,3 +51,24 @@ it and use the documented append-only release recovery procedure.
 
 Planning baseline is `7c6e13fd`. The GitHub Actions runs for the accepted main
 baseline completed successfully. Production release actions are outside this PR.
+
+The first implementation adds the Standard draft command and tag version
+stamping, reuses the hosted Windows integration packages, checks True Split
+during integrity verification, and starts Homebrew notification on stable
+publication. The existing SignPath workflow provides signed ZIPs and sidecars.
+A signed installer still requires an approved SignPath enrollment and procedure.
+
+All seven checks on the planning commit `93bba9fe` passed. Eighteen Python
+tests, actionlint and Bash syntax checks on eight workflow files, the extracted
+integrity fixture for both Windows ZIP layouts, and version stamping in a
+disposable Git checkout passed locally. Implementation CI runs on PR #740.
+
+The independent DeepSeek review of tree `03c9635` found a stale C# assertion,
+a mutable inventory comparison, reuse of updater-only runs, a missing legacy
+candidate preflight, unsuitable timeouts and stale release guidance.
+The implementation addresses those findings. Signed ZIP staging remains
+available, and the command stops before declaring completion until installer
+signing provenance can be established. The release defect ledger records
+the outstanding installer dependency.
+
+Production timing and live WINBRAT evidence require an authorized release.

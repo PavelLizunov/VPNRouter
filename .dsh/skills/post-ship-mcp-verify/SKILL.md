@@ -17,7 +17,7 @@ whenToUse: MANDATORY after every rolling or stable ship. Verifies the shipped Wi
 
 # Post-ship verification — remote brat only
 
-`$v` = shipped version (`VPNRouter.Core/AppVersion.cs`, e.g. `2.48.0-r3`).
+`$v` = full version from the shipped tag (e.g. `2.48.0-r3`).
 If the session runs on `harness-test`, coordinate only: execute the controller's
 headless build/test work from the exact release SHA on an authorized worker that
 passed the read-only resource/SDK/job preflight. Missing tooling is STOP, not

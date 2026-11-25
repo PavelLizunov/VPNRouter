@@ -16,6 +16,9 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - SignPath currently stages two signed Windows ZIPs and their sidecars. Signed Standard draft preparation stops until an approved installer signing and provenance path exists. [PR #740](https://github.com/PavelLizunov/VPNRouter/pull/740).
+- [ ] **P2** - Standard release staging can start before its draft because the macOS, Linux and Android uploaders run on tag push. Unsigned Windows staging also relies on a separate maintainer-side build. The exact-tag dispatch and hosted Windows work are tracked in [faster Standard release preparation](phase-release-fast-flow-2026-11-25.md).
+
 - [ ] **P3** - At `40362d8b`, a saved DNSTT refresh marker could reset the failure count for rollback assistance even though the connection parameters stayed the same. Verify that the fingerprint ignores local DNSTT grant metadata. [Rollback fingerprint](phase-standard-prerelease-r3-2026-11-24.md).
 - [ ] **P2** - Windows recovery review found misleading post-restart copy for the 2.50.5 target, stale claims about revocations and success history, and missing coverage for asynchronous release listing. The candidate now reports the observed version, documents the available provenance checks and rechecks the selected profile and runtime after asynchronous listing. Hosted and installed verification are pending. [Windows recovery](phase-standard-rollback-assistance-2026-11-24.md).
 - [ ] **P2** - The initial recovery fingerprint only counts custom rules, skips DNS and per-app rule content, and identifies a custom configuration by path. Compare effective connection inputs before combining failed attempts. [Windows recovery](phase-standard-rollback-assistance-2026-11-24.md).
@@ -193,6 +196,13 @@ Historical source-verified findings, not live reproductions; full evidence, boun
 - [ ] **P2 RESEARCH ONLY** — NIGHT-MEASURE: profile owner-record monitor enumeration/read/parse work before optimizing; CPU regression, physical disk bottleneck and handle leak NOT established — `VPNRouter.Core/Services/TunOwnershipLock.cs:174–240`; `VPNRouter.Core/Services/ProcessOwnership.cs:477–547`; morning report section 3 — TBD
 
 ## Resolved (history)
+
+- [x] **P1** - PR #740 updates the stale SignPath workflow assertion to require shared stamping, tag identity and exact HEAD.
+- [x] **P2** - PR #740 selects the hosted Windows package run by its title and covers resume after a successful updater-only run.
+- [x] **P2** - PR #740 checks the candidate tree supports exact-tag stamping before creating the stable tag.
+- [x] **P2** - PR #740 separates the workflow wait and Windows transfer budgets and covers healthy workflow reuse after timeout.
+
+- [x] **P2 RESOLVED IN PR #740** - Download counts could make the in-development draft command report an inventory race. The command compares asset identity and bytes. The regression fixture covers an incremented count and changed bytes.
 
 - [x] **P0 RESOLVED IN PR #720** - The macOS helper and managed config deny both Shadowsocks plugin keys and case variants in `747100f0`. Plain Shadowsocks passes the contract. Exact-head CI and independent review passed. Live migration remains tracked under the open F-01 P1. See `plans/phase-f01-macos-durable-2026-11-21.md`.
 

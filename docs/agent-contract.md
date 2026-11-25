@@ -88,7 +88,7 @@ Read the relevant zone document before changing that area:
    platform icons may remain until a dedicated presentation edit replaces them.
 7. `process_name` matching in sing-box is case-sensitive. Deduplicate with
    `StringComparer.OrdinalIgnoreCase` without lowercasing stored values.
-8. `AppVersion.Version` must exactly match every release tag, including `-rN`.
+8. Release binaries must embed `AppVersion.Version` exactly matching their tag, including `-rN`. The checked-in value is the development default. Stable may use the verified candidate commit.
 
 ## Test oracle
 

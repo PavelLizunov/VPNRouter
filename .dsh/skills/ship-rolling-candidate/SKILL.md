@@ -26,7 +26,7 @@ creating tags or proposing cleanup; release approval is not deletion approval.
    independent review. Record every surviving finding in `plans/OPEN-DEFECTS.md`.
 5. `tools/check-open-p0.ps1` must pass unless the owner explicitly records a
    waiver.
-6. `AppVersion.Version` must exactly equal `X.Y.Z-rN`.
+6. The release builds must embed `X.Y.Z-rN` from their exact tag.
 
 ## Branch and accepted commit
 
@@ -37,72 +37,21 @@ as Forgejo. Merge requires explicit owner authorization. After merge, continue
 only from a clean checkout whose `HEAD` equals accepted `origin/main`; use
 repo-relative scripts from that checkout.
 
-## Create the immutable tag and draft
+## Prepare the draft
 
-After explicit release authorization, record the accepted commit as `$sha`,
-set `$version = 'X.Y.Z-rN'` and `$tag = "v$version"`. Require clean `HEAD` to
-match accepted GitHub `main` and AppVersion to match the full version. Create
-and push only this new tag; never replace an existing tag:
+After explicit release authorization, set `$sha` to accepted `main` and use its
+clean checkout. Prepare the exact tag, draft and parallel hosted builds.
 
 ```powershell
-git tag -a $tag $sha -m "Release $tag"
-git push origin "refs/tags/$tag"
-$remoteSha = gh api "repos/PavelLizunov/VPNRouter/commits/$tag" --jq '.sha'
-if ($LASTEXITCODE -ne 0 -or $remoteSha -ne $sha) { throw 'Remote tag SHA mismatch.' }
-gh release create $tag --verify-tag --draft --prerelease --latest=false --title $tag --notes-file <notes-file>
+python .github/scripts/prepare_release.py vX.Y.Z-rN --notes <notes-file>
 ```
 
-Check every native command's exit code; stop on failure. Inspect an existing
-tag/draft instead of blindly repeating creation. `build.ps1 -Upload` does not
-create tags or releases and does not publish.
-
-## Stage Windows and other platforms
-
-Inspect the configured SignPath secret names and `SIGNPATH_EXPECTED_SUBJECT`
-repository variable without exposing values. Any SignPath configuration,
-including partial enrollment, forbids unsigned staging; finish enrollment or
-STOP. There is no unsigned fallback when signing fails.
-
-- Signed path: `gh workflow run sign-windows.yml --ref $tag -f version=$version`.
-  Wait for the exact-tag source build, owner signing approval and signature
-  verification before accepting its draft ZIPs and sidecars.
-- Only when all SignPath settings are absent, stage unsigned Windows assets on
-  the authorized exact-SHA worker. `build.ps1 -Upload` downloads the pinned
-  `sing-box-vpnctl` release, verifies its SHA256 and bundles the split-tunnel
-  driver; `-SingBoxPath` is for local builds only and is rejected with `-Upload`:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version -Upload
-```
-
-`build.ps1 -Upload` also builds the unsigned Inno Setup installer
-(`VPNRouter-Setup-vX.Y.Z.exe` plus sidecar), so the Windows set is six files and
-the worker needs Inno Setup 6 (`docs/test-workers.md`).
-Unsigned staging requires `HEAD == accepted main == tag SHA`, an existing
-correct-channel draft, and no conflicting assets. It never clobbers assets.
-Wait for tag-triggered `build-mac.yml`, `build-linux.yml`, `build-android.yml`,
-`test.yml` and `test-windows-update.yml`. Missing draft means staging fails
-closed; after creating it, inspect run results and draft assets before retry.
-For a missing platform set, dispatch its build workflow with `--ref $tag
--f version=$version` (and `-f upload_to_release=true` where offered). Test
-workflows use `--ref $tag` without a version input. Legacy `sign-android.yml`
-is disabled; use `build-android.yml`.
-
-A partial upload is not permission to overwrite or delete assets. Inspect names,
-hashes and provenance, then explicitly stage only missing files from the
-verified exact-tag output without clobber. If consistency cannot be proven,
-STOP; published corrections require a new version and immutable tag.
+Record the returned tag, SHA and successful run IDs. See
+[release strategy](../../../docs/release-strategy.md) for signing, retry and
+partial staging recovery. Keep the draft until all 18 assets, both True Split
+bundles and the read-only integrity job pass. Apply the strict CI check below.
 
 ## Prepublication gate and authorized publication
-
-Require all platform staging jobs and tag-bound tests/Windows update jobs green
-at the exact tag SHA, exactly 18 canonical assets (6 Windows, 4 macOS, 6 Linux,
-2 Android), every sidecar matching, and both Windows True Split driver bundles.
-Then explicitly dispatch and await the completed-draft integrity gate:
-
-```powershell
-gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draft_on_failure=false
-```
 
 Run the prepublication strict gate with explicit requirements, because the
 default strict requirements include postpublication APT:
@@ -134,8 +83,8 @@ gh workflow run publish-pages.yml --ref $tag -f tag=$tag
 ```
 
 Candidate APT runs verify provenance and reindex the latest published stable;
-they do not add candidates to APT. Homebrew notification is suppressed during
-draft staging and candidates must not notify the stable tap. Retention is a
+they do not add candidates to APT. The Homebrew workflow dispatches only
+for the published Latest stable. Retention is a
 separate owner-approved action under the linked policy, not a ship step.
 Preserve the candidate safety net, grace period and immutable tags.
 

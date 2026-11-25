@@ -13,7 +13,7 @@ Add / rotate via: **Repo Settings → Secrets and variables → Actions
 | Name | Used by | Required for | Type |
 |---|---|---|---|
 | `GITHUB_TOKEN` | every workflow | release uploads, gh CLI calls | auto-injected, no action needed |
-| `HOMEBREW_TAP_DISPATCH_TOKEN` | `build-mac.yml` | cross-repo dispatch to `PavelLizunov/homebrew-vpnrouter` on stable cuts | PAT, classic, `repo` scope |
+| `HOMEBREW_TAP_DISPATCH_TOKEN` | `notify-homebrew.yml` | cross-repo dispatch to `PavelLizunov/homebrew-vpnrouter` on stable cuts | PAT, classic, `repo` scope |
 | `ANDROID_KEYSTORE_BASE64` | `build-android.yml` | signing the release APK so existing installs accept updates | base64-encoded JKS keystore |
 | `ANDROID_KEYSTORE_PASSWORD` | `build-android.yml` | unlocks the keystore + key during signing | plain string |
 | `APT_SIGNING_KEY`, `APT_SIGNING_KEY_ID` | `publish-pages.yml` | signing the APT repository metadata | ASCII-armored PGP private key; key ID |

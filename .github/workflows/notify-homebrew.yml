@@ -1,0 +1,38 @@
+name: Notify Homebrew of a stable release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify the public stable and notify the tap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" != tag || ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo '::error::Use the published stable tag as the workflow ref.'
+            exit 1
+          fi
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq '.sha')" = "$GITHUB_SHA"
+          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq '.tagName')
+          test "$latest" = "$tag"
+          release=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets)
+          jq -e --arg dmg "VPNRouter-$tag-mac.dmg" '
+            .isDraft == false and .isPrerelease == false
+            and ([.assets[].name | select(. == $dmg or . == ($dmg + ".sha256"))] | length == 2)
+          ' <<< "$release" > /dev/null
+          test -n "$TAP_TOKEN"
+          GH_TOKEN="$TAP_TOKEN" gh api --method POST repos/PavelLizunov/homebrew-vpnrouter/dispatches \
+            -f event_type=vpnrouter-release -f "client_payload[version]=${tag#v}" -f "client_payload[tag]=$tag"

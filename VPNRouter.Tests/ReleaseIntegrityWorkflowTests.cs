@@ -198,18 +198,34 @@ public sealed class ReleaseIntegrityWorkflowTests
                 sidecar.unlink()
                 result = subprocess.run([sys.executable, '-c', isolated], cwd=root, env=env, capture_output=True, text=True)
                 assert result.returncode != 0 and 'inventory' in result.stderr, result
-                # Correct Windows embedded version plus matching hash succeeds.
-                with zipfile.ZipFile(assets / name, 'w') as z:
-                    z.writestr('app/VPNRouter.Core.dll', '3.0.0'.encode('utf-16-le'))
-                sidecar.write_text(hashlib.sha256((assets / name).read_bytes()).hexdigest())
-                result = subprocess.run([sys.executable, '-c', isolated], cwd=root, env=env, capture_output=True, text=True)
-                assert result.returncode == 0 and 'All checks passed' in result.stdout, result
-                # Valid hash cannot hide a wrong embedded Windows version.
-                with zipfile.ZipFile(assets / name, 'w') as z:
-                    z.writestr('app/VPNRouter.Core.dll', '2.99.0'.encode('utf-16-le'))
-                sidecar.write_text(hashlib.sha256((assets / name).read_bytes()).hexdigest())
-                result = subprocess.run([sys.executable, '-c', isolated], cwd=root, env=env, capture_output=True, text=True)
-                assert result.returncode == 1 and 'AppVersion mismatch' in result.stdout, result
+
+                def write_windows_zip(version, with_driver, prefix):
+                    with zipfile.ZipFile(assets / name, 'w') as z:
+                        z.writestr(prefix + '/VPNRouter.Core.dll', version.encode('utf-16-le'))
+                        if with_driver:
+                            z.writestr(prefix + '/LICENSE.split-tunnel', b'fixture')
+                            for file in ('mullvad-split-tunnel.sys', 'mullvad-split-tunnel.cat',
+                                         'mullvad-split-tunnel.inf', 'checksums.sha256'):
+                                z.writestr(prefix + '/driver/' + file, b'fixture')
+                    sidecar.write_text(hashlib.sha256((assets / name).read_bytes()).hexdigest())
+
+                for name, prefix in [('VPNRouter-v3.0.0-win.zip', 'app'),
+                                     ('VPNRouter-update-v3.0.0-win.zip', '_bootstrap')]:
+                    sidecar = assets / (name + '.sha256')
+                    expected.write_text(name + '\n' + name + '.sha256\n')
+                    # A valid version and hash cannot hide missing driver files.
+                    write_windows_zip('3.0.0', False, prefix)
+                    result = subprocess.run([sys.executable, '-c', isolated], cwd=root, env=env, capture_output=True, text=True)
+                    assert result.returncode == 1 and 'True Split driver bundle missing' in result.stdout, result
+                    write_windows_zip('3.0.0', True, prefix)
+                    result = subprocess.run([sys.executable, '-c', isolated], cwd=root, env=env, capture_output=True, text=True)
+                    assert result.returncode == 0 and 'All checks passed' in result.stdout, result
+                    # Valid hash cannot hide a wrong embedded Windows version.
+                    write_windows_zip('2.99.0', True, prefix)
+                    result = subprocess.run([sys.executable, '-c', isolated], cwd=root, env=env, capture_output=True, text=True)
+                    assert result.returncode == 1 and 'AppVersion mismatch' in result.stdout, result
+                    (assets / name).unlink()
+                    sidecar.unlink()
             print('Benign workflow fixtures passed')
             """;
         var start = new ProcessStartInfo("python3")
