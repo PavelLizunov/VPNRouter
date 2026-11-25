@@ -154,6 +154,9 @@ public static partial class Strings
     public static string SmpNoOtherInCategory => Ru
         ? "В этой категории больше нет доступных серверов."
         : "There are no other available servers in this category.";
+    public static string SmpNoVerifiedServerInCategory => Ru
+        ? "Не удалось подтвердить работу серверов в этой категории."
+        : "Could not verify any servers in this category.";
     public static string SmpSelectionUnavailable => Ru
         ? "Выбранный сервер или категория недоступны. Выберите другой вариант."
         : "The selected server or category is unavailable. Choose another option.";

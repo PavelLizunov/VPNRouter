@@ -16,7 +16,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P2** - Choosing an automatic category during an active Standard connection passes an unchecked first eligible row to reconnect or service Apply. Cold Connect probes the category. See [connected category selection](phase-standard-connected-category-autoselect-2026-11-25.md).
+- [x] **P2** - Choosing an automatic category during an active Standard connection passed an unchecked first eligible row to reconnect or service Apply. The desktop now requires current traffic proof for category selections. RESOLVED in source, CI pending. See [connected category selection](phase-standard-connected-category-autoselect-2026-11-25.md).
+
+- [x] **P1** - The first deep category-probe draft reused `IsConnecting`. A disconnect increments the connection generation and leaves the CTA busy. The same flag blocks Stop during verification. The probe now has its own cancellation scope and Stop cancels it. RESOLVED in source, CI pending. [PR #743](https://github.com/PavelLizunov/VPNRouter/pull/743).
+
+- [ ] **P2** - Category preflight does not prove the installed application TUN path. Confirm the chosen outbound with real installed traffic on WINBRAT. Desktop service Apply re-verifies the current pool. Unattended service startup, subscription refresh, and failover remain separate runtime entry points. [PR #743](https://github.com/PavelLizunov/VPNRouter/pull/743).
+
+- [x] **P3** - The first deep category-probe draft ran the HTTPS controls in series under one deadline, and Games and Voice required a single STUN datagram on a TCP-selected port. The controls now run in parallel and STUN retries on a UDP-selected port. RESOLVED in source, CI pending. [PR #743](https://github.com/PavelLizunov/VPNRouter/pull/743).
 
 - [ ] **P2** - On WINBRAT, v2.51.1-r3 (`ac85310f`) passed package integrity and launched the core but timed out during the first TUN warm-up. The Windows verifier ended with no core process or TUN. HTTPS and UDP probes were not reached. The same stage failed on r2. The failure mechanism is unconfirmed.
 
