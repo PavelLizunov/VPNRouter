@@ -47,7 +47,6 @@ public sealed class TurnRelayConfig
     public bool Udp { get; set; } = true;
 
     internal bool IsComplete() =>
-        IsLiteralIp(Server) &&
         TurnRelayUriParserRules.IsValidHostPort(TurnServer) &&
         !string.IsNullOrWhiteSpace(TurnUsername) &&
         !string.IsNullOrWhiteSpace(TurnPassword) &&

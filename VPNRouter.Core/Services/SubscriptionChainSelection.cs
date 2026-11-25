@@ -87,6 +87,7 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
 
     internal static bool IsUsableTurnRelayUpstream(VlessServerEntry row) =>
         SingBoxFeatures.TurnRelayAvailable && row.TurnRelay is { } profile && profile.IsComplete() &&
+        TurnRelayConfig.IsLiteralIp(row.Server) && row.Port is > 0 and <= 65535 &&
         TurnRelayUriParser.IsValidId(row.OutboundId) &&
         !VlessServersResolver.IsPlaceholderEntry(row);
 

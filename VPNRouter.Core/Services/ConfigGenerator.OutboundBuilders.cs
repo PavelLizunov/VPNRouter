@@ -76,7 +76,8 @@ public static partial class ConfigGenerator
     internal static SingBoxOutbound BuildTurnRelayOutbound(VlessServerEntry entry, string tag)
     {
         if (!SingBoxFeatures.TurnRelayAvailable || entry.TurnRelay is not { } profile ||
-            !profile.IsComplete() || !TurnRelayUriParser.IsValidId(entry.OutboundId))
+            !profile.IsComplete() || !TurnRelayConfig.IsLiteralIp(entry.Server) ||
+            entry.Port is < 1 or > 65535 || !TurnRelayUriParser.IsValidId(entry.OutboundId))
             throw new InvalidOperationException(
                 "ConfigGenerator: TurnRelay requires a compatible core and a complete chain entry.");
 
