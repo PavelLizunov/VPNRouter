@@ -16,6 +16,10 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Choosing an automatic category during an active Standard connection passes an unchecked first eligible row to reconnect or service Apply. Cold Connect probes the category. See [connected category selection](phase-standard-connected-category-autoselect-2026-11-25.md).
+
+- [ ] **P2** - On WINBRAT, v2.51.1-r3 (`ac85310f`) passed package integrity and launched the core but timed out during the first TUN warm-up. The Windows verifier ended with no core process or TUN. HTTPS and UDP probes were not reached. The same stage failed on r2. The failure mechanism is unconfirmed.
+
 - [x] **P2** - Standard v2.51.1-r2 was cut before PR #728 reached main, so the release lacks the reviewed desktop server categories and country flags. Restored on the integration branch. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P2** - Windows preview `b85fc444` shows DNSTT under Everyday and multiple nested scroll regions in the shared server list. The DNSTT protocol falls through the classifier and the tree and group lists both limit their height inside the host viewport. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
