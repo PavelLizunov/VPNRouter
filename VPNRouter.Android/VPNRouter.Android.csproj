@@ -10,10 +10,7 @@
   -->
 
   <PropertyGroup>
-    <!-- Wave 23 (Phase 5, 2026-05-18) — bumped to .NET 10 + Android 36 to
-         move off the Avalonia 11.3.12 pin. Avalonia.Android 12.0.3 requires
-         net10.0-android36.0; the desktop App is already on Avalonia 12.0.3
-         from Phase 3A. -->
+    <!-- Avalonia.Android targets .NET 10 and Android API 36. -->
     <TargetFramework>net10.0-android36.0</TargetFramework>
     <!-- libbox.aar requires API 23+ (Android 6.0 Marshmallow). Practically
          universal at this point; KYOCERA A101BM Phase 1.A test runs Android
@@ -130,13 +127,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Wave 23 (Phase 5, 2026-05-18) — Avalonia 12.0.3 bump on the
-         net10.0-android36.0 TFM. The Wave 12 11.3.12 pin block is removed
-         now that .NET 10 + Android 36 toolchain is available locally. -->
-    <PackageReference Include="Avalonia" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Android" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.3" />
+    <PackageReference Include="Avalonia" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Android" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.6" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.6" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- v2.32.0 (2026-05-07) — FileProvider for auto-update APK
          hand-off (Android 7+ requires content:// URIs in cross-app

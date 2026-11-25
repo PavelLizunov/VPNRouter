@@ -289,6 +289,13 @@ public partial class AndroidApp : Avalonia.Application
                         {
                             if (e.Property == TopLevel.ClientSizeProperty) Reapply();
                         };
+                        if (!insetsMgr.DisplaysEdgeToEdge)
+                        {
+                            // Android's PointToScreen scales coordinates without adding the native view offset.
+                            // Use a full-window origin and apply insets through the page margins.
+                            view.SetValue(TopLevel.AutoSafeAreaPaddingProperty, false);
+                            insetsMgr.DisplayEdgeToEdgePreference = true;
+                        }
                         Reapply();
                     }
                 }
@@ -359,12 +366,11 @@ public partial class AndroidApp : Avalonia.Application
     {
         _currentSafeArea = rawInsets;
         var insets = new Thickness(rawInsets.Left, rawInsets.Top, rawInsets.Right, _imeVisible ? 0.0 : rawInsets.Bottom);
+        if (_mainScroller is not null)
+            _mainScroller.Margin = new Thickness(0, insets.Top, 0, insets.Bottom);
+
         if (_mainContentGrid is not null)
-        {
-            var top = Math.Max(12.0, insets.Top + 6.0);
-            var bottom = Math.Max(16.0, insets.Bottom + 16.0);
-            _mainContentGrid.Margin = new Thickness(16, top, 16, bottom);
-        }
+            _mainContentGrid.Margin = new Thickness(16, Math.Max(6.0, 12.0 - insets.Top), 16, 16);
 
         if (_updateBannerFloating is not null)
         {
@@ -520,9 +526,7 @@ public partial class AndroidApp : Avalonia.Application
             Children = { innerStack }
         };
 
-        // The vertical room for the system bars is a margin of the content, not the ScrollViewer's Padding: the
-        // scroll extent includes a child's margin but not the viewer's padding, so with Padding the last cards could
-        // not be scrolled into view.
+        // Keep the page spacing inside the viewport. ApplySafeArea insets the scroller and its scrollbar.
         var outerGrid = new Grid
         {
             Margin = new Thickness(16, 12, 16, 16),
@@ -538,7 +542,6 @@ public partial class AndroidApp : Avalonia.Application
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Focusable = true,
         };
-        _mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
         var mainScroller = _mainScroller;
 
         mainScroller.SizeChanged += (_, _) => RevealHomeFocusedTextBox();
@@ -579,6 +582,15 @@ public partial class AndroidApp : Avalonia.Application
             Children = { mainScroller, _advShellOverlay, _logOverlay, _aboutOverlay,
                          _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
                          updateBannerFloating, _menuFeedbackFloating }
+        };
+        _pageRoot.BindToken(Grid.BackgroundProperty, "SurfaceAppBrush");
+        // The popup host routes input through this placeholder. Keep it outside the page scrollers.
+        _pageRoot.Children.Add(_kebabPopup!);
+        _pageRoot.SizeChanged += (_, e) =>
+        {
+            // Reopening computes a new anchor after rotation without closing on IME height changes.
+            if (e.WidthChanged && _kebabPopup is { IsOpen: true } popup)
+                popup.Close();
         };
         return _pageRoot;
     }
@@ -649,6 +661,7 @@ public partial class AndroidApp : Avalonia.Application
         };
         _kebabMenuButton.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
         _kebabMenuButton.Click += OnKebabMenuClicked;
+        RefreshMenuButtonAccessibility();
 
         var isDark = AndroidStorage.GetTheme() == "dark";
         _menuThemeLight = MakeSegmentButton(Localization.MenuSegLight, !isDark, OnMenuThemeLightClicked);
@@ -720,6 +733,8 @@ public partial class AndroidApp : Avalonia.Application
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
         _menuVersionItem.Click += OnMenuAboutClicked;
+        // The About row is an icon, a label and a version pill in one grid; name the action, not the layout.
+        AutomationProperties.SetName(_menuVersionItem, Localization.SmpMenuAbout);
 
         var menuStack = new StackPanel
         {
@@ -773,21 +788,22 @@ public partial class AndroidApp : Avalonia.Application
                 Content = menuStack,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                IsScrollChainingEnabled = false,
             },
         };
         menuPanel.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
         menuPanel.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
         menuPanel.BindToken(Border.BoxShadowProperty, "ShadowMd");
 
-        _kebabPopup = new Popup
+        _kebabPopup = new KebabMenuPopup
         {
             PlacementTarget = _kebabMenuButton,
             Placement = PlacementMode.BottomEdgeAlignedRight,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
             Child = menuPanel,
             IsLightDismissEnabled = true,
         };
-
-        HideSubtreeFromAccessibility(menuPanel);
 
         var headerRow = new Grid
         {
@@ -800,7 +816,6 @@ public partial class AndroidApp : Avalonia.Application
         headerRow.Children.Add(mascot);
         headerRow.Children.Add(brandStack);
         headerRow.Children.Add(_kebabMenuButton);
-        headerRow.Children.Add(_kebabPopup);
 
         return headerRow;
     }
@@ -1246,6 +1261,10 @@ public partial class AndroidApp : Avalonia.Application
         IPointer? activePointer = null;
         mainScroller.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
+            // An overlay can route input through a logical parent outside its visual tree.
+            if (e.Source is not Visual source || (source != mainScroller && !mainScroller.IsVisualAncestorOf(source)))
+                return;
+
             var p = e.GetCurrentPoint(mainScroller);
             if (p.Pointer.Type != PointerType.Touch && p.Pointer.Type != PointerType.Pen)
                 return;
@@ -1256,10 +1275,10 @@ public partial class AndroidApp : Avalonia.Application
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
         mainScroller.AddHandler(InputElement.PointerMovedEvent, (_, e) =>
         {
-            var p = e.GetCurrentPoint(mainScroller);
-            if (p.Pointer.Type != PointerType.Touch && p.Pointer.Type != PointerType.Pen)
+            if (e.Pointer != activePointer)
                 return;
-            if (activePointer is null) return;
+
+            var p = e.GetCurrentPoint(mainScroller);
             var totalDeltaY = p.Position.Y - dragStartY;
             if (!isDragging)
             {
@@ -1291,6 +1310,9 @@ public partial class AndroidApp : Avalonia.Application
         }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
         mainScroller.AddHandler(InputElement.PointerReleasedEvent, (_, e) =>
         {
+            if (e.Pointer != activePointer)
+                return;
+
             if (isDragging)
             {
                 e.Pointer.Capture(null);
@@ -1679,6 +1701,7 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuResetSettingsItem is not null && !_resetConfirmPending)
             SetMenuItemText(_menuResetSettingsItem, Localization.MenuItemResetSettings);
         if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
+        if (_menuVersionItem is not null) AutomationProperties.SetName(_menuVersionItem, Localization.SmpMenuAbout);
         if (_menuAdvancedToggleBtn is not null)
             UpdateMenuAdvancedToggle();
         if (_autostartCardTitleText is not null)
@@ -1691,6 +1714,7 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;
         if (_menuSectionTroubleshooting is not null) _menuSectionTroubleshooting.Text = Localization.MenuSectionTroubleshooting;
         if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
+        RefreshMenuButtonAccessibility();
         RefreshAdvancedShellStrings();
         if (_menuCheckLeaksItem is not null) SetMenuItemText(_menuCheckLeaksItem, Localization.MenuItemCheckLeaks);
         if (_menuHealthCheckItem is not null) SetMenuItemText(_menuHealthCheckItem, Localization.MenuItemHealthCheck);

@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
@@ -709,6 +710,8 @@ public partial class AndroidApp
             FontSize = UiScale.Fs(11),
             Foreground = GetBrush("TextPrimaryBrush"),
         };
+        // The visible title is the switch's accessible name; an unlabeled radio announces only "radio button".
+        AutomationProperties.SetLabeledBy(radio, titleText);
         var subText = new TextBlock
         {
             Text = subtitle,
@@ -753,6 +756,8 @@ public partial class AndroidApp
             Foreground = GetBrush("TextPrimaryBrush"),
             TextWrapping = TextWrapping.Wrap,
         };
+        // The visible title is the switch's accessible name; an unlabeled checkbox announces only "checkbox".
+        AutomationProperties.SetLabeledBy(cb, titleText);
         var subText = new TextBlock
         {
             Text = subtitle,

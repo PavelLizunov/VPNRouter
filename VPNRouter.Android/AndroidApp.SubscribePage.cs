@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
@@ -693,13 +694,15 @@ public partial class AndroidApp
 
         var nameText = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(sub.Name) ? "(no name)" : sub.Name,
+            Text = string.IsNullOrWhiteSpace(sub.Name) ? Localization.SubscriptionWithoutName : sub.Name,
             FontSize = UiScale.Fs(11),
             FontWeight = FontWeight.SemiBold,
             FontFamily = new FontFamily("monospace"),
             Foreground = GetBrush("TextPrimaryBrush"),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
+        // The subscription name is the visible label of its enable switch.
+        AutomationProperties.SetLabeledBy(enabledChk, nameText);
         var metadataText = new TextBlock
         {
             Text = FormatSubMetadata(sub),
