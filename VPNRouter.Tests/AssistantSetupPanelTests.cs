@@ -188,33 +188,45 @@ public sealed class AssistantSetupPanelTests
             window.Show();
             try
             {
+                var original = SettingsLoader.Load(AppPaths.ConfigYamlPath).App;
                 Assert.Equal(Strings.AssistantPreferenceSaved,
                     await vm.RunAssistantGoalAsync("Route synthetic-target.exe directly", window, panel,
                         (_, _) => Task.FromResult(true), TestContext.Current.CancellationToken));
                 Assert.True(vm.HasAssistantUndo);
+                var applied = SettingsLoader.Load(AppPaths.ConfigYamlPath).App;
+                Assert.Equal("split", applied.RoutingMode);
+                Assert.Contains("synthetic-target.exe", applied.RoutingAppsExclude);
 
                 vm.Subscriptions.Single().Enabled = false;
                 window.UpdateLayout();
 
-                var open = panel.FindControl<Button>("OpenAssistant")!;
+                var goal = panel.FindControl<TextBox>("AssistantGoal")!;
                 var undo = panel.FindControl<Button>("UndoAssistant")!;
                 var status = panel.FindControl<TextBlock>("AssistantStatus")!;
                 Assert.True(panel.IsVisible);
-                Assert.False(open.IsEffectivelyVisible);
+                Assert.False(goal.IsEffectivelyVisible);
                 Assert.True(undo.IsEffectivelyVisible);
                 Assert.True(undo.IsEnabled);
 
                 var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                status.PropertyChanged += (_, e) =>
+                undo.PropertyChanged += (_, e) =>
                 {
-                    if (e.Property == TextBlock.TextProperty && status.Text == Strings.AssistantUndone)
+                    if (e.Property == InputElement.IsEnabledProperty && undo.IsEnabled)
                         completed.TrySetResult(true);
                 };
                 undo.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 await completed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+                Assert.Equal(Strings.AssistantUndone, status.Text);
                 Assert.False(vm.HasAssistantUndo);
                 Assert.True(panel.IsVisible);
                 Assert.True(status.IsEffectivelyVisible);
+                var restored = SettingsLoader.Load(AppPaths.ConfigYamlPath).App;
+                Assert.Equal(original.RoutingMode, restored.RoutingMode);
+                Assert.Equal(original.ActiveProfile, restored.ActiveProfile);
+                Assert.Equal(original.RoutingAppsMode, restored.RoutingAppsMode);
+                Assert.Equal(original.RoutingAppsExclude, restored.RoutingAppsExclude);
+                Assert.False(Assert.Single(restored.Subscriptions).Enabled);
             }
             finally { window.Close(); }
         }
@@ -226,7 +238,7 @@ public sealed class AssistantSetupPanelTests
     }
 
     [AvaloniaFact]
-    public void Assistant_starts_with_one_primary_action_and_reveals_checks_on_demand()
+    public void Assistant_is_an_inline_composer_with_one_quiet_more_row()
     {
         var previous = AppPaths.DataDir;
         var directory = Directory.CreateTempSubdirectory();
@@ -249,16 +261,18 @@ public sealed class AssistantSetupPanelTests
             window.Show();
             try
             {
-                var open = panel.FindControl<Button>("OpenAssistant")!;
+                var goal = panel.FindControl<TextBox>("AssistantGoal")!;
                 var run = panel.FindControl<Button>("RunAssistant")!;
                 var moreToggle = panel.FindControl<Button>("MoreChecksToggle")!;
-                var more = panel.FindControl<StackPanel>("MoreChecks")!;
+                var more = panel.FindControl<WrapPanel>("MoreChecks")!;
                 var repair = panel.FindControl<Button>("RepairVpn")!;
                 var crash = panel.FindControl<Button>("DiagnoseCrash")!;
 
-                open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 window.UpdateLayout();
+                Assert.True(goal.IsEffectivelyVisible);
                 Assert.True(run.IsEffectivelyVisible);
+                Assert.Equal(Strings.AssistantPlan, run.Content);
+                Assert.False(panel.FindControl<TextBlock>("AssistantStatus")!.IsVisible);
                 Assert.False(more.IsVisible);
                 Assert.False(repair.IsEffectivelyVisible);
                 Assert.False(crash.IsEffectivelyVisible);
@@ -268,7 +282,6 @@ public sealed class AssistantSetupPanelTests
                 Assert.True(more.IsVisible);
                 Assert.True(repair.IsEffectivelyVisible);
                 Assert.True(crash.IsEffectivelyVisible);
-                Assert.True(panel.FindControl<Border>("SourceDiagnosisDetails")!.IsEffectivelyVisible);
             }
             finally { window.Close(); }
         }
@@ -448,14 +461,13 @@ public sealed class AssistantSetupPanelTests
                     if (args.Property == Avalonia.Input.InputElement.IsEnabledProperty && run.IsEnabled)
                         completed.TrySetResult(true);
                 };
-                panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 panel.FindControl<TextBox>("AssistantGoal")!.Text = "Enable DNS flushing on startup";
                 Assert.False(confirm.IsVisible);
                 run.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.True(confirm.IsVisible);
                 Assert.Equal(Strings.AssistantChangeDescription("SetFlushDnsOnStart", true, null, false),
                     panel.FindControl<TextBlock>("AssistantConsentText")!.Text);
-                Assert.Equal(Strings.AssistantConfirmWaiting, status.Text);
+                Assert.False(status.IsVisible);
                 Assert.False(SettingsLoader.Load(AppPaths.ConfigYamlPath).App.FlushDnsOnStart);
                 switch (response)
                 {
@@ -618,7 +630,6 @@ public sealed class AssistantSetupPanelTests
             var panel = new AssistantSetupPanel { DataContext = vm };
             var window = new Window { Content = panel };
             window.Show();
-            panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             panel.FindControl<TextBox>("AssistantGoal")!.Text = "Connect VPN";
             panel.FindControl<Button>("RunAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(request.CanBeCanceled);

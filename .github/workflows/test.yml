@@ -29,6 +29,7 @@ jobs:
         run: dotnet restore VPNRouter.sln
 
       - name: Build
+        id: build
         run: dotnet build VPNRouter.sln -c Release --no-restore
 
       - name: Provision the pinned core for loopback verification
@@ -55,10 +56,11 @@ jobs:
       # The visual suite stays out of the main test filter. These four captures cover the two owner-reported
       # surfaces, reuse the build above, and are uploaded for review without another compile.
       - name: UI snapshots (Simple picker and assistant)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~PageScreenshotTests.SimplePage_ServerCategories|FullyQualifiedName~PageScreenshotTests.Assistant_one_primary_step_520|FullyQualifiedName~PageScreenshotTests.Assistant_more_checks_360" --logger "console;verbosity=normal"
 
       - name: Upload UI snapshots
-        if: always()
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: ui-snapshots-${{ github.sha }}
@@ -66,6 +68,7 @@ jobs:
             VPNRouter.Tests/screenshots/simple-server-categories-*.png
             VPNRouter.Tests/screenshots/assistant-one-step-520.png
             VPNRouter.Tests/screenshots/assistant-more-checks-360.png
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload test results

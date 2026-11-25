@@ -4,13 +4,6 @@ namespace VPNRouter.Core.Localization;
 
 public static partial class Strings
 {
-    internal static string SourceDiagnosisTitle => Ru ? "Разбор по исходному коду" : "Analyze with source code";
-    internal static string SourceDiagnosisNotice => Ru
-        ? "DeepSeek получит версию приложения, систему и признаки сбоя. Строки кода подберёт шлюз."
-        : "DeepSeek receives the app build, OS and crash indicators. The gateway selects the source lines.";
-    internal static string SourceDiagnosisSendNotice => Ru
-        ? "В DeepSeek уйдут версия сборки, система и признаки сбоя."
-        : "DeepSeek receives the build, OS and crash indicators.";
     internal static string SourceDiagnosisPreview => Ru ? "Выбрать последний отчёт" : "Review latest report";
     internal static string SourceConnectionPreview => Ru ? "Разобрать последнее подключение" : "Review last failed connection";
     internal static string SourceConnectionExpired => Ru ? "Состояние подключения изменилось. Выберите актуальный сбой." : "The connection state changed. Select the current failure.";

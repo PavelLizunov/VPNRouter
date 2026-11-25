@@ -45,10 +45,8 @@ public class PageScreenshotTests
             Enabled = true
         }));
         vm.IsConnected = true;
-        var page = new SimplePage { DataContext = vm };
-        var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
-        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        ScreenshotHelper.CapturePage(page, "simple-connected-with-assistant", width: 520, height: 680);
+        ScreenshotHelper.CapturePage(new SimplePage { DataContext = vm },
+            "simple-connected-with-assistant", width: 520, height: 680);
     }
 
     private static VlessServerEntry PickerEntry(string name, string protocol = "vless", string transport = "tcp") =>
@@ -64,62 +62,85 @@ public class PageScreenshotTests
         };
 
     [AvaloniaTheory]
-    [InlineData(520, 720)]
-    [InlineData(360, 640)]
+    [InlineData(520, 680)]
+    [InlineData(360, 720)]
     public void SimplePage_ServerCategories(int width, int height)
     {
-        using var vm = GetVm();
-        foreach (var entry in new[]
-                 {
-                     PickerEntry("Aruba Cloud VLESS"),
-                     PickerEntry("ACDN VLESS"),
-                     PickerEntry("BitFolk VLESS"),
-                     PickerEntry("TINYSERVERS VLESS"),
-                     PickerEntry("TRANSP VLESS"),
-                     PickerEntry("BitFolk WS", transport: "ws"),
-                     PickerEntry("BitFolk XHTTP", transport: "xhttp"),
-                     PickerEntry("Hysteria Games", protocol: "hysteria2"),
-                     PickerEntry("Naive Web", protocol: "naive"),
-                 })
-            vm.SubscriptionServers.Add(new ServerViewModel(entry));
-        vm.OpenConfigPickerCommand.Execute(null);
-        ScreenshotHelper.CapturePage(new SimplePage { DataContext = vm },
-            $"simple-server-categories-{width}", width, height);
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            using var vm = GetVm();
+            vm.SetLanguageRussianCommand.Execute(null);
+            foreach (var entry in new[]
+                     {
+                         PickerEntry("Aruba Cloud VLESS"),
+                         PickerEntry("ACDN VLESS"),
+                         PickerEntry("BitFolk VLESS"),
+                         PickerEntry("TINYSERVERS VLESS"),
+                         PickerEntry("TRANSP VLESS"),
+                         PickerEntry("BitFolk WS", transport: "ws"),
+                         PickerEntry("BitFolk XHTTP", transport: "xhttp"),
+                         PickerEntry("Hysteria Games", protocol: "hysteria2"),
+                         PickerEntry("Naive Web", protocol: "naive"),
+                     })
+                vm.SubscriptionServers.Add(new ServerViewModel(entry));
+            vm.OpenConfigPickerCommand.Execute(null);
+            ScreenshotHelper.CapturePage(new SimplePage { DataContext = vm },
+                $"simple-server-categories-{width}", width, height);
+        }
+        finally
+        {
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
     }
 
     [AvaloniaFact]
     public void Assistant_one_primary_step_520()
     {
-        using var vm = GetVm();
-        vm.Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
         {
-            Name = "Fixture subscription",
-            Url = "https://ninitux.com/sub/synthetic-panel",
-            Enabled = true
-        }));
-        vm.SubscriptionServers.Add(new ServerViewModel(PickerEntry("Fixture server")));
-        var page = new SimplePage { DataContext = vm };
-        var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
-        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        ScreenshotHelper.CapturePage(page, "assistant-one-step-520", 520, 900);
+            using var vm = GetVm();
+            vm.SetLanguageRussianCommand.Execute(null);
+            vm.Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry
+            {
+                Name = "Fixture subscription",
+                Url = "https://ninitux.com/sub/synthetic-panel",
+                Enabled = true
+            }));
+            vm.SubscriptionServers.Add(new ServerViewModel(PickerEntry("Fixture server")));
+            ScreenshotHelper.CapturePage(new SimplePage { DataContext = vm }, "assistant-one-step-520", 520, 680);
+        }
+        finally
+        {
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
     }
 
     [AvaloniaFact]
     public void Assistant_more_checks_360()
     {
-        using var vm = GetVm();
-        vm.Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
         {
-            Name = "Fixture subscription",
-            Url = "https://ninitux.com/sub/synthetic-panel",
-            Enabled = true
-        }));
-        vm.SubscriptionServers.Add(new ServerViewModel(PickerEntry("Fixture server")));
-        var page = new SimplePage { DataContext = vm };
-        var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
-        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        assistant.FindControl<Button>("MoreChecksToggle")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        ScreenshotHelper.CapturePage(page, "assistant-more-checks-360", 360, 900);
+            using var vm = GetVm();
+            vm.SetLanguageRussianCommand.Execute(null);
+            vm.Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry
+            {
+                Name = "Fixture subscription",
+                Url = "https://ninitux.com/sub/synthetic-panel",
+                Enabled = true
+            }));
+            vm.SubscriptionServers.Add(new ServerViewModel(PickerEntry("Fixture server")));
+            var page = new SimplePage { DataContext = vm };
+            var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+            assistant.FindControl<Button>("MoreChecksToggle")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            ScreenshotHelper.CapturePage(page, "assistant-more-checks-360", 360, 720);
+        }
+        finally
+        {
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
     }
 
     [AvaloniaFact]
@@ -138,17 +159,25 @@ public class PageScreenshotTests
         Assert.False(panel.IsVisible);
         subscription.Enabled = true;
         Assert.True(panel.IsVisible);
-
-        var open = panel.FindControl<Button>("OpenAssistant")!;
-        open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.True(panel.FindControl<StackPanel>("AssistantFields")!.IsVisible);
+        Assert.True(panel.FindControl<TextBox>("AssistantGoal")!.IsEffectivelyVisible);
+        Assert.True(panel.FindControl<Button>("RunAssistant")!.IsEffectivelyVisible);
 
         var eligibleUrl = subscription.Url;
         subscription.Url = "https://provider.example/sub/synthetic-assistant-visual";
         Assert.False(panel.IsVisible);
         subscription.Url = eligibleUrl;
         Assert.True(panel.IsVisible);
-        ScreenshotHelper.CapturePage(panel, "assistant-setup-narrow360", width: 360, height: 340);
+
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            vm.SetLanguageRussianCommand.Execute(null);
+            ScreenshotHelper.CapturePage(panel, "assistant-setup-narrow360", width: 360, height: 320);
+        }
+        finally
+        {
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
     }
 
     [AvaloniaFact]

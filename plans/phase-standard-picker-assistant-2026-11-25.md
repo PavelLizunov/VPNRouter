@@ -21,6 +21,7 @@ interface and test changes to roll back.
 
 The Simple list presents localized use-case headings while retaining each
 subscription row as the selectable item. Rebuilding the subscription pool
-keeps the selected feed and row identities. The DeepSeek panel presents
-command entry first, with recovery and diagnostic tools available on demand.
-The confirmation and undo actions remain accessible when needed.
+keeps the selected feed and row identities. An eligible subscription shows the
+command field directly on Home. Ask DeepSeek submits it in one click. A second
+click confirms a proposed change. More opens the optional recovery tools.
+Undo remains reachable if the employee later disables the subscription.

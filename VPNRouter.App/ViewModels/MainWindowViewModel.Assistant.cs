@@ -418,6 +418,13 @@ public partial class MainWindowViewModel
                 else if (preference == "SetStrictDns") StrictDns = candidate.App.StrictDns;
                 else LoadSettingsIntoUI();
                 HasPendingAppChanges = false;
+
+                // Loading the editor can initialize or normalize derived routing fields that the next
+                // settings save will persist. Capture that final applied shape so an unrelated later
+                // save (for example disabling the last subscription) does not look like a routing edit
+                // and make Undo refuse its own change.
+                if (_assistantUndo is { } undo && undo.Revision == savedRevision)
+                    _assistantUndo = undo with { Applied = RoutingSelection.Capture(_settings) };
             }
             else if (!_disposed && appliedSession != null)
             {
