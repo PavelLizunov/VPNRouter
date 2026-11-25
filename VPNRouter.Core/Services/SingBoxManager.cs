@@ -51,6 +51,14 @@ public partial class SingBoxManager : IDisposable
 
     private readonly IHttpClient _http;
 
+    // Test seam: starts no server, so fixtures can answer the bounded /proxies probe.
+    private static readonly AsyncLocal<IHttpClient?> s_controllerTransportForTests = new();
+    internal static IHttpClient? ControllerTransportForTests
+    {
+        get => s_controllerTransportForTests.Value;
+        set => s_controllerTransportForTests.Value = value;
+    }
+
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
     public int? Pid => _handle is { HasExited: false } handle ? handle.Pid : null;
     internal bool HasActiveTunnel => Pid.HasValue ||
@@ -84,7 +92,7 @@ public partial class SingBoxManager : IDisposable
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
-        _http = http switch
+        _http = (http ?? ControllerTransportForTests) switch
         {
             null or PolicyHttpClient => LocalControllerHttp,
             IDirectHttpClient direct => direct,
@@ -156,49 +164,22 @@ public partial class SingBoxManager : IDisposable
             if (OperatingSystem.IsMacOS())
             {
                 // The privileged helper stages the config root-owned before it
-                // starts sing-box. A hot reload would hand the user-writable path
-                // back to root, so privileged macOS always restarts.
+                // starts sing-box; the staged contract is part of the apply.
                 configJson = MacPrivilegedConfigContract.Prepare(configJson);
                 forceRestart = true;
             }
 
-            _logger.Information("[SingBoxManager] Reloading config{Mode}",
-                forceRestart ? " (force restart, no hot-reload attempt)" : "");
-            if (forceRestart) return RestartWithConfig(configJson);
-
-            _currentConfigPath = WriteJsonToDisk(configJson);
-            if (TryHotReload()) return true;
-
-            _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
-            return RestartCore();
-        }
-    }
-
-    public bool TryReloadConfigJson(string configJson)
-    {
-        lock (_lifecycleGate)
-        {
-            if (Volatile.Read(ref _disposed) != 0)
-            {
-                _logger.Debug("[SingBoxManager] TryReloadConfigJson ignored — manager already disposed");
+            // sing-box 1.14.4's PUT /configs answers 204 without applying the
+            // document, so every apply is a real restart followed by a bounded
+            // controller tag check. The check confirms the new process serves
+            // the applied outbounds instead of trusting a no-op response.
+            _logger.Information(
+                "[SingBoxManager] Reloading config via restart{Mode}",
+                forceRestart ? " (forced)" : "");
+            if (!RestartWithConfig(configJson))
                 return false;
-            }
-            if (!_ownsTunLock || _exactStopUnconfirmed)
-            {
-                _logger.Warning("[SingBoxManager] TryReloadConfigJson ignored — manager does not own valid TUN lease");
-                return false;
-            }
 
-            if (OperatingSystem.IsMacOS())
-            {
-                _logger.Information(
-                    "[SingBoxManager] Hot-reload is disabled on privileged macOS; a restart is required");
-                return false;
-            }
-
-            _logger.Information("[SingBoxManager] Attempting hot-reload (no restart fallback)");
-            _currentConfigPath = WriteJsonToDisk(configJson);
-            return TryHotReload();
+            return VerifyAppliedConfigTags(configJson);
         }
     }
 

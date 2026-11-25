@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P0** - A legacy `PUT /configs` answers HTTP 204 on sing-box 1.14.4 without applying the document, so `SingBoxManager`/`HealthMonitor` reported a successful hot reload, skipped the restart and lifted the kill switch over the old config. `ReloadConfigJsonWithResult` now always restarts and confirms the applied outbound tags on `/proxies` within a bounded budget; `HealthMonitor` keeps the previous scan and block rules unless the restart is confirmed. RESOLVED in source on `feat/turnrelay-integration`. See [TurnRelay integration](phase-turnrelay-integration-2026-11-25.md).
+
 - [x] **P2** - Standard v2.51.1-r2 was cut before PR #728 reached main, so the release lacks the reviewed desktop server categories and country flags. Restored on the integration branch. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
 
 - [x] **P2** - Windows preview `b85fc444` shows DNSTT under Everyday and multiple nested scroll regions in the shared server list. The DNSTT protocol falls through the classifier and the tree and group lists both limit their height inside the host viewport. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).

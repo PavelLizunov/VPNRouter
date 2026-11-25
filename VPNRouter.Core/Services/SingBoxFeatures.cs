@@ -13,6 +13,8 @@ public static class SingBoxFeatures
     private static bool _xhttp;
     private static bool _dnstt;
     private static bool _embeddedDnstt;
+    private static bool _turnrelay;
+    private static bool _embeddedTurnRelay;
 
     internal static bool EmbeddedCore { get; set; } = OperatingSystem.IsAndroid();
 
@@ -48,7 +50,11 @@ public static class SingBoxFeatures
         }
     }
 
-    public static void SetEmbeddedCoreVersion(string version) => _embeddedDnstt = HasDnsttVersion(version);
+    public static void SetEmbeddedCoreVersion(string version)
+    {
+        _embeddedDnstt = HasDnsttVersion(version);
+        _embeddedTurnRelay = HasTurnRelayVersion(version);
+    }
 
     internal static bool HasDnsttVersion(string version)
     {
@@ -58,7 +64,39 @@ public static class SingBoxFeatures
             && (core > new Version(1, 14, 4) || (core == new Version(1, 14, 4) && patch >= 2));
     }
 
+    public static bool TurnRelayAvailable
+    {
+        get
+        {
+            if (OverrideTurnRelay is bool value) return value;
+            if (EmbeddedCore) return _embeddedTurnRelay;
+            if (SingBoxRuntimePolicy.Current is { } policy) return policy.TurnRelayAvailable;
+            _ = Probe();
+            return _turnrelay;
+        }
+    }
+
+    internal static bool HasTurnRelayVersion(string version)
+    {
+        version = version.Trim();
+
+        const string localPrefix = "-vpnctl-turnrelay.";
+        var localIndex = version.IndexOf(localPrefix, StringComparison.Ordinal);
+        if (localIndex > 0 && int.TryParse(version[(localIndex + localPrefix.Length)..], out var localPatch)
+            && localPatch >= 5)
+            return true;
+
+        var parts = version.Split("-vpnctl.", StringSplitOptions.None);
+        if (parts.Length != 2 || !Version.TryParse(parts[0], out var core))
+            return false;
+        if (core > new Version(1, 14, 4))
+            return true;
+        return core == new Version(1, 14, 4) && int.TryParse(parts[1], out var patch) && patch >= 4;
+    }
+
     internal static bool? OverrideDnstt { get; set; }
+
+    internal static bool? OverrideTurnRelay { get; set; }
 
     internal static bool? OverrideAwg { get; set; }
 
@@ -67,7 +105,7 @@ public static class SingBoxFeatures
     public static void Prewarm()
     {
         if (SingBoxRuntimePolicy.Current != null) return;
-        if (OverrideAwg.HasValue && OverrideXhttp.HasValue) return;
+        if (OverrideAwg.HasValue && OverrideXhttp.HasValue && OverrideTurnRelay.HasValue) return;
         _ = Task.Run(() => { try { _ = Probe(); } catch { } });
     }
 
@@ -80,7 +118,10 @@ public static class SingBoxFeatures
             _xhttp = false;
             _dnstt = false;
             _embeddedDnstt = false;
+            _turnrelay = false;
+            _embeddedTurnRelay = false;
             OverrideDnstt = null;
+            OverrideTurnRelay = null;
             EmbeddedCore = OperatingSystem.IsAndroid();
             OverrideAwg = null;
             OverrideXhttp = null;
@@ -108,6 +149,7 @@ public static class SingBoxFeatures
                     var tags = Array.Find(lines, line => line.TrimStart().StartsWith("Tags:", StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
                     var version = Array.Find(lines, line => line.StartsWith(prefix, StringComparison.Ordinal));
                     _dnstt = version != null && HasDnsttVersion(version[prefix.Length..]);
+                    _turnrelay = tags.Contains("with_turnrelay", StringComparison.Ordinal);
                     _awg = tags.Contains("with_awg", StringComparison.Ordinal);
                     _xhttp = tags.Contains("with_xhttp", StringComparison.Ordinal);
                 }
@@ -118,6 +160,7 @@ public static class SingBoxFeatures
                 _awg = false;
                 _xhttp = false;
                 _dnstt = false;
+                _turnrelay = false;
             }
             _probed = true;
             return (_awg, _xhttp);

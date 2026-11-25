@@ -19,6 +19,7 @@ public static class RollbackConfigCompatibility
     public const string LegacyTelegramAutostart = "legacy-telegram-autostart";
     public const string ActiveConfigMissing = "active-config-missing";
     public const string ActiveDnstt = "active-dnstt";
+    public const string ActiveTurnRelay = "active-turnrelay";
     public const string ActiveVmess = "active-vmess";
     public const string ActiveSingleOutbound = "active-single-outbound";
     public const string ActiveRowMissing = "active-row-missing";
@@ -86,6 +87,9 @@ public static class RollbackConfigCompatibility
             return null;
 
         var protocol = (server.Protocol ?? string.Empty).Trim();
+        if (server.IsTurnRelay || protocol.Equals("turnrelay", StringComparison.OrdinalIgnoreCase))
+            return ActiveTurnRelay;
+
         if (server.IsDnsTunnel ||
             server.Dnstt != null ||
             protocol.Equals("dnstt", StringComparison.OrdinalIgnoreCase) ||
@@ -248,6 +252,7 @@ public static class RollbackConfigCompatibility
                 : string.Empty;
             return type.Equals("dnstt", StringComparison.OrdinalIgnoreCase) ||
                    type.Equals("dns-tunnel", StringComparison.OrdinalIgnoreCase) ||
+                   type.Equals("turnrelay", StringComparison.OrdinalIgnoreCase) ||
                    type.Equals("vmess", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -258,6 +263,8 @@ public static class RollbackConfigCompatibility
                 var type = item["type"] is JsonValue value && value.TryGetValue<string>(out var text)
                     ? text
                     : string.Empty;
+                if (type.Equals("turnrelay", StringComparison.OrdinalIgnoreCase))
+                    return ActiveTurnRelay;
                 if (type.Equals("vmess", StringComparison.OrdinalIgnoreCase))
                     return ActiveVmess;
                 if (type.Equals("dnstt", StringComparison.OrdinalIgnoreCase) ||

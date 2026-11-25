@@ -79,7 +79,7 @@ public class VlessConfig
         if (!string.IsNullOrEmpty(active.DetourVia))
             return WithRequiredHop(active, all);
 
-        if (active.Dnstt != null || active.RequiresSingleOutbound() ||
+        if (active.Dnstt != null || active.IsTurnRelay || active.RequiresSingleOutbound() ||
             (!AutoSelectBestServer && string.Equals(active.Protocol, "vmess", StringComparison.OrdinalIgnoreCase)))
             return new List<VlessServerEntry> { active };
         if (all.Count <= 1) return all;
@@ -88,7 +88,8 @@ public class VlessConfig
             return BuildAutoSelectPool(all, active);
 
         var activeIp = active.Server;
-        return all.Where(s => s.Server == activeIp && s.Dnstt == null && string.IsNullOrEmpty(s.DetourVia)).ToList();
+        return all.Where(s => s.Server == activeIp && s.Dnstt == null && !s.IsTurnRelay &&
+            string.IsNullOrEmpty(s.DetourVia)).ToList();
     }
 
     internal static List<VlessServerEntry> WithRequiredHop(VlessServerEntry active, IEnumerable<VlessServerEntry> servers)
@@ -105,7 +106,7 @@ public class VlessConfig
     {
         var proto = active.Protocol ?? "vless";
         var pool = all.Where(s =>
-            string.IsNullOrEmpty(s.DetourVia) &&
+            string.IsNullOrEmpty(s.DetourVia) && !s.IsTurnRelay &&
             string.Equals(s.Protocol ?? "vless", proto, StringComparison.OrdinalIgnoreCase)).ToList();
 
         if (!string.IsNullOrEmpty(active.Flow))

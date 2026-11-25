@@ -12,7 +12,10 @@ that every failure path has the same behavior.
 - [StartupPipeline.cs](StartupPipeline.cs): startup phases, configuration
   checks, firewall setup and warmup probing. Read together with `VpnEngine`.
 - `SingBoxManager.cs` and `SingBoxManager.*.cs`: process launch, stop, crash
-  detection, health and hot reload.
+  detection, health and config apply. Config changes always restart sing-box;
+  `ReloadConfigJsonWithResult` then verifies the applied outbound tags on
+  `/proxies` within a bounded budget. The legacy `PUT /configs` path returns
+  HTTP 204 without applying anything and is no longer used.
 - `TunOwnershipLock.cs`, `ProcessOwnership.cs`, `UnixOwnedProcessSignal.cs`
   and `OrphanCleanup.cs`: ownership checks and cleanup paths. Inspect the
   actual acquisition/release paths before changing synchronization; there is

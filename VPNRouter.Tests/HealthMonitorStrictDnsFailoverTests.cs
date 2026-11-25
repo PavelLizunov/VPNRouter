@@ -78,7 +78,7 @@ public class HealthMonitorStrictDnsFailoverTests
     private static HealthMonitor Started(FakeSingBoxApi api, AppSettings settings)
     {
         var hm = BuildHm(api);
-        hm.HotReloadHookForTests = _ => api.ReloadResultOverride ?? api.TunnelHealthy;
+        hm.ReloadHookForTests = _ => api.ReloadResultOverride ?? api.TunnelHealthy;
         hm.Start(new Profile { Name = "test" }, settings);
         SetField(hm, "_lastScan", new ScanResult { ProcessNames = new List<string> { "Discord.exe" } });
         return hm;
@@ -114,7 +114,7 @@ public class HealthMonitorStrictDnsFailoverTests
             settings.App.BlockAds = blockAds;
             using var hm = Started(new FakeSingBoxApi { ProxyDelayMs = null }, settings);
             var reloads = 0;
-            hm.HotReloadHookForTests = _ => { reloads++; return true; };
+            hm.ReloadHookForTests = _ => { reloads++; return true; };
 
             Reconcile(hm);
             Reconcile(hm);

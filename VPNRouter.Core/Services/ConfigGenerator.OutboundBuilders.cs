@@ -65,10 +65,40 @@ public static partial class ConfigGenerator
             "naive"       => BuildNaiveOutbound(entry, tag),
             "vmess"       => BuildVmessOutbound(entry, tag),
             "dns-tunnel"  => BuildDnsTunnelOutbound(entry, tag),
+            "turnrelay"   => throw new InvalidOperationException(
+                "ConfigGenerator: a TurnRelay row is a chain entry only; it cannot be built as a standalone proxy outbound."),
             _             => BuildVlessOutboundCore(entry, tag),
         };
         outbound.SourceServer = entry;
         return outbound;
+    }
+
+    internal static SingBoxOutbound BuildTurnRelayOutbound(VlessServerEntry entry, string tag)
+    {
+        if (!SingBoxFeatures.TurnRelayAvailable || entry.TurnRelay is not { } profile ||
+            !profile.IsComplete() || !TurnRelayUriParser.IsValidId(entry.OutboundId))
+            throw new InvalidOperationException(
+                "ConfigGenerator: TurnRelay requires a compatible core and a complete chain entry.");
+
+        return new SingBoxOutbound
+        {
+            Type = "turnrelay",
+            Tag = tag,
+            Server = entry.Server,
+            ServerPort = entry.Port,
+            Password = profile.Password,
+            TurnRelayProvider = profile.Provider,
+            TurnRelayServerType = profile.ServerType,
+            TurnServer = profile.TurnServer,
+            TurnUsername = profile.TurnUsername,
+            TurnPassword = profile.TurnPassword,
+            TurnRelayServerFingerprint = profile.ServerFingerprint,
+            TurnRelayConnections = profile.Connections,
+            TurnRelayMode = profile.Mode,
+            TurnRelayUdp = profile.Udp,
+            DomainResolver = new DomainResolverValue("local-dns", "prefer_ipv4"),
+            SourceServer = entry,
+        };
     }
 
     private static SingBoxOutbound BuildDnsTunnelOutbound(VlessServerEntry entry, string tag)

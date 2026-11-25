@@ -185,73 +185,11 @@ public sealed class SingBoxManagerStateMachineTests
     }
 
     [Fact]
-    public void TryHotReload_ProcessNull_ReturnsFalseWithoutHttpCall()
+    public void TryReloadConfigJson_IsNotPartOfThePublicSurface()
     {
-        var http = new FakeHttpClient();
-        using var manager = BuildManager(http);
-
-        var result = InvokePrivate<bool>(manager, "TryHotReload");
-
-        Assert.False(result);
-        Assert.Empty(http.SentRequests);
-    }
-
-    [Fact]
-    public void TryReloadConfigJson_NullProcess_ReturnsFalse()
-    {
-        var http = new FakeHttpClient();
-        using var manager = BuildManager(http);
-
-        try
-        {
-            Directory.CreateDirectory(VPNRouter.Core.AppPaths.ConfigDir);
-        }
-        catch { }
-
-        var result = manager.TryReloadConfigJson("{\"log\":{\"level\":\"info\"}}");
-
-        Assert.False(result);
-        Assert.Empty(http.SentRequests);
-    }
-
-    [Fact]
-    public void TryHotReload_PutShape_PreservedAfter_3G2_Migration()
-    {
-        var http = new FakeHttpClient()
-            .Setup("127.0.0.1:9090/configs",
-                new HttpResponse(
-                    StatusCode: 200,
-                    Headers: new Dictionary<string, string>(),
-                    Body: Array.Empty<byte>(),
-                    Duration: TimeSpan.FromMilliseconds(1)));
-        using var manager = BuildManager(http);
-
-        var fakeHandle = new FakeProcessHandle(pid: 42424);
-        try
-        {
-            SetField(manager, "_handle", fakeHandle);
-            SetField(manager, "_currentConfigPath", @"C:\fake\current.json");
-
-            var result = InvokePrivate<bool>(manager, "TryHotReload");
-
-            Assert.True(result);
-            Assert.Single(http.SentRequests);
-
-            var req = http.SentRequests[0];
-            Assert.Equal(HttpMethod.Put, req.Method);
-            Assert.Equal("http://127.0.0.1:9090/configs?force=true",
-                req.Uri.ToString());
-            Assert.Equal("application/json", req.BodyContentType);
-            Assert.NotNull(req.Body);
-            var bodyJson = Encoding.UTF8.GetString(req.Body!);
-            Assert.Contains("\"path\":", bodyJson);
-            Assert.Contains("C:\\\\fake\\\\current.json", bodyJson);
-        }
-        finally
-        {
-            SetField(manager, "_handle", null);
-            fakeHandle.Dispose();
-        }
+        Assert.Null(typeof(SingBoxManager).GetMethod("TryReloadConfigJson"));
+        Assert.Null(typeof(SingBoxManager).GetMethod("TryHotReload",
+            BindingFlags.Instance | BindingFlags.NonPublic));
     }
 
     private static string? LoadSingBoxManagerSource()

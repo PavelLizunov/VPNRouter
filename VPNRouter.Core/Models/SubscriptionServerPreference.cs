@@ -45,7 +45,7 @@ public sealed record SubscriptionServerPreference
     }
 
     internal static bool CanAutoSelect(VlessServerEntry server) =>
-        server.Dnstt == null && string.IsNullOrEmpty(server.DetourVia) &&
+        server.Dnstt == null && !server.IsTurnRelay && string.IsNullOrEmpty(server.DetourVia) &&
         !string.IsNullOrWhiteSpace(server.Server) && server.Port is > 0 and <= 65535 &&
         !VlessServersResolver.IsPlaceholderEntry(server) && ConfigGenerator.IsServerRuntimeAvailable(server);
 

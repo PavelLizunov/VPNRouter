@@ -2,6 +2,7 @@
 
 using System;
 using System.IO;
+using System.Net.Http;
 using System.Reflection;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -593,10 +594,8 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         {
             SetField(manager, "_ownsTunLock", false);
             var resultNoLease = manager.ReloadConfigJsonWithResult("{\"case\":\"no-lease\"}");
-            var tryResultNoLease = manager.TryReloadConfigJson("{\"case\":\"try-no-lease\"}");
 
             Assert.False(resultNoLease, "ReloadConfigJsonWithResult must return false without lease.");
-            Assert.False(tryResultNoLease, "TryReloadConfigJson must return false without lease.");
 
             var configPath = VPNRouter.Core.AppPaths.CurrentConfigPath;
             Assert.False(File.Exists(configPath), "Must not write config to disk when lease is not owned.");
@@ -605,10 +604,8 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             SetField(manager, "_ownsTunLock", true);
             SetField(manager, "_disposed", 1);
             var resultDisposed = manager.ReloadConfigJsonWithResult("{\"case\":\"disposed\"}");
-            var tryResultDisposed = manager.TryReloadConfigJson("{\"case\":\"try-disposed\"}");
 
             Assert.False(resultDisposed, "ReloadConfigJsonWithResult must return false when disposed.");
-            Assert.False(tryResultDisposed, "TryReloadConfigJson must return false when disposed.");
             Assert.False(File.Exists(configPath), "Must not write config to disk when disposed.");
             Assert.Empty(fakeHttp.SentRequests);
         }
@@ -677,31 +674,44 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
     }
 
     [Fact]
-    public void ReloadConfigJsonWithResult_HotReloadSuccess_ReturnsTrue()
+    public void ReloadConfigJsonWithResult_Fake204_StillPerformsARealRestart()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Windows-only — LaunchProcess on Windows routes through IProcessRunner without pkexec.");
+
         var priorDataDir = GetAppPathsDataDir();
-        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-hot-reload-{Guid.NewGuid():N}");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-fake-204-{Guid.NewGuid():N}");
         VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
         EnsureConfigDir();
 
-        var fakeHttp = new FakeHttpClient().Setup("/configs", "", statusCode: 204);
-        var runner = new FakeProcessRunner();
+        var fakeHttp = new FakeHttpClient()
+            .Setup("/configs", "", statusCode: 204)
+            .Setup("/proxies", """{"proxies":{"proxy":{}}}""");
+        var initialHandle = new FakeProcessHandle(pid: NewFakePid());
+        var replacementHandle = new FakeProcessHandle(pid: NewFakePid());
+        var runner = new FakeProcessRunner().OnStart(_ => true, _ => replacementHandle);
         var manager = new SingBoxManager(DefaultSettings(), null, fakeHttp, runner);
+
+        SetField(manager, "_handle", initialHandle);
+        SetField(manager, "_currentConfigPath",
+            Path.Combine(VPNRouter.Core.AppPaths.ConfigDir, "current.json"));
 
         var lockInstance = TunOwnershipLock.Instance(null);
         SetLockOwnedForTest(lockInstance, manager);
 
-        var handle = new FakeProcessHandle(pid: NewFakePid());
-        SetField(manager, "_handle", handle);
-
         try
         {
-            var result = manager.ReloadConfigJsonWithResult("{\"dns\":{}}", forceRestart: false);
+            const string config =
+                """{"outbounds":[{"type":"vless","tag":"proxy","server":"203.0.113.9","server_port":443,"uuid":"u"}],"route":{"final":"proxy"}}""";
+            var result = manager.ReloadConfigJsonWithResult(config, forceRestart: false);
 
-            Assert.True(result, "ReloadConfigJsonWithResult must return true when Clash API hot-reload succeeds.");
-            Assert.Empty(runner.StartCalls);
-            Assert.Same(handle, GetField(manager, "_handle"));
-            Assert.Single(fakeHttp.SentRequests);
+            Assert.True(result, "The restarted controller served the applied proxy tag.");
+            Assert.True(initialHandle.HasExited, "A fake 204 must not keep the old process — the tunnel must restart.");
+            Assert.Same(replacementHandle, GetField(manager, "_handle"));
+            Assert.Single(runner.StartCalls);
+            Assert.DoesNotContain(fakeHttp.SentRequests, request => request.Method == HttpMethod.Put);
+            Assert.Contains(fakeHttp.SentRequests, request =>
+                request.Method == HttpMethod.Get && request.Uri.AbsolutePath == "/proxies");
         }
         finally
         {
@@ -709,7 +719,54 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
             SetField(manager, "_ownsTunLock", false);
             SetField(manager, "_exactStopUnconfirmed", false);
             manager.Dispose();
-            handle.Dispose();
+            initialHandle.Dispose();
+            replacementHandle.Dispose();
+            if (IsLockOwned(lockInstance)) lockInstance.Release();
+            RestoreAppPathsDataDir(priorDataDir);
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void ReloadConfigJsonWithResult_MissingControllerTag_ReturnsFalseAfterRealRestart()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "Windows-only — LaunchProcess on Windows routes through IProcessRunner without pkexec.");
+
+        var priorDataDir = GetAppPathsDataDir();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-tag-miss-{Guid.NewGuid():N}");
+        VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
+        EnsureConfigDir();
+
+        var fakeHttp = new FakeHttpClient().Setup("/proxies", """{"proxies":{}}""");
+        var initialHandle = new FakeProcessHandle(pid: NewFakePid());
+        var replacementHandle = new FakeProcessHandle(pid: NewFakePid());
+        var runner = new FakeProcessRunner().OnStart(_ => true, _ => replacementHandle);
+        var manager = new SingBoxManager(DefaultSettings(), null, fakeHttp, runner);
+
+        SetField(manager, "_handle", initialHandle);
+        var lockInstance = TunOwnershipLock.Instance(null);
+        SetLockOwnedForTest(lockInstance, manager);
+
+        try
+        {
+            const string config =
+                """{"outbounds":[{"type":"vless","tag":"proxy","server":"203.0.113.9","server_port":443,"uuid":"u"}],"route":{"final":"proxy"}}""";
+            var result = manager.ReloadConfigJsonWithResult(config, forceRestart: true);
+
+            Assert.False(result, "A controller that does not serve the applied tag is not a confirmed reload.");
+            Assert.True(initialHandle.HasExited, "The restart still happened; only the verification failed.");
+            Assert.Same(replacementHandle, GetField(manager, "_handle"));
+            Assert.Single(runner.StartCalls);
+        }
+        finally
+        {
+            SetField(manager, "_handle", null);
+            SetField(manager, "_ownsTunLock", false);
+            SetField(manager, "_exactStopUnconfirmed", false);
+            manager.Dispose();
+            initialHandle.Dispose();
+            replacementHandle.Dispose();
             if (IsLockOwned(lockInstance)) lockInstance.Release();
             RestoreAppPathsDataDir(priorDataDir);
             try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); } catch { }

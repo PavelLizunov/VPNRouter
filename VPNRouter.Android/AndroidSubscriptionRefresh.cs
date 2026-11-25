@@ -175,6 +175,54 @@ internal static class AndroidSubscriptionRefresh
         return true;
     }
 
+    // Pasted hop + target pairs arrive as separate share links. Keep both rows so
+    // the target's opaque detour id resolves, and select the target (never the hop).
+    internal static bool SaveServerLinks(IReadOnlyList<VlessServerEntry> entries, string targetUri, string command,
+        Func<string, string?> read, Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
+    {
+        if (!IsCurrentSelection(command, read)) return false;
+        if (entries.Count == 0) return false;
+
+        var servers = ReadStandalone(read, options);
+        var updates = new Dictionary<string, string?>();
+        PreserveLegacyFeed(updates, read, servers, options);
+        RemoveRetainedManualCopy(servers, ReadRetainedManual(read), options);
+
+        var indexes = new List<int>();
+        foreach (var entry in entries)
+            indexes.Add(AddStandaloneRow(servers, entry, options));
+
+        var targetIndex = indexes[^1];
+        var target = servers[targetIndex];
+        updates[SelectedFeedId] = null;
+        updates[SelectedFeedRow] = null;
+        updates[StandaloneServers] = JsonSerializer.Serialize(servers, options);
+        updates[SelectedName] = target.Name;
+        updates[ManualUri] = targetUri;
+        updates[LegacyManualOwner] = null;
+        updates[SubscriptionUrl] = null;
+        updates[ConfigMode] = "manual";
+        commit(updates);
+        return true;
+    }
+
+    private static int AddStandaloneRow(List<VlessServerEntry> servers, VlessServerEntry entry,
+        JsonSerializerOptions options)
+    {
+        var identity = JsonSerializer.Serialize(entry, options);
+        var existing = servers.FindIndex(row => JsonSerializer.Serialize(row, options) == identity);
+        if (existing >= 0) return existing;
+
+        var names = servers.Select(row => row.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var baseName = string.IsNullOrWhiteSpace(entry.Name) ? entry.Server : entry.Name;
+        var name = baseName;
+        for (var suffix = 2; names.Contains(name); suffix++)
+            name = $"{baseName} #{suffix}";
+        entry.Name = name;
+        servers.Add(entry);
+        return servers.Count - 1;
+    }
+
     private static void PreserveLegacyFeed(Dictionary<string, string?> changes, Func<string, string?> read,
         List<VlessServerEntry> servers, JsonSerializerOptions options)
     {

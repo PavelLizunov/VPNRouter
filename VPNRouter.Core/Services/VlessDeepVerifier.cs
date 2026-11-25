@@ -175,6 +175,13 @@ public sealed class VlessDeepVerifier
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
 
+        if (entry.IsTurnRelay)
+        {
+            _logger.Information("[VlessDeepVerifier] TurnRelay hop deep verify skipped (chain entry only)");
+            return DeepVerifyResult.Failed("deep verify: turnrelay is a chain entry; verify its VLESS target",
+                DeepVerifyFailurePhase.UnsupportedByVerifier);
+        }
+
         var policy = EffectivePolicy;
         using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
         if (policy != null)

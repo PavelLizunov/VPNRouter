@@ -206,13 +206,18 @@ public sealed class VpnEngineHotReloadLifecycleTests
             settings.SingBox.ClashApi = "127.0.0.1:0";
         }
 
+        var previousControllerTransport = SingBoxManager.ControllerTransportForTests;
+        SingBoxManager.ControllerTransportForTests = new FakeHttpClient()
+            .Setup("/proxies", """{"proxies":{"proxy":{},"proxy-udp":{},"chain-entry":{},"custom-proxy":{}}}""");
+
         var cleanup = new HotReloadCleanup(
             engine,
             stubExe,
             previousDataDir,
             tempDataDir,
             prevSingBoxRunner,
-            prevTunDiagRunner);
+            prevTunDiagRunner,
+            previousControllerTransport);
 
         try
         {
@@ -235,6 +240,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
         private readonly string _tempDataDir;
         private readonly IProcessRunner _prevSingBoxRunner;
         private readonly IProcessRunner _prevTunDiagRunner;
+        private readonly IHttpClient? _prevControllerTransport;
         private bool _disposed;
 
         public HotReloadCleanup(
@@ -243,7 +249,8 @@ public sealed class VpnEngineHotReloadLifecycleTests
             string previousDataDir,
             string tempDataDir,
             IProcessRunner prevSingBoxRunner,
-            IProcessRunner prevTunDiagRunner)
+            IProcessRunner prevTunDiagRunner,
+            IHttpClient? prevControllerTransport)
         {
             _engine = engine;
             _stubExe = stubExe;
@@ -251,6 +258,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
             _tempDataDir = tempDataDir;
             _prevSingBoxRunner = prevSingBoxRunner;
             _prevTunDiagRunner = prevTunDiagRunner;
+            _prevControllerTransport = prevControllerTransport;
         }
 
         public void Dispose()
@@ -260,6 +268,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
             try { _engine.Stop(); } catch { }
             try { _engine.Dispose(); } catch { }
             SingBoxManager.Runner = _prevSingBoxRunner;
+            SingBoxManager.ControllerTransportForTests = _prevControllerTransport;
             TunAdapterDiagnostics.Runner = _prevTunDiagRunner;
             TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
             AppPaths.OverrideDataDir(_previousDataDir);

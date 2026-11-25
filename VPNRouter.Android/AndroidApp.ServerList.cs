@@ -613,18 +613,11 @@ public partial class AndroidApp
         if (_srvVlessUriInput is null) return;
         var raw = (_srvVlessUriInput.Text ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(raw)) return;
-        if (!ServerUriParser.IsSupportedScheme(raw)) return;
-
-        VlessServerEntry parsed;
-        try
-        {
-            parsed = ServerUriParser.Parse(raw);
-        }
-        catch
-        {
-            return;
-        }
-        if (string.IsNullOrEmpty(parsed.Server) || parsed.Port <= 0) return;
+        // Accept one link or a newline-separated hop + target pair.
+        var parsedRows = ServerUriParser.ParseMultiple(raw)
+            .Where(row => !string.IsNullOrEmpty(row.Server) && row.Port > 0)
+            .ToList();
+        if (parsedRows.Count == 0) return;
 
         var subs = AndroidStorage.GetSubscriptions();
         var sub = _srvCurrentSub;
@@ -640,7 +633,7 @@ public partial class AndroidApp
             _srvCurrentSub = sub;
         }
         sub.Servers ??= new List<VlessServerEntry>();
-        sub.Servers.Add(parsed);
+        sub.Servers.AddRange(parsedRows);
 
         var idx = subs.FindIndex(s =>
             string.Equals(s.Id, sub.Id, StringComparison.OrdinalIgnoreCase));
@@ -1031,6 +1024,12 @@ public partial class AndroidApp
 
     private void ApplyServerSelection(SubscriptionEntry source, VlessServerEntry srv)
     {
+        if (srv.IsTurnRelay)
+        {
+            ShowMenuFeedback(VPNRouter.Core.Localization.Strings.SmpTurnRelayChainRequired);
+            return;
+        }
+
         var activity = MainActivity.Instance;
         bool reconnect = activity != null && MainActivity.IntendedConnected;
         var command = reconnect ? ReserveConnectCommand() : null;

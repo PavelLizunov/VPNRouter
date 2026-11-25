@@ -70,7 +70,7 @@ public static partial class CustomConfigInjector
     internal static List<string> CheckForkFeatureSupport(JsonObject config)
     {
         var errors = new List<string>();
-        var (needsAwg, needsXhttp) = DetectForkOnlyFeatures(config);
+        var (needsAwg, needsXhttp, needsTurnRelay) = DetectForkOnlyFeatures(config);
         if (needsAwg && !SingBoxFeatures.AwgAvailable)
             errors.Add("Config uses AmneziaWG obfuscation fields (jc/jmin/jmax/s1-s4/h1-h4) in 'endpoints', "
                      + "but this sing-box build lacks with_awg — it would fail to start. "
@@ -78,6 +78,9 @@ public static partial class CustomConfigInjector
         if (needsXhttp && !SingBoxFeatures.XhttpAvailable)
             errors.Add("Config uses the 'xhttp' transport, but this sing-box build lacks with_xhttp — "
                      + "it would fail to start. Use a VPNRouter build bundling the lx core, or switch the transport.");
+        if (needsTurnRelay && !SingBoxFeatures.TurnRelayAvailable)
+            errors.Add("Config uses a 'turnrelay' outbound, but this sing-box build lacks with_turnrelay — "
+                     + "it would fail to start. Use a VPNRouter build bundling the turnrelay-capable core.");
         return errors;
     }
 

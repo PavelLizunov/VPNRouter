@@ -49,8 +49,10 @@ public sealed class DnsttSubscriptionTests
         const string url = "https://provider.example/api/v1/app/config/pilot";
         var fake = new FakeHttpClient().Setup(url, string.Join('\n', Link("one"), Link("two"), Link("invalid", "https://resolver.example")));
         var previousCapability = SingBoxFeatures.OverrideDnstt;
+        var previousTurnRelay = SingBoxFeatures.OverrideTurnRelay;
         var previousHttp = SubscriptionFetcher.Http;
         SingBoxFeatures.OverrideDnstt = supported;
+        SingBoxFeatures.OverrideTurnRelay = false;
         SubscriptionFetcher.Http = fake;
         try
         {
@@ -63,6 +65,7 @@ public sealed class DnsttSubscriptionTests
         finally
         {
             SingBoxFeatures.OverrideDnstt = previousCapability;
+            SingBoxFeatures.OverrideTurnRelay = previousTurnRelay;
             SubscriptionFetcher.Http = previousHttp;
         }
     }
@@ -100,8 +103,10 @@ public sealed class DnsttSubscriptionTests
         };
         var fake = new FakeHttpClient().Setup(url, response);
         var previousCapability = SingBoxFeatures.OverrideDnstt;
+        var previousTurnRelay = SingBoxFeatures.OverrideTurnRelay;
         var previousHttp = SubscriptionFetcher.Http;
         SingBoxFeatures.OverrideDnstt = true;
+        SingBoxFeatures.OverrideTurnRelay = false;
         SubscriptionFetcher.Http = fake;
         try
         {
@@ -111,6 +116,7 @@ public sealed class DnsttSubscriptionTests
         finally
         {
             SingBoxFeatures.OverrideDnstt = previousCapability;
+            SingBoxFeatures.OverrideTurnRelay = previousTurnRelay;
             SubscriptionFetcher.Http = previousHttp;
         }
     }

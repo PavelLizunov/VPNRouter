@@ -101,6 +101,31 @@ public sealed class RollbackConfigCompatibilityTests
     }
 
     [Fact]
+    public void ActiveTurnRelayHop_IsRefused()
+    {
+        var active = Server("active", "relay.example");
+        active.TurnRelay = new TurnRelayConfig { TurnServer = "192.0.2.10:3478" };
+
+        Assert.Equal(RollbackConfigCompatibility.ActiveTurnRelay,
+            RollbackConfigCompatibility.CheckActiveConfig(Generated(active), LegacyTarget));
+
+        var named = Server("active", "relay.example", "turnrelay");
+        Assert.Equal(RollbackConfigCompatibility.ActiveTurnRelay,
+            RollbackConfigCompatibility.CheckActiveConfig(Generated(named), LegacyTarget));
+    }
+
+    [Fact]
+    public void InactiveTurnRelayHop_DoesNotBlockACompatibleActiveRow()
+    {
+        var active = Server("active", "active.example");
+        var hop = Server("hop", "relay.example");
+        hop.TurnRelay = new TurnRelayConfig { TurnServer = "192.0.2.10:3478" };
+
+        Assert.Null(RollbackConfigCompatibility.CheckActiveConfig(
+            Generated(active, hop), LegacyTarget));
+    }
+
+    [Fact]
     public void ActiveVmessAndNewVmessFields_AreRefused()
     {
         Assert.Equal(RollbackConfigCompatibility.ActiveVmess,
