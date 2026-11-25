@@ -686,6 +686,51 @@ public sealed class VpnEngineLifecycleTests
         }
     }
 
+    [Fact]
+    public void Dispose_WhenSingBoxNull_DisposesOrphanedMonitorsAndSanityCheck()
+    {
+        var dns = new NullWindowsDnsHardening();
+        var engine = BuildEngine(dns, out var firewall, out var monitor);
+        typeof(VpnEngine).GetField("_etw", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(engine, monitor);
+        typeof(VpnEngine).GetField("_firewall", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(engine, firewall);
+        typeof(VpnEngine).GetField("_sanityCheck", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .SetValue(engine, new ConfigSanityCheck());
+
+        engine.Dispose();
+
+        Assert.Equal(1, monitor.DisposeCount);
+        Assert.Equal(1, firewall.DisposeCount);
+        Assert.Null(typeof(VpnEngine).GetField("_etw", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(engine));
+        Assert.Null(typeof(VpnEngine).GetField("_sanityCheck", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(engine));
+    }
+
+    [Fact]
+    public void DisposeOwnedSession_OnIdleEngine_PreservesExternalDns()
+    {
+        var dns = new NullWindowsDnsHardening();
+        var engine = BuildEngine(dns, out _, out _);
+
+        engine.DisposeOwnedSession();
+
+        Assert.Equal(0, dns.RestoreCount);
+    }
+
+    [Fact]
+    public void ConfigSanityCheck_Dispose_IsIdempotentAndDoesNotDisposeCallerHttpClient()
+    {
+        using var callerHttp = new System.Net.Http.HttpClient();
+        var borrowed = new ConfigSanityCheck(httpClient: callerHttp);
+        borrowed.Dispose();
+        borrowed.Dispose();
+        callerHttp.Timeout = TimeSpan.FromSeconds(5);
+
+        var owned = new ConfigSanityCheck();
+        owned.Dispose();
+        owned.Dispose();
+    }
+
     private sealed class HotReloadTestHost : StartupHostInternal
     {
         public Serilog.ILogger? Logger => null;

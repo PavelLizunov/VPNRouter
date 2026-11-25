@@ -520,7 +520,7 @@ internal static class ProcessOwnership
         return result;
     }
 
-    private static OwnedProcessIdentity? TryReadIdentityByPid(int pid)
+    internal static OwnedProcessIdentity? TryReadIdentityByPid(int pid)
     {
         try
         {

@@ -213,15 +213,19 @@ internal sealed partial class SplitTunnelDriverManager
         {
             using var searcher = new ManagementObjectSearcher(
                 "SELECT Name, DisplayName, State, PathName FROM Win32_SystemDriver WHERE State = 'Running'");
-            foreach (ManagementObject driver in searcher.Get())
+            using var results = searcher.Get();
+            foreach (ManagementObject driver in results)
             {
-                string name = Convert.ToString(driver["Name"]) ?? "";
-                string path = Convert.ToString(driver["PathName"]) ?? "";
-                if (!SplitTunnelPolicy.IsForeignSplitDriverService(name, path))
-                    continue;
+                using (driver)
+                {
+                    string name = Convert.ToString(driver["Name"]) ?? "";
+                    string path = Convert.ToString(driver["PathName"]) ?? "";
+                    if (!SplitTunnelPolicy.IsForeignSplitDriverService(name, path))
+                        continue;
 
-                string displayName = Convert.ToString(driver["DisplayName"]) ?? "";
-                result.Add(new ForeignSplitDriverService(name, displayName, path));
+                    string displayName = Convert.ToString(driver["DisplayName"]) ?? "";
+                    result.Add(new ForeignSplitDriverService(name, displayName, path));
+                }
             }
         }
         catch (Exception ex)

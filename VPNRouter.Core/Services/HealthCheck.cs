@@ -584,7 +584,8 @@ public static class HealthCheck
     internal static int CountProxyDialTimeouts(string log, IReadOnlySet<string> endpoints)
     {
         var count = 0;
-        foreach (var line in log.Replace("\r\n", "\n").Split('\n'))
+        using var reader = new StringReader(log);
+        while (reader.ReadLine() is { } line)
         {
             if (!line.Contains("i/o timeout", StringComparison.OrdinalIgnoreCase) ||
                 !line.Contains("dial tcp", StringComparison.OrdinalIgnoreCase))
@@ -605,7 +606,8 @@ public static class HealthCheck
     internal static int CountDiscordDnsStalls(string log)
     {
         var count = 0;
-        foreach (var line in log.Replace("\r\n", "\n").Split('\n'))
+        using var reader = new StringReader(log);
+        while (reader.ReadLine() is { } line)
         {
             if (!line.Contains("dns:", StringComparison.OrdinalIgnoreCase) ||
                 !line.Contains("discord", StringComparison.OrdinalIgnoreCase))

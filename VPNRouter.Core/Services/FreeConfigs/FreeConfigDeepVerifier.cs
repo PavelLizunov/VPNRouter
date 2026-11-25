@@ -55,7 +55,7 @@ public sealed class FreeConfigDeepVerifier
             return;
         }
 
-        var sem = new SemaphoreSlim(MaxConcurrency);
+        using var sem = new SemaphoreSlim(MaxConcurrency);
         var total = configs.Count;
         var done = 0;
 
@@ -116,6 +116,8 @@ public sealed class FreeConfigDeepVerifier
             startInfo.ArgumentList.Add("run");
             startInfo.ArgumentList.Add("-c");
             startInfo.ArgumentList.Add(tmpConfigPath);
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GOMEMLIMIT")))
+                startInfo.Environment["GOMEMLIMIT"] = SingBoxManager.DeepVerifyGoMemLimit;
 
             process = new Process
             {

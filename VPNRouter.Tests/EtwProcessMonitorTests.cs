@@ -35,5 +35,21 @@ public sealed class EtwProcessMonitorTests
         Assert.Equal(string.Empty, args.ProcessName);
     }
 
+    [Fact]
+    public void SessionBufferSizeMB_IsBoundedTo4MiB()
+    {
+        Assert.Equal(4, EtwProcessMonitor.SessionBufferSizeMB);
+    }
+
+    [Fact]
+    public void StartWithNoSubscribers_SkipsKernelSessionAndDisposeIsIdempotent()
+    {
+        var monitor = new EtwProcessMonitor();
+        monitor.Start();
+        monitor.Stop();
+        monitor.Dispose();
+        monitor.Dispose();
+    }
+
 #endif
 }
