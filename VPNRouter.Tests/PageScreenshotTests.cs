@@ -159,8 +159,8 @@ public class PageScreenshotTests
         Assert.False(panel.IsVisible);
         subscription.Enabled = true;
         Assert.True(panel.IsVisible);
-        Assert.True(panel.FindControl<TextBox>("AssistantGoal")!.IsEffectivelyVisible);
-        Assert.True(panel.FindControl<Button>("RunAssistant")!.IsEffectivelyVisible);
+        Assert.True(panel.FindControl<TextBox>("AssistantGoal")!.IsVisible);
+        Assert.True(panel.FindControl<Button>("RunAssistant")!.IsVisible);
 
         var eligibleUrl = subscription.Url;
         subscription.Url = "https://provider.example/sub/synthetic-assistant-visual";

@@ -188,7 +188,7 @@ public sealed class AssistantSetupPanelTests
             window.Show();
             try
             {
-                var original = SettingsLoader.Load(AppPaths.ConfigYamlPath).App;
+                var original = SettingsLoader.Load(AppPaths.ConfigYamlPath);
                 Assert.Equal(Strings.AssistantPreferenceSaved,
                     await vm.RunAssistantGoalAsync("Route synthetic-target.exe directly", window, panel,
                         (_, _) => Task.FromResult(true), TestContext.Current.CancellationToken));
@@ -221,12 +221,12 @@ public sealed class AssistantSetupPanelTests
                 Assert.False(vm.HasAssistantUndo);
                 Assert.True(panel.IsVisible);
                 Assert.True(status.IsEffectivelyVisible);
-                var restored = SettingsLoader.Load(AppPaths.ConfigYamlPath).App;
-                Assert.Equal(original.RoutingMode, restored.RoutingMode);
+                var restored = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+                Assert.Equal(original.App.RoutingMode, restored.App.RoutingMode);
                 Assert.Equal(original.ActiveProfile, restored.ActiveProfile);
-                Assert.Equal(original.RoutingAppsMode, restored.RoutingAppsMode);
-                Assert.Equal(original.RoutingAppsExclude, restored.RoutingAppsExclude);
-                Assert.False(Assert.Single(restored.Subscriptions).Enabled);
+                Assert.Equal(original.App.RoutingAppsMode, restored.App.RoutingAppsMode);
+                Assert.Equal(original.App.RoutingAppsExclude, restored.App.RoutingAppsExclude);
+                Assert.False(Assert.Single(restored.App.Subscriptions).Enabled);
             }
             finally { window.Close(); }
         }
