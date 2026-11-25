@@ -232,7 +232,7 @@ public partial class MainWindowViewModel
         var cached = _businessAutoCachedOutcome;
         var checksWinner = cached?.Winner is { } winner && SubscriptionEntry.RowKey(winner) == SubscriptionEntry.RowKey(entry);
         var generation = Volatile.Read(ref _businessAutoGeneration);
-        var result = await VerifyBusinessEntryAsync(entry, pool, ct, runCanaries: false)
+        var result = await VerifyBusinessEntryAsync(entry, pool, ct)
             .ConfigureAwait(false);
         var probeResult = BusinessServerAutoSelection.ToProbeResult(result);
 
@@ -401,7 +401,7 @@ public partial class MainWindowViewModel
         {
             var outcome = await BusinessServerAutoSelection.SelectFastestAsync(
                 candidates,
-                (entry, ct) => VerifyBusinessEntryAsync(entry, pool, ct, runCanaries: false),
+                (entry, ct) => VerifyBusinessEntryAsync(entry, pool, ct),
                 token,
                 BusinessServerAutoSelection.DefaultMaxConcurrency,
                 BusinessServerAutoSelection.DefaultBudget);
@@ -450,8 +450,7 @@ public partial class MainWindowViewModel
     private async Task<DeepVerifyResult> VerifyBusinessEntryAsync(
         VlessServerEntry entry,
         IReadOnlyList<VlessServerEntry> pool,
-        CancellationToken ct,
-        bool runCanaries)
+        CancellationToken ct)
     {
         await _businessVerifyGate.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -464,8 +463,8 @@ public partial class MainWindowViewModel
                 return DeepVerifyResult.Failed(
                     "sing-box runtime is unavailable", DeepVerifyFailurePhase.LocalSpawn);
 
-            return await _businessDeepVerifier.VerifyAsync(
-                entry, pool, measureBandwidth: false, ct, runCanaries).ConfigureAwait(false);
+            return await _businessDeepVerifier.VerifyForSelectionAsync(
+                entry, pool, _settings.Dns.LocalDns, ct).ConfigureAwait(false);
         }
         finally
         {

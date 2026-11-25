@@ -13,4 +13,10 @@ internal static class NetPortUtil
         listener.Stop();
         return port;
     }
+
+    public static int FindFreeUdpPort()
+    {
+        using var socket = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        return ((IPEndPoint)socket.Client.LocalEndPoint!).Port;
+    }
 }

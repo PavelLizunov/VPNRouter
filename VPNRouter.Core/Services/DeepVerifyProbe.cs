@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -37,7 +39,7 @@ internal static class DeepVerifyProbe
 
     public static async Task<(bool ok, int latencyMs, string? err)> ProbeViaProxyAsync(
         VerificationProxy proxy, TimeSpan httpTimeout, CancellationToken ct,
-        string probeUrl = DeepVerifyConstants.ProbeUrl)
+        string probeUrl = DeepVerifyConstants.ProbeUrl, bool expectNoContent = false)
     {
         var handler = proxy.CreateHttpHandler(TimeSpan.FromSeconds(5));
         handler.AllowAutoRedirect = false;
@@ -51,6 +53,11 @@ internal static class DeepVerifyProbe
                 return (false, 0, $"http {(int)resp.StatusCode}");
 
             var body = await resp.Content.ReadAsStringAsync(ct);
+
+            if (expectNoContent)
+                return resp.StatusCode == HttpStatusCode.NoContent && body.Length == 0
+                    ? (true, (int)sw.ElapsedMilliseconds, null)
+                    : (false, 0, "unexpected HTTPS control response");
 
             var (valid, evalErr) = EvaluateProbeResponse(body);
             if (!valid)
@@ -75,6 +82,55 @@ internal static class DeepVerifyProbe
         {
             return (false, 0, ex.GetType().Name);
         }
+    }
+
+    internal static async Task<bool> ProbeStunAsync(int localPort, CancellationToken ct)
+    {
+        using var client = new UdpClient(AddressFamily.InterNetwork);
+        client.Connect(IPAddress.Loopback, localPort);
+
+        byte[] request = [0, 1, 0, 0, 0x21, 0x12, 0xa4, 0x42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        RandomNumberGenerator.Fill(request.AsSpan(8));
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromSeconds(1));
+            try
+            {
+                await client.SendAsync(request.AsMemory(), deadline.Token).ConfigureAwait(false);
+                var response = await client.ReceiveAsync(deadline.Token).ConfigureAwait(false);
+                if (IsMatchingStunResponse(response.Buffer, request)) return true;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+            catch (SocketException) { await Task.Delay(250, ct).ConfigureAwait(false); }
+        }
+        return false;
+    }
+
+    internal static bool IsMatchingStunResponse(ReadOnlySpan<byte> response, ReadOnlySpan<byte> request)
+    {
+        const int headerLength = 20;
+        if (response.Length <= headerLength || request.Length != headerLength ||
+            response[0] != 1 || response[1] != 1 || !response[4..20].SequenceEqual(request[4..20]))
+            return false;
+
+        int attributeLength = (response[2] << 8) | response[3];
+        if (attributeLength % 4 != 0 || attributeLength != response.Length - headerLength) return false;
+
+        bool hasMappedAddress = false;
+        for (int offset = headerLength; offset < response.Length;)
+        {
+            int type = (response[offset] << 8) | response[offset + 1];
+            int length = (response[offset + 2] << 8) | response[offset + 3];
+            int data = offset + 4;
+            int next = data + ((length + 3) & ~3);
+            if (next > response.Length) return false;
+            if (type == 0x0020 && length >= 2)
+                hasMappedAddress |= (response[data + 1] == 1 && length == 8) ||
+                    (response[data + 1] == 2 && length == 20);
+            offset = next;
+        }
+        return hasMappedAddress;
     }
 
     public static async Task<(bool ok, double mbps, string? err)> MeasureBandwidthViaProxyAsync(

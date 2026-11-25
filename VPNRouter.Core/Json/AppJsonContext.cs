@@ -24,6 +24,7 @@ namespace VPNRouter.Core.Json;
 [JsonSerializable(typeof(ClashSingBoxApi.VersionDto))]
 [JsonSerializable(typeof(ConfigShareDocument))]
 [JsonSerializable(typeof(CustomRule))]
+[JsonSerializable(typeof(DnsServer))]
 [JsonSerializable(typeof(FreeConfigCache.CacheFile))]
 [JsonSerializable(typeof(GitHubAsset))]
 [JsonSerializable(typeof(GitHubRelease))]
