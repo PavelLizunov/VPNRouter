@@ -288,7 +288,7 @@ public partial class MainWindowViewModel
 
     internal void SelectBusinessServer(ServerViewModel? server)
     {
-        if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting || IsBusinessRepairInProgress ||
+        if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting ||
             server == null || !GetBusinessServerChoices().Contains(server)) return;
 
         MarkBusinessSelectionManual();
