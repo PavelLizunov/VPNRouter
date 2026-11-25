@@ -11,6 +11,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="9" />
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" />
+  </ItemGroup>
+
+  <ItemGroup>
     <AssemblyMetadata Include="VPNRouterEdition" Value="Business" Condition="'$(VPNRouterEdition)' == 'Business'" />
     <EmbeddedResource Include="..\packaging\windows\support\Collect-VPNRouterBusiness-Diagnostics.ps1" LogicalName="VPNRouter.Business.Collector" />
     <EmbeddedResource Include="..\packaging\windows\business-rules.json" LogicalName="VPNRouter.Business.Rules" />
