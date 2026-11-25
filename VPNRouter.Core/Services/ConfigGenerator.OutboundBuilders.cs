@@ -87,8 +87,10 @@ public static partial class ConfigGenerator
             Server = entry.Server,
             ServerPort = entry.Port,
             Password = profile.Password,
-            TurnRelayProvider = profile.Provider,
-            TurnRelayServerType = profile.ServerType,
+            TurnRelayProvider = string.IsNullOrEmpty(profile.Provider)
+                ? TurnRelayConfig.DefaultProvider : profile.Provider,
+            TurnRelayServerType = string.IsNullOrEmpty(profile.ServerType)
+                ? TurnRelayConfig.DefaultServerType : profile.ServerType,
             TurnServer = profile.TurnServer,
             TurnUsername = profile.TurnUsername,
             TurnPassword = profile.TurnPassword,
