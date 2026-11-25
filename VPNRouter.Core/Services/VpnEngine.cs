@@ -201,7 +201,7 @@ public partial class VpnEngine : IDisposable
     }
 
     private async Task StartSessionGatedAsync(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck,
-        bool restoreAcceptedImport = false, string? sessionImportJson = null)
+        bool restoreAcceptedImport = false, string? sessionImportJson = null, bool deferActiveProfileSave = false)
     {
         if (_startupIncomplete || (ConfirmServiceReplacement != null && HasLiveOrStartingSingBox() &&
             _singBox != null && _healthMonitor?.IsMonitoring(_singBox) != true))
@@ -222,7 +222,8 @@ public partial class VpnEngine : IDisposable
         _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         ResetFailoverContext(settings);
         await StartAsyncInternal(settings, _sessionCts.Token, skipVpnConflictCheck,
-            restoreAcceptedImport: restoreAcceptedImport, sessionImportJson: sessionImportJson).ConfigureAwait(false);
+            restoreAcceptedImport: restoreAcceptedImport, sessionImportJson: sessionImportJson,
+            deferActiveProfileSave: deferActiveProfileSave).ConfigureAwait(false);
     }
 
     private void RetireIncompleteStartup()
@@ -250,7 +251,8 @@ public partial class VpnEngine : IDisposable
     }
 
     internal async Task StartAsyncInternal(AppSettings settings, CancellationToken ct, bool skipVpnConflictCheck,
-        Action? retireAfterValidation = null, bool restoreAcceptedImport = false, string? sessionImportJson = null)
+        Action? retireAfterValidation = null, bool restoreAcceptedImport = false, string? sessionImportJson = null,
+        bool deferActiveProfileSave = false)
     {
         bool preparingNewRuntime = false;
         async Task PrepareRuntimeAsync()
@@ -277,6 +279,7 @@ public partial class VpnEngine : IDisposable
                 new StartupContext(settings, mode, skipVpnConflictCheck)
                 {
                     RequireCompleteRuleSets = RequireCompleteRuleSetsOnStart,
+                    DeferActiveProfileSave = deferActiveProfileSave,
                     RestoreAcceptedImport = restoreAcceptedImport,
                     SessionImportJson = sessionImportJson
                 }, ct,
@@ -487,7 +490,7 @@ public partial class VpnEngine : IDisposable
                 : "[VpnEngine] Applying config via full restart");
 
             // Resolve the control endpoint before retiring a live tunnel.
-            var controller = _healthMonitor != null || ConfirmServiceReplacement != null
+            var controller = _healthMonitor != null || ConfirmServiceReplacement != null || verifySelection
                 ? ClashSingBoxApi.ReadLocalController(configJson) : ((Uri Endpoint, string? Secret)?)null;
             var tunnelInfo = new AcceptedTunnelInfo(settings, configJson, ActiveServerAddress, controller, result.ProxySources);
             if (controller is { } target)
@@ -637,7 +640,8 @@ public partial class VpnEngine : IDisposable
         try
         {
             // A child with unreadable exit status still belongs to its manager.
-            if (!onlyOwnedSession || _singBox != null || _healthMonitor != null || _slipstream != null)
+            if (!onlyOwnedSession || _singBox != null || _healthMonitor != null || _etw != null
+                || _slipstream != null || _connHealthStream != null || _firewall != null)
                 EndSession();
         }
         finally
@@ -711,13 +715,31 @@ public partial class VpnEngine : IDisposable
         _logger?.Information("[VpnEngine] Stopped");
     }
 
-    public void Dispose()
+    public void Dispose() => Dispose(onlyOwnedSession: false);
+
+    internal void DisposeOwnedSession() => Dispose(onlyOwnedSession: true);
+
+    private void Dispose(bool onlyOwnedSession)
     {
         if (_disposed) return;
 
-        if (_singBox != null) Stop();
+        if (onlyOwnedSession)
+        {
+            StopOwnedSession();
+        }
+        else if (_singBox != null)
+        {
+            Stop();
+        }
         else
         {
+            try { _healthMonitor?.Dispose(); } catch { }
+            _healthMonitor = null;
+            try { _etw?.Dispose(); } catch { }
+            _etw = null;
+            try { _connHealthStream?.Stop(); } catch { }
+            try { _connHealthStream?.Dispose(); } catch { }
+            _connHealthStream = null;
             try { _dnsHardening.Restore(_logger); } catch { }
             try { _unixDns.Restore(_logger); } catch { }
             try { _firewall?.Dispose(); } catch { }
@@ -726,6 +748,8 @@ public partial class VpnEngine : IDisposable
             _slipstream = null;
         }
         _disposed = true;
+        try { _sanityCheck?.Dispose(); } catch { }
+        _sanityCheck = null;
         try { _splitDriver?.Dispose(); } catch { }
         try { _probeCts?.Cancel(); } catch { }
         try { _probeCts?.Dispose(); } catch { }

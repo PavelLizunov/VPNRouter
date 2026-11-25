@@ -37,6 +37,13 @@ public static partial class Strings
         ? "Сгенерировать новый MTProto secret"
         : "Generate new MTProto secret";
 
+    public static string TgProxyRuntimeBusy => Ru
+        ? "Telegram-прокси используется. Остановите его в службе или другом экземпляре VPNRouter и дождитесь завершения обновления."
+        : "The Telegram proxy runtime is in use. Stop the proxy in the service or other VPNRouter instance and let any update finish.";
+    public static string TgProxyUpdateRequired => Ru
+        ? "Для запуска нужна однократная загрузка. Подключитесь к интернету и обновите Telegram-прокси на вкладке Telegram."
+        : "A one-time download is required. Connect to the internet and update the proxy on the Telegram tab.";
+
     public static string TgProxyPortBusy => Ru
         ? "Порт {0} занят другим приложением. Закройте его или поменяйте порт в настройках."
         : "Port {0} is busy. Close the other app or change the port in settings.";
@@ -55,8 +62,8 @@ public static partial class Strings
         : "Telegram Desktop not found. The proxy is running, but auto-open isn't available — copy the link below and add it manually in Telegram (here or on another device).";
 
     public static string TgProxyDownloadStep1Python => Ru
-        ? "Шаг 1/3: Загрузка Python 3.12 (~11 МБ)..."
-        : "Step 1/3: Downloading Python 3.12 (~11 MB)...";
+        ? "Шаг 1/3: Загрузка Python 3.14 (~12 МБ)..."
+        : "Step 1/3: Downloading Python 3.14 (~12 MB)...";
     public static string TgProxyDownloadStep2Wheels => Ru
         ? "Шаг 2/3: Установка зависимостей (cryptography, cffi, pycparser)..."
         : "Step 2/3: Installing dependencies (cryptography, cffi, pycparser)...";

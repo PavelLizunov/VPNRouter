@@ -11,6 +11,8 @@ namespace VPNRouter.App.Views;
 
 public partial class AboutWindow : Window
 {
+    private Bitmap? _logoBitmap;
+
     public AboutWindow()
     {
         InitializeComponent();
@@ -19,11 +21,19 @@ public partial class AboutWindow : Window
         {
             using var stream = AssetLoader.Open(
                 new Uri("avares://VPNRouter.App/Assets/penguin_logo.png"));
-            LogoImage.Source = new Bitmap(stream);
+            _logoBitmap = new Bitmap(stream);
+            LogoImage.Source = _logoBitmap;
         }
         catch
         {
         }
+
+        Closed += (_, _) =>
+        {
+            LogoImage.Source = null;
+            _logoBitmap?.Dispose();
+            _logoBitmap = null;
+        };
 
         VersionTextBlock.Text = $"v{AppVersion.Version}";
         SingBoxTextBlock.Text = GetSingBoxVersion();

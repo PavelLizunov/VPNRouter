@@ -28,6 +28,7 @@ namespace VPNRouter.Core.Json;
 [JsonSerializable(typeof(GitHubRelease))]
 [JsonSerializable(typeof(GitHubRelease[]))]
 [JsonSerializable(typeof(LaunchFailureCounter.State))]
+[JsonSerializable(typeof(ConnectionRollbackState))]
 [JsonSerializable(typeof(List<CustomRule>))]
 [JsonSerializable(typeof(List<RouteRule>))]
 [JsonSerializable(typeof(List<string>))]

@@ -187,12 +187,23 @@ public static class SettingsLoader
     internal static string GetRevision(string yaml) =>
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(yaml)));
 
-    internal static AppSettings? ParseLiveCandidate(string yaml)
+    internal static AppSettings? ParseLiveCandidate(string yaml) => ParseCandidate(yaml, false, out _);
+
+    internal static AppSettings? ParseRepairCandidate(string yaml, out int? normalizedMtu) =>
+        ParseCandidate(yaml, true, out normalizedMtu);
+
+    private static AppSettings? ParseCandidate(string yaml, bool repairMtu, out int? normalizedMtu)
     {
+        normalizedMtu = null;
         if (string.IsNullOrWhiteSpace(yaml)) return null;
         try
         {
             var candidate = Parse(yaml, persistMigrations: false);
+            if (repairMtu && AssistantRepairPolicy.SuggestMtu(candidate.Tun, null) is int mtu)
+            {
+                candidate.Tun.Mtu = mtu;
+                normalizedMtu = mtu;
+            }
             return SettingsValidator.Validate(candidate).IsValid ? candidate : null;
         }
         catch (Exception) { return null; }
@@ -315,7 +326,15 @@ public static class SettingsLoader
         return (count, at);
     }
 
+    internal static object FileWriteLock { get; } = new();
+
     internal static void Save(AppSettings settings, string? path = null)
+    {
+        lock (FileWriteLock)
+            SaveCore(settings, path);
+    }
+
+    private static void SaveCore(AppSettings settings, string? path)
     {
         if (SafeMode.Enabled)
             return;

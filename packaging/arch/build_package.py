@@ -134,10 +134,16 @@ def export_source(repo_dir: Path, commit_sha: str, work_dir: Path) -> tuple[Path
             ):
                 required_paths.append(path_str)
 
-    # Core embeds its updater scripts even when published for Linux.
-    for directory in ("VPNRouter.Core", "VPNRouter.Headless", "profiles", "packaging/windows/installer"):
-        if any(p == directory or p.startswith(directory + "/") for p in tracked):
-            required_paths.append(directory)
+    # Core embeds the platform installer and updater scripts on Linux too.
+    for path in (
+        "VPNRouter.Core",
+        "VPNRouter.Headless",
+        "profiles",
+        "packaging/windows/installer",
+        "packaging/macos/install-privileged.sh",
+    ):
+        if any(p == path or p.startswith(path + "/") for p in tracked):
+            required_paths.append(path)
 
     source_tar = work_dir / "source.tar"
     subprocess.run(

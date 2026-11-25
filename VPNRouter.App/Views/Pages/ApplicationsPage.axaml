@@ -192,6 +192,7 @@
         <TextBlock Grid.Column="1" Text="{Binding L_AppsFullTunnelBanner}"/>
         <Button Classes="solid small" Grid.Column="2"
                 Content="{Binding L_AppsFullTunnelBannerAction}"
+                AutomationProperties.AutomationId="AssistantAction.UseSplitTunnel"
                 Command="{Binding SwitchToSplitTunnelCommand}"
                 FontWeight="SemiBold"
                 Background="{DynamicResource AccentSolidBrush}"
@@ -408,6 +409,7 @@
                        Foreground="{DynamicResource WarningFgBrush}"/>
           </Grid>
           <Button Classes="solid" icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ApplyChanges}"
+                  AutomationProperties.AutomationId="AssistantAction.ApplyApplicationRouting"
                   Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
                   IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
                   IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).CanApplyAppChanges}"
@@ -425,12 +427,14 @@
                   Padding="0,6" CornerRadius="{StaticResource RadiusSm}"/>
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
             <TextBox Grid.Column="0" x:Name="CustomAppInput"
+                     AutomationProperties.AutomationId="AssistantAction.ApplicationExecutableName"
                      PlaceholderText="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"
                      FontSize="11" Padding="8,6"
                      VerticalContentAlignment="Center"
                      CornerRadius="{StaticResource RadiusSm}"/>
             <Button Classes="solid" Grid.Column="1" x:Name="AddCustomAppButton"
                     icons:PictogramText.Icons="add" icons:PictogramText.Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
+                    AutomationProperties.AutomationId="AssistantAction.AddApplicationToRouting"
                     Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
                     CommandParameter="{Binding #CustomAppInput.Text}"
                     VerticalAlignment="Stretch"

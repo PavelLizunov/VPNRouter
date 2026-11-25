@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         {
             if (DataContext is MainWindowViewModel vm)
             {
+                vm.PropertyChanged -= OnViewModelPropertyChanged;
                 try { vm.Dispose(); }
                 catch { }
             }

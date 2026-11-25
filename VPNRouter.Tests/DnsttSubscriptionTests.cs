@@ -56,7 +56,8 @@ public sealed class DnsttSubscriptionTests
         {
             var entries = await SubscriptionFetcher.FetchAsync(url, ct: TestContext.Current.CancellationToken);
             var request = Assert.Single(fake.SentRequests);
-            Assert.Equal(supported ? "detour-v1, dnstt-v1" : "detour-v1", request.Headers!["X-VPNRouter-Capabilities"]);
+            Assert.Equal(supported ? "detour-v1, dnstt-v1, vmess-v1" : "detour-v1, vmess-v1",
+                request.Headers!["X-VPNRouter-Capabilities"]);
             Assert.Equal(supported ? 2 : 0, entries.Count);
         }
         finally
@@ -88,8 +89,8 @@ public sealed class DnsttSubscriptionTests
     }
 
     [Theory]
-    [InlineData("http", "http", "detour-v1")]
-    [InlineData("https", "http", "detour-v1, dnstt-v1")]
+    [InlineData("http", "http", "detour-v1, vmess-v1")]
+    [InlineData("https", "http", "detour-v1, dnstt-v1, vmess-v1")]
     public async Task CleartextResponseDoesNotImportDnstt(string sourceScheme, string responseScheme, string capability)
     {
         var url = $"{sourceScheme}://provider.example/api/v1/app/config/pilot";

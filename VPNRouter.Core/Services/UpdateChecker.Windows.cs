@@ -9,7 +9,12 @@ namespace VPNRouter.Core.Services;
 
 public partial class UpdateChecker
 {
-    private sealed record WindowsStage(string Archive, string Sha256, string Version, bool LocalFixture = false);
+    private sealed record WindowsStage(
+        string Archive,
+        string Sha256,
+        string Version,
+        bool LocalFixture = false,
+        long ExpectedSize = 0);
     private readonly ConcurrentDictionary<string, WindowsStage> _windowsStages = new(StringComparer.OrdinalIgnoreCase);
 
     internal static bool IsOfficialWindowsRelease(Uri uri, string version, bool checksum = false)
@@ -34,12 +39,19 @@ public partial class UpdateChecker
         else Directory.CreateDirectory(_stagingDir);
     }
 
-    private WindowsStage RequireWindowsStage(string directory, string? version = null, string? sha256 = null)
+    private WindowsStage RequireWindowsStage(
+        string directory,
+        string? version = null,
+        string? sha256 = null,
+        long? expectedSize = null)
     {
         if (!_windowsStages.TryGetValue(Path.GetFullPath(directory), out var stage) ||
             (version != null && (stage.Version != version ||
                 !string.Equals(stage.Sha256, sha256, StringComparison.OrdinalIgnoreCase))))
             throw new InvalidOperationException("The update must be verified in this application session.");
+        var expected = expectedSize ?? stage.ExpectedSize;
+        if (expected > 0 && new FileInfo(stage.Archive).Length != expected)
+            throw new InvalidOperationException("The verified update archive size changed before publication.");
         return stage;
     }
 

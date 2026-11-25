@@ -117,7 +117,7 @@ public static class PlaceholderDefense
             {
                 if (node is not JsonObject ob) continue;
                 var type = StjNodeHelpers.AsString(ob["type"])?.ToLowerInvariant() ?? "";
-                if (type is "vless" or "hysteria2" or "tuic" or "shadowsocks" or "naive" or "trojan")
+                if (type is "vless" or "vmess" or "hysteria2" or "tuic" or "shadowsocks" or "naive" or "trojan")
                     return ob;
                 if (type == "ssh" && StjNodeHelpers.AsString(ob["tag"]) == "proxy"
                     && StjNodeHelpers.AsString(ob["detour"]) is { Length: > 0 } detour
@@ -151,7 +151,7 @@ public sealed class PlaceholderConfigException : Exception
 
     public PlaceholderConfigException(string offendingField, string offendingValue)
         : base($"Credential rejected: {offendingField} matches a known placeholder fingerprint ({TruncateForMessage(offendingValue)}). " +
-               "Get a real vless:// URL from your VPN provider.")
+               "Get a real vless:// or vmess:// URL from your VPN provider.")
     {
         OffendingField = offendingField;
         OffendingValue = offendingValue;

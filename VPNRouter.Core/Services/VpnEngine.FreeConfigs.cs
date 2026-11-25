@@ -4,10 +4,19 @@ namespace VPNRouter.Core.Services;
 
 public partial class VpnEngine
 {
-    private volatile bool _confirmingFreeConfig;
+    private volatile bool _confirmingCandidate;
 
-    internal async Task<bool> ConnectVerifiedFreeConfigAsync(AppSettings candidate, Action commitSelection,
+    internal Task<bool> ConnectVerifiedFreeConfigAsync(AppSettings candidate, Action commitSelection,
         bool skipVpnConflictCheck, CancellationToken ct)
+    {
+        bool eligible = candidate.App.ConfigMode == "generated" &&
+            candidate.Vless.GetActiveServers() is [{ UseAsSingleOutbound: true } active] &&
+            string.Equals(active.Name, candidate.Vless.ActiveServer, StringComparison.OrdinalIgnoreCase);
+        return ConnectVerifiedCandidateAsync(candidate, eligible, null, commitSelection, skipVpnConflictCheck, ct);
+    }
+
+    private async Task<bool> ConnectVerifiedCandidateAsync(AppSettings candidate, bool eligible,
+        AssistantRouteIntent? routeIntent, Action commitSelection, bool skipVpnConflictCheck, CancellationToken ct)
     {
         var policy = EffectivePolicy;
         using var scope = SingBoxRuntimePolicy.EnterScope(policy);
@@ -15,43 +24,65 @@ public partial class VpnEngine
         await _lifecycleGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (candidate.App.ConfigMode != "generated" ||
-                candidate.Vless.GetActiveServers() is not [{ UseAsSingleOutbound: true } active] ||
-                !string.Equals(active.Name, candidate.Vless.ActiveServer, StringComparison.OrdinalIgnoreCase))
-                return false;
+            if (!eligible) return false;
 
             var previous = _failoverSettingsContext;
             var previousImport = _healthMonitor?.AcceptedImportJson;
             var previousHandle = _singBox?.OwnedProcessHandle;
             bool wasRunning = HasLiveOrStartingSingBox();
+            if (routeIntent != null && !IsAssistantSessionCurrent(routeIntent.Session))
+                return RejectVerifiedCandidate("session-changed");
             if (wasRunning && (previous == null || previousHandle is not { HasExited: false }))
-                return false;
+                return RejectVerifiedCandidate("previous-session-unconfirmed");
 
             bool confirmed = false;
-            _confirmingFreeConfig = true;
+            _confirmingCandidate = true;
             try
             {
                 if (wasRunning)
                 {
                     // Strict generation resolves required rule sets before the owned process is replaced.
                     if (!await ApplyGatedAsync(candidate, ct, forceRestart: true, verifySelection: true).ConfigureAwait(false))
-                        return false;
+                        return RejectVerifiedCandidate("replacement");
                     _warmupConfirmed = false;
                 }
                 else
                 {
-                    await StartSessionGatedAsync(candidate, ct, skipVpnConflictCheck).ConfigureAwait(false);
+                    await StartSessionGatedAsync(candidate, ct, skipVpnConflictCheck,
+                        deferActiveProfileSave: routeIntent != null).ConfigureAwait(false);
                 }
 
                 var handle = _singBox?.OwnedProcessHandle;
-                if (handle is not { HasExited: false } || _sessionCts == null) return false;
+                var tunnel = AcceptedTunnel;
+                if (handle == null || tunnel == null || _sessionCts == null)
+                    return RejectVerifiedCandidate("startup");
+
+                bool IsCurrent() => !handle.HasExited && ReferenceEquals(handle, _singBox?.OwnedProcessHandle)
+                    && ReferenceEquals(tunnel, AcceptedTunnel) && ReferenceEquals(candidate, _failoverSettingsContext);
+                if (!IsCurrent()) return RejectVerifiedCandidate("candidate-changed");
+                if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.Process, routeIntent.Direct))
+                    return RejectVerifiedCandidate("app-route");
+                if (routeIntent?.ExpectedServerRow is { } expectedRow &&
+                    (tunnel.UsesAutoGroup || tunnel.Server.RowKey != expectedRow || tunnel.Server.FeedId != routeIntent.ExpectedFeed))
+                {
+                    routeIntent.OnRejection?.Invoke(AssistantCandidateRejection.ServerMismatch);
+                    return RejectVerifiedCandidate("server-changed");
+                }
+
                 using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct, _sessionCts.Token);
                 var sanity = _sanityCheck ??= new ConfigSanityCheck(_logger);
-                var probe = await sanity.ProbeAsync(ParseClashApiPort(candidate.SingBox.ClashApi),
-                    candidate.SingBox.ClashApiSecret, probeCts.Token).ConfigureAwait(false);
+                var probe = await ProbeCurrentStartAsync(IsCurrent,
+                    token => tunnel.ProbeProxyAsync(sanity, token, preferHttps: routeIntent != null),
+                    probeCts.Token).ConfigureAwait(false);
                 probeCts.Token.ThrowIfCancellationRequested();
-                if (probe.IsDead || handle.HasExited || !ReferenceEquals(handle, _singBox?.OwnedProcessHandle) ||
-                    !ReferenceEquals(candidate, _failoverSettingsContext)) return false;
+                if (probe == null) return RejectVerifiedCandidate("candidate-changed");
+                if (probe.IsDead)
+                {
+                    routeIntent?.OnRejection?.Invoke(AssistantCandidateRejection.ProxyHealth);
+                    return RejectVerifiedCandidate("proxy-health");
+                }
+                if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.Process, routeIntent.Direct))
+                    return RejectVerifiedCandidate("app-route");
 
                 commitSelection();
                 confirmed = true;
@@ -77,9 +108,10 @@ public partial class VpnEngine
                         EndSession();
                         if (wasRunning && !userStopped)
                         {
-                            _confirmingFreeConfig = false;
+                            _confirmingCandidate = false;
                             await StartSessionGatedAsync(previous!, CancellationToken.None, skipVpnConflictCheck,
-                                restoreAcceptedImport: true, sessionImportJson: previousImport).ConfigureAwait(false);
+                                restoreAcceptedImport: true, sessionImportJson: previousImport,
+                                deferActiveProfileSave: routeIntent != null).ConfigureAwait(false);
                         }
                     }
                 }
@@ -87,8 +119,14 @@ public partial class VpnEngine
         }
         finally
         {
-            _confirmingFreeConfig = false;
+            _confirmingCandidate = false;
             _lifecycleGate.Release();
         }
+    }
+
+    private bool RejectVerifiedCandidate(string phase)
+    {
+        _logger?.Warning("[VpnEngine] Verified candidate rejected ({Phase})", phase);
+        return false;
     }
 }

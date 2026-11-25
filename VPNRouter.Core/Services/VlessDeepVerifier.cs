@@ -102,7 +102,7 @@ public sealed class VlessDeepVerifier
             return;
         }
 
-        var sem = new SemaphoreSlim(MaxConcurrency);
+        using var sem = new SemaphoreSlim(MaxConcurrency);
         var total = servers.Count;
         var done = 0;
 
@@ -226,7 +226,8 @@ public sealed class VlessDeepVerifier
                 ExecutablePath: policy?.SelectedExecutablePath ?? _singBoxPath,
                 Arguments: new[] { "run", "-c", tmpConfigPath },
                 CaptureStdout: true,
-                CaptureStderr: true);
+                CaptureStderr: true,
+                EnvironmentOverrides: SingBoxManager.BuildGoMemLimitOverride(SingBoxManager.DeepVerifyGoMemLimit));
             try
             {
                 handle = _runner.Start(request, child =>
@@ -321,6 +322,7 @@ public sealed class VlessDeepVerifier
         if (!string.IsNullOrEmpty(s.DetourVia))
             throw new InvalidOperationException(DeepVerifyConstants.DetourNote);
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
+        var dnsTag = protocol == "vmess" ? "local-dns" : "dns-google";
         JsonObject? outbound = null;
         JsonNode? awgEndpoint = null;
 
@@ -343,6 +345,7 @@ public sealed class VlessDeepVerifier
                 "tuic"                => BuildTuicOutbound(s),
                 "shadowsocks" or "ss" => BuildShadowsocksOutbound(s),
                 "naive"               => BuildNaiveOutbound(s),
+                "vmess"               => BuildVmessOutbound(s),
                 _                     => BuildVlessOutbound(s),
             };
         }
@@ -360,16 +363,16 @@ public sealed class VlessDeepVerifier
             {
                 ["servers"] = new JsonArray
                 {
-                    (JsonNode?)new JsonObject { ["type"] = "https", ["tag"] = "dns-google", ["server"] = "8.8.8.8", ["path"] = "/dns-query", ["detour"] = "dns-direct-out" },
+                    (JsonNode?)new JsonObject { ["type"] = "https", ["tag"] = dnsTag, ["server"] = "8.8.8.8", ["path"] = "/dns-query", ["detour"] = "dns-direct-out" },
                 },
-                ["final"] = "dns-google",
+                ["final"] = dnsTag,
             },
             ["inbounds"] = new JsonArray(proxy.CreateInbound()),
             ["outbounds"] = outboundsArray,
             ["route"] = new JsonObject
             {
                 ["final"] = "proxy",
-                ["default_domain_resolver"] = new JsonObject { ["server"] = "dns-google" },
+                ["default_domain_resolver"] = new JsonObject { ["server"] = dnsTag },
                 ["rules"] = new JsonArray
                 {
                     (JsonNode?)new JsonObject { ["action"] = "sniff" },
@@ -424,6 +427,10 @@ public sealed class VlessDeepVerifier
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return false; }
     }
+
+    internal static JsonObject BuildVmessOutbound(VlessServerEntry server) =>
+        JsonSerializer.SerializeToNode(ConfigGenerator.BuildVmessOutbound(server, "proxy"),
+            AppJsonContext.Default.SingBoxOutbound)!.AsObject();
 
     internal static JsonObject BuildVlessOutbound(VlessServerEntry s)
     {

@@ -55,6 +55,8 @@ public static class CrashReporter
             var sb = new StringBuilder();
             sb.AppendLine($"VPNRouter crash report");
             sb.AppendLine($"Version:   {VPNRouter.Core.AppVersion.Version}");
+            if (AssistantSourceBuild.Installed() is { } build)
+                sb.AppendLine($"Source build: {build.ReportIdentity}");
             sb.AppendLine($"Fatal:     {fatal}");
             sb.AppendLine($"Time:      {DateTime.UtcNow:o}");
             sb.AppendLine($"OS:        {Environment.OSVersion}");

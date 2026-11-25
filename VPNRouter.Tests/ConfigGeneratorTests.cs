@@ -1,3 +1,4 @@
+using System.Text.Json;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -6,6 +7,33 @@ namespace VPNRouter.Tests;
 
 public class ConfigGeneratorTests
 {
+    [Theory]
+    [InlineData("none", "tcp", false)]
+    [InlineData("none", "ws", false)]
+    [InlineData("tls", "tcp", true)]
+    [InlineData("reality", "tcp", true)]
+    public void VlessSerializesTlsOnlyWhenEnabled(string security, string transport, bool enabled)
+    {
+        var settings = CreateSettings();
+        var server = settings.Vless.Servers.Single();
+        server.Security = security;
+        server.Flow = string.Empty;
+        server.Transport.Type = transport;
+        server.Tls.Enabled = security == "tls";
+
+        var config = ConfigGenerator.Generate(CreateProfile(), [], settings);
+        using var document = JsonDocument.Parse(ConfigGenerator.Serialize(config));
+        var outbound = document.RootElement.GetProperty("outbounds").EnumerateArray()
+            .Single(item => item.GetProperty("type").GetString() == "vless");
+
+        Assert.Equal(enabled, outbound.TryGetProperty("tls", out var tls));
+        if (enabled)
+        {
+            Assert.True(tls.GetProperty("enabled").GetBoolean());
+            Assert.Equal(security == "reality", tls.TryGetProperty("reality", out _));
+        }
+    }
+
     [Theory]
     [InlineData("172.19.0.1/30", "full", "custom_first")]
     [InlineData("10.77.0.1/30", "split", "toggles_first")]
@@ -215,6 +243,12 @@ public class ConfigGeneratorTests
                 .Any(tag => tag?.ToString() == "vpnrouter-geosite-ru") == true).ToList();
 
             Assert.Equal(routingMode == "full" || appsMode == "exclude" ? "proxy" : "direct", config.Route.Final);
+            if (routingMode == "split" && appsMode == "include")
+            {
+                var tunnel = new AcceptedTunnelInfo(settings, ConfigGenerator.Serialize(config), "", null,
+                    new Dictionary<string, VlessServerEntry>());
+                Assert.Equal(!enabled, tunnel.RoutesOnlyApp("firefox.exe"));
+            }
             if (!enabled)
             {
                 Assert.Empty(bypassRules);

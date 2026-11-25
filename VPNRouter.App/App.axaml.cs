@@ -13,6 +13,7 @@ public partial class App : Application
 {
     private MainWindowViewModel? _viewModel;
     private TrayIcon? _trayIcon;
+    private Avalonia.Threading.DispatcherTimer? _trayWatchTimer;
 
     public override void Initialize()
     {
@@ -32,6 +33,7 @@ public partial class App : Application
             {
                 SkiaSharp.SKGraphics.SetFontCacheLimit(4 * 1024 * 1024);
                 SkiaSharp.SKGraphics.SetFontCacheCountLimit(64);
+                SkiaSharp.SKGraphics.SetResourceCacheTotalByteLimit(16 * 1024 * 1024);
             }
             catch { }
 
@@ -124,9 +126,11 @@ public partial class App : Application
 
             desktop.Exit += (_, _) =>
             {
+                try { _trayWatchTimer?.Stop(); _trayWatchTimer = null; } catch { }
                 VPNRouter.App.Services.AppAutomationDriver.Stop();
                 try { VPNRouter.Core.Services.LockFile.Release(Serilog.Log.Logger); } catch { }
                 try { VPNRouter.App.Services.SingleInstance.Release(); } catch { }
+                try { Serilog.Log.CloseAndFlush(); } catch { }
             };
 
             if (Program.StartMinimized)
@@ -176,9 +180,10 @@ public partial class App : Application
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(quitItem);
 
+        using var initialIconStream = AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant)));
         _trayIcon = new TrayIcon
         {
-            Icon = new WindowIcon(AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant)))),
+            Icon = new WindowIcon(initialIconStream),
             ToolTipText = "VPNRouter",
             Menu = menu,
             IsVisible = true
@@ -193,7 +198,8 @@ public partial class App : Application
             {
                 if (_trayIcon != null)
                 {
-                    _trayIcon.Icon = new WindowIcon(AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant))));
+                    using var themeIconStream = AssetLoader.Open(new System.Uri(GetTrayIconUri(ActualThemeVariant)));
+                    _trayIcon.Icon = new WindowIcon(themeIconStream);
                 }
             }
             catch { }
@@ -248,6 +254,7 @@ public partial class App : Application
 
         bool? lastState = null;
         var timer = new Avalonia.Threading.DispatcherTimer { Interval = System.TimeSpan.FromSeconds(10) };
+        _trayWatchTimer = timer;
         timer.Tick += (_, _) =>
         {
             timer.Interval = System.TimeSpan.FromMinutes(2);

@@ -172,6 +172,11 @@ public sealed class TunOwnershipLock : IDisposable
         }
     }
 
+    private static readonly TimeSpan FastOwnerPollInterval = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan IdleOwnerPollInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan SteadyOwnerPollInterval = TimeSpan.FromSeconds(5);
+    private const int FastOwnerPollAttemptsBeforeBackoff = 50;
+
     private void StartOwnerRecordMonitor(string executablePath)
     {
         CancellationTokenSource cts;
@@ -187,20 +192,40 @@ public sealed class TunOwnershipLock : IDisposable
         {
             try
             {
+                OwnedProcessIdentity? publishedChild = null;
+                var consecutiveMisses = 0;
+
                 while (!cts.IsCancellationRequested && _owned)
                 {
+                    var delay = FastOwnerPollInterval;
                     try
                     {
                         if (!DeepVerifyProbe.AnyProbeInFlight)
                         {
-                            var child = ProcessOwnership.FindProcessAtPath(
+                            var ownerRecordPath = Path.Combine(AppPaths.DataDir, "runtime-owner.json");
+                            OwnedProcessIdentity? liveChild = null;
+                            if (publishedChild is { } known)
+                            {
+                                var byPid = ProcessOwnership.TryReadIdentityByPid(known.Pid);
+                                if (byPid is { } current && ProcessOwnership.IsSameProcessIdentity(known, current))
+                                {
+                                    liveChild = current;
+                                }
+                                else
+                                {
+                                    publishedChild = null;
+                                    consecutiveMisses = 0;
+                                }
+                            }
+
+                            liveChild ??= ProcessOwnership.FindProcessAtPath(
                                 executablePath,
                                 notBeforeUtcTicks,
                                 Environment.ProcessId);
-                            if (child is { } identity)
+
+                            if (liveChild is { } identity)
                             {
-                                var existing = ProcessOwnership.ReadRuntimeOwnerRecord(
-                                    Path.Combine(AppPaths.DataDir, "runtime-owner.json"));
+                                var existing = ProcessOwnership.ReadRuntimeOwnerRecord(ownerRecordPath);
                                 var alreadyPublished = existing.Kind == RuntimeOwnerRecordKind.CurrentV2
                                                        && existing.Record is { } record
                                                        && record.OwnerPid == Environment.ProcessId
@@ -211,6 +236,15 @@ public sealed class TunOwnershipLock : IDisposable
                                                            identity.ExecutablePath);
                                 if (!alreadyPublished)
                                     ProcessOwnership.WriteRuntimeOwnerRecord(identity);
+                                publishedChild = identity;
+                                consecutiveMisses = 0;
+                                delay = SteadyOwnerPollInterval;
+                            }
+                            else
+                            {
+                                consecutiveMisses++;
+                                if (consecutiveMisses >= FastOwnerPollAttemptsBeforeBackoff)
+                                    delay = IdleOwnerPollInterval;
                             }
                         }
                     }
@@ -221,7 +255,7 @@ public sealed class TunOwnershipLock : IDisposable
 
                     try
                     {
-                        await Task.Delay(TimeSpan.FromMilliseconds(200), cts.Token)
+                        await Task.Delay(delay, cts.Token)
                             .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)

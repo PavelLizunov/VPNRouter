@@ -63,6 +63,7 @@ public static partial class ConfigGenerator
             "shadowsocks" => BuildShadowsocksOutbound(entry, tag),
             "ss"          => BuildShadowsocksOutbound(entry, tag),
             "naive"       => BuildNaiveOutbound(entry, tag),
+            "vmess"       => BuildVmessOutbound(entry, tag),
             "dns-tunnel"  => BuildDnsTunnelOutbound(entry, tag),
             _             => BuildVlessOutboundCore(entry, tag),
         };
@@ -115,6 +116,7 @@ public static partial class ConfigGenerator
     {
         var transport = entry.Transport ?? new VlessTransportConfig();
         var transportType = transport.Type ?? "tcp";
+        var tls = BuildTlsConfig(entry);
 
         return new SingBoxOutbound
         {
@@ -126,10 +128,71 @@ public static partial class ConfigGenerator
             Flow       = (string.IsNullOrEmpty(entry.Flow)
                           || transportType.Equals("xhttp", StringComparison.OrdinalIgnoreCase))
                 ? null : entry.Flow,
-            Tls        = BuildTlsConfig(entry),
+            // libbox constructs a TLS dialer whenever VLESS has a TLS object.
+            Tls        = tls.Enabled ? tls : null,
             Transport  = transportType.Equals("tcp", StringComparison.OrdinalIgnoreCase)
                 ? null
                 : BuildTransportConfig(transportType, transport),
+            DomainResolver = "local-dns",
+            TcpKeepAlive         = "30s",
+            TcpKeepAliveInterval = "30s",
+        };
+    }
+
+    internal static SingBoxOutbound BuildVmessOutbound(VlessServerEntry entry, string tag)
+    {
+        if (entry.AlterId != 0)
+            throw new InvalidOperationException(
+                "ConfigGenerator: VMess requires AEAD alter_id 0; legacy alter_id is unsupported.");
+
+        if (!VmessUriParser.TryNormalizeAeadSecurity(entry.VmessSecurity, out var security))
+            throw new InvalidOperationException(
+                "ConfigGenerator: VMess requires an AEAD cipher (aes-128-gcm or chacha20-poly1305).");
+
+        var transportType = (entry.Transport?.Type ?? "tcp").Trim().ToLowerInvariant();
+        if (transportType.Length == 0) transportType = "tcp";
+        if (transportType != "tcp" && transportType != "ws")
+            throw new InvalidOperationException(
+                "ConfigGenerator: VMess supports tcp and ws transports only.");
+
+        var tlsEnabled = entry.Tls?.Enabled == true
+            || string.Equals(entry.Security, "tls", StringComparison.OrdinalIgnoreCase);
+        TlsConfig? tls = tlsEnabled ? BuildTlsConfig(entry) : null;
+        if (tls != null)
+        {
+            tls.Enabled = true;
+            if (string.IsNullOrWhiteSpace(tls.ServerName))
+                tls.ServerName = entry.Server;
+        }
+
+        TransportConfig? transport = null;
+        if (transportType == "ws")
+        {
+            var host = VmessUriParser.HostHeader(entry);
+            if (string.IsNullOrWhiteSpace(host) && tlsEnabled)
+                host = tls?.ServerName;
+            var path = entry.Transport?.Path;
+            transport = new TransportConfig
+            {
+                Type = "ws",
+                Path = string.IsNullOrEmpty(path) ? "/" : path,
+                Headers = string.IsNullOrWhiteSpace(host)
+                    ? null
+                    : new Dictionary<string, string> { ["Host"] = host },
+            };
+        }
+
+        return new SingBoxOutbound
+        {
+            Type       = "vmess",
+            Tag        = tag,
+            Server     = entry.Server,
+            ServerPort = entry.Port,
+            Uuid       = entry.Uuid,
+            VmessSecurity = security,
+            AlterId    = 0,
+            Tls        = tls,
+            Transport  = transport,
             DomainResolver = "local-dns",
             TcpKeepAlive         = "30s",
             TcpKeepAliveInterval = "30s",

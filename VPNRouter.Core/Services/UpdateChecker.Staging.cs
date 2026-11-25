@@ -26,6 +26,7 @@ public partial class UpdateChecker
             HasLiteUpdate = false,
             FullChecksumUrl = null,
             FullChecksumSha256 = info.AssetSha256,
+            RequireExactSize = info.RequireExactSize,
         };
 
         Action<int>? handler = null;
@@ -61,7 +62,8 @@ public partial class UpdateChecker
         if (string.IsNullOrWhiteSpace(stagedPath))
             throw new ArgumentException("Staged path must be non-empty.", nameof(stagedPath));
         if (OperatingSystem.IsWindows())
-            RequireWindowsStage(stagedPath, info.Version, info.AssetSha256);
+            RequireWindowsStage(stagedPath, info.Version, info.AssetSha256,
+                info.RequireExactSize ? info.AssetSize : null);
         var isDowngrade = IsVersionDowngrade(_currentVersion, info.Version);
         if (isDowngrade)
         {
@@ -154,6 +156,13 @@ public partial class UpdateChecker
         }
 
         var downloadedSize = new FileInfo(zipPath).Length;
+        if (expectedSize > 0 && info.RequireExactSize && downloadedSize != expectedSize)
+        {
+            try { File.Delete(zipPath); } catch { }
+            throw new InvalidOperationException(
+                $"Downloaded file size is {downloadedSize} bytes, expected exactly {expectedSize}. " +
+                "The install was refused.");
+        }
         if (expectedSize > 0 && downloadedSize < expectedSize * 0.9)
             throw new InvalidOperationException(
                 $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {expectedSize / 1024 / 1024} MB). Download may be corrupted.");
@@ -229,7 +238,9 @@ public partial class UpdateChecker
 
         ValidateExtractedContent(extractDir);
         if (OperatingSystem.IsWindows())
-            _windowsStages[Path.GetFullPath(extractDir)] = new(zipPath, expectedSha, info.LatestVersion);
+            _windowsStages[Path.GetFullPath(extractDir)] = new(
+                zipPath, expectedSha, info.LatestVersion,
+                ExpectedSize: info.RequireExactSize ? expectedSize : 0);
 
         StatusChanged?.Invoke("Update ready to apply.");
         return extractDir;

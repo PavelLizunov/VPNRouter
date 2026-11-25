@@ -17,7 +17,7 @@ public sealed class FreeConfigTester
         IProgress<(int done, int total)>? progress = null,
         CancellationToken ct = default)
     {
-        var sem = new SemaphoreSlim(MaxConcurrency);
+        using var sem = new SemaphoreSlim(MaxConcurrency);
         var total = configs.Count;
         var done = 0;
 

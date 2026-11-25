@@ -39,6 +39,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private Task? _tgProxyPostStartRecheckTask;
 #endif
     private readonly ILogger _logger;
+    private readonly IDisposable? _ownedLogger;
     private readonly ISettingsStore _settingsStore;
     private AppSettings _settings;
     private bool _isLoadingUI;
@@ -478,17 +479,33 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public MainWindowViewModel(ISettingsStore? settingsStore) : this(settingsStore, null) { }
 
     internal MainWindowViewModel(ISettingsStore? settingsStore, ILogger? logger,
-        VPNRouter.Core.Services.UpdateSources.IUpdateSource? updateSource = null, Action<int>? exitApplication = null)
+        VPNRouter.Core.Services.UpdateSources.IUpdateSource? updateSource = null, Action<int>? exitApplication = null,
+        ConnectionRollbackHistory? rollbackHistory = null)
     {
         _settingsStore = settingsStore ?? RealSettingsStore.Instance;
+        _rollbackHistory = rollbackHistory ?? new ConnectionRollbackHistory();
 
-        _logger = logger ?? new LoggerConfiguration()
-            .WriteTo.File(
-                Path.Combine(AppPaths.LogsDir, "vpnrouter.log"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: 7)
-            .WriteTo.Console()
-            .CreateLogger();
+        if (logger != null)
+        {
+            _logger = logger;
+        }
+        else if (Serilog.Log.Logger != null &&
+                 !string.Equals(Serilog.Log.Logger.GetType().Name, "SilentLogger", StringComparison.Ordinal))
+        {
+            _logger = Serilog.Log.Logger;
+        }
+        else
+        {
+            var created = new LoggerConfiguration()
+                .WriteTo.File(
+                    Path.Combine(AppPaths.LogsDir, "vpnrouter.log"),
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 7)
+                .WriteTo.Console()
+                .CreateLogger();
+            _logger = created;
+            _ownedLogger = created;
+        }
 
         TcpTlsProbe.Logger = _logger;
 
@@ -513,8 +530,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         WireServersOrphanTracking();
         WireSimpleHomeNotifications();
 
-        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger, updateSource, exitApplication);
+        UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger, updateSource, exitApplication, _rollbackHistory);
         UpdateVm.ReserveRestart = ReserveRestart;
+        UpdateVm.RunLocalDiagnostics = ExportDiagnosticsAsync;
+        UpdateVm.MatchesRollbackConfig = fingerprint => !IsConnected && !IsConnecting &&
+            !_engine.HasActiveTunnel && ConnectionRollbackHistory.ComputeConfigFingerprint(_settings) == fingerprint;
+        UpdateVm.ActiveConfigIncompatibility = ActiveRollbackIncompatibility;
+        RefreshRollbackAssistance();
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
@@ -811,7 +833,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         if (!TryReleaseZapretForShutdown())
             throw new InvalidOperationException(Core.Localization.Strings.ZapretQuitPending);
-        _engine.StopOwnedSession();
+        _engine.DisposeOwnedSession();
         _disposed = true;
 
 #if PLATFORM_WINDOWS
@@ -897,10 +919,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _rulesToastCts?.Dispose();
             _rulesToastCts = null;
             _tgProxyToastToken++;
-            _problemScanCts?.Cancel();
-            _problemScanCts = null;
+            CancelProblemScan();
+            try { _serverTestCts?.Cancel(); } catch (ObjectDisposedException) { }
+            try { _serverDeepCts?.Cancel(); } catch (ObjectDisposedException) { }
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: toast CTS cleanup failed"); }
+
+        try { _ownedLogger?.Dispose(); }
+        catch { }
     }
 
     private void RefreshLocalization()

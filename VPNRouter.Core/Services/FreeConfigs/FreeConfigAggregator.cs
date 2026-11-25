@@ -6,7 +6,7 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
-public sealed class FreeConfigAggregator
+public sealed class FreeConfigAggregator : IDisposable
 {
     private readonly FreeConfigFetcher _fetcher;
     private readonly FreeConfigTester _tester;
@@ -14,6 +14,7 @@ public sealed class FreeConfigAggregator
     private readonly FreeConfigCache _cache;
     private readonly FreeConfigPoolFetcher _poolFetcher;
     private readonly ILogger _logger;
+    private bool _disposed;
 
     public FreeConfigAggregator(ILogger logger)
         : this(logger, new FreeConfigCache(logger))
@@ -28,6 +29,14 @@ public sealed class FreeConfigAggregator
         _geoIp = new FreeConfigGeoIp(logger);
         _cache = cache;
         _poolFetcher = new FreeConfigPoolFetcher(logger);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _geoIp.Dispose();
+        _poolFetcher.Dispose();
     }
 
     public bool UseServerPool { get; set; } = true;

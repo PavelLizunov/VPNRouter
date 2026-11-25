@@ -13,6 +13,13 @@ public class VlessServerEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UseAsSingleOutbound { get; set; }
 
+    // Repair must select one row without changing the stored row fingerprint.
+    private bool _singleOutboundForRepair;
+
+    internal void PinForRepair() => _singleOutboundForRepair = true;
+
+    internal bool RequiresSingleOutbound() => UseAsSingleOutbound || _singleOutboundForRepair;
+
     [YamlMember(Alias = "protocol")]
     public string Protocol { get; set; } = "vless";
 
@@ -28,6 +35,16 @@ public class VlessServerEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public DnsttProfile? Dnstt { get; set; }
 
+    // A previously matched generated grant needs fresh confirmation from its owning feed.
+    [JsonIgnore]
+    [YamlMember(Alias = "dnstt_refresh_binding", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? DnsttRefreshBinding { get; set; }
+
+    // A pasted copy of the original grant can select this row after its credentials rotate.
+    [JsonIgnore]
+    [YamlMember(Alias = "dnstt_original_binding", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    public string? DnsttOriginalBinding { get; set; }
+
     [YamlMember(Alias = "server")]
     public string Server { get; set; } = string.Empty;
 
@@ -39,6 +56,17 @@ public class VlessServerEntry
 
     [YamlMember(Alias = "flow")]
     public string Flow { get; set; } = string.Empty;
+
+    // VMess AEAD cipher. Null on non-VMess rows so existing serialized rows keep
+    // their exact shape; VMess rows default to aes-128-gcm when the field is absent.
+    [YamlMember(Alias = "vmess_security", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? VmessSecurity { get; set; }
+
+    // VMess legacy alter_id. Only 0 (AEAD) is accepted; the default stays omitted.
+    [YamlMember(Alias = "alter_id", DefaultValuesHandling = DefaultValuesHandling.OmitDefaults)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AlterId { get; set; }
 
     [YamlMember(Alias = "security")]
     public string Security { get; set; } = "reality";

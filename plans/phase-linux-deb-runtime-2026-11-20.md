@@ -85,6 +85,8 @@ package-owned `/opt/vpnrouter/sing-box` directly.
 - Merged `origin/main` at `60c65c72` to clear the PR conflict. The only conflict
   was the additive Open block in `plans/OPEN-DEFECTS.md`; both entries were
   kept. Product and packaging files were unchanged by the resolution.
+- Merged `origin/main` at `8e8e88e2`. Both sets of entries from the only
+  conflict in the defect ledger are retained. The resolution changed no code.
 - Build, full tests and live `.deb` acceptance must run on an authorized worker
   or CI; no local build was performed for this isolated task.
 

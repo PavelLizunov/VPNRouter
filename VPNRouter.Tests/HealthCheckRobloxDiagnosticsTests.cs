@@ -7,6 +7,34 @@ namespace VPNRouter.Tests;
 public sealed class HealthCheckRobloxDiagnosticsTests
 {
     [Fact]
+    public void PathMtuProbe_cancels_an_active_ping_and_skips_remaining_payloads()
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var runner = new CancellingMtuRunner(cancellation);
+        Assert.ThrowsAny<OperationCanceledException>(() => HealthCheck.PingPathMtu(runner, cancellation.Token));
+        Assert.Equal(2, runner.Requests.Count);
+        Assert.Contains("-f", runner.Requests[1].Arguments);
+    }
+
+    private sealed class CancellingMtuRunner(CancellationTokenSource cancellation) : IProcessRunner
+    {
+        internal List<ProcessRequest> Requests { get; } = [];
+
+        public Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken ct = default)
+        {
+            Assert.Equal(cancellation.Token, ct);
+            Assert.Equal(TimeSpan.FromSeconds(2), request.Timeout);
+            Requests.Add(request);
+            if (Requests.Count == 1)
+                return Task.FromResult(new ProcessResult(0, "TTL=64", "", TimeSpan.Zero, false));
+            cancellation.Cancel();
+            return Task.FromCanceled<ProcessResult>(ct);
+        }
+
+        public IProcessHandle Start(ProcessRequest request) => throw new NotSupportedException();
+    }
+
+    [Fact]
     public void ExtractProxyEndpoints_ReadsSingBoxOutbounds()
     {
         var endpoints = HealthCheck.ExtractProxyEndpointsFromCurrentJson("""

@@ -132,7 +132,7 @@ internal static class Localization
     public static string TunnelError(string? code) => code switch
     {
         "apps-empty" => Ru ? "Выберите хотя бы одно установленное приложение для VPN." : "Select at least one installed app for the VPN.",
-        "apps-missing" => Ru ? "Проверьте, что все приложения в списке исключений установлены." : "Check that every app in the VPN exclusion list is installed.",
+        "apps-missing" => Ru ? "Уберите недоступные приложения из списка исключений VPN и подключитесь снова." : "Remove unavailable apps from the VPN exclusion list, then reconnect.",
         "per-app-listener" => Ru ? "Для VPN по приложениям нужен профиль с одним входом TUN без дополнительных сервисов и слушающих портов."
             : "For per-app VPN, use a profile with one TUN inbound and no additional services or listeners.",
         "dns-unavailable" => Ru ? "Это устройство не поддерживает DNS-туннель." : "DNS tunnels are unavailable on this device.",
@@ -773,6 +773,7 @@ internal static class Localization
     public static string PerAppCountInclude => global::VPNRouter.Core.Localization.Strings.PerAppCountInclude;
     public static string PerAppCountExclude => global::VPNRouter.Core.Localization.Strings.PerAppCountExclude;
     public static string PerAppGroupSelected => global::VPNRouter.Core.Localization.Strings.PerAppGroupSelected;
+    public static string PerAppSavedPackage => Ru ? "Сохранённое приложение" : "Saved app";
     public static string PerAppGroupAvailable => global::VPNRouter.Core.Localization.Strings.PerAppGroupAvailable;
     public static string TipEditSubscription => global::VPNRouter.Core.Localization.Strings.TipEditSubscription;
     public static string LblNoSubscriptions => global::VPNRouter.Core.Localization.Strings.LblNoSubscriptions;
