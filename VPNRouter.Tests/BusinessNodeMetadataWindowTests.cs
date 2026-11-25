@@ -407,6 +407,7 @@ public sealed class BusinessNodeMetadataWindowTests
         var settings = new AppSettings();
         BusinessDefaults.Apply(settings, Connection, BusinessBootstrap.ReadRules());
         settings.App.Language = language;
+        settings.App.BusinessServerSelectionMode = BusinessServerSelectionMode.Manual;
         settings.App.RoutingMode = "full";
         store.Save(settings, AppPaths.ConfigYamlPath);
         return new(store);

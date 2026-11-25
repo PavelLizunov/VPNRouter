@@ -52,7 +52,11 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
 
     public bool IsGood => !_checking && _result.Status == ServerProbeStatus.Ok;
     public bool IsWarning => !_checking && _result.Status is ServerProbeStatus.Slow or ServerProbeStatus.Implausible;
+    public bool IsSlow => !_checking && _result.Status == ServerProbeStatus.Slow;
     public bool IsBad => !_checking && _result.Status is ServerProbeStatus.Unreachable or ServerProbeStatus.Timeout or ServerProbeStatus.TlsFailed;
+    internal ServerProbeStatus ProbeStatus => _result.Status;
+    internal bool IsChecking => _checking;
+    public string SlowBadgeText => Strings.BusinessServerSlowShort;
 
     public string StatusText => _checking ? Strings.BusinessServerChecking
         : !SupportsEndToEndProbe ? Strings.BusinessServerUnsupportedByCheck
@@ -81,6 +85,7 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         OnPropertyChanged(nameof(CountryName));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(PingText));
+        OnPropertyChanged(nameof(SlowBadgeText));
         RefreshMetadata();
     }
 
@@ -123,6 +128,7 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         _checking = checking;
         OnPropertyChanged(nameof(IsGood));
         OnPropertyChanged(nameof(IsWarning));
+        OnPropertyChanged(nameof(IsSlow));
         OnPropertyChanged(nameof(IsBad));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(PingText));

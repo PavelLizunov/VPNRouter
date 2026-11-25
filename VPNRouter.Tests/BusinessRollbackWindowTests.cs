@@ -37,7 +37,7 @@ public sealed class BusinessRollbackWindowTests
         Assert.Equal(new[] { AppVersion.Version, "2.50.7", "2.50.6" },
             fixture.Vm.UpdateVm.StableVersions.Select(item => item.Version));
         Assert.True(fixture.Vm.UpdateVm.StableVersions[0].IsInstalled);
-        Assert.Equal(Strings.RollbackSafetyHint, fixture.Vm.UpdateVm.VersionHistoryMessage);
+        Assert.Equal(Strings.BusinessRollbackSafetyHint, fixture.Vm.UpdateVm.VersionHistoryMessage);
         Assert.Same(fixture.Vm.UpdateVm.ToggleVersionHistoryCommand,
             fixture.ById<Button>("BusinessVersionHistory").Command);
         Assert.False(fixture.ById<Button>("BusinessRollbackConfirm").IsEffectivelyVisible);
@@ -139,7 +139,7 @@ public sealed class BusinessRollbackWindowTests
         Assert.True(fixture.Menu.Bounds.Width <= width);
         Assert.True(confirm.IsEffectivelyVisible);
         Assert.True(cancel.IsEffectivelyVisible);
-        Assert.Contains(confirm.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == Strings.ConfirmRollback);
+        Assert.Contains(confirm.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == Strings.RollbackAction);
         Assert.Contains(cancel.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == Strings.Cancel);
         foreach (var button in new[] { confirm, cancel })
         {

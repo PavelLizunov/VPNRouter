@@ -27,6 +27,7 @@ public sealed class BusinessWindowTests
         var settings = new AppSettings();
         BusinessDefaults.Apply(settings, BusinessDefaultsTests.MultiServerConnection, App.Services.BusinessBootstrap.ReadRules());
         settings.App.Language = "ru";
+        settings.App.BusinessServerSelectionMode = BusinessServerSelectionMode.Manual;
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = new MainWindowViewModel(store);
         vm.StatusText = "VPNRouter Business";
@@ -103,6 +104,8 @@ public sealed class BusinessWindowTests
             vm.IsConnecting = false;
             vm.IsConnected = true;
             Assert.All(modes, mode => Assert.False(mode.IsEffectivelyEnabled));
+            Assert.Contains(modeButton.GetVisualDescendants().OfType<TextBlock>(),
+                text => text.IsEffectivelyVisible && text.Text == Strings.BusinessModeUnknown);
             vm.IsConnected = false;
             modes[0].IsChecked = true;
             Assert.True(vm.IsSplitTunnel);
@@ -162,10 +165,21 @@ public sealed class BusinessWindowTests
                 store.Load(AppPaths.ConfigYamlPath).App.BusinessServerSelectionMode);
 
             var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
-            selector.SelectedIndex = 1;
+            var saved = vm.SelectedServer;
+            Assert.Null(selector.SelectedItem);
+            selector.SelectedItem = selector.Items.Cast<BusinessServerChoiceViewModel>()
+                .Single(choice => ReferenceEquals(choice.Server, saved));
             Dispatcher.UIThread.RunJobs();
+            Assert.Same(saved, vm.SelectedServer);
+            Assert.False(check.IsChecked);
             Assert.Equal(BusinessServerSelectionMode.Manual,
                 store.Load(AppPaths.ConfigYamlPath).App.BusinessServerSelectionMode);
+            check.IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Null(selector.SelectedItem);
+            selector.SelectedIndex = 1;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(check.IsChecked);
             Assert.Equal(BusinessDefaultsTests.ReserveName, vm.SelectedServer?.Name);
         }
         finally { window.Close(); }

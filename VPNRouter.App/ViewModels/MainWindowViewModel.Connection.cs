@@ -128,6 +128,7 @@ public partial class MainWindowViewModel
 
                 IsConnected = false;
                 IsConnecting = false;
+                SetBusinessConnectedServerName(null);
                 ConnectButtonText = Strings.StartVPN;
                 StatusText = Strings.NotConnected;
                 StopSubRefreshTimer();
@@ -280,6 +281,7 @@ public partial class MainWindowViewModel
             }
             IsConnected = false;
             IsConnecting = false;
+            SetBusinessConnectedServerName(null);
             ConnectButtonText = Strings.StartVPN;
             StatusText = Strings.NotConnected;
             _lastSuccessfulConnectAt = DateTime.MinValue;
@@ -406,6 +408,7 @@ public partial class MainWindowViewModel
  }
                     _displayExternalTunnel = false;
                     if (_pinnedStartRequested) _pinnedStartOwnedByUs = true;
+                    SetBusinessConnectedServerName(_pinnedStartRequested ? capturedSettings.Vless.ActiveServer : null);
                     IsConnected = true;
                     IsConnecting = false;
                     _lastSuccessfulConnectAt = DateTime.UtcNow;
@@ -567,6 +570,7 @@ public partial class MainWindowViewModel
         try { await Task.Run(() => _engine.Stop()); } catch { }
         IsConnecting = false;
         IsConnected = false;
+        SetBusinessConnectedServerName(null);
         StatusText = statusText;
         ConnectButtonText = Strings.StartVPN;
     }
@@ -693,6 +697,11 @@ public partial class MainWindowViewModel
         if (!IsConnected) return;
         SyncStatsTunnel();
         RefreshActiveIndicator();
+        if (ProductEdition.IsBusiness)
+        {
+            OnPropertyChanged(nameof(BusinessActiveRoutingMode));
+            OnPropertyChanged(nameof(BusinessActiveServerName));
+        }
         OnPropertyChanged(nameof(SimpleStatusDescription));
         OnPropertyChanged(nameof(SmpActiveServerLine));
         OnPropertyChanged(nameof(SimpleActiveOutboundLine));

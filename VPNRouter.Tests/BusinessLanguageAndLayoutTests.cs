@@ -330,11 +330,11 @@ public sealed class BusinessLanguageAndLayoutTests
     }
 
     [AvaloniaTheory]
-    [InlineData(340, "ru")]
-    [InlineData(420, "ru")]
-    [InlineData(340, "en")]
-    [InlineData(420, "en")]
-    public void CompactWindow_KeepsHomeSettingsReachable_AndSupportInMenu(int width, string language)
+    [InlineData(340, "ru", false)]
+    [InlineData(420, "ru", true)]
+    [InlineData(340, "en", true)]
+    [InlineData(420, "en", false)]
+    public async Task CompactWindow_KeepsHomeSettingsReachable_AndSupportInMenu(int width, string language, bool captureServer)
     {
         using var fixture = new Fixture(width, language);
         var window = fixture.Window;
@@ -342,7 +342,21 @@ public sealed class BusinessLanguageAndLayoutTests
         Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(),
             text => text.Text == Strings.BusinessServerHint && text.IsEffectivelyVisible);
         Assert.False(fixture.Services.IsDiagnosticStatusVisible);
-        Assert.False(fixture.Services.IsRefreshStatusVisible);
+        var refreshed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void RefreshFinished(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(BusinessServicesViewModel.IsRefreshing) && !fixture.Services.IsRefreshing)
+                refreshed.TrySetResult();
+        }
+        fixture.Services.PropertyChanged += RefreshFinished;
+        try
+        {
+            if (fixture.Services.IsRefreshing)
+                await refreshed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally { fixture.Services.PropertyChanged -= RefreshFinished; }
+        Assert.True(fixture.Services.IsRefreshStatusVisible);
+        Assert.Equal(Strings.BusinessSubscriptionUpdated(3), fixture.Services.RefreshStatus);
         var scroll = Assert.IsType<ScrollViewer>(window.Content);
         FlushLayout(window);
         var menu = window.FindControl<Button>("BusinessMenuButton")!;
@@ -370,7 +384,10 @@ public sealed class BusinessLanguageAndLayoutTests
         menuScroll.Offset = new(0, menuScroll.Extent.Height);
         FlushLayout(window);
         Assert.True(menuScroll.Offset.Y + menuScroll.Viewport.Height >= menuScroll.Extent.Height - 1);
-        AssertInsideViewport(window.FindControl<StackPanel>("BusinessSubscriptionActions")!, menuScroll);
+        var subscription = window.FindControl<StackPanel>("BusinessSubscriptionActions")!;
+        AssertInsideViewport(subscription, menuScroll);
+        Assert.Contains(subscription.GetVisualDescendants().OfType<TextBlock>(), text =>
+            text.IsEffectivelyVisible && text.Text == Strings.BusinessSubscriptionUpdated(3));
         Assert.True(menuScroll.Extent.Width <= menuScroll.Viewport.Width + 1);
         flyout.Hide();
 
@@ -383,18 +400,21 @@ public sealed class BusinessLanguageAndLayoutTests
         window.OpenModePanel();
         FlushLayout(window);
         Assert.False(selector.IsEffectivelyVisible);
-        AssertInsideViewport(modePanel, scroll);
-        AssertInsideViewport(ConnectionButton(fixture), scroll);
-        AssertInsideViewport(modeButton, scroll);
         Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-        scroll.Offset = new(0, scroll.Extent.Height);
+        modePanel.BringIntoView();
         FlushLayout(window);
-        Assert.True(scroll.Offset.Y + scroll.Viewport.Height >= scroll.Extent.Height - 1);
         AssertInsideViewport(modePanel, scroll);
-        scroll.Offset = default;
-        FlushLayout(window);
-        // Capture closes the window, so it must follow all live-window assertions.
-        ScreenshotHelper.Capture(window, $"business-home-mode-{language}-{width}");
+        var modes = modePanel.GetVisualDescendants().OfType<RadioButton>().ToArray();
+        Assert.Equal(2, modes.Length);
+        Assert.All(modes, mode => AssertInsideViewport(mode, scroll));
+        if (captureServer)
+        {
+            window.OpenServerPanel();
+            selector.BringIntoView();
+            FlushLayout(window);
+        }
+        var panel = captureServer ? "server" : "mode";
+        ScreenshotHelper.Capture(window, $"business-home-{panel}-{language}-{width}");
     }
 
     private static Button Send(BusinessWindow window) => Assert.Single(
@@ -448,8 +468,10 @@ public sealed class BusinessLanguageAndLayoutTests
         Assert.Contains(button.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == expectedButton);
         Assert.Equal(!connecting, button.IsEffectivelyEnabled);
         Assert.Equal(expectedStatus, fixture.Window.Texts.ConnectionStatus);
-        var content = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(fixture.Window.Content).Content);
-        Assert.Equal(expectedStatus, content.Children.OfType<TextBlock>().First().Text);
+        var status = Assert.Single(fixture.Window.GetVisualDescendants().OfType<TextBlock>(), text =>
+            AutomationProperties.GetAutomationId(text) == "BusinessConnectionStatus");
+        Assert.True(status.IsEffectivelyVisible);
+        Assert.Equal(expectedStatus, status.Text);
     }
 
     private static void AssertBusyOwnersUnchanged(Fixture fixture, bool connecting,
@@ -505,6 +527,7 @@ public sealed class BusinessLanguageAndLayoutTests
             BusinessDefaults.Apply(settings, BusinessClientConfigurationTests.Three, BusinessBootstrap.ReadRules());
             settings.App.Language = language;
             settings.App.RoutingMode = "full";
+            settings.App.BusinessServerSelectionMode = BusinessServerSelectionMode.Manual;
             Store.Save(settings, AppPaths.ConfigYamlPath);
             Vm = new(Store);
             _client = new(new BusinessClientHttpTests.Handler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)

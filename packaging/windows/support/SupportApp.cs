@@ -36,7 +36,7 @@ namespace VPNRouter.Business.Support
             MaximizeBox = false;
             Font = new Font("Segoe UI", 10);
             var description = new Label();
-            description.Text = "Отправьте администратору журналы VPNRouter, чтобы разобраться с запуском или соединением.\r\n\r\nПароли, ключи и ссылки маскируются. В отчёте могут остаться домены, IP и имена приложений.";
+            description.Text = "Отправьте администратору журналы VPNRouter, чтобы разобраться с запуском или соединением.\r\n\r\nОтчёт содержит имя ПК и пользователя Windows. Пароли, ключи и ссылки маскируются; в логах могут остаться домены, IP и имена приложений.";
             description.SetBounds(22, 18, 426, 128);
             status.SetBounds(22, 152, 426, 42);
             status.Text = "Готово к сбору и отправке.";

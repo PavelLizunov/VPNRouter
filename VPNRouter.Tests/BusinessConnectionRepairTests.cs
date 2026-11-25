@@ -1,10 +1,17 @@
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.App.Views;
+using VPNRouter.Core;
 using VPNRouter.Core.Localization;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 
@@ -13,11 +20,16 @@ namespace VPNRouter.Tests;
 [Collection(SafeModeStateCollection.Name)]
 public sealed class BusinessConnectionRepairTests
 {
+    private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(5);
+
     private sealed class Diagnostics : IBusinessDiagnostics
     {
         public int Collected { get; private set; }
         public List<string> Sent { get; } = [];
         public TaskCompletionSource<BusinessSupportReply>? Reply { get; set; }
+        public bool RejectUpload { get; set; }
+        public bool CancelPendingReply { get; set; }
+        public Action? BeforeAcknowledgement { get; set; }
 
         public Task<string> CollectAsync(CancellationToken ct) => Task.FromResult($"report-{++Collected}.zip");
 
@@ -26,8 +38,12 @@ public sealed class BusinessConnectionRepairTests
         public Task<BusinessSupportReply> SendWithReplyAsync(string path, Action acknowledged, CancellationToken ct)
         {
             Sent.Add(path);
+            if (RejectUpload) return Task.FromException<BusinessSupportReply>(new IOException("Synthetic upload rejection."));
+            BeforeAcknowledgement?.Invoke();
             acknowledged();
-            return Reply?.Task ?? Task.FromResult(new BusinessSupportReply("ready", "Проверьте другой сервер.", "Try a different server."));
+            if (Reply is { } reply)
+                return CancelPendingReply ? reply.Task.WaitAsync(ct) : reply.Task;
+            return Task.FromResult(new BusinessSupportReply("ready", "Проверьте другой сервер.", "Try a different server."));
         }
     }
 
@@ -37,67 +53,302 @@ public sealed class BusinessConnectionRepairTests
     [AvaloniaFact]
     public async Task OneClickRepairsLocallyAndOnlyAnExplicitSecondClickSendsAFreshReport()
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
-        var diagnostics = new Diagnostics();
-        var starts = 0;
-        BusinessServicesViewModel? services = null;
-        var window = new BusinessWindow(static (_, _) => Task.FromResult(ServerProbeResult.Unknown), (model, changed) =>
-            services = new(model, SupportOnly(), new BusinessClientHttp(), changed, diagnostics, ct =>
-            {
-                ct.ThrowIfCancellationRequested();
-                starts++;
-                return Task.FromResult(false);
-            })) { DataContext = vm };
-        window.Show();
-        try
-        {
-            var repair = window.FindControl<StackPanel>("BusinessRepairActions")!;
-            var open = Assert.IsType<Button>(repair.Children[0]);
-            Assert.True(open.IsEffectivelyVisible);
-            Assert.True(open.Command!.CanExecute(null));
-            await services!.RunDiagnosticsAsync(false);
-            open.Command.Execute(null);
-            await services.OpenRepairCommand.ExecutionTask!;
-            Assert.Equal(1, starts);
-            Assert.True(services.ShowAnalyze);
-            Assert.Empty(diagnostics.Sent);
-            await services.AnalyzeRepairCommand.ExecuteAsync(null);
-            Assert.Equal(new[] { "report-2.zip" }, diagnostics.Sent);
-            Assert.True(services.ShowRepairAnalysis);
-            Assert.Contains(Strings.Lang == "ru" ? "другой сервер" : "different server", services.DiagnosticStatus);
-            Assert.Equal(1, starts);
-            Assert.False(services.ShowAnalyze);
-        }
-        finally { window.Close(); }
+        using var fixture = new RepairWindowFixture();
+        await fixture.Services.RunDiagnosticsAsync(false);
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+        Assert.Equal(1, fixture.LocalAttempts);
+        Assert.True(fixture.Services.HasRepairPrimaryAction);
+        Assert.Empty(fixture.Diagnostics.Sent);
+
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairAnalyze"));
+
+        Assert.Equal(new[] { "report-2.zip" }, fixture.Diagnostics.Sent);
+        Assert.True(fixture.Services.IsRepairOpen);
+        Assert.Contains("другой сервер", fixture.Services.DiagnosticStatus);
+        Assert.Equal(1, fixture.LocalAttempts);
+        Assert.False(fixture.Services.HasRepairPrimaryAction);
+        var advice = fixture.Services.RepairBody;
+        fixture.Window.OpenServerPanel();
+        var selector = fixture.Window.FindControl<ComboBox>("BusinessServerSelector")!;
+        selector.SelectedIndex = 1;
+        Assert.Equal(BusinessDefaultsTests.ReserveName, fixture.Vm.SelectedServer?.Name);
+        Assert.True(fixture.Services.IsRepairOpen);
+        Assert.Equal(advice, fixture.Services.RepairBody);
+        Click(fixture.Window, fixture.Window.FindControl<Button>("BusinessServerMenuButton")!);
+        ScreenshotHelper.Capture(fixture.Window, "business-repair-advice-360");
+    }
+
+    [AvaloniaFact]
+    public async Task MenuDiagnostics_OpensVisibleConsentBeforeCollectingOrUploading()
+    {
+        using var fixture = new RepairWindowFixture();
+        var menu = fixture.Window.FindControl<Button>("BusinessMenuButton")!;
+        Click(fixture.Window, menu);
+        var flyout = Assert.IsType<Flyout>(menu.Flyout);
+        Assert.True(flyout.IsOpen);
+        Click(fixture.Window, FindButton(Assert.IsAssignableFrom<Control>(flyout.Content), "BusinessDiagnosticsSend"));
+
+        Assert.False(flyout.IsOpen);
+        Assert.True(fixture.Services.IsRepairOpen);
+        Assert.Contains(fixture.Repair.GetVisualDescendants().OfType<TextBlock>(), text =>
+            text.IsEffectivelyVisible && text.Text == Strings.BusinessRepairConsentTitle);
+        Assert.Contains(fixture.Repair.GetVisualDescendants().OfType<TextBlock>(), text =>
+            text.IsEffectivelyVisible && text.Text == Strings.BusinessRepairConsent);
+        Assert.Equal(0, fixture.LocalAttempts);
+        Assert.Equal(0, fixture.Diagnostics.Collected);
+        Assert.Empty(fixture.Diagnostics.Sent);
+
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairAnalyze"));
+
+        Assert.Equal(0, fixture.LocalAttempts);
+        Assert.Equal(1, fixture.Diagnostics.Collected);
+        Assert.Equal(new[] { "report-1.zip" }, fixture.Diagnostics.Sent);
     }
 
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NarrowWindowKeepsRepairUnderConnect(bool expand)
+    public async Task RejectedRepairUpload_OffersOneClickRetryWithoutCollectingOrSearchingAgain(bool retry)
     {
-        var previousLanguage = Strings.Lang;
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
-        vm.SetLanguageRussianCommand.Execute(null);
-        BusinessServicesViewModel? services = null;
-        var window = new BusinessWindow(static (_, _) => Task.FromResult(ServerProbeResult.Unknown),
-            (model, changed) => services = new(model, SupportOnly(), new BusinessClientHttp(), changed, new Diagnostics(),
-                _ => Task.FromResult(false)))
-            { Width = 360, DataContext = vm };
-        window.Show();
+        using var fixture = new RepairWindowFixture();
+        fixture.Diagnostics.RejectUpload = true;
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairAnalyze"));
+
+        Assert.Equal(1, fixture.LocalAttempts);
+        Assert.Equal(1, fixture.Diagnostics.Collected);
+        Assert.Equal(new[] { "report-1.zip" }, fixture.Diagnostics.Sent);
+        Assert.True(fixture.Services.IsRepairError);
+        Assert.Equal(Strings.BusinessRepairRetrySend, fixture.Services.RepairActionText);
+        var retryButton = FindButton(fixture.Repair, "BusinessRepairAnalyze");
+        Assert.True(retryButton.IsEffectivelyVisible);
+        Assert.True(retryButton.IsEffectivelyEnabled);
+        if (!retry)
+        {
+            ScreenshotHelper.Capture(fixture.Window, "business-repair-retry-360");
+            return;
+        }
+
+        fixture.Diagnostics.RejectUpload = false;
+        await ClickAsync(fixture.Window, retryButton);
+
+        Assert.Equal(1, fixture.LocalAttempts);
+        Assert.Equal(1, fixture.Diagnostics.Collected);
+        Assert.Equal(new[] { "report-1.zip", "report-1.zip" }, fixture.Diagnostics.Sent);
+        Assert.False(fixture.Services.HasRepairPrimaryAction);
+        Assert.False(fixture.Services.IsRepairError);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AcknowledgedRepairReport_DistinguishesReceiptAndAnalysisAndKeepsReceiptWhenWaitStops(bool stopWaiting)
+    {
+        using var fixture = new RepairWindowFixture(initiallyConnected: true);
+        fixture.Diagnostics.Reply = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Diagnostics.CancelPendingReply = true;
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+        Assert.Equal(Strings.BusinessRepairConsentOnline, fixture.Services.RepairBody);
+        Assert.Empty(fixture.Diagnostics.Sent);
+        var sending = ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairAnalyze"));
         try
         {
-            var repair = window.FindControl<StackPanel>("BusinessRepairActions")!;
-            var siblings = Assert.IsType<StackPanel>(repair.Parent).Children;
-            var before = Assert.IsType<Border>(siblings[siblings.IndexOf(repair) - 1]);
-            Assert.Same(vm.ToggleConnectionCommand, Assert.IsType<Button>(before.Child).Command);
-            if (expand) await services!.OpenRepairCommand.ExecuteAsync(null);
-            window.UpdateLayout();
-            var scroll = Assert.IsType<ScrollViewer>(window.Content);
-            Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-            ScreenshotHelper.Capture(window, expand ? "business-repair-consent-360" : "business-repair-home-360");
+            Assert.False(sending.IsCompleted);
+            Assert.Equal(Strings.BusinessRepairReceiptTitle, fixture.Services.RepairHeading);
+            Assert.Equal(Strings.BusinessDiagnosticsReplyPending, fixture.Services.DiagnosticStatus);
+            Assert.Equal(Strings.BusinessRepairStopWaiting, fixture.Services.RepairDismissText);
+            Assert.False(fixture.Services.HasRepairPrimaryAction);
+            Assert.Equal(0, fixture.LocalAttempts);
+            Assert.True(fixture.Vm.IsConnected);
+
+            if (!stopWaiting)
+            {
+                ScreenshotHelper.Capture(fixture.Window, "business-repair-receipt-pending-360");
+                return;
+            }
+
+            Click(fixture.Window, FindButton(fixture.Repair, "BusinessRepairClose"));
+            await sending;
+
+            Assert.True(fixture.Services.IsRepairOpen);
+            Assert.False(fixture.Services.IsRepairBusy);
+            Assert.Equal(Strings.BusinessRepairReceiptTitle, fixture.Services.RepairHeading);
+            Assert.Equal(Strings.BusinessDiagnosticsReplyWaitCancelled, fixture.Services.DiagnosticStatus);
+            Assert.Equal(new[] { "report-1.zip" }, fixture.Diagnostics.Sent);
+            Assert.True(fixture.Vm.IsConnected);
+            Click(fixture.Window, FindButton(fixture.Repair, "BusinessRepairClose"));
+            Assert.False(fixture.Services.IsRepairOpen);
         }
-        finally { window.Close(); Strings.Lang = previousLanguage; }
+        finally
+        {
+            fixture.Diagnostics.Reply.TrySetResult(BusinessSupportReply.Unavailable);
+            await sending;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task CancelDuringAcknowledgementHandoff_KeepsReceipt()
+    {
+        using var fixture = new RepairWindowFixture(initiallyConnected: true);
+        fixture.Diagnostics.Reply = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Diagnostics.CancelPendingReply = true;
+        fixture.Diagnostics.BeforeAcknowledgement = () => fixture.Services.CloseRepairCommand.Execute(null);
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairAnalyze"));
+
+        Assert.True(fixture.Services.IsRepairOpen);
+        Assert.True(fixture.Services.IsRepairReceipt);
+        Assert.False(fixture.Services.IsRepairBusy);
+        Assert.Equal(Strings.BusinessRepairReceiptWaitCancelled, fixture.Services.RepairBody);
+        Assert.Equal(new[] { "report-1.zip" }, fixture.Diagnostics.Sent);
+        ScreenshotHelper.Capture(fixture.Window, "business-repair-receipt-stopped-360");
+    }
+
+    [AvaloniaFact]
+    public async Task FailedLocalSearch_CanSearchAgainWithoutCollecting()
+    {
+        using var fixture = new RepairWindowFixture();
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairRetrySearch"));
+
+        Assert.Equal(2, fixture.LocalAttempts);
+        Assert.True(fixture.Services.IsRepairError);
+        Assert.True(fixture.Services.HasRepairPrimaryAction);
+        Assert.Equal(0, fixture.Diagnostics.Collected);
+        Assert.Empty(fixture.Diagnostics.Sent);
+    }
+
+    [AvaloniaFact]
+    public async Task LocalSearch_ShowsBusyFeedbackBeforeAnyDiagnosticCollection()
+    {
+        var searchResult = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var fixture = new RepairWindowFixture(connect: ct => searchResult.Task.WaitAsync(ct));
+        var searching = ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+        try
+        {
+            Assert.False(searching.IsCompleted);
+            Assert.Equal(Strings.BusinessRepairChecking, fixture.Services.RepairHeading);
+            Assert.True(fixture.Services.IsRepairBusy);
+            Assert.False(fixture.Services.HasRepairPrimaryAction);
+            Assert.Contains(fixture.Repair.GetVisualDescendants().OfType<ProgressBar>(),
+                progress => progress.IsEffectivelyVisible && progress.IsIndeterminate);
+            Assert.True(FindButton(fixture.Repair, "BusinessRepairClose").IsEffectivelyEnabled);
+            Assert.Equal(1, fixture.LocalAttempts);
+            Assert.Equal(0, fixture.Diagnostics.Collected);
+            Assert.Empty(fixture.Diagnostics.Sent);
+            ScreenshotHelper.Capture(fixture.Window, "business-repair-search-360");
+        }
+        finally
+        {
+            searchResult.TrySetResult(false);
+            await searching;
+        }
+    }
+
+    private static Button FindButton(Control root, string automationId) => Assert.Single(
+        root.GetVisualDescendants().OfType<Button>(), button => AutomationProperties.GetAutomationId(button) == automationId);
+
+    private static void Click(BusinessWindow window, Button button)
+    {
+        Assert.True(button.IsEffectivelyEnabled);
+        Assert.True(button.IsEffectivelyVisible);
+        new ButtonAutomationPeer(button).Invoke();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+    }
+
+    private static Task ClickAsync(BusinessWindow window, Button button)
+    {
+        var command = Assert.IsAssignableFrom<IAsyncRelayCommand>(button.Command);
+        Click(window, button);
+        return Assert.IsAssignableFrom<Task>(command.ExecutionTask).WaitAsync(TestTimeout);
+    }
+
+    private sealed class RepairWindowFixture : IDisposable
+    {
+        private readonly string _previousLanguage = Strings.Lang;
+
+        internal readonly MainWindowViewModel Vm;
+        internal readonly Diagnostics Diagnostics = new();
+        internal readonly BusinessWindow Window;
+        internal readonly BusinessServicesViewModel Services;
+        internal StackPanel Repair => Window.FindControl<StackPanel>("BusinessRepairActions")!;
+        internal int LocalAttempts { get; private set; }
+
+        internal RepairWindowFixture(bool initiallyConnected = false, Func<CancellationToken, Task<bool>>? connect = null)
+        {
+            var store = new InMemorySettingsStore();
+            var settings = new AppSettings();
+            BusinessDefaults.Apply(settings, BusinessDefaultsTests.MultiServerConnection, BusinessBootstrap.ReadRules());
+            settings.App.Language = "ru";
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            Vm = new(store, null, null, null, businessBootstrap: (_, _) => null);
+            Vm.IsConnected = initiallyConnected;
+            if (initiallyConnected) Vm.StatusText = Strings.Connected("split", null, null);
+            BusinessServicesViewModel? services = null;
+            Window = new BusinessWindow(static (_, _) => Task.FromResult(ServerProbeResult.Unknown), (model, changed) =>
+                services = new(model, SupportOnly(), new BusinessClientHttp(), changed, Diagnostics, ct =>
+                {
+                    LocalAttempts++;
+                    return connect?.Invoke(ct) ?? Task.FromResult(false);
+                }))
+            {
+                Width = 360,
+                DataContext = Vm
+            };
+            Window.Show();
+            Dispatcher.UIThread.RunJobs();
+            Window.UpdateLayout();
+            Services = services!;
+        }
+
+        public void Dispose()
+        {
+            Window.Close();
+            Vm.Dispose();
+            Strings.Lang = _previousLanguage;
+        }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false, false, "business-repair-home-360")]
+    [InlineData(false, true, "business-repair-consent-360")]
+    [InlineData(true, false, "business-repair-home-connected-360")]
+    [InlineData(true, true, "business-repair-consent-connected-360")]
+    public async Task NarrowWindowKeepsRepairUnderConnect(bool initiallyConnected, bool expand, string screenshot)
+    {
+        using var fixture = new RepairWindowFixture(initiallyConnected);
+        var siblings = Assert.IsType<StackPanel>(fixture.Repair.Parent).Children;
+        var before = Assert.IsType<Border>(siblings[siblings.IndexOf(fixture.Repair) - 1]);
+        Assert.Same(fixture.Vm.ToggleConnectionCommand, Assert.IsType<Button>(before.Child).Command);
+        if (expand) await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+        Assert.Equal(expand, fixture.Services.IsRepairOpen);
+        var scroll = Assert.IsType<ScrollViewer>(fixture.Window.Content);
+        Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
+        ScreenshotHelper.Capture(fixture.Window, screenshot);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(true, "business-repair-home-server-360")]
+    [InlineData(false, "business-repair-home-mode-360")]
+    public void NarrowHomeSettings_ExpandInlineWithoutHorizontalOverflow(bool serverPanel, string screenshot)
+    {
+        using var fixture = new RepairWindowFixture();
+        if (serverPanel)
+            fixture.Window.OpenServerPanel();
+        else
+            fixture.Window.OpenModePanel();
+
+        var name = serverPanel ? "BusinessServerPanel" : "BusinessModePanel";
+        var panel = fixture.Window.FindControl<Border>(name)!;
+        panel.BringIntoView();
+        fixture.Window.UpdateLayout();
+        var scroll = Assert.IsType<ScrollViewer>(fixture.Window.Content);
+        Assert.True(panel.IsEffectivelyVisible);
+        Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
+        ScreenshotHelper.Capture(fixture.Window, screenshot);
     }
 
     [AvaloniaTheory]
@@ -114,7 +365,7 @@ public sealed class BusinessConnectionRepairTests
         services.SetVisible(true);
         await services.OpenRepairCommand.ExecuteAsync(null);
         Assert.Equal(initiallyConnected ? 0 : 1, localAttempts);
-        var pending = services.AnalyzeRepairCommand.ExecuteAsync(null);
+        var pending = services.RepairPrimaryCommand.ExecuteAsync(null);
         Assert.Single(diagnostics.Sent);
         if (!initiallyConnected) services.SetVisible(false);
         diagnostics.Reply.SetResult(BusinessSupportReply.Unavailable);
@@ -141,12 +392,14 @@ public sealed class BusinessConnectionRepairTests
                 return Task.FromResult(succeeds);
             });
         services.SetVisible(true);
+        Assert.True(services.IsRefreshStatusVisible);
+        Assert.Equal(Strings.BusinessSubscriptionNotConfigured, services.RefreshStatus);
         await services.OpenRepairCommand.ExecuteAsync(null);
-        Assert.False(services.ShowAnalyze);
         Assert.Equal(1, attempts);
         Assert.Equal(succeeds, vm.IsConnected);
         Assert.Equal(!succeeds, services.IsRepairOpen);
-        Assert.Equal(succeeds ? string.Empty : Strings.BusinessRepairFailed, services.RepairHint);
+        if (!succeeds) Assert.Equal(Strings.BusinessRepairFailed, services.RepairHeading);
         Assert.Equal(0, diagnostics.Collected);
+        Assert.Empty(diagnostics.Sent);
     }
 }

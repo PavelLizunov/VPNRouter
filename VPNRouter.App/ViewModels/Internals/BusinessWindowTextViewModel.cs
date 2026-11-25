@@ -1,4 +1,5 @@
 using VPNRouter.Core.Localization;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels.Internals;
 
@@ -7,12 +8,21 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
 {
     private MainWindowViewModel? _client;
     private bool _languageSaveFailed;
+    private BusinessServerChoiceViewModel? _savedServer;
+    private bool _hasProbeTargets, _isServerChecking;
+    public bool CanToggleConnection => _client is { CanToggleConnection: true } &&
+        (!_client.IsBusinessRepairInProgress || _client.IsConnected);
+    public bool IsConnectionBusy => _client is { } client && (client.IsConnecting || client.IsBusinessRepairInProgress);
     public string ConnectButton => _client?.IsConnecting == true && IsStoppingStatus(_client.StatusText) ? Strings.Stopping
         : _client?.IsConnecting == true ? Strings.ButtonConnecting
         : _client?.IsConnected == true ? Strings.BusinessDisconnect : Strings.BusinessConnect;
     public string ConnectionStatus => _languageSaveFailed ? Strings.BusinessLanguageSaveFailed
         : _client?.IsConnecting == true && IsStoppingStatus(_client.StatusText) ? Strings.Stopping
+        : _client is { IsBusinessRepairInProgress: true, IsConnected: false } ? Strings.BusinessRepairChecking
         : _client?.IsConnecting == true && IsNeutralStartingStatus(_client.StatusText) ? Strings.ButtonConnecting
+        : _client?.StatusText == Strings.BusinessPolicyApplying ? Strings.ButtonConnecting
+        : _client?.IsConnected == true && _client.StatusText == Strings.SmpStatusConnectedNoDetails
+            ? _client.IsBusinessServiceManaged ? Strings.BusinessServiceConnected : Strings.BusinessConnected
         : _client?.IsConnected == true && IsHealthyConnectionStatus(_client.StatusText)
             ? Strings.BusinessConnected
         : _client?.IsConnected == true && IsHealthyConnectionStatus(_client.StatusText, serviceManaged: true)
@@ -41,6 +51,8 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     {
         if (_client != null) _client.BusinessPolicyStatusChanged -= Refresh;
         _client = client;
+        _savedServer = null;
+        _hasProbeTargets = _isServerChecking = false;
         if (_client != null) _client.BusinessPolicyStatusChanged += Refresh;
         _languageSaveFailed = false;
         Refresh();
@@ -52,11 +64,16 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
         OnPropertyChanged(nameof(AutoSelectEnabled));
         OnPropertyChanged(nameof(AutoSelectStatus));
         OnPropertyChanged(nameof(HasAutoSelectStatus));
+        OnPropertyChanged(nameof(ServerSummary));
+        OnPropertyChanged(nameof(ServerPickerCaption));
+        OnPropertyChanged(nameof(ServerPickerPlaceholder));
     }
 
     public string Menu => Strings.BusinessMenu;
     public string PolicyStatus => _client?.BusinessPolicyStatusText ?? string.Empty;
-    public bool HasPolicyStatus => !string.IsNullOrEmpty(PolicyStatus);
+    public bool HasPolicyStatus => _client?.HasHomeBusinessPolicyNotice == true;
+    public bool IsPolicyDanger => _client?.IsBusinessPolicyDanger == true;
+    public bool IsPolicyApplying => _client?.IsBusinessPolicyApplying == true;
     public string Language => Strings.BusinessLanguage;
     public string Server => Strings.BusinessServer;
     public string ServerMenu => Strings.BusinessServerMenu;
@@ -74,15 +91,86 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     }
     public string AutoSelectStatus => _client?.BusinessAutoSelectStatusText ?? string.Empty;
     public bool HasAutoSelectStatus => _client?.HasBusinessAutoSelectStatus == true;
-    public string ServerRefresh => Strings.BusinessServerRefresh;
+    internal void SetSavedServer(BusinessServerChoiceViewModel? choice)
+    {
+        _savedServer = choice;
+        OnPropertyChanged(nameof(ServerPickerPlaceholder));
+        RefreshServerSummary();
+    }
+
+    internal void RefreshServerSummary()
+    {
+        OnPropertyChanged(nameof(ServerSummary));
+        OnPropertyChanged(nameof(AutoSelectStatus));
+        OnPropertyChanged(nameof(HasAutoSelectStatus));
+    }
+
+    public string ServerSummary
+    {
+        get
+        {
+            if (_client == null) return string.Empty;
+            if (_client.IsConnected)
+                return _client.BusinessActiveServerName is { } active ? Strings.BusinessServerSummaryActive(active)
+                    : _client.IsBusinessServiceManaged ? Strings.BusinessServerSummaryActiveService
+                    : Strings.BusinessServerSummaryActiveUnknown;
+
+            if (_client.BusinessAutoSelect)
+            {
+                if (_client.IsBusinessAutoChecking) return Strings.BusinessServerSummaryAutoChecking;
+                if (_client.BusinessFreshAutoWinner is { } winner)
+                    return Strings.BusinessServerSummaryAutoChecked(winner.Name, winner.LatencyMs);
+                return _client.IsBusinessAutoProblem
+                    ? Strings.BusinessServerSummaryAutoUnavailable : Strings.BusinessServerSummaryAutoPending;
+            }
+
+            if (_client.SelectedServer is not { } selected) return Strings.BusinessServerNotChecked;
+            if (_savedServer is { IsChecking: false } saved && ReferenceEquals(saved.Server, selected))
+            {
+                if (saved.IsBad)
+                    return Strings.BusinessServerSummaryManualWithTag(selected.DisplayName, Strings.BusinessServerNoReplyShort);
+                if (saved.ProbeStatus is ServerProbeStatus.Ok or ServerProbeStatus.Slow)
+                    return Strings.BusinessServerSummaryManualWithTag(selected.DisplayName, saved.PingText);
+            }
+            return Strings.BusinessServerSummaryManual(selected.DisplayName);
+        }
+    }
+
+    public string ServerPickerPlaceholder => _savedServer?.DisplayName ?? Strings.BusinessServer;
+    public string ServerPickerCaption => AutoSelectEnabled
+        ? Strings.BusinessServerPickerAutoCaption : Strings.BusinessServerPickerManualCaption;
+    public string ServerLocked => _client?.BusinessActiveServerName is { } name
+        ? Strings.BusinessServerLockedActive(name) : Strings.BusinessServerLocked;
+    public string ModeSummary => _client?.IsConnected == true
+        ? _client.BusinessActiveRoutingMode switch
+        {
+            "split" => Strings.BusinessSplit,
+            "full" => Strings.BusinessFullCompact,
+            _ => Strings.BusinessModeUnknown
+        }
+        : _client?.IsSplitTunnel == true ? Strings.BusinessSplit : Strings.BusinessFullCompact;
+    internal void RefreshModeSummary() => OnPropertyChanged(nameof(ModeSummary));
+    public string ModeLocked => Strings.BusinessModeLocked;
+    public string FullDescription => Strings.BusinessFullDescription;
+    public string SplitDescription => Strings.BusinessSplitDescription;
+    public string UpdateStopNote => Strings.BusinessUpdateStopNote;
+    public string ServerRefresh => _isServerChecking ? Strings.BusinessServerRefreshChecking : Strings.BusinessServerRefresh;
+    public bool CanTestServers => _hasProbeTargets && !_isServerChecking;
+
+    internal void UpdateServerCheck(bool hasTargets, bool isChecking)
+    {
+        if (_hasProbeTargets == hasTargets && _isServerChecking == isChecking) return;
+        _hasProbeTargets = hasTargets;
+        _isServerChecking = isChecking;
+        OnPropertyChanged(nameof(ServerRefresh));
+        OnPropertyChanged(nameof(CanTestServers));
+    }
+
     public string UpdateServers => Strings.BusinessUpdateServers;
     public string InstallUpdate => Strings.UpdateButton;
     public string LaterUpdate => Strings.UpdateButtonDismiss;
-    public string RepairTitle => Strings.BusinessRepairTitle;
-    public string RepairAnalyze => Strings.BusinessRepairAnalyze;
-    public string RepairConsent => Strings.BusinessRepairConsent;
-    public string RepairClose => Strings.BusinessRepairClose;
-    public string DiagnosticsHeader => Strings.BusinessDiagnosticsHeader;
+    public string RepairTitle => _client?.IsConnected == true
+        ? Strings.BusinessRepairConnectedTitle : Strings.BusinessRepairTitle;
     public string DiagnosticsCollect => Strings.BusinessDiagnosticsCollect;
     public string DiagnosticsSend => Strings.BusinessDiagnosticsSend;
     public string DiagnosticsCancel => Strings.BusinessDiagnosticsCancel;

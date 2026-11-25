@@ -172,6 +172,7 @@ public partial class MainWindowViewModel
     private void MarkConnectedViaService()
     {
         _displayExternalTunnel = true;
+        SetBusinessConnectedServerName(null);
         IsConnected = true;
         ConnectButtonText = Strings.StopVPN;
         RestoreConnectedStatus();
