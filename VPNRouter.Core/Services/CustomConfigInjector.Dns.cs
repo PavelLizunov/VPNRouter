@@ -152,18 +152,20 @@ public static partial class CustomConfigInjector
         foreach (var server in servers)
         {
             if (server is not JsonObject sObj) continue;
-            var detour = StjNodeHelpers.AsString(sObj["detour"]);
+            var tag = StjNodeHelpers.AsString(sObj["tag"]);
             var type = StjNodeHelpers.AsString(sObj["type"]);
+            if (type == "local" && IsSynthesizedLocalBootstrapTag(tag)) continue;
+            var detour = StjNodeHelpers.AsString(sObj["detour"]);
             var address = StjNodeHelpers.AsString(sObj["address"]);
             if (type == "fakeip" || address == "fakeip") continue;
             if (detour == "direct" || detour == "dns-direct" ||
                 string.IsNullOrEmpty(detour) && (type == "local" || type == "udp" || type == "dhcp"))
-                return StjNodeHelpers.AsString(sObj["tag"]);
+                return tag;
         }
         return null;
     }
 
-    private static void EnsureDefaultDomainResolver(JsonObject config)
+    private static void EnsureDefaultDomainResolver(JsonObject config, string? configuredLocalDns = null)
     {
         var route = config["route"] as JsonObject;
         if (route == null) return;
@@ -174,13 +176,13 @@ public static partial class CustomConfigInjector
         var localTag = FindLocalDnsTag(servers);
 
         if (string.IsNullOrEmpty(localTag))
-            localTag = EnsureLocalBootstrapDns(config, servers);
+            localTag = EnsureLocalBootstrapDns(config, servers, configuredLocalDns);
 
         if (!string.IsNullOrEmpty(localTag))
             route["default_domain_resolver"] = localTag;
     }
 
-    private static string EnsureLocalBootstrapDns(JsonObject config, JsonArray servers)
+    private static string EnsureLocalBootstrapDns(JsonObject config, JsonArray servers, string? configuredLocalDns = null)
     {
         const string tag = "vpnrouter-dns-direct";
         foreach (var s in servers)
@@ -190,15 +192,14 @@ public static partial class CustomConfigInjector
                     throw new InvalidOperationException($"DNS server tag '{tag}' collides with reserved bootstrap DNS tag. Choose another FakeIP server tag.");
                 return tag;
             }
-        servers.Add((JsonNode?)new JsonObject
-        {
-            ["tag"] = tag,
-            ["type"] = "https",
-            ["server"] = "8.8.8.8",
-            ["path"] = "/dns-query",
-            ["detour"] = "dns-direct",
-        });
-        EnsureDnsDirectOutbound(config);
+        var resolved = ConfigGenerator.BuildLocalDnsServer(configuredLocalDns, out var bootstrap, tag);
+        var entry = new JsonObject { ["tag"] = tag };
+        StampLocalDnsObject(entry, resolved, includeDetour: true);
+        servers.Add((JsonNode?)entry);
+        if (bootstrap != null)
+            entry["domain_resolver"] = EnsureLocalBootstrapTag(servers);
+        if (resolved.Detour == "dns-direct")
+            EnsureDnsDirectOutbound(config);
         return tag;
     }
 
