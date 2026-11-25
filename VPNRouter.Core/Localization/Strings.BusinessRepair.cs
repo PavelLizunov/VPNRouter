@@ -3,18 +3,18 @@ namespace VPNRouter.Core.Localization;
 public static partial class Strings
 {
     public static string BusinessRepairTitle => Ru ? "Исправить подключение с DeepSeek" : "Fix connection with DeepSeek";
-    public static string BusinessRepairAnalyze => Ru ? "Отправить отчёт в DeepSeek" : "Send report for DeepSeek analysis";
+    public static string BusinessRepairAnalyze => Ru ? "Отправить на разбор" : "Send for analysis";
     public static string BusinessRepairConnect => Ru ? "Проверить серверы и подключиться" : "Test servers and connect";
     public static string BusinessRepairClose => Ru ? "Закрыть" : "Close";
     public static string BusinessRepairConsent => Ru
-        ? "Для разбора DeepSeek клиент отправит свежий отчёт в поддержку вашей компании. В нём есть имена компьютера и пользователя Windows. В журналах могут быть адреса и названия приложений."
-        : "For DeepSeek analysis, the client will send a fresh report to your company’s support service. It includes the computer and Windows user names. Logs may contain addresses and app names.";
+        ? "DeepSeek разберёт свежий отчёт в поддержке компании. В нём есть имена ПК и пользователя Windows, возможны адреса и названия приложений."
+        : "Send a fresh report to company support for DeepSeek analysis. It includes your PC and Windows user names. Logs may contain addresses and app names.";
     public static string BusinessRepairLocalOnly => Ru
         ? "В этой сборке отправка в поддержку не настроена. Доступна локальная проверка серверов."
         : "Support upload is not configured for this build. You can test servers locally.";
     public static string BusinessRepairPlan => Ru
-        ? "Клиент может проверить корпоративные профили запросом через VPN и подключиться через работающий сервер. Для этого отправка отчёта не требуется."
-        : "The client can test the company profiles with a request through the VPN and connect through a working server. Uploading a report is optional.";
+        ? "Можно проверить серверы и подключиться локально, без отправки отчёта."
+        : "Test locally and connect through a working server. This action sends no report.";
     public static string BusinessRepairActive => Ru
         ? "VPN подключён. Чтобы попробовать другой сервер, сначала отключитесь."
         : "VPN is connected. Disconnect first to try another server.";

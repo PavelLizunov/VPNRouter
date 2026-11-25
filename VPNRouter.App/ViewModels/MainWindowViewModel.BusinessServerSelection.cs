@@ -135,7 +135,9 @@ public partial class MainWindowViewModel
     internal IReadOnlyDictionary<string, ServerProbeResult>? GetBusinessAutoPickerResults()
     {
         var outcome = _businessAutoCachedOutcome;
-        if (outcome == null) return null;
+        if (outcome == null ||
+            DateTimeOffset.UtcNow - _businessAutoCachedAt >= BusinessAutoResultTtl)
+            return null;
         return outcome.Probes
             .GroupBy(probe => probe.Entry.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key,

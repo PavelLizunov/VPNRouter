@@ -1,3 +1,4 @@
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
@@ -39,24 +40,27 @@ public sealed class BusinessPinnedServerConfigTests
         Assert.Equal(443, active.Port);
 
         var config = ConfigGenerator.Generate(new Profile(), [], submitted);
-        BusinessDefaults.ApplyDns(config, submitted.App.CustomRules);
-        BusinessDefaults.ApplyDomainTransports(config, false, false, false);
-        ConfigGenerator.ApplyBusinessPortal(config, submitted);
+        if (!ProductEdition.IsBusiness)
+        {
+            BusinessDefaults.ApplyDns(config, submitted.App.CustomRules);
+            BusinessDefaults.ApplyDomainTransports(config, false, false, false);
+            ConfigGenerator.ApplyBusinessPortal(config, submitted);
+        }
 
-        var proxy = Assert.Single(config.Outbounds.Where(outbound => outbound.Tag == "proxy"));
+        var proxy = Assert.Single(config.Outbounds, outbound => outbound.Tag == "proxy");
         Assert.Equal("192.0.2.1", proxy.Server);
         Assert.Equal(443, proxy.ServerPort);
         Assert.Null(proxy.Flow);
         Assert.DoesNotContain(config.Outbounds, outbound => outbound.Tag == "proxy-udp");
         Assert.DoesNotContain(config.Outbounds, outbound => outbound.ServerPort == 2443);
 
-        var portal = Assert.Single(config.Outbounds
-            .Where(outbound => outbound.Tag == ConfigGenerator.BusinessPortalOutbound));
+        var portal = Assert.Single(config.Outbounds,
+            outbound => outbound.Tag == ConfigGenerator.BusinessPortalOutbound);
         Assert.Equal("192.0.2.1", portal.Server);
         Assert.Equal(443, portal.ServerPort);
         Assert.Equal("business-portal",
-            Assert.Single(config.Dns.Servers
-                .Where(dns => dns.Tag == ConfigGenerator.BusinessPortalDns)).Detour);
+            Assert.Single(config.Dns.Servers,
+                dns => dns.Tag == ConfigGenerator.BusinessPortalDns).Detour);
         Assert.Contains(config.Route.Rules, rule =>
             rule.Outbound == ConfigGenerator.BusinessPortalOutbound &&
             rule.DomainSuffix?.Contains(BusinessPolicyDomains.PortalDomain) == true);

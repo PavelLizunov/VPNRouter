@@ -36,7 +36,7 @@ public sealed class BusinessConnectionRepairTests
     [AvaloniaFact]
     public async Task HomeButtonOpensConsentAndFreshAnalysisNeverConnectsUntilConfirmed()
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+        using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
         var diagnostics = new Diagnostics();
         var starts = 0;
         BusinessServicesViewModel? services = null;
@@ -79,7 +79,7 @@ public sealed class BusinessConnectionRepairTests
     [InlineData(true)]
     public void NarrowWindowKeepsRepairUnderConnect(bool expand)
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+        using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
         var window = new BusinessWindow(static (_, _) => Task.FromResult(ServerProbeResult.Unknown),
             (model, changed) => new(model, SupportOnly(), new BusinessClientHttp(), changed, new Diagnostics()))
             { Width = 360, DataContext = vm };
@@ -104,7 +104,7 @@ public sealed class BusinessConnectionRepairTests
     [InlineData(false)]
     public async Task ActiveTunnelOrLateAnalysisCannotStartARepair(bool initiallyConnected)
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+        using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
         vm.IsConnected = initiallyConnected;
         var diagnostics = new Diagnostics { Reply = new(TaskCreationOptions.RunContinuationsAsynchronously) };
         using var services = new BusinessServicesViewModel(vm, SupportOnly(), new BusinessClientHttp(), () => { },
@@ -125,7 +125,7 @@ public sealed class BusinessConnectionRepairTests
     [AvaloniaFact]
     public async Task LocalRepairWorksWithoutAnAnalysisEndpointAndReportsFailure()
     {
-        using var vm = new MainWindowViewModel(new InMemorySettingsStore());
+        using var vm = new MainWindowViewModel(new InMemorySettingsStore(), null, null, null, businessBootstrap: (_, _) => null);
         var diagnostics = new Diagnostics();
         var attempts = 0;
         using var services = new BusinessServicesViewModel(vm, BusinessClientConfiguration.Empty,

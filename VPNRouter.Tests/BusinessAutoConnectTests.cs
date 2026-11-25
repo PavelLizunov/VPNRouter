@@ -1,7 +1,10 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
+using VPNRouter.App.ViewModels.Internals;
+using VPNRouter.App.Views;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -28,7 +31,37 @@ public sealed class BusinessAutoConnectTests
             ? BusinessServerSelectionMode.Automatic
             : BusinessServerSelectionMode.Manual;
         store.Save(settings, AppPaths.ConfigYamlPath);
-        return new MainWindowViewModel(store);
+        return new MainWindowViewModel(store, null, null, null,
+            businessBootstrap: static (_, _) => null)
+        {
+            ExternalTunnelOwned = static () => false,
+        };
+    }
+
+    [AvaloniaFact]
+    public async Task Picker_UsesTheDeepVerifierAndShowsItsHttpLatency()
+    {
+        using var vm = CreateVm(out _, automatic: false);
+        var calls = 0;
+        vm.BusinessServerVerifier = (entry, pool, _) =>
+        {
+            Interlocked.Increment(ref calls);
+            Assert.Contains(pool, server => ReferenceEquals(server, entry));
+            return Task.FromResult(Ok(42));
+        };
+        var window = new BusinessWindow { DataContext = vm };
+        window.Show();
+        try
+        {
+            await window.RefreshBusinessServersAsync();
+            var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
+            var choices = selector.Items.Cast<BusinessServerChoiceViewModel>().ToArray();
+            Assert.Equal(2, calls);
+            Assert.All(choices, choice => Assert.Equal(
+                Strings.BusinessServerLatency(42), choice.PingText));
+            Assert.All(choices, choice => Assert.True(choice.IsGood));
+        }
+        finally { window.Close(); }
     }
 
     [AvaloniaFact]
@@ -178,10 +211,12 @@ public sealed class BusinessAutoConnectTests
 
         using var cts = new CancellationTokenSource();
         var hook = vm.ConnectVerifiedBusinessServerAsync(cts.Token);
-        await prepareStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await prepareStarted.Task.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
         cts.Cancel();
 
-        Assert.False(await hook.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.False(await hook.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken));
         Assert.Equal(0, starts);
         Assert.False(vm.IsConnecting);
     }
@@ -243,10 +278,12 @@ public sealed class BusinessAutoConnectTests
         };
 
         var hook = vm.ConnectVerifiedBusinessServerAsync(TestContext.Current.CancellationToken);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
         vm.SelectBusinessServer(vm.Servers[1]);
 
-        Assert.False(await hook.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.False(await hook.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken));
         Assert.Equal(0, starts);
         Assert.False(vm.IsConnecting);
     }

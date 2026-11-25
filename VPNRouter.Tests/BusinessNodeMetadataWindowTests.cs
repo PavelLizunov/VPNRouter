@@ -151,7 +151,8 @@ public sealed class BusinessNodeMetadataWindowTests
 
         Assert.Equal("NL", choice.CountryCode);
         Assert.NotNull(choice.CountryFlag);
-        Assert.Equal(Strings.BusinessServerNotChecked, choice.PingText);
+        Assert.False(choice.SupportsEndToEndProbe);
+        Assert.Equal(Strings.BusinessServerUnsupportedByCheck, choice.PingText);
         Assert.False(choice.IsGood || choice.IsWarning || choice.IsBad);
         Assert.NotEmpty(tcpProbes);
         Assert.DoesNotContain("192.0.2.53", tcpProbes);

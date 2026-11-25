@@ -327,9 +327,16 @@ public partial class MainWindowViewModel
         _isLoadingUI = true;
         try
         {
+            var currentName = SelectedServer?.Name;
             Servers.Clear();
             foreach (var row in rows) Servers.Add(row);
-            SelectedServer = rows.First(s => s.Name == next.ActiveServer);
+            var desiredName = !string.IsNullOrEmpty(currentName) &&
+                rows.Any(row => string.Equals(row.Name, currentName, StringComparison.OrdinalIgnoreCase))
+                    ? currentName
+                    : next.ActiveServer;
+            if (string.IsNullOrEmpty(desiredName)) desiredName = rows[0].Name;
+            SelectedServer = rows.First(row =>
+                string.Equals(row.Name, desiredName, StringComparison.OrdinalIgnoreCase));
         }
         finally { _isLoadingUI = false; }
         OnBusinessServersReplaced();

@@ -112,10 +112,12 @@ public sealed class BusinessAutoSelectionTests
             },
             cts.Token);
 
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => run.WaitAsync(TimeSpan.FromSeconds(5)));
+            () => run.WaitAsync(TimeSpan.FromSeconds(5),
+                TestContext.Current.CancellationToken));
     }
 
     [Fact]

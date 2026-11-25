@@ -258,9 +258,9 @@ public sealed class BusinessLanguageAndLayoutTests
                 Assert.True(unavailableRow.IsEffectivelyVisible);
                 Assert.Same(slow, slowRow.DataContext);
                 Assert.Same(unavailable, unavailableRow.DataContext);
-                AssertHealthTooltip(slowRow, index == 0 ? "Медленный ответ" : "Slow response",
+                AssertHealthTooltip(slowRow, index == 0 ? "Медленный VPN" : "Slow VPN",
                     fixture.Window.Texts.ConnectionStatus);
-                AssertHealthTooltip(unavailableRow, index == 0 ? "Нет ответа" : "No response",
+                AssertHealthTooltip(unavailableRow, index == 0 ? "Проверка не прошла" : "Check failed",
                     fixture.Window.Texts.ConnectionStatus);
                 Assert.Equal(index == 0 ? "930 мс" : "930 ms", slow.PingText);
                 Assert.True(slow.IsWarning);

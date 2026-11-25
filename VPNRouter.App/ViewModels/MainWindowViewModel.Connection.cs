@@ -212,6 +212,8 @@ public partial class MainWindowViewModel
     private async Task ToggleConnectionCoreAsync(AppSettings? submitted, bool useSimpleStart = true,
         CancellationToken ct = default)
     {
+        _pinnedStartRequested = false;
+        _pinnedStartOwnedByUs = false;
         if (ProductEdition.IsBusiness && UpdateVm.IsDownloading) return;
         if (_businessPolicyApplyActive)
         {
@@ -361,7 +363,7 @@ public partial class MainWindowViewModel
                 var skipConflictCheck = _skipVpnConflictThisSession;
                 var businessStart = startOverride == null && submitted != null && !useSimpleStart
                     ? BusinessConnectStart : null;
-                if (startOverride == null && businessStart == null)
+                if (startOverride == null && (businessStart == null || PrepareColdStartForTest != null))
                 {
                     try { await PrepareColdStartAsync(ct); }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
