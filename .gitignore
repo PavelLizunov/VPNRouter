@@ -53,6 +53,7 @@ tools/*
 # Fail-closed remote-only verifier for the windows-brat test VM (fixed target
 # 100.115.182.0 / WINBRAT; semantic UIA runs on brat, never the dev box).
 !tools/brat-verify.ps1
+!tools/verify-business-core.ps1
 !tools/brat-route-plan.ps1
 !tools/brat-stability.ps1
 !tools/post-ship-verify.ps1

@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http;
 using System.Threading.Channels;
 using VPNRouter.App.Services;
+using VPNRouter.Core;
+using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -13,14 +16,93 @@ public sealed class BusinessClientHttpTests
         using var client = new HttpClient(new Handler(async (request, ct) =>
         {
             Assert.Equal(HttpMethod.Get, request.Method);
-            Assert.Contains("VPNRouter", request.Headers.UserAgent.ToString());
-            Assert.Equal(VPNRouter.Core.Services.SubscriptionFetcher.GetSubscriptionHeaders(secure: true)["X-VPNRouter-Capabilities"],
-                Assert.Single(request.Headers.GetValues("X-VPNRouter-Capabilities")));
+            Assert.Equal($"VPNRouterBusiness/{AppVersion.Version}", request.Headers.UserAgent.ToString());
+            Assert.Equal(OperatingSystem.IsWindows(), request.Headers.Contains("X-VPNRouter-Platform"));
             await Task.Yield();
             return new(HttpStatusCode.OK) { Content = new StringContent(BusinessClientConfigurationTests.Four) };
         }));
         using var http = new BusinessClientHttp(client);
         Assert.Equal(BusinessClientConfigurationTests.Four, await http.FetchAsync(new("https://example.invalid/sub"), CancellationToken.None));
+    }
+
+    private const string Core2 = "sing-box version 1.14.4-vpnctl.2";
+    private const string Core3 = "sing-box version 1.14.4-vpnctl.3";
+
+    public static TheoryData<string?, string?, bool, string?, bool> EqualSizeCoreUpdate
+    {
+        get
+        {
+            var windowsBusiness = OperatingSystem.IsWindows() && ProductEdition.IsBusiness;
+            return new() { { Core3, Core2, windowsBusiness, windowsBusiness ? "1.14.4-vpnctl.3" : "1.14.4-vpnctl.2", true } };
+        }
+    }
+
+    [Theory]
+    [InlineData(Core3, null, true, "1.14.4-vpnctl.3", true)]
+    [InlineData(Core3 + "\nTags: with_awg", Core2, true, "1.14.4-vpnctl.3", true)]
+    [MemberData(nameof(EqualSizeCoreUpdate))]
+    [InlineData(Core3, Core3, false, "1.14.4-vpnctl.3", true)]
+    [InlineData(null, "sing-box version 1.14.4", false, "1.14.4", false)]
+    [InlineData(null, "sing-box version invalid value", false, null, false)]
+    [InlineData(null, null, false, null, false)]
+    public async Task WindowsSubscriptionAndPreconnectProbeUseTheNextStartupExecutable(
+        string? bundle, string? installed, bool selectBundle, string? version, bool dnstt)
+    {
+        var root = Directory.CreateTempSubdirectory("business-runtime-");
+        try
+        {
+            var deployment = new SingBoxDeployment(Path.Combine(root.FullName, "bundle", "sing-box.exe"),
+                Path.Combine(root.FullName, "bin", "sing-box.exe"));
+            Directory.CreateDirectory(Path.GetDirectoryName(deployment.Bundled)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(deployment.Deployed)!);
+            var nativeLibrary = Path.Combine(Path.GetDirectoryName(deployment.Bundled)!, "libcronet.dll");
+            File.WriteAllText(nativeLibrary, "synthetic library");
+            if (bundle != null) File.WriteAllText(deployment.Bundled, bundle);
+            if (installed != null) File.WriteAllText(deployment.Deployed, installed);
+            var expected = selectBundle ? deployment.Bundled : deployment.Deployed;
+            Assert.Equal(expected, AppPaths.SingBoxDeploymentSource(deployment.Bundled, deployment.Deployed));
+
+            string? inspected = null;
+            string ReadVersion(string path)
+            {
+                inspected = path;
+                return File.ReadAllText(path);
+            }
+            using var client = new HttpClient(new Handler((request, _) =>
+            {
+                Assert.Equal($"VPNRouterBusiness/{AppVersion.Version}", request.Headers.UserAgent.ToString());
+                Assert.Equal("windows", Assert.Single(request.Headers.GetValues("X-VPNRouter-Platform")));
+                Assert.Equal(version, request.Headers.TryGetValues("X-VPNRouter-Core-Version", out var values)
+                    ? Assert.Single(values) : null);
+                Assert.Equal(dnstt ? "detour-v1, dnstt-v1" : "detour-v1",
+                    Assert.Single(request.Headers.GetValues("X-VPNRouter-Capabilities")));
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                    { Content = new StringContent(BusinessClientConfigurationTests.Three) });
+            }));
+            using var http = new BusinessClientHttp(client, subscriptionRuntime: () =>
+                (true, SingBoxFeatures.ReadDesktopFeatures(deployment, ReadVersion).Version));
+            var ct = TestContext.Current.CancellationToken;
+            await http.FetchAsync(new("https://example.invalid/api/v1/app/config/pilot"), ct);
+
+            var runner = new FakeProcessRunner().OnStart(_ => true, _ => throw new IOException("Synthetic stop before networking"));
+            var verifier = new VlessDeepVerifier(Serilog.Log.Logger, deployment, runner);
+            var entry = VlessDeepVerifierTests.CleanVlessEntry();
+            var result = await verifier.VerifyAsync(entry, [entry], measureBandwidth: false, ct);
+            Assert.Equal(DeepVerifyFailurePhase.LocalSpawn, result.FailurePhase);
+            if (bundle == null && installed == null)
+            {
+                Assert.Null(inspected);
+                Assert.Empty(runner.StartCalls);
+            }
+            else
+            {
+                Assert.Equal(expected, inspected);
+                Assert.Equal(expected, Assert.Single(runner.StartCalls).ExecutablePath);
+                if (OperatingSystem.IsWindows())
+                    Assert.Equal("synthetic library", File.ReadAllText(Path.Combine(Path.GetDirectoryName(expected)!, "libcronet.dll")));
+            }
+        }
+        finally { root.Delete(recursive: true); }
     }
 
     [Theory]

@@ -79,13 +79,8 @@ public sealed class RuleSetFileTests
             File.Delete(bundle);
             Assert.Equal(deployed, VPNRouter.Core.AppPaths.SingBoxDeploymentSource(bundle, deployed));
 
-            // Match the shipped bundle size when the test runner includes one, as a deployed install would.
             var packaged = new FileInfo(VPNRouter.Core.AppPaths.BundledSingBoxExePath);
-            if (packaged.Exists)
-            {
-                using var installed = File.OpenWrite(deployed);
-                installed.SetLength(packaged.Length);
-            }
+            if (packaged.Exists) packaged.CopyTo(deployed, overwrite: true);
             var runner = new Fakes.FakeProcessRunner().OnRun(_ => true, new ProcessResult(0, "", "", TimeSpan.Zero, false));
             var sample = Path.Combine(dir.FullName, "candidate.srs");
             File.WriteAllBytes(sample, RuleSetSamples.KeywordRule());

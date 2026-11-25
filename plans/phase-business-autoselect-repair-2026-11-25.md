@@ -57,5 +57,22 @@ Exercise delayed success, cache fallback, and manual preference with synthetic
 Business fixtures. Verify exact-head build and focused regression results in
 PR CI. Revert this follow-up to restore the previous refresh scheduling.
 
+## Business Windows runtime
+
+The current Windows Business client contains sing-box 1.14.4-vpnctl.2. The
+operator assigns some nodes only to clients using exactly 1.14.4-vpnctl.3.
+Use that release in Business Windows packages and report the actual selected
+core version and Windows platform on the authenticated subscription request.
+Verify the official archive, the core in a credential-free Business package
+and selection of the correct feed in the separate vpnctl change. Use 2.51.1
+for the Business candidate so the updater can distinguish it from 2.51.0.
+
+The Business GET and preconnect verifier use startup's deployment selection.
+Windows Business compares the bytes of equal-length executables before
+choosing the deployed copy. Mock HTTP and process tests cover a same-size
+.2 to .3 update and an identical deployed .3, plus fresh, different-size,
+upstream, malformed and missing cores. On Windows the fixture also checks
+that the selected executable has its companion library.
+
 Static checks confirmed the Business build filter includes the new tests.
 The subscription tests still require an exact-head CI run.

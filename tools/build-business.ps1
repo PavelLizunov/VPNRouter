@@ -13,13 +13,15 @@ if (-not (Test-Path $iscc)) { $iscc = 'C:\android-build\tools\innosetup\ISCC.exe
 if (-not (Test-Path $iscc)) { throw 'Required Inno Setup SDK missing; do not install it automatically.' }
 $version = [regex]::Match((Get-Content (Join-Path $root 'VPNRouter.Core\AppVersion.cs') -Raw), 'Version = "([^"]+)"').Groups[1].Value
 if (-not $version) { throw 'Source version missing.' }
+. (Join-Path $root 'packaging\windows\business-core.ps1')
 $priorEdition = $env:VPNRouterEdition
 $priorConnection = $env:BusinessConnectionFile
 try {
     $env:VPNRouterEdition = 'Business'
     $env:BusinessConnectionFile = (Resolve-Path -LiteralPath $ConnectionFile).Path
     # Same engine, .NET publishes, runtime payload and hash-verified dependencies.
-    & (Join-Path $root 'build.ps1') -Version $version
+    & (Join-Path $root 'build.ps1') -Version $version `
+        -SingBoxVersion $BusinessSingBoxVersion -SingBoxSha256 $BusinessSingBoxSha256
     if ($LASTEXITCODE -ne 0) { throw 'Business application build failed.' }
     $payload = Join-Path $OutputDir 'payload'
     New-Item -ItemType Directory -Force -Path $payload | Out-Null

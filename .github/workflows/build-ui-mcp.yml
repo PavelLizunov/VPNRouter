@@ -16,8 +16,11 @@ on:
       - 'packaging/windows/support/**'
       - 'packaging/business-support/**'
       - 'packaging/windows/business.iss'
+      - 'packaging/windows/business-core.ps1'
       - 'packaging/windows/business-update.md'
+      - 'tools/build-business.ps1'
       - 'tools/build-business-update.ps1'
+      - 'tools/verify-business-core.ps1'
       - 'VPNRouter.Tests/Business*.cs'
       - '.github/workflows/build-ui-mcp.yml'
   pull_request:
@@ -30,8 +33,11 @@ on:
       - 'packaging/windows/support/**'
       - 'packaging/business-support/**'
       - 'packaging/windows/business.iss'
+      - 'packaging/windows/business-core.ps1'
       - 'packaging/windows/business-update.md'
+      - 'tools/build-business.ps1'
       - 'tools/build-business-update.ps1'
+      - 'tools/verify-business-core.ps1'
       - 'VPNRouter.Tests/Business*.cs'
       - '.github/workflows/build-ui-mcp.yml'
   workflow_dispatch:
@@ -135,6 +141,11 @@ jobs:
           dotnet --list-sdks
           $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
           if (!(Test-Path $csc) -or $os.FreePhysicalMemory -lt 3MB -or $disk.Free -lt 8GB) { throw 'Windows support build preflight failed.' }
+      - name: Verify pinned Windows Business core artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tools/verify-business-core.ps1
       - name: Build shared Release solution
         run: dotnet build VPNRouter.sln -c Release
       - name: Business policy and isolated UI checks

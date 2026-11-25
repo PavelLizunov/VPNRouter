@@ -19,6 +19,7 @@ if ((Test-Path -LiteralPath $output) -and @(Get-ChildItem -LiteralPath $output -
     throw 'OutputDir must be a new or empty task-owned directory.'
 }
 
+. (Join-Path $root 'packaging\windows\business-core.ps1')
 $priorEdition = $env:VPNRouterEdition
 $priorShared = $env:BusinessSharedUpdate
 $priorConnection = $env:BusinessConnectionFile
@@ -27,7 +28,8 @@ try {
     $env:VPNRouterEdition = 'Business'
     $env:BusinessSharedUpdate = 'true'
     $env:BusinessConnectionFile = $null
-    & (Join-Path $root 'build.ps1') -Version $version
+    & (Join-Path $root 'build.ps1') -Version $version `
+        -SingBoxVersion $BusinessSingBoxVersion -SingBoxSha256 $BusinessSingBoxSha256
     if ($LASTEXITCODE -ne 0) { throw 'Shared Business application build failed.' }
 
     New-Item -ItemType Directory -Force -Path $output | Out-Null

@@ -25,21 +25,18 @@ public sealed class BusinessServerSelectionSubscriptionTests
     {
         using var fixture = new Fixture(manual: repair);
         var response = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        CancellationToken refreshToken = default;
-        using var services = fixture.CreateServices(ct =>
-        {
-            refreshToken = ct;
-            return response.Task;
-        }, NewServer);
-        services.SetVisible(true);
-        Assert.True(services.IsRefreshing);
-        Assert.Equal(1, fixture.Requests);
-
-        Task connect = repair
-            ? services.OpenRepairCommand.ExecuteAsync(null)
-            : fixture.Vm.ToggleConnectionCommand.ExecuteAsync(null);
+        using var services = fixture.CreateServices(_ => response.Task, NewServer);
+        Task connect;
         try
         {
+            services.SetVisible(true);
+            var refreshToken = await fixture.WaitForFirstRequestAsync();
+            Assert.True(services.IsRefreshing);
+            Assert.Equal(1, fixture.Requests);
+
+            connect = repair
+                ? services.OpenRepairCommand.ExecuteAsync(null)
+                : fixture.Vm.ToggleConnectionCommand.ExecuteAsync(null);
             Assert.True(fixture.Vm.IsConnecting);
             Assert.False(connect.IsCompleted);
             Assert.False(refreshToken.IsCancellationRequested);
@@ -77,7 +74,11 @@ public sealed class BusinessServerSelectionSubscriptionTests
             "http error" => Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)),
             _ => Task.FromResult(Response(BusinessClientConfigurationTests.Three + "\ninvalid row")),
         }, CachedServer);
-        if (joinInFlight) services.SetVisible(true);
+        if (joinInFlight)
+        {
+            services.SetVisible(true);
+            await fixture.WaitForFirstRequestAsync();
+        }
 
         var connect = fixture.Vm.ToggleConnectionCommand.ExecuteAsync(null);
         if (joinInFlight) pending.SetException(new HttpRequestException("synthetic offline"));
@@ -135,9 +136,10 @@ public sealed class BusinessServerSelectionSubscriptionTests
         var response = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var services = fixture.CreateServices(_ => response.Task, NewServer);
         services.SetVisible(true);
-        var repair = services.OpenRepairCommand.ExecuteAsync(null);
         try
         {
+            await fixture.WaitForFirstRequestAsync();
+            var repair = services.OpenRepairCommand.ExecuteAsync(null);
             Assert.True(fixture.Vm.IsConnecting);
             services.CloseRepairCommand.Execute(null);
             await repair.WaitAsync(TestTimeout);
@@ -161,9 +163,13 @@ public sealed class BusinessServerSelectionSubscriptionTests
         var response = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var services = fixture.CreateServices(_ => response.Task, NewServer);
         var connect = fixture.Vm.ToggleConnectionCommand.ExecuteAsync(null);
-        fixture.Vm.ExternalTunnelOwned = static () => true;
-        fixture.Vm.AdoptExternalTunnelForTest = static () => false;
-        response.SetResult(Response(BusinessClientConfigurationTests.Four));
+        try
+        {
+            await fixture.WaitForFirstRequestAsync();
+            fixture.Vm.ExternalTunnelOwned = static () => true;
+            fixture.Vm.AdoptExternalTunnelForTest = static () => false;
+        }
+        finally { response.TrySetResult(Response(BusinessClientConfigurationTests.Four)); }
 
         await connect.WaitAsync(TestTimeout);
         Assert.Equal(1, fixture.Requests);
@@ -238,12 +244,15 @@ public sealed class BusinessServerSelectionSubscriptionTests
         private readonly InMemorySettingsStore _store = new();
         private readonly BusinessClientConfiguration _configuration =
             BusinessClientConfiguration.Parse(BusinessClientConfigurationTests.Bundle());
+        private readonly TaskCompletionSource<CancellationToken> _firstRequest =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         private HttpClient? _client;
+        private int _requests;
 
         internal MainWindowViewModel Vm { get; }
         internal AppSettings Saved => _store.Load(AppPaths.ConfigYamlPath);
         internal string SourceHash => _configuration.SourceHash!;
-        internal int Requests { get; private set; }
+        internal int Requests => Volatile.Read(ref _requests);
         internal int PoolChanges { get; private set; }
         internal List<VlessServerEntry> Probed { get; } = [];
         internal List<AppSettings> Submitted { get; } = [];
@@ -287,8 +296,9 @@ public sealed class BusinessServerSelectionSubscriptionTests
             var config = configuration ?? _configuration;
             _client = new HttpClient(new BusinessClientHttpTests.Handler((request, ct) =>
             {
-                Requests++;
+                Interlocked.Increment(ref _requests);
                 Assert.Equal(config.Subscription, request.RequestUri);
+                _firstRequest.TrySetResult(ct);
                 return fetch(ct);
             }));
             Vm.BusinessServerVerifier = (entry, _, _) =>
@@ -298,9 +308,11 @@ public sealed class BusinessServerSelectionSubscriptionTests
                     ? new DeepVerifyResult(true, 25, null, null)
                     : DeepVerifyResult.Failed("fixture rejected", DeepVerifyFailurePhase.ProxiedHttp));
             };
-            return new BusinessServicesViewModel(Vm, config, new BusinessClientHttp(_client), () => PoolChanges++,
-                timeProvider: timeProvider);
+            var http = new BusinessClientHttp(_client, subscriptionRuntime: static () => (false, null));
+            return new BusinessServicesViewModel(Vm, config, http, () => PoolChanges++, timeProvider: timeProvider);
         }
+
+        internal Task<CancellationToken> WaitForFirstRequestAsync() => _firstRequest.Task.WaitAsync(TestTimeout);
 
         public void Dispose()
         {

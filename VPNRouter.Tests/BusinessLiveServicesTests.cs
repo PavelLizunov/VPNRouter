@@ -77,8 +77,13 @@ public sealed class BusinessLiveServicesTests
         using var vm = CreateVm(out _);
         var requests = 0; var changed = 0;
         var diagnostics = new FakeDiagnostics();
-        using var client = Client((_, _) => { requests++; return Task.FromResult(Response(BusinessClientConfigurationTests.Four)); });
-        using var services = new BusinessServicesViewModel(vm, Configuration(), new(client), () => changed++, diagnostics);
+        using var client = Client((_, _) =>
+        {
+            Interlocked.Increment(ref requests);
+            return Task.FromResult(Response(BusinessClientConfigurationTests.Four));
+        });
+        using var services = new BusinessServicesViewModel(vm, Configuration(), SubscriptionHttp(client),
+            () => changed++, diagnostics);
         Assert.Equal(0, requests);
         services.SetVisible(true);
         await Idle(services);
@@ -98,16 +103,25 @@ public sealed class BusinessLiveServicesTests
     {
         using var vm = CreateVm(out var store);
         var gate = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        CancellationToken observed = default;
-        using var client = Client((_, ct) => { observed = ct; return gate.Task; });
+        var entered = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var client = Client((_, ct) =>
+        {
+            entered.TrySetResult(ct);
+            return gate.Task;
+        });
         var changes = 0;
-        using var services = new BusinessServicesViewModel(vm, Configuration(), new(client), () => changes++, new FakeDiagnostics());
-        services.SetVisible(true);
-        Assert.True(services.IsRefreshing);
+        using var services = new BusinessServicesViewModel(vm, Configuration(), SubscriptionHttp(client),
+            () => changes++, new FakeDiagnostics());
         var before = store.SaveCount;
-        if (hide) services.SetVisible(false); else vm.IsConnecting = true;
-        Assert.True(observed.IsCancellationRequested);
-        gate.SetResult(Response(BusinessClientConfigurationTests.Four));
+        services.SetVisible(true);
+        try
+        {
+            var observed = await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(services.IsRefreshing);
+            if (hide) services.SetVisible(false); else vm.IsConnecting = true;
+            Assert.True(observed.IsCancellationRequested);
+        }
+        finally { gate.TrySetResult(Response(BusinessClientConfigurationTests.Four)); }
         await Idle(services);
         Assert.Equal(0, changes); Assert.Equal(3, vm.Servers.Count);
         Assert.Equal(before, store.SaveCount);
@@ -121,7 +135,8 @@ public sealed class BusinessLiveServicesTests
         using var vm = CreateVm(out var store);
         var selected = vm.SelectedServer; var saves = store.SaveCount;
         using var client = Client((_, _) => Task.FromException<HttpResponseMessage>(new IOException("private URL and identity")));
-        using var services = new BusinessServicesViewModel(vm, Configuration(), new(client), () => Assert.Fail("Must not apply failed response"), new FakeDiagnostics());
+        using var services = new BusinessServicesViewModel(vm, Configuration(), SubscriptionHttp(client),
+            () => Assert.Fail("Must not apply failed response"), new FakeDiagnostics());
         services.SetVisible(true); await Idle(services);
         Assert.Same(selected, vm.SelectedServer); Assert.Equal(saves, store.SaveCount);
         Assert.Equal(Strings.BusinessSubscriptionFailed, services.RefreshStatus);
@@ -191,7 +206,8 @@ public sealed class BusinessLiveServicesTests
         using var client = Client((_, _) => Task.FromResult(Response(BusinessClientConfigurationTests.Four)));
         BusinessServicesViewModel? services = null;
         var window = new BusinessWindow(static (_, _) => Task.FromResult(ServerProbeResult.Unknown), (model, changed) =>
-            services = new(model, Configuration(), new(client), changed, new FakeDiagnostics())) { DataContext = vm, Width = width };
+            services = new(model, Configuration(), SubscriptionHttp(client), changed, new FakeDiagnostics()))
+            { DataContext = vm, Width = width };
         window.Show();
         try
         {
@@ -249,6 +265,9 @@ public sealed class BusinessLiveServicesTests
     private static BusinessClientConfiguration Configuration() => BusinessClientConfiguration.Parse(BusinessClientConfigurationTests.Bundle());
     private static HttpResponseMessage Response(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body) };
     private static HttpClient Client(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) => new(new BusinessClientHttpTests.Handler(send));
+    private static BusinessClientHttp SubscriptionHttp(HttpClient client) =>
+        new(client, subscriptionRuntime: static () => (false, null));
+
     private static async Task Idle(BusinessServicesViewModel services)
     {
         if (!services.IsRefreshing) return;

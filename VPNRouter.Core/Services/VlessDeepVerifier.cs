@@ -38,7 +38,7 @@ public sealed record DeepVerifyResult(
 public sealed class VlessDeepVerifier
 {
     private readonly ILogger _logger;
-    private readonly string _singBoxPath;
+    private readonly SingBoxDeployment _deployment;
     private readonly IProcessRunner _runner;
     private SingBoxRuntimePolicy? _policy;
 
@@ -58,22 +58,20 @@ public sealed class VlessDeepVerifier
     internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
 
     public VlessDeepVerifier(ILogger logger, IProcessRunner? runner = null)
-    {
-        _logger = logger;
-        _policy = SingBoxRuntimePolicy.Current;
-        _singBoxPath = _policy?.SelectedExecutablePath ?? AppPaths.SingBoxExePath;
-        _runner = runner ?? Runner;
-    }
+        : this(logger, AppPaths.DefaultSingBoxDeployment, runner) { }
 
     internal VlessDeepVerifier(ILogger logger, string singBoxPath, IProcessRunner? runner = null)
+        : this(logger, new SingBoxDeployment(singBoxPath, singBoxPath), runner) { }
+
+    internal VlessDeepVerifier(ILogger logger, SingBoxDeployment deployment, IProcessRunner? runner = null)
     {
         _logger = logger;
         _policy = SingBoxRuntimePolicy.Current;
-        _singBoxPath = _policy?.SelectedExecutablePath ?? singBoxPath;
+        _deployment = deployment;
         _runner = runner ?? Runner;
     }
 
-    public bool IsAvailable => EffectivePolicy != null ? EffectivePolicy.IsAvailable : File.Exists(_singBoxPath);
+    public bool IsAvailable => EffectivePolicy is { } policy ? policy.IsAvailable : File.Exists(_deployment.Source);
 
     public async Task VerifyBatchAsync(
         IReadOnlyList<VlessServerEntry> servers,
@@ -96,7 +94,7 @@ public sealed class VlessDeepVerifier
         }
         else if (!IsAvailable)
         {
-            _logger.Warning("[VlessDeepVerifier] sing-box not found at {Path}", _singBoxPath);
+            _logger.Warning("[VlessDeepVerifier] sing-box binary missing");
             foreach (var s in servers)
                 onOneDone(s, DeepVerifyResult.Failed("sing-box binary missing", DeepVerifyFailurePhase.LocalSpawn));
             return;
@@ -243,22 +241,24 @@ public sealed class VlessDeepVerifier
                 return DeepVerifyResult.Failed("sing-box runtime is unavailable or untrusted", DeepVerifyFailurePhase.LocalSpawn);
             }
         }
-        else if (!IsAvailable)
+        var executable = policy?.SelectedExecutablePath ?? _deployment.Source;
+        if (policy == null && !File.Exists(executable))
         {
             _logger.Warning("[VlessDeepVerifier] sing-box binary missing");
             return DeepVerifyResult.Failed("sing-box binary missing", DeepVerifyFailurePhase.LocalSpawn);
         }
 
-        if ("naive".Equals(entry.Protocol, StringComparison.OrdinalIgnoreCase))
+        var isNaive = "naive".Equals(entry.Protocol, StringComparison.OrdinalIgnoreCase);
+        if (isNaive && !ServerUriParser.NaiveRuntimeAvailable)
         {
-            if (!ServerUriParser.NaiveRuntimeAvailable)
-            {
-                _logger.Warning("[VlessDeepVerifier] naive unsupported on this platform (needs libcronet)");
-                return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
-                    DeepVerifyFailurePhase.UnsupportedByVerifier);
-            }
-            if (policy == null)
-                SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
+            _logger.Warning("[VlessDeepVerifier] naive unsupported on this platform (needs libcronet)");
+            return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
+                DeepVerifyFailurePhase.UnsupportedByVerifier);
+        }
+        if (policy == null && (isNaive || (pool != null && OperatingSystem.IsWindows())))
+        {
+            var libraryDirectory = pool == null ? AppContext.BaseDirectory : Path.GetDirectoryName(_deployment.Bundled);
+            SingBoxManager.TryColocateCronet(executable, libraryDirectory ?? AppContext.BaseDirectory, _logger);
         }
 
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
@@ -279,7 +279,7 @@ public sealed class VlessDeepVerifier
                 await writer.WriteAsync(configJson.AsMemory(), overallCts.Token);
 
             var request = new ProcessRequest(
-                ExecutablePath: policy?.SelectedExecutablePath ?? _singBoxPath,
+                ExecutablePath: executable,
                 Arguments: new[] { "run", "-c", tmpConfigPath },
                 CaptureStdout: true,
                 CaptureStderr: true);
