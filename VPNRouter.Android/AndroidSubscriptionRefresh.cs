@@ -594,12 +594,15 @@ internal static class AndroidSubscriptionRefresh
 
         if (!string.IsNullOrEmpty(current.DetourVia))
         {
-            var feed = subscriptions.FirstOrDefault(f => f is { Enabled: true, Servers: not null } &&
-                f.Id == origin.Id && f.Url == origin.Url && f.Servers.Contains(current));
+            var feed = origin.Id == null
+                ? null
+                : subscriptions.FirstOrDefault(f => f is { Enabled: true, Servers: not null } &&
+                    f.Id == origin.Id && f.Url == origin.Url && f.Servers.Contains(current));
+            // A manual hop + target paste keeps both rows in the standalone list.
+            var siblings = feed?.Servers ?? standalone;
             config.Servers = [current];
-            if (feed != null)
-                config.Servers.AddRange(feed.Servers.Where(row => string.IsNullOrEmpty(row.DetourVia) &&
-                    string.Equals(row.OutboundId, current.DetourVia, StringComparison.OrdinalIgnoreCase)));
+            config.Servers.AddRange(siblings.Where(row => string.IsNullOrEmpty(row.DetourVia) &&
+                string.Equals(row.OutboundId, current.DetourVia, StringComparison.OrdinalIgnoreCase)));
             config.ActiveServer = current.Name ?? string.Empty;
             return;
         }

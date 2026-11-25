@@ -129,6 +129,10 @@ public class AndroidSubscriptionRefreshTests
         Assert.Equal("exit", prefs.Read(AndroidSubscriptionRefresh.SelectedName));
         Assert.Equal("target-uri", prefs.Read(AndroidSubscriptionRefresh.ManualUri));
         Assert.Equal("manual", prefs.Read(AndroidSubscriptionRefresh.ConfigMode));
+
+        var resolved = Assert.IsType<VlessServerEntry>(prefs.Resolve("qr-command"));
+        var config = prefs.Prepare(resolved);
+        Assert.Contains(config.Servers, row => row.IsTurnRelay && row.OutboundId == "turnrelay-hop-1");
     }
 
     [Fact]
