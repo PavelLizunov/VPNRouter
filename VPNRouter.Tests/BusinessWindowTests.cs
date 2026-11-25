@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Automation;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.App.Views;

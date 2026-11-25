@@ -307,7 +307,7 @@ public partial class MainWindowViewModel
         if (!CanRefreshBusinessServers) return false;
         var entries = BusinessDefaults.ParseConnection(connection);
         var next = BusinessDefaults.CreateServerPool(entries, _settings.Vless,
-            requireSelectedDnstt: BusinessServerSelectionMode.IsManual(_settings.App.BusinessServerSelectionMode));
+            requireSelectedDnstt: !BusinessServerSelectionMode.IsAutomatic(_settings.App.BusinessServerSelectionMode));
         var rows = entries.Select(s => new ServerViewModel(s)).ToArray();
         ServerViewModel.RefreshUdpSiblingFlags(rows);
         ServerViewModel.RefreshProviderRiskFlags(rows);

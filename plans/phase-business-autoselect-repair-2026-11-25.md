@@ -56,3 +56,6 @@ guard while allowing an automatic pool to rotate its previous DNSTT entry.
 Exercise delayed success, cache fallback, and manual preference with synthetic
 Business fixtures. Verify exact-head build and focused regression results in
 PR CI. Revert this follow-up to restore the previous refresh scheduling.
+
+Static checks confirmed the Business build filter includes the new tests.
+The subscription tests still require an exact-head CI run.

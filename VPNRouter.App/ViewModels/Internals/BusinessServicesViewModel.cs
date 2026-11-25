@@ -211,6 +211,11 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
                 return;
             }
             _lastSuccessfulRefresh = _timeProvider.GetTimestamp();
+            if (_visible)
+            {
+                _timer.Stop();
+                _timer.Start();
+            }
             _poolChanged();
             _refreshedCount = _vm.GetBusinessServerChoices().Count;
             SetRefreshState(RefreshState.Updated);
