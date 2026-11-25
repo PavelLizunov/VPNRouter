@@ -456,7 +456,7 @@ public partial class MainWindowViewModel
     {
         IsSimpleMode = !IsSimpleMode;
         _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
-        SaveSettings();
+        SaveSettingsFromControls(preserveConfigMode: true);
     }
 
     [RelayCommand]
@@ -606,7 +606,7 @@ public partial class MainWindowViewModel
 
         var configMode = _settings.App.ConfigMode ?? "generated";
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
-        SmpInput = IsSubscribeMode
+        SmpInput = IsSubscribeMode && SimpleServerPreference == null
             ? _settings.App.Subscriptions.FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url))?.Url ?? string.Empty
             : string.Empty;
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
@@ -643,7 +643,7 @@ public partial class MainWindowViewModel
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
-        AutoSelectBestServer = _settings.Vless.AutoSelectBestServer;
+        AutoSelectBestServer = SimpleServerPreference == null && _settings.Vless.AutoSelectBestServer;
         ConnectionIntentIndex = IntentToIndex(_settings.App.ConnectionIntent);
         IsDnsLeakLockdownEnabled = _settings.App.DnsLeakLockdown;
 
@@ -870,18 +870,21 @@ public partial class MainWindowViewModel
         finally { IsApplying = false; }
     }
 
-    private void SaveSettings()
+    private void SaveSettings() => SaveSettingsFromControls();
+
+    private void SaveSettingsFromControls(bool preserveConfigMode = false)
     {
         if (_isLoadingUI) return;
 
         BackupConfigFile();
-        ReadSettingsFromControls();
+        ReadSettingsFromControls(preserveConfigMode);
         _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
-    private void ReadSettingsFromControls()
+    private void ReadSettingsFromControls(bool preserveConfigMode = false)
     {
-        ApplyConfigModeToSettings();
+        if (!preserveConfigMode) ApplyConfigModeToSettings();
+        if (!CanPickSimpleSubscriptionServer) _settings.App.SubscriptionPreference = null;
         ApplySubscriptionsToSettings();
         ApplyRoutingToSettings();
         ApplyOptionsToSettings();
@@ -906,7 +909,8 @@ public partial class MainWindowViewModel
         // On the home screen IsVlessMode/IsSubscribeMode are leftovers of the last Advanced tab, not a choice: saving a routing change
         // from there turned a subscription into "server link" (tester log 01:03:31). The home screen changes the mode only by
         // setting it itself (TryApplyVless / ApplySimpleSubscriptionInput).
-        if (IsSimpleMode && !string.IsNullOrWhiteSpace(_settings.App.ConfigMode))
+        if ((IsSimpleMode || (SimpleServerPreference != null && SelectedTabIndex is not (0 or 1))) &&
+            !string.IsNullOrWhiteSpace(_settings.App.ConfigMode))
             return;
 
         var wantsCustomMode = !IsSubscribeMode && !IsVlessMode;
@@ -939,10 +943,17 @@ public partial class MainWindowViewModel
     {
         _settings.App.Subscriptions = Subscriptions.Select(sv => sv.ToEntry()).ToList();
 
-        var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
-        _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
-        _settings.App.ActiveSubscriptionId = activeSub?.SubscriptionId;
-        _settings.App.ActiveSubscriptionRow = activeSub?.SubscriptionId != null ? SubscriptionEntry.RowKey(activeSub.SourceEntry) : null;
+        var activeSub = SelectedSubscriptionServer;
+        if (activeSub == null && SimpleServerPreference == null)
+            activeSub = SubscriptionServers.FirstOrDefault();
+        // A missing scoped row is still the user's choice. Keep its registration identity
+        // so a saved link cannot be interpreted as an explicit source switch on Connect.
+        if (activeSub != null || SimpleServerPreference == null)
+        {
+            _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
+            _settings.App.ActiveSubscriptionId = activeSub?.SubscriptionId;
+            _settings.App.ActiveSubscriptionRow = activeSub?.SubscriptionId != null ? SubscriptionEntry.RowKey(activeSub.SourceEntry) : null;
+        }
 
         _settings.App.SubscriptionUrl = string.Empty;
         _settings.App.SubscriptionServers = new();
@@ -1021,15 +1032,17 @@ public partial class MainWindowViewModel
         var activeVless = SelectedServer ?? Servers.FirstOrDefault();
         _settings.Vless.ActiveServer = activeVless?.Name ?? "";
         if (_settings.Vless.Servers.Count > 0)
-        {
-            var entry = activeVless?.ToEntry() ?? _settings.Vless.Servers[0];
-            _settings.Vless.Server = entry.Server;
-            _settings.Vless.Port = entry.Port;
-            _settings.Vless.Uuid = entry.Uuid;
-            _settings.Vless.Flow = entry.Flow;
-            _settings.Vless.Security = entry.Security;
-            _settings.Vless.Reality = entry.Reality;
-        }
+            SetLegacyManualServer(_settings.Vless, activeVless?.ToEntry() ?? _settings.Vless.Servers[0]);
+    }
+
+    private static void SetLegacyManualServer(VlessConfig config, VlessServerEntry entry)
+    {
+        config.Server = entry.Server;
+        config.Port = entry.Port;
+        config.Uuid = entry.Uuid;
+        config.Flow = entry.Flow;
+        config.Security = entry.Security;
+        config.Reality = entry.Reality;
     }
 
     private void ApplyCustomConfigsToSettings()

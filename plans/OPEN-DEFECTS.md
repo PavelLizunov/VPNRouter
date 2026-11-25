@@ -16,6 +16,42 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2** - Standard v2.51.1-r2 was cut before PR #728 reached main, so the release lacks the reviewed desktop server categories and country flags. Restored on the integration branch. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Windows preview `b85fc444` shows DNSTT under Everyday and multiple nested scroll regions in the shared server list. The DNSTT protocol falls through the classifier and the tree and group lists both limit their height inside the host viewport. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - The Simple header could label the active server with the next selection's manual/auto setting. Separate the accepted connection caption from the pending choice and keep the header chevron aligned with its action. Confirmed with the Windows headless capture at `fc9ac716`, resolved in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Reviewing the shared picker exposed two policy losses in desktop settings. An Advanced preferences save can use stale server-tab flags, and an enabled feed that loses its pinned row can be mistaken for a new link at the next Simple Connect. Preserve the scoped policy in both cases. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Hosted macOS PF acceptance assumed the kernel could not reuse a released token value. Both runs at `b4c21893` confirmed the release then failed the host record digest comparison. The fixture now verifies a kernel reference owned by a new pfctl PID. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P3** - At 360 px the Advanced Subscriptions intent controls narrowed the auto-select checkbox to a few letters per line. Stacked controls keep the checkbox label readable. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Saving a new link in Simple used the first-run feed replacement semantics and removed other registered subscriptions. Keep their entries and caches while choosing the new feed. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P3** - The initial Simple editor could lose keyboard focus while saving, lacked progress feedback, and failed to load stored links for mixed-case modes or after a direct-link restart. Keep focus and show progress, compare modes case-insensitively, and associate saved direct links with the exact row. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P3** - The Simple link save button had 2.77:1 light and 2.14:1 dark text contrast in Windows captures at `67987fae`. Use the existing solid-action brushes for 4.94:1 light and 9.23:1 dark. RESOLVED in source. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - The grouped picker could display another subscription server after the exact choice disappeared, and duplicate names could resolve the wrong protocol icon. Use the actual editor selection and label unavailable preferences. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - The grouped picker offered manual selection for unsupported runtime protocols and reported unavailable groups as empty subscriptions. Distinguish unsupported rows, manually selectable routes and unavailable categories. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [ ] **P2** - Grouped picker runtime capability checks can wait for a cold sing-box probe on macOS or Linux. Source risk from synchronous feature lookup; no cold-start duration measured. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P1** - The first grouped picker draft allowed auto selection of exact-only routes and could keep a preference after an explicit source change. Restricted category candidates, kept exact pins through unavailable states and clear the scope at explicit selection boundaries. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P1** - A future category name in the grouped picker draft could make YAML unreadable. Store a string and reject unknown categories at selection time. Hosted Linux run 45014407551 found that the generated YAML serializer also wrote the computed IsCategory property. Removed computed properties from the persisted model and retained round-trip coverage. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Simple-page picker labels could retain the previous language. Fixed in source by refreshing the labels after localization notifications have finished. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Opening application rules from Simple mode could replace the saved subscription mode with a stale Advanced tab's mode. The shortcut now restores the current mode flags and saves the view preference without recomputing the connection mode. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Simple desktop routing summary presented fixed example apps as the current policy in Windows 2.51.0-r1. Fixed in source with a route-mode description, a link to the actual application rules and a separate applied-mode line. See [Simple desktop home](phase-simple-home-server-picker-2026-11-22.md).
+
+- [x] **P2** - Desktop manual server selection left auto-select enabled, so the cross-host `urltest` group could choose another host every three minutes. Confirmed in Standard 2.51.0-r1 and fixed in source by saving explicit row activations with auto-select off. Review caught keyboard navigation disabling auto-select before confirmation. The follow-up uses Avalonia's row activation path and covers navigation, an active row and the service Apply path. See [manual server selection](phase-manual-server-selection-2026-11-22.md).
+
 - [ ] **P2** - SignPath currently stages two signed Windows ZIPs and their sidecars. Signed Standard draft preparation stops until an approved installer signing and provenance path exists. [PR #740](https://github.com/PavelLizunov/VPNRouter/pull/740).
 - [ ] **P2** - Standard release staging can start before its draft because the macOS, Linux and Android uploaders run on tag push. Unsigned Windows staging also relies on a separate maintainer-side build. The exact-tag dispatch and hosted Windows work are tracked in [faster Standard release preparation](phase-release-fast-flow-2026-11-25.md).
 

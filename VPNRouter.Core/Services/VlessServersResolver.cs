@@ -17,6 +17,18 @@ public static class VlessServersResolver
             .Where(s => !string.IsNullOrWhiteSpace(s?.Server) && s.Server != "your.server.com")
             .ToList();
 
+        if (SubscriptionServerPreference.For(settings.App) is { } preference)
+        {
+            settings.Vless.Servers = subscriptionAggregated;
+            if (preference.Preferred(settings.App) is not { } chosen) return [];
+
+            settings.App.ActiveSubscriptionId = chosen.Feed.Id;
+            settings.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(chosen.Server);
+            settings.App.ActiveSubscriptionServer = settings.Vless.ActiveServer = chosen.Server.Name;
+            PrioritizeSelectedRow(settings, subscriptionAggregated);
+            return subscriptionAggregated;
+        }
+
         var hasActiveSubscriptionServers = subscriptionAggregated.Count > 0;
 
         var activeEntry = (settings.Vless.Servers ?? new())
@@ -111,8 +123,22 @@ public static class VlessServersResolver
     internal static bool IsPlaceholderEntry(VlessServerEntry entry) =>
         PlaceholderDefense.LayerA_ResolverScopeGuard.IsPlaceholderEntry(entry);
 
+    internal static List<VlessServerEntry> GetActiveServers(AppSettings settings)
+    {
+        var preference = SubscriptionServerPreference.For(settings.App);
+        if (preference == null) return settings.Vless?.GetActiveServers() ?? [];
+        if (preference.Preferred(settings.App) is not { } chosen) return [];
+
+        // Select one exit per connection. Naive UDP pairing can still use the full resolved pool.
+        return VlessConfig.WithRequiredHop(chosen.Server, chosen.Feed.Servers);
+    }
+
     public static string? DescribeEmptyReason(AppSettings settings)
     {
+        if (SubscriptionServerPreference.For(settings.App) is { } preference &&
+            preference.Preferred(settings.App) == null)
+            return Localization.Strings.SmpSelectionUnavailable;
+
         var configMode = (settings.App.ConfigMode ?? "generated").Trim();
         var isSubscribe = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
 

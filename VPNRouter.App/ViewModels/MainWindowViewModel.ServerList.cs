@@ -243,34 +243,82 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
-    partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value)
+    private bool _updatingServerPickerSelection;
+
+    internal bool SelectServerFromPicker(Func<bool> select, Func<ServerViewModel?> getSelection)
     {
-        if (_isLoadingUI || value == null || _isReconnecting) return;
-        if (value.SubscriptionId is { } id && (IsSubscribeMode || _settings.App.ConfigMode == "subscribe") &&
-            Subscriptions.FirstOrDefault(s => s.Id == id) is { } source)
-            SmpInput = source.Url;
-        if (value.IsActive) return;
-        _logger.Information(
-            "[VM] Subscription server selected (connected={Connected}, subscribeMode={SubscribeMode}, connecting={Connecting})",
-            IsConnected, IsSubscribeMode, IsConnecting);
-        if (IsConnected && IsSubscribeMode && !IsConnecting)
+        if (_isLoadingUI || (!AutoSelectBestServer && SimpleServerPreference == null)) return select();
+
+        // Let the picker update its binding before reconnect captures the choice.
+        ServerViewModel server;
+        bool subscription;
+        _updatingServerPickerSelection = true;
+        try
         {
-            if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }
-            _ = ReconnectAsync(value.DisplayName, ReconnectIntent.Subscription);
+            if (!select()) return false;
+            if (getSelection() is not { } selected) return true;
+            server = selected;
+            subscription = SubscriptionServers.Contains(server);
+            if (subscription) SelectedSubscriptionServer = server;
+            else SelectedServer = server;
         }
+        finally { _updatingServerPickerSelection = false; }
+
+        _settings.App.SubscriptionPreference = null;
+        HandleServerSelection(server, subscription, disableAutoSelect: true);
+        RaiseSimpleHomeProps();
+        return true;
     }
 
-    partial void OnSelectedServerChanged(ServerViewModel? value)
+    partial void OnAutoSelectBestServerChanged(bool value)
     {
-        if (_isLoadingUI || value == null || _isReconnecting) return;
+        if (_isLoadingUI || SimpleServerPreference == null) return;
+        _settings.App.SubscriptionPreference = null;
+        RaiseSimpleHomeProps();
+    }
 
-        _logger.Information(
-            "[VM] Manual server selected (connected={Connected}, vlessMode={VlessMode}, subscribeMode={SubscribeMode}, connecting={Connecting})",
-            IsConnected, IsVlessMode, IsSubscribeMode, IsConnecting);
-        if (IsConnected && IsVlessMode && !IsConnecting)
+    partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value) =>
+        HandleServerSelection(value, subscription: true);
+
+    partial void OnSelectedServerChanged(ServerViewModel? value) =>
+        HandleServerSelection(value, subscription: false);
+
+    private void HandleServerSelection(ServerViewModel? value, bool subscription, bool disableAutoSelect = false)
+    {
+        if (_isLoadingUI || _updatingServerPickerSelection || value == null ||
+            (_isReconnecting && !disableAutoSelect)) return;
+
+        if (subscription && value.SubscriptionId is { } id &&
+            (IsSubscribeMode || _settings.App.ConfigMode == "subscribe") &&
+            Subscriptions.FirstOrDefault(s => s.Id == id) is { } source)
+            SmpInput = source.Url;
+        if (subscription && value.IsActive && !disableAutoSelect) return;
+        if (disableAutoSelect) AutoSelectBestServer = false;
+
+        if (subscription)
+            _logger.Information(
+                "[VM] Subscription server selected (connected={Connected}, subscribeMode={SubscribeMode}, connecting={Connecting})",
+                IsConnected, IsSubscribeMode, IsConnecting);
+        else
+            _logger.Information(
+                "[VM] Manual server selected (connected={Connected}, vlessMode={VlessMode}, subscribeMode={SubscribeMode}, connecting={Connecting})",
+                IsConnected, IsVlessMode, IsSubscribeMode, IsConnecting);
+        if (IsConnected && (subscription ? IsSubscribeMode : IsVlessMode) &&
+            !IsConnecting && (!disableAutoSelect || !IsApplying) && !_isReconnecting)
         {
             if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }
-            _ = ReconnectAsync(value.DisplayName, ReconnectIntent.ManualVless);
+            _ = ReconnectAsync(value.DisplayName,
+                subscription ? ReconnectIntent.Subscription : ReconnectIntent.ManualVless);
+        }
+        else if (disableAutoSelect)
+        {
+            MarkRoutingSettingsChanged();
+            try { SaveSettings(); }
+            catch (Exception ex)
+            {
+                _logger.Warning("[VM] Manual server selection save failed ({ErrorType})", ex.GetType().Name);
+                StatusText = Strings.ApplyFailed;
+            }
         }
     }
 

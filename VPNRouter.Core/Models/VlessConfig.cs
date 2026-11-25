@@ -77,17 +77,7 @@ public class VlessConfig
         active ??= all[0];
 
         if (!string.IsNullOrEmpty(active.DetourVia))
-        {
-            var upstreams = all.Where(s =>
-                string.IsNullOrEmpty(s.DetourVia) &&
-                !string.IsNullOrEmpty(s.OutboundId) &&
-                string.Equals(s.OutboundId, active.DetourVia, StringComparison.OrdinalIgnoreCase)).ToList();
-
-            if (upstreams.Count == 1)
-                return new List<VlessServerEntry> { active, upstreams[0] };
-
-            return new List<VlessServerEntry> { active };
-        }
+            return WithRequiredHop(active, all);
 
         if (active.Dnstt != null || active.RequiresSingleOutbound() ||
             (!AutoSelectBestServer && string.Equals(active.Protocol, "vmess", StringComparison.OrdinalIgnoreCase)))
@@ -99,6 +89,16 @@ public class VlessConfig
 
         var activeIp = active.Server;
         return all.Where(s => s.Server == activeIp && s.Dnstt == null && string.IsNullOrEmpty(s.DetourVia)).ToList();
+    }
+
+    internal static List<VlessServerEntry> WithRequiredHop(VlessServerEntry active, IEnumerable<VlessServerEntry> servers)
+    {
+        if (string.IsNullOrEmpty(active.DetourVia)) return [active];
+
+        var upstreams = servers.Where(server =>
+            string.IsNullOrEmpty(server.DetourVia) &&
+            string.Equals(server.OutboundId, active.DetourVia, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+        return upstreams.Count == 1 ? [active, upstreams[0]] : [active];
     }
 
     private List<VlessServerEntry> BuildAutoSelectPool(List<VlessServerEntry> all, VlessServerEntry active)

@@ -1,0 +1,12 @@
+IP geolocation by DB-IP.com
+DB-IP IP to Country Lite database, November 2026
+https://db-ip.com/db/download/ip-to-country-lite
+https://download.db-ip.com/free/dbip-country-lite-2026-11.csv.gz
+Creative Commons Attribution 4.0 International License
+https://creativecommons.org/licenses/by/4.0/
+
+Decompressed CSV SHA-1: e2061015c43ec91c94a12191a6a613279eb94c0c
+Compressed CSV SHA-256: e5c8459d638a272ece7f4d7cfa49dce18d91b4f403f6940ba9249bf0db3781fd
+VPNRouter splits the sorted CSV by address family, omits unknown ZZ ranges,
+and packs each first address, last address and two ASCII country-code bytes
+in network byte order. Rebuild with tools/icons/pack-country-ranges.py.

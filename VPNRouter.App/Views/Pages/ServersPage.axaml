@@ -44,19 +44,19 @@
             </Grid>
           </Border>
           <Panel>
-            <ListBox x:Name="ServerList"
+            <icons:ServerPickerListBox x:Name="ServerList"
                      Classes="server-list"
                      ItemsSource="{Binding Servers}"
                      SelectedItem="{Binding SelectedServer}"
                      ContextRequested="ServerList_ContextRequested"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ScrollViewer.VerticalScrollBarVisibility="Auto">
-              <ListBox.ItemsPanel>
+              <icons:ServerPickerListBox.ItemsPanel>
                 <ItemsPanelTemplate>
                   <VirtualizingStackPanel/>
                 </ItemsPanelTemplate>
-              </ListBox.ItemsPanel>
-              <ListBox.ItemTemplate>
+              </icons:ServerPickerListBox.ItemsPanel>
+              <icons:ServerPickerListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:ServerViewModel">
                   <Border Classes="server-row" Classes.active="{Binding IsActive}">
                     <Grid ColumnDefinitions="22,26,*,Auto,Auto,Auto" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="2">
@@ -119,8 +119,8 @@
                     </Grid>
                   </Border>
                 </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
+              </icons:ServerPickerListBox.ItemTemplate>
+            </icons:ServerPickerListBox>
 
             <StackPanel Classes="empty-state" IsVisible="{Binding !Servers.Count}">
               <Border Classes="empty-icon">

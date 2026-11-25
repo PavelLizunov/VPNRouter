@@ -29,6 +29,30 @@ public class YamlStaticContextRoundTripTests : IDisposable
     private string TempYamlPath() => Path.Combine(_tempDir, "config.yaml");
 
     [Fact]
+    public void UnknownSubscriptionCategorySurvivesYamlWithoutSelectingAnotherServer()
+    {
+        var settings = SettingsLoader.Parse("""
+schema_version: 8
+app:
+  config_mode: subscribe
+  subscription_preference:
+    category: FutureGroup
+  subscriptions:
+  - name: fixture
+    enabled: true
+    servers:
+    - name: daily
+      server: daily.invalid
+""");
+        SettingsLoader.Save(settings, TempYamlPath());
+        var loaded = SettingsLoader.Load(TempYamlPath());
+
+        Assert.Equal("FutureGroup", loaded.App.SubscriptionPreference?.CategoryName);
+        Assert.Single(loaded.App.Subscriptions);
+        Assert.Empty(VlessServersResolver.GetActiveServers(loaded));
+    }
+
+    [Fact]
     public void LegacyYaml_WithoutConnectionIntent_LoadsGeneralIntent()
     {
         var settings = SettingsLoader.Parse("""

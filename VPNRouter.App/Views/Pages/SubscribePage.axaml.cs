@@ -1,37 +1,14 @@
-using System.Linq;
 using Avalonia.Controls;
-using VPNRouter.App.ViewModels;
+using Avalonia.Markup.Xaml;
 
 namespace VPNRouter.App.Views.Pages;
 
 public partial class SubscribePage : UserControl
 {
-    private MainWindowViewModel? _subscribedVm;
-
     public SubscribePage()
     {
-        InitializeComponent();
-        DataContextChanged += OnDataContextChanged;
-    }
-
-    private void OnDataContextChanged(object? sender, System.EventArgs e)
-    {
-        if (_subscribedVm is not null)
-            _subscribedVm.ActiveServerChanged -= OnActiveServerChanged;
-        _subscribedVm = DataContext as MainWindowViewModel;
-        if (_subscribedVm is not null)
-            _subscribedVm.ActiveServerChanged += OnActiveServerChanged;
-    }
-
-    private void OnActiveServerChanged(ServerViewModel? active)
-    {
-        if (active == null) return;
-        var list = this.FindControl<ListBox>("SubList");
-        if (list == null || !list.Items.Cast<object?>().Contains(active)) return;
-
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            try { list.ScrollIntoView(active); } catch { }
-        });
+        AvaloniaXamlLoader.Load(this);
+        this.FindControl<SubscriptionServerPicker>("AdvancedPicker")!.LinkTransferred +=
+            this.FindControl<SubscriptionLinkEditor>("AdvancedLink")!.SetDraft;
     }
 }

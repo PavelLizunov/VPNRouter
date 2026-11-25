@@ -1,6 +1,7 @@
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using VPNRouter.App.Localization;
+using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using CoreStrings = VPNRouter.Core.Localization.Strings;
@@ -13,12 +14,16 @@ public partial class ServerViewModel : ViewModelBase
     internal VlessServerEntry SourceEntry => _originalEntry;
     internal string? SubscriptionId { get; init; }
 
-    [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Endpoint))]
+    [NotifyPropertyChangedFor(nameof(SimpleDisplayName), nameof(CountryCode), nameof(CountryFlag),
+        nameof(HasCountryFlag), nameof(CountryFlagTooltip), nameof(SimpleLocation))]
+    private string _name = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Endpoint), nameof(SimpleDisplayName), nameof(CountryCode),
+        nameof(CountryFlag), nameof(HasCountryFlag), nameof(CountryFlagTooltip), nameof(SimpleLocation))]
     private string _server = string.Empty;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Endpoint))]
+    [NotifyPropertyChangedFor(nameof(Endpoint), nameof(SimpleLocation))]
     private int _port = 443;
 
     public string Endpoint => Port > 0 ? $"{Server}:{Port}" : Server;
@@ -393,6 +398,16 @@ public partial class ServerViewModel : ViewModelBase
 
     public string DisplayName => string.IsNullOrEmpty(Name) ? Server : Name;
 
+    public string SimpleDisplayName => ServerCountryFlags.DisplayName(DisplayName);
+    public string CountryCode => ServerCountryFlags.Code(Name) is { Length: > 0 } explicitCode
+        ? explicitCode : BundledServerIpCountry.Code(Server);
+    public string CountryFlagTooltip => ServerCountryFlags.Code(Name) is { Length: > 0 } explicitCode
+        ? explicitCode : CoreStrings.SmpServerCountryByIp(CountryCode);
+    public string SimpleLocation => CountryCode is { Length: > 0 } country
+        ? $"{ServerCountryFlags.CountryName(country)} · {Endpoint}" : Endpoint;
+    public IImage? CountryFlag => ServerCountryFlags.Flag(CountryCode);
+    public bool HasCountryFlag => CountryFlag != null;
+
     private string ProtocolKey => (_originalEntry?.Awg != null)
         ? "amneziawg"
         : (_originalEntry?.IsDnsTunnel == true)
@@ -468,6 +483,9 @@ public partial class ServerViewModel : ViewModelBase
 
     /// <summary>What the server is good for; the lists show it as the coloured icon in front of the name.</summary>
     public ProtocolGroup ProtocolGroup => ProtocolGroups.Of(_originalEntry);
+
+    public bool CanSelectInSimpleMode => ConfigGenerator.IsServerRuntimeAvailable(_originalEntry) &&
+        (_originalEntry.Dnstt == null || SingBoxFeatures.DnsttAvailable);
 
     public string ProtocolUseCase => ProtocolGroup switch
     {

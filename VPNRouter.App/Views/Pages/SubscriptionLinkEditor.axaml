@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:icons="using:VPNRouter.App.Controls"
+             x:Class="VPNRouter.App.Views.Pages.SubscriptionLinkEditor"
+             x:CompileBindings="True"
+             x:DataType="vm:MainWindowViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="LineHeight" Value="16"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+
+        <Style Selector="Button.change, ToggleButton.change">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6,10,6"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.change:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         Button.change:pressed /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.change:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.change:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+
+    </UserControl.Styles>
+
+    <StackPanel Spacing="8">
+        <ToggleButton Name="SimpleLinkButton" Classes="change" HorizontalAlignment="Left" Click="ToggleLinkEditor">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <icons:Pictogram Id="link" Width="14" Height="14"/>
+                <TextBlock Name="SimpleLinkButtonLabel"/>
+            </StackPanel>
+        </ToggleButton>
+        <StackPanel Name="SimpleLinkEditor" IsVisible="{Binding #SimpleLinkButton.IsChecked, FallbackValue=False}"
+                    Spacing="8" KeyDown="OnLinkEditorKeyDown">
+            <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" TextWrapping="Wrap"/>
+            <TextBox Name="SimpleConfigLink" PlaceholderText="{Binding L_SmpInputWatermark}"
+                     AutomationProperties.Name="{Binding L_SmpInputLabel}"
+                     MinHeight="40" AcceptsReturn="False" CornerRadius="{StaticResource RadiusLg}"/>
+            <TextBlock Name="SimpleLinkError" Classes="hint" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite"
+                       Foreground="{DynamicResource DangerFgBrush}"
+                       IsVisible="{Binding #SimpleLinkError.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            <TextBlock Name="SimpleLinkProgress" Classes="hint" TextWrapping="Wrap"
+                       IsVisible="False" AutomationProperties.LiveSetting="Polite"/>
+            <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
+                <Button Name="SimpleCancelLink" Classes="change" Click="CancelLinkEdit"/>
+                <Button Name="SimpleSaveLink" Classes="solid" Click="SaveLink"
+                        Background="{DynamicResource AccentSolidBrush}"
+                        Foreground="{DynamicResource AccentOnSolidBrush}"/>
+            </WrapPanel>
+        </StackPanel>
+        <TextBlock Name="SimpleLinkNotice" Classes="hint" TextWrapping="Wrap"
+                   AutomationProperties.LiveSetting="Polite"
+                   IsVisible="{Binding #SimpleLinkNotice.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    </StackPanel>
+
+</UserControl>

@@ -19,6 +19,8 @@ demand or bundled with the installer, not statically linked into the managed cod
 | libbox.aar | sing-box gomobile binding (Android) | https://github.com/SagerNet/sing-box (experimental/libbox) | GPL-3.0 |
 | Zapret / winws | DPI bypass (Discord / YouTube) | https://github.com/Flowseal/zapret-discord-youtube , https://github.com/bol-van/zapret | see upstream repositories |
 | Telegram proxy (tg-ws-proxy) | Telegram proxy | fetched on demand from its upstream GitHub release (see `TgProxyUpdater`) | see upstream repository |
+| Country flags | Simple subscription picker | https://github.com/lipis/flag-icons/tree/v7.5.0 | MIT |
+| DB-IP IP to Country Lite (November 2026) | Local approximate country for literal server IP addresses | https://db-ip.com/db/download/ip-to-country-lite | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | GeoIP / geosite rule-sets | RU-bypass / routing | sing-box rule-sets + MaxMind GeoLite2 | respective upstream terms (e.g. MaxMind GeoLite2 EULA) |
 
 ## .NET / NuGet libraries

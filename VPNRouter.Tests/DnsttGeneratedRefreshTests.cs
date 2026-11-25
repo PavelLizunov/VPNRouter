@@ -256,6 +256,27 @@ public sealed class DnsttGeneratedRefreshTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task SimpleLinkSaveRejectsAnUnrelatedDnsttGrantAndKeepsExistingRows()
+    {
+        var original = Link(OldDomain, 'a');
+        var row = ServerUriParser.Parse(original);
+        var settings = GeneratedSettings(row, FeedEntry(Feed, ServerUriParser.Parse(original)));
+        settings.Vless.Servers.Add(ServerUriParser.Parse(Link(OtherDomain, 'c', "manual", "Manual")));
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store);
+
+        Assert.NotNull(await vm.SaveSimpleLinkAsync(Link(OtherDomain, 'd'), () => true));
+        Assert.Equal(OldDomain, Active(Recovery(store)).Dnstt!.Domain);
+        Assert.Null(await vm.SaveSimpleLinkAsync(original, () => true));
+
+        var saved = Recovery(store);
+        Assert.Equal(OldDomain, Active(saved).Dnstt!.Domain);
+        Assert.Equal(2, saved.Vless.Servers.Count);
+        Assert.Contains(saved.Vless.Servers, entry => entry.Name == "Manual");
+    }
+
+    [AvaloniaFact]
     public async Task PastedManualDnsttThatDoesNotMatchTheCacheIsImported()
     {
         var settings = GeneratedSettings(

@@ -619,10 +619,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var mode = _settings.App.ConfigMode ?? "generated";
         if (mode.Equals("custom", StringComparison.OrdinalIgnoreCase))
             return ((CustomConfigs.FirstOrDefault(c => c.IsActive) ?? SelectedCustomConfig ?? CustomConfigs.FirstOrDefault())?.Name, null);
-        var row = mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase)
-            ? SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault()
-            : SelectedServer ?? Servers.FirstOrDefault();
+        var row = EditorServerRow(mode);
         return (row?.DisplayName, row?.Server);
+    }
+
+    private ServerViewModel? EditorServerRow(string mode)
+    {
+        if (mode.Equals("custom", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!mode.Equals("subscribe", StringComparison.OrdinalIgnoreCase))
+            return SelectedServer ?? Servers.FirstOrDefault();
+        return SelectedSubscriptionServer ?? (SimpleServerPreference == null ? SubscriptionServers.FirstOrDefault() : null);
     }
 
     private string FormatRelativeTime(DateTime utcWhen)

@@ -1,5 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.Headless.XUnit;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
@@ -62,6 +65,8 @@ public class ProtocolGroupsTests
     [InlineData("ss", null, ProtocolGroup.Fallback)]
     [InlineData("shadowsocks", null, ProtocolGroup.Fallback)]
     [InlineData("dns-tunnel", null, ProtocolGroup.Emergency)]
+    [InlineData("dnstt", null, ProtocolGroup.Emergency)]
+    [InlineData("DNSTT", "ws", ProtocolGroup.Emergency)]
     [InlineData("VLESS", "XHTTP", ProtocolGroup.StealthWeb)]
     public void Of_MapsProtocolAndTransport(string protocol, string? transport, ProtocolGroup expected)
     {
@@ -78,6 +83,11 @@ public class ProtocolGroupsTests
         var dns = Entry("vless");
         dns.DnsDomain = "t.example";
         Assert.Equal(ProtocolGroup.Emergency, ProtocolGroups.Of(dns));
+
+        var managedDnstt = Entry("vless");
+        managedDnstt.Dnstt = new DnsttProfile();
+        Assert.Equal(ProtocolGroup.Emergency, ProtocolGroups.Of(managedDnstt));
+        Assert.False(SubscriptionServerPreference.CanAutoSelect(managedDnstt));
 
         Assert.Equal(ProtocolGroup.Daily, ProtocolGroups.Of(null));
     }
@@ -120,31 +130,45 @@ public class ProtocolGroupsTests
     }
 
     [AvaloniaFact]
-    public void SubscribeList_ShowsAColouredDiscPerServer()
+    public void SubscribeList_ShowsAColouredDiscForEachServerWithoutAFlag()
     {
         var app = Avalonia.Application.Current!;
         using var vm = new MainWindowViewModel(new InMemorySettingsStore());
-        var awg = Entry("amneziawg", null, "Finland AWG");
+        var awg = Entry("amneziawg", null, "awg-route");
         awg.Awg = new AwgConfig();
-        var dns = Entry("dns-tunnel", null, "Emergency DNS");
+        var dns = Entry("dns-tunnel", null, "emergency");
         dns.DnsDomain = "t.example";
         VlessServerEntry[] entries =
         [
-            Entry("vless", "tcp", "Netherlands Reality"), Entry("hysteria2", null, "Germany HY2"), awg,
-            Entry("vless", "xhttp", "Sweden XHTTP"), Entry("vless", "ws", "Poland WS"), Entry("naive", null, "Latvia Naive"),
-            Entry("ss", null, "Turkey SS"), dns,
+            Entry("vless", "tcp", "daily"), Entry("hysteria2", null, "voice"), awg,
+            Entry("vless", "xhttp", "stealth"), Entry("vless", "ws", "web-fallback"), Entry("naive", null, "web-only"),
+            Entry("ss", null, "fallback"), dns,
         ];
-        foreach (var entry in entries) vm.SubscriptionServers.Add(new ServerViewModel(entry));
+        for (var index = 0; index < entries.Length; ++index)
+        {
+            entries[index].Name = $"Test {index}: {entries[index].Name}";
+            vm.SubscriptionServers.Add(new ServerViewModel(entries[index]));
+        }
 
         var page = new SubscribePage { DataContext = vm };
         var window = new Window { Width = 520, Height = 900, Content = page };
         window.Bind(Window.BackgroundProperty, window.GetResourceObservable("SurfaceAppBrush"));
         window.Show();
-        var discs = page.GetVisualDescendants().OfType<ProtocolDisc>().ToList();
-        Assert.Equal(entries.Length, discs.Count);
-        Assert.Equal(Enum.GetValues<ProtocolGroup>().Length, discs.Select(d => d.Group).Distinct().Count());
-        foreach (var disc in discs)
+        var picker = page.FindControl<SubscriptionServerPicker>("AdvancedPicker")!;
+        var filter = picker.FindControl<ToggleButton>("SimpleServerSearchButton")!;
+        filter.IsChecked = true;
+        filter.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var search = picker.FindControl<TextBox>("SimpleServerSearch")!;
+        var list = picker.FindControl<ServerPickerListBox>("SimpleServerResults")!;
+        for (var index = 0; index < entries.Length; ++index)
         {
+            search.Text = $"Test {index}:";
+            Dispatcher.UIThread.RunJobs();
+            Assert.Same(vm.SubscriptionServers[index], Assert.Single(list.Items));
+            var row = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(0));
+            var disc = Assert.Single(row.GetVisualDescendants().OfType<ProtocolDisc>(), icon => icon.IsEffectivelyVisible);
+            Assert.Equal(vm.SubscriptionServers[index].ProtocolGroup, disc.Group);
+
             Assert.True(app.TryGetResource(ProtocolGroups.TokenPrefix(disc.Group) + "BgBrush", app.ActualThemeVariant, out var bg));
             Assert.Same(bg, disc.Background);
             var glyph = Assert.IsType<Pictogram>(disc.Child);

@@ -23,7 +23,8 @@ public partial class MainWindowViewModel
         RebuildSubscriptionPool();
         if (replaceInput)
             SmpInput = Subscriptions.FirstOrDefault(s => s.Id == SelectedSubscriptionServer?.SubscriptionId)?.Url
-                ?? Subscriptions.FirstOrDefault(s => s.Enabled)?.Url ?? string.Empty;
+                ?? (SimpleServerPreference == null ? Subscriptions.FirstOrDefault(s => s.Enabled)?.Url : null)
+                ?? string.Empty;
         SaveSettings();
         if (IsConnected) HasPendingAppChanges = true;
     });
@@ -47,7 +48,7 @@ public partial class MainWindowViewModel
             var entries = enabled.SelectMany(s => s.UnderlyingEntry.Servers);
             var selected = SubscriptionRefreshDiff.FindRegisteredServer(source?.UnderlyingEntry, entries, name, key,
                 previous?.SourceEntry, SelectedSubscriptionRoute()?.Route);
-            if (selected == null && IsSubscribeConfig(_settings.App.ConfigMode) && source != null &&
+            if (SimpleServerPreference == null && selected == null && IsSubscribeConfig(_settings.App.ConfigMode) && source != null &&
                 (previous?.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia)))
             {
                 foreach (var row in SubscriptionServers.Where(row => enabled.All(feed => feed.Id != row.SubscriptionId)).ToArray())
@@ -63,9 +64,20 @@ public partial class MainWindowViewModel
             ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
             ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
 
-            SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault(row =>
-                (source == null || row.SubscriptionId == source.Id) && ReferenceEquals(row.SourceEntry, selected))
-                ?? SubscriptionServers.FirstOrDefault();
+            if (SimpleServerPreference is { } preference)
+            {
+                var chosen = preference.Preferred(_settings.App, enabled.Select(feed => feed.UnderlyingEntry));
+                SelectedSubscriptionServer = chosen is { } registered
+                    ? SubscriptionServers.FirstOrDefault(row => row.SubscriptionId == registered.Feed.Id &&
+                        ReferenceEquals(row.SourceEntry, registered.Server))
+                    : null;
+            }
+            else
+            {
+                SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault(row =>
+                    (source == null || row.SubscriptionId == source.Id) && ReferenceEquals(row.SourceEntry, selected))
+                    ?? SubscriptionServers.FirstOrDefault();
+            }
 
             RefreshActiveIndicator();
         }
@@ -129,7 +141,8 @@ public partial class MainWindowViewModel
         if (removedInput)
         {
             var selected = Subscriptions.FirstOrDefault(s => s.Id == SelectedSubscriptionServer?.SubscriptionId);
-            SmpInput = selected?.Url ?? Subscriptions.FirstOrDefault(s => s.Enabled)?.Url ?? string.Empty;
+            SmpInput = selected?.Url ??
+                (SimpleServerPreference == null ? Subscriptions.FirstOrDefault(s => s.Enabled)?.Url : null) ?? string.Empty;
         }
         SaveSettings();
     }
@@ -236,10 +249,13 @@ public partial class MainWindowViewModel
         AppSettings? submission = null, DnsttSelectionRefresh.Binding? generatedGrant = null)
     {
         var feeds = submission?.App.Subscriptions ?? Subscriptions.Select(s => s.ToEntry()).ToList();
-        var chain = submission == null ? null : SubscriptionChainSelection.Capture(submission.App);
+        var app = submission?.App ?? _settings.App;
+        var preference = SubscriptionServerPreference.For(app);
+        var chain = submission != null || preference != null ? SubscriptionChainSelection.Capture(app, feeds) : null;
         // A generated-mode row is not selected from the subscription pool; that pool selection must
         // not veto a feed replacement or a legacy DNSTT reconciliation.
-        if (submission == null && IsSubscribeConfig(_settings.App.ConfigMode) && SelectedSubscriptionServer is { } selectedRow &&
+        if (submission == null && preference == null && IsSubscribeConfig(app.ConfigMode) &&
+            SelectedSubscriptionServer is { } selectedRow &&
             (selectedRow.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(selectedRow.SourceEntry.DetourVia)) &&
             feeds.FirstOrDefault(s => s.Id == selectedRow.SubscriptionId) is { } source)
             chain = new(source.Id, source.Url, selectedRow.SourceEntry, SelectedSubscriptionRoute()?.Route);
@@ -252,7 +268,13 @@ public partial class MainWindowViewModel
             : updates.FirstOrDefault(candidate => candidate.Origin.Id == binding.FeedId);
         ServerViewModel? editorRow = null;
         var outcome = DnsttSelectionRefresh.RefreshOutcome.Invalid;
-        bool PublishRows() => SubscriptionCacheUpdate.TryPublish(updates, feeds, chain, out _);
+        bool PublishRows()
+        {
+            if (!SubscriptionCacheUpdate.TryPublish(updates, feeds, chain, out var successor))
+                return false;
+            if (successor != null) chain?.RebindPin(app, feeds, successor);
+            return true;
+        }
         bool accepted;
         if (binding == null)
         {

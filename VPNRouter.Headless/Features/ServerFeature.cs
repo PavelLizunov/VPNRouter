@@ -192,6 +192,7 @@ public sealed class ServerFeature
         var serverName = string.IsNullOrWhiteSpace(server.Name) ? $"{server.Server}:{server.Port}" : server.Name;
 
         settings.Vless ??= new VlessConfig();
+        settings.App.SubscriptionPreference = null;
 
         if (match.IsSubscription)
         {

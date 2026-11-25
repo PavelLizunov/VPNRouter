@@ -51,12 +51,18 @@ public static class SubscriptionResolver
                 }
                 if (selected != null)
                 {
+                    chain!.RebindPin(settings.App, settings.App.Subscriptions, selected);
                     settings.App.ActiveSubscriptionServer = selected.Name;
                     settings.App.ActiveSubscriptionRow = SubscriptionEntry.RowKey(selected);
                     settings.App.ActiveSubscriptionId = chain!.FeedId;
                 }
             }
         }
+
+        // The generated-mode migration is for legacy selections. Keep subscription ownership
+        // for scoped preferences during service startup, settings copies and recovery.
+        if (SubscriptionServerPreference.For(settings.App) != null)
+            return VlessServersResolver.Resolve(settings, logger).Count;
 
         var aggregated = settings.App.Subscriptions
             .Where(s => s.Enabled)
