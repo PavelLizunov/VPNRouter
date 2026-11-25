@@ -87,7 +87,7 @@ public partial class AssistantSetupPanel : UserControl
     {
         var canPlan = _viewModel?.HasAssistantSubscription == true;
         var canUndo = _viewModel?.HasAssistantUndo == true;
-        IsVisible = _request != null || canPlan || canUndo;
+        IsVisible = _request != null || canPlan || canUndo || !string.IsNullOrWhiteSpace(AssistantStatus.Text);
         OpenAssistant.Content = Strings.AssistantTitle;
         OpenAssistant.IsVisible = canPlan || AssistantFields.IsVisible || _request != null;
         AssistantGoalLabel.Text = Strings.AssistantGoalLabel;
@@ -178,7 +178,11 @@ public partial class AssistantSetupPanel : UserControl
 
     private async void UndoAssistant_Click(object? sender, RoutedEventArgs args)
     {
-        if (_viewModel is { } vm) await RunAsync(vm.UndoAssistantGoalAsync);
+        if (_viewModel is not { } vm) return;
+        // Undo stays reachable after the eligible feed is disabled. Open the output area so the result is visible
+        // even when there is no longer a command entry to show.
+        if (!AssistantFields.IsVisible) AssistantFields.IsVisible = true;
+        await RunAsync(vm.UndoAssistantGoalAsync);
     }
 
     private async void DiagnoseCrash_Click(object? sender, RoutedEventArgs args)

@@ -169,7 +169,7 @@ public sealed class AssistantSetupPanelTests
             var settings = new AppSettings();
             settings.App.ConfigMode = "subscribe";
             settings.App.Language = "en";
-            settings.App.FlushDnsOnStart = false;
+            settings.App.RoutingMode = "full";
             settings.App.Subscriptions =
             [
                 new() { Url = "https://ninitux.com/sub/synthetic-undo", Enabled = true }
@@ -178,9 +178,10 @@ public sealed class AssistantSetupPanelTests
             using var logger = new Serilog.LoggerConfiguration().CreateLogger();
             using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
             {
+                ResolveAssistantApplication = app => app == "synthetic-target.exe" ? app : null,
                 StepAssistantAsync = (_, _, _, observation, _) =>
                     Task.FromResult(new AssistantStep(AssistantStepStatus.Act,
-                        Assert.Single(observation.Controls), Toggle: true)),
+                        Assert.Single(observation.Controls))),
             };
             var panel = new AssistantSetupPanel { DataContext = vm };
             var window = new Window { Width = 360, Height = 560, Content = panel };
@@ -188,7 +189,7 @@ public sealed class AssistantSetupPanelTests
             try
             {
                 Assert.Equal(Strings.AssistantPreferenceSaved,
-                    await vm.RunAssistantGoalAsync("Enable DNS flushing on startup", window, panel,
+                    await vm.RunAssistantGoalAsync("Route synthetic-target.exe directly", window, panel,
                         (_, _) => Task.FromResult(true), TestContext.Current.CancellationToken));
                 Assert.True(vm.HasAssistantUndo);
 
@@ -197,10 +198,23 @@ public sealed class AssistantSetupPanelTests
 
                 var open = panel.FindControl<Button>("OpenAssistant")!;
                 var undo = panel.FindControl<Button>("UndoAssistant")!;
+                var status = panel.FindControl<TextBlock>("AssistantStatus")!;
                 Assert.True(panel.IsVisible);
                 Assert.False(open.IsEffectivelyVisible);
                 Assert.True(undo.IsEffectivelyVisible);
                 Assert.True(undo.IsEnabled);
+
+                var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                status.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == TextBlock.TextProperty && status.Text == Strings.AssistantUndone)
+                        completed.TrySetResult(true);
+                };
+                undo.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+                Assert.False(vm.HasAssistantUndo);
+                Assert.True(panel.IsVisible);
+                Assert.True(status.IsEffectivelyVisible);
             }
             finally { window.Close(); }
         }

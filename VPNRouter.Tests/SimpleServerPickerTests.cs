@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
+using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Tests.Fakes;
 using Xunit;

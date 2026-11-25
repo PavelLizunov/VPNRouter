@@ -97,10 +97,11 @@ public class PageScreenshotTests
             Url = "https://ninitux.com/sub/synthetic-panel",
             Enabled = true
         }));
+        vm.SubscriptionServers.Add(new ServerViewModel(PickerEntry("Fixture server")));
         var page = new SimplePage { DataContext = vm };
         var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
         assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        ScreenshotHelper.CapturePage(page, "assistant-one-step-520", 520, 720);
+        ScreenshotHelper.CapturePage(page, "assistant-one-step-520", 520, 900);
     }
 
     [AvaloniaFact]
@@ -113,11 +114,12 @@ public class PageScreenshotTests
             Url = "https://ninitux.com/sub/synthetic-panel",
             Enabled = true
         }));
+        vm.SubscriptionServers.Add(new ServerViewModel(PickerEntry("Fixture server")));
         var page = new SimplePage { DataContext = vm };
         var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
         assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         assistant.FindControl<Button>("MoreChecksToggle")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        ScreenshotHelper.CapturePage(page, "assistant-more-checks-360", 360, 720);
+        ScreenshotHelper.CapturePage(page, "assistant-more-checks-360", 360, 900);
     }
 
     [AvaloniaFact]

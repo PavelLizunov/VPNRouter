@@ -763,7 +763,7 @@ public partial class MainWindowViewModel
         _simpleServerRowsDirty = false;
         try
         {
-            SimpleServerRows.Clear();
+            var desired = new List<ServerViewModel>(SubscriptionServers.Count);
             foreach (var group in SubscriptionServers
                          .GroupBy(row => row.ProtocolGroup)
                          .OrderBy(group => group.Key))
@@ -772,10 +772,16 @@ public partial class MainWindowViewModel
                 foreach (var row in group)
                 {
                     row.IsSimpleCategoryStart = first;
-                    SimpleServerRows.Add(row);
+                    desired.Add(row);
                     first = false;
                 }
             }
+
+            // A rebuild call with the same rows (for example a settings save) keeps the ListBox instance and its
+            // scroll offset untouched.
+            if (SimpleServerRows.SequenceEqual(desired)) return;
+            SimpleServerRows.Clear();
+            foreach (var row in desired) SimpleServerRows.Add(row);
         }
         finally
         {
@@ -969,8 +975,13 @@ public partial class MainWindowViewModel
         Servers.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
         SubscriptionServers.CollectionChanged += (_, _) =>
         {
-            if (_simpleServerRowsBatch > 0) _simpleServerRowsDirty = true;
-            else RebuildSimpleServerRows();
+            if (_simpleServerRowsBatch > 0)
+            {
+                _simpleServerRowsDirty = true;
+                _simpleHomePropsDirty = true;
+                return;
+            }
+            RebuildSimpleServerRows();
             RaiseSimpleHomeProps();
         };
         Subscriptions.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
