@@ -26,7 +26,6 @@ public static class AppAutomationDriver
     private static Window? _window;
     private static MainWindowViewModel? _viewModel;
     private static string? _token;
-    private static int _port;
 
     public static int? AutomationPort { get; internal set; }
     public static string? AutomationToken { get; internal set; }
@@ -76,7 +75,6 @@ public static class AppAutomationDriver
 
         _window = window;
         _viewModel = viewModel;
-        _port = port;
         _token = token;
         _cts = new CancellationTokenSource();
 

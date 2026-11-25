@@ -60,7 +60,6 @@ public sealed class LinuxTunOwnership : IDisposable
     }
 
     public bool HasOwnership => _owned;
-    public string? HeldLockPath => _heldLockPath;
 
     public bool TryAcquire()
     {
@@ -359,14 +358,12 @@ public sealed class LinuxTunOwnership : IDisposable
     #region Native Interop
 
     private const int O_RDONLY   = 0x0000;
-    private const int O_WRONLY   = 0x0001;
     private const int O_RDWR     = 0x0002;
     private const int O_CREAT    = 0x0040;
     private const int O_NONBLOCK = 0x0800;
     private const int O_NOFOLLOW = 0x00020000;
     private const int O_CLOEXEC  = 0x00080000;
 
-    private const int LOCK_SH = 0x0001;
     private const int LOCK_EX = 0x0002;
     private const int LOCK_NB = 0x0004;
     private const int LOCK_UN = 0x0008;
@@ -377,38 +374,23 @@ public sealed class LinuxTunOwnership : IDisposable
     private const uint STATX_BASIC_STATS  = 0x07FF;
 
     private const uint S_IFMT   = 0xF000;
-    private const uint S_IFSOCK = 0xC000;
     private const uint S_IFLNK  = 0xA000;
     private const uint S_IFREG  = 0x8000;
-    private const uint S_IFBLK  = 0x6000;
     private const uint S_IFDIR  = 0x4000;
-    private const uint S_IFCHR  = 0x2000;
-    private const uint S_IFIFO  = 0x1000;
 
-    private const uint S_IRWXU = 0x01C0; // user rwx (0700)
     private const uint S_IRUSR = 0x0100; // user read (0400)
     private const uint S_IWUSR = 0x0080; // user write (0200)
-    private const uint S_IXUSR = 0x0040; // user execute (0100)
 
     private const uint S_IRWXG = 0x0038; // group rwx (0070)
-    private const uint S_IRGRP = 0x0020; // group read (0040)
-    private const uint S_IWGRP = 0x0010; // group write (0020)
-    private const uint S_IXGRP = 0x0008; // group execute (0010)
-
     private const uint S_IRWXO = 0x0007; // other rwx (0007)
-    private const uint S_IROTH = 0x0004; // other read (0004)
-    private const uint S_IWOTH = 0x0002; // other write (0002)
-    private const uint S_IXOTH = 0x0001; // other execute (0001)
 
     private const uint S_IRWXG_O = S_IRWXG | S_IRWXO; // 0x003F (octal 0077)
     private const uint S_PERM_MASK = 0x01FF;          // 0x01FF (octal 0777)
     private const uint MODE_0600 = S_IRUSR | S_IWUSR; // 0x0180
-    private const uint MODE_0700 = S_IRWXU;           // 0x01C0
 
     private const int ENOENT      = 2;
     private const int EAGAIN      = 11;
     private const int EWOULDBLOCK = 11;
-    private const int ELOOP       = 40;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct StatxTimestamp

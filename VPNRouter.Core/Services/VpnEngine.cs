@@ -140,7 +140,6 @@ public partial class VpnEngine : IDisposable
     public event Action<bool>? TrueSplitEngagedChanged;
     public event Action<TrueSplitState, string>? TrueSplitStateChanged;
 
-    public bool IsTrueSplitEngaged => _splitDriver?.IsEngaged ?? false;
     public TrueSplitState CurrentTrueSplitState { get; private set; } = TrueSplitState.NotApplicable;
 
     [Obsolete(

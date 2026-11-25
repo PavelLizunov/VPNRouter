@@ -100,7 +100,6 @@ public sealed partial class SetupWizardViewModel : ObservableObject
     public string ChecksTitle => Strings.SetupWizardChecksTitle;
     public string ChecksBody => Strings.SetupWizardChecksBody;
     public string RunChecksText => Strings.SetupWizardRunChecks;
-    public string ChecksRunningText => Strings.SetupWizardChecksRunning;
     public string RepairTitle => Strings.SetupWizardRepairTitle;
     public string RepairBody => Strings.SetupWizardRepairBody;
     public string ResetMtuText => Strings.SetupWizardResetMtu;

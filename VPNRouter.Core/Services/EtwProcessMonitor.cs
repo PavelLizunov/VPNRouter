@@ -13,7 +13,6 @@ public class EtwProcessMonitor : IProcessMonitor
     internal const int SessionBufferSizeMB = 4;
 
     private readonly ILogger _logger;
-    private readonly IProcessRunner _processRunner;
     private readonly object _gate = new();
     private TraceEventSession? _session;
     private Thread? _sessionThread;
@@ -29,7 +28,7 @@ public class EtwProcessMonitor : IProcessMonitor
     public EtwProcessMonitor(ILogger? logger = null, IProcessRunner? processRunner = null)
     {
         _logger = logger ?? Log.Logger;
-        _processRunner = processRunner ?? new ProcessRunner();
+        _ = processRunner;
     }
 
     public void Start()

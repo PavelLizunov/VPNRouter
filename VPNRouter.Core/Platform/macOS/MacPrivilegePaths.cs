@@ -12,12 +12,9 @@ public static class MacPrivilegePaths
     public const string HelperPath = "/Library/PrivilegedHelperTools/com.vpnrouter.privileged";
     public const string RootDir = "/Library/Application Support/VPNRouter";
     public const string RootSingBoxPath = RootDir + "/bin/sing-box";
-    public const string ManifestPath = RootDir + "/install.json";
     public const string RunDir = RootDir + "/run";
     public const string AssetRoot = RootDir + "/assets";
-    public const string InstallLockPath = RootDir + "/.install.lock";
     public const string PolicyDirectory = "/private/etc/sudoers.d";
-    public const string LegacyPolicyPath = PolicyDirectory + "/vpnrouter";
     public const string SudoPath = "/usr/bin/sudo";
     public const string HelperBundleName = "vpnrouter-privileged";
     public const int PolicyVersion = 2;
@@ -26,8 +23,6 @@ public static class MacPrivilegePaths
     public static string PolicyPath(int uid) => $"{PolicyDirectory}/vpnrouter-{uid}";
 
     public static string UserRunDir(int uid) => $"{RunDir}/{uid}";
-
-    public static string UserStagedConfigPath(int uid) => $"{UserRunDir(uid)}/current.json";
 
     public static string UserAssetDir(int uid) => $"{AssetRoot}/{uid}";
 
