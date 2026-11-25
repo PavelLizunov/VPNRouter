@@ -735,30 +735,45 @@
                         <StackPanel IsVisible="{Binding SmpPickerVisible}" Margin="16,12,16,14" Spacing="8">
                             <StackPanel IsVisible="{Binding SmpHasSubscriptionServers}" Spacing="6">
                                 <TextBlock Classes="label" Text="{Binding L_SmpPickServerLabel}"/>
-                                <ListBox Classes="pick"
-                                         ItemsSource="{Binding SubscriptionServers}"
-                                         SelectedItem="{Binding SelectedSubscriptionServer}"
+                                <ListBox Name="SimpleServerPicker" Classes="pick"
+                                         ItemsSource="{Binding SimpleServerRows}"
+                                         SelectedItem="{Binding SelectedSimpleServer}"
                                          MaxHeight="216"
                                          AutomationProperties.Name="{Binding L_SmpPickServerLabel}"
-                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ServerViewModel">
-                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                                <icons:ProtocolDisc Width="22" Height="22" GlyphSize="13" CornerRadius="11"
-                                                                    Group="{Binding ProtocolGroup}"
-                                                                    ToolTip.Tip="{Binding ProtocolUseCaseTooltip}"/>
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
-                                                               ToolTip.Tip="{Binding DisplayName}"/>
-                                                    <TextBlock Classes="hint" Text="{Binding HealthVerdictText}"
-                                                               IsVisible="{Binding HasHealthVerdict}"
-                                                               ToolTip.Tip="{Binding HealthTooltip}"/>
+                                            <StackPanel Spacing="4">
+                                                <!-- One visible, localized heading per destination category. The heading belongs to
+                                                     the first server row, so the list stays one keyboard- and scroll-native ListBox. -->
+                                                <StackPanel IsVisible="{Binding IsSimpleCategoryStart}"
+                                                            Spacing="3" Margin="4,6,4,1">
+                                                    <TextBlock Text="{Binding SimpleCategoryName}"
+                                                               FontSize="{StaticResource FsSm}"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource TextMutedBrush}"
+                                                               TextWrapping="Wrap"/>
+                                                    <Border Height="1" Background="{DynamicResource BorderSubtleBrush}"/>
                                                 </StackPanel>
-                                                <TextBlock Grid.Column="2" Text="{Binding PingDisplay}"
-                                                           FontSize="{StaticResource FsXs}"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource TextMutedBrush}"/>
-                                            </Grid>
+                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                                    <icons:ProtocolDisc Width="22" Height="22" GlyphSize="13" CornerRadius="11"
+                                                                        Group="{Binding ProtocolGroup}"
+                                                                        ToolTip.Tip="{Binding ProtocolUseCaseTooltip}"
+                                                                        AutomationProperties.Name="{Binding SimpleCategoryName}"/>
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                                                                   ToolTip.Tip="{Binding DisplayName}"/>
+                                                        <TextBlock Classes="hint" Text="{Binding HealthVerdictText}"
+                                                                   IsVisible="{Binding HasHealthVerdict}"
+                                                                   ToolTip.Tip="{Binding HealthTooltip}"/>
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Text="{Binding PingDisplay}"
+                                                               FontSize="{StaticResource FsXs}"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                                </Grid>
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>

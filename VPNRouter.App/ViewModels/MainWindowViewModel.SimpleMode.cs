@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Threading;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -26,6 +27,26 @@ public partial class MainWindowViewModel
     private bool _smpFormExpanded;
 
     public string L_SmpConfigRowToggle => SmpFormExpanded ? Strings.SmpConfigRowHide : Strings.SmpConfigRowChange;
+
+    // The Simple picker is one flat ListBox: rows stay real ServerViewModel instances (exact selection even when
+    // display names repeat) and the first row of every destination category carries the visible heading.
+    private bool _rebuildingSimpleServerRows;
+    private int _simpleServerRowsBatch;
+    private bool _simpleServerRowsDirty;
+    private bool _simpleHomePropsDirty;
+    public ObservableCollection<ServerViewModel> SimpleServerRows { get; } = new();
+
+    public ServerViewModel? SelectedSimpleServer
+    {
+        get => SelectedSubscriptionServer;
+        set
+        {
+            // A list rebuild clears the ListBox selection momentarily. Keep the view model selection until the
+            // caller (subscription refresh) explicitly names the exact row that should stay selected.
+            if (_rebuildingSimpleServerRows || value is null || !SimpleServerRows.Contains(value)) return;
+            SelectedSubscriptionServer = value;
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(L_FcSettingsToggle))]
@@ -735,6 +756,74 @@ public partial class MainWindowViewModel
 
     public bool SmpHasSubscriptionServers => SubscriptionServers.Count > 0;
 
+    private void RebuildSimpleServerRows()
+    {
+        if (_rebuildingSimpleServerRows) return;
+        _rebuildingSimpleServerRows = true;
+        _simpleServerRowsDirty = false;
+        try
+        {
+            var desired = new List<ServerViewModel>(SubscriptionServers.Count);
+            foreach (var group in SubscriptionServers
+                         .GroupBy(row => row.ProtocolGroup)
+                         .OrderBy(group => group.Key))
+            {
+                var first = true;
+                foreach (var row in group)
+                {
+                    row.IsSimpleCategoryStart = first;
+                    desired.Add(row);
+                    first = false;
+                }
+            }
+
+            // A rebuild call with the same rows (for example a settings save) keeps the ListBox instance and its
+            // scroll offset untouched.
+            if (SimpleServerRows.SequenceEqual(desired)) return;
+            SimpleServerRows.Clear();
+            foreach (var row in desired) SimpleServerRows.Add(row);
+        }
+        finally
+        {
+            _rebuildingSimpleServerRows = false;
+            OnPropertyChanged(nameof(SelectedSimpleServer));
+        }
+    }
+
+    // A full subscription replacement clears the list and adds every row one by one. Coalesce those notifications
+    // into a single grouping pass; ordinary one-row changes still rebuild immediately.
+    private IDisposable DeferSimpleServerRows() => new SimpleServerRowsBatch(this);
+
+    private void EndSimpleServerRowsBatch()
+    {
+        if (_simpleServerRowsBatch == 0) return;
+        _simpleServerRowsBatch--;
+        if (_simpleServerRowsBatch != 0) return;
+        if (_simpleServerRowsDirty) RebuildSimpleServerRows();
+        if (!_simpleHomePropsDirty) return;
+        _simpleHomePropsDirty = false;
+        RaiseSimpleHomeProps();
+    }
+
+    private sealed class SimpleServerRowsBatch : IDisposable
+    {
+        private MainWindowViewModel? _owner;
+
+        internal SimpleServerRowsBatch(MainWindowViewModel owner)
+        {
+            _owner = owner;
+            owner._simpleServerRowsBatch++;
+        }
+
+        public void Dispose()
+        {
+            var owner = _owner;
+            if (owner == null) return;
+            _owner = null;
+            owner.EndSimpleServerRowsBatch();
+        }
+    }
+
     public bool SmpHasRefreshableSubscriptions => Subscriptions.Any(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
 
     public bool SmpSubscriptionsRefreshing => Subscriptions.Any(s => s.Enabled && s.IsRefreshing);
@@ -845,6 +934,7 @@ public partial class MainWindowViewModel
         nameof(SmpHeroIsError), nameof(SmpHeroIsWarn), nameof(SmpHeroIsOn), nameof(SmpHeroIsBusy), nameof(SmpHeroIsIdle),
         nameof(SmpHomeTitle), nameof(SmpHomeSubline), nameof(SmpConfigName), nameof(SmpConfigKind),
         nameof(SmpConfigServer), nameof(SmpHasConfigServer), nameof(SimpleConfigModeSummary), nameof(SimplePendingSummary),
+        nameof(SelectedSimpleServer),
     };
 
     private void RaiseSimpleHomeProps()
@@ -883,7 +973,17 @@ public partial class MainWindowViewModel
             }
         };
         Servers.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
-        SubscriptionServers.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
+        SubscriptionServers.CollectionChanged += (_, _) =>
+        {
+            if (_simpleServerRowsBatch > 0)
+            {
+                _simpleServerRowsDirty = true;
+                _simpleHomePropsDirty = true;
+                return;
+            }
+            RebuildSimpleServerRows();
+            RaiseSimpleHomeProps();
+        };
         Subscriptions.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
         CustomConfigs.CollectionChanged += (_, _) => RaiseSimpleHomeProps();
     }

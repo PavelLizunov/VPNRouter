@@ -3,17 +3,19 @@ namespace VPNRouter.Core.Localization;
 public static partial class Strings
 {
     public static string AssistantTitle => Ru ? "Настроить с DeepSeek" : "Set up with DeepSeek";
-    public static string AssistantGoalHint => Ru ? "Что настроить в VPNRouter?" : "What should VPNRouter do?";
-    public static string AssistantDataNotice => Ru
-        ? "Текст команды отправляется в DeepSeek."
-        : "Your request is sent to DeepSeek.";
+    public static string AssistantGoalHint => Ru ? "Что настроить?" : "What should VPNRouter do?";
+    public static string AssistantMoreChecks => Ru ? "Ещё" : "More";
     public static string AssistantDiagnoseCrash => Ru ? "Разобрать сбой" : "Analyze crash";
     public static string AssistantDiagnosingCrash => Ru ? "Проверяю отчёт о последнем сбое…" : "Checking the last crash report…";
+    public static string AssistantCrashConsent => Ru
+        ? "Отправить признаки последнего сбоя в DeepSeek для разбора?"
+        : "Send the latest crash details to DeepSeek for analysis?";
     public static string AssistantNoCrash => Ru ? "Сохранённый отчёт о сбое не найден." : "No saved crash report was found.";
     public static string AssistantApply => Ru ? "Настроить" : "Apply";
-    public static string AssistantPlan => Ru ? "Проверить команду" : "Review command";
-    public static string AssistantPlanning => Ru ? "Проверяю команду…" : "Reviewing your command…";
-    public static string AssistantConfirm => Ru ? "Подтвердить изменение" : "Confirm change";
+    public static string AssistantPlan => Ru ? "Спросить DeepSeek" : "Ask DeepSeek";
+    public static string AssistantPlanning => Ru ? "Спрашиваю DeepSeek…" : "Asking DeepSeek…";
+    public static string AssistantConfirm => Ru ? "Продолжить" : "Continue";
+    public static string AssistantSend => Ru ? "Отправить" : "Send";
     public static string AssistantSingleCommand => Ru
         ? "Укажите одно действие, например «Включи VPN», «Пусти Edge напрямую» или «Только Firefox через VPN»."
         : "Enter one action, such as “Connect VPN”, “Route Edge directly” or “Route only Firefox through the VPN”.";
@@ -48,13 +50,21 @@ public static partial class Strings
             "SetVpnConnected" => Ru ? "Отключить текущее VPN-соединение?" : "Disconnect the current VPN connection?",
             "SetFlushDnsOnStart" when desired == true => Ru ? "Очищать кэш DNS при запуске VPN?" : "Flush the DNS cache when the VPN starts?",
             "SetFlushDnsOnStart" => Ru ? "Сохранять кэш DNS при запуске VPN?" : "Keep the DNS cache when the VPN starts?",
-            "SetStrictDns" => (desired == true
-                ? (Ru ? "Включить строгий DNS?" : "Enable strict DNS?")
-                : (Ru ? "Отключить строгий DNS?" : "Disable strict DNS?")) + RestartNotice(connected),
-            "RouteOnlyApplication" => (Ru ? $"Заменить список приложений VPN? Только {app} будет использовать VPN. Остальные приложения пойдут напрямую."
-                : $"Replace the VPN app list? Only {app} will use the VPN. Other apps will connect directly.")
-                + (connected ? RestartNotice(true) : (Ru ? " VPN подключится." : " The VPN will connect.")),
-            "RouteApplicationDirect" => (Ru ? $"Направить трафик {app} в обход VPN?" : $"Send {app} traffic directly, outside the VPN?") + RestartNotice(connected),
+            "SetStrictDns" => connected
+                ? (desired == true
+                    ? (Ru ? "Включить строгий DNS и перезапустить текущее соединение?" : "Enable strict DNS and restart the current connection?")
+                    : (Ru ? "Отключить строгий DNS и перезапустить текущее соединение?" : "Disable strict DNS and restart the current connection?"))
+                : (desired == true ? (Ru ? "Включить строгий DNS?" : "Enable strict DNS?")
+                    : (Ru ? "Отключить строгий DNS?" : "Disable strict DNS?")),
+            "RouteOnlyApplication" => connected
+                ? (Ru ? $"Только {app} будет использовать VPN, остальные приложения пойдут напрямую; текущее соединение перезапустится."
+                    : $"Only {app} will use the VPN; other apps will connect directly and the current connection will restart.")
+                : (Ru ? $"Только {app} будет использовать VPN, остальные приложения пойдут напрямую; VPN подключится."
+                    : $"Only {app} will use the VPN; other apps will connect directly and the VPN will connect."),
+            "RouteApplicationDirect" => connected
+                ? (Ru ? $"Пустить трафик {app} напрямую и перезапустить текущее соединение?"
+                    : $"Send {app} traffic directly and restart the current connection?")
+                : (Ru ? $"Пустить трафик {app} напрямую?" : $"Send {app} traffic directly?"),
             "OpenServerSettings" => Ru ? "Перейти в расширенный режим и выбрать вкладку ручной настройки серверов?" : "Switch to Advanced mode and select manual server settings?",
             "OpenSubscriptions" => Ru ? "Перейти в расширенный режим и выбрать вкладку подписок?" : "Switch to Advanced mode and select subscriptions?",
             "OpenNetworkSettings" => OpenAssistantSection(TabSettings),
@@ -67,9 +77,6 @@ public static partial class Strings
     private static string OpenAssistantSection(string section) =>
         Ru ? $"Открыть раздел «{section}» в расширенном режиме?" : $"Open {section} in Advanced mode?";
 
-    private static string RestartNotice(bool connected) => connected
-        ? (Ru ? " VPN применит настройки к текущему соединению." : " The VPN will reapply settings to the current connection.")
-        : string.Empty;
     public static string AssistantUndo => Ru ? "Отменить изменения" : "Undo changes";
     public static string AssistantCancel => Ru ? "Прервать" : "Cancel";
     public static string AssistantWorking => Ru ? "Настраиваю и проверяю маршрут…" : "Applying and checking the route…";
@@ -130,6 +137,7 @@ public static partial class Strings
     public static string AssistantUnconfirmed => Ru ? "Помощник не подтвердил результат команды." : "The assistant could not verify the requested outcome.";
     public static string AssistantDecline => Ru ? "Оставить как есть" : "Keep current settings";
     public static string AssistantNoChanges => Ru ? "Ничего не изменено." : "Nothing was changed.";
+    public static string AssistantDiagnosisDeclined => Ru ? "Ничего не отправлено." : "Nothing was sent.";
     internal static string AssistantSplitProfileChange => Ru ? " VPN переключится на профиль раздельной маршрутизации." : " The VPN will switch to the split-routing profile.";
     internal static string AssistantRegionalBypassChange => Ru ? " Исключение для российского трафика будет отключено." : " The Russian traffic bypass will be turned off.";
     public static string AssistantStepLimit => Ru ? "Достигнут лимит шагов. Уточните оставшуюся задачу." : "The step limit was reached. Specify what remains.";

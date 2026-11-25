@@ -34,6 +34,7 @@ public partial class MainWindowViewModel
 
     private void RebuildSubscriptionPool()
     {
+        using var simpleRowsBatch = DeferSimpleServerRows();
         var prevLoading = _isLoadingUI;
         _isLoadingUI = true;
         try
@@ -414,13 +415,16 @@ public partial class MainWindowViewModel
                 StatusText = Strings.SyncComplete(entries.Count);
                 return;
             }
-            SubscriptionServers.Clear();
-            foreach (var entry in entries)
-                SubscriptionServers.Add(new ServerViewModel(entry));
-            ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
-            ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
+            using (DeferSimpleServerRows())
+            {
+                SubscriptionServers.Clear();
+                foreach (var entry in entries)
+                    SubscriptionServers.Add(new ServerViewModel(entry));
+                ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
+                ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
 
-            SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault();
+                SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault();
+            }
             SaveSettings();
             StatusText = Strings.SyncComplete(entries.Count);
         }

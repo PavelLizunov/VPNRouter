@@ -62,6 +62,7 @@ public class ProtocolGroupsTests
     [InlineData("ss", null, ProtocolGroup.Fallback)]
     [InlineData("shadowsocks", null, ProtocolGroup.Fallback)]
     [InlineData("dns-tunnel", null, ProtocolGroup.Emergency)]
+    [InlineData("dnstt", null, ProtocolGroup.Emergency)]
     [InlineData("VLESS", "XHTTP", ProtocolGroup.StealthWeb)]
     public void Of_MapsProtocolAndTransport(string protocol, string? transport, ProtocolGroup expected)
     {

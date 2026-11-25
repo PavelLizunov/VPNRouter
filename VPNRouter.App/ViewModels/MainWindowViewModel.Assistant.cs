@@ -62,16 +62,26 @@ public partial class MainWindowViewModel
             ?? (eligible.Length == 1 ? eligible[0] : null);
     }
 
-    internal async Task<string> DiagnoseAssistantCrashAsync(CancellationToken ct)
+    internal async Task<string> DiagnoseAssistantCrashAsync(
+        Func<string, CancellationToken, Task<bool>> consent, CancellationToken ct)
     {
-        var evidence = await Task.Run(() => AssistantCrashEvidence.ReadLatest(AppPaths.DataDir), ct);
-        if (evidence == null) return Strings.AssistantNoCrash;
-        var subscription = SelectAssistantSubscription(_settings.App);
-        if (subscription == null) return Strings.AssistantSubscription;
+        ct.ThrowIfCancellationRequested();
+        var url = SelectAssistantSubscription(_settings.App)?.Url;
+        if (url == null) return Strings.AssistantSubscription;
 
-        var result = await StepAssistantAsync(subscription.Url, "Analyze the last VPNRouter crash", IsRussian,
+        var evidence = await Task.Run(() => AssistantCrashEvidence.ReadLatest(AppPaths.DataDir), ct);
+        ct.ThrowIfCancellationRequested();
+        if (evidence == null) return Strings.AssistantNoCrash;
+        if (SelectAssistantSubscription(_settings.App)?.Url != url) return Strings.AssistantSubscription;
+
+        if (!await consent(Strings.AssistantCrashConsent, ct)) return Strings.AssistantDiagnosisDeclined;
+        ct.ThrowIfCancellationRequested();
+        if (SelectAssistantSubscription(_settings.App)?.Url != url) return Strings.AssistantSubscription;
+
+        var result = await StepAssistantAsync(url, "Analyze the last VPNRouter crash", IsRussian,
             new AssistantObservation(IsConnected, IsConnecting, IsSimpleMode, [], null, evidence), ct);
         ct.ThrowIfCancellationRequested();
+        if (SelectAssistantSubscription(_settings.App)?.Url != url) return Strings.AssistantSubscription;
         return result is { Status: AssistantStepStatus.Diagnosis, Text: { } summary }
             ? summary
             : AssistantStepMessage(result.Status);
@@ -418,6 +428,13 @@ public partial class MainWindowViewModel
                 else if (preference == "SetStrictDns") StrictDns = candidate.App.StrictDns;
                 else LoadSettingsIntoUI();
                 HasPendingAppChanges = false;
+
+                // Loading the editor can initialize or normalize derived routing fields that the next
+                // settings save will persist. Capture that final applied shape so an unrelated later
+                // save (for example disabling the last subscription) does not look like a routing edit
+                // and make Undo refuse its own change.
+                if (_assistantUndo is { } undo && undo.Revision == savedRevision)
+                    _assistantUndo = undo with { Applied = RoutingSelection.Capture(_settings) };
             }
             else if (!_disposed && appliedSession != null)
             {

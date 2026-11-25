@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
@@ -18,6 +19,18 @@ namespace VPNRouter.Tests;
 [Collection(SafeModeStateCollection.Name)]
 public sealed class AssistantSetupPanelTests
 {
+    private static void WriteCrashReport(string dataDir)
+    {
+        var crashes = Directory.CreateDirectory(Path.Combine(dataDir, "crashes"));
+        File.WriteAllText(Path.Combine(crashes.FullName, "crash-001.txt"), """
+            VPNRouter crash report
+            Version:   2.51.1-r1
+            Fatal:     True
+
+            ──── Exception ────
+            System.InvalidOperationException: synthetic crash
+            """);
+    }
     [Theory]
     [InlineData("Подключи VPN.", "SetVpnConnected", true, null)]
     [InlineData("Disconnect the VPN", "SetVpnConnected", false, null)]
@@ -150,6 +163,257 @@ public sealed class AssistantSetupPanelTests
                 Assert.False(vm.IsConnected);
             }
             finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Undo_stays_reachable_when_the_last_eligible_feed_disappears()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "en";
+            settings.App.RoutingMode = "full";
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-undo", Enabled = true }
+            ];
+            SettingsLoader.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
+            {
+                ResolveAssistantApplication = app => app == "synthetic-target.exe" ? app : null,
+                StepAssistantAsync = (_, _, _, observation, _) =>
+                    Task.FromResult(new AssistantStep(AssistantStepStatus.Act,
+                        Assert.Single(observation.Controls))),
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Width = 360, Height = 560, Content = panel };
+            window.Show();
+            try
+            {
+                var original = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+                Assert.Equal(Strings.AssistantPreferenceSaved,
+                    await vm.RunAssistantGoalAsync("Route synthetic-target.exe directly", window, panel,
+                        (_, _) => Task.FromResult(true), TestContext.Current.CancellationToken));
+                Assert.True(vm.HasAssistantUndo);
+                var applied = SettingsLoader.Load(AppPaths.ConfigYamlPath).App;
+                Assert.Equal("split", applied.RoutingMode);
+                Assert.Contains("synthetic-target.exe", applied.RoutingAppsExclude);
+
+                vm.Subscriptions.Single().Enabled = false;
+                window.UpdateLayout();
+
+                var goal = panel.FindControl<TextBox>("AssistantGoal")!;
+                var undo = panel.FindControl<Button>("UndoAssistant")!;
+                var status = panel.FindControl<TextBlock>("AssistantStatus")!;
+                Assert.True(panel.IsVisible);
+                Assert.False(goal.IsEffectivelyVisible);
+                Assert.True(undo.IsEffectivelyVisible);
+                Assert.True(undo.IsEnabled);
+
+                var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                undo.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == InputElement.IsEnabledProperty && undo.IsEnabled)
+                        completed.TrySetResult(true);
+                };
+                undo.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+                Assert.Equal(Strings.AssistantUndone, status.Text);
+                Assert.False(vm.HasAssistantUndo);
+                Assert.True(panel.IsVisible);
+                Assert.True(status.IsEffectivelyVisible);
+                var restored = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+                Assert.Equal(original.App.RoutingMode, restored.App.RoutingMode);
+                Assert.Equal(original.ActiveProfile, restored.ActiveProfile);
+                Assert.Equal(original.App.RoutingAppsMode, restored.App.RoutingAppsMode);
+                Assert.True(original.App.RoutingAppsExclude.SequenceEqual(restored.App.RoutingAppsExclude));
+                Assert.False(Assert.Single(restored.App.Subscriptions).Enabled);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
+    [AvaloniaFact]
+    public void Assistant_is_an_inline_composer_with_one_quiet_more_row()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "en";
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-panel", Enabled = true }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger);
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Width = 360, Height = 560, Content = panel };
+            window.Show();
+            try
+            {
+                var goal = panel.FindControl<TextBox>("AssistantGoal")!;
+                var run = panel.FindControl<Button>("RunAssistant")!;
+                var moreToggle = panel.FindControl<Button>("MoreChecksToggle")!;
+                var more = panel.FindControl<WrapPanel>("MoreChecks")!;
+                var repair = panel.FindControl<Button>("RepairVpn")!;
+                var crash = panel.FindControl<Button>("DiagnoseCrash")!;
+
+                window.UpdateLayout();
+                Assert.True(goal.IsEffectivelyVisible);
+                Assert.True(run.IsEffectivelyVisible);
+                Assert.Equal(Strings.AssistantPlan, run.Content);
+                Assert.False(panel.FindControl<TextBlock>("AssistantStatus")!.IsVisible);
+                Assert.False(more.IsVisible);
+                Assert.False(repair.IsEffectivelyVisible);
+                Assert.False(crash.IsEffectivelyVisible);
+
+                moreToggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.UpdateLayout();
+                Assert.True(more.IsVisible);
+                Assert.True(repair.IsEffectivelyVisible);
+                Assert.True(crash.IsEffectivelyVisible);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Crash_analysis_requires_consent_and_does_not_send_when_declined()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            WriteCrashReport(directory.FullName);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "en";
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-crash", Enabled = true }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            int providerCalls = 0;
+            using var vm = new MainWindowViewModel(store, logger)
+            {
+                StepAssistantAsync = (_, _, _, _, _) =>
+                {
+                    providerCalls++;
+                    return Task.FromResult(new AssistantStep(AssistantStepStatus.Diagnosis, Text: "unexpected"));
+                },
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var window = new Window { Width = 360, Height = 400, Content = panel };
+            window.Show();
+            try
+            {
+                var consent = panel.FindControl<Border>("AssistantConsent")!;
+                var consentText = panel.FindControl<TextBlock>("AssistantConsentText")!;
+                var confirm = panel.FindControl<Button>("ConfirmAssistant")!;
+                var decline = panel.FindControl<Button>("CancelAssistant")!;
+                var crash = panel.FindControl<Button>("DiagnoseCrash")!;
+                var status = panel.FindControl<TextBlock>("AssistantStatus")!;
+                var shown = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                consentText.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == TextBlock.TextProperty && !string.IsNullOrEmpty(consentText.Text))
+                        shown.TrySetResult(true);
+                };
+                crash.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == InputElement.IsEnabledProperty && crash.IsEnabled)
+                        completed.TrySetResult(true);
+                };
+
+                panel.FindControl<Button>("MoreChecksToggle")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                crash.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await shown.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+                Assert.True(consent.IsVisible);
+                Assert.Equal(Strings.AssistantCrashConsent, consentText.Text);
+                Assert.Equal(AutomationLiveSetting.Assertive, AutomationProperties.GetLiveSetting(consentText));
+                Assert.Equal(Strings.AssistantSend, confirm.Content);
+                Assert.Equal(Strings.SourceDiagnosisDoNotSend, decline.Content);
+
+                decline.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+                Assert.Equal(0, providerCalls);
+                Assert.Equal(Strings.AssistantDiagnosisDeclined, status.Text);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            directory.Delete(true);
+        }
+    }
+
+    [Fact]
+    public async Task Crash_analysis_rechecks_the_feed_after_consent()
+    {
+        var previous = AppPaths.DataDir;
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            AppPaths.OverrideDataDir(directory.FullName);
+            WriteCrashReport(directory.FullName);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions =
+            [
+                new() { Url = "https://ninitux.com/sub/synthetic-crash-after", Enabled = true }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger)
+            {
+                StepAssistantAsync = (_, _, _, _, _) =>
+                    throw new InvalidOperationException("The provider must not be called."),
+            };
+
+            var result = await vm.DiagnoseAssistantCrashAsync((question, _) =>
+            {
+                Assert.Equal(Strings.AssistantCrashConsent, question);
+                vm.Subscriptions.Single().Enabled = false;
+                return Task.FromResult(true);
+            }, TestContext.Current.CancellationToken);
+
+            Assert.Equal(Strings.AssistantSubscription, result);
         }
         finally
         {
@@ -327,12 +591,13 @@ public sealed class AssistantSetupPanelTests
                     if (args.Property == Avalonia.Input.InputElement.IsEnabledProperty && run.IsEnabled)
                         completed.TrySetResult(true);
                 };
-                panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 panel.FindControl<TextBox>("AssistantGoal")!.Text = "Enable DNS flushing on startup";
                 Assert.False(confirm.IsVisible);
                 run.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.True(confirm.IsVisible);
-                Assert.Equal(Strings.AssistantChangeDescription("SetFlushDnsOnStart", true, null, false), status.Text);
+                Assert.Equal(Strings.AssistantChangeDescription("SetFlushDnsOnStart", true, null, false),
+                    panel.FindControl<TextBlock>("AssistantConsentText")!.Text);
+                Assert.False(status.IsVisible);
                 Assert.False(SettingsLoader.Load(AppPaths.ConfigYamlPath).App.FlushDnsOnStart);
                 switch (response)
                 {
@@ -495,7 +760,6 @@ public sealed class AssistantSetupPanelTests
             var panel = new AssistantSetupPanel { DataContext = vm };
             var window = new Window { Content = panel };
             window.Show();
-            panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             panel.FindControl<TextBox>("AssistantGoal")!.Text = "Connect VPN";
             panel.FindControl<Button>("RunAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(request.CanBeCanceled);

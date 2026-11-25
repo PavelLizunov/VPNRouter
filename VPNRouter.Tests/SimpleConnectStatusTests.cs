@@ -1,7 +1,6 @@
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using VPNRouter.App.Controls;
 using Avalonia.Threading;
@@ -40,8 +39,8 @@ public sealed class SimpleConnectStatusTests
 
         var assistant = Assert.Single(view.Page.GetVisualDescendants().OfType<AssistantSetupPanel>());
         Assert.True(assistant.IsEffectivelyVisible);
-        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.True(assistant.FindControl<StackPanel>("AssistantFields")!.IsEffectivelyVisible);
+        Assert.True(assistant.FindControl<TextBox>("AssistantGoal")!.IsEffectivelyVisible);
+        Assert.True(assistant.FindControl<Button>("RunAssistant")!.IsEffectivelyVisible);
 
         var scroll = view.Page.FindControl<ScrollViewer>("SimpleContentScroll")!;
         var actions = view.Page.FindControl<Panel>("SimpleConnectionActions")!;
