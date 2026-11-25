@@ -10,6 +10,47 @@ namespace VPNRouter.App.ViewModels;
 public partial class MainWindowViewModel
 {
     private bool _businessConfigurationFailed;
+    private bool _pinnedStartRequested;
+    private bool _pinnedStartOwnedByUs;
+
+    // Test seam for hosts where the Windows service owns the TUN.
+    internal Func<bool>? ExternalTunnelOwned { get; set; }
+    internal Func<bool>? AdoptExternalTunnelForTest { get; set; }
+
+    private bool HasExternalTunnelOwned()
+    {
+        if (ExternalTunnelOwned != null) return ExternalTunnelOwned();
+#if PLATFORM_WINDOWS
+        return VPNRouter.App.Services.WindowsServiceHelper.IsRunning() && TunOwnershipLock.IsOwnedByAnyone();
+#else
+        return false;
+#endif
+    }
+
+    private bool TryAdoptExternalTunnel()
+    {
+        if (AdoptExternalTunnelForTest != null) return AdoptExternalTunnelForTest();
+        DetectServiceManagedVpn();
+        return IsConnected;
+    }
+
+    private bool TryHandleExternalTunnelOwnership()
+    {
+        if (!HasExternalTunnelOwned()) return false;
+        var adopted = TryAdoptExternalTunnel();
+        // Only this transition belongs to the caller; the other tunnel stays untouched.
+        IsConnecting = false;
+        ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
+        if (adopted)
+            _logger.Information("[VM] Connect adopted an externally owned VPN instead of starting a parallel engine");
+        else
+        {
+            _logger.Warning("[VM] Connect refused to start while another owner holds the tunnel");
+            StatusText = Core.Localization.Strings.BusinessExternalTunnelBusy;
+        }
+        return true;
+    }
+
     private void OnAutoFailoverMessage(string message)
     {
         if (string.IsNullOrWhiteSpace(message)) return;
@@ -168,7 +209,8 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private Task ToggleConnectionAsync() => ToggleConnectionCoreAsync(null);
 
-    private async Task ToggleConnectionCoreAsync(AppSettings? submitted)
+    private async Task ToggleConnectionCoreAsync(AppSettings? submitted, bool useSimpleStart = true,
+        CancellationToken ct = default)
     {
         if (ProductEdition.IsBusiness && UpdateVm.IsDownloading) return;
         if (_businessPolicyApplyActive)
@@ -243,19 +285,52 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var startOverride = submitted == null ? null : SimpleTunnelStart;
-#if PLATFORM_WINDOWS
-        if (startOverride == null && VPNRouter.App.Services.WindowsServiceHelper.IsRunning()
-            && TunOwnershipLock.IsOwnedByAnyone())
+        if (submitted == null && TryHandleExternalTunnelOwnership()) return;
+
+        if (submitted == null && IsBusinessAutomaticSelection)
         {
-            DetectServiceManagedVpn();
-            if (IsConnected)
+            IsConnecting = true;
+            StatusText = Core.Localization.Strings.BusinessAutoSelecting;
+            ConnectButtonText = Strings.Starting;
+            AppSettings? pinned = null;
+            try { pinned = await ResolveBusinessAutomaticSubmissionAsync(CancellationToken.None); }
+            finally
             {
-                _logger.Information("[VM] Connect adopted Windows Service-owned VPN instead of starting a parallel engine");
+                if (pinned == null)
+                {
+                    IsConnecting = false;
+                    ConnectButtonText = Strings.StartVPN;
+                }
+            }
+            if (pinned == null)
+            {
+                StatusText = HasBusinessAutoSelectStatus
+                    ? BusinessAutoSelectStatusText
+                    : Core.Localization.Strings.BusinessAutoNoneWorking;
                 return;
             }
+            submitted = pinned;
+            useSimpleStart = false;
         }
-#endif
+
+        _pinnedStartRequested = submitted != null && !useSimpleStart;
+        _pinnedStartOwnedByUs = false;
+
+        var startOverride = submitted == null || !useSimpleStart ? null : SimpleTunnelStart;
+        if (startOverride == null && HasExternalTunnelOwned())
+        {
+            var adopted = TryAdoptExternalTunnel();
+            if (adopted)
+                _logger.Information("[VM] Connect adopted an externally owned VPN instead of starting a parallel engine");
+            else
+                _logger.Warning("[VM] Connect refused to start while another owner holds the tunnel");
+
+            // Only this transition belongs to the caller; the other tunnel stays untouched.
+            IsConnecting = false;
+            ConnectButtonText = IsConnected ? Strings.StopVPN : Strings.StartVPN;
+            if (!adopted) StatusText = Core.Localization.Strings.BusinessExternalTunnelBusy;
+            return;
+        }
 
         {
             IsConnecting = true;
@@ -284,13 +359,35 @@ public partial class MainWindowViewModel
             {
                 var capturedSettings = submitted ?? CaptureBusinessConnectionSettings();
                 var skipConflictCheck = _skipVpnConflictThisSession;
-                if (startOverride == null)
-                    await PrepareColdStartAsync();
+                var businessStart = startOverride == null && submitted != null && !useSimpleStart
+                    ? BusinessConnectStart : null;
+                if (startOverride == null && businessStart == null)
+                {
+                    try { await PrepareColdStartAsync(ct); }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        IsConnecting = false;
+                        ConnectButtonText = Strings.StartVPN;
+                        StatusText = Strings.NotConnected;
+                        return;
+                    }
+                }
 
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
+                // Cancellation during preparation (for example closing the
+                // repair dialog) must not launch the captured tunnel.
+                if (ct.IsCancellationRequested)
+                {
+                    IsConnecting = false;
+                    ConnectButtonText = Strings.StartVPN;
+                    StatusText = Strings.NotConnected;
+                    return;
+                }
+
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
-                var start = startOverride ?? RunTwoPhaseStartAsync;
+                var start = startOverride ?? businessStart ?? RunTwoPhaseStartAsync;
                 var (startTask, outcome) = await start(capturedSettings, cts.Token, skipConflictCheck);
 
                 if (outcome == Internals.TwoPhaseStartOutcome.Connected)
@@ -298,6 +395,7 @@ public partial class MainWindowViewModel
                     try { await startTask; } catch {
  }
                     _displayExternalTunnel = false;
+                    if (_pinnedStartRequested) _pinnedStartOwnedByUs = true;
                     IsConnected = true;
                     IsConnecting = false;
                     _lastSuccessfulConnectAt = DateTime.UtcNow;
@@ -336,6 +434,7 @@ public partial class MainWindowViewModel
             catch (TunOwnershipException)
             {
                 _logger.Warning("[VM] TUN adapter owned by another VPNRouter instance");
+                if (_pinnedStartRequested) InvalidateBusinessAutoOutcome();
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 IsConnected = false;
                 IsConnecting = false;
@@ -351,6 +450,7 @@ public partial class MainWindowViewModel
                     "[VM] Conflicting VPN detected: {Count} processes ({First})",
                     cvex.Conflicts.Count,
                     cvex.Conflicts.Count > 0 ? cvex.Conflicts[0].ProcessName : "<empty>");
+                if (_pinnedStartRequested) InvalidateBusinessAutoOutcome();
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 IsConnecting = false;
                 IsConnected = false;
@@ -372,6 +472,7 @@ public partial class MainWindowViewModel
             catch (Exception ex)
             {
                 _logger.Error("Failed to start VPN ({ExceptionType})", ex.GetType().Name);
+                if (_pinnedStartRequested) InvalidateBusinessAutoOutcome();
                 IsConnecting = false;
                 if (IsConnected && _engine.IsRunning)
                 {
@@ -399,8 +500,17 @@ public partial class MainWindowViewModel
     }
 #endif
 
-    private async Task PrepareColdStartAsync()
+    internal Func<CancellationToken, Task>? PrepareColdStartForTest { get; set; }
+
+    private async Task PrepareColdStartAsync(CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+        if (PrepareColdStartForTest != null)
+        {
+            await PrepareColdStartForTest(ct);
+            ct.ThrowIfCancellationRequested();
+            return;
+        }
 #if PLATFORM_WINDOWS
         await Task.Run(() =>
         {
@@ -409,10 +519,11 @@ public partial class MainWindowViewModel
             try { OrphanCleanup.KillOrphans(); } catch { }
             try { if (TryStopVpnRouterService()) Thread.Sleep(2000); }
             catch { }
-        });
+        }, ct);
 #endif
         if (OperatingSystem.IsMacOS())
-            await Task.Run(EnsureMacSudoAccess);
+            await Task.Run(EnsureMacSudoAccess, ct);
+        ct.ThrowIfCancellationRequested();
     }
 
     private async Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)> RunTwoPhaseStartAsync(
@@ -442,6 +553,7 @@ public partial class MainWindowViewModel
 
     private async Task AbortStartAsync(string statusText)
     {
+        if (_pinnedStartRequested) InvalidateBusinessAutoOutcome();
         try { await Task.Run(() => _engine.Stop()); } catch { }
         IsConnecting = false;
         IsConnected = false;

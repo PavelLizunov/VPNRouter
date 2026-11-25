@@ -64,6 +64,11 @@ public class VlessConfig
 
     public bool AutoSelectBestServer { get; set; } = false;
 
+    // Automatic Business selection and one-off repair keep failover choices local to this session.
+    [JsonIgnore]
+    [YamlIgnore]
+    internal bool IsTransientBusinessSelection { get; set; }
+
     public List<VlessServerEntry> GetActiveServers()
     {
         var all = GetEffectiveServers();

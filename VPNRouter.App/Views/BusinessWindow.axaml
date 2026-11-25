@@ -231,7 +231,40 @@
                 <TextBlock Text="{Binding #BusinessWindowRoot.Texts.ConnectButton}" FontSize="18" VerticalAlignment="Center"/>
             </Button>
             </Border>
+            <StackPanel x:Name="BusinessRepairActions" x:DataType="business:BusinessServicesViewModel" Spacing="6">
+                <Button Content="{Binding #BusinessWindowRoot.Texts.RepairTitle}" Command="{Binding OpenRepairCommand}"
+                        IsVisible="{Binding !IsRepairOpen}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        AutomationProperties.AutomationId="BusinessRepairOpen"/>
+                <Border IsVisible="{Binding IsRepairOpen}" Padding="10" CornerRadius="{StaticResource RadiusMd}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="{Binding RepairHint}" IsVisible="{Binding HasRepairHint}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding DiagnosticStatus}" IsVisible="{Binding ShowRepairAnalysis}" TextWrapping="Wrap"
+                                   AutomationProperties.AutomationId="BusinessRepairAnalysis"/>
+                        <Button Content="{Binding #BusinessWindowRoot.Texts.RepairAnalyze}" Command="{Binding AnalyzeRepairCommand}"
+                                IsVisible="{Binding ShowAnalyze}" AutomationProperties.AutomationId="BusinessRepairAnalyze"/>
+                        <TextBlock Text="{Binding RepairActionHint}" IsVisible="{Binding ShowRepairPlan}" TextWrapping="Wrap"/>
+                        <Button Content="{Binding #BusinessWindowRoot.Texts.RepairConnect}" Command="{Binding ConnectRepairCommand}"
+                                IsVisible="{Binding ShowRepairConnect}" AutomationProperties.AutomationId="BusinessRepairConnect"/>
+                        <Button Content="{Binding #BusinessWindowRoot.Texts.RepairClose}" Command="{Binding CloseRepairCommand}"
+                                AutomationProperties.AutomationId="BusinessRepairClose"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
             <StackPanel Spacing="8" IsEnabled="{Binding !IsConnected}">
+                <CheckBox IsChecked="{Binding #BusinessWindowRoot.Texts.AutoSelectEnabled, Mode=TwoWay}"
+                          IsEnabled="{Binding !IsConnecting}"
+                          MinHeight="0" Padding="4,0"
+                          ToolTip.Tip="{Binding #BusinessWindowRoot.Texts.AutoSelectHint}"
+                          AutomationProperties.AutomationId="BusinessAutoSelect"
+                          AutomationProperties.Name="{Binding #BusinessWindowRoot.Texts.AutoSelect}">
+                    <TextBlock Text="{Binding #BusinessWindowRoot.Texts.AutoSelect}" TextWrapping="Wrap"/>
+                </CheckBox>
+                <TextBlock Text="{Binding #BusinessWindowRoot.Texts.AutoSelectStatus}"
+                           IsVisible="{Binding #BusinessWindowRoot.Texts.HasAutoSelectStatus}"
+                           TextWrapping="Wrap" FontSize="11"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           AutomationProperties.AutomationId="BusinessAutoSelectStatus"/>
                 <TextBlock Text="{Binding #BusinessWindowRoot.Texts.Server}"
                            Foreground="{DynamicResource TextSecondaryBrush}"/>
                 <ComboBox x:Name="BusinessServerSelector" SelectionChanged="OnBusinessServerSelectionChanged"

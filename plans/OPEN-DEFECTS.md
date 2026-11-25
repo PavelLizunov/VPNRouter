@@ -26,6 +26,19 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P2** - A failed automatic start can reuse the same cached winner, and a subsequent failover can persist a transient selection over a manual preference. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
+
+- [x] **P1** - The proposed Business probe can omit HTTP Upgrade or TLS ALPN while verifying a direct VLESS profile. Use the same outbound as the eventual VPN session and validate its serialized transport. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
+
+- [x] **P2** - Closing a Business repair during launch preparation can still start the tunnel, and a manual repair can leave the auto-selection status checking after success. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
+
+- [x] **P1** - Applying a new company policy can replace the active verified server with the saved manual one. Preserve the transport snapshot of the current session when applying routing policy. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
+- [x] **P1** - Detecting a service-owned tunnel after a Business probe can leave Connect busy or claim a verified start for another session. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
+
+- [x] **P1** - An automatic Business start can verify one VLESS profile and send traffic through an unverified sibling on the same host. Pin the captured profile and verify the generated proxy and portal outbounds in split and full mode. See PR #732. Fixed in the candidate; regression checks run in the Business matrix.
+
+- [x] **P2** - In the proposed Business chain probe, hostname outbounds referred to an undeclared DNS resolver and sing-box rejected the configuration. The pinned runtime reproduced the failure with a hostname. See PR #732 and phase-business-autoselect-repair-2026-11-25.md. Fixed in the candidate; regression checks run in the Business matrix.
+
 - [ ] **P2** - Business 2.50.13 looks up DNSTT country and activity by the recursive resolver and displays its TCP reachability as server health. Match the deployed node and skip the resolver TCP probe. See phase-business-dnstt-card-2026-11-19.md.
 - [x] **P1** - Validate rollback before promoting the snapshot and retain the previous live tree and marker on relaunch failure (#661). RESOLVED in source. Rollback and repair, verified at `c76a226a` in CI 44368009981.
 - [x] **P1** - Complete monitored startup before service acceptance, preserve native DNS rule fall-through, isolate the accepted import from edits, and retain explicit Stop ownership on refusal (#664). RESOLVED in source. Routing and service acceptance, verified at `c76a226a` in CI 44368009981.

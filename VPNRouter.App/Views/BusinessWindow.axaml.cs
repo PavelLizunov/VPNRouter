@@ -11,7 +11,7 @@ namespace VPNRouter.App.Views;
 
 public partial class BusinessWindow : Window
 {
-    private readonly Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>> _probe;
+    private readonly Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>>? _probe;
     private BusinessServerHealthMonitor? _health;
     private MainWindowViewModel? _vm;
     private readonly Func<MainWindowViewModel, Action, BusinessServicesViewModel> _serviceFactory;
@@ -25,11 +25,11 @@ public partial class BusinessWindow : Window
         ? BusinessBootstrap.ReadClientConfiguration() : BusinessClientConfiguration.Empty) { }
 
     private BusinessWindow(BusinessClientConfiguration configuration) : this(
-        static (server, ct) => TcpTlsProbe.ProbeTcpOnlyAsync(server.Server, server.Port, ct),
+        probe: null,
         (vm, changed) => new(vm, configuration, new BusinessClientHttp(), changed),
         changed => configuration.NodesEndpoint is { } endpoint ? new(endpoint, changed) : null) { }
 
-    internal BusinessWindow(Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>> probe,
+    internal BusinessWindow(Func<ServerViewModel, CancellationToken, Task<ServerProbeResult>>? probe,
         Func<MainWindowViewModel, Action, BusinessServicesViewModel>? serviceFactory = null,
         Func<Action, BusinessNodeMetadataController?>? metadataFactory = null)
     {
@@ -65,6 +65,7 @@ public partial class BusinessWindow : Window
         _services?.Dispose();
         BusinessActions.DataContext = null;
         BusinessSubscriptionActions.DataContext = null;
+        BusinessRepairActions.DataContext = null;
         _services = null;
         _health = null;
         _vm = null;
@@ -83,6 +84,7 @@ public partial class BusinessWindow : Window
             _services = _serviceFactory(_vm, RebuildHealth);
             BusinessActions.DataContext = _services;
             BusinessSubscriptionActions.DataContext = _services;
+            BusinessRepairActions.DataContext = _services;
             _vm.PropertyChanged += OnVmPropertyChanged;
             _services.SetVisible(IsVisible);
             _metadata?.SetVisible(IsVisible);
@@ -131,6 +133,13 @@ public partial class BusinessWindow : Window
         {
             // IsRussian is raised before the shared language has been updated.
             Dispatcher.UIThread.Post(RefreshBusinessLocalization);
+        }
+        if (e.PropertyName is nameof(MainWindowViewModel.BusinessAutoSelect)
+            or nameof(MainWindowViewModel.BusinessAutoSelectStatusText)
+            or nameof(MainWindowViewModel.HasBusinessAutoSelectStatus))
+        {
+            if (Dispatcher.UIThread.CheckAccess()) Texts.RefreshAutoSelect();
+            else Dispatcher.UIThread.Post(Texts.RefreshAutoSelect);
         }
         if (e.PropertyName != nameof(MainWindowViewModel.SelectedServer)) return;
         if (Dispatcher.UIThread.CheckAccess()) SyncSelection();

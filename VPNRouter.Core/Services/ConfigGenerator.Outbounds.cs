@@ -222,7 +222,7 @@ public static partial class ConfigGenerator
         return servers;
     }
 
-    private static List<SingBoxOutbound> BuildChainedOutbounds(
+    internal static List<SingBoxOutbound> BuildChainedOutbounds(
         List<VlessServerEntry> servers, List<VlessServerEntry> chainedTargets)
     {
         if (chainedTargets.Count != 1)

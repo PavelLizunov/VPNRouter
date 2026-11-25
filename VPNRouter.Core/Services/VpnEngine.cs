@@ -173,6 +173,8 @@ public partial class VpnEngine : IDisposable
     internal static AppSettings CopySessionSettings(AppSettings settings)
     {
         var snapshot = SettingsLoader.Copy(settings);
+        if (settings.Vless?.IsTransientBusinessSelection == true)
+            snapshot.Vless.IsTransientBusinessSelection = true;
         if (settings.Tun?.AutoDetectedExcludeAddress is { Count: > 0 } detected)
             snapshot.Tun.AutoDetectedExcludeAddress = [.. detected];
         snapshot.BusinessPolicy = settings.BusinessPolicy;

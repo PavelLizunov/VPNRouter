@@ -291,6 +291,8 @@ public partial class MainWindowViewModel
         if (_isLoadingUI || _isReconnecting || IsConnected || IsConnecting ||
             server == null || !GetBusinessServerChoices().Contains(server)) return;
 
+        MarkBusinessSelectionManual();
+        _settings.App.BusinessServerSelectionMode = BusinessServerSelectionMode.Manual;
         SelectedServer = server;
         try { SaveSettings(); }
         catch (Exception)
@@ -330,6 +332,7 @@ public partial class MainWindowViewModel
             SelectedServer = rows.First(s => s.Name == next.ActiveServer);
         }
         finally { _isLoadingUI = false; }
+        OnBusinessServersReplaced();
         return true;
     }
 

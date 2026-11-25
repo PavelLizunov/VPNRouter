@@ -117,7 +117,8 @@ public sealed class AutoFailoverEngine
             return new FailoverOutcome(Switched: false, NewActiveServer: null, UserFacingMessage: null);
         }
 
-        PersistSelection(replacement);
+        if (!_settings.Vless.IsTransientBusinessSelection)
+            PersistSelection(replacement);
 
         return new FailoverOutcome(
             Switched: true,

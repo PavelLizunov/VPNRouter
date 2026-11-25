@@ -67,6 +67,8 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     }
     internal void RefreshLocalization()
     {
+        OnPropertyChanged(nameof(RepairHint));
+        OnPropertyChanged(nameof(RepairActionHint));
         OnPropertyChanged(nameof(RefreshStatus));
         OnPropertyChanged(nameof(IsRefreshStatusVisible));
         OnPropertyChanged(nameof(DiagnosticStatus));
@@ -80,16 +82,19 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     public RelayCommand OpenReportCommand { get; }
 
     internal BusinessServicesViewModel(MainWindowViewModel vm, BusinessClientConfiguration configuration,
-        BusinessClientHttp http, Action poolChanged, IBusinessDiagnostics? diagnostics = null)
+        BusinessClientHttp http, Action poolChanged, IBusinessDiagnostics? diagnostics = null,
+        Func<CancellationToken, Task<bool>>? connectVerified = null)
     {
         _vm = vm; _configuration = configuration; _http = http; _poolChanged = poolChanged;
+        _connectVerified = connectVerified ?? vm.ConnectVerifiedBusinessServerAsync;
         _diagnostics = diagnostics ?? new BusinessDiagnostics(configuration, http);
         RefreshListCommand = new(RefreshListAsync, CanRefresh);
-        CollectCommand = new(() => RunDiagnosticsAsync(false), () => !_disposed && !IsDiagnosticBusy);
-        SendCommand = new(() => RunDiagnosticsAsync(true), () => !_disposed && !IsDiagnosticBusy && configuration.SupportEndpoint != null);
+        CollectCommand = new(() => RunDiagnosticsAsync(false), () => !_disposed && !IsRepairOpen && !IsDiagnosticBusy);
+        SendCommand = new(() => RunDiagnosticsAsync(true), () => !_disposed && !IsRepairOpen && !IsDiagnosticBusy && configuration.SupportEndpoint != null);
         CancelDiagnosticCommand = new(() => _diagnostic?.Cancel(), () => !_disposed && IsDiagnosticBusy);
         OpenReportCommand = new(OpenReport, () => !_disposed && !IsDiagnosticBusy && _report != null);
         _vm.PropertyChanged += OnVmChanged;
+        _vm.UpdateVm.PropertyChanged += OnUpdateChanged;
         _timer.Tick += OnTimer;
         if (configuration.Subscription == null) SetRefreshState(RefreshState.NotConfigured);
         if (configuration.SupportEndpoint == null) SetDiagnosticState(DiagnosticState.LocalOnly);
@@ -101,21 +106,33 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     internal void SetVisible(bool visible)
     {
         _visible = visible;
-        if (!visible) { _timer.Stop(); _refresh?.Cancel(); }
+        if (!visible) { CloseRepair(); _timer.Stop(); _refresh?.Cancel(); }
         else if (!_disposed)
         {
             _timer.Start();
             if (!_started && CanRefresh()) { _started = true; _ = RefreshListAsync(); }
         }
         RefreshListCommand.NotifyCanExecuteChanged();
+        NotifyRepairCommands();
+    }
+
+    private void OnUpdateChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(_vm.UpdateVm.IsDownloading)) OnVmChanged(sender, e);
     }
 
     private void OnTimer(object? sender, EventArgs e) { if (CanRefresh()) _ = RefreshListAsync(); }
     private void OnVmChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not (nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected))) return;
+        if (e.PropertyName is not (nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected)
+            or nameof(MainWindowViewModel.IsApplying) or nameof(MainWindowViewModel.SelectedServer) or nameof(_vm.UpdateVm.IsDownloading))) return;
         if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => OnVmChanged(sender, e)); return; }
         if (_disposed) return;
+        if (_repairStep is RepairStep.Analyzing or RepairStep.Advice or RepairStep.Connected or RepairStep.Failed ||
+            (_repairStep == RepairStep.Consent && e.PropertyName != nameof(MainWindowViewModel.SelectedServer)))
+            CloseRepair();
+        NotifyRepairCommands();
+        if (e.PropertyName is not (nameof(MainWindowViewModel.IsConnecting) or nameof(MainWindowViewModel.IsConnected))) return;
         if (_vm.IsConnecting || _vm.IsConnected) _refresh?.Cancel();
         if (!_started && CanRefresh()) { _started = true; _ = RefreshListAsync(); }
         RefreshListCommand.NotifyCanExecuteChanged();
@@ -125,6 +142,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     {
         if (!CanRefresh()) return;
         IsRefreshing = true;
+        NotifyRepairCommands();
         RefreshListCommand.NotifyCanExecuteChanged();
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _refresh = operation;
@@ -145,22 +163,22 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         finally
         {
             _refresh = null;
-            if (!_disposed) { IsRefreshing = false; RefreshListCommand.NotifyCanExecuteChanged(); }
+            if (!_disposed) { IsRefreshing = false; RefreshListCommand.NotifyCanExecuteChanged(); NotifyRepairCommands(); }
         }
     }
 
-    internal async Task RunDiagnosticsAsync(bool send)
+    internal async Task RunDiagnosticsAsync(bool send, bool fresh = false, CancellationToken cancellationToken = default)
     {
-        if (_disposed || IsDiagnosticBusy || (send && _configuration.SupportEndpoint == null)) return;
+        if (_disposed || IsDiagnosticBusy || (IsRepairOpen && !fresh) || (send && _configuration.SupportEndpoint == null)) return;
         IsDiagnosticBusy = true; NotifyDiagnosticCommands();
-        using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
         _diagnostic = operation;
         var uploading = false;
         var acknowledged = false;
         try
         {
             // Retry sends the same saved archive, allowing receiver deduplication.
-            if (!send || _report == null || _delivered)
+            if (fresh || !send || _report == null || _delivered)
             {
                 SetDiagnosticState(DiagnosticState.Collecting);
                 var report = await _diagnostics.CollectAsync(operation.Token);
@@ -209,6 +227,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
     {
         CollectCommand.NotifyCanExecuteChanged(); SendCommand.NotifyCanExecuteChanged();
         CancelDiagnosticCommand.NotifyCanExecuteChanged(); OpenReportCommand.NotifyCanExecuteChanged();
+        NotifyRepairCommands();
     }
 
     private void OpenReport()
@@ -224,6 +243,7 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         _disposed = true;
         _timer.Stop(); _timer.Tick -= OnTimer;
         _vm.PropertyChanged -= OnVmChanged;
+        _vm.UpdateVm.PropertyChanged -= OnUpdateChanged;
         _lifetime.Cancel();
         // Active operations own/dispose their linked sources after completion.
         _http.Dispose();

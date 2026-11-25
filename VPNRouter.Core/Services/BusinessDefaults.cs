@@ -14,7 +14,16 @@ internal static class BusinessDefaults
 
         rules = BusinessPolicyRouting.Compose(rules, policy);
 
+        // An existing named node was a manual choice. A fresh install starts in
+        // automatic mode; an explicit stored mode always wins.
+        var hadSavedChoice = !string.IsNullOrWhiteSpace(settings.Vless.ActiveServer) &&
+            settings.Vless.Servers is { Count: > 0 };
+        var selectionMode = BusinessServerSelectionMode.IsConfigured(settings.App.BusinessServerSelectionMode)
+            ? settings.App.BusinessServerSelectionMode
+            : hadSavedChoice ? BusinessServerSelectionMode.Manual : BusinessServerSelectionMode.Automatic;
+
         settings.Vless = CreateServerPool(servers, settings.Vless);
+        settings.App.BusinessServerSelectionMode = selectionMode;
         settings.ActiveProfile = string.Empty;
         settings.CustomApps.Clear();
         settings.ExcludedApps.Clear();

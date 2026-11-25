@@ -77,6 +77,9 @@ public static partial class Strings
     };
     public static string BusinessSplit => Ru ? "Выбранные приложения и сайты" : "Selected apps and sites";
     public static string BusinessFull => Ru ? "Всё, кроме российских ресурсов и UIS" : "Everything except Russian resources and UIS";
+    public static string BusinessExternalTunnelBusy => Ru
+        ? "VPN уже запущен другим процессом или службой. Дождитесь его завершения и повторите."
+        : "VPN is already running in another process or service. Wait for it to finish and retry.";
     public static string BusinessConfigMissing => Ru
         ? "Не удалось подготовить корпоративную конфигурацию. Обратитесь к администратору."
         : "The Business configuration could not be prepared. Contact your administrator.";
@@ -86,24 +89,45 @@ public static partial class Strings
     public static string BusinessDiagnostics => Ru ? "Сохранить диагностику" : "Save diagnostics";
     public static string BusinessOpen => Ru ? "Открыть VPNRouter Business" : "Open VPNRouter Business";
     public static string BusinessServer => Ru ? "Сервер VPN" : "VPN server";
-    public static string BusinessServerRefresh => Ru ? "Обновить пинг" : "Refresh ping";
-    public static string BusinessServerChecking => Ru ? "Проверка…" : "Checking…";
+    public static string BusinessServerRefresh => Ru ? "Обновить проверку" : "Refresh check";
+    public static string BusinessServerChecking => Ru ? "Проверяем VPN…" : "Checking VPN…";
     public static string BusinessServerNotChecked => Ru ? "Не проверен" : "Not checked";
-    public static string BusinessServerReachable => Ru ? "Порт доступен" : "Port reachable";
-    public static string BusinessServerSlow => Ru ? "Медленный ответ" : "Slow response";
-    public static string BusinessServerNoReply => Ru ? "Нет ответа" : "No response";
+    public static string BusinessServerUnsupportedByCheck => Ru
+        ? "Проверка не поддерживается — выберите вручную"
+        : "Check unsupported; choose manually";
+    public static string BusinessServerReachable => Ru ? "Работает" : "Works";
+    public static string BusinessServerSlow => Ru ? "Медленный VPN" : "Slow VPN";
+    public static string BusinessServerNoReply => Ru ? "Проверка не прошла" : "Check failed";
     public static string BusinessServerInconclusive => Ru ? "Неясно" : "Inconclusive";
     public static string BusinessServerLatency(int ms) => Ru ? $"{ms} мс" : $"{ms} ms";
     public static string BusinessServerSubMillisecond => Ru ? "<1 мс" : "<1 ms";
     public static string BusinessServerHealthHint => Ru
-        ? "Доступность порта и пинг: проверка каждые 30 с при отключённом VPN. Это не проверка работы VPN."
-        : "Port reachability and ping: checked every 30 s while VPN is off. This does not verify VPN traffic.";
+        ? "Сквозная HTTPS-проверка через выбранный сервер каждые 30 с при отключённом VPN. VPN при этом не запускается."
+        : "End-to-end HTTPS check through the selected server every 30 s while VPN is off. It does not start the VPN.";
     public static string BusinessServerHealthLegend => Ru
-        ? "Зелёный: порт отвечает, до 800 мс. Жёлтый: медленнее 800 мс или результат неясен. Красный: нет ответа. Серый: не проверен. Проверка приостановлена, пока VPN подключается или подключён."
-        : "Green: port responds within 800 ms. Yellow: slower than 800 ms or inconclusive. Red: no response. Grey: not checked. Probes pause while VPN is connecting or connected.";
+        ? "Зелёный: HTTPS прошёл через сервер, до 800 мс. Жёлтый: медленнее 800 мс. Красный: проверка не прошла. Серый: не проверен или протокол не поддерживает проверку. Проверка приостановлена, пока VPN подключается или подключён."
+        : "Green: HTTPS completes through the server within 800 ms. Yellow: slower than 800 ms. Red: check failed. Grey: not checked or the protocol cannot be checked. Checks pause while VPN is connecting or connected.";
     public static string BusinessServerHint => Ru
-        ? "Если VPN недоступен: отключитесь, выберите другой сервер и подключитесь снова. Выбор сохраняется."
-        : "If VPN is unavailable, disconnect, choose another server and reconnect. Your choice is saved.";
+        ? "Автоматический режим выбирает самый быстрый рабочий сервер. Чтобы выбрать вручную, укажите сервер в списке: выбор сохранится."
+        : "Automatic mode picks the fastest working server. To choose manually, pick a server in the list; that choice is saved.";
+    public static string BusinessAutoSelectServer => Ru
+        ? "Автоматически выбирать самый быстрый рабочий сервер"
+        : "Automatically choose the fastest working server";
+    public static string BusinessAutoSelectHint => Ru
+        ? "Перед подключением каждый сервер проверяется сквозным HTTPS-запросом через настроенный маршрут. Выбор сервера вручную отключает автоматический режим."
+        : "Before connecting, each server is checked with an end-to-end HTTPS request through its configured route. Picking a server manually turns automatic mode off.";
+    public static string BusinessAutoSelecting => Ru
+        ? "Проверяем серверы сквозным HTTPS-запросом…"
+        : "Checking servers with an end-to-end HTTPS request…";
+    public static string BusinessAutoFastest(string name, int ms) => Ru
+        ? $"Автоматически: {name} · {ms} мс"
+        : $"Automatic: {name} · {ms} ms";
+    public static string BusinessAutoNoneWorking => Ru
+        ? "Ни один сервер не прошёл сквозную проверку. Повторите позже или выберите сервер вручную."
+        : "No server passed the end-to-end check. Try again later or choose a server manually.";
+    public static string BusinessAutoCheckUnavailable => Ru
+        ? "Сквозная проверка недоступна. Выберите сервер вручную."
+        : "The end-to-end check is unavailable. Choose a server manually.";
     public static string BusinessServerSaveFailed => Ru
         ? "Не удалось сохранить выбранный сервер. Проверьте права доступа к настройкам."
         : "The selected server could not be saved. Check access to the settings folder.";

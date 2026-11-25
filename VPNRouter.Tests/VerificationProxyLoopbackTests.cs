@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json.Nodes;
 using VPNRouter.Core;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
@@ -94,22 +95,97 @@ public sealed class VerificationProxyLoopbackTests
         Assert.False(await rejected);
     });
 
-    private static async Task ReplyAsync(TcpClient client, string statusAndHeaders, CancellationToken ct)
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ReachableVlessPortOnlyPassesTraceProbeWithWorkingOutbound(bool validUser)
     {
-        var response = $"HTTP/1.1 {statusAndHeaders}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+        using var vlessPort = new TcpListener(IPAddress.Loopback, 0);
+        using var directTrap = new TcpListener(IPAddress.Loopback, 0);
+        using var origin = new TcpListener(IPAddress.Loopback, 0);
+        vlessPort.Start();
+        directTrap.Start();
+        origin.Start();
+        var serverEndpoint = (IPEndPoint)vlessPort.LocalEndpoint;
+        var trapEndpoint = (IPEndPoint)directTrap.LocalEndpoint;
+        var originEndpoint = (IPEndPoint)origin.LocalEndpoint;
+        var user = Guid.NewGuid().ToString();
+
+        await WithOwnedProxyAsync(async (proxy, ct) =>
+        {
+            using (var tcp = new TcpClient())
+                await tcp.ConnectAsync(serverEndpoint.Address, serverEndpoint.Port, ct);
+
+            var trace = DeepVerifyProbe.ProbeViaProxyAsync(
+                proxy, TimeSpan.FromSeconds(4), ct, $"http://{trapEndpoint}/trace");
+            if (validUser)
+            {
+                using var connection = await origin.AcceptTcpClientAsync(ct);
+                await ReadOriginRequestAsync(connection.GetStream(), "/trace", ct);
+                await ReplyAsync(connection, "200 OK", ct, "ip=198.51.100.42\n");
+            }
+
+            var result = await trace;
+            Assert.False(directTrap.Pending(), "The verifier attempted to connect directly to the trace URL.");
+            Assert.False(origin.Pending(), "The origin received an unexpected connection.");
+            if (validUser) Assert.True(result.ok, result.err);
+            else Assert.False(result.ok, "TCP reachability must not pass verification for a rejected VLESS user.");
+        }, proxy =>
+        {
+            vlessPort.Stop();
+            var entry = new VlessServerEntry
+            {
+                Server = serverEndpoint.Address.ToString(),
+                Port = serverEndpoint.Port,
+                Uuid = validUser ? user : Guid.NewGuid().ToString(),
+            };
+            var config = JsonNode.Parse(VlessDeepVerifier.BuildSingleOutboundConfig(entry, proxy))!.AsObject();
+            config["inbounds"]!.AsArray().Insert(0, new JsonObject
+            {
+                ["type"] = "vless",
+                ["tag"] = "fixture-vless",
+                ["listen"] = entry.Server,
+                ["listen_port"] = entry.Port,
+                ["users"] = new JsonArray(new JsonObject { ["uuid"] = user }),
+            });
+            // Only authenticated VLESS traffic can reach the origin behind the trap URL.
+            var rules = config["route"]!["rules"]!.AsArray();
+            rules.Insert(0, new JsonObject
+            {
+                ["inbound"] = new JsonArray("fixture-vless"),
+                ["ip_cidr"] = new JsonArray("127.0.0.1/32"),
+                ["port"] = new JsonArray(trapEndpoint.Port),
+                ["action"] = "route",
+                ["outbound"] = "dns-direct-out",
+                ["override_port"] = originEndpoint.Port,
+            });
+            rules.Insert(1, new JsonObject { ["inbound"] = new JsonArray("fixture-vless"), ["action"] = "reject" });
+            var dns = config["dns"]!["servers"]![0]!;
+            dns["server"] = "127.0.0.1";
+            dns["server_port"] = trapEndpoint.Port;
+            return config;
+        });
+    }
+
+    private static async Task ReplyAsync(TcpClient client, string statusAndHeaders, CancellationToken ct, string body = "")
+    {
+        var response = $"HTTP/1.1 {statusAndHeaders}\r\nConnection: close\r\nContent-Length: {body.Length}\r\n\r\n{body}";
         await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(response), ct);
     }
 
-    private static async Task WithOwnedProxyAsync(Func<VerificationProxy, CancellationToken, Task> test)
+    private static async Task WithOwnedProxyAsync(Func<VerificationProxy, CancellationToken, Task> test,
+        Func<VerificationProxy, JsonObject>? configure = null)
     {
         var runtime = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
+        if (OperatingSystem.IsLinux() && Environment.GetEnvironmentVariable("VPNROUTER_EXPECT_BUSINESS_POLICY_TESTS") == "1")
+            Assert.False(string.IsNullOrEmpty(runtime), "Business CI requires the pinned sing-box fixture.");
         Assert.SkipUnless(!string.IsNullOrEmpty(runtime), "Requires the verified sing-box fixture");
         Assert.True(File.Exists(runtime));
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(20));
         var proxy = new VerificationProxy(NetPortUtil.FindFreePort());
-        var config = new JsonObject
+        var config = configure?.Invoke(proxy) ?? new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "info" },
             ["inbounds"] = new JsonArray(proxy.CreateInbound()),
