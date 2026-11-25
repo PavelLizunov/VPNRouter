@@ -14,7 +14,7 @@ internal static class TurnRelayUriParser
     {
         if (!SingBoxFeatures.TurnRelayAvailable)
             throw new FormatException("TurnRelay requires a sing-box-vpnctl core with with_turnrelay.");
-        if (uri.Length > MaxPayloadChars + 512)
+        if (uri.Length > MaxPayloadChars + 2048)
             throw new FormatException("TurnRelay profile is too large.");
 
         int fragmentStart = uri.IndexOf('#', Prefix.Length);

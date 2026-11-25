@@ -952,6 +952,14 @@ public partial class AndroidApp
                 parts.Add("amneziawg");
                 break;
 
+            case "turnrelay":
+                parts.Add("turnrelay");
+                if (!string.IsNullOrWhiteSpace(srv.TurnRelay?.Mode))
+                    parts.Add(srv.TurnRelay!.Mode.ToLowerInvariant());
+                if (!string.IsNullOrWhiteSpace(srv.TurnRelay?.TurnServer))
+                    parts.Add(srv.TurnRelay!.TurnServer);
+                break;
+
             case "vmess":
                 parts.Add("vmess");
                 if (!string.IsNullOrWhiteSpace(srv.Transport?.Type))
