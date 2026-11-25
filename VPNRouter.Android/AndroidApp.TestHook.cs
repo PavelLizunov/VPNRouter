@@ -134,10 +134,19 @@ public partial class AndroidApp
             }
             if (targetIndex < 0) targetIndex = entries.Count - 1;
 
-            app._serverInput.Text = lines[targetIndex];
+            // SelectServerLinks takes the last row as the active exit.
+            var targetLine = lines[targetIndex];
+            var targetEntry = entries[targetIndex];
+            if (targetIndex != entries.Count - 1)
+            {
+                entries.RemoveAt(targetIndex);
+                entries.Add(targetEntry);
+            }
+
+            app._serverInput.Text = targetLine;
             var linkCommand = app.ReserveConnectCommand();
             var linksRejected = linkCommand == null ||
-                !AndroidStorage.SelectServerLinks(entries, lines[targetIndex], linkCommand);
+                !AndroidStorage.SelectServerLinks(entries, targetLine, linkCommand);
             if (!linksRejected)
             {
                 app.RefreshConfigModeUiFromStorage();
@@ -149,8 +158,8 @@ public partial class AndroidApp
             {
                 w.WriteString("kind", "share-links");
                 w.WriteNumber("links", entries.Count);
-                w.WriteBoolean("chained", entries[targetIndex].IsTurnRelay == false &&
-                    !string.IsNullOrEmpty(entries[targetIndex].DetourVia));
+                w.WriteBoolean("chained", targetEntry.IsTurnRelay == false &&
+                    !string.IsNullOrEmpty(targetEntry.DetourVia));
                 w.WriteString("mode", AndroidStorage.GetConfigMode());
                 w.WriteBoolean("rejectedByInputCheck", linksRejected);
             });
