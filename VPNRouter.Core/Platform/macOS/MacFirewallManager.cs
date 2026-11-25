@@ -33,7 +33,6 @@ public sealed class MacFirewallManager : IFirewallManager, ICommittedFirewallCon
     internal IReadOnlyList<string> ServerIps { get { lock (_gate) { return _serverIps.ToArray(); } } }
     internal bool IsArmed { get { lock (_gate) { return _armed; } } }
     internal bool IsLoaded { get { lock (_gate) { return _loaded; } } }
-    internal bool IsAnchorMode { get { lock (_gate) { return _anchorMode; } } }
 
     public MacFirewallManager(
         ILogger? logger = null,

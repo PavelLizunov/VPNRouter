@@ -59,12 +59,6 @@ public static class PlaceholderDefense
             .Where(s => !string.IsNullOrEmpty(s))
             .ToHashSet(StringComparer.Ordinal)!;
 
-    public static IReadOnlySet<string> KnownPubkeys => s_knownPubkeys;
-
-    public static IReadOnlySet<string> KnownShortIds => s_knownShortIds;
-
-    public static IReadOnlySet<string> KnownServers => s_knownServers;
-
     public static string? Inspect(VlessServerEntry? entry)
     {
         if (entry is null) return null;

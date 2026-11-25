@@ -35,21 +35,4 @@ public partial class SingBoxManager
 
         return true;
     }
-
-    public ProcessMetrics GetMetrics()
-    {
-        if (_handle == null || _handle.HasExited)
-            return new ProcessMetrics();
-
-        var snapshot = _handle.TryGetSnapshot();
-        if (snapshot == null)
-            return new ProcessMetrics();
-
-        return new ProcessMetrics
-        {
-            MemoryMb = snapshot.WorkingSetBytes / 1024 / 1024,
-            CpuTime = snapshot.TotalProcessorTime,
-            StartTime = snapshot.StartTime
-        };
-    }
 }

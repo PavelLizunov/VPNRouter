@@ -1,8 +1,8 @@
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Markup.Xaml;
+using VPNRouter.App.Services;
 
 namespace VPNRouter.App.Controls;
 
@@ -39,7 +39,7 @@ public partial class StatusEmblem : UserControl
         _glyph = this.FindControl<Pictogram>("Glyph")!;
         _badge = this.FindControl<Pictogram>("BadgeGlyph")!;
         // The connecting arc spins only when the system allows animations; with reduced motion it stays a still accent arc.
-        _root.Classes.Set("calm", PrefersReducedMotion());
+        _root.Classes.Set("calm", !UiMotion.Allowed());
         Apply();
     }
 
@@ -69,21 +69,4 @@ public partial class StatusEmblem : UserControl
             _ => "power",
         };
     }
-
-    // Windows: "Show animations in Windows" (SPI_GETCLIENTAREAANIMATION). Other systems expose no setting Avalonia can read.
-    private static bool PrefersReducedMotion()
-    {
-        if (!OperatingSystem.IsWindows()) return false;
-        try
-        {
-            return SystemParametersInfo(0x1042, 0, out var enabled, 0) && !enabled;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SystemParametersInfo(uint action, uint param, out bool value, uint winIni);
 }

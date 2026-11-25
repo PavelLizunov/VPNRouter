@@ -40,8 +40,6 @@ public sealed class MacPrivilegedClient
         _logger = logger;
     }
 
-    public static bool IsSupportedPlatform => OperatingSystem.IsMacOS();
-
     public MacPrivilegeState Probe()
     {
         var result = Run(new JsonObject { ["version"] = JsonValue.Create(1), ["op"] = "probe" },

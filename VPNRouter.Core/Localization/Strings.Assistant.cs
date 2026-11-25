@@ -10,7 +10,6 @@ public static partial class Strings
     public static string AssistantDiagnoseCrash => Ru ? "Разобрать сбой" : "Analyze crash";
     public static string AssistantDiagnosingCrash => Ru ? "Проверяю отчёт о последнем сбое…" : "Checking the last crash report…";
     public static string AssistantNoCrash => Ru ? "Сохранённый отчёт о сбое не найден." : "No saved crash report was found.";
-    public static string AssistantApply => Ru ? "Настроить" : "Apply";
     public static string AssistantPlan => Ru ? "Проверить команду" : "Review command";
     public static string AssistantPlanning => Ru ? "Проверяю команду…" : "Reviewing your command…";
     public static string AssistantConfirm => Ru ? "Подтвердить изменение" : "Confirm change";
@@ -132,7 +131,6 @@ public static partial class Strings
     public static string AssistantNoChanges => Ru ? "Ничего не изменено." : "Nothing was changed.";
     internal static string AssistantSplitProfileChange => Ru ? " VPN переключится на профиль раздельной маршрутизации." : " The VPN will switch to the split-routing profile.";
     internal static string AssistantRegionalBypassChange => Ru ? " Исключение для российского трафика будет отключено." : " The Russian traffic bypass will be turned off.";
-    public static string AssistantStepLimit => Ru ? "Достигнут лимит шагов. Уточните оставшуюся задачу." : "The step limit was reached. Specify what remains.";
     public static string AssistantRateLimited => Ru ? "Лимит запросов исчерпан. Попробуйте позже." : "Request limit reached. Try again later.";
     public static string AssistantInvalidGoal => Ru ? "Введите короткую команду без данных подписки." : "Enter a short request without subscription details.";
     public static string AssistantUnavailable => Ru ? "DeepSeek недоступен. Попробуйте позже." : "DeepSeek is unavailable. Try again later.";

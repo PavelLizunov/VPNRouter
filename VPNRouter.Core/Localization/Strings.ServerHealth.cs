@@ -32,10 +32,6 @@ public static partial class Strings
             : "Not verified",
     };
 
-    public static string HealthAsnHighRisk => Ru
-        ? "ASN под риском блокировки"
-        : "ASN at high block risk";
-
     public static string HealthRuBlockWarning => Ru
         ? "Сервер доступен по сети, но VPN-протокол не проходит.\n"
           + "В России такое бывает при блокировке протокола, IP или подсети хостера через DPI/ТСПУ.\n"
@@ -53,16 +49,6 @@ public static partial class Strings
         : "The VPN connected, but the blocked-service check did not pass.\n"
           + "Regular internet works through the VPN, but this server/transport may not bypass the block on your network.\n"
           + "Try another server, ASN/hosting, or transport.";
-
-    public static string HealthYoutubeCanaryCaveat => Ru
-        ? "YouTube — полезная проверка, но не абсолютная. В России его доступность может "
-          + "отличаться по провайдерам, регионам, приложениям и временным правилам блокировки."
-        : "YouTube is a useful check, but not an absolute one. In Russia its availability can "
-          + "vary by ISP, region, app, and temporary blocking rules.";
-
-    public static string HealthCanaryPartialNote => Ru
-        ? "Часть заблокированных сервисов открывается через VPN, часть — нет. Обход подтверждён частично."
-        : "Some blocked services open via the VPN, others do not. Bypass is only partially proven.";
 
     public static string HealthProviderHighRisk => Ru
         ? "Подсеть хостера под риском блокировки: несколько серверов этой подсети не проходят "

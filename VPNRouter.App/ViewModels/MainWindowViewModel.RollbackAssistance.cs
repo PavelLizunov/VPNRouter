@@ -18,8 +18,6 @@ public partial class MainWindowViewModel
         string? AssistantSubscriptionUrl,
         string? ActiveConfigIncompatibility);
 
-    internal ConnectionRollbackHistory RollbackHistory => _rollbackHistory;
-
     private string? BeginManualRollbackAttempt(AppSettings settings)
     {
         _manualRollbackAttempt = null;

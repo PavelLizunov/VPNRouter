@@ -153,12 +153,6 @@ public static class WindowsServiceHelper
         return new(true, $"Service '{ServiceName}' stopped.");
     });
 
-    public static string? GetBinPath()
-    {
-        using var registration = OpenRegistration(ServiceName, 0);
-        return registration?.Config.Image;
-    }
-
     public static ServiceResult EnsureCurrentBinPath(string? currentServiceExePath = null)
     {
         if (currentServiceExePath != null && !string.Equals(currentServiceExePath, EditionExe, StringComparison.OrdinalIgnoreCase))
@@ -179,8 +173,6 @@ public static class WindowsServiceHelper
         }
         catch (Exception ex) { return new(false, ex.Message); }
     }
-
-    public static string? ResolveServiceExePath() => ServiceExeExists(EditionExe) ? EditionExe : null;
 
     private static (int ExitCode, string Output) RunSc(params string[] arguments)
     {
