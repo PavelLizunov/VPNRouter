@@ -353,13 +353,13 @@ public static partial class CustomConfigInjector
         return isIpv6 ? prefix >= 0 && prefix <= 128 : prefix >= 0 && prefix <= 32;
     }
 
-    private static void StripUnsupportedFeatures(JsonObject config, List<string>? excludeAddresses, bool forceIpv4Only, bool strictDns, bool ipv6Enabled)
+    private static void StripUnsupportedFeatures(JsonObject config, List<string>? excludeAddresses, bool forceIpv4Only, bool strictDns, bool ipv6Enabled, string? configuredLocalDns = null)
     {
         MigrateFakeIp(config);
 
         var dnsServers = StjNodeHelpers.SelectToken(config, "dns.servers") as JsonArray;
         MigrateLegacyDnsServers(dnsServers);
-        ReplaceLocalDnsServers(dnsServers);
+        ReplaceLocalDnsServers(dnsServers, configuredLocalDns);
         RouteLocalDnsDetoursThroughDirect(config, dnsServers);
         NormalizeDnsStrategyAndFinal(config, dnsServers, forceIpv4Only, strictDns, ipv6Enabled);
         RemoveLegacyDnsRules(config);
@@ -429,26 +429,112 @@ public static partial class CustomConfigInjector
         }
     }
 
-    private static void ReplaceLocalDnsServers(JsonArray? dnsServers)
+    private static void ReplaceLocalDnsServers(JsonArray? dnsServers, string? configuredLocalDns = null)
     {
-        if (dnsServers != null)
+        if (dnsServers == null)
+            return;
+
+        var explicitOverride = ConfigGenerator.IsExplicitLocalDnsOverride(configuredLocalDns);
+        var needBootstrapTargets = new List<JsonObject>();
+
+        foreach (var server in dnsServers)
         {
-            foreach (var server in dnsServers)
+            var obj = server as JsonObject;
+            if (obj == null) continue;
+            var type = StjNodeHelpers.AsString(obj["type"]);
+            if (type != "local" && type != "dhcp") continue;
+
+            if (!explicitOverride)
             {
-                var obj = server as JsonObject;
-                if (obj == null) continue;
-                var type = StjNodeHelpers.AsString(obj["type"]);
-                if (type == "local" || type == "dhcp")
-                {
-                    obj["type"] = "https";
-                    if (obj["server"] == null)
-                        obj["server"] = "8.8.8.8";
-                    if (obj["path"] == null)
-                        obj["path"] = "/dns-query";
-                    obj.Remove("detour");
-                }
+                obj["type"] = "https";
+                if (obj["server"] == null)
+                    obj["server"] = ConfigGenerator.DefaultDirectDohServer;
+                if (obj["path"] == null)
+                    obj["path"] = ConfigGenerator.DefaultDirectDohPath;
+                obj.Remove("interface");
+                obj.Remove("prefer_go");
+                obj.Remove("detour");
+                continue;
             }
+
+            var resolved = ConfigGenerator.BuildLocalDnsServer(configuredLocalDns, out var bootstrap);
+            StampLocalDnsObject(obj, resolved, includeDetour: false);
+            if (bootstrap != null)
+                needBootstrapTargets.Add(obj);
         }
+
+        if (needBootstrapTargets.Count > 0)
+        {
+            var bootstrapTag = EnsureLocalBootstrapTag(dnsServers);
+            foreach (var target in needBootstrapTargets)
+                target["domain_resolver"] = bootstrapTag;
+        }
+    }
+
+    internal static void StampLocalDnsObject(JsonObject obj, Models.DnsServer resolved, bool includeDetour)
+    {
+        obj.Remove("address");
+        obj.Remove("server");
+        obj.Remove("server_port");
+        obj.Remove("path");
+        obj.Remove("domain_resolver");
+        obj.Remove("detour");
+        obj.Remove("interface");
+        obj.Remove("prefer_go");
+
+        obj["type"] = resolved.Type;
+        if (resolved.Server != null)
+            obj["server"] = resolved.Server;
+        if (resolved.ServerPort.HasValue)
+            obj["server_port"] = resolved.ServerPort.Value;
+        if (resolved.Path != null)
+            obj["path"] = resolved.Path;
+        if (resolved.DomainResolver != null)
+            obj["domain_resolver"] = resolved.DomainResolver.Server;
+        if (includeDetour && resolved.Detour != null)
+            obj["detour"] = resolved.Detour;
+    }
+
+    internal static bool IsSynthesizedLocalBootstrapTag(string? tag)
+    {
+        if (tag == ConfigGenerator.LocalBootstrapDnsTag)
+            return true;
+        var prefix = ConfigGenerator.LocalBootstrapDnsTag + "-";
+        if (tag == null || !tag.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+        var suffix = tag[prefix.Length..];
+        return int.TryParse(suffix, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n)
+            && n >= 2
+            && string.Equals(suffix, n.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+    }
+
+    internal static string EnsureLocalBootstrapTag(JsonArray dnsServers)
+    {
+        var candidate = ConfigGenerator.LocalBootstrapDnsTag;
+        var existingByTag = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        foreach (var s in dnsServers.OfType<JsonObject>())
+        {
+            var tag = StjNodeHelpers.AsString(s["tag"]);
+            if (!string.IsNullOrEmpty(tag))
+                existingByTag.TryAdd(tag, s);
+        }
+
+        for (var n = 2; existingByTag.TryGetValue(candidate, out var existing); n++)
+        {
+            if (StjNodeHelpers.AsString(existing["type"]) == "local"
+                && string.IsNullOrEmpty(StjNodeHelpers.AsString(existing["detour"])))
+            {
+                return candidate;
+            }
+            candidate = $"{ConfigGenerator.LocalBootstrapDnsTag}-{n}";
+        }
+
+        dnsServers.Add((JsonNode?)new JsonObject
+        {
+            ["tag"] = candidate,
+            ["type"] = "local"
+        });
+        return candidate;
     }
 
     private static void RouteLocalDnsDetoursThroughDirect(JsonObject config, JsonArray? dnsServers)
@@ -462,7 +548,8 @@ public static partial class CustomConfigInjector
             {
                 var obj = server as JsonObject;
                 if (obj == null) continue;
-                if (StjNodeHelpers.AsString(obj["type"]) == "fakeip") continue;
+                var type = StjNodeHelpers.AsString(obj["type"]);
+                if (type == "fakeip" || type == "local") continue;
                 var detour = StjNodeHelpers.AsString(obj["detour"]);
                 if (detour != "dns-direct" && IsLocalDetour(sbOutbounds, sbEndpoints, detour))
                 {
@@ -511,11 +598,14 @@ public static partial class CustomConfigInjector
                 foreach (var s in dnsServers)
                 {
                     if (s is not JsonObject sObj) continue;
-                    if (StjNodeHelpers.AsString(sObj["type"]) == "fakeip") continue;
+                    var sType = StjNodeHelpers.AsString(sObj["type"]);
+                    if (sType == "fakeip") continue;
+                    var sTag = StjNodeHelpers.AsString(sObj["tag"]);
+                    if (sType == "local" && IsSynthesizedLocalBootstrapTag(sTag)) continue;
                     var d = StjNodeHelpers.AsString(sObj["detour"]);
-                    if ((d == "dns-direct" || d == "direct") && localTag == null)
+                    if ((d == "dns-direct" || d == "direct" || (string.IsNullOrEmpty(d) && sType == "local")) && localTag == null)
                     {
-                        localTag = StjNodeHelpers.AsString(sObj["tag"]);
+                        localTag = sTag;
                     }
                 }
             }
