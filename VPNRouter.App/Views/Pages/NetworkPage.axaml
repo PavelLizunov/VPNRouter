@@ -1549,6 +1549,7 @@
               <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
                     ToolTip.Tip="{Binding L_TipLeakFlushDns}">
                 <CheckBox Grid.Column="0"
+                          AutomationProperties.AutomationId="AssistantAction.FlushDnsOnStart"
                           IsChecked="{Binding FlushDnsOnStart}"
                           AutomationProperties.Name="{Binding FlushDnsLabel}"
                           MinHeight="0" Padding="0"
@@ -1561,6 +1562,7 @@
               <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
                     ToolTip.Tip="{Binding L_TipLeakStrictDns}">
                 <CheckBox Grid.Column="0"
+                          AutomationProperties.AutomationId="AssistantAction.UseStrictDns"
                           IsChecked="{Binding StrictDns}"
                           AutomationProperties.Name="{Binding StrictDnsLabel}"
                           MinHeight="0" Padding="0"
@@ -1723,7 +1725,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
-              <Border IsVisible="{Binding UpdateVm.IsRollbackConfirmationVisible}"
+              <Border IsVisible="{Binding UpdateVm.IsHistoryRollbackConfirmationVisible}"
                       Padding="8" CornerRadius="{StaticResource RadiusSm}"
                       Background="{DynamicResource WarningBgBrush}"
                       BorderBrush="{DynamicResource WarningBorderBrush}"
@@ -2005,6 +2007,7 @@
         </StackPanel>
         <Button Classes="solid" Grid.Column="1"
                 icons:PictogramText.Icons="apply" icons:PictogramText.Content="{Binding L_ApplyNowReloadVpn}"
+                AutomationProperties.AutomationId="AssistantAction.ApplyNetworkSettings"
                 Command="{Binding ApplyPendingChangesCommand}"
                 IsEnabled="{Binding IsConnected}"
                 Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"

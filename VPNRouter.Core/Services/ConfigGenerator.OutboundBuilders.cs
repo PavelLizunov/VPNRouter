@@ -116,6 +116,7 @@ public static partial class ConfigGenerator
     {
         var transport = entry.Transport ?? new VlessTransportConfig();
         var transportType = transport.Type ?? "tcp";
+        var tls = BuildTlsConfig(entry);
 
         return new SingBoxOutbound
         {
@@ -127,7 +128,8 @@ public static partial class ConfigGenerator
             Flow       = (string.IsNullOrEmpty(entry.Flow)
                           || transportType.Equals("xhttp", StringComparison.OrdinalIgnoreCase))
                 ? null : entry.Flow,
-            Tls        = BuildTlsConfig(entry),
+            // libbox constructs a TLS dialer whenever VLESS has a TLS object.
+            Tls        = tls.Enabled ? tls : null,
             Transport  = transportType.Equals("tcp", StringComparison.OrdinalIgnoreCase)
                 ? null
                 : BuildTransportConfig(transportType, transport),

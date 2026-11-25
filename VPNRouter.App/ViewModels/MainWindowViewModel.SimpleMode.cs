@@ -378,6 +378,10 @@ public partial class MainWindowViewModel
     internal Func<AppSettings, CancellationToken, bool,
         Task<(Task StartTask, Internals.TwoPhaseStartOutcome Outcome)>>? SimpleTunnelStart { get; set; }
 
+    private bool IsCurrentConnectionPreparation(int generation) =>
+        !_disposed && IsConnecting && !IsConnected && !IsApplying && !_isReconnecting
+        && generation == _connectionGeneration;
+
     [RelayCommand]
     private Task SmpToggleConnectAsync() => PrepareSubscriptionConnectionAsync(useSimpleInput: true);
 
@@ -407,8 +411,7 @@ public partial class MainWindowViewModel
         var editorInput = input;
         var revision = _routingSettingsRevision;
         Func<bool>? choiceUnchanged = null;
-        bool Preparing() => !_disposed && IsConnecting && !IsConnected && !IsApplying && !_isReconnecting
-            && generation == _connectionGeneration;
+        bool Preparing() => IsCurrentConnectionPreparation(generation);
         try
         {
             var kind = useSimpleInput ? SimpleInputDetector.Classify(input) : SmpInputKind.Invalid;
@@ -441,6 +444,18 @@ public partial class MainWindowViewModel
                 return;
             }
 
+            // A generated-mode home connect has no subscription URL input to refresh. Fetch the
+            // single enabled registration once so a rotated imported DNSTT grant is current.
+            // This also covers a retained dnstt:// link, which may be a stale copy of an owned
+            // grant: Capture returns null for a genuinely manual or different row.
+            var blocked = await RefreshGeneratedDnsttSelectionAsync(generation, CancellationToken.None);
+            if (!Preparing()) return;
+            if (blocked != null)
+            {
+                SmpErrorText = blocked;
+                return;
+            }
+
             if (useSimpleInput && IsSplitTunnel) _settings.ActiveProfile = SimpleSplitProfile;
             var scoped = SimpleServerPreference != null;
             SaveSettingsFromControls(preserveConfigMode: scoped);
@@ -467,7 +482,7 @@ public partial class MainWindowViewModel
                 {
                     var updates = await FetchSubscriptionRowsAsync(rows, CancellationToken.None);
                     if (!Preparing()) return;
-                    if (!PublishSubscriptionRows(rows, updates, submitted))
+                    if (!PublishSubscriptionRows(rows, updates, submitted).Accepted)
                     {
                         SmpErrorText = Strings.SyncEmpty;
                         return;
@@ -558,7 +573,7 @@ public partial class MainWindowViewModel
 
             if (!Preparing()) return;
             IsConnecting = false;
-            await ToggleConnectionCoreAsync(submitted);
+            await ToggleConnectionCoreAsync(submitted, manual: true);
         }
         finally
         {
@@ -728,8 +743,35 @@ public partial class MainWindowViewModel
         SaveSettingsFromControls(preserveConfigMode: SimpleServerPreference != null);
     }
 
+    private string? _consumedServerInput;
+    private VlessServerEntry? _consumedServerEntry;
+
+    // The home screen keeps a pasted server link in the input after Connect. Once that link has
+    // been applied, a later Connect must use the saved row (which may have been rotated by the
+    // feed) instead of re-importing the stale text and dropping other rows. The entry reference
+    // also makes removing the saved row re-enable the import.
+    private bool IsConsumedServerUri(string uri) =>
+        _consumedServerInput != null &&
+        _consumedServerEntry != null &&
+        string.Equals(uri.Trim(), _consumedServerInput, StringComparison.Ordinal) &&
+        DnsttSelectionRefresh.IsGenerated(_settings.App.ConfigMode) &&
+        Servers.Any(vm => ReferenceEquals(vm.SourceEntry, _consumedServerEntry)) &&
+        SelectedServer != null;
+
+    partial void OnSmpInputChanged(string value)
+    {
+        if (_consumedServerInput != null &&
+            !string.Equals(value?.Trim(), _consumedServerInput, StringComparison.Ordinal))
+        {
+            _consumedServerInput = null;
+            _consumedServerEntry = null;
+        }
+    }
+
     private bool TryApplyVless(string uri)
     {
+        if (IsConsumedServerUri(uri)) return true;
+
         var entry = ParseSimpleServerLink(uri, out var error);
         if (entry == null)
         {
@@ -737,21 +779,51 @@ public partial class MainWindowViewModel
             return false;
         }
 
+        var dnsttError = CheckSimpleDnsttLink(entry, out var existingRow, out var retainRows);
+        if (dnsttError != null)
+        {
+            SmpErrorText = dnsttError;
+            return false;
+        }
+
+        if (!retainRows) Servers.Clear();
+        var row = existingRow ?? new ServerViewModel(entry);
+        if (existingRow == null) Servers.Add(row);
+        if (string.IsNullOrWhiteSpace(row.Name) && !string.IsNullOrWhiteSpace(entry.Name))
+            row.Name = entry.Name;
+        SelectedServer = row;
+
         _settings.App.SubscriptionPreference = null;
-        _settings.Vless.Servers = [entry];
-        _settings.Vless.ActiveServer = entry.Name ?? string.Empty;
-        RememberSimpleDirectLink(_settings.App, entry, uri);
-
-        Servers.Clear();
-        var vm = new ServerViewModel(entry);
-        Servers.Add(vm);
-        SelectedServer = vm;
-
         _settings.App.ConfigMode = "generated";
         _settings.App.ActiveSubscriptionServer = string.Empty;
         IsSubscribeMode = false;
         IsVlessMode = true;
+        ApplyServersToSettings();
+        RememberSimpleDirectLink(_settings.App, row.SourceEntry, uri);
+        _consumedServerInput = retainRows ? uri : null;
+        _consumedServerEntry = retainRows ? row.SourceEntry : null;
         return true;
+    }
+
+    private string? CheckSimpleDnsttLink(VlessServerEntry entry, out ServerViewModel? existingRow,
+        out bool retainRows)
+    {
+        existingRow = null;
+        retainRows = false;
+        if (entry.Dnstt == null) return null;
+
+        existingRow = Servers.FirstOrDefault(vm =>
+            string.Equals(vm.SourceEntry.OutboundId, entry.OutboundId, StringComparison.OrdinalIgnoreCase));
+        if (existingRow != null && !DnsttSelectionRefresh.SameGrant(existingRow.SourceEntry, entry) &&
+            !DnsttSelectionRefresh.MatchesOriginalGrant(_settings, existingRow.SourceEntry, entry))
+        {
+            return IsRussian
+                ? "Ссылка содержит другие параметры для сохранённого идентификатора DNSTT. Сверьте профиль с подпиской."
+                : "This link has different settings for a saved DNSTT ID. Check the profile against its subscription.";
+        }
+
+        retainRows = existingRow != null || DnsttSelectionRefresh.MatchesRegisteredGrant(_settings, entry);
+        return retainRows && HasConflictingDnsttRow(existingRow, entry) ? GeneratedDnsttRowConflict : null;
     }
 
     private VlessServerEntry? ParseSimpleServerLink(string uri, out string error)

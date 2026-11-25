@@ -85,12 +85,26 @@ public partial class MainWindowViewModel
                 feed != null && action == SubscriptionInputAction.KeepCached && SimpleConnectPolicy.SameUrl(input, SimpleSavedLink))
                 return null;
 
-            var candidate = SnapshotDesktopSettingsFromControls();
+            var candidate = SnapshotDesktopSettings();
+            var rememberConsumedLink = false;
             if (server != null)
             {
+                var dnsttError = CheckSimpleDnsttLink(server, out var existingRow, out rememberConsumedLink);
+                if (dnsttError != null) return dnsttError;
+
                 candidate.App.ConfigMode = "generated";
                 candidate.App.SubscriptionPreference = null;
-                candidate.Vless.Servers = [server];
+                if (existingRow != null)
+                {
+                    var pastedName = server.Name;
+                    // The detached snapshot preserves the order of the editable Servers list.
+                    server = candidate.Vless.Servers[Servers.IndexOf(existingRow)];
+                    if (string.IsNullOrWhiteSpace(server.Name)) server.Name = pastedName;
+                }
+                else if (rememberConsumedLink)
+                    candidate.Vless.Servers.Add(server);
+                else
+                    candidate.Vless.Servers = [server];
                 candidate.Vless.ActiveServer = server.Name ?? string.Empty;
                 SetLegacyManualServer(candidate.Vless, server);
                 RememberSimpleDirectLink(candidate.App, server, input);
@@ -103,6 +117,11 @@ public partial class MainWindowViewModel
             BackupConfigFile();
             _settingsStore.Save(candidate, AppPaths.ConfigYamlPath);
             PublishSavedSimpleLink(candidate, input, server != null);
+            if (rememberConsumedLink)
+            {
+                _consumedServerInput = input;
+                _consumedServerEntry = SelectedServer?.SourceEntry;
+            }
             return null;
         }
         catch (Exception ex)

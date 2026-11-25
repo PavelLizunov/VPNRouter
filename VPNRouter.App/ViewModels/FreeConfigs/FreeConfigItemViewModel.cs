@@ -29,8 +29,6 @@ public partial class FreeConfigItemViewModel : ObservableObject
 
     public string CountryCode => string.IsNullOrEmpty(Entry.CountryCode) ? "—" : Entry.CountryCode;
 
-    public string CountryFlag => FlagFor(Entry.CountryCode);
-
     public string CountryDisplay => string.IsNullOrEmpty(Entry.CountryCode)
         ? "—"
         : $"{FlagFor(Entry.CountryCode)} {Entry.CountryCode}";
@@ -54,8 +52,6 @@ public partial class FreeConfigItemViewModel : ObservableObject
         _                             => "—",
     };
 
-    public int LatencySortKey => SortKeyFor(Entry);
-
     public static int SortKeyFor(FreeConfigEntry entry) => entry.Status switch
     {
         FreeConfigStatus.Verified when entry.LatencyMs <= 0 => 90_000,
@@ -68,8 +64,6 @@ public partial class FreeConfigItemViewModel : ObservableObject
         FreeConfigStatus.Unreachable                  => 1_000_001,
         _                                              => 999_999,
     };
-
-    public bool IsWorking => Entry.Status == FreeConfigStatus.Ok;
 
     public bool HasFailedLastCheck => FreeConfigFreshness.HasFailedLastCheck(Entry);
 
@@ -103,20 +97,6 @@ public partial class FreeConfigItemViewModel : ObservableObject
     public bool IsSlow => Entry.Status == FreeConfigStatus.Ok && Entry.LatencyMs >= 300;
     public bool IsDanger => Entry.Status is FreeConfigStatus.Slow or FreeConfigStatus.Implausible or FreeConfigStatus.TlsFailed;
     public bool IsNeutral => !IsFast && !IsMedium && !IsSlow && !IsDanger;
-
-    public string LatencyColor => Entry.Status switch
-    {
-        FreeConfigStatus.Verified                         => "#059669",
-        FreeConfigStatus.Ok   when Entry.LatencyMs < 100 => "#22C55E",
-        FreeConfigStatus.Ok   when Entry.LatencyMs < 300 => "#65A30D",
-        FreeConfigStatus.Ok                               => "#F59E0B",
-        FreeConfigStatus.Slow                             => "#EF4444",
-        FreeConfigStatus.Implausible                      => "#DC2626",
-        FreeConfigStatus.TlsFailed                        => "#F97316",
-        _                                                  => "#9CA3AF",
-    };
-
-    public string ErrorTooltip => Entry.LastError ?? string.Empty;
 
     public string DisplayName => string.IsNullOrWhiteSpace(Entry.Name) ? Endpoint : Entry.Name;
 

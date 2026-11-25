@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.UpdateSources;
 using VPNRouter.Tests.Fakes;
 using Xunit;
 
@@ -94,6 +95,32 @@ public class UpdateCheckerStagingTests
 
         Assert.Contains("Invalid or non-http(s) update download URL", ex.Message);
         Assert.Empty(http.SentStreamingRequests);
+    }
+
+    [Fact]
+    public async Task SignedRollbackDownload_RejectsANonExactSize()
+    {
+        var zip = MinimalUpdateZip();
+        var sha = Convert.ToHexStringLower(SHA256.HashData(zip));
+        const string url = "https://github.com/PavelLizunov/VPNRouter/releases/download/v9.9.9/VPNRouter-update-v9.9.9-win.zip";
+        var http = new FakeHttpClient().SetupStream(url, zip);
+        var checker = new UpdateChecker(new UpdateSettings(), "2.51.1-r1", http);
+        var info = new UpdateSourceInfo(
+            Version: "9.9.9",
+            ReleaseUrl: "https://github.com/PavelLizunov/VPNRouter/releases/tag/v9.9.9",
+            AssetName: "VPNRouter-update-v9.9.9-win.zip",
+            DownloadUrl: url,
+            AssetSize: zip.LongLength + 1,
+            AssetSha256: sha,
+            IsPrerelease: false,
+            ReleaseNotes: string.Empty,
+            RequireExactSize: true);
+
+        var ex = await Assert.ThrowsAsync<System.InvalidOperationException>(
+            () => ((IDesktopInstaller)checker).DownloadAndStageAsync(
+                info, progress: null, ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("expected exactly", ex.Message);
     }
 
     [Theory]

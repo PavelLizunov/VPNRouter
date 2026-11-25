@@ -183,6 +183,51 @@ vless:
         }
     }
 
+    [Fact]
+    public void Export_SummaryIncludesMemoryTelemetry_WithoutSecrets()
+    {
+        var previous = AppPaths.DataDir;
+        var dataDir = Path.Combine(Path.GetTempPath(), "vpnrouter-diag-mem-" + Guid.NewGuid().ToString("N"));
+        var outDir = Path.Combine(Path.GetTempPath(), "vpnrouter-diag-mem-out-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            AppPaths.OverrideDataDir(dataDir);
+            AppPaths.EnsureDirectories();
+            File.WriteAllText(AppPaths.ConfigYamlPath, $"vless:\n  servers:\n    - uuid: {Uuid}\n      password: {Password}\n");
+
+            var result = DiagnosticsExporter.Export(
+                new DateTime(2026, 11, 25, 12, 0, 0), connected: false, destinationDir: outDir);
+
+            string? summary = null;
+            using (var zip = ZipFile.OpenRead(result.ZipPath))
+            {
+                var summaryEntry = zip.GetEntry("summary.txt");
+                Assert.NotNull(summaryEntry);
+                using var sr = new StreamReader(summaryEntry!.Open());
+                summary = sr.ReadToEnd();
+            }
+
+            Assert.NotNull(summary);
+            Assert.Contains("──── Memory ────", summary);
+            Assert.Contains("WorkingSet=", summary);
+            Assert.Contains("PrivateMemory=", summary);
+            Assert.Contains("ManagedGC=", summary);
+            Assert.Contains("GCCommitted=", summary);
+            Assert.Contains("GC(Gen0=", summary);
+            Assert.DoesNotContain(Uuid, summary);
+            Assert.DoesNotContain(Password, summary);
+            Assert.DoesNotContain(SubToken, summary);
+            Assert.DoesNotContain(LogSecret, summary);
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previous);
+            TryDelete(dataDir);
+            TryDelete(outDir);
+        }
+    }
+
     private static void TryDelete(string dir)
     {
         try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); } catch { }

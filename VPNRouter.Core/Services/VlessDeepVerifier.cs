@@ -102,7 +102,7 @@ public sealed class VlessDeepVerifier
             return;
         }
 
-        var sem = new SemaphoreSlim(MaxConcurrency);
+        using var sem = new SemaphoreSlim(MaxConcurrency);
         var total = servers.Count;
         var done = 0;
 
@@ -226,7 +226,8 @@ public sealed class VlessDeepVerifier
                 ExecutablePath: policy?.SelectedExecutablePath ?? _singBoxPath,
                 Arguments: new[] { "run", "-c", tmpConfigPath },
                 CaptureStdout: true,
-                CaptureStderr: true);
+                CaptureStderr: true,
+                EnvironmentOverrides: SingBoxManager.BuildGoMemLimitOverride(SingBoxManager.DeepVerifyGoMemLimit));
             try
             {
                 handle = _runner.Start(request, child =>

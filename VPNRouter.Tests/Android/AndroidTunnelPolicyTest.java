@@ -24,6 +24,7 @@ public final class AndroidTunnelPolicyTest {
         checkPrivatePathsAndListeners();
         checkPackageSelection();
         checkRulesAndDns();
+        checkDisabledVlessTls();
         checkRestorePreferences();
     }
 
@@ -178,6 +179,28 @@ public final class AndroidTunnelPolicyTest {
         rejected(() -> prepare(narrow.replace("\"address\":", "\"dns_address\":[\"192.0.2.53\",\"127.0.0.1\"],\"address\":"), "off", false));
         prepare(narrow.replace("\"172.19.0.1/32\"", "[\"172.19.0.1/32\",\"fd00::1/126\"]"), "include", false);
         rejected(() -> prepare(narrow.replace("\"172.19.0.1/32\"", "[\"172.19.0.1/32\",\"172.19.1.1/30\"]"), "off", false));
+    }
+
+    private static void checkDisabledVlessTls() throws Exception {
+        JSONObject vless = new JSONObject().put("type", "vless");
+        JSONObject tls = new JSONObject().put("enabled", true).put("server_name", "example.org");
+        JSONObject enabled = new JSONObject(vless.toString()).put("tls", tls);
+        JSONObject vmess = new JSONObject().put("type", "vmess").put("tls", new JSONObject().put("enabled", false));
+        JSONArray outbounds = new JSONArray()
+                .put(new JSONObject(vless.toString()).put("tls", new JSONObject().put("enabled", false)))
+                .put(new JSONObject(vless.toString()).put("tls", new JSONObject()))
+                .put(vless).put(enabled).put(vmess);
+
+        JSONObject profile = new JSONObject(PROFILE).put("outbounds", outbounds);
+        for (String mode : Arrays.asList("off", "include", "exclude")) {
+            JSONArray accepted = new JSONObject(prepare(profile.toString(), mode, false)).getJSONArray("outbounds");
+            require(accepted.length() == 5);
+            require(!accepted.getJSONObject(0).has("tls"));
+            require(!accepted.getJSONObject(1).has("tls"));
+            require(accepted.getJSONObject(2).similar(vless));
+            require(accepted.getJSONObject(3).similar(enabled));
+            require(accepted.getJSONObject(4).similar(vmess));
+        }
     }
 
     private static void checkRestorePreferences() throws Exception {

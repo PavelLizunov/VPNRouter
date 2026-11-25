@@ -13,7 +13,7 @@ Add / rotate via: **Repo Settings → Secrets and variables → Actions
 | Name | Used by | Required for | Type |
 |---|---|---|---|
 | `GITHUB_TOKEN` | every workflow | release uploads, gh CLI calls | auto-injected, no action needed |
-| `HOMEBREW_TAP_DISPATCH_TOKEN` | `build-mac.yml` | cross-repo dispatch to `PavelLizunov/homebrew-vpnrouter` on stable cuts | PAT, classic, `repo` scope |
+| `HOMEBREW_TAP_DISPATCH_TOKEN` | `notify-homebrew.yml` | cross-repo dispatch to `PavelLizunov/homebrew-vpnrouter` on stable cuts | PAT, classic, `repo` scope |
 | `ANDROID_KEYSTORE_BASE64` | `build-android.yml` | signing the release APK so existing installs accept updates | base64-encoded JKS keystore |
 | `ANDROID_KEYSTORE_PASSWORD` | `build-android.yml` | unlocks the keystore + key during signing | plain string |
 | `APT_SIGNING_KEY`, `APT_SIGNING_KEY_ID` | `publish-pages.yml` | signing the APT repository metadata | ASCII-armored PGP private key; key ID |
@@ -61,9 +61,9 @@ default "Latest" filter.
 ### Active libbox source
 
 Since 2.50.1 the Android build no longer uses a tooling release of this repository.
-`build-android.yml` and `android-compile.yml` download `libbox-legacy-1.14.4-vpnctl.2.aar`
+`build-android.yml` and `android-compile.yml` download `libbox-legacy-1.14.4-vpnctl.3.aar`
 (Android API 21, no naive outbound; the app keeps minSdk 23) from the
-`PavelLizunov/sing-box-vpnctl` release `v1.14.4-vpnctl.2` as `VPNRouter.Android/Lib/libbox.aar`,
+`PavelLizunov/sing-box-vpnctl` release `v1.14.4-vpnctl.3` as `VPNRouter.Android/Lib/libbox.aar`,
 compare it with the SHA-256 pinned next to the tag and run `gh attestation verify` against that
 repository. To move to another core release, bump `LIBBOX_RELEASE_TAG`, `LIBBOX_ASSET` and
 `LIBBOX_AAR_SHA256` together in both workflows; the sums are in the release's `SHA256SUMS`.

@@ -1,9 +1,11 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services.UpdateSources;
 using VPNRouter.Tests.Fakes;
 
@@ -31,6 +33,52 @@ public class PageScreenshotTests
     [AvaloniaFact] public void TelegramPage() => Capture(new TelegramPage(), "page-telegram");
     [AvaloniaFact] public void FreeConfigsPage() => Capture(new FreeConfigsPage(), "page-free-configs");
     [AvaloniaFact] public void SimplePage() => Capture(new SimplePage(), "page-simple");
+
+    [AvaloniaFact]
+    public void SimplePage_ConnectedWithAssistantAt520x680()
+    {
+        using var vm = GetVm();
+        vm.Subscriptions.Add(new SubscriptionViewModel(new SubscriptionEntry
+        {
+            Name = "Fixture subscription",
+            Url = "https://ninitux.com/sub/synthetic-viewport",
+            Enabled = true
+        }));
+        vm.IsConnected = true;
+        var page = new SimplePage { DataContext = vm };
+        var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        ScreenshotHelper.CapturePage(page, "simple-connected-with-assistant", width: 520, height: 680);
+    }
+
+    [AvaloniaFact]
+    public void Assistant_panel_follows_subscription_eligibility()
+    {
+        using var vm = GetVm();
+        var panel = new AssistantSetupPanel { DataContext = vm };
+        var subscription = new SubscriptionViewModel(new SubscriptionEntry
+        {
+            Name = "Fixture subscription",
+            Url = "https://ninitux.com/sub/synthetic-assistant-visual",
+            Enabled = false
+        });
+
+        vm.Subscriptions.Add(subscription);
+        Assert.False(panel.IsVisible);
+        subscription.Enabled = true;
+        Assert.True(panel.IsVisible);
+
+        var open = panel.FindControl<Button>("OpenAssistant")!;
+        open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(panel.FindControl<StackPanel>("AssistantFields")!.IsVisible);
+
+        var eligibleUrl = subscription.Url;
+        subscription.Url = "https://provider.example/sub/synthetic-assistant-visual";
+        Assert.False(panel.IsVisible);
+        subscription.Url = eligibleUrl;
+        Assert.True(panel.IsVisible);
+        ScreenshotHelper.CapturePage(panel, "assistant-setup-narrow360", width: 360, height: 340);
+    }
 
     [AvaloniaFact]
     public void ApplicationsPage_Narrow529()

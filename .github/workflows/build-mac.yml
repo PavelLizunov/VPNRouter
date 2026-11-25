@@ -1,9 +1,6 @@
 name: Build macOS DMG
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -31,11 +28,7 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="$INPUT_VERSION"
-          fi
+          VERSION="$INPUT_VERSION"
           if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-r[1-9][0-9]*)?$ ]]; then
             echo "::error::Expected X.Y.Z or X.Y.Z-rN (N >= 1)."
             exit 1
@@ -53,24 +46,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Verify requested tag and full AppVersion
-        shell: bash
+      - name: Stamp the verified release version
         env:
-          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin "refs/tags/$TAG"
-          TAG_SHA=$(git rev-parse 'FETCH_HEAD^{commit}')
-          if [ "$TAG_SHA" != "$GITHUB_SHA" ] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
-            echo "::error::Requested tag does not point to the exact workflow commit."
-            exit 1
-          fi
-          APPVER=$(sed -nE 's/^[[:space:]]*public static readonly string Version = "([^"]+)";.*/\1/p' VPNRouter.Core/AppVersion.cs)
-          if [ "$APPVER" != "$VERSION" ]; then
-            echo "::error::AppVersion/tag mismatch; full version including -rN must match."
-            exit 1
-          fi
+        run: python3 .github/scripts/stamp_release_version.py "$VERSION"
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
@@ -160,9 +139,7 @@ jobs:
           retention-days: 30
 
       - name: Upload to GitHub Release
-        if: >-
-          github.event_name == 'push' ||
-          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release)
+        if: inputs.upload_to_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -187,48 +164,3 @@ jobs:
           echo "Uploading to release $TAG..."
           gh release upload "$TAG" "$DMG" "$ZIP" "$DMG_SHA" "$ZIP_SHA" --repo "$GITHUB_REPOSITORY"
           echo "✓ Uploaded DMG + ZIP + 2 SHA256 sidecars to $TAG"
-
-      - name: Trigger Homebrew Cask update (stable only)
-        if: >-
-          (github.event_name == 'push' ||
-           (github.event_name == 'workflow_dispatch' && inputs.upload_to_release))
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          set -euo pipefail
-
-          IS_DRAFT=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')
-          if [ "$IS_DRAFT" = "true" ]; then
-              echo "::notice::Draft assets staged; Homebrew notification belongs after publication."
-              exit 0
-          fi
-
-          case "$TAG" in
-              *-r[0-9]*|*-rc*|*-beta*|*-alpha*|*-pre*)
-                  echo "::notice::$TAG looks like a prerelease — not bumping Homebrew Cask"
-                  exit 0
-                  ;;
-          esac
-
-          IS_PRE=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease' 2>/dev/null || echo "true")
-          if [ "$IS_PRE" = "true" ]; then
-              echo "::notice::$TAG is flagged prerelease on GitHub — not bumping Homebrew Cask"
-              exit 0
-          fi
-
-          if [ -z "${TAP_TOKEN:-}" ]; then
-              echo "::notice::HOMEBREW_TAP_DISPATCH_TOKEN secret is not configured — skipping tap dispatch. The tap's daily cron will pick up this release within 24h."
-              exit 0
-          fi
-
-          echo "Dispatching vpnrouter-release event to PavelLizunov/homebrew-vpnrouter (version=$VERSION)"
-          curl -fsSL -X POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer $TAP_TOKEN" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/PavelLizunov/homebrew-vpnrouter/dispatches" \
-              -d "{\"event_type\":\"vpnrouter-release\",\"client_payload\":{\"version\":\"$VERSION\",\"tag\":\"$TAG\"}}"
-          echo "✓ Dispatched — tap's update-cask.yml should now be running"

@@ -1,6 +1,6 @@
 ---
 name: cut-stable
-description: Promote a fully verified rolling -rN candidate to stable vX.Y.Z. Uses branch/PR/CI, exact 18-asset validation, fixed-WINBRAT update and connection gates, and never touches the development workstation's VPN installation.
+description: Promote a fully verified rolling -rN candidate to stable vX.Y.Z. Uses exact-tag CI, 18-asset validation, fixed-WINBRAT update and connection gates, and never touches the development workstation's VPN installation.
 whenToUse: The latest -rN passed all hard gates and the user explicitly said cut, ok, promote, or otherwise authorized the stable release. Stable cut is never autonomous.
 ---
 
@@ -87,84 +87,30 @@ touch the developer machine's `C:\Program Files\VPNRouter`.
 Any failure means: do not cut stable; fix it in `-r(N+1)` and repeat every
 hard gate.
 
-## Stable commit
+## Prepare the stable draft
 
-1. Create or continue a `dsh/` task branch from current `origin/main`.
-2. Change `VPNRouter.Core/AppVersion.cs` from `X.Y.Z-rN` to `X.Y.Z`.
-3. Update the current version in `CURRENT_STATE.md`. The READMEs and `docs/guide/` carry
-   `{version}` placeholders and no typed version, so they need no bump.
-4. Run build, full tests, verifier contracts, visual tests,
-   `tools/check-open-p0.ps1`, PowerShell 5.1 parse checks and
-   `git diff --check`.
-5. Commit without bypassing hooks, immediately push the task branch, open a PR,
-   and wait for all required PR checks.
-6. Merge only after green CI. Build the stable tag from the exact merged
-   `origin/main` commit with a clean checkout.
-
-## Create the stable draft and stage assets
-
-Use the accepted stable commit as `$sha`, `$version = 'X.Y.Z'` and
-`$tag = "v$version"`. Require clean `HEAD == accepted main`, with the exact
-no-suffix AppVersion. With explicit owner authorization, create and push the
-new immutable stable tag, verify its remote peeled SHA, then create the draft:
+After the separate owner authorization and hard gates above, use a clean
+checkout at the verified published candidate's exact commit in accepted
+`main` history. Stable packages compile on GitHub from that commit with the
+stable version. Prepare the draft and await the exact-tag builds and integrity
+check.
 
 ```powershell
-git tag -a $tag $sha -m "Release $tag"
-git push origin "refs/tags/$tag"
-$remoteSha = gh api "repos/PavelLizunov/VPNRouter/commits/$tag" --jq '.sha'
-if ($LASTEXITCODE -ne 0 -or $remoteSha -ne $sha) { throw 'Remote tag SHA mismatch.' }
-gh release create $tag --verify-tag --draft --latest=false --title $tag --notes-file <notes-file>
+python .github/scripts/prepare_release.py vX.Y.Z --from-candidate vX.Y.Z-rN --notes <notes-file>
 ```
 
-Check every native command's exit code and stop on failure. Inspect existing
-tags/drafts rather than recreating them. Never force-update a tag or broadly
-fetch all tags when auxiliary refs are unhealthy.
-
-Follow `ship-rolling-candidate`'s exact-tag staging and recovery procedure with
-the stable version: inspect SignPath settings first. Any configured setting,
-including partial enrollment, requires `sign-windows.yml --ref $tag
--f version=$version`; signing failure has no unsigned fallback. Only when all
-settings are absent, stage unsigned ZIPs with the pinned `sing-box-vpnctl`
-release (`-SingBoxPath` is local-only and rejected with `-Upload`):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version $version -Upload
-```
-
-`-Upload` only stages to an existing correct-channel draft at the exact accepted
-main/tag SHA; it neither creates nor publishes a release and never clobbers.
-Wait for tag-triggered macOS/Linux/Android builds or explicitly dispatch each
-with `--ref $tag -f version=$version`. Missing draft fails staging safely;
-inspect existing assets before retrying missing files only. Partial or
-inconsistent assets mean STOP, not an overwrite. `build-android.yml` builds
-and production-signs the ARM64 APK; legacy `sign-android.yml` is disabled.
-
+Record the stable tag, SHA and run IDs. Follow
+[release strategy](../../../docs/release-strategy.md) for signing and recovery.
 Mirror the immutable stable tag only when explicitly requested, with the
-configured mirror and GitHub-equivalent SHA verified. Do not repair remotes
-or launch a local VPN to reach them.
+configured mirror and GitHub-equivalent SHA verified.
 
 ## Prepublication gate
 
-Require successful canonical macOS/Linux/Android staging, Windows signing when
-configured, `test.yml` and Windows update runs at this stable tag and SHA, then:
-
-- exactly 18 canonical assets and every SHA sidecar matching;
-- full Windows ZIP True Split bundle under `app/driver/`;
-- update Windows ZIP True Split bundle under `_bootstrap/driver/`;
-- Android asset `VPNRouter-vX.Y.Z-android-arm64.apk`.
-
-Explicitly verify the completed draft and wait for success:
-
-```powershell
-gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draft_on_failure=false
-```
-
-Run the explicit prepublication strict command in `ship-rolling-candidate`
-with this stable `$sha` and `$tag`: it includes `-ReleaseTag`, three platform
-build jobs, tests/update/integrity and excludes APT. Do not use bare strict
-defaults here because they include APT. Require canonical tag-bound runs, not
-arbitrary checks sharing the SHA; inspect Sign Windows separately when used.
-APT and full post-ship checks belong after publication, not in this gate.
+Require the successful preparation command, all 18 canonical assets, checksums
+and both Windows True Split bundles. Run the exact-tag prepublication strict
+command in [ship-rolling-candidate](../ship-rolling-candidate/SKILL.md) with
+this stable SHA and tag. Inspect the exact-tag Sign Windows run when configured.
+APT and post-ship checks follow publication.
 
 ## Publish and notify consumers
 
@@ -183,21 +129,15 @@ gh workflow run verify-release-integrity.yml --ref $tag -f tag=$tag -f auto_draf
 gh workflow run publish-pages.yml --ref $tag -f tag=$tag
 ```
 
-Homebrew notification in `build-mac.yml` is suppressed during draft staging.
-It is not automatically retriggered by publication. After verifying the public
-stable and DMG hash, send the workflow's tap event using an authorized token
-with contents-write access to `PavelLizunov/homebrew-vpnrouter`:
+Await `notify-homebrew.yml` and verify the tap's `update-cask.yml` run and
+resulting cask version and DMG hash. If the publication event was suppressed,
+dispatch the notification at the published stable tag.
 
 ```powershell
-gh api --method POST repos/PavelLizunov/homebrew-vpnrouter/dispatches `
-  -f event_type=vpnrouter-release -f "client_payload[version]=$version" -f "client_payload[tag]=$tag"
+gh workflow run notify-homebrew.yml --ref $tag
 ```
 
-Keep credentials outside commands/logs. Inspect the tap's `update-cask.yml` run
-and resulting cask version/hash; missing access is an explicit blocker, not an
-automatic-success claim. Do not rerun the macOS uploader against a published
-release just to notify Homebrew. Published artifact corrections need a new
-version, not replacement assets or a moved tag.
+Published artifact corrections require a new version and tag.
 
 ## Mandatory stable post-ship verification
 

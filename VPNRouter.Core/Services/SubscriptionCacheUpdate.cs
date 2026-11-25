@@ -6,6 +6,8 @@ namespace VPNRouter.Core.Services;
 internal sealed record SubscriptionCacheUpdate(SubscriptionEntry Origin, List<VlessServerEntry> PreviousRows,
     SubscriptionEntry Candidate, bool Failed)
 {
+    // Failed covers a transport/HTTP error and a response that yielded zero usable rows. An empty
+    // or unparseable body is not an authoritative "the grant was removed" signal.
     internal static async Task<SubscriptionCacheUpdate> FetchAsync(SubscriptionEntry origin, ILogger? logger, CancellationToken ct)
     {
         var previous = origin.Servers;

@@ -79,7 +79,7 @@ public class VlessConfig
         if (!string.IsNullOrEmpty(active.DetourVia))
             return WithRequiredHop(active, all);
 
-        if (active.Dnstt != null || active.UseAsSingleOutbound ||
+        if (active.Dnstt != null || active.RequiresSingleOutbound() ||
             (!AutoSelectBestServer && string.Equals(active.Protocol, "vmess", StringComparison.OrdinalIgnoreCase)))
             return new List<VlessServerEntry> { active };
         if (all.Count <= 1) return all;

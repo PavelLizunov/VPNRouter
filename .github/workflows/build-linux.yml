@@ -1,9 +1,6 @@
 name: Build Linux AppImage + .deb
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -31,11 +28,7 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="$INPUT_VERSION"
-          fi
+          VERSION="$INPUT_VERSION"
           if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-r[1-9][0-9]*)?$ ]]; then
             echo "::error::Expected X.Y.Z or X.Y.Z-rN (N >= 1)."
             exit 1
@@ -53,24 +46,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Verify requested tag and full AppVersion
-        shell: bash
+      - name: Stamp the verified release version
         env:
-          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin "refs/tags/$TAG"
-          TAG_SHA=$(git rev-parse 'FETCH_HEAD^{commit}')
-          if [ "$TAG_SHA" != "$GITHUB_SHA" ] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
-            echo "::error::Requested tag does not point to the exact workflow commit."
-            exit 1
-          fi
-          APPVER=$(sed -nE 's/^[[:space:]]*public static readonly string Version = "([^"]+)";.*/\1/p' VPNRouter.Core/AppVersion.cs)
-          if [ "$APPVER" != "$VERSION" ]; then
-            echo "::error::AppVersion/tag mismatch; full version including -rN must match."
-            exit 1
-          fi
+        run: python3 .github/scripts/stamp_release_version.py "$VERSION"
 
       - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
@@ -93,8 +72,8 @@ jobs:
       - name: Bundle sing-box-vpnctl-linux-amd64 + libcronet
         run: |
           set -euo pipefail
-          SINGBOX_VPNCTL_VER="1.14.4-vpnctl.2"
-          SINGBOX_VPNCTL_SHA256="cc0ea9a46498aaca9d283411ca1fb71c70693bb60c27ffca6832889ca3953c4e"
+          SINGBOX_VPNCTL_VER="1.14.4-vpnctl.3"
+          SINGBOX_VPNCTL_SHA256="62c7d4ab2ec93fc6a51790facbcc50436d1183d8bf6f9c84b07d1d75e1618eae"
           curl -sSL -o /tmp/singbox-vpnctl.tar.gz \
             "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v${SINGBOX_VPNCTL_VER}/sing-box-${SINGBOX_VPNCTL_VER}-linux-amd64.tar.gz"
           echo "${SINGBOX_VPNCTL_SHA256}  /tmp/singbox-vpnctl.tar.gz" | sha256sum -c -
@@ -256,9 +235,7 @@ jobs:
           retention-days: 30
 
       - name: Upload to GitHub Release
-        if: >-
-          github.event_name == 'push' ||
-          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release)
+        if: inputs.upload_to_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

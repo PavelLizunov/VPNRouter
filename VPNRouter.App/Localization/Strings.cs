@@ -121,8 +121,6 @@ public static class Strings
     public static string TgProxyStatsActive => global::VPNRouter.Core.Localization.Strings.TgProxyStatsActive;
     public static string TgProxyStatsTotal => global::VPNRouter.Core.Localization.Strings.TgProxyStatsTotal;
 
-    public static string RuleParserMissingValue => global::VPNRouter.Core.Localization.Strings.RuleParserMissingValue;
-    public static string RuleParserUnknownType(string type) => global::VPNRouter.Core.Localization.Strings.RuleParserUnknownType(type);
     public static string RulesAllDeleted => global::VPNRouter.Core.Localization.Strings.RulesAllDeleted;
     public static string RulesAlreadySorted => global::VPNRouter.Core.Localization.Strings.RulesAlreadySorted;
     public static string RulesEmptyValue => global::VPNRouter.Core.Localization.Strings.RulesEmptyValue;
@@ -177,7 +175,6 @@ public static class Strings
     public static string RulesImportFailed(string warning) => global::VPNRouter.Core.Localization.Strings.RulesImportFailed(warning);
     public static string RulesImportNoRules => global::VPNRouter.Core.Localization.Strings.RulesImportNoRules;
     public static string RulesImported(int count, string format) => global::VPNRouter.Core.Localization.Strings.RulesImported(count, format);
-    public static string RulesImportWithWarnings(int count) => global::VPNRouter.Core.Localization.Strings.RulesImportWithWarnings(count);
     public static string RulesImportError(string err) => global::VPNRouter.Core.Localization.Strings.RulesImportError(err);
     public static string RulesExportNothing => global::VPNRouter.Core.Localization.Strings.RulesExportNothing;
     public static string RulesExported(int count, string filename) => global::VPNRouter.Core.Localization.Strings.RulesExported(count, filename);
@@ -382,9 +379,6 @@ public static class Strings
     public static string TgProxyExitedImmediately => global::VPNRouter.Core.Localization.Strings.TgProxyExitedImmediately;
     public static string TgProxyTelegramNotInstalled => global::VPNRouter.Core.Localization.Strings.TgProxyTelegramNotInstalled;
     public static string TgProxySchemeMissingWarning => global::VPNRouter.Core.Localization.Strings.TgProxySchemeMissingWarning;
-    public static string TgProxyDownloadStep1Python => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep1Python;
-    public static string TgProxyDownloadStep2Wheels => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep2Wheels;
-    public static string TgProxyDownloadStep3Source => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep3Source;
 
     public static string TgProxyOneTapTitleStopped => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapTitleStopped;
     public static string TgProxyOneTapTitleRunning => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapTitleRunning;
@@ -420,7 +414,6 @@ public static class Strings
     public static string ZapretOneTapDownloading => global::VPNRouter.Core.Localization.Strings.ZapretOneTapDownloading;
     public static string ZapretOneTapInstallingHosts => global::VPNRouter.Core.Localization.Strings.ZapretOneTapInstallingHosts;
     public static string ZapretOneTapAllFailedToast => global::VPNRouter.Core.Localization.Strings.ZapretOneTapAllFailedToast;
-    public static string ZapretOneTapNoSignalToast => global::VPNRouter.Core.Localization.Strings.ZapretOneTapNoSignalToast;
 
     public static string OpenFolder => global::VPNRouter.Core.Localization.Strings.OpenFolder;
     public static string OpenGitHub => global::VPNRouter.Core.Localization.Strings.OpenGitHub;

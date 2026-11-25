@@ -6,12 +6,13 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Styling;
 using Avalonia.Media.Imaging;
+using Avalonia.Styling;
 using VPNRouter.App.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Avalonia.Headless.XUnit;
+using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.App.Views.Pages;
@@ -26,6 +27,51 @@ namespace VPNRouter.Tests;
 [Collection(SafeModeStateCollection.Name)]
 public sealed class SimpleConnectStatusTests
 {
+    [AvaloniaTheory]
+    [InlineData(520, 540)]
+    [InlineData(380, 400)]
+    public void ConnectionActionStaysInTheViewportWithTheAssistantOpen(int width, int height)
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.UiMode = "simple";
+        settings.App.Subscriptions =
+        [
+            new() { Enabled = true, Url = "https://ninitux.com/sub/synthetic-layout", Servers = [Entry("test", "test.invalid")] }
+        ];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm, width, height: height);
+
+        var assistant = Assert.Single(view.Page.GetVisualDescendants().OfType<AssistantSetupPanel>());
+        Assert.True(assistant.IsEffectivelyVisible);
+        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(assistant.FindControl<StackPanel>("AssistantFields")!.IsEffectivelyVisible);
+
+        var scroll = view.Page.FindControl<ScrollViewer>("SimpleContentScroll")!;
+        var actions = view.Page.FindControl<Panel>("SimpleConnectionActions")!;
+        Assert.Contains("go", GetVisibleAction().Classes);
+
+        vm.IsConnected = true;
+        Dispatcher.UIThread.RunJobs();
+        var disconnect = GetVisibleAction();
+        Assert.Contains("stop", disconnect.Classes);
+        Assert.True(disconnect.IsEffectivelyEnabled);
+        Assert.Same(vm.SmpToggleConnectCommand, disconnect.Command);
+        Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
+        Assert.True(disconnect.Bounds.Height > 0);
+        var initial = disconnect.TranslatePoint(default, view.Page)!.Value;
+        Assert.InRange(initial.Y, 0, view.Page.Bounds.Height - disconnect.Bounds.Height);
+
+        scroll.Offset = new Vector(0, scroll.Extent.Height - scroll.Viewport.Height);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(scroll.Offset.Y > 0);
+        Assert.Equal(initial, disconnect.TranslatePoint(default, view.Page)!.Value);
+
+        Button GetVisibleAction() => Assert.Single(actions.Children.OfType<Button>().Where(b => b.IsEffectivelyVisible));
+    }
+
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]
@@ -245,7 +291,12 @@ public sealed class SimpleConnectStatusTests
             return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.PhaseBTimeout));
         };
 
-        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+        var assistant = view.Page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+        var window = Assert.IsType<Window>(TopLevel.GetTopLevel(view.Page));
+        var automation = new AssistantWindowAutomation(window, assistant);
+        var action = Assert.Single(automation.Observe(), control => control.Name == "ConnectVpn");
+        Assert.Equal("ConnectVpn", automation.Execute(action, null, null));
+        await vm.SmpToggleConnectCommand.ExecutionTask!;
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(started);
@@ -955,7 +1006,7 @@ public sealed class SimpleConnectStatusTests
             else vm.OpenConfigPickerCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
 
-            var viewport = page.FindControl<ScrollViewer>("ServerPickerViewport")!;
+            var viewport = page.FindControl<ScrollViewer>(advanced ? "ServerPickerViewport" : "SimpleContentScroll")!;
             var groups = FindOnPage<ItemsControl>(page, "SimpleServerGroups")!;
             var emergency = Assert.Single(groups.Items.Cast<SimpleServerGroup>(), group => group.Category == ProtocolGroup.Emergency);
             Assert.Equal("dnstt", emergency.Protocols);
@@ -1153,10 +1204,10 @@ public sealed class SimpleConnectStatusTests
         public SimplePage Page { get; }
         private readonly Window _window;
 
-        public OpenPage(MainWindowViewModel vm, int width = 520, ThemeVariant? theme = null)
+        public OpenPage(MainWindowViewModel vm, int width = 520, ThemeVariant? theme = null, int height = 800)
         {
             Page = new SimplePage { DataContext = vm };
-            _window = new Window { Content = Page, Width = width, Height = 800 };
+            _window = new Window { Content = Page, Width = width, Height = height };
             if (theme != null) _window.RequestedThemeVariant = theme;
             _window.Show();
         }

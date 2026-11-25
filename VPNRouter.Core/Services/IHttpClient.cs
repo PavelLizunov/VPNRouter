@@ -48,6 +48,7 @@ public sealed record HttpRequest(
     TimeSpan? RetryBaseDelay = null)
 {
     public long? MaxResponseBytes { get; init; }
+    internal bool ReadErrorBody { get; init; } = true;
 }
 
 public sealed record HttpResponse(

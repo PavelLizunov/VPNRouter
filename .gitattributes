@@ -23,6 +23,10 @@ build-mac.sh                                       text eol=lf
 *.md                                               text
 *.json                                             text
 
+# The publisher signs the exact recovery manifest bytes.
+VPNRouter.Core/Recovery/*.json                      -text
+VPNRouter.Core/Recovery/*.sig                       binary
+
 # Binary — never CRLF conversion
 *.png                                              binary
 *.ico                                              binary

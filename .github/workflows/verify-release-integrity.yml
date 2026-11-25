@@ -166,6 +166,14 @@ jobs:
                                    for encoding, offset in [('utf-16-le', 0), ('utf-16-le', 1), ('utf-16-be', 0)])
               return set(re.findall(r'(?<![0-9.])[0-9]+\.[0-9]+\.[0-9]+(?:-r[0-9]+)?(?![0-9.a-zA-Z-])', combined))
 
+          def missing_driver_files(archive, prefix):
+              entries = {member.filename.replace('\\', '/')
+                         for member in archive.infolist() if member.file_size > 0 and not member.is_dir()}
+              expected = {f'{prefix}/driver/{name}' for name in (
+                  'mullvad-split-tunnel.sys', 'mullvad-split-tunnel.cat',
+                  'mullvad-split-tunnel.inf', 'checksums.sha256')}
+              return (expected | {f'{prefix}/LICENSE.split-tunnel'}) - entries
+
           def inspect_zip(path):
               # Read selected members into memory, never extract archive-controlled paths.
               with zipfile.ZipFile(path) as archive:
@@ -202,6 +210,11 @@ jobs:
                       continue
                   if name.endswith(('.zip', '.apk')):
                       blobs = inspect_zip(path)
+                      if name.endswith('-win.zip'):
+                          prefix = '_bootstrap' if name.startswith('VPNRouter-update-') else 'app'
+                          with zipfile.ZipFile(path) as archive:
+                              if missing_driver_files(archive, prefix):
+                                  sink.append(f'{name}: True Split driver bundle missing under {prefix}/')
                   elif name.endswith('.tar.gz'):
                       with path.open('rb') as stream:
                           blobs = inspect_tar(stream)

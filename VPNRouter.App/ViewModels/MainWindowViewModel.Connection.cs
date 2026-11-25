@@ -112,6 +112,15 @@ public partial class MainWindowViewModel
         {
             if (_disposed) return;
             if (!readinessGuard()) return;
+            if (_manualRollbackAttempt == null)
+            {
+                SetSourceConnectionObservation(null);
+                if (RollbackArtifactPolicy.IsSupportedHost())
+                {
+                    _rollbackHistory.ClearFailuresAfterConnection();
+                    UpdateVm?.ClearConnectionRollbackSuggestion();
+                }
+            }
             if (IsConnecting || _isReconnecting) return;
 
             _displayExternalTunnel = false;
@@ -166,7 +175,7 @@ public partial class MainWindowViewModel
     private Task ToggleConnectionAsync() =>
         !IsConnected && SimpleServerPreference != null && (IsSubscribeMode || SelectedTabIndex is not (0 or 1))
             ? PrepareSubscriptionConnectionAsync(useSimpleInput: false)
-            : ToggleConnectionCoreAsync(null);
+            : ToggleConnectionCoreAsync(null, manual: true);
 
     private void ShowUnconfirmedStop()
     {
@@ -176,7 +185,10 @@ public partial class MainWindowViewModel
         StatusText = Strings.TunnelStopUnconfirmed;
     }
 
-    private async Task ToggleConnectionCoreAsync(AppSettings? submitted)
+    private async Task ToggleConnectionCoreAsync(
+        AppSettings? submitted,
+        CancellationToken cancellationToken = default,
+        bool manual = false)
     {
         var toggle = ConnectionSyncPolicy.DecideToggle(
             IsConnected,
@@ -235,7 +247,10 @@ public partial class MainWindowViewModel
             return;
         }
 
-        var startOverride = submitted == null ? null : SimpleTunnelStart;
+        // Tests replace the two-phase start for user-initiated connects. Production leaves this
+        // null; Simple submissions and the manual Advanced command share the same seam, while
+        // assistant-driven state changes keep the real engine path.
+        var startOverride = (manual || submitted != null) ? SimpleTunnelStart : null;
 #if PLATFORM_WINDOWS
         if (startOverride == null && VPNRouter.App.Services.WindowsServiceHelper.IsRunning()
             && TunOwnershipLock.IsOwnedByAnyone())
@@ -256,6 +271,21 @@ public partial class MainWindowViewModel
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
 
+            if (manual && submitted == null)
+            {
+                var generation = _connectionGeneration;
+                var blocked = await RefreshGeneratedDnsttSelectionAsync(generation, cancellationToken);
+                if (!IsCurrentConnectionPreparation(generation)) return;
+                if (blocked != null)
+                {
+                    SmpErrorText = blocked;
+                    StatusText = blocked;
+                    IsConnecting = false;
+                    ConnectButtonText = Strings.StartVPN;
+                    return;
+                }
+            }
+
             if (submitted == null)
             {
                 SaveSettings();
@@ -274,6 +304,10 @@ public partial class MainWindowViewModel
                 }
             }
 
+            var rollbackAttemptId = manual
+                ? BeginManualRollbackAttempt(submitted ?? _settings)
+                : null;
+
             try
             {
                 var capturedSettings = submitted ?? CaptureConnectionSettings();
@@ -287,7 +321,8 @@ public partial class MainWindowViewModel
                 if (startOverride == null)
                     await PrepareColdStartAsync();
 
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
                     Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
                 var start = startOverride ?? RunTwoPhaseStartAsync;
@@ -305,10 +340,13 @@ public partial class MainWindowViewModel
                     StartSubRefreshTimer();
                     RestoreConnectedStatus();
                     ConflictingVpnWarningText = string.Empty;
+                    CompleteManualRollbackSuccess(rollbackAttemptId);
                 }
                 else if (outcome == Internals.TwoPhaseStartOutcome.StartTaskCompleted)
                 {
                     await startTask;
+                    if (rollbackAttemptId != null && _manualRollbackAttempt?.Id == rollbackAttemptId)
+                        _manualRollbackAttempt = null;
                     IsConnecting = false;
                     _logger.Warning("[VM] StartAsync returned without firing SingBoxStarted — leaving state to OnEngineStatus");
                 }
@@ -316,6 +354,8 @@ public partial class MainWindowViewModel
                 {
                     _logger.Error("[VM] Phase A (sing-box launch) timed out after {N}s — sing-box never reported started. Possible cause: slow firewall rule creation, missing NetAdapter PowerShell module (Windows 10 LTSC / Server SKUs), or pre-start TUN cleanup hang. Stopping engine.",
                         (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds);
+                    CompleteManualRollbackFailure(rollbackAttemptId,
+                        new ConnectionAttemptAssessment(ConnectionFailureCategory.Technical, "phase-a-timeout"));
                     await AbortStartAsync(Strings.StartTimeoutPhaseA);
                     return;
                 }
@@ -323,18 +363,24 @@ public partial class MainWindowViewModel
                 {
                     _logger.Error("[VM] Phase B (TUN warm-up) timed out after {N}s — sing-box started but Connected event never fired. Possible cause: wintun driver issue, network interface gone, or warmup probe blocked. Stopping engine.",
                         (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds);
+                    CompleteManualRollbackFailure(rollbackAttemptId,
+                        new ConnectionAttemptAssessment(ConnectionFailureCategory.Technical, "phase-b-timeout"));
                     await AbortStartAsync(Strings.StartTimeoutPhaseB);
                     return;
                 }
                 else
                 {
                     _logger.Error("[VM] Two-phase start cancelled by outer CTS");
+                    CompleteManualRollbackFailure(rollbackAttemptId,
+                        new ConnectionAttemptAssessment(ConnectionFailureCategory.UserCancelled, "outer-timeout"));
                     await AbortStartAsync(Strings.StartTimeoutPhaseA);
                     return;
                 }
             }
             catch (TunOwnershipException)
             {
+                CompleteManualRollbackFailure(rollbackAttemptId,
+                    new ConnectionAttemptAssessment(ConnectionFailureCategory.LocalEnvironment, "tun-owned"));
                 _logger.Warning("[VM] TUN adapter owned by another VPNRouter instance");
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 IsConnected = false;
@@ -347,6 +393,8 @@ public partial class MainWindowViewModel
             }
             catch (VPNRouter.Core.Services.ConflictingVpnException cvex)
             {
+                CompleteManualRollbackFailure(rollbackAttemptId,
+                    new ConnectionAttemptAssessment(ConnectionFailureCategory.LocalEnvironment, "vpn-conflict"));
                 _logger.Warning(
                     "[VM] Conflicting VPN detected: {Count} processes ({First})",
                     cvex.Conflicts.Count,
@@ -366,6 +414,8 @@ public partial class MainWindowViewModel
             catch (OperationCanceledException)
             {
                 _logger.Error("[VM] OperationCanceledException out of two-phase start path — treating as Phase A timeout. Stopping engine.");
+                CompleteManualRollbackFailure(rollbackAttemptId,
+                    new ConnectionAttemptAssessment(ConnectionFailureCategory.UserCancelled, "cancelled"));
                 await AbortStartAsync(Strings.StartTimeoutPhaseA);
                 return;
             }
@@ -376,10 +426,13 @@ public partial class MainWindowViewModel
                 if (IsConnected && _engine.IsRunning)
                 {
                     ConnectButtonText = Strings.StopVPN;
+                    CompleteManualRollbackSuccess(rollbackAttemptId);
                     _logger.Warning("[VM] start path threw but engine is running and already typed ready — keeping connected status instead of a stale 'Failed to start VPN'");
                 }
                 else
                 {
+                    CompleteManualRollbackFailure(rollbackAttemptId,
+                        ConnectionAttemptClassifier.Classify(ex));
                     try { await Task.Run(() => _engine.Stop()); } catch { }
                     IsConnected = false;
                     StatusText = $"{Strings.FailedStartVpn} {ex.Message}";

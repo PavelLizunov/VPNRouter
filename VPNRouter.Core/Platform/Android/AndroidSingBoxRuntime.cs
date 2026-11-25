@@ -1,8 +1,6 @@
 #if PLATFORM_ANDROID
 using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.OS;
@@ -111,9 +109,6 @@ public sealed class AndroidSingBoxRuntime
         }
         return VpnStateResolver.Resolve(stored, global::Android.OS.Process.MyPid(), DateTimeOffset.UtcNow);
     }
-
-    public Task<bool> IsRunningAsync(CancellationToken ct = default) =>
-        Task.FromResult(!ct.IsCancellationRequested && IsRunning());
 
     public bool IsRunning() => HasLiveTunnel();
 

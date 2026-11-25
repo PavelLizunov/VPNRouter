@@ -5,21 +5,32 @@ using Serilog;
 
 namespace VPNRouter.Core.Services;
 
-public sealed class ConfigSanityCheck
+public sealed class ConfigSanityCheck : IDisposable
 {
     private const int DnsttProbeTimeoutMs = 8_000;
     private const int DnsttFallbackTimeoutMs = 6_000;
     private const int ControllerResponseAllowanceMs = 1_000;
     private readonly ILogger? _logger;
     private readonly HttpClient _http;
+    private readonly bool _ownsHttp;
+    private bool _disposed;
 
     public ConfigSanityCheck(ILogger? logger = null, HttpClient? httpClient = null)
     {
         _logger = logger;
+        _ownsHttp = httpClient == null;
         _http = httpClient ?? new HttpClient(ClashSingBoxApi.CreateControllerHandler())
         {
             Timeout = TimeSpan.FromMilliseconds(DnsttProbeTimeoutMs + ControllerResponseAllowanceMs)
         };
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsHttp)
+            _http.Dispose();
     }
 
     public PreStartCheckResult CheckBeforeStart(JsonObject singboxConfig)
@@ -172,7 +183,7 @@ public sealed class ConfigSanityCheck
     }
 
     internal async Task<ProbeResult> ProbeAsync(Uri controller, string? clashApiSecret, CancellationToken ct,
-        bool dnstt = false)
+        bool dnstt = false, bool preferHttps = false)
     {
         const string defaultProbeUrl = "http://www.gstatic.com/generate_204";
         int lastDelay = 0;
@@ -183,7 +194,7 @@ public sealed class ConfigSanityCheck
             ct.ThrowIfCancellationRequested();
 
             bool initialDnsttProbe = dnstt && attempt == 1;
-            var target = initialDnsttProbe ? DeepVerifyConstants.ProbeUrl : defaultProbeUrl;
+            var target = attempt == 1 && (dnstt || preferHttps) ? DeepVerifyConstants.ProbeUrl : defaultProbeUrl;
             // Leave room for a second destination inside the desktop warmup deadline.
             var probeTimeoutMs = !dnstt ? 5_000 :
                 initialDnsttProbe ? DnsttProbeTimeoutMs : DnsttFallbackTimeoutMs;

@@ -26,7 +26,6 @@ public static class AppAutomationDriver
     private static Window? _window;
     private static MainWindowViewModel? _viewModel;
     private static string? _token;
-    private static int _port;
 
     public static int? AutomationPort { get; internal set; }
     public static string? AutomationToken { get; internal set; }
@@ -76,7 +75,6 @@ public static class AppAutomationDriver
 
         _window = window;
         _viewModel = viewModel;
-        _port = port;
         _token = token;
         _cts = new CancellationTokenSource();
 
@@ -433,20 +431,14 @@ public static class AppAutomationDriver
     {
         if (string.IsNullOrWhiteSpace(target)) return null;
 
-        foreach (var child in parent.GetVisualChildren())
-        {
-            if (child is T c)
-            {
-                if (string.Equals(c.Name, target, StringComparison.OrdinalIgnoreCase))
-                    return c;
-                if (c is ContentControl cc && cc.Content is string s && string.Equals(s, target, StringComparison.OrdinalIgnoreCase))
-                    return c;
-            }
-            var found = FindControl<T>(child, target);
-            if (found != null) return found;
-        }
-        return null;
+        return ControlsIn(parent).OfType<T>().FirstOrDefault(control =>
+            string.Equals(control.Name, target, StringComparison.OrdinalIgnoreCase)
+            || (control is ContentControl { Content: string text }
+                && string.Equals(text, target, StringComparison.OrdinalIgnoreCase)));
     }
+
+    internal static IEnumerable<Control> ControlsIn(Visual root) =>
+        root.GetVisualDescendants().OfType<Control>();
 
     private static async Task HandleScreenshotAsync(HttpListenerResponse response)
     {

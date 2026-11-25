@@ -68,24 +68,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate tag and AppVersion identity
+      - name: Stamp the verified release version
         shell: pwsh
         env:
           VERSION: ${{ inputs.version }}
-        run: |
-          $head = (git rev-parse HEAD).Trim()
-          $tagCommit = (git rev-list -n 1 "v$env:VERSION").Trim()
-          if ($head -ne $tagCommit) { throw "Tag identity mismatch: HEAD=$head tag=$tagCommit" }
-          $source = Get-Content VPNRouter.Core/AppVersion.cs -Raw
-          if ($source -notmatch 'string\s+Version\s*=\s*"([^"]+)"') {
-            throw 'Could not resolve AppVersion.Version.'
-          }
-          if ($Matches[1] -ne $env:VERSION) {
-            throw "AppVersion/tag mismatch: source=$($Matches[1]) input=$env:VERSION"
-          }
+        run: python .github/scripts/stamp_release_version.py $env:VERSION
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73  # v6.1.0
@@ -237,4 +226,4 @@ jobs:
       - name: Summary
         shell: pwsh
         run: |
-          "Signed Windows assets are verified and staged on draft v${{ inputs.version }}. The release remains draft until the pre-publish build, test and exact 16-asset integrity gates pass; post-ship runs after authorized publication." | Write-Host
+          "Signed Windows assets are verified and staged on draft v${{ inputs.version }}. The release remains draft until the pre-publish build, test and exact 18-asset integrity gates pass; post-ship runs after authorized publication." | Write-Host

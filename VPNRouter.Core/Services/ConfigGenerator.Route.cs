@@ -37,13 +37,18 @@ public static partial class ConfigGenerator
             Outbound    = "direct"
         });
 
+        bool excludeApps = !isFullTunnel && isExcludeMode;
+        if (excludeApps)
+            AddPerAppRoutingRules(rules, processes, isFullTunnel, isExcludeMode, hasUdpProxy);
+
         if (blockQuicOnTcpProxy && !hasUdpProxy && !proxyIsUdpNative)
             AddQuicRejectRules(rules, processes, isFullTunnel, isExcludeMode);
 
         if (tcpOnlyProxy && !isFullTunnel && !isExcludeMode && processes.Count > 0)
             rules.Add(new RouteRule { Network = "udp", ProcessName = processes.ToList(), Action = "reject" });
 
-        AddPerAppRoutingRules(rules, processes, isFullTunnel, isExcludeMode, hasUdpProxy);
+        if (!excludeApps)
+            AddPerAppRoutingRules(rules, processes, isFullTunnel, isExcludeMode, hasUdpProxy);
 
         if (tcpOnlyProxy && (isFullTunnel || isExcludeMode))
             rules.Add(new RouteRule { Network = "udp", Action = "reject" });
@@ -143,7 +148,7 @@ public static partial class ConfigGenerator
                 });
             }
         }
-        else if (isFullTunnel && hasUdpProxy)
+        if ((isFullTunnel || isExcludeMode) && hasUdpProxy)
         {
             rules.Add(new RouteRule
             {

@@ -1,7 +1,7 @@
 param(
     [string]$Version = "1.0",
-    [string]$SingBoxVersion = "1.14.4-vpnctl.2",
-    [string]$SingBoxSha256 = "07b4030ebc28f1797536a2cd1f050c852de04ac43a5948ddb28c7d7c546d2862",
+    [string]$SingBoxVersion = "1.14.4-vpnctl.3",
+    [string]$SingBoxSha256 = "11f5194ea8bf7b1796c9cfa3a160adf8748b2fd26b22bbaa1b1ff4b42f715825",
     [string]$SingBoxPath = "",
     [string]$SlipstreamPath = "",
     [switch]$Upload,

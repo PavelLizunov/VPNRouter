@@ -20,6 +20,8 @@ public sealed class FakeUpdateSource : IUpdateSource
     public IReadOnlyList<UpdateSourceInfo> StableReleases { get; init; } =
         Array.Empty<UpdateSourceInfo>();
 
+    public Task<IReadOnlyList<UpdateSourceInfo>>? PendingStableReleases { get; init; }
+
     public Exception? ListStableException { get; init; }
 
     public IReadOnlyList<UpdateSourceInfo> CandidateReleases { get; init; } =
@@ -70,7 +72,7 @@ public sealed class FakeUpdateSource : IUpdateSource
         ListStableCallCount++;
         if (ListStableException is not null)
             return Task.FromException<IReadOnlyList<UpdateSourceInfo>>(ListStableException);
-        return Task.FromResult(StableReleases);
+        return PendingStableReleases ?? Task.FromResult(StableReleases);
     }
 
     public Task<IReadOnlyList<UpdateSourceInfo>> ListOlderAsync(

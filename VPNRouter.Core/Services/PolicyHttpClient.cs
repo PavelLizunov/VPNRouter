@@ -79,9 +79,9 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
                     HttpCompletionOption.ResponseHeadersRead,
                     perRequestCts.Token).ConfigureAwait(false);
 
-                var body = await ReadBoundedAsync(
-                    httpResponse.Content, maxResponseBytes, perRequestCts.Token)
-                    .ConfigureAwait(false);
+                var body = request.ReadErrorBody || httpResponse.IsSuccessStatusCode
+                    ? await ReadBoundedAsync(httpResponse.Content, maxResponseBytes, perRequestCts.Token).ConfigureAwait(false)
+                    : Array.Empty<byte>();
 
                 var duration = TimeSpan.FromMilliseconds(Environment.TickCount64 - startedAt);
                 var statusCode = (int)httpResponse.StatusCode;

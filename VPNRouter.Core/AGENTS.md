@@ -51,7 +51,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 - `Localization/`: Shared localized string tables (`Strings.cs`, `Strings.FreeConfigs.cs`, etc.).
 - `Json/`: `System.Text.Json` source generation context (`AppJsonContext.cs`).
 - `AppPaths.cs`: Cross-platform root data directory resolution (`%ProgramData%\VPNRouter` on Windows, `~/Library/Application Support/VPNRouter` on macOS, `~/.config/vpnrouter` on Linux; overrideable via `OverrideDataDir` for Android).
-- `AppVersion.cs`: Single source of truth for versioning (`AppVersion.Version`).
+- `AppVersion.cs`: Default development version. Release builds stamp `AppVersion.Version` from their verified tag.
 
 ## Critical Invariants & Execution Rules
 

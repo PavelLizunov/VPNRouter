@@ -298,3 +298,27 @@ moved the host viewport in both modes. The new regressions then tried
 to read the last virtualized row before it was realized. Bring that item
 into the host viewport through the list's item index before checking
 its position and the saved selection.
+
+## Standard candidate integration
+
+Standard v2.51.1-r2 was published from aaa02215 while this PR was still open.
+Recover the reviewed picker from 2cf927a7 on current main. Preserve the shared
+Simple and Advanced category controls, country flags, exact subscription pins,
+and category-scoped automatic selection. Preserve current main's DNSTT grant
+reconciliation, rollback assistance, fixed Connect footer, DNS and tray lifetime
+fixes. The assistant redesign in PR #733 has a separate scope.
+
+The risk is a dropped connection or saved selection during the merge. Rollback
+is a revert of the resulting PR. Validate config and selection with the existing
+hosted Release build and suites, review the exact diff independently, inspect
+the synthetic Windows captures, and confirm the UI and regenerated outbounds
+against the same revision. Add the observed results to this record. Installed
+verification belongs to a separately authorized candidate.
+
+Merged the accepted main source into the picker branch. The shared picker uses
+the current Simple viewport and fixed footer. Its direct-link editor validates
+and preserves existing DNSTT grants. The merged refresh path preserves both
+exact subscription pins and generated grant reconciliation. Added a targeted
+link-save regression. An independent source review found no integration blocker.
+Changed XAML and workflow YAML parsed, and git diff --check passed. The hosted
+build, test and capture results are pending for the merged revision.
