@@ -65,7 +65,18 @@ public partial class SingBoxManager
         if (expected.Count == 0)
             return true;
 
-        var proxiesUri = new Uri(CurrentControllerRequest.Uri, "/proxies");
+        // The applied document may declare its own loopback controller (custom
+        // configs and service replacements); verify the controller it names.
+        HttpRequest controllerRequest;
+        try
+        {
+            controllerRequest = ControllerRequest(ClashSingBoxApi.ReadLocalController(configJson), "/configs");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException or JsonException)
+        {
+            controllerRequest = CurrentControllerRequest;
+        }
+        var proxiesUri = new Uri(controllerRequest.Uri, "/proxies");
         var clock = Stopwatch.StartNew();
         while (clock.Elapsed < TagVerificationBudget)
         {
@@ -78,7 +89,7 @@ public partial class SingBoxManager
                 using var cts = new CancellationTokenSource(
                     remaining < TimeSpan.FromSeconds(1) ? remaining : TimeSpan.FromSeconds(1));
                 var response = SendClashRequestAsync(
-                    CurrentControllerRequest with { Uri = proxiesUri }, cts.Token).GetAwaiter().GetResult();
+                    controllerRequest with { Uri = proxiesUri }, cts.Token).GetAwaiter().GetResult();
                 if (response.IsSuccess())
                 {
                     if (ServesTags(response.AsString(), expected))
