@@ -71,4 +71,9 @@ available, and the command stops before declaring completion until installer
 signing provenance can be established. The release defect ledger records
 the outstanding installer dependency.
 
+The Linux test run on `e355106b` failed one release-skill text assertion.
+The rolling-candidate instructions again explicitly require exactly 18
+canonical assets. All 17 text assertions from that test were rechecked
+against both skills before the follow-up commit.
+
 Production timing and live WINBRAT evidence require an authorized release.

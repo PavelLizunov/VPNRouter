@@ -48,8 +48,9 @@ python .github/scripts/prepare_release.py vX.Y.Z-rN --notes <notes-file>
 
 Record the returned tag, SHA and successful run IDs. See
 [release strategy](../../../docs/release-strategy.md) for signing, retry and
-partial staging recovery. Keep the draft until all 18 assets, both True Split
-bundles and the read-only integrity job pass. Apply the strict CI check below.
+partial staging recovery. Require exactly 18 canonical assets, both True Split
+bundles, and a successful read-only integrity job before publication. Apply
+the strict CI check below.
 
 ## Prepublication gate and authorized publication
 
