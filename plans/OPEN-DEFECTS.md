@@ -16,6 +16,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P1** - Windows ETW can enable the kernel provider after a concurrent Stop has cleared the worker and attempted to stop the still-unstarted session. See `VPNRouter.Core/Services/EtwProcessMonitor.cs:125` and [memory follow-up](phase-standard-memory-retention-2026-11-26.md).
+- [ ] **P2** - The macOS privileged helper omits the Go memory target from its fixed core environment, and Linux pkexec drops the target supplied to its own environment. See `packaging/macos/vpnrouter-privileged.c:1975` and `VPNRouter.Core/Services/SingBoxManager.Lifecycle.cs:737`.
+- [ ] **P2** - The Unix process monitor can capture a cleared or replacement cancellation source when a worker starts late, and sweeps all processes even with no subscribers. See `VPNRouter.Core/Platform/macOS/MacProcessMonitor.cs:27`.
+- [ ] **P2** - Existing health records persist beyond their TTL, and scanner regex caches and ruleset file locks retain each distinct key. See `ServerHealthStore.cs`, `ProcessScanner.cs`, `MacProcessScanner.cs`, and `RuleSetCacheManager.cs`.
+- [ ] **P3** - Clash statistics buffer the whole connections response. Opt-in Clash logs retain the largest message buffer and have no count cap in their rolling event queue. See `ClashSingBoxApi.cs`, `ClashLogStream.cs`, and `ConnectionHealthState.cs`.
+- [ ] **P3** - Simple Mode keeps the selected Advanced content active for tray trimming, and bundled country-table decompression temporarily duplicates large buffers. Some manual Free Configs commands retain their cancellation sources. See [memory follow-up](phase-standard-memory-retention-2026-11-26.md).
+
 - [x] **P2** - Choosing an automatic category during an active Standard connection passed an unchecked first eligible row to reconnect or service Apply. The desktop now requires current traffic proof for category selections. RESOLVED in source, CI pending. See [connected category selection](phase-standard-connected-category-autoselect-2026-11-25.md).
 
 - [x] **P1** - The first deep category-probe draft reused `IsConnecting`. A disconnect increments the connection generation and leaves the CTA busy. The same flag blocks Stop during verification. The probe now has its own cancellation scope and Stop cancels it. RESOLVED in source, CI pending. [PR #743](https://github.com/PavelLizunov/VPNRouter/pull/743).
