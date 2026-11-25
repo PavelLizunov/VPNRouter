@@ -24,8 +24,6 @@ public sealed record CanaryAggregate(PhaseOutcome BlockedTargetCanary, bool Stal
 
 public static class CanaryPolicy
 {
-    public const bool DirectProbesDefaultEnabled = false;
-
     public static string RedactUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return "(none)";

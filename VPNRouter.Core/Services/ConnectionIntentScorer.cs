@@ -23,13 +23,6 @@ public static class ConnectionIntentScorer
         return new(chosen, Reason(chosen, normalized));
     }
 
-    public static VlessServerEntry? PickServer(
-        IEnumerable<ServerLiveness> results,
-        string? intent,
-        string? activeName) =>
-        PickLiveServer(results, intent, row => string.Equals(row.Name, activeName, StringComparison.Ordinal) &&
-            (!string.IsNullOrEmpty(activeName) || ConnectionIntent.Normalize(intent) != ConnectionIntent.General));
-
     internal static VlessServerEntry? PickRegisteredServer(IEnumerable<ServerLiveness> results,
         string? intent, VlessServerEntry selected) =>
         PickLiveServer(results, intent, row => ReferenceEquals(row, selected));
