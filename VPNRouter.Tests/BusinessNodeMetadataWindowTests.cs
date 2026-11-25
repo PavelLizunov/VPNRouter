@@ -443,7 +443,6 @@ public sealed class BusinessNodeMetadataWindowTests
         {
             get
             {
-                OpenMenu(Window);
                 Window.OpenServerPanel();
                 return Window.FindControl<ComboBox>("BusinessServerSelector")!;
             }

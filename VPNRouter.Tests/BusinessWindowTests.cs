@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Automation;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using VPNRouter.App.Services;
@@ -8,6 +9,7 @@ using VPNRouter.App.ViewModels;
 using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.App.Views;
 using VPNRouter.Core;
+using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
@@ -38,13 +40,24 @@ public sealed class BusinessWindowTests
             Assert.Empty(controls.OfType<TabControl>());
             Assert.DoesNotContain(controls.OfType<RadioButton>(), radio => radio.IsEffectivelyVisible);
 
-            window.OpenServerPanel();
-            window.OpenModePanel();
-            Assert.True(window.FindControl<Border>("BusinessServerPanel")!.IsVisible);
-            Assert.True(window.FindControl<Border>("BusinessModePanel")!.IsVisible);
             var menu = (Flyout)window.FindControl<Button>("BusinessMenuButton")!.Flyout!;
-            var menuControls = Assert.IsAssignableFrom<Control>(menu.Content).GetVisualDescendants().ToList();
-            var selector = Assert.Single(menuControls.OfType<ComboBox>().Where(c => AutomationProperties.GetAutomationId(c) == "BusinessServerSelector"));
+            var serverButton = window.FindControl<Button>("BusinessServerMenuButton")!;
+            var modeButton = window.FindControl<Button>("BusinessModeMenuButton")!;
+            Assert.Contains(serverButton, controls);
+            Assert.Contains(modeButton, controls);
+            Assert.False(menu.IsOpen);
+
+            var serverPanel = window.FindControl<Border>("BusinessServerPanel")!;
+            var modePanel = window.FindControl<Border>("BusinessModePanel")!;
+            Assert.False(serverPanel.IsVisible);
+            Assert.False(modePanel.IsVisible);
+            serverButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            Assert.False(menu.IsOpen);
+            Assert.True(serverPanel.IsVisible);
+            Assert.False(modePanel.IsVisible);
+            var selector = Assert.Single(serverPanel.GetVisualDescendants().OfType<ComboBox>());
             Assert.False(selector.IsEditable);
             Assert.Equal("BusinessServerSelector", AutomationProperties.GetAutomationId(selector));
             Assert.Equal("Сервер VPN", AutomationProperties.GetName(selector));
@@ -64,20 +77,41 @@ public sealed class BusinessWindowTests
             Assert.False(selector.IsEffectivelyEnabled);
             vm.IsConnected = false;
             Assert.True(selector.IsEffectivelyEnabled);
-            var modes = menuControls.OfType<RadioButton>().ToArray();
+            Assert.InRange(selector.Bounds.Width, 1, width);
+            Assert.DoesNotContain(serverPanel.GetVisualDescendants().OfType<TextBlock>(),
+                text => text.Text?.Contains("192.0.2.1") == true);
+
+            modeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(menu.IsOpen);
+            Assert.False(serverPanel.IsVisible);
+            Assert.True(modePanel.IsVisible);
+            var modes = modePanel.GetVisualDescendants().OfType<RadioButton>().ToArray();
             Assert.Equal(2, modes.Length);
             Assert.True(vm.IsSplitTunnel);
+            Assert.True(modes[0].IsChecked);
+            Assert.Contains(modeButton.GetVisualDescendants().OfType<TextBlock>(),
+                text => text.IsEffectivelyVisible && text.Text == Strings.BusinessSplit);
             modes[1].IsChecked = true;
+            Dispatcher.UIThread.RunJobs();
             Assert.False(vm.IsSplitTunnel);
             Assert.Equal("full", store.Load(AppPaths.ConfigYamlPath).App.RoutingMode);
+            Assert.Contains(modeButton.GetVisualDescendants().OfType<TextBlock>(),
+                text => text.IsEffectivelyVisible && text.Text == Strings.BusinessFullCompact);
+            vm.IsConnecting = true;
+            Assert.All(modes, mode => Assert.False(mode.IsEffectivelyEnabled));
+            vm.IsConnecting = false;
+            vm.IsConnected = true;
+            Assert.All(modes, mode => Assert.False(mode.IsEffectivelyEnabled));
+            vm.IsConnected = false;
             modes[0].IsChecked = true;
             Assert.True(vm.IsSplitTunnel);
             Assert.Equal("split", store.Load(AppPaths.ConfigYamlPath).App.RoutingMode);
+            modeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
-            Assert.InRange(selector.Bounds.Width, 1, width);
+            Assert.False(modePanel.IsVisible);
             var scroll = Assert.IsType<ScrollViewer>(window.Content);
             Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 1);
-            Assert.False(menuControls.OfType<TextBlock>().Any(t => t.Text?.Contains("192.0.2.1") == true));
         }
         finally { window.Close(); }
         var reloaded = store.Load(AppPaths.ConfigYamlPath);
@@ -90,7 +124,7 @@ public sealed class BusinessWindowTests
     }
 
     [AvaloniaFact]
-    public async Task MenuServerPanel_ReturnsToAutomaticOrKeepsThePickedServer()
+    public async Task HomeServerPanel_ReturnsToAutomaticOrKeepsThePickedServer()
     {
         var store = new InMemorySettingsStore();
         var settings = new AppSettings();
@@ -109,9 +143,8 @@ public sealed class BusinessWindowTests
         try
         {
             window.OpenServerPanel();
-            var menu = (Flyout)window.FindControl<Button>("BusinessMenuButton")!.Flyout!;
-            var menuControls = Assert.IsAssignableFrom<Control>(menu.Content).GetVisualDescendants();
-            var check = menuControls.OfType<CheckBox>()
+            var serverPanel = window.FindControl<Border>("BusinessServerPanel")!;
+            var check = serverPanel.GetVisualDescendants().OfType<CheckBox>()
                 .Single(box => AutomationProperties.GetAutomationId(box) == "BusinessAutoSelect");
             Assert.True(check.IsChecked);
             Assert.Equal(BusinessServerSelectionMode.Automatic,

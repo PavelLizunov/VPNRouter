@@ -252,16 +252,15 @@ public sealed class BusinessServerHealthTests
             var selector = window.FindControl<ComboBox>("BusinessServerSelector")!;
             selector.SelectedIndex = selected;
             Dispatcher.UIThread.RunJobs();
-            var menu = (Flyout)window.FindControl<Button>("BusinessMenuButton")!.Flyout!;
-            var menuControls = Assert.IsAssignableFrom<Control>(menu.Content).GetVisualDescendants().ToList();
+            var panelControls = window.FindControl<Border>("BusinessServerPanel")!.GetVisualDescendants().ToArray();
             var choices = selector.Items.Cast<BusinessServerChoiceViewModel>().ToArray();
             Assert.True(choices[0].IsGood);
             Assert.True(choices[1].IsWarning);
             Assert.True(choices[2].IsBad);
-            var texts = menuControls.OfType<TextBlock>().Select(t => t.Text).ToArray();
+            var texts = panelControls.OfType<TextBlock>().Select(t => t.Text).ToArray();
             Assert.Contains(choices[selected].PingText, texts);
             Assert.DoesNotContain(texts, t => t?.Contains("192.0.2.") == true || t?.Contains("private error") == true);
-            var dot = Assert.Single(menuControls.OfType<Ellipse>().Where(e => e.Classes.Contains("business-health-dot")));
+            var dot = Assert.Single(panelControls.OfType<Ellipse>().Where(e => e.Classes.Contains("business-health-dot")));
             Assert.True(window.TryFindResource(brushKey, window.ActualThemeVariant, out var brush));
             Assert.Equal(Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color, Assert.IsAssignableFrom<ISolidColorBrush>(dot.Fill).Color);
             var scroll = Assert.IsType<ScrollViewer>(window.Content);
@@ -271,7 +270,6 @@ public sealed class BusinessServerHealthTests
             Assert.False(refresh.IsEffectivelyEnabled);
             Assert.All(choices, c => Assert.False(c.IsGood || c.IsWarning || c.IsBad));
             vm.IsConnecting = false;
-            OpenMenu(window).Hide();
             ScreenshotHelper.Capture(window, $"business-health-{label}-{width}");
         }
         finally { window.Close(); }
@@ -285,16 +283,6 @@ public sealed class BusinessServerHealthTests
         return window.FindControl<Button>("BusinessServerRefresh")!;
     }
 
-    private static Flyout OpenMenu(BusinessWindow window)
-    {
-        var button = window.FindControl<Button>("BusinessMenuButton")!;
-        var flyout = Assert.IsType<Flyout>(button.Flyout);
-        if (!flyout.IsOpen) flyout.ShowAt(button);
-        Dispatcher.UIThread.RunJobs();
-        window.UpdateLayout();
-        Dispatcher.UIThread.RunJobs();
-        return flyout;
-    }
 
     private static MainWindowViewModel CreateVm(out InMemorySettingsStore store)
     {
