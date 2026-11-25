@@ -44,6 +44,21 @@ Branch: `feat/turnrelay-integration` from `origin/main` `ac85310f`.
 - Android APK/AVD readiness is a separate environment report; no emulator build
   runs on `harness-test`.
 
+## Observed outcomes
+
+- `harness-test`: `dotnet`, Java, `adb`, `emulator` and any Android SDK are
+  absent. This control plane cannot build or run the APK/AVD.
+- `mac-worker` at `2330b714`: the production helper compiled with the workflow
+  flags (`-std=c11 -O2 -Wall -Wextra -Werror -D_FORTIFY_SOURCE=2
+  -fstack-protector-strong`), `install-privileged.sh` passed `bash -n`, and the
+  typed contract tests passed when compiled without the sanitizer. The
+  sanitizer build stalled inside the macOS ASAN runtime initializer on this
+  worker, before the test binary could run; that is an environment limitation,
+  not a contract failure.
+- `windows-worker` was stopped and the sequential pool was leased by
+  `vpnctl-turnrelay-20261125` during implementation; a queued request for VM100
+  was submitted. The .NET suite result is recorded below once that lease clears.
+
 ## Unknowns
 
 - The pinned `sing-box-vpnctl` release hash is intentionally unchanged until a
