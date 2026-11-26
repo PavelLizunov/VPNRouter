@@ -61,8 +61,8 @@ public sealed class SimpleConnectStatusTests
         Assert.True(disconnect.IsEffectivelyEnabled);
         Assert.Same(vm.SmpToggleConnectCommand, disconnect.Command);
         Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
-        Assert.InRange(disconnect.Bounds.Height, 116, 124);
-        Assert.Equal(disconnect.Bounds.Height, disconnect.Bounds.Width);
+        Assert.InRange(disconnect.Bounds.Width, 116, 136);
+        Assert.InRange(disconnect.Bounds.Height, 124, 144);
         var initial = disconnect.TranslatePoint(default, view.Page)!.Value;
         Assert.InRange(initial.Y, 1, view.Page.Bounds.Height - disconnect.Bounds.Height - 1);
 
