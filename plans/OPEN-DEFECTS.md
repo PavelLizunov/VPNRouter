@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P3** - In Standard r5 the Simple home hides subscription refresh under server checks. Simple and Advanced subscription pickers also show TurnRelay hops as unsupported selectable rows. Move the refresh feedback to the home card and keep hop rows in the resolver pool while omitting them from the picker. [Task record](phase-simple-subscription-refresh-2026-11-27.md).
+
 - [x] **P0** - macOS health restarts could rotate the Clash secret and leave existing clients unauthorized. A started runtime could time out before scheduling kill-switch release. RESOLVED in source on PR #746 with session-secret retention and deferred reconciliation. Final CI and installed checks are recorded in the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
 
 - [x] **P1** - HealthMonitor config restarts skipped the configured kill switch. Desktop Apply could leave a rejected runtime presented as the accepted tunnel. RESOLVED in source on PR #746 with restart protection, a quiesced rollback snapshot, and accepted-tunnel invalidation when rollback is unconfirmed. See the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
