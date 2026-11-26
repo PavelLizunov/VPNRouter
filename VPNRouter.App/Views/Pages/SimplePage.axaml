@@ -84,12 +84,12 @@
             <Setter Property="Margin" Value="0,0,0,-6"/>
             <Setter Property="BorderBrush" Value="{DynamicResource SurfaceAppBrush}"/>
             <Setter Property="BorderThickness" Value="2.5"/>
-            <Setter Property="Background" Value="{DynamicResource BorderStrongBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceOverlayBrush}"/>
         </Style>
         <Style Selector="Grid.hero-ring Border.ring-badge icons|Pictogram">
             <Setter Property="Width" Value="13"/>
             <Setter Property="Height" Value="13"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
@@ -125,6 +125,9 @@
         </Style>
         <Style Selector="Grid.hero-ring.error Border.ring-badge">
             <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
+        </Style>
+        <Style Selector="Grid.hero-ring.error Border.ring-badge icons|Pictogram">
+            <Setter Property="Foreground" Value="White"/>
         </Style>
 
         <!-- Primary Connect / Disconnect pill CTA right under the status (matches Android & Business). -->
@@ -345,7 +348,7 @@
                         </Arc.RenderTransform>
                     </Arc>
                     <Border Classes="mascot-disc" IsHitTestVisible="False">
-                        <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
+                        <Image Source="avares://VPNRouter.App/Assets/penguin_mascot.png"
                                Stretch="Uniform" Margin="6"
                                RenderOptions.BitmapInterpolationMode="HighQuality"/>
                     </Border>
