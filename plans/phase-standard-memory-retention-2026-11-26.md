@@ -50,8 +50,23 @@ before releasing semaphores and clears and disposes the three manual command
 lifetimes on their normal paths.
 
 Static checks covered whitespace, XAML parsing, embedded gzip member sizes,
-the macOS environment literal, and the Linux env argument shape. Build, test,
-and platform acceptance evidence remain pending for this implementation block.
+the macOS environment literal, and the Linux env argument shape. All ten PR
+checks passed for `0d6b57b2`, including Windows characterization and macOS
+privileged-system acceptance. The Linux test artifact reports 4,647 passes
+with no failures, including the rendered Pictogram, process polling, memory
+target, and deferred-page regressions.
+
+The second block expires server verdicts after 12 hours and retains the
+2,048 most recent entries. It streams large legacy histories using a 64 KiB
+record buffer and keeps existing fresh records. The shared process-pattern
+cache holds at most 256 entries, and ruleset fetching uses a fixed 64-lock
+array. TUN diagnostics reuse their static regex instances.
+
+Clash connection statistics parse in a pooled 64 KiB buffer under a 4 MiB
+body limit. Opt-in log health discards individual messages over 256 KiB and
+caps its rolling queue at 10,000 events. Oversized and invalid snapshots keep
+the existing failure representation. Build, tests, and independent review
+for this combined revision are pending.
 
 The independent watchdog design recommends observing per-process trends first.
 Cache cleanup can reuse existing trim paths. Any future owned-core restart

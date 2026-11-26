@@ -1,4 +1,5 @@
 #nullable enable
+using System.Buffers;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -16,6 +17,10 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     private static readonly TimeSpan ReloadDeadline = TimeSpan.FromSeconds(3);
 
     private static readonly TimeSpan PingDeadline = TimeSpan.FromSeconds(1);
+
+    // /connections carries live connection metadata; a runaway response is
+    // treated as a failed snapshot instead of being buffered without limit.
+    internal const long MaxConnectionsResponseBytes = 4L * 1024 * 1024;
 
     private readonly HttpClient _http;
     private readonly string _baseUrl;
@@ -173,20 +178,36 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
             deadlineCts.CancelAfter(PingDeadline);
 
             using var response = await _http
-                .GetAsync($"{_baseUrl}/connections", deadlineCts.Token)
+                .GetAsync(
+                    $"{_baseUrl}/connections",
+                    HttpCompletionOption.ResponseHeadersRead,
+                    deadlineCts.Token)
                 .ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
                 return failureSnapshot;
 
-            var bytes = await response.Content.ReadAsByteArrayAsync(deadlineCts.Token).ConfigureAwait(false);
-            if (!ParseConnectionsSummary(bytes, out var down, out var up, out var count))
+            if (response.Content.Headers.ContentLength is long contentLength &&
+                contentLength > MaxConnectionsResponseBytes)
+            {
+                return failureSnapshot;
+            }
+
+            await using var stream = await response.Content
+                .ReadAsStreamAsync(deadlineCts.Token)
+                .ConfigureAwait(false);
+
+            var parsed = await ParseConnectionsSummaryAsync(
+                    stream, MaxConnectionsResponseBytes, deadlineCts.Token)
+                .ConfigureAwait(false);
+
+            if (!parsed.Ok)
                 return failureSnapshot;
 
             return new ConnectionsSnapshot(
-                ActiveCount: count,
-                TotalUploadBytes: up,
-                TotalDownloadBytes: down,
+                ActiveCount: parsed.ActiveCount,
+                TotalUploadBytes: parsed.Upload,
+                TotalDownloadBytes: parsed.Download,
                 CapturedAt: DateTimeOffset.UtcNow);
         }
         catch (OperationCanceledException)
@@ -502,105 +523,155 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     internal static bool ParseConnectionsSummary(
         ReadOnlySpan<byte> json, out long download, out long upload, out int activeCount)
     {
-        download = 0; upload = 0; activeCount = 0;
+        var summary = new ConnectionsSummaryReader();
+        ConnectionsParseResult result = default;
         try
         {
             var reader = new Utf8JsonReader(json);
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return false;
+            if (summary.Read(ref reader)) result = summary.GetResult();
+        }
+        catch (JsonException) { }
 
-            var hasDownload = false;
-            var hasUpload = false;
-            var hasConnections = false;
-            var completedRootObject = false;
+        (download, upload, activeCount) = (result.Download, result.Upload, result.ActiveCount);
+        return result.Ok;
+    }
 
+    internal readonly record struct ConnectionsParseResult(
+        bool Ok, long Download, long Upload, int ActiveCount);
+
+    internal static async Task<ConnectionsParseResult> ParseConnectionsSummaryAsync(
+        Stream stream, long maxBytes, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
+        // The reader needs a complete token per chunk. Clash metadata tokens are small.
+        var capacity = (int)Math.Min(64 * 1024, maxBytes);
+        var buffer = ArrayPool<byte>.Shared.Rent(capacity);
+        try
+        {
+            var summary = new ConnectionsSummaryReader();
+            var state = new JsonReaderState();
+            var buffered = 0;
+            long totalRead = 0;
+            var isFinal = false;
+            while (true)
+            {
+                {
+                    var reader = new Utf8JsonReader(buffer.AsSpan(0, buffered), isFinal, state);
+                    if (!summary.Read(ref reader)) return default;
+                    if (isFinal) return summary.GetResult();
+                    state = reader.CurrentState;
+                    var consumed = (int)reader.BytesConsumed;
+                    buffered -= consumed;
+                    buffer.AsSpan(consumed, buffered).CopyTo(buffer);
+                }
+
+                var available = capacity - buffered;
+                if (available == 0) return default;
+                // Read one extra byte at the ceiling to distinguish EOF from an oversized body.
+                var remaining = maxBytes - totalRead;
+                var requested = remaining < available ? (int)remaining + 1 : available;
+                var read = await stream.ReadAsync(buffer.AsMemory(buffered, requested), ct).ConfigureAwait(false);
+                if (read > remaining) return default;
+                totalRead += read;
+                buffered += read;
+                isFinal = read == 0;
+            }
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
+        }
+    }
+
+    private sealed class ConnectionsSummaryReader
+    {
+        private enum Field { Other, Download, Upload, Connections }
+
+        private Field _pending;
+        private bool _started;
+        private bool _completed;
+        private bool _hasConnections;
+        private bool _inConnections;
+        private long? _download;
+        private long? _upload;
+        private int _activeCount;
+
+        public ConnectionsParseResult GetResult() =>
+            _completed && _hasConnections && _download.HasValue && _upload.HasValue
+                ? new(true, _download.Value, _upload.Value, _activeCount)
+                : default;
+
+        public bool Read(ref Utf8JsonReader reader)
+        {
             while (reader.Read())
             {
-                if (reader.TokenType == JsonTokenType.EndObject && reader.CurrentDepth == 0)
+                var token = reader.TokenType;
+                var depth = reader.CurrentDepth;
+                if (!_started)
                 {
-                    completedRootObject = true;
-                    break;
+                    if (token != JsonTokenType.StartObject) return false;
+                    _started = true;
                 }
-
-                if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != 1)
-                    continue;
-
-                if (reader.ValueTextEquals("downloadTotal"))
+                else if (_completed)
                 {
-                    if (hasDownload || !reader.Read() || reader.TokenType != JsonTokenType.Number)
-                        return false;
-                    if (!reader.TryGetInt64(out var downVal) || downVal < 0)
-                        return false;
-                    download = downVal;
-                    hasDownload = true;
-                }
-                else if (reader.ValueTextEquals("uploadTotal"))
-                {
-                    if (hasUpload || !reader.Read() || reader.TokenType != JsonTokenType.Number)
-                        return false;
-                    if (!reader.TryGetInt64(out var upVal) || upVal < 0)
-                        return false;
-                    upload = upVal;
-                    hasUpload = true;
-                }
-                else if (reader.ValueTextEquals("connections"))
-                {
-                    if (hasConnections || !reader.Read())
-                        return false;
-
-                    if (reader.TokenType == JsonTokenType.StartArray)
-                    {
-                        hasConnections = true;
-                        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-                        {
-                            if (activeCount == int.MaxValue)
-                                return false;
-                            activeCount++;
-                            reader.Skip();
-                        }
-
-                        if (reader.TokenType != JsonTokenType.EndArray)
-                            return false;
-                    }
-                    else if (reader.TokenType == JsonTokenType.Null)
-                    {
-                        hasConnections = true;
-                        activeCount = 0;
-                    }
-                    else
-                    {
-                        return false;
-                    }
-                }
-                else
-                {
-                    if (!reader.Read())
-                        return false;
-                    reader.Skip();
-                }
-            }
-
-            if (!completedRootObject || !hasDownload || !hasUpload || !hasConnections)
-            {
-                download = 0; upload = 0; activeCount = 0;
-                return false;
-            }
-
-            while (reader.Read())
-            {
-                if (reader.TokenType != JsonTokenType.Comment)
-                {
-                    download = 0; upload = 0; activeCount = 0;
                     return false;
                 }
+                else if (_pending != Field.Other)
+                {
+                    if (!ReadField(ref reader)) return false;
+                    _pending = Field.Other;
+                }
+                else if (_inConnections)
+                {
+                    if (depth == 1 && token == JsonTokenType.EndArray)
+                        _inConnections = false;
+                    else if (depth == 2 && token is not (JsonTokenType.EndObject or JsonTokenType.EndArray))
+                        _activeCount++;
+                }
+                else if (depth == 1 && token == JsonTokenType.PropertyName)
+                {
+                    if (reader.ValueTextEquals("downloadTotal"u8)) _pending = Field.Download;
+                    else if (reader.ValueTextEquals("uploadTotal"u8)) _pending = Field.Upload;
+                    else if (reader.ValueTextEquals("connections"u8)) _pending = Field.Connections;
+                }
+                else if (depth == 0 && token == JsonTokenType.EndObject)
+                {
+                    _completed = true;
+                }
             }
-
             return true;
         }
-        catch
+
+        private bool ReadField(ref Utf8JsonReader reader)
         {
-            download = 0; upload = 0; activeCount = 0;
-            return false;
+            if (_pending == Field.Connections)
+            {
+                if (_hasConnections || reader.TokenType is not (JsonTokenType.StartArray or JsonTokenType.Null))
+                    return false;
+                _hasConnections = true;
+                _inConnections = reader.TokenType == JsonTokenType.StartArray;
+                return true;
+            }
+
+            if (reader.TokenType != JsonTokenType.Number || !reader.TryGetInt64(out var value) || value < 0)
+                return false;
+
+            if (_pending == Field.Download)
+            {
+                if (_download.HasValue) return false;
+                _download = value;
+            }
+            else
+            {
+                if (_upload.HasValue) return false;
+                _upload = value;
+            }
+            return true;
         }
     }
 

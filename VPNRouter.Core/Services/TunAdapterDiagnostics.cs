@@ -209,15 +209,18 @@ public static class TunAdapterDiagnostics
 
     private const string DefaultTunInterfaceName = "VPNRouter-TUN";
 
+    private static readonly Regex OwnedNamePattern = new(
+        @"^(VPNRouter-TUN|sing-box-tun(?:-[A-Za-z0-9_-]+)?)$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex ColumnSeparatorPattern = new(
+        @"\s{2,}", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     internal static List<string> ExtractStaleAdapterNames(string netshOutput)
     {
         if (string.IsNullOrEmpty(netshOutput)) return new List<string>();
 
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var ownedNamePattern = new Regex(
-            @"^(VPNRouter-TUN|sing-box-tun(?:-[A-Za-z0-9_-]+)?)$",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         foreach (var rawLine in netshOutput.Split(new[] { '\r', '\n' },
                      StringSplitOptions.RemoveEmptyEntries))
@@ -225,10 +228,10 @@ public static class TunAdapterDiagnostics
             var line = rawLine.Trim();
             if (line.Length == 0) continue;
 
-            var columns = Regex.Split(line, @"\s{2,}");
+            var columns = ColumnSeparatorPattern.Split(line);
             if (columns.Length != 4) continue;
 
-            var match = ownedNamePattern.Match(columns[3].Trim());
+            var match = OwnedNamePattern.Match(columns[3].Trim());
             if (match.Success)
                 names.Add(match.Groups[1].Value);
         }

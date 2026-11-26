@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using VPNRouter.Core.Services;
 using Xunit;
@@ -35,6 +36,20 @@ public sealed class TunAdapterReadinessTests
             Enabled        Disconnected   Loopback         Loopback Pseudo-Interface 1
             """;
         Assert.Empty(TunAdapterDiagnostics.ExtractStaleAdapterNames(noTun));
+    }
+
+    [Fact]
+    public void TunDiag_OwnedNamePattern_IsAStaticCompiledRegex()
+    {
+        var field = typeof(TunAdapterDiagnostics).GetField(
+            "OwnedNamePattern", BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.NotNull(field);
+        Assert.True(field!.IsInitOnly);
+
+        var regex = Assert.IsType<Regex>(field!.GetValue(null));
+        Assert.True(regex.Options.HasFlag(RegexOptions.Compiled));
+        Assert.True(regex.Options.HasFlag(RegexOptions.IgnoreCase));
     }
 
     [Fact]

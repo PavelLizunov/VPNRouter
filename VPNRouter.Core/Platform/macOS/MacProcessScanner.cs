@@ -1,7 +1,6 @@
 #if !PLATFORM_WINDOWS
 using System.Diagnostics;
 using System.Text.RegularExpressions;
-using System.Collections.Concurrent;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
@@ -12,9 +11,6 @@ namespace VPNRouter.Core.Platform.macOS;
 public class MacProcessScanner : IProcessScanner
 {
     private readonly ILogger _logger;
-
-    private static readonly ConcurrentDictionary<string, Regex> _regexCache =
-        new(StringComparer.OrdinalIgnoreCase);
 
     public MacProcessScanner(ILogger? logger = null)
     {
@@ -147,19 +143,8 @@ public class MacProcessScanner : IProcessScanner
         return names;
     }
 
-    private static Regex BuildPatternRegex(string pattern)
-    {
-        return _regexCache.GetOrAdd(pattern, p =>
-        {
-            var regexPattern = "^" + Regex.Escape(p)
-                .Replace(@"\*", ".*")
-                .Replace(@"\?", ".") + "$";
-
-            return new Regex(regexPattern,
-                RegexOptions.IgnoreCase | RegexOptions.Compiled,
-                TimeSpan.FromMilliseconds(250));
-        });
-    }
+    private static Regex BuildPatternRegex(string pattern) =>
+        ProcessPatternRegexCache.Get(pattern);
 
     private static string StripExe(string name)
     {

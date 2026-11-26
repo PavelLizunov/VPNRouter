@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 #if PLATFORM_WINDOWS
 using System.Management;
@@ -13,8 +12,6 @@ namespace VPNRouter.Core.Services;
 public class ProcessScanner : IProcessScanner
 {
     private readonly ILogger _logger;
-
-    private static readonly ConcurrentDictionary<string, Regex> _regexCache = new(StringComparer.OrdinalIgnoreCase);
 
     public ProcessScanner(ILogger? logger = null)
     {
@@ -188,21 +185,10 @@ public class ProcessScanner : IProcessScanner
 #endif
     }
 
-    private const int PatternMatchTimeoutMs = 250;
+    private const int PatternMatchTimeoutMs = ProcessPatternRegexCache.MatchTimeoutMilliseconds;
 
-    private static Regex BuildPatternRegex(string pattern)
-    {
-        return _regexCache.GetOrAdd(pattern, p =>
-        {
-            var regexPattern = "^" + Regex.Escape(p)
-                .Replace(@"\*", ".*")
-                .Replace(@"\?", ".") + "$";
-
-            return new Regex(regexPattern,
-                RegexOptions.IgnoreCase | RegexOptions.Compiled,
-                TimeSpan.FromMilliseconds(PatternMatchTimeoutMs));
-        });
-    }
+    private static Regex BuildPatternRegex(string pattern) =>
+        ProcessPatternRegexCache.Get(pattern);
 
     private static string NormalizeName(string name)
     {
