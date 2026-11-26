@@ -9,31 +9,25 @@
 
     <UserControl.Resources>
         <ControlTheme x:Key="SimplePowerButton" TargetType="Button">
-            <Setter Property="Width" Value="120"/>
-            <Setter Property="Height" Value="120"/>
+            <Setter Property="Width" Value="124"/>
+            <Setter Property="Height" Value="132"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Top"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="CornerRadius" Value="999"/>
-            <Setter Property="BorderThickness" Value="4"/>
-            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
-            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <ControlTemplate>
-                    <Border Name="PowerFace"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{TemplateBinding CornerRadius}">
+                    <Grid Name="PowerFace" Width="124" Height="132" Background="Transparent"
+                          RenderTransformOrigin="50%,50%">
                         <ContentPresenter Name="PART_ContentPresenter"
                                           Content="{TemplateBinding Content}"
                                           ContentTemplate="{TemplateBinding ContentTemplate}"
                                           HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          Foreground="{TemplateBinding Foreground}"/>
-                    </Border>
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Grid>
                 </ControlTemplate>
             </Setter>
         </ControlTheme>
@@ -87,46 +81,123 @@
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         </Style>
 
-        <Style Selector="Button.power icons|Pictogram">
-            <Setter Property="Width" Value="44"/>
-            <Setter Property="Height" Value="44"/>
+        <!-- Android StatusCard hero ring: outer halo fill, 4px state track, white penguin mascot disc, 34px power badge at 6 o'clock. -->
+        <Style Selector="Ellipse.ring-fill">
+            <Setter Property="Fill" Value="{DynamicResource SurfaceSunkenBrush}"/>
+        </Style>
+        <Style Selector="Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}"/>
+            <Setter Property="StrokeThickness" Value="4"/>
+        </Style>
+        <Style Selector="Border.mascot-disc">
+            <Setter Property="Width" Value="96"/>
+            <Setter Property="Height" Value="96"/>
+            <Setter Property="CornerRadius" Value="48"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="ClipToBounds" Value="True"/>
+        </Style>
+        <Style Selector="Border.ring-badge">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="CornerRadius" Value="17"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
-        </Style>
-        <Style Selector="Button.power.go">
+            <Setter Property="VerticalAlignment" Value="Bottom"/>
+            <Setter Property="Margin" Value="0,0,0,-8"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SurfaceAppBrush}"/>
+            <Setter Property="BorderThickness" Value="3"/>
             <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource AccentSolidHoverBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.go:pointerover">
+        <Style Selector="Border.ring-badge icons|Pictogram">
+            <Setter Property="Width" Value="15"/>
+            <Setter Property="Height" Value="15"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Idle / ready to connect -->
+        <Style Selector="Button.power.go Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}"/>
+        </Style>
+        <Style Selector="Button.power.go:pointerover Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource AccentSolidBrush}"/>
+        </Style>
+        <Style Selector="Button.power.go:pointerover Ellipse.ring-fill">
+            <Setter Property="Fill" Value="{DynamicResource AccentBgSubtleBrush}"/>
+        </Style>
+        <Style Selector="Button.power.go:pointerover Border.ring-badge">
             <Setter Property="Background" Value="{DynamicResource AccentSolidHoverBrush}"/>
         </Style>
-        <Style Selector="Button.power.go:disabled">
-            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+        <Style Selector="Button.power.go:disabled Border.ring-badge">
+            <Setter Property="Background" Value="{DynamicResource BorderStrongBrush}"/>
+        </Style>
+        <Style Selector="Button.power.go:disabled Border.ring-badge icons|Pictogram">
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         </Style>
-        <Style Selector="Button.power.stop">
-            <Setter Property="Background" Value="{DynamicResource SuccessBgBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource SuccessSolidBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource SuccessFgBrush}"/>
+
+        <!-- Connected -->
+        <Style Selector="Button.power.stop Ellipse.ring-fill">
+            <Setter Property="Fill" Value="{DynamicResource SuccessBgBrush}"/>
         </Style>
-        <Style Selector="Button.power.wait, Button.power.warn">
-            <Setter Property="Background" Value="{DynamicResource WarningBgBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource WarningFgBrush}"/>
+        <Style Selector="Button.power.stop Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource SuccessSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.warn">
-            <Setter Property="BorderBrush" Value="{DynamicResource WarningSolidBrush}"/>
+        <Style Selector="Button.power.stop Border.ring-badge">
+            <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.error, Button.power.stop:pointerover, Button.power.stop:pressed">
-            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource DangerSolidBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        <Style Selector="Button.power.stop Border.ring-badge icons|Pictogram">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessOnSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power:focus-visible /template/ Border#PowerFace">
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderAccentBrush}"/>
+        <Style Selector="Button.power.stop:pointerover Ellipse.ring-fill">
+            <Setter Property="Fill" Value="{DynamicResource DangerBgBrush}"/>
         </Style>
-        <Style Selector="pages|SimplePage:not(.calm) Button.power:pressed /template/ Border#PowerFace">
+        <Style Selector="Button.power.stop:pointerover Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource DangerSolidBrush}"/>
+        </Style>
+        <Style Selector="Button.power.stop:pointerover Border.ring-badge">
+            <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
+        </Style>
+        <Style Selector="Button.power.stop:pointerover Border.ring-badge icons|Pictogram">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <!-- Connecting / warn -->
+        <Style Selector="Button.power.wait Ellipse.ring-fill, Button.power.warn Ellipse.ring-fill">
+            <Setter Property="Fill" Value="{DynamicResource WarningBgBrush}"/>
+        </Style>
+        <Style Selector="Button.power.wait Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}"/>
+        </Style>
+        <Style Selector="Button.power.warn Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource WarningSolidBrush}"/>
+        </Style>
+        <Style Selector="Button.power.wait Border.ring-badge, Button.power.warn Border.ring-badge">
+            <Setter Property="Background" Value="{DynamicResource WarningActionSolidBrush}"/>
+        </Style>
+        <Style Selector="Button.power.wait Border.ring-badge icons|Pictogram, Button.power.warn Border.ring-badge icons|Pictogram">
+            <Setter Property="Foreground" Value="{DynamicResource WarningActionOnSolidBrush}"/>
+        </Style>
+
+        <!-- Error -->
+        <Style Selector="Button.power.error Ellipse.ring-fill">
+            <Setter Property="Fill" Value="{DynamicResource DangerBgBrush}"/>
+        </Style>
+        <Style Selector="Button.power.error Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource DangerSolidBrush}"/>
+        </Style>
+        <Style Selector="Button.power.error Border.ring-badge">
+            <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
+        </Style>
+        <Style Selector="Button.power.error Border.ring-badge icons|Pictogram">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style Selector="Button.power:focus-visible Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource BorderAccentBrush}"/>
+        </Style>
+        <Style Selector="pages|SimplePage:not(.calm) Button.power:pressed /template/ Grid#PowerFace">
             <Setter Property="RenderTransform">
                 <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
             </Setter>
@@ -288,43 +359,70 @@
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*">
-        <StackPanel Grid.Row="0" Spacing="5" Margin="16,8,16,4" MaxWidth="400">
+        <StackPanel Grid.Row="0" Spacing="5" Margin="16,10,16,4" MaxWidth="400">
             <Panel Name="SimpleConnectionActions" HorizontalAlignment="Center">
                 <Button Theme="{StaticResource SimplePowerButton}" Classes="power go" Classes.error="{Binding SmpHeroIsError}"
                         Command="{Binding SmpToggleConnectCommand}"
                         AutomationProperties.AutomationId="AssistantAction.ConnectVpn"
                         IsVisible="{Binding SimpleCtaIsDisconnected}"
                         IsEnabled="{Binding SmpCanConnect}"
+                        ToolTip.Tip="{Binding SimpleCtaText}"
                         AutomationProperties.Name="{Binding SimpleCtaText}">
-                    <StackPanel Spacing="5">
-                        <icons:Pictogram Id="power"/>
-                        <TextBlock Text="{Binding SimpleCtaText}" HorizontalAlignment="Center"/>
-                    </StackPanel>
+                    <Grid Width="120" Height="120" VerticalAlignment="Top">
+                        <Ellipse Classes="ring-fill" Width="116" Height="116"/>
+                        <Ellipse Classes="ring-track" Width="120" Height="120"/>
+                        <Border Classes="mascot-disc" IsHitTestVisible="False">
+                            <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
+                                   Stretch="Uniform" Margin="7"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                        </Border>
+                        <Border Classes="ring-badge" IsHitTestVisible="False">
+                            <icons:Pictogram Id="power"/>
+                        </Border>
+                    </Grid>
                 </Button>
                 <Button Theme="{StaticResource SimplePowerButton}" Classes="power stop" Classes.warn="{Binding SmpHeroIsWarn}"
                         Command="{Binding SmpToggleConnectCommand}"
                         AutomationProperties.AutomationId="AssistantAction.DisconnectVpn"
                         IsVisible="{Binding SimpleCtaIsConnected}"
+                        ToolTip.Tip="{Binding SimpleCtaText}"
                         AutomationProperties.Name="{Binding SimpleCtaText}">
-                    <StackPanel Spacing="5">
-                        <icons:Pictogram Id="power"/>
-                        <TextBlock Text="{Binding SimpleCtaText}" HorizontalAlignment="Center"/>
-                    </StackPanel>
+                    <Grid Width="120" Height="120" VerticalAlignment="Top">
+                        <Ellipse Classes="ring-fill" Width="116" Height="116"/>
+                        <Ellipse Classes="ring-track" Width="120" Height="120"/>
+                        <Border Classes="mascot-disc" IsHitTestVisible="False">
+                            <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
+                                   Stretch="Uniform" Margin="7"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                        </Border>
+                        <Border Classes="ring-badge" IsHitTestVisible="False">
+                            <icons:Pictogram Id="power"/>
+                        </Border>
+                    </Grid>
                 </Button>
                 <Button Theme="{StaticResource SimplePowerButton}" Classes="power wait" Classes.error="{Binding SmpHeroIsError}"
                         Command="{Binding SmpToggleConnectCommand}"
                         IsVisible="{Binding SimpleCtaIsConnecting}"
                         IsEnabled="False"
+                        ToolTip.Tip="{Binding L_SmpCtaWait}"
                         AutomationProperties.Name="{Binding L_SmpCtaWait}">
-                    <StackPanel Spacing="5">
-                        <icons:Pictogram Id="power"/>
-                        <TextBlock Text="{Binding L_SmpCtaWait}" HorizontalAlignment="Center"/>
-                    </StackPanel>
+                    <Grid Width="120" Height="120" VerticalAlignment="Top">
+                        <Ellipse Classes="ring-fill" Width="116" Height="116"/>
+                        <Ellipse Classes="ring-track" Width="120" Height="120"/>
+                        <Border Classes="mascot-disc" IsHitTestVisible="False">
+                            <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
+                                   Stretch="Uniform" Margin="7"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                        </Border>
+                        <Border Classes="ring-badge" IsHitTestVisible="False">
+                            <icons:Pictogram Id="power"/>
+                        </Border>
+                    </Grid>
                 </Button>
                 <Arc Classes="spinner"
                      Classes.spin="{Binding SmpHeroIsBusy}"
                      IsVisible="{Binding SmpHeroIsBusy}" IsHitTestVisible="False"
-                     Width="120" Height="120" StrokeThickness="4">
+                     Width="120" Height="120" VerticalAlignment="Top" StrokeThickness="4">
                     <Arc.RenderTransform>
                         <RotateTransform/>
                     </Arc.RenderTransform>
@@ -416,19 +514,16 @@
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
                             </StackPanel>
-                            <Border Grid.Column="2" VerticalAlignment="Center" Padding="8,4"
-                                    CornerRadius="{StaticResource RadiusSm}" Background="{DynamicResource AccentBgSubtleBrush}"
-                                    IsVisible="{Binding #SimpleChangeServer.IsEnabled}">
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4" MaxWidth="105">
-                                    <TextBlock Text="{Binding L_SmpConfigRowToggle}" TextWrapping="Wrap"
-                                               FontSize="{StaticResource FsSm}" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource AccentFgBrush}" VerticalAlignment="Center"/>
-                                    <icons:Pictogram Grid.Column="1" Id="chevron-down" Classes="disclosure"
-                                                     Classes.open="{Binding SmpFormExpanded}"
-                                                     Width="14" Height="14" Transitions="{x:Null}"
-                                                     Foreground="{DynamicResource AccentFgBrush}"/>
-                                </Grid>
-                            </Border>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
+                                        IsVisible="{Binding #SimpleChangeServer.IsEnabled}">
+                                <TextBlock Text="{Binding L_SmpConfigRowToggle}"
+                                           FontSize="{StaticResource FsSm}" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentFgBrush}" VerticalAlignment="Center"/>
+                                <icons:Pictogram Id="chevron-down" Classes="disclosure"
+                                                 Classes.open="{Binding SmpFormExpanded}"
+                                                 Width="14" Height="14" Transitions="{x:Null}"
+                                                 Foreground="{DynamicResource AccentFgBrush}"/>
+                            </StackPanel>
                           </Grid>
                         </ToggleButton>
 
@@ -436,10 +531,11 @@
                         <pages:SubscriptionServerPicker Name="SimplePicker" Margin="12,8,12,10"
                                                         IsVisible="False"/>
                         <Border Classes="divider" IsVisible="{Binding #SimplePicker.IsVisible}"/>
-                        <StackPanel Margin="12,6,12,8" Spacing="4"
+                        <StackPanel Margin="12,8,12,10" Spacing="6"
                                     IsVisible="{Binding SmpHasConfig}">
-                            <StackPanel Spacing="6" IsVisible="{Binding SmpHasRefreshableSubscriptions}">
-                                <Button Name="SimpleRefreshSubscriptions" Classes="outline" HorizontalAlignment="Left"
+                            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                                <Button Name="SimpleRefreshSubscriptions" Classes="outline"
+                                        IsVisible="{Binding SmpHasRefreshableSubscriptions}"
                                         Command="{Binding RefreshAllSubscriptionsCommand}"
                                         AutomationProperties.Name="{Binding L_SmpRefreshSubscriptions}">
                                     <Button.IsEnabled>
@@ -453,6 +549,16 @@
                                         <TextBlock Text="{Binding L_SmpRefreshSubscriptions}"/>
                                     </StackPanel>
                                 </Button>
+                                <StackPanel Name="SimpleChecks" IsVisible="False">
+                                    <ToggleButton Name="SimpleCheckServers" Classes="ghost" Click="ToggleServerChecks">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <icons:Pictogram Id="shield-check" Width="14" Height="14"/>
+                                            <TextBlock Name="SimpleCheckServersLabel"/>
+                                        </StackPanel>
+                                    </ToggleButton>
+                                </StackPanel>
+                            </WrapPanel>
+                            <StackPanel Spacing="4" IsVisible="{Binding SmpHasRefreshableSubscriptions}">
                                 <ProgressBar Name="SimpleRefreshProgress" Height="3" MinHeight="3" IsIndeterminate="True"
                                              Foreground="{DynamicResource AccentSolidBrush}"
                                              IsVisible="{Binding SmpSubscriptionsRefreshing}"/>
@@ -481,16 +587,13 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </StackPanel>
-                            <pages:SubscriptionLinkEditor Name="SimpleLink"/>
-                        </StackPanel>
-                        <StackPanel Name="SimpleChecks" IsVisible="False" Margin="16,0,16,12" Spacing="8">
-                            <ToggleButton Name="SimpleCheckServers" Classes="ghost" HorizontalAlignment="Left" Click="ToggleServerChecks">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <icons:Pictogram Id="shield-check" Width="14" Height="14"/>
-                                    <TextBlock Name="SimpleCheckServersLabel"/>
-                                </StackPanel>
-                            </ToggleButton>
-                            <StackPanel IsVisible="{Binding #SimpleCheckServers.IsChecked, FallbackValue=False}" Spacing="8">
+                            <StackPanel Spacing="8">
+                                <StackPanel.IsVisible>
+                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                        <Binding Path="#SimpleChecks.IsVisible"/>
+                                        <Binding Path="#SimpleCheckServers.IsChecked" FallbackValue="False"/>
+                                    </MultiBinding>
+                                </StackPanel.IsVisible>
                                 <TextBlock icons:PictogramText.Icons="arrow-down,arrow-up"
                                            icons:PictogramText.Text="{Binding ConnectionStatsText}"
                                            IsVisible="{Binding HasConnectionStats}"
@@ -515,6 +618,7 @@
                                 <TextBlock Classes="hint" Text="{Binding SubscriptionDeepProgressText}"
                                            IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                             </StackPanel>
+                            <pages:SubscriptionLinkEditor Name="SimpleLink"/>
                         </StackPanel>
 
                         <Border Classes="divider" IsVisible="{Binding SmpHasConfig}"/>

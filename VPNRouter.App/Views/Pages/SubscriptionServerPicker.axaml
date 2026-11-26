@@ -20,17 +20,18 @@
                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Grid>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                        <TextBlock Classes="server-name" Text="{Binding SimpleDisplayName}" TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center"
-                                   ToolTip.Tip="{Binding DisplayName}"/>
-                        <Border Grid.Column="1" Classes="chip" IsVisible="{Binding HasTurnRelayHop}"
-                                ToolTip.Tip="{Binding TurnRelayTooltip}">
-                            <TextBlock Text="{Binding TurnRelayBadgeText}" FontSize="{StaticResource FsSm}"/>
+                    <TextBlock Classes="server-name" Text="{Binding SimpleDisplayName}" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               ToolTip.Tip="{Binding DisplayName}"/>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="2"
+                               IsVisible="{Binding CanSelectInSimpleMode}">
+                        <TextBlock Classes="hint" Text="{Binding SimpleLocation}" TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" ToolTip.Tip="{Binding HealthTooltip}"/>
+                        <Border Classes="chip" Padding="6,1" IsVisible="{Binding HasTurnRelayHop}"
+                                VerticalAlignment="Center" ToolTip.Tip="{Binding TurnRelayTooltip}">
+                            <TextBlock Text="{Binding TurnRelayBadgeText}" FontSize="10"/>
                         </Border>
-                    </Grid>
-                    <TextBlock Classes="hint" Text="{Binding SimpleLocation}" TextTrimming="CharacterEllipsis"
-                               IsVisible="{Binding CanSelectInSimpleMode}" ToolTip.Tip="{Binding HealthTooltip}"/>
+                    </WrapPanel>
                     <TextBlock Classes="hint advanced-verdict" Text="{Binding HealthVerdictText}"
                                Classes.has-verdict="{Binding HasHealthVerdict}" TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding HealthTooltip}"/>
@@ -40,8 +41,8 @@
                                ToolTip.Tip="{Binding Endpoint}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="2">
-                    <Border Classes="ping-pill" Classes.good="{Binding IsPingGood}" Classes.slow="{Binding IsPingSlow}"
-                            Classes.bad="{Binding IsPingBad}" MinWidth="44" ToolTip.Tip="{Binding HealthTooltip}">
+                    <Border Classes="ping-pill picker-ping" Classes.good="{Binding IsPingGood}" Classes.slow="{Binding IsPingSlow}"
+                            Classes.bad="{Binding IsPingBad}" ToolTip.Tip="{Binding HealthTooltip}">
                         <TextBlock Text="{Binding PingDisplay}"/>
                     </Border>
                     <TextBlock IsVisible="{Binding IsActive}" Text="{x:Static loc:Strings.SmpCurrentServer}"
@@ -61,20 +62,47 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
+        <Style Selector="Border.ping-pill.picker-ping">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
+        <Style Selector="Border.ping-pill.picker-ping.good">
+            <Setter Property="Background" Value="{DynamicResource SuccessBgBrush}"/>
+            <Setter Property="Padding" Value="7,2"/>
+            <Setter Property="MinWidth" Value="42"/>
+        </Style>
+        <Style Selector="Border.ping-pill.picker-ping.slow">
+            <Setter Property="Background" Value="{DynamicResource WarningBgBrush}"/>
+            <Setter Property="Padding" Value="7,2"/>
+            <Setter Property="MinWidth" Value="42"/>
+        </Style>
+        <Style Selector="Border.ping-pill.picker-ping.bad">
+            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="Padding" Value="7,2"/>
+            <Setter Property="MinWidth" Value="42"/>
+        </Style>
+
         <Style Selector="Button.category">
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="MinHeight" Value="46"/>
-            <Setter Property="Padding" Value="8,4"/>
-            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
-            <Setter Property="Background" Value="{DynamicResource SurfaceAppBrush}"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.category:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
         </Style>
         <Style Selector="Button.category.current">
             <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
         </Style>
         <Style Selector="Button.category.disclosure">
-            <Setter Property="MinWidth" Value="40"/>
+            <Setter Property="MinWidth" Value="28"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="Padding" Value="0"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
 
@@ -169,7 +197,7 @@
                            ToolTip.Tip="{Binding #PickerSelection.Text}"/>
                 <TextBlock Name="PickerRunning" Classes="hint" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
-            <ToggleButton Grid.Column="1" Name="SimpleServerSearchButton" Classes="change" Click="ToggleServerSearch"
+            <ToggleButton Grid.Column="1" Name="SimpleServerSearchButton" Classes="ghost" Click="ToggleServerSearch"
                           IsVisible="{Binding SmpHasSubscriptionServers}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <icons:Pictogram Id="search-tab" Width="14" Height="14"/>
@@ -192,20 +220,26 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="pages:SimpleServerGroup">
                     <StackPanel Spacing="4">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="2">
                             <Button Classes="category" Classes.current="{Binding IsCurrent}"
                                     Click="ChooseServerCategory"
                                     IsEnabled="{Binding CanActivateCategory}"
+                                    ToolTip.Tip="{Binding SelectionHint}"
                                     AutomationProperties.Name="{Binding AutoLabel}">
                                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                    <icons:ProtocolDisc Width="30" Height="30" GlyphSize="16" CornerRadius="15"
+                                    <icons:ProtocolDisc Width="22" Height="22" GlyphSize="12" CornerRadius="11"
                                                         Group="{Binding Category}"/>
-                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                        <TextBlock Classes="hint" Text="{Binding Protocols}"
-                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Protocols}"/>
+                                    <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Name}" FontSize="{StaticResource FsSm}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Protocols}" FontSize="11"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                       ToolTip.Tip="{Binding Protocols}"/>
+                                        </StackPanel>
                                         <TextBlock Classes="hint" Text="{Binding SelectionHint}"
-                                                   IsVisible="{Binding !CanAutoSelect}" TextWrapping="Wrap"/>
+                                                   IsVisible="{Binding !HasSelectableServers}" TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <TextBlock Grid.Column="2" Text="{Binding AutoText}" IsVisible="{Binding IsCurrent}"
                                                Foreground="{DynamicResource AccentFgBrush}"
@@ -217,7 +251,7 @@
                                     AutomationProperties.Name="{Binding DisclosureLabel}"
                                     ToolTip.Tip="{Binding DisclosureLabel}">
                                 <icons:Pictogram Id="chevron-down" Classes="disclosure"
-                                                 Classes.open="{Binding IsExpanded}"/>
+                                                 Classes.open="{Binding IsExpanded}" Width="14" Height="14"/>
                             </Button>
                         </Grid>
                         <icons:ServerPickerListBox Classes="pick"
