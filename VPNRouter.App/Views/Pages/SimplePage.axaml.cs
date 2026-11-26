@@ -155,5 +155,13 @@ public partial class SimplePage : UserControl
     // Expanding "Test servers" does not auto-start a network probe so users can inspect or refresh first.
     private void ToggleServerChecks(object? sender, RoutedEventArgs args) { }
 
+    private void OnHeroRingClicked(object? sender, Avalonia.Input.PointerReleasedEventArgs args)
+    {
+        if (_viewModel is not { } vm || vm.SimpleCtaIsConnecting) return;
+        if (!vm.IsConnected && !vm.SmpCanConnect) return;
+        if (vm.SmpToggleConnectCommand.CanExecute(null))
+            vm.SmpToggleConnectCommand.Execute(null);
+    }
+
     private void OpenAppRules(object? sender, RoutedEventArgs args) => _viewModel?.OpenSimpleApplicationRules();
 }

@@ -7,32 +7,6 @@
              x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
 
-    <UserControl.Resources>
-        <ControlTheme x:Key="SimplePowerButton" TargetType="Button">
-            <Setter Property="Width" Value="124"/>
-            <Setter Property="Height" Value="132"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Top"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <ControlTemplate>
-                    <Grid Name="PowerFace" Width="124" Height="132" Background="Transparent"
-                          RenderTransformOrigin="50%,50%">
-                        <ContentPresenter Name="PART_ContentPresenter"
-                                          Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"/>
-                    </Grid>
-                </ControlTemplate>
-            </Setter>
-        </ControlTheme>
-    </UserControl.Resources>
-
     <UserControl.Styles>
         <Style Selector="Arc.spinner">
             <Setter Property="Stroke" Value="{DynamicResource WarningSolidBrush}"/>
@@ -55,7 +29,7 @@
 
         <!-- Hero text. -->
         <Style Selector="TextBlock.state">
-            <Setter Property="FontSize" Value="{StaticResource Fs3Xl}"/>
+            <Setter Property="FontSize" Value="{StaticResource Fs2Xl}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
@@ -81,133 +55,123 @@
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         </Style>
 
-        <!-- Android StatusCard hero ring: outer halo fill, 4px state track, white penguin mascot disc, 34px power badge at 6 o'clock. -->
-        <Style Selector="Ellipse.ring-fill">
+        <!-- Android StatusCard hero ring (clickable, mirrors VPNRouter.Android/Controls/StatusCard.cs). -->
+        <Style Selector="Grid.hero-ring Ellipse.ring-fill">
             <Setter Property="Fill" Value="{DynamicResource SurfaceSunkenBrush}"/>
         </Style>
-        <Style Selector="Ellipse.ring-track">
+        <Style Selector="Grid.hero-ring Ellipse.ring-track">
             <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}"/>
-            <Setter Property="StrokeThickness" Value="4"/>
+            <Setter Property="StrokeThickness" Value="3.5"/>
         </Style>
-        <Style Selector="Border.mascot-disc">
-            <Setter Property="Width" Value="96"/>
-            <Setter Property="Height" Value="96"/>
-            <Setter Property="CornerRadius" Value="48"/>
+        <Style Selector="Grid.hero-ring:pointerover Ellipse.ring-track">
+            <Setter Property="Stroke" Value="{DynamicResource AccentSolidBrush}"/>
+        </Style>
+        <Style Selector="Grid.hero-ring Border.mascot-disc">
+            <Setter Property="Width" Value="74"/>
+            <Setter Property="Height" Value="74"/>
+            <Setter Property="CornerRadius" Value="37"/>
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="ClipToBounds" Value="True"/>
         </Style>
-        <Style Selector="Border.ring-badge">
-            <Setter Property="Width" Value="34"/>
-            <Setter Property="Height" Value="34"/>
-            <Setter Property="CornerRadius" Value="17"/>
+        <Style Selector="Grid.hero-ring Border.ring-badge">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="CornerRadius" Value="14"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Bottom"/>
-            <Setter Property="Margin" Value="0,0,0,-8"/>
+            <Setter Property="Margin" Value="0,0,0,-6"/>
             <Setter Property="BorderBrush" Value="{DynamicResource SurfaceAppBrush}"/>
-            <Setter Property="BorderThickness" Value="3"/>
-            <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+            <Setter Property="BorderThickness" Value="2.5"/>
+            <Setter Property="Background" Value="{DynamicResource BorderStrongBrush}"/>
         </Style>
-        <Style Selector="Border.ring-badge icons|Pictogram">
-            <Setter Property="Width" Value="15"/>
-            <Setter Property="Height" Value="15"/>
-            <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+        <Style Selector="Grid.hero-ring Border.ring-badge icons|Pictogram">
+            <Setter Property="Width" Value="13"/>
+            <Setter Property="Height" Value="13"/>
+            <Setter Property="Foreground" Value="White"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-
-        <!-- Idle / ready to connect -->
-        <Style Selector="Button.power.go Ellipse.ring-track">
-            <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}"/>
-        </Style>
-        <Style Selector="Button.power.go:pointerover Ellipse.ring-track">
-            <Setter Property="Stroke" Value="{DynamicResource AccentSolidBrush}"/>
-        </Style>
-        <Style Selector="Button.power.go:pointerover Ellipse.ring-fill">
-            <Setter Property="Fill" Value="{DynamicResource AccentBgSubtleBrush}"/>
-        </Style>
-        <Style Selector="Button.power.go:pointerover Border.ring-badge">
-            <Setter Property="Background" Value="{DynamicResource AccentSolidHoverBrush}"/>
-        </Style>
-        <Style Selector="Button.power.go:disabled Border.ring-badge">
-            <Setter Property="Background" Value="{DynamicResource BorderStrongBrush}"/>
-        </Style>
-        <Style Selector="Button.power.go:disabled Border.ring-badge icons|Pictogram">
-            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-        </Style>
-
-        <!-- Connected -->
-        <Style Selector="Button.power.stop Ellipse.ring-fill">
+        <Style Selector="Grid.hero-ring.on Ellipse.ring-fill">
             <Setter Property="Fill" Value="{DynamicResource SuccessBgBrush}"/>
         </Style>
-        <Style Selector="Button.power.stop Ellipse.ring-track">
+        <Style Selector="Grid.hero-ring.on Ellipse.ring-track">
             <Setter Property="Stroke" Value="{DynamicResource SuccessSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.stop Border.ring-badge">
+        <Style Selector="Grid.hero-ring.on Border.ring-badge">
             <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.stop Border.ring-badge icons|Pictogram">
+        <Style Selector="Grid.hero-ring.on Border.ring-badge icons|Pictogram">
             <Setter Property="Foreground" Value="{DynamicResource SuccessOnSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.stop:pointerover Ellipse.ring-fill">
-            <Setter Property="Fill" Value="{DynamicResource DangerBgBrush}"/>
-        </Style>
-        <Style Selector="Button.power.stop:pointerover Ellipse.ring-track">
-            <Setter Property="Stroke" Value="{DynamicResource DangerSolidBrush}"/>
-        </Style>
-        <Style Selector="Button.power.stop:pointerover Border.ring-badge">
-            <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
-        </Style>
-        <Style Selector="Button.power.stop:pointerover Border.ring-badge icons|Pictogram">
-            <Setter Property="Foreground" Value="White"/>
-        </Style>
-
-        <!-- Connecting / warn -->
-        <Style Selector="Button.power.wait Ellipse.ring-fill, Button.power.warn Ellipse.ring-fill">
+        <Style Selector="Grid.hero-ring.busy Ellipse.ring-fill, Grid.hero-ring.warn Ellipse.ring-fill">
             <Setter Property="Fill" Value="{DynamicResource WarningBgBrush}"/>
         </Style>
-        <Style Selector="Button.power.wait Ellipse.ring-track">
-            <Setter Property="Stroke" Value="{DynamicResource BorderStrongBrush}"/>
-        </Style>
-        <Style Selector="Button.power.warn Ellipse.ring-track">
+        <Style Selector="Grid.hero-ring.warn Ellipse.ring-track">
             <Setter Property="Stroke" Value="{DynamicResource WarningSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.wait Border.ring-badge, Button.power.warn Border.ring-badge">
+        <Style Selector="Grid.hero-ring.busy Border.ring-badge, Grid.hero-ring.warn Border.ring-badge">
             <Setter Property="Background" Value="{DynamicResource WarningActionSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.wait Border.ring-badge icons|Pictogram, Button.power.warn Border.ring-badge icons|Pictogram">
+        <Style Selector="Grid.hero-ring.busy Border.ring-badge icons|Pictogram, Grid.hero-ring.warn Border.ring-badge icons|Pictogram">
             <Setter Property="Foreground" Value="{DynamicResource WarningActionOnSolidBrush}"/>
         </Style>
-
-        <!-- Error -->
-        <Style Selector="Button.power.error Ellipse.ring-fill">
+        <Style Selector="Grid.hero-ring.error Ellipse.ring-fill">
             <Setter Property="Fill" Value="{DynamicResource DangerBgBrush}"/>
         </Style>
-        <Style Selector="Button.power.error Ellipse.ring-track">
+        <Style Selector="Grid.hero-ring.error Ellipse.ring-track">
             <Setter Property="Stroke" Value="{DynamicResource DangerSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.error Border.ring-badge">
+        <Style Selector="Grid.hero-ring.error Border.ring-badge">
             <Setter Property="Background" Value="{DynamicResource DangerSolidBrush}"/>
         </Style>
-        <Style Selector="Button.power.error Border.ring-badge icons|Pictogram">
-            <Setter Property="Foreground" Value="White"/>
-        </Style>
 
-        <Style Selector="Button.power:focus-visible Ellipse.ring-track">
-            <Setter Property="Stroke" Value="{DynamicResource BorderAccentBrush}"/>
+        <!-- Primary Connect / Disconnect pill CTA right under the status (matches Android & Business). -->
+        <Style Selector="Button.cta">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="MinHeight" Value="44"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="FontSize" Value="{StaticResource FsXl}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
-        <Style Selector="pages|SimplePage:not(.calm) Button.power:pressed /template/ Grid#PowerFace">
-            <Setter Property="RenderTransform">
-                <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-            </Setter>
+        <Style Selector="Button.cta icons|Pictogram">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
         <Style Selector="Button.cta.go">
             <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.cta.go:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentSolidHoverBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+        </Style>
+        <Style Selector="Button.cta.go:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+        <Style Selector="Button.cta.stop">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="Button.cta.stop:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+        </Style>
+        <Style Selector="Button.cta.wait">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
         </Style>
 
         <!-- Cards and the quiet list. -->
@@ -359,75 +323,37 @@
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*">
-        <StackPanel Grid.Row="0" Spacing="5" Margin="16,10,16,4" MaxWidth="400">
-            <Panel Name="SimpleConnectionActions" HorizontalAlignment="Center">
-                <Button Theme="{StaticResource SimplePowerButton}" Classes="power go" Classes.error="{Binding SmpHeroIsError}"
-                        Command="{Binding SmpToggleConnectCommand}"
-                        AutomationProperties.AutomationId="AssistantAction.ConnectVpn"
-                        IsVisible="{Binding SimpleCtaIsDisconnected}"
-                        IsEnabled="{Binding SmpCanConnect}"
-                        ToolTip.Tip="{Binding SimpleCtaText}"
-                        AutomationProperties.Name="{Binding SimpleCtaText}">
-                    <Grid Width="120" Height="120" VerticalAlignment="Top">
-                        <Ellipse Classes="ring-fill" Width="116" Height="116"/>
-                        <Ellipse Classes="ring-track" Width="120" Height="120"/>
-                        <Border Classes="mascot-disc" IsHitTestVisible="False">
-                            <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
-                                   Stretch="Uniform" Margin="7"
-                                   RenderOptions.BitmapInterpolationMode="HighQuality"/>
-                        </Border>
-                        <Border Classes="ring-badge" IsHitTestVisible="False">
-                            <icons:Pictogram Id="power"/>
-                        </Border>
-                    </Grid>
-                </Button>
-                <Button Theme="{StaticResource SimplePowerButton}" Classes="power stop" Classes.warn="{Binding SmpHeroIsWarn}"
-                        Command="{Binding SmpToggleConnectCommand}"
-                        AutomationProperties.AutomationId="AssistantAction.DisconnectVpn"
-                        IsVisible="{Binding SimpleCtaIsConnected}"
-                        ToolTip.Tip="{Binding SimpleCtaText}"
-                        AutomationProperties.Name="{Binding SimpleCtaText}">
-                    <Grid Width="120" Height="120" VerticalAlignment="Top">
-                        <Ellipse Classes="ring-fill" Width="116" Height="116"/>
-                        <Ellipse Classes="ring-track" Width="120" Height="120"/>
-                        <Border Classes="mascot-disc" IsHitTestVisible="False">
-                            <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
-                                   Stretch="Uniform" Margin="7"
-                                   RenderOptions.BitmapInterpolationMode="HighQuality"/>
-                        </Border>
-                        <Border Classes="ring-badge" IsHitTestVisible="False">
-                            <icons:Pictogram Id="power"/>
-                        </Border>
-                    </Grid>
-                </Button>
-                <Button Theme="{StaticResource SimplePowerButton}" Classes="power wait" Classes.error="{Binding SmpHeroIsError}"
-                        Command="{Binding SmpToggleConnectCommand}"
-                        IsVisible="{Binding SimpleCtaIsConnecting}"
-                        IsEnabled="False"
-                        ToolTip.Tip="{Binding L_SmpCtaWait}"
-                        AutomationProperties.Name="{Binding L_SmpCtaWait}">
-                    <Grid Width="120" Height="120" VerticalAlignment="Top">
-                        <Ellipse Classes="ring-fill" Width="116" Height="116"/>
-                        <Ellipse Classes="ring-track" Width="120" Height="120"/>
-                        <Border Classes="mascot-disc" IsHitTestVisible="False">
-                            <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
-                                   Stretch="Uniform" Margin="7"
-                                   RenderOptions.BitmapInterpolationMode="HighQuality"/>
-                        </Border>
-                        <Border Classes="ring-badge" IsHitTestVisible="False">
-                            <icons:Pictogram Id="power"/>
-                        </Border>
-                    </Grid>
-                </Button>
-                <Arc Classes="spinner"
-                     Classes.spin="{Binding SmpHeroIsBusy}"
-                     IsVisible="{Binding SmpHeroIsBusy}" IsHitTestVisible="False"
-                     Width="120" Height="120" VerticalAlignment="Top" StrokeThickness="4">
-                    <Arc.RenderTransform>
-                        <RotateTransform/>
-                    </Arc.RenderTransform>
-                </Arc>
-            </Panel>
+        <StackPanel Grid.Row="0" Spacing="5" Margin="16,10,16,6" MaxWidth="400" HorizontalAlignment="Stretch">
+            <Grid Name="HeroRing" Classes="hero-ring"
+                  Classes.on="{Binding SmpHeroIsOn}"
+                  Classes.busy="{Binding SmpHeroIsBusy}"
+                  Classes.error="{Binding SmpHeroIsError}"
+                  Classes.warn="{Binding SmpHeroIsWarn}"
+                  Width="96" Height="102" HorizontalAlignment="Center"
+                  Background="Transparent" Cursor="Hand"
+                  PointerReleased="OnHeroRingClicked"
+                  ToolTip.Tip="{Binding SimpleCtaText}">
+                <Grid Width="96" Height="96" VerticalAlignment="Top">
+                    <Ellipse Classes="ring-fill" Width="92" Height="92"/>
+                    <Ellipse Classes="ring-track" Width="96" Height="96"/>
+                    <Arc Classes="spinner"
+                         Classes.spin="{Binding SmpHeroIsBusy}"
+                         IsVisible="{Binding SmpHeroIsBusy}" IsHitTestVisible="False"
+                         Width="96" Height="96" StrokeThickness="3.5">
+                        <Arc.RenderTransform>
+                            <RotateTransform/>
+                        </Arc.RenderTransform>
+                    </Arc>
+                    <Border Classes="mascot-disc" IsHitTestVisible="False">
+                        <Image Source="avares://VPNRouter.App/Assets/penguin_logo.png"
+                               Stretch="Uniform" Margin="6"
+                               RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                    </Border>
+                    <Border Classes="ring-badge" IsHitTestVisible="False">
+                        <icons:Pictogram Id="power"/>
+                    </Border>
+                </Grid>
+            </Grid>
             <TextBlock Classes="state"
                        Classes.on="{Binding SmpHeroIsOn}"
                        Classes.error="{Binding SmpHeroIsError}"
@@ -437,6 +363,36 @@
                        Text="{Binding SmpHomeSubline}"
                        MaxLines="2" TextTrimming="CharacterEllipsis"
                        ToolTip.Tip="{Binding SmpHomeSubline}"/>
+            <Panel Name="SimpleConnectionActions" Margin="0,4,0,0">
+                <Button Classes="cta go"
+                        Command="{Binding SmpToggleConnectCommand}"
+                        AutomationProperties.AutomationId="AssistantAction.ConnectVpn"
+                        IsVisible="{Binding SimpleCtaIsDisconnected}"
+                        IsEnabled="{Binding SmpCanConnect}"
+                        AutomationProperties.Name="{Binding SimpleCtaText}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <icons:Pictogram Id="power"/>
+                        <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="cta stop"
+                        Command="{Binding SmpToggleConnectCommand}"
+                        AutomationProperties.AutomationId="AssistantAction.DisconnectVpn"
+                        IsVisible="{Binding SimpleCtaIsConnected}"
+                        AutomationProperties.Name="{Binding SimpleCtaText}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <icons:Pictogram Id="power"/>
+                        <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Classes="cta wait"
+                        Command="{Binding SmpToggleConnectCommand}"
+                        IsVisible="{Binding SimpleCtaIsConnecting}"
+                        IsEnabled="False"
+                        AutomationProperties.Name="{Binding L_SmpCtaWait}">
+                    <TextBlock Text="{Binding L_SmpCtaWait}" VerticalAlignment="Center"/>
+                </Button>
+            </Panel>
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" Name="SimpleContentScroll" HorizontalScrollBarVisibility="Disabled"
