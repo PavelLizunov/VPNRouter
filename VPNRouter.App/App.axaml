@@ -86,6 +86,73 @@
             <Setter Property="Opacity" Value="0.76"/>
         </Style>
 
+        <!-- Shared secondary, quiet, and high-contrast warning button roles across Standard and Business. -->
+        <Style Selector="Button.outline, ToggleButton.outline">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.outline:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         Button.outline:pressed /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.outline:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.outline:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}"/>
+        </Style>
+        <Style Selector="Button.outline:disabled /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.outline:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+        </Style>
+
+        <Style Selector="Button.ghost, ToggleButton.ghost">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.ghost:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         Button.ghost:pressed /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.ghost:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ToggleButton.ghost:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+        <Style Selector="Button.ghost:disabled /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.ghost:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+
+        <Style Selector="Button.warning-action">
+            <Setter Property="Background" Value="{DynamicResource WarningActionSolidBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource WarningActionOnSolidBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.warning-action:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         Button.warning-action:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource WarningActionSolidHoverBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource WarningActionOnSolidBrush}"/>
+        </Style>
+
         <!-- Input controls share one height (the per-page MinHeight="0" overrides were removed). -->
         <Style Selector="TextBox, ComboBox">
             <Setter Property="MinHeight" Value="30"/>

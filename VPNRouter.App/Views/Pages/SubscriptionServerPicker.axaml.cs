@@ -133,16 +133,23 @@ public partial class SubscriptionServerPicker : UserControl
         var filtering = query.Length != 0 && !looksLikeLink;
         _serverGroups.IsVisible = !filtering;
         _serverResults.IsVisible = _serverCount.IsVisible = filtering;
+        var emptyState = this.FindControl<TextBlock>("SimplePickerEmptyState")!;
         if (!filtering)
         {
             _serverResults.ItemsSource = null;
             RefreshGroups(vm, rows, selected, current);
+            emptyState.IsVisible = _sourceRows.Length == 0 && vm.SmpHasOnlyTurnRelayHops;
+            emptyState.Text = emptyState.IsVisible ? Strings.SmpTurnRelayOnlyHops : string.Empty;
             return;
         }
+        emptyState.IsVisible = false;
 
         var matches = rows
             .Where(row => row.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                ServerCountryFlags.MatchesCountry(row.CountryCode, query))
+                ServerCountryFlags.MatchesCountry(row.CountryCode, query) ||
+                (row.HasTurnRelayHop &&
+                    ("turnrelay".Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                     row.TurnRelayBadgeText.Contains(query, StringComparison.OrdinalIgnoreCase))))
             .OrderByDescending(row => ReferenceEquals(row, current))
             .ToArray();
         if (!_serverResults.Items.Cast<ServerViewModel>().SequenceEqual(matches))
@@ -233,6 +240,11 @@ public partial class SubscriptionServerPicker : UserControl
     private async void ChooseServerCategory(object? sender, RoutedEventArgs args)
     {
         if (sender is not Button { DataContext: SimpleServerGroup group } || _viewModel is not { } vm) return;
+        if (!group.CanAutoSelect)
+        {
+            ToggleServerCategory(sender, args);
+            return;
+        }
         await vm.ConfirmSimpleCategoryAsync(group.Category);
         if (ReferenceEquals(vm, _viewModel)) ChoiceConfirmed?.Invoke();
     }

@@ -93,17 +93,25 @@
                    Text="{Binding L_SubscriptionsSection}"
                    FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
                    Foreground="{DynamicResource TextPrimaryBrush}"/>
-        <Button Grid.Column="1"
+        <Button Grid.Column="1" Classes="outline"
                 Command="{Binding RefreshAllSubscriptionsCommand}"
-                IsEnabled="{Binding SmpCanRefreshSubscriptions}"
                 FontSize="11" Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                 AutomationProperties.Name="{Binding L_RefreshAll}">
+          <Button.IsEnabled>
+            <MultiBinding Converter="{x:Static BoolConverters.And}">
+              <Binding Path="SmpCanRefreshSubscriptions"/>
+              <Binding Path="!SmpSubscriptionsRefreshing"/>
+            </MultiBinding>
+          </Button.IsEnabled>
           <StackPanel Orientation="Horizontal" Spacing="5">
             <icons:Pictogram Id="refresh" Width="13" Height="13" VerticalAlignment="Center"/>
             <TextBlock Text="{Binding L_RefreshAll}" VerticalAlignment="Center"/>
           </StackPanel>
         </Button>
       </Grid>
+      <TextBlock Name="SubscribeRefreshBlockedReason" FontSize="11" TextWrapping="Wrap"
+                 Foreground="{DynamicResource TextMutedBrush}" IsVisible="False"
+                 AutomationProperties.LiveSetting="Polite"/>
       <ScrollViewer MaxHeight="150"
                     HorizontalScrollBarVisibility="Disabled"
                     VerticalScrollBarVisibility="Auto">
@@ -148,8 +156,13 @@
                   <Button Grid.Column="3" Classes="row-icon"
                           Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
                           CommandParameter="{Binding}"
-                          IsEnabled="{Binding !IsRefreshing}"
                           ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}" AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}">
+                    <Button.IsEnabled>
+                      <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="$parent[UserControl].((vm:MainWindowViewModel)DataContext).SmpCanRefreshSubscriptions"/>
+                        <Binding Path="!IsRefreshing"/>
+                      </MultiBinding>
+                    </Button.IsEnabled>
                     <icons:Pictogram Id="refresh"/>
                   </Button>
 

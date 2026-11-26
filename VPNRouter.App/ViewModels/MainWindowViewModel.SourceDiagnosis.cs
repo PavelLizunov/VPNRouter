@@ -55,7 +55,7 @@ public partial class MainWindowViewModel
             preview = Strings.SourceDiagnosisConsent(report);
         }
         if (SelectAssistantSubscription(_settings.App)?.Url != url) return Strings.AssistantSubscription;
-        if (!await consent(preview, ct)) return Strings.SourceDiagnosisDeclined;
+        if (!await consent(preview, ct)) return connection ? Strings.SourceConnectionDeclined : Strings.SourceDiagnosisDeclined;
         ct.ThrowIfCancellationRequested();
         if (SelectAssistantSubscription(_settings.App)?.Url != url) return Strings.AssistantSubscription;
         if (connection && !ReferenceEquals(_sourceConnection, observed)) return Strings.SourceConnectionExpired;

@@ -19,15 +19,23 @@
                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Grid>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Text="{Binding SimpleDisplayName}" TextTrimming="CharacterEllipsis"
-                               ToolTip.Tip="{Binding DisplayName}"/>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="2">
+                        <TextBlock Text="{Binding SimpleDisplayName}" TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center"
+                                   ToolTip.Tip="{Binding DisplayName}"/>
+                        <Border Classes="chip" IsVisible="{Binding HasTurnRelayHop}"
+                                ToolTip.Tip="{Binding TurnRelayTooltip}">
+                            <TextBlock Text="{Binding TurnRelayBadgeText}" FontSize="{StaticResource FsSm}"/>
+                        </Border>
+                    </WrapPanel>
                     <TextBlock Classes="hint" Text="{Binding SimpleLocation}" TextTrimming="CharacterEllipsis"
                                IsVisible="{Binding CanSelectInSimpleMode}" ToolTip.Tip="{Binding HealthTooltip}"/>
                     <TextBlock Classes="hint advanced-verdict" Text="{Binding HealthVerdictText}"
                                Classes.has-verdict="{Binding HasHealthVerdict}" TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding HealthTooltip}"/>
-                    <TextBlock Classes="hint" Text="{x:Static loc:Strings.SmpServerUnsupported}"
+                    <TextBlock Classes="hint" Text="{Binding UnavailableReasonText}"
                                IsVisible="{Binding !CanSelectInSimpleMode}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource WarningFgBrush}"
                                ToolTip.Tip="{Binding Endpoint}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
@@ -77,6 +85,25 @@
             <Setter Property="MinHeight" Value="36"/>
             <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
             <Setter Property="FontSize" Value="{StaticResource FsMd}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ListBox.pick ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ListBox.pick ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="ListBox.pick ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter,
+                         ListBox.pick ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         ListBox.pick ListBoxItem:selected:focus /template/ ContentPresenter#PART_ContentPresenter,
+                         ListBox.pick ListBoxItem:selected:focus:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         ListBox.pick ListBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
         </Style>
         <Style Selector="TextBlock.label">
             <Setter Property="FontSize" Value="{StaticResource FsSm}"/>
@@ -149,7 +176,7 @@
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                             <Button Classes="category" Classes.current="{Binding IsCurrent}"
                                     Click="ChooseServerCategory"
-                                    IsEnabled="{Binding CanAutoSelect}"
+                                    IsEnabled="{Binding CanActivateCategory}"
                                     AutomationProperties.Name="{Binding AutoLabel}">
                                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                     <icons:ProtocolDisc Width="30" Height="30" GlyphSize="16" CornerRadius="15"
@@ -191,6 +218,9 @@
                                    ItemTemplate="{StaticResource SimpleServerRowTemplate}"
                                    AutomationProperties.Name="{Binding L_SmpPickServerLabel}"
                                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+        <TextBlock Name="SimplePickerEmptyState" Classes="hint" TextWrapping="Wrap"
+                   IsVisible="False" Foreground="{DynamicResource WarningFgBrush}"
+                   AutomationProperties.LiveSetting="Polite"/>
         <TextBlock Name="SimpleServerCount" Classes="hint"
                    AutomationProperties.LiveSetting="Polite"/>
     </StackPanel>

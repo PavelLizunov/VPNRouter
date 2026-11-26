@@ -93,13 +93,18 @@ public sealed class SimpleConnectStatusTests
         var linkButton = FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!;
         var link = FindOnPage<TextBox>(view.Page, "SimpleConfigLink")!;
         var refresh = view.Page.FindControl<Button>("SimpleRefreshSubscriptions")!;
-        Assert.True(options.IsEffectivelyVisible);
+        Assert.Equal(cached, options.IsEffectivelyVisible);
         Assert.True(linkButton.IsEffectivelyVisible);
         Assert.False(options.IsChecked);
         Assert.True(refresh.IsEffectivelyVisible);
         Assert.True(refresh.IsEffectivelyEnabled);
         Assert.Same(vm.RefreshAllSubscriptionsCommand, refresh.Command);
         Assert.Equal(Strings.SmpRefreshSubscriptions, AutomationProperties.GetName(refresh));
+        if (!cached)
+        {
+            Dispatcher.UIThread.RunJobs();
+            view.Capture("simple-home-refresh-empty-before-380");
+        }
 
         var http = new FakeHttpClient().Setup(settings.App.Subscriptions[0].Url,
             "vless://00000000-0000-4000-8000-000000000001@new.invalid:443?security=none#new");
@@ -110,8 +115,10 @@ public sealed class SimpleConnectStatusTests
             await vm.RefreshAllSubscriptionsCommand.ExecuteAsync(refresh.CommandParameter);
             Assert.Single(http.SentRequests);
             Assert.Equal("new", Assert.Single(vm.SubscriptionServers).Name);
+            Assert.True(options.IsEffectivelyVisible);
             Assert.False(options.IsChecked);
             Dispatcher.UIThread.RunJobs();
+            Assert.True(view.Page.FindControl<TextBlock>("SimpleRefreshFeedback")!.IsEffectivelyVisible);
             view.Capture($"simple-home-refresh-{(cached ? "cached" : "empty")}-380");
         }
         finally { SubscriptionFetcher.Http = originalHttp; }
@@ -289,6 +296,7 @@ public sealed class SimpleConnectStatusTests
             Assert.True(linkButton.IsFocused);
             Assert.False(Shown(link));
             Assert.Equal(before, store.SaveCount);
+            Assert.Equal(Strings.SmpLinkAlreadySaved, BoundText(page, "SimpleLinkNotice"));
         }
         finally { VPNRouter.App.Localization.Strings.Lang = language; }
     }
@@ -865,7 +873,7 @@ public sealed class SimpleConnectStatusTests
         var hop = Entry("TurnRelay hop", "203.0.113.20", 53492);
         hop.Protocol = "turnrelay";
         hop.OutboundId = "turnrelay-test";
-        var exit = Entry("VLESS · TurnRelay", "exit.invalid");
+        var exit = Entry("Frankfurt Exit", "exit.invalid");
         exit.DetourVia = hop.OutboundId;
         var settings = new AppSettings();
         settings.App.ConfigMode = "subscribe";
@@ -874,12 +882,21 @@ public sealed class SimpleConnectStatusTests
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = CreateVm(store);
         using var view = new OpenPage(vm, width: 360);
+        Assert.Equal(1, vm.SmpSelectableServerCount);
+        Assert.Equal(1, Assert.Single(vm.Subscriptions).SelectableServerCount);
         vm.OpenConfigPickerCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
         var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
         var group = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
-        Assert.Equal(exit.Name, Assert.Single(group.Servers).Name);
+        var exitRow = Assert.Single(group.Servers);
+        Assert.Equal(exit.Name, exitRow.Name);
+        Assert.True(exitRow.HasTurnRelayHop);
+        Assert.Equal(Strings.SmpTurnRelayBadge, exitRow.TurnRelayBadgeText);
+        Assert.True(group.HasSelectableServers);
+        Assert.True(group.CanActivateCategory);
+        Assert.False(group.CanAutoSelect);
+        Assert.True(FindGroupButton(groups, group.Category, disclosure: false).IsEffectivelyEnabled);
         Toggle(view.Page, "SimpleServerSearchButton", true);
         FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!.Text = "TurnRelay";
         Dispatcher.UIThread.RunJobs();
@@ -888,6 +905,130 @@ public sealed class SimpleConnectStatusTests
         var feed = Assert.Single(vm.Subscriptions).UnderlyingEntry;
         Assert.Equal(exit.DetourVia, Assert.Single(feed.Servers, row => row.IsTurnRelay).OutboundId);
         view.Capture("simple-picker-turnrelay-exit-360");
+    }
+
+    [AvaloniaFact]
+    public void TurnRelayOnlyHopsAndMissingUpstreamShowClearStates()
+    {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            var hopOnly = Entry("TurnRelay hop", "203.0.113.20", 53492);
+            hopOnly.Protocol = "turnrelay";
+            hopOnly.OutboundId = "turnrelay-only";
+            var onlySettings = new AppSettings();
+            onlySettings.App.Language = "ru";
+            onlySettings.App.ConfigMode = "subscribe";
+            onlySettings.App.Subscriptions = [new() { Url = "https://feed.invalid/hop-only", Servers = [hopOnly] }];
+            var onlyStore = new InMemorySettingsStore();
+            onlyStore.Save(onlySettings, AppPaths.ConfigYamlPath);
+            using (var vm = CreateVm(onlyStore))
+            using (var view = new OpenPage(vm, width: 360, ThemeVariant.Light))
+            {
+                Assert.True(vm.SmpHasOnlyTurnRelayHops);
+                Assert.Equal(Strings.SmpTurnRelayOnlyHopsTitle, BoundText(view.Page, "ConfigName"));
+                vm.OpenConfigPickerCommand.Execute(null);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(Strings.SmpTurnRelayOnlyHops, BoundText(view.Page, "SimplePickerEmptyState"));
+                view.Capture("simple-picker-turnrelay-only-hop-360");
+            }
+
+            var orphanExit = Entry("Frankfurt Relay", "orphan.invalid");
+            orphanExit.DetourVia = "turnrelay-missing";
+            var missingSettings = new AppSettings();
+            missingSettings.App.Language = "ru";
+            missingSettings.App.ConfigMode = "subscribe";
+            missingSettings.App.Subscriptions = [new() { Url = "https://feed.invalid/missing-hop", Servers = [orphanExit] }];
+            var missingStore = new InMemorySettingsStore();
+            missingStore.Save(missingSettings, AppPaths.ConfigYamlPath);
+            using (var vm = CreateVm(missingStore))
+            using (var view = new OpenPage(vm, width: 360, ThemeVariant.Light))
+            {
+                var row = Assert.Single(vm.SubscriptionServers);
+                Assert.True(row.IsChainUpstreamMissing);
+                Assert.False(row.CanSelectInSimpleMode);
+                Assert.Equal(Strings.SmpTurnRelayMissingHop, row.UnavailableReasonText);
+                vm.ConfirmSimpleServer(row);
+                Assert.Equal(Strings.SmpTurnRelayMissingHop, vm.SmpErrorText);
+                vm.OpenConfigPickerCommand.Execute(null);
+                Dispatcher.UIThread.RunJobs();
+                view.Capture("simple-picker-turnrelay-missing-hop-360");
+            }
+        }
+        finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
+    }
+
+    [AvaloniaFact]
+    public async Task SimpleRefreshShowsFeedbackPartialFailureAndBlockedReason()
+    {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            var settings = new AppSettings();
+            settings.App.Language = "ru";
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions =
+            [
+                new() { Name = "Primary", Enabled = true, Url = "https://feed.invalid/ok", Servers = [Entry("Sweden", "ok.invalid")] },
+                new() { Name = "Backup", Enabled = true, Url = "https://feed.invalid/fail", Servers = [Entry("Finland", "fail.invalid")] },
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = CreateVm(store);
+            using var view = new OpenPage(vm, width: 380, ThemeVariant.Light);
+
+            vm.IsConnecting = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Strings.SmpRefreshBlockedConnecting, BoundText(view.Page, "SimpleRefreshBlockedReason"));
+            vm.IsConnecting = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(view.Page.FindControl<TextBlock>("SimpleRefreshBlockedReason")!.IsEffectivelyVisible);
+
+            var http = new FakeHttpClient()
+                .Setup(settings.App.Subscriptions[0].Url, "vless://00000000-0000-4000-8000-000000000001@ok2.invalid:443?security=none#Sweden")
+                .Setup(settings.App.Subscriptions[1].Url, string.Empty, statusCode: 502);
+            var originalHttp = SubscriptionFetcher.Http;
+            try
+            {
+                SubscriptionFetcher.Http = http;
+                await vm.RefreshAllSubscriptionsCommand.ExecuteAsync(null);
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(vm.SmpRefreshResultIsError);
+                Assert.Contains("1", BoundText(view.Page, "SimpleRefreshFeedback"));
+                view.Capture("simple-home-refresh-partial-fail-380");
+            }
+            finally { SubscriptionFetcher.Http = originalHttp; }
+        }
+        finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SimpleExpandedHomeSyncsThemeVariantAndShowsSelection(bool dark)
+    {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            var settings = new AppSettings();
+            settings.App.Language = "ru";
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions =
+            [
+                new() { Enabled = true, Url = "https://feed.invalid/theme", Servers = [Entry("Sweden · Stockholm", "se.invalid"), Entry("Finland · Helsinki", "fi.invalid")] }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = CreateVm(store);
+            using var view = new OpenPage(vm, width: 360, theme: dark ? ThemeVariant.Dark : ThemeVariant.Light);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(dark, vm.IsDarkTheme);
+
+            vm.OpenConfigPickerCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            view.Capture($"simple-home-expanded-{(dark ? "dark" : "light")}-360");
+        }
+        finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
     }
 
     [AvaloniaFact]
@@ -913,7 +1054,7 @@ public sealed class SimpleConnectStatusTests
             Assert.Equal("Название, страна или город", search.PlaceholderText);
             Assert.Equal("Поиск по списку", AutomationProperties.GetName(search));
             Assert.Equal("Проверить серверы", AutomationProperties.GetName(check));
-            Assert.Equal("Ссылка подписки", AutomationProperties.GetName(link));
+            Assert.Equal("Изменить ссылку", AutomationProperties.GetName(link));
             Assert.Equal("Настроить приложения", appRules.Content);
         }
         finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }

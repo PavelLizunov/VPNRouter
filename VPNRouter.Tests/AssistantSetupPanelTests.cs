@@ -515,4 +515,93 @@ public sealed class AssistantSetupPanelTests
             if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
         }
     }
+
+    [AvaloniaFact]
+    public async Task InFlightRequestAndConfirmation_IgnoreScrollTabAndInsideClicks()
+    {
+        var previousDir = AppPaths.DataDir;
+        var temporary = Path.Combine(Path.GetTempPath(), $"assistant-focus-guard-{Guid.NewGuid():N}");
+        try
+        {
+            AppPaths.OverrideDataDir(temporary);
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Language = "en";
+            settings.App.FlushDnsOnStart = false;
+            settings.App.Subscriptions = [new() { Url = "https://ninitux.com/sub/synthetic-guard", Enabled = true }];
+            SettingsLoader.Save(settings, AppPaths.ConfigYamlPath);
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            var release = new TaskCompletionSource<AssistantStep>(TaskCreationOptions.RunContinuationsAsynchronously);
+            CancellationToken requestToken = default;
+            using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+            using var vm = new MainWindowViewModel(store, logger)
+            {
+                StepAssistantAsync = (_, _, _, obs, ct) =>
+                {
+                    requestToken = ct;
+                    return release.Task.WaitAsync(ct);
+                },
+            };
+            var panel = new AssistantSetupPanel { DataContext = vm };
+            var outside = new Button { Content = "Outside" };
+            var window = new Window { Width = 520, Height = 640, Content = new StackPanel { Children = { panel, outside } } };
+            window.Show();
+            try
+            {
+                var run = panel.FindControl<Button>("RunAssistant")!;
+                var confirm = panel.FindControl<Button>("ConfirmAssistant")!;
+                var progress = panel.FindControl<ProgressBar>("AssistantProgress")!;
+                var status = panel.FindControl<TextBlock>("AssistantStatus")!;
+                var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                run.PropertyChanged += (_, args) =>
+                {
+                    if (args.Property == InputElement.IsEnabledProperty && run.IsEnabled)
+                        completed.TrySetResult(true);
+                };
+
+                panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                panel.FindControl<TextBox>("AssistantGoal")!.Text = "Enable DNS flushing on startup";
+                run.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.True(progress.IsVisible);
+                Assert.False(requestToken.IsCancellationRequested);
+
+                // During in-flight request, clicking outside or pressing Tab must not cancel.
+                window.UpdateLayout();
+                var outsidePoint = outside.TranslatePoint(new Point(outside.Bounds.Width / 2, outside.Bounds.Height / 2), window)!.Value;
+                window.MouseDown(outsidePoint, MouseButton.Left);
+                window.MouseUp(outsidePoint, MouseButton.Left);
+                window.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Tab });
+                Assert.False(requestToken.IsCancellationRequested);
+
+                // Resolve the step into the confirmation phase.
+                var obs = new AssistantWindowAutomation(window, panel).Observe();
+                var flushControl = obs.Single(c => c.Name == "SetFlushDnsOnStart");
+                release.SetResult(new AssistantStep(AssistantStepStatus.Act, flushControl, Toggle: true));
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                Assert.True(confirm.IsVisible);
+                Assert.False(progress.IsVisible);
+
+                // Pressing Tab or clicking inside the status card must keep the confirmation open.
+                window.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Tab });
+                var statusPoint = status.TranslatePoint(new Point(4, 4), window)!.Value;
+                window.MouseDown(statusPoint, MouseButton.Left);
+                window.MouseUp(statusPoint, MouseButton.Left);
+                Assert.True(confirm.IsVisible);
+
+                // Escape declines cleanly.
+                window.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+                Assert.False(confirm.IsVisible);
+                Assert.Equal(Strings.AssistantNoChanges, status.Text);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            AppPaths.OverrideDataDir(previousDir);
+            if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
+        }
+    }
 }

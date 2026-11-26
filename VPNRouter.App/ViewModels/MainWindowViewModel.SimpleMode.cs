@@ -291,7 +291,7 @@ public partial class MainWindowViewModel
         if (row.SubscriptionId is not { } feedId || !SubscriptionServers.Contains(row)) return;
         if (!row.CanSelectInSimpleMode)
         {
-            SmpErrorText = Core.Localization.Strings.SmpServerUnsupported;
+            SmpErrorText = row.UnavailableReasonText;
             return;
         }
         ConfirmSimplePreference(new() { FeedId = feedId, RowKey = SubscriptionEntry.RowKey(row.SourceEntry) }, row);
@@ -1044,6 +1044,9 @@ public partial class MainWindowViewModel
                 return Core.Localization.Strings.SmpSelectionUnavailableTitle;
             var (name, address) = DeriveConnectedServerLabel();
             if (!string.IsNullOrWhiteSpace(name)) return name;
+            if (!IsConnected && string.Equals(_settings?.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase) &&
+                !SmpHasSelectableSubscriptionServers && Subscriptions.Any(s => s.Enabled))
+                return SmpHasOnlyTurnRelayHops ? Strings.SmpTurnRelayOnlyHopsTitle : Strings.SmpEmptySubTitle;
             return string.IsNullOrWhiteSpace(address) ? SmpConfigKind : address;
         }
     }
@@ -1085,13 +1088,44 @@ public partial class MainWindowViewModel
                             ? $"{SimpleCategoryName(category)} · {Core.Localization.Strings.SmpAutoInCategory}"
                             : Core.Localization.Strings.SmpPinnedServer;
                 }
-                var count = SubscriptionServers.Count;
-                return count > 0 ? $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(count)}" : Strings.SmpKindSubscription;
+                var count = SmpSelectableServerCount;
+                if (count > 0) return $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(count)}";
+                if (SmpHasOnlyTurnRelayHops) return $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(0)}";
+                if (Subscriptions.Any(s => s.Enabled)) return $"{Strings.SmpKindSubscription} · {Strings.SmpEmptySubHint}";
+                return Strings.SmpKindSubscription;
             }
             return mode.Equals("generated", StringComparison.OrdinalIgnoreCase)
                 ? Strings.SmpKindServer
                 : Strings.SmpKindCustom;
         }
+    }
+
+    internal int SmpSelectableServerCount => SubscriptionServers.Count(row => !row.SourceEntry.IsTurnRelay);
+    internal bool SmpHasSelectableSubscriptionServers => SubscriptionServers.Any(row => !row.SourceEntry.IsTurnRelay);
+    internal bool SmpHasOnlyTurnRelayHops => SubscriptionServers.Count > 0 && !SmpHasSelectableSubscriptionServers;
+    internal bool CanApplySimplePendingChanges => IsServiceManagedVpn && HasPendingAppChanges && CanApplyAppChanges;
+
+    internal string SmpRefreshBlockedReason
+    {
+        get
+        {
+            if (SmpCanRefreshSubscriptions || SmpSubscriptionsRefreshing) return string.Empty;
+            if (IsApplying) return Strings.SmpRefreshBlockedApplying;
+            if (IsTestingServers || IsDeepTestingServers) return Strings.SmpRefreshBlockedTesting;
+            if (SimpleCtaIsConnecting) return Strings.SmpRefreshBlockedConnecting;
+            return string.Empty;
+        }
+    }
+
+    internal void OpenVersionHistoryFromMenu()
+    {
+        IsSimpleMode = false;
+        _settings.App.UiMode = "advanced";
+        SelectedTabIndex = 2;
+        SelectedSettingsIndex = 4;
+        SaveSettings();
+        if (!UpdateVm.IsVersionHistoryVisible && UpdateVm.ToggleVersionHistoryCommand.CanExecute(null))
+            UpdateVm.ToggleVersionHistoryCommand.Execute(null);
     }
 
     public string L_SmpHeroChange => Strings.SmpConfigRowChange;

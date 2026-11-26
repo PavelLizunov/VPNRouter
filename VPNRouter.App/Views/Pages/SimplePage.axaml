@@ -222,6 +222,12 @@
             <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
+        <Style Selector="ToggleButton.row:checked /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.row:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                         ToggleButton.row:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
         <Style Selector="Button.row icons|Pictogram.lead">
             <Setter Property="Width" Value="18"/>
             <Setter Property="Height" Value="18"/>
@@ -454,43 +460,58 @@
                           </Grid>
                         </ToggleButton>
 
-                        <pages:SubscriptionLinkEditor Name="SimpleLink" Margin="16,0,16,12"
-                                                      IsVisible="{Binding SmpHasConfig}"/>
-                        <StackPanel Margin="16,0,16,12" Spacing="6"
-                                    IsVisible="{Binding SmpHasRefreshableSubscriptions}">
-                            <Button Name="SimpleRefreshSubscriptions" Classes="change" HorizontalAlignment="Left"
-                                    Command="{Binding RefreshAllSubscriptionsCommand}"
-                                    AutomationProperties.Name="{Binding L_SmpRefreshSubscriptions}">
-                                <Button.IsEnabled>
-                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                        <Binding Path="SmpCanRefreshSubscriptions"/>
-                                        <Binding Path="!SmpSubscriptionsRefreshing"/>
-                                    </MultiBinding>
-                                </Button.IsEnabled>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <icons:Pictogram Id="refresh" Width="14" Height="14"/>
-                                    <TextBlock Text="{Binding L_SmpRefreshSubscriptions}"/>
-                                </StackPanel>
-                            </Button>
-                            <TextBlock Classes="hint" Text="{Binding L_SubsRefreshing}"
-                                       IsVisible="{Binding SmpSubscriptionsRefreshing}" AutomationProperties.LiveSetting="Polite"/>
-                            <ItemsControl ItemsSource="{Binding Subscriptions}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:SubscriptionViewModel">
-                                        <Panel IsVisible="{Binding Enabled}">
-                                            <TextBlock Classes="hint" Text="{Binding StatusBadge}"
-                                                       IsVisible="{Binding LastRefreshFailed}"
-                                                       ToolTip.Tip="{Binding Name}" AutomationProperties.LiveSetting="Polite"/>
-                                        </Panel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                        <StackPanel Margin="16,0,16,12" Spacing="8"
+                                    IsVisible="{Binding SmpHasConfig}">
+                            <StackPanel Spacing="6" IsVisible="{Binding SmpHasRefreshableSubscriptions}">
+                                <Button Name="SimpleRefreshSubscriptions" Classes="outline" HorizontalAlignment="Left"
+                                        Command="{Binding RefreshAllSubscriptionsCommand}"
+                                        AutomationProperties.Name="{Binding L_SmpRefreshSubscriptions}">
+                                    <Button.IsEnabled>
+                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                            <Binding Path="SmpCanRefreshSubscriptions"/>
+                                            <Binding Path="!SmpSubscriptionsRefreshing"/>
+                                        </MultiBinding>
+                                    </Button.IsEnabled>
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <icons:Pictogram Id="refresh" Width="14" Height="14"/>
+                                        <TextBlock Text="{Binding L_SmpRefreshSubscriptions}"/>
+                                    </StackPanel>
+                                </Button>
+                                <ProgressBar Name="SimpleRefreshProgress" Height="3" MinHeight="3" IsIndeterminate="True"
+                                             Foreground="{DynamicResource AccentSolidBrush}"
+                                             IsVisible="{Binding SmpSubscriptionsRefreshing}"/>
+                                <TextBlock Classes="hint" Text="{Binding L_SubsRefreshing}"
+                                           IsVisible="{Binding SmpSubscriptionsRefreshing}" AutomationProperties.LiveSetting="Polite"/>
+                                <TextBlock Name="SimpleRefreshFeedback" Classes="hint" TextWrapping="Wrap"
+                                           IsVisible="False" AutomationProperties.LiveSetting="Polite"/>
+                                <TextBlock Name="SimpleRefreshBlockedReason" Classes="hint" TextWrapping="Wrap"
+                                           IsVisible="False" AutomationProperties.LiveSetting="Polite"/>
+                                <ItemsControl ItemsSource="{Binding Subscriptions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SubscriptionViewModel">
+                                            <Panel IsVisible="{Binding Enabled}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4"
+                                                            IsVisible="{Binding LastRefreshFailed}">
+                                                    <TextBlock Classes="hint" Text="{Binding Name}" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource WarningFgBrush}"/>
+                                                    <TextBlock Classes="hint" Text="·"
+                                                               Foreground="{DynamicResource WarningFgBrush}"/>
+                                                    <TextBlock Classes="hint" Text="{Binding StatusBadge}"
+                                                               Foreground="{DynamicResource WarningFgBrush}"
+                                                               ToolTip.Tip="{Binding Name}" AutomationProperties.LiveSetting="Polite"/>
+                                                </StackPanel>
+                                            </Panel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                            <pages:SubscriptionLinkEditor Name="SimpleLink"/>
                         </StackPanel>
                         <Border Classes="divider" IsVisible="{Binding #SimplePicker.IsVisible}"/>
                         <pages:SubscriptionServerPicker Name="SimplePicker" Margin="16,12,16,14"
                                                         IsVisible="False"/>
                         <StackPanel Name="SimpleChecks" IsVisible="False" Margin="16,0,16,12" Spacing="8">
-                            <ToggleButton Name="SimpleCheckServers" Classes="change" HorizontalAlignment="Left" Click="ToggleServerChecks">
+                            <ToggleButton Name="SimpleCheckServers" Classes="ghost" HorizontalAlignment="Left" Click="ToggleServerChecks">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <icons:Pictogram Id="shield-check" Width="14" Height="14"/>
                                     <TextBlock Name="SimpleCheckServersLabel"/>
@@ -503,12 +524,12 @@
                                            FontSize="{StaticResource FsSm}"
                                            Foreground="{DynamicResource TextMutedBrush}"/>
                                 <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
-                                    <Button Name="SimplePing" Content="{Binding SmpPingButtonText}"
+                                    <Button Name="SimplePing" Classes="outline" Content="{Binding SmpPingButtonText}"
                                             Command="{Binding TestAllSubscriptionServersCommand}"
                                             IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
                                             IsVisible="{Binding SmpHasSubscriptionServers}"
                                             ToolTip.Tip="{Binding L_TipTestAllServers}"/>
-                                    <Button Name="SimpleDeepCheck" Content="{Binding ServerDeepButtonText}"
+                                    <Button Name="SimpleDeepCheck" Classes="outline" Content="{Binding ServerDeepButtonText}"
                                             Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
                                             IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
                                             IsVisible="{Binding SmpHasSubscriptionServers}"
@@ -527,11 +548,18 @@
 
                         <StackPanel Margin="16,14,16,16" Spacing="10" IsEnabled="{Binding !IsApplying}">
                             <TextBlock Classes="label" Text="{Binding L_SmpTunnelModeLabel}"/>
-                            <StackPanel IsVisible="{Binding IsConnected}" Spacing="3" Margin="0,4,0,0">
+                            <StackPanel IsVisible="{Binding IsConnected}" Spacing="4" Margin="0,4,0,0">
                                 <TextBlock Name="ActiveMode" Classes="subline" Text="{Binding SimpleConfigModeSummary}"
                                            TextAlignment="Left" HorizontalAlignment="Left"/>
-                                <TextBlock Name="PendingConfig" Classes="hint" TextWrapping="Wrap"
-                                           IsVisible="{Binding HasPendingAppChanges}" Text="{Binding SimplePendingSummary}"/>
+                                <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="4"
+                                           IsVisible="{Binding HasPendingAppChanges}">
+                                    <TextBlock Name="PendingConfig" Classes="hint" TextWrapping="Wrap"
+                                               VerticalAlignment="Center"
+                                               Text="{Binding SimplePendingSummary}"/>
+                                    <Button Name="SimpleApplyPending" Classes="outline" IsVisible="False"
+                                            Command="{Binding ApplyPendingChangesCommand}"
+                                            IsEnabled="{Binding CanApplyAppChanges}"/>
+                                </WrapPanel>
                             </StackPanel>
                             <Border Classes="seg-track">
                                 <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
@@ -559,7 +587,7 @@
                             </Border>
                             <TextBlock Classes="hint" Text="{Binding L_SmpTipSplitHome}" IsVisible="{Binding IsSplitTunnel}"/>
                             <TextBlock Classes="hint" Text="{Binding L_SmpTipFullHome}" IsVisible="{Binding !IsSplitTunnel}"/>
-                            <Button Name="SimpleAppRules" Classes="change" Click="OpenAppRules"
+                            <Button Name="SimpleAppRules" Classes="ghost" Click="OpenAppRules"
                                     HorizontalAlignment="Left"
                                     IsVisible="{Binding IsSplitTunnel}" IsEnabled="{Binding !SimpleCtaIsConnecting}"/>
                         </StackPanel>
@@ -584,7 +612,7 @@
                                    LineHeight="16"
                                    Foreground="{DynamicResource WarningFgBrush}"
                                    TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
                             <Button Content="{Binding LblBadComboDisableLockdown}"
                                     Command="{Binding DisableBadComboLockdownCommand}"
                                     FontSize="11"
@@ -598,7 +626,7 @@
                                     Background="Transparent"
                                     BorderBrush="{DynamicResource WarningBorderBrush}"
                                     BorderThickness="1"/>
-                        </StackPanel>
+                        </WrapPanel>
                     </StackPanel>
                 </Border>
 
@@ -644,8 +672,8 @@
                                    Foreground="{DynamicResource WarningFgBrush}"
                                    TextWrapping="Wrap"/>
 
-                        <StackPanel Orientation="Horizontal" Spacing="6"
-                                    IsVisible="{Binding UpdateVm.IsRollbackAssistanceChoiceVisible}">
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6"
+                                   IsVisible="{Binding UpdateVm.IsRollbackAssistanceChoiceVisible}">
                             <Button Command="{Binding UpdateVm.RunRollbackAssistancePrimaryCommand}"
                                     FontSize="11"
                                     Padding="10,5"
@@ -665,7 +693,7 @@
                                 <TextBlock Text="{Binding UpdateVm.RollbackAssistanceSecondaryText}"
                                            TextWrapping="Wrap"/>
                             </Button>
-                        </StackPanel>
+                        </WrapPanel>
 
                         <Border IsVisible="{Binding UpdateVm.IsAssistedRollbackConfirmationVisible}"
                                 Padding="10"
@@ -684,18 +712,18 @@
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            TextWrapping="Wrap"/>
                                 <StackPanel Spacing="6">
-                                    <Button Classes="solid"
+                                    <Button Classes="warning-action"
                                             Command="{Binding UpdateVm.ConfirmRollbackCommand}"
-                                            Background="{DynamicResource WarningSolidBrush}"
-                                            Foreground="White"
                                             HorizontalAlignment="Stretch"
                                             FontSize="11"
-                                            Padding="10,5"
+                                            Padding="10,6"
+                                            CornerRadius="{StaticResource RadiusMd}"
                                             AutomationProperties.AutomationId="RollbackAssistanceConfirmButton">
                                         <TextBlock Text="{Binding UpdateVm.RollbackAssistanceInstallText}"
                                                    TextWrapping="Wrap" TextAlignment="Center"/>
                                     </Button>
-                                    <Button Command="{Binding UpdateVm.CancelRollbackCommand}"
+                                    <Button Classes="ghost"
+                                            Command="{Binding UpdateVm.CancelRollbackCommand}"
                                             HorizontalAlignment="Stretch"
                                             FontSize="11"
                                             Padding="10,5"
@@ -783,7 +811,7 @@
                                    LineHeight="16"
                                    Foreground="{DynamicResource WarningFgBrush}"
                                    TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6">
                             <Button Classes="cta go"
                                     Content="{Binding L_ProblemsFix}"
                                     Command="{Binding FixProblemsCommand}"
@@ -808,7 +836,7 @@
                                     Background="Transparent"
                                     BorderBrush="{DynamicResource WarningBorderBrush}"
                                     BorderThickness="1"/>
-                        </StackPanel>
+                        </WrapPanel>
                         <Button Command="{Binding OpenProblemHelpCommand}"
                                 IsVisible="{Binding HasHomeProblems}"
                                 AutomationProperties.Name="{Binding L_ProblemsHowTo}"

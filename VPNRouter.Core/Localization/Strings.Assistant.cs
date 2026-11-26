@@ -2,11 +2,16 @@ namespace VPNRouter.Core.Localization;
 
 public static partial class Strings
 {
-    public static string AssistantTitle => Ru ? "Настроить с DeepSeek" : "Set up with DeepSeek";
+    public static string AssistantTitle => Ru ? "Помощник и диагностика" : "Assistant & diagnostics";
+    internal static string AssistantLocalSection => Ru ? "Локальное восстановление (без отправки данных)" : "Local repair (nothing is sent)";
+    internal static string AssistantCloudSection => Ru ? "Команда через DeepSeek" : "Command via DeepSeek";
     public static string AssistantGoalHint => Ru ? "Что настроить в VPNRouter?" : "What should VPNRouter do?";
     public static string AssistantDataNotice => Ru
-        ? "Текст команды отправляется в DeepSeek."
-        : "Your request is sent to DeepSeek.";
+        ? "В DeepSeek отправляется текст команды и список доступных действий. Изменения применяются только после подтверждения."
+        : "Your command text and available actions are sent to DeepSeek. Changes apply only after you confirm.";
+    internal static string AssistantCrashNotice => Ru
+        ? "Отправляются только 4 кода последнего сбоя и состояние VPN (без конфигов и сырых логов)."
+        : "Sends only 4 classified crash codes and VPN state (no configs or raw logs).";
     public static string AssistantDiagnoseCrash => Ru ? "Разобрать сбой" : "Analyze crash";
     public static string AssistantDiagnosingCrash => Ru ? "Проверяю отчёт о последнем сбое…" : "Checking the last crash report…";
     public static string AssistantNoCrash => Ru ? "Сохранённый отчёт о сбое не найден." : "No saved crash report was found.";
@@ -70,6 +75,7 @@ public static partial class Strings
         ? (Ru ? " VPN применит настройки к текущему соединению." : " The VPN will reapply settings to the current connection.")
         : string.Empty;
     public static string AssistantUndo => Ru ? "Отменить изменения" : "Undo changes";
+    internal static string AssistantUndoWorking => Ru ? "Восстанавливаю прежние настройки…" : "Restoring previous settings…";
     public static string AssistantCancel => Ru ? "Прервать" : "Cancel";
     public static string AssistantWorking => Ru ? "Настраиваю и проверяю маршрут…" : "Applying and checking the route…";
     public static string AssistantBusy => Ru

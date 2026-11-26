@@ -63,6 +63,7 @@ public partial class MainWindowViewModel
                     SubscriptionServers.Add(new ServerViewModel(entry) { SubscriptionId = feed.Id });
             ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
             ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
+            ServerViewModel.RefreshChainFlags(SubscriptionServers);
 
             if (SimpleServerPreference is { } preference)
             {
@@ -164,6 +165,71 @@ public partial class MainWindowViewModel
     }
 
     internal Func<string, Task>? SubscriptionRefreshReconnect { get; set; }
+    internal event Action? SubscriptionRefreshFeedbackChanged;
+
+    private enum SubscriptionRefreshFeedbackKind
+    {
+        None,
+        UpdatedOffline,
+        UpdatedConnectedUnchanged,
+        UpdatedConnectedReconnecting,
+        UpdatedConnectedService,
+        PartialFailure,
+        FailedCached,
+        FailedEmpty,
+        ChainPreserved,
+    }
+
+    private sealed record SubscriptionRefreshFeedback(
+        SubscriptionRefreshFeedbackKind Kind,
+        int SelectableCount,
+        int SucceededFeeds,
+        int TotalFeeds,
+        string FailedFeedNames,
+        DateTimeOffset At);
+
+    private SubscriptionRefreshFeedback? _lastSubscriptionRefreshFeedback;
+
+    internal bool SmpRefreshResultIsError => _lastSubscriptionRefreshFeedback?.Kind is
+        SubscriptionRefreshFeedbackKind.PartialFailure
+        or SubscriptionRefreshFeedbackKind.FailedCached
+        or SubscriptionRefreshFeedbackKind.FailedEmpty
+        or SubscriptionRefreshFeedbackKind.ChainPreserved;
+
+    internal string SmpRefreshResultText
+    {
+        get
+        {
+            if (_lastSubscriptionRefreshFeedback is not { } fb) return string.Empty;
+            var countText = Core.Localization.Strings.SmpKindServers(fb.SelectableCount);
+            return fb.Kind switch
+            {
+                SubscriptionRefreshFeedbackKind.UpdatedOffline =>
+                    Core.Localization.Strings.SmpRefreshUpdated(countText, fb.At.ToLocalTime().ToString("HH:mm")),
+                SubscriptionRefreshFeedbackKind.UpdatedConnectedUnchanged =>
+                    Core.Localization.Strings.SmpRefreshUpdatedConnectedUnchanged(countText),
+                SubscriptionRefreshFeedbackKind.UpdatedConnectedReconnecting =>
+                    Core.Localization.Strings.SmpRefreshUpdatedConnectedReconnecting,
+                SubscriptionRefreshFeedbackKind.UpdatedConnectedService =>
+                    Core.Localization.Strings.SmpRefreshUpdatedConnectedService,
+                SubscriptionRefreshFeedbackKind.PartialFailure =>
+                    Core.Localization.Strings.SmpRefreshPartialFailure(fb.SucceededFeeds, fb.TotalFeeds, fb.FailedFeedNames),
+                SubscriptionRefreshFeedbackKind.FailedCached =>
+                    Core.Localization.Strings.SmpRefreshFailedCached(countText),
+                SubscriptionRefreshFeedbackKind.FailedEmpty =>
+                    Core.Localization.Strings.SmpRefreshFailedEmpty,
+                SubscriptionRefreshFeedbackKind.ChainPreserved =>
+                    Core.Localization.Strings.SmpRefreshChainPreserved,
+                _ => string.Empty,
+            };
+        }
+    }
+
+    private void SetSubscriptionRefreshFeedback(SubscriptionRefreshFeedback? feedback)
+    {
+        _lastSubscriptionRefreshFeedback = feedback;
+        SubscriptionRefreshFeedbackChanged?.Invoke();
+    }
 
     private int _subscriptionRefreshApplyGeneration;
 
@@ -176,6 +242,7 @@ public partial class MainWindowViewModel
     {
         OnPropertyChanged(nameof(SmpSubscriptionsRefreshing));
         OnPropertyChanged(nameof(SmpCanConnect));
+        SubscriptionRefreshFeedbackChanged?.Invoke();
     }
 
     private async Task RefreshRegisteredSubscriptionsAsync(List<SubscriptionViewModel> targets, CancellationToken ct)
@@ -190,13 +257,23 @@ public partial class MainWindowViewModel
         var generatedGrant = DnsttSelectionRefresh.Capture(_settings);
         var generation = _connectionGeneration;
         var applyGeneration = _subscriptionRefreshApplyGeneration;
+        SubscriptionCacheUpdate[]? updates = null;
+        var succeededCount = 0;
+        var failedNames = string.Empty;
         foreach (var row in targets) row.IsRefreshing = true;
         NotifySubscriptionRefreshState();
         try
         {
-            var updates = await FetchSubscriptionRowsAsync(targets, ct);
+            updates = await FetchSubscriptionRowsAsync(targets, ct);
             if (_disposed || ct.IsCancellationRequested || !SmpCanRefreshSubscriptions || _isReconnecting ||
                 generation != _connectionGeneration || applyGeneration != _subscriptionRefreshApplyGeneration) return;
+            succeededCount = updates.Count(u => !u.Failed);
+            var failedFeeds = targets.Zip(updates)
+                .Where(pair => pair.Second.Failed)
+                .Select(pair => string.IsNullOrWhiteSpace(pair.First.Name) ? pair.First.Url : pair.First.Name)
+                .ToList();
+            failedNames = string.Join(", ", failedFeeds);
+
             var published = PublishSubscriptionRows(targets, updates, generatedGrant: generatedGrant);
             if (!published.Accepted)
             {
@@ -205,6 +282,13 @@ public partial class MainWindowViewModel
                 {
                     StatusText = GeneratedDnsttBlockMessage(published.GeneratedOutcome);
                 }
+                var selectable = SmpSelectableServerCount;
+                var kind = succeededCount > 0
+                    ? SubscriptionRefreshFeedbackKind.ChainPreserved
+                    : selectable > 0
+                        ? SubscriptionRefreshFeedbackKind.FailedCached
+                        : SubscriptionRefreshFeedbackKind.FailedEmpty;
+                SetSubscriptionRefreshFeedback(new(kind, selectable, succeededCount, targets.Count, failedNames, DateTimeOffset.UtcNow));
                 return;
             }
         }
@@ -223,14 +307,35 @@ public partial class MainWindowViewModel
         if (generatedGrant != null)
             _generatedDnsttRefreshKey = DnsttSelectionRefresh.KeyOf(DnsttSelectionRefresh.Capture(_settings));
 
-        if (!sameSelection || previousRoute == null || previousRoute == SelectedSubscriptionRoute())
+        var selectableAfter = SmpSelectableServerCount;
+        var routeChanged = sameSelection && previousRoute != null && previousRoute != SelectedSubscriptionRoute();
+        var willReconnect = routeChanged && generation == _connectionGeneration && IsConnected && IsSubscribeMode &&
+            !IsConnecting && !IsApplying && !_isReconnecting;
+
+        SubscriptionRefreshFeedbackKind resultKind;
+        if (succeededCount == 0)
+            resultKind = selectableAfter > 0 ? SubscriptionRefreshFeedbackKind.FailedCached : SubscriptionRefreshFeedbackKind.FailedEmpty;
+        else if (succeededCount < targets.Count)
+            resultKind = SubscriptionRefreshFeedbackKind.PartialFailure;
+        else if (IsConnected && IsSubscribeMode)
+            resultKind = !willReconnect
+                ? SubscriptionRefreshFeedbackKind.UpdatedConnectedUnchanged
+                : IsServiceManagedVpn
+                    ? SubscriptionRefreshFeedbackKind.UpdatedConnectedService
+                    : SubscriptionRefreshFeedbackKind.UpdatedConnectedReconnecting;
+        else
+            resultKind = SubscriptionRefreshFeedbackKind.UpdatedOffline;
+
+        SetSubscriptionRefreshFeedback(new(resultKind, selectableAfter, succeededCount, targets.Count, failedNames, DateTimeOffset.UtcNow));
+
+        if (!routeChanged)
         {
             RefreshActiveIndicator();
             OnPropertyChanged(nameof(SimpleStatusDescription));
             OnPropertyChanged(nameof(SimpleActiveOutboundLine));
             return;
         }
-        if (generation != _connectionGeneration || !IsConnected || !IsSubscribeMode || IsConnecting || IsApplying || _isReconnecting)
+        if (!willReconnect)
             return;
 
         var name = SelectedSubscriptionServer?.Name ?? "subscription";
@@ -441,6 +546,7 @@ public partial class MainWindowViewModel
                 SubscriptionServers.Add(new ServerViewModel(entry));
             ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
             ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
+            ServerViewModel.RefreshChainFlags(SubscriptionServers);
 
             SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault(row => !row.SourceEntry.IsTurnRelay);
             SaveSettings();

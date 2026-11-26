@@ -23,7 +23,8 @@ internal sealed partial class SimpleServerGroup : ObservableObject
         Category = category;
         Servers = servers;
         CanAutoSelect = servers.Any(row => SubscriptionServerPreference.CanAutoSelect(row.SourceEntry));
-        SelectionHint = CanAutoSelect ? string.Empty : servers.Any(row => row.CanSelectInSimpleMode)
+        HasSelectableServers = servers.Any(row => row.CanSelectInSimpleMode);
+        SelectionHint = CanAutoSelect ? string.Empty : HasSelectableServers
             ? Strings.SmpManualOnlyCategory : Strings.SmpServerUnsupported;
         Name = MainWindowViewModel.SimpleCategoryName(category);
         Protocols = DescribeProtocols(category, servers);
@@ -44,6 +45,8 @@ internal sealed partial class SimpleServerGroup : ObservableObject
     public string Protocols { get; }
     public ServerViewModel[] Servers { get; }
     public bool CanAutoSelect { get; }
+    public bool HasSelectableServers { get; }
+    public bool CanActivateCategory => CanAutoSelect || HasSelectableServers;
     public string SelectionHint { get; }
     public string AutoText => Strings.SmpAutoInCategory;
     public string AutoLabel => $"{Name}. {Strings.SmpSelectCategory}";

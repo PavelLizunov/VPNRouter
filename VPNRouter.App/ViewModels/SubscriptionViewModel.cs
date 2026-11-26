@@ -24,7 +24,11 @@ public partial class SubscriptionViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ServerCountText))]
     private int _lastServerCount;
 
-    public string ServerCountText => string.Format(VPNRouter.Core.Localization.Strings.SubsServersFormat, LastServerCount);
+    public int SelectableServerCount => _entry.Servers?.Count(s => !s.IsTurnRelay) ?? 0;
+
+    public string ServerCountText => string.Format(
+        VPNRouter.Core.Localization.Strings.SubsServersFormat,
+        _entry.Servers is { Count: > 0 } ? SelectableServerCount : LastServerCount);
     [ObservableProperty] private bool _isRefreshing;
 
     [ObservableProperty]

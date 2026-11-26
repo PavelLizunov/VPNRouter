@@ -75,6 +75,22 @@ public partial class MainWindow : Window
 
     private void OnResetWindowSizeClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => ResetWindowSize();
 
+    private void OnOpenVersionHistoryClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (this.FindControl<Button>("OverflowMenuButton")?.Flyout is { } flyout)
+            flyout.Hide();
+        if (DataContext is MainWindowViewModel vm)
+            vm.OpenVersionHistoryFromMenu();
+    }
+
+    private void RefreshMenuLabels()
+    {
+        if (this.FindControl<TextBlock>("MenuAppSectionLabel") is { } label)
+            label.Text = VPNRouter.Core.Localization.Strings.SmpMenuAppSection;
+        if (this.FindControl<Button>("MenuVersionHistoryButton") is { } history)
+            history.Content = VPNRouter.Core.Localization.Strings.SmpMenuVersionHistory;
+    }
+
     private void FitToScreen()
     {
         try
@@ -113,13 +129,17 @@ public partial class MainWindow : Window
                 if (change.NewValue is MainWindowViewModel current) current.PropertyChanged += OnViewModelPropertyChanged;
             }
             ApplyCompactTabs();
+            RefreshMenuLabels();
         }
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainWindowViewModel.IsRussian))
+        {
             ApplyCompactTabs();
+            RefreshMenuLabels();
+        }
     }
 
     private void ApplyCompactTabs()

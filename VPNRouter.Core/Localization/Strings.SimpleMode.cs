@@ -148,7 +148,9 @@ public static partial class Strings
     public static string SmpPinnedServerUnreachable => Ru
         ? "Закреплённый сервер не отвечает. Можно повторить подключение или выбрать другой."
         : "The pinned server is not responding. Retry the connection or choose another server.";
-    public static string SmpManualOnlyCategory => Ru ? "Выберите сервер вручную" : "Choose a server manually";
+    public static string SmpManualOnlyCategory => Ru
+        ? "Автоподбор недоступен — нажмите, чтобы выбрать сервер вручную"
+        : "Auto-select unavailable — click to pick a server manually";
     public static string SmpServerCountryByIp(string code) => Ru
         ? $"{code} · Страна по IP (DB-IP)"
         : $"{code} · Country by IP (DB-IP)";
@@ -164,21 +166,82 @@ public static partial class Strings
         ? "Выбранный сервер или категория недоступны. Выберите другой вариант."
         : "The selected server or category is unavailable. Choose another option.";
     public static string SmpCurrentServer           => Ru ? "Активен" : "Active";
-    public static string SmpSubscriptionLink => Ru ? "Ссылка подписки" : "Subscription link";
-    public static string SmpDirectLink => Ru ? "Ссылка сервера" : "Server link";
+    public static string SmpSubscriptionLink => Ru ? "Изменить ссылку" : "Change link";
+    public static string SmpDirectLink => Ru ? "Изменить ссылку" : "Change link";
     public static string SmpSaveLink => Ru ? "Сохранить ссылку" : "Save link";
     public static string SmpLinkInputInvalid => Ru ? "Вставьте действительную ссылку подписки или сервера." : "Enter a valid subscription or server link.";
     public static string SmpLinkSaved => Ru ? "Ссылка сохранена для следующего подключения." : "Link saved for the next connection.";
-    public static string SmpLinkSaving => Ru ? "Сохраняем ссылку…" : "Saving link…";
+    public static string SmpLinkSaving => Ru ? "Сохраняем и загружаем список…" : "Saving and loading list…";
     public static string SmpLinkSaveBusy => Ru ? "Дождитесь завершения подключения или применения настроек." : "Wait for the connection or settings change to finish.";
     public static string SmpLinkSaveStale => Ru ? "Состояние VPN изменилось. Повторите сохранение." : "The VPN state changed. Save the link again.";
-    public static string SmpCheckServers => Ru ? "Проверить серверы" : "Check servers";
+    public static string SmpCheckServers => Ru ? "Проверить серверы" : "Test servers";
     public static string SmpApplicationRules        => Ru ? "Настроить приложения" : "Configure app rules";
     public static string SmpPickServerHint          => Ru
         ? "Подключение берёт последний выбранный сервер, если он отвечает, иначе самый быстрый из рабочих."
         : "Connect uses the server you picked last if it answers, otherwise the fastest working one.";
     public static string SmpCheckPing => Ru ? "Проверить пинг" : "Check ping";
-    public static string SmpRefreshSubscriptions => Ru ? "Обновить подписки" : "Refresh subscriptions";
+    public static string SmpRefreshSubscriptions => Ru ? "Обновить список серверов" : "Refresh server list";
+    internal static string SmpRefreshUpdated(string count, string time) => Ru
+        ? $"Список обновлён · {count} · {time}"
+        : $"List updated · {count} · {time}";
+    internal static string SmpRefreshUpdatedConnectedUnchanged(string count) => Ru
+        ? $"Список обновлён ({count}). Текущее подключение не изменилось."
+        : $"List updated ({count}). Your active connection stayed unchanged.";
+    internal static string SmpRefreshUpdatedConnectedReconnecting => Ru
+        ? "Список обновлён. Переподключаем активный сервер…"
+        : "List updated. Reconnecting the active server…";
+    internal static string SmpRefreshUpdatedConnectedService => Ru
+        ? "Список обновлён. Изменения активного сервера вступят в силу после «Применить» или переподключения."
+        : "List updated. Active server changes take effect after Apply or reconnect.";
+    internal static string SmpRefreshPartialFailure(int ok, int total, string failedNames) => Ru
+        ? $"Обновлено {ok} из {total}. Не удалось обновить «{failedNames}» — сохранённый список доступен."
+        : $"Updated {ok} of {total}. Couldn't refresh “{failedNames}” — saved servers are still available.";
+    internal static string SmpRefreshFailedCached(string count) => Ru
+        ? $"Не удалось обновить список. Сохранённые серверы ({count}) по-прежнему доступны."
+        : $"Couldn't refresh the list. Saved servers ({count}) are still available.";
+    internal static string SmpRefreshFailedEmpty => Ru
+        ? "Не удалось загрузить серверы. Проверьте сеть или ссылку и повторите."
+        : "Couldn't load servers. Check your network or link and try again.";
+    internal static string SmpRefreshChainPreserved => Ru
+        ? "Прежний список сохранён: активная цепочка отсутствует в обновлённой подписке."
+        : "Kept the previous list: the active server chain is missing in the updated subscription.";
+    internal static string SmpRefreshBlockedConnecting => Ru
+        ? "Обновление недоступно, пока идёт подбор сервера. Дождитесь завершения или нажмите «Отмена»."
+        : "Refresh is unavailable while selecting a server. Wait for it to finish or press Cancel.";
+    internal static string SmpRefreshBlockedApplying => Ru
+        ? "Обновление недоступно, пока применяются настройки."
+        : "Refresh is unavailable while settings are being applied.";
+    internal static string SmpRefreshBlockedTesting => Ru
+        ? "Обновление недоступно во время проверки серверов. Дождитесь завершения или остановите проверку."
+        : "Refresh is unavailable while testing servers. Wait for it to finish or stop the test.";
+    internal static string SmpEmptySubTitle => Ru ? "Подписка без серверов" : "Subscription has no servers";
+    internal static string SmpEmptySubHint => Ru ? "Нажмите «Обновить список серверов»" : "Press “Refresh server list”";
+    internal static string SmpLinkSavedLoaded(string count) => Ru
+        ? $"Ссылка сохранена · загружено: {count}."
+        : $"Link saved · loaded: {count}.";
+    internal static string SmpLinkSavedConnected(string count) => Ru
+        ? $"Ссылка сохранена ({count}). Вступит в силу при следующем подключении."
+        : $"Link saved ({count}). Takes effect on the next connection.";
+    internal static string SmpLinkAlreadySaved => Ru
+        ? "Эта ссылка уже сохранена. Чтобы загрузить изменения, нажмите «Обновить список серверов»."
+        : "This link is already saved. Press “Refresh server list” to fetch changes.";
+    internal static string SmpTurnRelayBadge => Ru ? "Через TurnRelay" : "Via TurnRelay";
+    internal static string SmpTurnRelayTooltip => Ru
+        ? "Подключение идёт через промежуточный узел TurnRelay. Выбирается вручную; быстрый пинг и автоподбор недоступны."
+        : "Connects through a TurnRelay hop. Select manually; quick ping and auto-selection are not supported.";
+    internal static string SmpTurnRelayOnlyHopsTitle => Ru ? "Нет выходных серверов" : "No selectable exit servers";
+    internal static string SmpTurnRelayOnlyHops => Ru
+        ? "В подписке нет выходных серверов — получены только служебные узлы TurnRelay. Обновите подписку или обратитесь к провайдеру."
+        : "No selectable exit servers in this subscription — only TurnRelay hops were received. Refresh or contact your provider.";
+    internal static string SmpTurnRelayMissingHop => Ru
+        ? "Нет связанного узла TurnRelay — выберите другой сервер или обновите подписку."
+        : "Linked TurnRelay hop is missing — choose another server or refresh the subscription.";
+    internal static string SmpTurnRelayCoreRequired => Ru
+        ? "Для TurnRelay нужна совместимая версия ядра sing-box."
+        : "TurnRelay requires a compatible sing-box core.";
+    internal static string SmpApplyServiceNow => Ru ? "Применить" : "Apply";
+    internal static string SmpMenuAppSection => Ru ? "Приложение" : "App";
+    internal static string SmpMenuVersionHistory => Ru ? "История версий и откат…" : "Version history & rollback…";
     public static string SmpSetupCheckTitle         => Ru ? "Проверка настроек" : "Check my setup";
     public static string SmpSetupCheckSubtitle      => Ru
         ? "Маршрутизация, MTU и аварийное отключение, шаг за шагом"
