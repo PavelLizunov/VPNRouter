@@ -288,10 +288,11 @@ public static partial class CustomConfigInjector
         return (errors.Count == 0, errors);
     }
 
-    internal static (bool NeedsAwg, bool NeedsXhttp) DetectForkOnlyFeatures(JsonObject config)
+    internal static (bool NeedsAwg, bool NeedsXhttp, bool NeedsTurnRelay) DetectForkOnlyFeatures(JsonObject config)
     {
         var needsAwg = false;
         var needsXhttp = false;
+        var needsTurnRelay = false;
 
         if (config["endpoints"] is JsonArray endpoints)
             foreach (var ep in endpoints.OfType<JsonObject>())
@@ -300,10 +301,14 @@ public static partial class CustomConfigInjector
 
         if (config["outbounds"] is JsonArray outbounds)
             foreach (var ob in outbounds.OfType<JsonObject>())
+            {
                 if (StjNodeHelpers.AsString(ob["transport"]?["type"]) == "xhttp")
                     needsXhttp = true;
+                if (string.Equals(StjNodeHelpers.AsString(ob["type"]), "turnrelay", StringComparison.OrdinalIgnoreCase))
+                    needsTurnRelay = true;
+            }
 
-        return (needsAwg, needsXhttp);
+        return (needsAwg, needsXhttp, needsTurnRelay);
     }
 
     public static (string protocols, string server) ParseConfigInfo(string rawJson)

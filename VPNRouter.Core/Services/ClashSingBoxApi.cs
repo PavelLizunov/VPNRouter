@@ -82,54 +82,17 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
             await OpenControlSocketAsync(context.InitialRequestMessage.RequestUri!, ct).ConfigureAwait(false), ownsSocket: true)
     };
 
-    public async Task<bool> ReloadConfigAsync(string configPath, CancellationToken ct = default)
+    public Task<bool> ReloadConfigAsync(string configPath, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(configPath))
-        {
             _logger.Warning("[ClashSingBoxApi] ReloadConfigAsync called with empty configPath");
-            return false;
-        }
-
-        var body = JsonSerializer.Serialize(
-            new ClashSetConfigDto(configPath), Json.AppJsonContext.Default.ClashSetConfigDto);
-        var url = $"{_baseUrl}/configs?force=true";
-
-        try
-        {
-            using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            deadlineCts.CancelAfter(ReloadDeadline);
-
-            using var content = new StringContent(body, Encoding.UTF8, "application/json");
-            using var response = await _http.PutAsync(url, content, deadlineCts.Token).ConfigureAwait(false);
-
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.Information(
-                    "[ClashSingBoxApi] Hot-reload succeeded (HTTP {Code}) — TUN stays up",
-                    (int)response.StatusCode);
-                return true;
-            }
-
-            var respBody = await response.Content.ReadAsStringAsync(deadlineCts.Token).ConfigureAwait(false);
+        else
             _logger.Warning(
-                "[ClashSingBoxApi] Hot-reload HTTP {Code}: {Body}",
-                (int)response.StatusCode, respBody);
-            return false;
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            _logger.Debug("[ClashSingBoxApi] Hot-reload timed out after {Sec}s", ReloadDeadline.TotalSeconds);
-            return false;
-        }
-        catch (OperationCanceledException)
-        {
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug(ex, "[ClashSingBoxApi] Hot-reload unavailable ({Msg})", ex.Message);
-            return false;
-        }
+                "[ClashSingBoxApi] ReloadConfigAsync is unavailable — sing-box 1.14.4 accepts PUT /configs " +
+                "with HTTP 204 but does not apply the file; the caller must restart sing-box instead");
+
+        // Never report success from the legacy endpoint: a 204 here proves nothing.
+        return Task.FromResult(false);
     }
 
     public async Task<string?> GetVersionAsync(CancellationToken ct = default)

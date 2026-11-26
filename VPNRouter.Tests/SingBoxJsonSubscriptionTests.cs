@@ -114,6 +114,48 @@ public sealed class SingBoxJsonSubscriptionTests : IDisposable
     }
 
     [Fact]
+    public void ParseBody_TurnRelayHop_IsMappedAndChainsTheVlessTarget()
+    {
+        SingBoxFeatures.OverrideTurnRelay = true;
+        var fingerprint = new string('a', 64);
+        var body = Config(
+            "{\"type\":\"vless\",\"tag\":\"exit\",\"server\":\"exit.invalid\",\"server_port\":443," +
+            "\"uuid\":\"" + Uuid1 + "\",\"detour\":\"turnrelay-1\"}",
+            "{\"type\":\"turnrelay\",\"tag\":\"turnrelay-1\",\"server\":\"203.0.113.20\"," +
+            "\"server_port\":53492,\"turn_server\":\"192.0.2.10:3478\",\"turn_username\":\"user\"," +
+            "\"turn_password\":\"secret\",\"password\":\"exit-secret\",\"server_fingerprint\":\"" +
+            fingerprint + "\",\"connections\":2,\"mode\":\"dtls\",\"udp\":true," +
+            "\"provider\":\"static\",\"server_type\":\"exit\"}");
+
+        var result = SubscriptionFetcher.ParseBody(body);
+
+        var relay = Assert.Single(result, e => e.IsTurnRelay);
+        Assert.Equal("turnrelay-1", relay.OutboundId);
+        Assert.Equal("203.0.113.20", relay.Server);
+        Assert.Equal(53492, relay.Port);
+        Assert.Equal("192.0.2.10:3478", relay.TurnRelay!.TurnServer);
+        Assert.Equal(fingerprint, relay.TurnRelay.ServerFingerprint);
+        Assert.Equal("dtls", relay.TurnRelay.Mode);
+
+        var target = Assert.Single(result, e => e.Protocol == "vless");
+        Assert.Equal("turnrelay-1", target.DetourVia);
+        Assert.True(SubscriptionChainSelection.IsUsableChainTarget(target));
+    }
+
+    [Fact]
+    public void ParseBody_TurnRelayHop_WithUnknownOption_IsDropped()
+    {
+        SingBoxFeatures.OverrideTurnRelay = true;
+        var body = Config(
+            "{\"type\":\"turnrelay\",\"tag\":\"turnrelay-1\",\"server\":\"203.0.113.20\"," +
+            "\"server_port\":53492,\"turn_server\":\"192.0.2.10:3478\",\"turn_username\":\"user\"," +
+            "\"turn_password\":\"secret\",\"password\":\"exit-secret\",\"server_fingerprint\":\"" +
+            new string('a', 64) + "\",\"bind_interface\":\"eth0\"}");
+
+        Assert.Empty(SubscriptionFetcher.ParseBody(body));
+    }
+
+    [Fact]
     public void ParseBody_StructuralAndUnsupportedOutbounds_AreIgnored()
     {
         var body = Config(

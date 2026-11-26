@@ -29,6 +29,7 @@ public static class SimpleInputDetector
             trimmed.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("dns-tunnel://",  StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("dnstt://",       StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("turnrelay://",   StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("awg://",         StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("amneziawg://",   StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("awg3://",        StringComparison.OrdinalIgnoreCase) ||

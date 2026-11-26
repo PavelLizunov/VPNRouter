@@ -67,6 +67,7 @@ public class ProtocolGroupsTests
     [InlineData("dns-tunnel", null, ProtocolGroup.Emergency)]
     [InlineData("dnstt", null, ProtocolGroup.Emergency)]
     [InlineData("DNSTT", "ws", ProtocolGroup.Emergency)]
+    [InlineData("turnrelay", null, ProtocolGroup.Emergency)]
     [InlineData("VLESS", "XHTTP", ProtocolGroup.StealthWeb)]
     public void Of_MapsProtocolAndTransport(string protocol, string? transport, ProtocolGroup expected)
     {

@@ -112,7 +112,7 @@ public partial class MainWindowViewModel
         if (addedAny)
         {
             if (SelectedServer == null)
-                SelectedServer = Servers.FirstOrDefault();
+                SelectedServer = Servers.FirstOrDefault(row => !row.SourceEntry.IsTurnRelay);
             SaveSettings();
         }
 
@@ -129,7 +129,7 @@ public partial class MainWindowViewModel
         var wasSelected = ReferenceEquals(SelectedServer, entry);
         Servers.Remove(entry);
         if (wasSelected)
-            SelectedServer = Servers.FirstOrDefault();
+            SelectedServer = Servers.FirstOrDefault(row => !row.SourceEntry.IsTurnRelay);
 
         SaveSettings();
         _logger.Information(

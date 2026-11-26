@@ -67,6 +67,13 @@ public static partial class ConfigGenerator
             return chainedOutbounds;
         }
 
+        // A TurnRelay row is a hop only. It never joins a normal proxy pool, and a
+        // selection that resolves to nothing else fails closed instead of dialing it.
+        servers = servers.Where(server => !server.IsTurnRelay).ToList();
+        if (servers.Count == 0)
+            throw new InvalidOperationException(
+                "ConfigGenerator: the selected TurnRelay row is a chain entry only — select a VLESS target that detours through it.");
+
         if (servers.Any(server => server.Dnstt != null || string.Equals(server.Protocol, "dnstt", StringComparison.OrdinalIgnoreCase)))
         {
             if (servers.Count != 1)
@@ -180,6 +187,7 @@ public static partial class ConfigGenerator
     internal static bool IsServerRuntimeAvailable(VlessServerEntry server) =>
         (!string.Equals(server.Protocol, "naive", StringComparison.OrdinalIgnoreCase) || ServerUriParser.NaiveRuntimeAvailable) &&
         (!IsAwg(server) || SingBoxFeatures.AwgAvailable) &&
+        (!server.IsTurnRelay || SingBoxFeatures.TurnRelayAvailable) &&
         (!string.Equals(server.Transport?.Type, "xhttp", StringComparison.OrdinalIgnoreCase) || SingBoxFeatures.XhttpAvailable);
 
     private static List<VlessServerEntry> FilterUnavailableServers(List<VlessServerEntry> servers) =>
@@ -257,19 +265,23 @@ public static partial class ConfigGenerator
 
         var upstream = upstreams[0];
         var upstreamProto = (upstream.Protocol ?? "vless").ToLowerInvariant();
-        if (upstreamProto != "vless" || "xhttp".Equals(upstream.Transport?.Type, StringComparison.OrdinalIgnoreCase))
+        if (!upstream.IsTurnRelay &&
+            (upstreamProto != "vless" || "xhttp".Equals(upstream.Transport?.Type, StringComparison.OrdinalIgnoreCase)))
         {
             throw new InvalidOperationException(
-                "ConfigGenerator: chained upstream uses unsupported protocol/transport — only VLESS is supported.");
+                "ConfigGenerator: chained upstream uses unsupported protocol/transport — only VLESS and TurnRelay are supported.");
         }
 
-        if (targetProto == "vmess" && !SubscriptionChainSelection.IsUsableChainUpstream(upstream))
+        if ((upstream.IsTurnRelay || targetProto == "vmess") &&
+            !SubscriptionChainSelection.IsUsableChainUpstream(upstream))
         {
             throw new InvalidOperationException(
-                "ConfigGenerator: chained VMess target references an unusable upstream.");
+                "ConfigGenerator: chained target references an unusable upstream.");
         }
 
-        var upstreamOutbound = BuildVlessOutbound(upstream, "chain-entry");
+        var upstreamOutbound = upstream.IsTurnRelay
+            ? BuildTurnRelayOutbound(upstream, "chain-entry")
+            : BuildVlessOutbound(upstream, "chain-entry");
         var targetOutbound = BuildVlessOutbound(target, "proxy");
         targetOutbound.Detour = "chain-entry";
 

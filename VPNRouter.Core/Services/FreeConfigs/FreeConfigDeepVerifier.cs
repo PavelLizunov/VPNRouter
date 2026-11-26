@@ -86,7 +86,7 @@ public sealed class FreeConfigDeepVerifier
         ct.ThrowIfCancellationRequested();
         cfg.BeginDeepRecheck();
         var entry = ServerUriParser.TryParse(cfg.RawUri);
-        if (entry == null || !string.IsNullOrEmpty(entry.DetourVia))
+        if (entry == null || entry.IsTurnRelay || !string.IsNullOrEmpty(entry.DetourVia))
         {
             cfg.LastError = entry == null ? "invalid server entry" : DeepVerifyConstants.DetourNote;
             return;

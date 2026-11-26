@@ -65,7 +65,7 @@ Reference these in every contract; check them in every review.
 - **B1** One primary mutation at a time (VPN start/stop/reconnect/apply blocks
   conflicting lifecycle + config mutations; navigation + read-only allowed).
 - **B2** Persisted state ≠ runtime state (define per-mutation: persist now,
-  hot-reload, mark-pending, or block while starting/stopping; route service-owned
+  restart-apply, mark-pending, or block while starting/stopping; route service-owned
   changes through the service contract).
 - **B3** Convenience data never owns user data (user-owned preserved unless
   explicitly deleted; derived cache replaced/cleared atomically).

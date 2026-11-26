@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
@@ -21,6 +22,21 @@ public class HealthMonitor : IDisposable
     private ISingBoxApi _api;
 
     private IDisposable? _ownedApi;
+
+    internal Action<AppSettings>? ReapplyUnixDnsOnRestart { get; set; }
+
+    // The live session controller is authoritative across regenerated recovery
+    // configs. On macOS the privileged contract mints a secret for a blank
+    // document, so regenerating must reuse the accepted bearer, not a new one.
+    private string? _activeControllerSecret;
+
+    // A started replacement whose bounded tag check did not finish stays armed
+    // until a later reconcile request confirms the controller serves the document.
+    private string? _pendingConfigConfirmation;
+
+    // A strict-DNS replacement that started unconfirmed must still update the
+    // in-memory failover state once that same document is later accepted.
+    private bool? _pendingStrictDnsFailOpen;
 
     private readonly IWindowsDnsHardening _dnsHardening;
 
@@ -90,6 +106,7 @@ public class HealthMonitor : IDisposable
         _settings = settings;
         _logger = logger ?? Log.Logger;
         _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
+        _activeControllerSecret = clashApiSecret;
 
         if (api is not null)
         {
@@ -123,6 +140,8 @@ public class HealthMonitor : IDisposable
         _isStopping = false;
         _shouldBeRunning = true;
         _servingConfirmed = false; _wedgeStreak = 0;
+        _pendingConfigConfirmation = null;
+        _pendingStrictDnsFailOpen = null;
         _lastScan = initialScan;
 
         var intervalSeconds = appSettings.App.StrictMode ? 5 : _settings.HealthCheckInterval;
@@ -139,7 +158,8 @@ public class HealthMonitor : IDisposable
     }
 
     internal void ResumeAfterApply(Profile profile, AppSettings settings, ScanResult? scan,
-        (Uri Endpoint, string? Secret)? controller = null, Action? commit = null)
+        (Uri Endpoint, string? Secret)? controller = null, Action? commit = null,
+        bool strictDnsFailedOver = false)
     {
         lock (_settingsWork)
         {
@@ -160,7 +180,11 @@ public class HealthMonitor : IDisposable
                 throw;
             }
 
-            if (controller is { } accepted) _singBox.SetClashController(accepted);
+            if (controller is { } accepted)
+            {
+                _activeControllerSecret = accepted.Secret;
+                _singBox.SetClashController(accepted);
+            }
             if (candidateApi != null)
             {
                 var oldApi = _ownedApi;
@@ -168,7 +192,7 @@ public class HealthMonitor : IDisposable
                 _ownedApi = candidateApi;
                 oldApi?.Dispose();
             }
-            _strictDnsFailedOver = false;
+            _strictDnsFailedOver = strictDnsFailedOver;
             _strictDnsUnhealthyStreak = _strictDnsHealthyStreak = 0;
         }
     }
@@ -180,9 +204,21 @@ public class HealthMonitor : IDisposable
                 !_isStopping && _shouldBeRunning;
     }
 
-    internal void PauseForApply()
+    internal bool PauseForApply()
     {
-        lock (_settingsWork) StopCore(preserveFirewallRelease: true);
+        lock (_settingsWork)
+        {
+            var strictDnsFailedOver = _pendingStrictDnsFailOpen ?? _strictDnsFailedOver;
+            StopCore(preserveFirewallRelease: true);
+            return strictDnsFailedOver;
+        }
+    }
+
+    internal void ScheduleBlockRuleReleaseRetry()
+    {
+        if (_firewall is not MacFirewallManager) return;
+        _lastFullRestart = DateTime.UtcNow;
+        Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
     }
 
     internal bool TryRetireForFailover(Func<bool> retire)
@@ -212,6 +248,8 @@ public class HealthMonitor : IDisposable
         _isStopping = true;
         _shouldBeRunning = false;
         _unhealthyHealthProbeStreak = 0;
+        _pendingConfigConfirmation = null;
+        _pendingStrictDnsFailOpen = null;
 
         if (!preserveFirewallRelease)
         {
@@ -294,21 +332,34 @@ public class HealthMonitor : IDisposable
                 var sinceRestart = DateTime.UtcNow - _lastFullRestart;
                 var clashServing = Serving();
                 var fallbackElapsed = sinceRestart >= DeferredDisableMaxWait;
-                if ((clashServing || fallbackElapsed)
+
+                // A restart that started but could not finish its bounded tag
+                // check is reconciled here: the controller is asked again for
+                // the applied outbound tags before the block rules are lifted.
+                if (_pendingConfigConfirmation is { } pending && clashServing &&
+                    _singBox.VerifyAppliedConfigTags(pending, logFailure: false))
+                {
+                    CommitPendingConfigConfirmation();
+                }
+
+                var confirmationComplete = _pendingConfigConfirmation == null;
+                var releaseReady = confirmationComplete ? clashServing || fallbackElapsed : clashServing && fallbackElapsed;
+                if (releaseReady
                     && System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0) == 1)
                 {
                     try
                     {
-                        var released = true;
-                        if (_firewall is MacFirewallManager macFirewall)
-                            released = macFirewall.TryDisableBlockRules();
-                        else
-                            _firewall.DisableBlockRules();
-
+                        ReapplyUnixDnsOnRestart?.Invoke(_appSettings);
+                        var released = TryReleaseBlockRules();
                         if (released)
+                        {
+                            // The fallback window elapsed with the started runtime
+                            // still in place: accept its pending strict-DNS state too.
+                            CommitPendingConfigConfirmation();
                             _logger.Information(
-                                "[HealthMonitor] Kill-switch block rules lifted after restart — TUN serving confirmed (clashApi={Clash}, fallback={Fallback}, +{Secs:F0}s)",
+                                "[HealthMonitor] Kill-switch block rules lifted after restart (clashApi={Clash}, fallback={Fallback}, +{Secs:F0}s)",
                                 clashServing, fallbackElapsed, sinceRestart.TotalSeconds);
+                        }
                         else
                             Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
                     }
@@ -404,6 +455,11 @@ public class HealthMonitor : IDisposable
         if ((!soleDriver && !_strictDnsFailedOver) || scan is null)
             return;
 
+        // Wait for the deferred controller confirmation before replacing the
+        // runtime again; the health tick reconciles pending tags.
+        if (_pendingConfigConfirmation != null)
+            return;
+
         bool proxyOk = ProxyReachable();
         if (proxyOk) { _strictDnsHealthyStreak++; _strictDnsUnhealthyStreak = 0; }
         else { _strictDnsUnhealthyStreak++; _strictDnsHealthyStreak = 0; }
@@ -422,16 +478,28 @@ public class HealthMonitor : IDisposable
         {
             var configJson = GenerateConfigJson(scan.ProcessNames.ToList(),
                 strictDnsFailedOverOverride: failOpen);
-            var reloaded = TryHotReloadViaApi(configJson);
+            var state = ApplyConfigWithRestart(configJson);
 
-            if (!reloaded)
+            if (state == ConfigApplyState.StartedUnconfirmed)
             {
+                // The new document is live even though the bounded tag check
+                // timed out. Keep the target so confirmation commits it.
+                _pendingStrictDnsFailOpen = failOpen;
                 _logger.Warning(
-                    "[HealthMonitor] StrictDns failover hot-reload FAILED (target fail-open={FailOpen}) — leaving state unchanged; will retry next tick",
+                    "[HealthMonitor] StrictDns failover started but is not yet confirmed (target fail-open={FailOpen}) — retaining the previous in-memory state until the health reconcile accepts the document",
                     failOpen);
                 return;
             }
 
+            if (state == ConfigApplyState.NotStarted)
+            {
+                _logger.Warning(
+                    "[HealthMonitor] StrictDns failover restart did not start (target fail-open={FailOpen}) — leaving state unchanged; will retry next tick",
+                    failOpen);
+                return;
+            }
+
+            _pendingStrictDnsFailOpen = null;
             _strictDnsFailedOver = failOpen;
 
             if (failOpen)
@@ -482,6 +550,8 @@ public class HealthMonitor : IDisposable
         _unhealthyHealthProbeStreak = 0;
         _servingConfirmed = false; _wedgeStreak = 0;
         _vpnWasRunning = false;
+        _pendingConfigConfirmation = null;
+        _pendingStrictDnsFailOpen = null;
 
         try { _firewall.EnableBlockRules(); }
         catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to enable firewall block rules on crash"); }
@@ -578,84 +648,80 @@ public class HealthMonitor : IDisposable
         _logger.Warning("[HealthMonitor] Restarting sing-box (attempt {N}/{Max}) in {Delay}ms",
             attempt, _settings.MaxRestartAttempts, delayMs);
 
-        Task.Delay(delayMs, ct).ContinueWith(_ => RunForActiveSettings(() =>
-        {
-            if (ct.IsCancellationRequested || _isStopping) return;
+        Task.Delay(delayMs, ct).ContinueWith(_ =>
+            RunForActiveSettings(() => RunScheduledRestart(ct)), CancellationToken.None);
+    }
 
-            if (_singBox.IsRunning())
+    private void RunScheduledRestart(CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested || _isStopping) return;
+
+        if (_singBox.IsRunning())
+        {
+            _logger.Debug("[HealthMonitor] sing-box already running — skipping scheduled restart");
+            lock (_attemptRestartLock) { _restartAttempts = 0; }
+            return;
+        }
+
+        try
+        {
+            var scan = _scanner.ScanForProfile(_activeProfile);
+            var configJson = GenerateConfigJson(scan.ProcessNames);
+
+            if (!RunTunOrphanRecoveryCleanup(ct)) return;
+
+            if (ct.IsCancellationRequested || _isStopping)
             {
-                _logger.Debug("[HealthMonitor] sing-box already running — skipping scheduled restart");
-                lock (_attemptRestartLock) { _restartAttempts = 0; }
+                _logger.Information("[HealthMonitor] Stop requested during restart prep — aborting sing-box revival");
                 return;
             }
 
+            var managedSingBoxRunning = _singBox.IsRunning();
+            if (!managedSingBoxRunning && OperatingSystem.IsWindows() && ProcessOwnership.AnySingBoxOwned())
+            {
+                _logger.Warning(
+                    "[HealthMonitor] Managed sing-box handle is gone but a VPNRouter-owned sing-box is still running — killing orphan before full restart");
+                try { OrphanCleanup.KillOrphans(_logger, respectTunLock: false); }
+                catch (Exception cleanupEx) { _logger.Warning(cleanupEx, "[HealthMonitor] Orphan sing-box cleanup failed before full restart"); }
+            }
+
+            // Never trust the legacy 204 reload: arm the kill switch, restart
+            // with the regenerated document, and keep the block rules deferred
+            // once the new runtime has started. A start which could not finish
+            // its bounded tag check is still a started runtime, not a failure.
             try
             {
-                var scan = _scanner.ScanForProfile(_activeProfile);
-                var configJson = GenerateConfigJson(scan.ProcessNames);
-
-                if (!RunTunOrphanRecoveryCleanup(ct)) return;
-
-                if (ct.IsCancellationRequested || _isStopping)
-                {
-                    _logger.Information("[HealthMonitor] Stop requested during restart prep — aborting sing-box revival");
-                    return;
-                }
-
-                var managedSingBoxRunning = _singBox.IsRunning();
-                if (!managedSingBoxRunning && OperatingSystem.IsWindows() && ProcessOwnership.AnySingBoxOwned())
+                var freshScan = _scanner.ScanForProfile(_activeProfile);
+                configJson = GenerateConfigJson(freshScan.ProcessNames);
+                scan = freshScan;
+                _pendingStrictDnsFailOpen = null;
+                var state = ApplyConfigWithProtection(configJson, releaseWhenNotStarted: false);
+                if (state == ConfigApplyState.NotStarted)
                 {
                     _logger.Warning(
-                        "[HealthMonitor] Managed sing-box handle is gone but a VPNRouter-owned sing-box is still running — killing orphan before full restart");
-                    try { OrphanCleanup.KillOrphans(_logger, respectTunLock: false); }
-                    catch (Exception cleanupEx) { _logger.Warning(cleanupEx, "[HealthMonitor] Orphan sing-box cleanup failed before full restart"); }
+                        "[HealthMonitor] Restart attempt {N} did not start a replacement — keeping the previous scan and kill-switch block rules",
+                        _restartAttempts);
+                    return;
                 }
-
-                var hotReloaded = managedSingBoxRunning && TryHotReloadViaApi(configJson);
-                if (!managedSingBoxRunning)
-                    _logger.Warning("[HealthMonitor] Hot-reload skipped on restart attempt — no managed sing-box process; performing full restart");
-                if (!hotReloaded)
-                {
-                    _logger.Warning("[HealthMonitor] Hot-reload unavailable on restart attempt — performing full restart");
-                    if (_firewall is MacFirewallManager macFirewall)
-                        macFirewall.EnableBlockRules();
-                    try
-                    {
-                        var freshScan = _scanner.ScanForProfile(_activeProfile);
-                        configJson = GenerateConfigJson(freshScan.ProcessNames);
-                        scan = freshScan;
-                        _singBox.ReloadConfigJson(configJson, forceRestart: true);
-                    }
-                    catch (Exception) when (!_singBox.HasActiveTunnel)
-                    {
-                        _logger.Warning(
-                            "[HealthMonitor] Config regen before full restart failed — " +
-                            "falling back to relaunch of last-good on-disk config");
-                        _singBox.Restart();
-                    }
-                }
-                _lastScan = scan;
-                _lastFullRestart = DateTime.UtcNow;
-
-                if (hotReloaded)
-                {
-                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
-                    try { _firewall.DisableBlockRules(); }
-                    catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to disable firewall block rules after hot-reload"); }
-                }
-                else
-                {
-                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
-                    _logger.Information("[HealthMonitor] Full restart done — deferring kill-switch lift until health confirmed");
-                }
-
-                _logger.Information("[HealthMonitor] sing-box restarted successfully");
             }
-            catch (Exception ex)
+            catch (Exception) when (!_singBox.HasActiveTunnel)
             {
-                _logger.Error("[HealthMonitor] Restart attempt {N} failed ({ExceptionType})", _restartAttempts, ex.GetType().Name);
+                _logger.Warning(
+                    "[HealthMonitor] Config regen before full restart failed — " +
+                    "falling back to relaunch of last-good on-disk config");
+                _singBox.Restart();
+                _lastFullRestart = DateTime.UtcNow;
+                Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+                _logger.Information("[HealthMonitor] Fallback restart done — deferring kill-switch lift until health confirmed");
             }
-        }), CancellationToken.None);
+
+            _lastScan = scan;
+            _logger.Information("[HealthMonitor] Restart attempt {N} advanced the active scan", _restartAttempts);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("[HealthMonitor] Restart attempt {N} failed ({ExceptionType})", _restartAttempts, ex.GetType().Name);
+        }
     }
 
     internal bool RunTunOrphanRecoveryCleanup(CancellationToken ct)
@@ -698,23 +764,125 @@ public class HealthMonitor : IDisposable
         }
     }
 
-    internal Func<string, bool>? HotReloadHookForTests { get; set; }
+    internal Func<string, bool>? ReloadHookForTests { get; set; }
 
-    private bool TryHotReloadViaApi(string configJson)
+    internal Func<string, ConfigApplyState>? ReloadOutcomeHookForTests { get; set; }
+
+    /// <summary>
+    /// Applies a config with a real restart and the manager's bounded controller
+    /// tag check. There is no hot-reload fallback: a legacy 204 response is not
+    /// evidence that the document was applied.
+    /// </summary>
+    private ConfigApplyState ApplyConfigWithRestart(string configJson) =>
+        ApplyConfigWithProtection(configJson, releaseWhenNotStarted: true);
+
+    private ConfigApplyState ApplyConfigWithProtection(string configJson, bool releaseWhenNotStarted)
     {
-        if (HotReloadHookForTests is { } hook)
-            return hook(configJson);
+        var previousRuntime = _singBox.CaptureRuntimeIdentity();
 
-        var path = _singBox.WriteConfigToDisk(configJson);
+        // A replacement briefly stops the only runtime. Arm the configured
+        // kill switch first so the gap cannot carry direct traffic.
+        try { _firewall.EnableBlockRules(); }
+        catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to arm firewall block rules before a restart"); }
+
+        var state = ApplyConfigWithRestartCore(configJson);
+        if (state == ConfigApplyState.NotStarted)
+        {
+            // A failed replacement can happen after the old runtime was already
+            // stopped. Lift only when the exact prior runtime is demonstrably
+            // alive; otherwise keep the kill switch armed.
+            if (releaseWhenNotStarted && Volatile.Read(ref _deferredBlockRuleDisable) == 0)
+            {
+                if (_singBox.IsRuntimeIdentityLive(previousRuntime))
+                {
+                    try
+                    {
+                        if (!TryReleaseBlockRules())
+                        {
+                            Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+                            _logger.Warning("[HealthMonitor] Previous runtime survived the unstarted replacement but block-rule release was not confirmed — will retry on the health tick");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+                        _logger.Error(ex, "[HealthMonitor] Failed to release firewall block rules after an unstarted restart");
+                    }
+                }
+                else
+                {
+                    _logger.Warning(
+                        "[HealthMonitor] Replacement did not start and the previous runtime is not confirmed live — keeping the kill switch armed");
+                }
+            }
+            return state;
+        }
+
+        _lastFullRestart = DateTime.UtcNow;
+        Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+        if (state == ConfigApplyState.Confirmed)
+        {
+            _pendingConfigConfirmation = null;
+            _logger.Information("[HealthMonitor] Config replacement confirmed — deferring kill-switch lift until health confirmed");
+        }
+        else
+        {
+            _pendingConfigConfirmation = configJson;
+            _logger.Warning(
+                "[HealthMonitor] Restart started but controller tag confirmation did not finish — keeping the kill switch armed and deferring its lift to the next health reconcile");
+        }
+        return state;
+    }
+
+    private ConfigApplyState ApplyConfigWithRestartCore(string configJson)
+    {
+        if (ReloadOutcomeHookForTests is { } outcomeHook)
+            return outcomeHook(configJson);
+        if (ReloadHookForTests is { } hook)
+            return hook(configJson) ? ConfigApplyState.Confirmed : ConfigApplyState.NotStarted;
+
         try
         {
-            return _api.ReloadConfigAsync(path).GetAwaiter().GetResult();
+            return _singBox.ReloadConfigJsonWithOutcome(configJson, forceRestart: true);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            _logger.Debug("[HealthMonitor] ISingBoxApi.ReloadConfigAsync threw — returning false");
-            return false;
+            _logger.Warning(ex, "[HealthMonitor] Controlled restart threw ({ExceptionType})", ex.GetType().Name);
+            return ConfigApplyState.NotStarted;
         }
+    }
+
+    private bool TryReleaseBlockRules()
+    {
+        if (_firewall is MacFirewallManager macFirewall)
+            return macFirewall.TryDisableBlockRules();
+
+        _firewall.DisableBlockRules();
+        return true;
+    }
+
+    private void CommitPendingConfigConfirmation()
+    {
+        _pendingConfigConfirmation = null;
+        if (_pendingStrictDnsFailOpen is not { } failOpen)
+            return;
+
+        _pendingStrictDnsFailOpen = null;
+        if (_strictDnsFailedOver == failOpen)
+            return;
+
+        _strictDnsFailedOver = failOpen;
+        if (failOpen)
+        {
+            _logger.Warning(
+                "[HealthMonitor] Deferred StrictDns failover accepted (fail-open) — DNS stays on the direct resolver");
+        }
+        else
+        {
+            _logger.Information(
+                "[HealthMonitor] Deferred StrictDns re-arm accepted — all DNS is back through the tunnel");
+        }
+        StrictDnsFailoverChanged?.Invoke(this, failOpen);
     }
 
     private void OnDebounceElapsed(object? state) => RunForActiveSettings(RescanProcesses);
@@ -746,36 +914,36 @@ public class HealthMonitor : IDisposable
 
             _restartCts?.Cancel();
 
+            // This document supersedes any unconfirmed strict-DNS transition.
+            _pendingStrictDnsFailOpen = null;
+
             var configJson = GenerateConfigJson(newScan.ProcessNames);
 
-            if (TryHotReloadViaApi(configJson))
+            var sinceLastRestart = DateTime.UtcNow - _lastFullRestart;
+            if (sinceLastRestart < RestartCooldown)
             {
-                _lastScan = newScan;
-                _restartAttempts = 0;
-                _logger.Information("[HealthMonitor] Hot-reload succeeded with {Count} processes", newFiltered.Count);
+                _logger.Warning(
+                    "[HealthMonitor] Process list changed but restart cooldown is active ({Remaining}s left) — keeping the previous scan",
+                    (int)(RestartCooldown - sinceLastRestart).TotalSeconds);
+                return;
             }
-            else
+
+            var state = ApplyConfigWithRestart(configJson);
+            if (state == ConfigApplyState.NotStarted)
             {
-                var sinceLastRestart = DateTime.UtcNow - _lastFullRestart;
-                if (sinceLastRestart < RestartCooldown)
-                {
-                    _logger.Warning("[HealthMonitor] Hot-reload failed, but cooldown active ({Remaining}s left) — deferring full restart",
-                        (int)(RestartCooldown - sinceLastRestart).TotalSeconds);
-                    _lastScan = newScan;
-                }
-                else
-                {
-                    _logger.Warning("[HealthMonitor] Hot-reload failed — performing full restart");
-                    _lastFullRestart = DateTime.UtcNow;
-                    try { _firewall.EnableBlockRules(); }
-                    catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to enable block rules before debounce restart"); }
-                    _singBox.Restart();
-                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
-                    _lastScan = newScan;
-                    _restartAttempts = 0;
-                    _logger.Information("[HealthMonitor] Full restart completed with {Count} processes", newFiltered.Count);
-                }
+                // The old runtime and its scan are still active: never record an
+                // unapplied process list as if the restart had succeeded.
+                _logger.Warning(
+                    "[HealthMonitor] Restart for the new process list did not start — keeping the previous scan");
+                return;
             }
+
+            _lastScan = newScan;
+            _restartAttempts = 0;
+            _logger.Information(
+                "[HealthMonitor] Process-list replacement {State} with {Count} processes",
+                state == ConfigApplyState.Confirmed ? "confirmed" : "started; controller confirmation deferred",
+                newFiltered.Count);
         }
         catch (Exception ex)
         {
@@ -796,7 +964,7 @@ public class HealthMonitor : IDisposable
                     ConfigGenerator.RejectMissingRuleSet, _singBox.CheckRuleSetAsync);
                 if (!_singBox.CheckCandidateAsync(json, CancellationToken.None).GetAwaiter().GetResult())
                     throw new InvalidOperationException("The imported VPN configuration failed native validation.");
-                return json;
+                return PinActiveControllerSecret(json);
             }
 
             if (AcceptedImportJson is { } accepted) return CheckImport(accepted);
@@ -805,7 +973,7 @@ public class HealthMonitor : IDisposable
             throw new InvalidOperationException("The selected custom VPN configuration is missing.");
         }
 
-        return ConfigPipeline.Generate(
+        var generated = ConfigPipeline.Generate(
             _activeProfile,
             processNames,
             _appSettings,
@@ -815,6 +983,23 @@ public class HealthMonitor : IDisposable
             strictDnsOverride: (strictDnsFailedOverOverride ?? _strictDnsFailedOver) ? false : (bool?)null,
             onMissingRuleSet: ConfigGenerator.RejectMissingRuleSet,
             checkRuleSet: _singBox.CheckRuleSetAsync);
+        return PinActiveControllerSecret(generated);
+    }
+
+    private string PinActiveControllerSecret(string configJson)
+    {
+        // A recovery document must keep the bearer the live controller accepted.
+        // This is session memory only: the secret is never logged here.
+        if (string.IsNullOrEmpty(_activeControllerSecret))
+            return configJson;
+
+        if (JsonNode.Parse(configJson) is not JsonObject root ||
+            root["experimental"] is not JsonObject experimental ||
+            experimental["clash_api"] is not JsonObject clashApi)
+            throw new InvalidOperationException("The recovery configuration is missing the active controller.");
+
+        clashApi["secret"] = _activeControllerSecret;
+        return root.ToJsonString();
     }
 
     private static List<string> FilterForSingBox(IEnumerable<string> names) =>

@@ -514,6 +514,16 @@ public class HeadlessRuntimePolicyTests : IDisposable
     }
 
     [Fact]
+    public void TurnRelayCapability_IsAdvertisedOnlyForPackagedRuntime()
+    {
+        var fixturePath = Path.Combine(_testDataDir, "sing-box");
+        var fixture = SingBoxRuntimePolicy.ForTestFile(fixturePath, new string('a', 64));
+
+        Assert.True(SingBoxRuntimePolicy.DefaultProduction.TurnRelayAvailable);
+        Assert.False(fixture.TurnRelayAvailable);
+    }
+
+    [Fact]
     public void CallbackReentrancy_DeniesRecursiveAuthorization_DoesNotStackOverflow()
     {
         var tempFile = Path.Combine(_testDataDir, "reentrant-sb-" + Guid.NewGuid().ToString("N") + ".bin");

@@ -26,10 +26,19 @@ public static class SubscriptionFetcher
             ["X-VPNRouter-Capabilities"] = "detour-v1, vmess-v1"
         };
 
-    private static IReadOnlyDictionary<string, string> GetSubscriptionHeaders(bool secure) =>
-        secure && SingBoxFeatures.DnsttAvailable
-            ? new Dictionary<string, string> { ["X-VPNRouter-Capabilities"] = "detour-v1, dnstt-v1, vmess-v1" }
-            : SubscriptionHeaders;
+    private static IReadOnlyDictionary<string, string> GetSubscriptionHeaders(bool secure)
+    {
+        if (!secure) return SubscriptionHeaders;
+
+        var capabilities = new List<string> { "detour-v1" };
+        if (SingBoxFeatures.DnsttAvailable) capabilities.Add("dnstt-v1");
+        if (SingBoxFeatures.TurnRelayAvailable) capabilities.Add("turnrelay-v1");
+        capabilities.Add("vmess-v1");
+        return new Dictionary<string, string>
+        {
+            ["X-VPNRouter-Capabilities"] = string.Join(", ", capabilities),
+        };
+    }
 
     public static async Task<List<VlessServerEntry>> FetchAsync(string url, ILogger? logger = null, CancellationToken ct = default)
     {
@@ -86,8 +95,8 @@ public static class SubscriptionFetcher
                 return (result, 0, userInfo, false);
             }
 
-            var allowDnstt = secure && (httpResp.FinalUri ?? parsedUri).Scheme == Uri.UriSchemeHttps;
-            result = ParseBody(response, out droppedPlaceholders, out skippedChains, logger, allowDnstt);
+            var allowSecureTransports = secure && (httpResp.FinalUri ?? parsedUri).Scheme == Uri.UriSchemeHttps;
+            result = ParseBody(response, out droppedPlaceholders, out skippedChains, logger, allowSecureTransports);
 
             if (droppedPlaceholders > 0)
             {
@@ -114,12 +123,12 @@ public static class SubscriptionFetcher
         ParseBody(responseBody, out droppedPlaceholders, out _, logger);
 
     private static List<VlessServerEntry> ParseBody(
-        string responseBody, out int droppedPlaceholders, out bool skippedChains, ILogger? logger, bool allowDnstt = true)
+        string responseBody, out int droppedPlaceholders, out bool skippedChains, ILogger? logger, bool allowSecureTransports = true)
     {
         var lines = DecodeToShareUris(responseBody, logger, out skippedChains);
         if (skippedChains)
             logger?.Warning("[Subscription] Skipped entries with an unsupported proxy chain");
-        var result = DeduplicateServers(ParseShareUris(lines, logger, out droppedPlaceholders, allowDnstt), logger);
+        var result = DeduplicateServers(ParseShareUris(lines, logger, out droppedPlaceholders, allowSecureTransports), logger);
 
         if (result.Count >= 500)
             logger?.Warning("[Subscription] Large subscription: {Count} servers — may impact performance", result.Count);
@@ -186,15 +195,17 @@ public static class SubscriptionFetcher
     }
 
     private static List<VlessServerEntry> ParseShareUris(
-        IEnumerable<string> lines, ILogger? logger, out int droppedPlaceholders, bool allowDnstt)
+        IEnumerable<string> lines, ILogger? logger, out int droppedPlaceholders, bool allowSecureTransports)
     {
         droppedPlaceholders = 0;
         var result = new List<VlessServerEntry>();
 
         foreach (var line in lines)
         {
-            if ((!allowDnstt && line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
-                || !ServerUriParser.IsSupportedScheme(line))
+            if (!allowSecureTransports && (line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            if (!ServerUriParser.IsSupportedScheme(line))
                 continue;
 
             try
@@ -254,7 +265,17 @@ public static class SubscriptionFetcher
         string? DnsttDomain,
         string? DnsttNoiseKey,
         string? DnsttSshHostKey,
-        string? DnsttSshPrivateKey);
+        string? DnsttSshPrivateKey,
+        string? TurnRelayProvider,
+        string? TurnRelayServerType,
+        string? TurnRelayServer,
+        string? TurnRelayUsername,
+        string? TurnRelayPassword,
+        string? TurnRelayTargetPassword,
+        string? TurnRelayFingerprint,
+        int? TurnRelayConnections,
+        string? TurnRelayMode,
+        bool? TurnRelayUdp);
 
     private static ServerDedupKey DedupeKey(VlessServerEntry entry)
     {
@@ -283,7 +304,17 @@ public static class SubscriptionFetcher
             DnsttDomain: entry.Dnstt?.Domain,
             DnsttNoiseKey: entry.Dnstt?.NoiseKey,
             DnsttSshHostKey: entry.Dnstt?.SshHostKey,
-            DnsttSshPrivateKey: entry.Dnstt?.SshPrivateKey);
+            DnsttSshPrivateKey: entry.Dnstt?.SshPrivateKey,
+            TurnRelayProvider: entry.TurnRelay?.Provider,
+            TurnRelayServerType: entry.TurnRelay?.ServerType,
+            TurnRelayServer: entry.TurnRelay?.TurnServer,
+            TurnRelayUsername: entry.TurnRelay?.TurnUsername,
+            TurnRelayPassword: entry.TurnRelay?.TurnPassword,
+            TurnRelayTargetPassword: entry.TurnRelay?.Password,
+            TurnRelayFingerprint: entry.TurnRelay?.ServerFingerprint,
+            TurnRelayConnections: entry.TurnRelay?.Connections,
+            TurnRelayMode: entry.TurnRelay?.Mode,
+            TurnRelayUdp: entry.TurnRelay?.Udp);
     }
 
     public static async Task<int> RefreshEntryAsync(
@@ -340,7 +371,7 @@ internal sealed class NativeSubscriptionRows
         private VlessServerEntry? _parsed;
         private bool? _usableUpstream;
         private bool? _usableTarget;
-        private VlessServerEntry? Parsed => _parsed ??= ShareUri is null ? null : ServerUriParser.TryParse(ShareUri);
+        internal VlessServerEntry? Parsed => _parsed ??= ShareUri is null ? null : ServerUriParser.TryParse(ShareUri);
         public bool IsUsableUpstream => _usableUpstream ??=
             canChain && Parsed is { } upstream && SubscriptionChainSelection.IsUsableChainUpstream(upstream);
         public bool IsUsableTarget => _usableTarget ??=
@@ -376,8 +407,19 @@ internal sealed class NativeSubscriptionRows
                 continue;
             }
 
-            upstream.OutboundId ??= Guid.NewGuid().ToString("N");
-            target.DetourId = upstream.OutboundId;
+            if (upstream.Parsed is { IsTurnRelay: true } relay)
+            {
+                // The TurnRelay payload already carries its own `id`; the target must
+                // reference that exact opaque id and the payload must never gain a
+                // query string, which would corrupt its base64url document.
+                upstream.OutboundId = relay.OutboundId;
+                target.DetourId = relay.OutboundId;
+            }
+            else
+            {
+                upstream.OutboundId ??= Guid.NewGuid().ToString("N");
+                target.DetourId = upstream.OutboundId;
+            }
             target.OutboundId = Guid.NewGuid().ToString("N");
         }
 
@@ -386,7 +428,8 @@ internal sealed class NativeSubscriptionRows
         {
             if (row.ShareUri is null || (row.Via is not null && row.DetourId is null)) continue;
             var uri = row.ShareUri;
-            if (row.OutboundId is not null)
+            if (row.OutboundId is not null &&
+                !uri.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             {
                 if (uri.StartsWith(VmessUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
                 {

@@ -377,32 +377,81 @@ public partial class VpnEngine : IDisposable
         var configCommitted = false;
         var previousSettings = _failoverSettingsContext;
         bool pausedHealth = false;
+        bool pausedStrictDnsFailedOver = false;
         bool pausedTelemetry = false;
         string? lastGoodJson = null;
-        IProcessHandle? previousServiceHandle = null;
+        SingBoxManager.RuntimeIdentity? replacementRuntimeIdentity = null;
         bool rolledBack = false;
+        bool applyProtectionArmed = false;
         IProcessHandle? confirmedServiceHandle = null;
 
-        void RestoreActiveBaseline()
+        bool ReplacementStarted() => replacementRuntimeIdentity is { } identity &&
+            !_singBox.IsSameRuntimeIdentity(identity);
+
+        bool BaselineRuntimeIsLive() => replacementRuntimeIdentity is not { } identity ||
+            _singBox.IsRuntimeIdentityLive(identity);
+
+        bool ReleaseApplyProtection()
         {
-            ActiveConfigMode = oldConfigMode;
-            ActiveRoutingMode = oldRoutingMode;
-            TunFingerprint = oldTunFingerprint;
-            ActiveAppRoutingFingerprint = oldAppRoutingFingerprint;
-            ActiveServerAddress = oldServerAddress;
-            _activeProfile = oldProfile;
-            _scanResult = oldScanResult;
+            try
+            {
+                if (_firewall is MacFirewallManager macFirewall)
+                    return macFirewall.TryDisableBlockRules();
+                _firewall?.DisableBlockRules();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning(ex, "[VpnEngine] Could not release temporary apply protection");
+                return false;
+            }
+        }
+
+        void ReleaseApplyProtectionOrRetry(string reason)
+        {
+            if (!applyProtectionArmed) return;
+            if (ReleaseApplyProtection())
+            {
+                applyProtectionArmed = false;
+                return;
+            }
+
+            _logger?.Warning("[VpnEngine] Temporary apply protection could not be released {Reason}", reason);
+            _healthMonitor?.ScheduleBlockRuleReleaseRetry();
+        }
+
+        void RestoreActiveBaseline(bool activeBaselineIsLive)
+        {
+            if (activeBaselineIsLive)
+            {
+                ActiveConfigMode = oldConfigMode;
+                ActiveRoutingMode = oldRoutingMode;
+                TunFingerprint = oldTunFingerprint;
+                ActiveAppRoutingFingerprint = oldAppRoutingFingerprint;
+                ActiveServerAddress = oldServerAddress;
+                _activeProfile = oldProfile;
+                _scanResult = oldScanResult;
+            }
+            else
+            {
+                // The rejected candidate is the live runtime. Do not present the
+                // previous accepted profile, server or health monitor as active.
+                Volatile.Write(ref _acceptedTunnel, null);
+                _warmupConfirmed = false;
+            }
+
             if (pausedTelemetry && previousSettings != null && !_sessionCts.IsCancellationRequested &&
-                (rolledBack || (previousServiceHandle?.QueryHasExited() == false &&
-                 ReferenceEquals(previousServiceHandle, _singBox.OwnedProcessHandle))))
+                activeBaselineIsLive)
             {
                 pausedTelemetry = false;
                 TryStartConnectionHealthStream(previousSettings);
             }
-            if (pausedHealth && oldProfile != null && previousSettings != null && !_sessionCts.IsCancellationRequested)
+            if (pausedHealth && oldProfile != null && previousSettings != null &&
+                !_sessionCts.IsCancellationRequested && activeBaselineIsLive)
             {
                 pausedHealth = false;
-                _healthMonitor?.ResumeAfterApply(oldProfile, previousSettings, oldScanResult);
+                _healthMonitor?.ResumeAfterApply(oldProfile, previousSettings, oldScanResult,
+                    strictDnsFailedOver: pausedStrictDnsFailedOver);
             }
         }
 
@@ -419,7 +468,7 @@ public partial class VpnEngine : IDisposable
             if (!result.Success || result.ConfigJson == null)
             {
                 _logger?.Warning("[VpnEngine] Apply: pipeline returned no config JSON");
-                RestoreActiveBaseline();
+                RestoreActiveBaseline(activeBaselineIsLive: BaselineRuntimeIsLive());
                 return false;
             }
 
@@ -494,17 +543,55 @@ public partial class VpnEngine : IDisposable
             var tunnelInfo = new AcceptedTunnelInfo(settings, configJson, ActiveServerAddress, controller, result.ProxySources);
             if (controller is { } target)
                 await ClashSingBoxApi.ResolveControlTargetsAsync(target.Endpoint, ct).ConfigureAwait(false);
+            var confirm = ConfirmServiceReplacement;
+            // Quiesce recovery before capturing what is being replaced or its
+            // rollback document. Otherwise a concurrent rescan/recovery can
+            // replace the runtime between the snapshot and the pause.
             if (_healthMonitor != null)
             {
-                _healthMonitor.PauseForApply();
+                pausedStrictDnsFailedOver = _healthMonitor.PauseForApply();
                 pausedHealth = true;
             }
-            previousServiceHandle = _singBox.OwnedProcessHandle;
-            var confirm = ConfirmServiceReplacement;
-            if (confirm != null || result.PublishAcceptedImport != null)
+            replacementRuntimeIdentity = _singBox.CaptureRuntimeIdentity();
+
+            // Every replacement (desktop Apply, service and import) must be able
+            // to restore the configuration the accepted tunnel is running.
+            // Refuse the replacement when no rollback snapshot is available.
+            var snapshotPath = AppPaths.CurrentConfigPath;
+            if (!File.Exists(snapshotPath))
             {
-                lastGoodJson = File.ReadAllText(AppPaths.CurrentConfigPath);
+                _logger?.Error("[VpnEngine] Apply refused: the previous applied config is missing, so a failed replacement could not be rolled back");
+                RestoreActiveBaseline(activeBaselineIsLive: BaselineRuntimeIsLive());
+                OnStatus("Apply failed: the previous configuration is unavailable. Reconnect to recover.");
+                return false;
             }
+            try
+            {
+                lastGoodJson = File.ReadAllText(snapshotPath);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning(ex, "[VpnEngine] Apply refused: the previous applied config could not be read for rollback");
+                RestoreActiveBaseline(activeBaselineIsLive: BaselineRuntimeIsLive());
+                OnStatus("Apply failed: the previous configuration could not be read. Reconnect to recover.");
+                return false;
+            }
+
+            // Keep configured protection armed from before the stop through any
+            // rollback; release it only after the accepted or restored runtime.
+            if (oldProfile?.BlockOnVpnFail == true || result.Profile?.BlockOnVpnFail == true)
+            {
+                try
+                {
+                    _firewall?.EnableBlockRules();
+                    applyProtectionArmed = _firewall != null;
+                }
+                catch (Exception fwEx)
+                {
+                    _logger?.Warning(fwEx, "[VpnEngine] Could not arm temporary protection for the replacement");
+                }
+            }
+
             // Stop old control requests before replacing the listener or its credentials.
             _probeCts?.Cancel();
             if (_connHealthStream != null)
@@ -515,9 +602,13 @@ public partial class VpnEngine : IDisposable
             }
             if (!_singBox.ReloadConfigJsonWithResult(configJson, forceRestart: true))
             {
-                if (lastGoodJson != null && !ReferenceEquals(previousServiceHandle, _singBox.OwnedProcessHandle))
-                    throw new InvalidOperationException("Service replacement did not start.");
-                RestoreActiveBaseline();
+                if (ReplacementStarted())
+                    throw new InvalidOperationException("The replacement runtime did not confirm the candidate configuration.");
+
+                var baselineIsLive = BaselineRuntimeIsLive();
+                RestoreActiveBaseline(activeBaselineIsLive: baselineIsLive);
+                if (baselineIsLive)
+                    ReleaseApplyProtectionOrRetry("after the unchanged runtime");
                 _logger?.Error("[VpnEngine] Apply failed: sing-box reload or restart was not confirmed");
                 OnStatus("Apply failed: sing-box reload or restart was not confirmed");
                 return false;
@@ -563,6 +654,7 @@ public partial class VpnEngine : IDisposable
             // Restart replaces the link and resolved drops its per-link settings.
             ApplyUnixDnsSettings(settings);
             UpdateFirewallCommittedConfig(configJson, newRoutingMode, result.Profile ?? _activeProfile);
+            ReleaseApplyProtectionOrRetry("after the accepted replacement");
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
 
             await TryEngageSplitDriverAsync(settings, CancellationToken.None).ConfigureAwait(false);
@@ -572,30 +664,51 @@ public partial class VpnEngine : IDisposable
         {
             if (configCommitted)
             {
+                ReleaseApplyProtectionOrRetry("after the accepted replacement");
                 _logger?.Warning("[VpnEngine] Post-apply step failed ({ExceptionType})", ex.GetType().Name);
                 return true;
             }
-            if (lastGoodJson != null && !_sessionCts.IsCancellationRequested &&
-                !ReferenceEquals(previousServiceHandle, _singBox.OwnedProcessHandle))
+            var replacementStarted = ReplacementStarted();
+            if (lastGoodJson != null && !_sessionCts.IsCancellationRequested && replacementStarted)
             {
                 try
                 {
                     if (_singBox.HasActiveTunnel)
                     {
                         rolledBack = _singBox.ReloadConfigJsonWithResult(lastGoodJson, forceRestart: true);
-                        if (!rolledBack) _logger?.Error("[VpnEngine] Service tunnel rollback was not confirmed");
+                        if (!rolledBack) _logger?.Error("[VpnEngine] Tunnel rollback was not confirmed");
                     }
                     else
                     {
                         _singBox.StartWithJson(lastGoodJson);
-                        rolledBack = true;
+                        rolledBack = _singBox.IsRunning() && _singBox.VerifyAppliedConfigTags(lastGoodJson);
+                        if (!rolledBack) _logger?.Error("[VpnEngine] Tunnel rollback start was not confirmed");
                     }
                 }
-                catch (Exception) { _logger?.Error("[VpnEngine] Service tunnel rollback failed"); }
+                catch (Exception) { _logger?.Error("[VpnEngine] Tunnel rollback failed"); }
             }
-            RestoreActiveBaseline();
+
+            var activeBaselineIsLive = rolledBack || (!replacementStarted && BaselineRuntimeIsLive());
+            if (activeBaselineIsLive)
+            {
+                if (rolledBack && previousSettings != null)
+                    ApplyUnixDnsSettings(previousSettings);
+                ReleaseApplyProtectionOrRetry("after the restored runtime");
+            }
+            else if (!activeBaselineIsLive && !applyProtectionArmed &&
+                     !_sessionCts.IsCancellationRequested && _activeProfile?.BlockOnVpnFail == true)
+            {
+                // A live rejected candidate must not be presented as the old
+                // accepted tunnel, and configured protection must not be left
+                // disarmed while the user reconnects.
+                try { _firewall?.EnableBlockRules(); }
+                catch (Exception fwEx) { _logger?.Error(fwEx, "[VpnEngine] Failed to arm protection after an unconfirmed apply rollback"); }
+            }
+            RestoreActiveBaseline(activeBaselineIsLive);
             _logger?.Error("[VpnEngine] Apply failed ({ExceptionType})", ex.GetType().Name);
-            OnStatus("Apply failed: check the selected configuration and required rule sets, then retry.");
+            OnStatus(activeBaselineIsLive
+                ? "Apply failed: check the selected configuration and required rule sets, then retry."
+                : "Apply failed: the previous configuration could not be restored. Reconnect to recover.");
             return false;
         }
     }

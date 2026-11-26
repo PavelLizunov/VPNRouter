@@ -410,9 +410,11 @@ public partial class ServerViewModel : ViewModelBase
 
     private string ProtocolKey => (_originalEntry?.Awg != null)
         ? "amneziawg"
-        : (_originalEntry?.IsDnsTunnel == true)
-            ? "dns-tunnel"
-            : (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
+        : (_originalEntry?.IsTurnRelay == true)
+            ? "turnrelay"
+            : (_originalEntry?.IsDnsTunnel == true)
+                ? "dns-tunnel"
+                : (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
 
     public string HostSubtitle
     {
@@ -460,6 +462,14 @@ public partial class ServerViewModel : ViewModelBase
                     parts.Add("dns-tunnel");
                     break;
 
+                case "turnrelay":
+                    parts.Add("turnrelay");
+                    if (!string.IsNullOrWhiteSpace(_originalEntry?.TurnRelay?.Mode))
+                        parts.Add(_originalEntry!.TurnRelay!.Mode.ToLowerInvariant());
+                    if (!string.IsNullOrWhiteSpace(_originalEntry?.TurnRelay?.TurnServer))
+                        parts.Add(_originalEntry!.TurnRelay!.TurnServer);
+                    break;
+
                 case "amneziawg":
                 case "awg":
                     parts.Add("amneziawg");
@@ -484,7 +494,9 @@ public partial class ServerViewModel : ViewModelBase
     /// <summary>What the server is good for; the lists show it as the coloured icon in front of the name.</summary>
     public ProtocolGroup ProtocolGroup => ProtocolGroups.Of(_originalEntry);
 
+    // A TurnRelay row is a chain upstream and must never be selected as the exit.
     public bool CanSelectInSimpleMode => ConfigGenerator.IsServerRuntimeAvailable(_originalEntry) &&
+        _originalEntry?.IsTurnRelay != true &&
         (_originalEntry.Dnstt == null || SingBoxFeatures.DnsttAvailable);
 
     public string ProtocolUseCase => ProtocolGroup switch

@@ -58,12 +58,12 @@ public static class DiagnosticsRedactor
 
     // Security: Captures double-quoted or single-quoted secret values (including spaces, opposite quotes, and escapes).
     private static readonly Regex _logQuotedSecret = new(
-        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)(?:((?:bearer|basic|token|digest|negotiate)\s+))?(?:""((?:[^""\r\n\\]|\\.)*)(""?)|'((?:[^'\r\n\\]|\\.)*)('?))",
+        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password|turn[_-]?(?:username|password))|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)(?:((?:bearer|basic|token|digest|negotiate)\s+))?(?:""((?:[^""\r\n\\]|\\.)*)(""?)|'((?:[^'\r\n\\]|\\.)*)('?))",
         RegexOptions.Compiled);
 
     // Security: Captures unquoted key-value secret values.
     private static readonly Regex _logUnquotedSecret = new(
-        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)(?:((?:bearer|basic|token|digest|negotiate)\s+))?([^\s""',]+)",
+        @"(?i)\b((?:[a-z0-9_]*[_-])?(?:password|passwd|pass|secret|token|uuid|short[_-]?id|sid|private[_-]?key|secret[_-]?key|api[_-]?key|access[_-]?key|enc(?:ryption)?[_-]?key|auth[_-]?key|session[_-]?key|client[_-]?key|app[_-]?key|user[_-]?key|psk|pre[_-]?shared[_-]?key|preshared[_-]?key|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password|turn[_-]?(?:username|password))|client[_-]?secret|client[_-]?pass(?:word|wd)?|refresh[_-]?token|access[_-]?token|id[_-]?token|app[_-]?secret|user[_-]?secret|user[_-]?pass(?:word|wd)?|auth[_-]?secret|auth[_-]?token)\b([""']?\s*[=:]\s*)(?:((?:bearer|basic|token|digest|negotiate)\s+))?([^\s""',]+)",
         RegexOptions.Compiled);
 
     private static readonly Regex _yamlKeyValuePair = new(
@@ -238,7 +238,9 @@ public static class DiagnosticsRedactor
     {
         if (string.IsNullOrEmpty(value)) return value;
 
-        if (value.AsSpan().TrimStart().StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+        if (value.AsSpan().TrimStart().StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+            || value.AsSpan().TrimStart().StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+            || IsTurnRelaySecretKey(key)
             || key?.Equals("sshPrivateKey", StringComparison.OrdinalIgnoreCase) == true
             || key?.Equals("ssh_private_key", StringComparison.OrdinalIgnoreCase) == true)
             return Redacted;
@@ -254,9 +256,17 @@ public static class DiagnosticsRedactor
 
     private static string RedactUrlKeepHost(string value)
     {
-        if (value.TrimStart(' ', '\t', '\'', '"').StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+        var trimmed = value.TrimStart(' ', '\t', '\'', '"');
+        if (trimmed.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return Redacted;
         var m = _urlKeepHost.Match(value);
         return m.Success ? $"{m.Groups[1].Value}{m.Groups[2].Value}/{Redacted}" : Redacted;
     }
+
+    private static bool IsTurnRelaySecretKey(string? key) =>
+        key is not null && (key.Equals("turn_password", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("turnPassword", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("turn_username", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("turnUsername", StringComparison.OrdinalIgnoreCase));
 }

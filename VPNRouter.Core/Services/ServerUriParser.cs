@@ -40,7 +40,9 @@ public static class ServerUriParser
             return DnsttUriParser.Parse(uri);
 
         VlessServerEntry entry;
-        if (uri.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+        if (uri.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            entry = TurnRelayUriParser.Parse(uri);
+        else if (uri.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
             uri.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
             entry = ParseHysteria2(uri);
         else if (uri.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase))
@@ -77,7 +79,7 @@ public static class ServerUriParser
             entry = ParseAmneziaWg(uri);
         }
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / vmess:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / vmess:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / turnrelay:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
 
         var offendingField = PlaceholderDefense.Inspect(entry);
         if (offendingField != null)
@@ -101,6 +103,26 @@ public static class ServerUriParser
         catch (PlaceholderConfigException) { return null; }
         catch (FormatException) { return null; }
         catch { return null; }
+    }
+
+    internal static VlessServerEntry[]? ParseTurnRelayPair(string text, out string targetUri)
+    {
+        targetUri = string.Empty;
+        var lines = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (lines.Length != 2 || lines.Any(line => line.Any(char.IsControl))) return null;
+
+        var hopIndex = lines[0].StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+        var hop = TryParse(lines[hopIndex]);
+        var target = TryParse(lines[1 - hopIndex]);
+        if (hop?.IsTurnRelay != true || target == null ||
+            !SubscriptionChainSelection.IsUsableChainTarget(target) ||
+            !SubscriptionChainSelection.IsUsableTurnRelayUpstream(hop) ||
+            !string.Equals(target.DetourVia, hop.OutboundId, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        targetUri = lines[1 - hopIndex];
+        if (string.Equals(target.Name, hop.Name, StringComparison.OrdinalIgnoreCase)) hop.Name += " (TurnRelay)";
+        return [hop, target];
     }
 
     public static List<VlessServerEntry> ParseMultiple(string text)
@@ -131,6 +153,9 @@ public static class ServerUriParser
 
     public static bool IsSupportedScheme(ReadOnlySpan<char> line)
     {
+        if (line.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return SingBoxFeatures.TurnRelayAvailable;
+
         if (line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return SingBoxFeatures.DnsttAvailable;
 

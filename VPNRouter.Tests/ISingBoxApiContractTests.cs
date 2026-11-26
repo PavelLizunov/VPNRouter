@@ -23,8 +23,9 @@ public sealed class ISingBoxApiContractTests
             using var api = new ClashSingBoxApi(baseUrl: baseUrl);
             var ct = TestContext.Current.CancellationToken;
 
+            // The legacy endpoint is a 204 no-op on sing-box 1.14.4 and must not be used.
             var reloadOk = await api.ReloadConfigAsync(@"C:\fake\path.json", ct);
-            Assert.True(reloadOk);
+            Assert.False(reloadOk);
 
             var version = await api.GetVersionAsync(ct);
             Assert.Equal("1.13.10", version);
@@ -41,7 +42,7 @@ public sealed class ISingBoxApiContractTests
             Assert.NotEmpty(proxies);
             Assert.Contains(proxies, p => p.Name == "proxyA" && p.Type == "vless");
 
-            Assert.Contains("PUT /configs?force=true", server.Calls);
+            Assert.DoesNotContain(server.Calls, call => call.StartsWith("PUT /configs", StringComparison.Ordinal));
             Assert.Contains("GET /version", server.Calls);
             Assert.Contains("GET /connections", server.Calls);
             Assert.Contains("PUT /proxies/select", server.Calls);

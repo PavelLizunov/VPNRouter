@@ -16,6 +16,16 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P0** - macOS health restarts could rotate the Clash secret and leave existing clients unauthorized. A started runtime could time out before scheduling kill-switch release. RESOLVED in source on PR #746 with session-secret retention and deferred reconciliation. Final CI and installed checks are recorded in the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
+
+- [x] **P1** - HealthMonitor config restarts skipped the configured kill switch. Desktop Apply could leave a rejected runtime presented as the accepted tunnel. RESOLVED in source on PR #746 with restart protection, a quiesced rollback snapshot, and accepted-tunnel invalidation when rollback is unconfirmed. See the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
+
+- [x] **P1** - TurnRelay needed the actual TURN address under the Unix kill switch, HTTPS enforcement for remote imports, and exit-only default selection and two-link import in Standard. RESOLVED at `193fffd9` with all 11 checks passing. See the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
+
+- [x] **P2** - Review found gaps in TurnRelay standalone probes, placeholder validation, rollback compatibility, version gating, JSON serialization, and diagnostic redaction. RESOLVED at `193fffd9` with all 11 checks passing. See the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
+
+- [x] **P0** - A legacy `PUT /configs` answers HTTP 204 on sing-box 1.14.4 without applying the document, so `SingBoxManager`/`HealthMonitor` reported a successful hot reload, skipped the restart and lifted the kill switch over the old config. `ReloadConfigJsonWithResult` now always restarts and confirms the applied outbound tags on `/proxies` within a bounded budget; `HealthMonitor` keeps the previous scan and block rules unless the restart is confirmed. RESOLVED in source on `feat/turnrelay-integration`. See [TurnRelay integration](phase-turnrelay-integration-2026-11-25.md).
+
 - [x] **P2** - Choosing an automatic category during an active Standard connection passed an unchecked first eligible row to reconnect or service Apply. The desktop now requires current traffic proof for category selections. RESOLVED in source, CI pending. See [connected category selection](phase-standard-connected-category-autoselect-2026-11-25.md).
 
 - [x] **P1** - The first deep category-probe draft reused `IsConnecting`. A disconnect increments the connection generation and leaves the CTA busy. The same flag blocks Stop during verification. The probe now has its own cancellation scope and Stop cancels it. RESOLVED in source, CI pending. [PR #743](https://github.com/PavelLizunov/VPNRouter/pull/743).

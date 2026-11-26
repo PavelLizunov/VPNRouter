@@ -823,6 +823,7 @@ public static class Strings
     public static string SmpInputHint => global::VPNRouter.Core.Localization.Strings.SmpInputHint;
     public static string SmpInvalidServerLink => global::VPNRouter.Core.Localization.Strings.SmpInvalidServerLink;
     public static string SmpDnsttCoreRequired => global::VPNRouter.Core.Localization.Strings.SmpDnsttCoreRequired;
+    public static string SmpTurnRelayChainRequired => global::VPNRouter.Core.Localization.Strings.SmpTurnRelayChainRequired;
     public static string SmpTunnelModeLabel => global::VPNRouter.Core.Localization.Strings.SmpTunnelModeLabel;
     public static string SmpCurrentServer => global::VPNRouter.Core.Localization.Strings.SmpCurrentServer;
     public static string SmpServerUnsupported => global::VPNRouter.Core.Localization.Strings.SmpServerUnsupported;

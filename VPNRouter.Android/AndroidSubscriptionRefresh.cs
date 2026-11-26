@@ -121,7 +121,7 @@ internal static class AndroidSubscriptionRefresh
         if (selected)
         {
             affected[0].Enabled = true;
-            SelectFeedRow(updates, affected[0], refreshed.Servers[0]);
+            SelectFeedRow(updates, affected[0], refreshed.Servers.FirstOrDefault(row => !row.IsTurnRelay));
         }
         else if (!rejected && !superseded && ReadMode(read) == "subscribe" && read(SelectedFeedId) == refreshed.Id &&
             read(SubscriptionUrl) == refreshed.Url && ReadRetainedManual(read) == null)
@@ -141,10 +141,11 @@ internal static class AndroidSubscriptionRefresh
                     string.IsNullOrEmpty(previous?.DetourVia))
                 {
                     var name = read(SelectedName);
-                    var matches = refreshed.Servers.Where(row =>
+                    var matches = refreshed.Servers.Where(row => !row.IsTurnRelay &&
                         string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
                     if (matches.Count <= 1)
-                        BindFeed(updates, affected[0], matches.FirstOrDefault() ?? refreshed.Servers[0]);
+                        BindFeed(updates, affected[0], matches.FirstOrDefault() ??
+                            refreshed.Servers.FirstOrDefault(row => !row.IsTurnRelay));
                 }
             }
         }
@@ -173,6 +174,63 @@ internal static class AndroidSubscriptionRefresh
         SelectManualRow(updates, servers, server, uri, options);
         commit(updates);
         return true;
+    }
+
+    // Pasted hop + target pairs arrive as separate share links. Keep both rows so
+    // the target's opaque detour id resolves, and select the target (never the hop).
+    internal static bool SaveServerLinks(IReadOnlyList<VlessServerEntry> entries, string targetUri, string command,
+        Func<string, string?> read, Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
+    {
+        if (!IsCurrentSelection(command, read)) return false;
+        if (entries.Count == 0) return false;
+
+        var servers = ReadStandalone(read, options);
+        var updates = new Dictionary<string, string?>();
+        PreserveLegacyFeed(updates, read, servers, options);
+        RemoveRetainedManualCopy(servers, ReadRetainedManual(read), options);
+
+        foreach (var entry in entries.Take(entries.Count - 1))
+        {
+            if (entry.IsTurnRelay)
+            {
+                var matches = servers.Where(row =>
+                    string.Equals(row.OutboundId, entry.OutboundId, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+                if (matches.Length > 1 || matches.Length == 1 &&
+                    (!matches[0].IsTurnRelay || SubscriptionEntry.OutboundKey(matches[0]) != SubscriptionEntry.OutboundKey(entry)))
+                    return false;
+                if (matches.Length == 1) continue;
+            }
+            AddStandaloneRow(servers, entry, options);
+        }
+        var targetIndex = AddStandaloneRow(servers, entries[^1], options);
+        var target = servers[targetIndex];
+        updates[SelectedFeedId] = null;
+        updates[SelectedFeedRow] = null;
+        updates[StandaloneServers] = JsonSerializer.Serialize(servers, options);
+        updates[SelectedName] = target.Name;
+        updates[ManualUri] = targetUri;
+        updates[LegacyManualOwner] = null;
+        updates[SubscriptionUrl] = null;
+        updates[ConfigMode] = "manual";
+        commit(updates);
+        return true;
+    }
+
+    private static int AddStandaloneRow(List<VlessServerEntry> servers, VlessServerEntry entry,
+        JsonSerializerOptions options)
+    {
+        var identity = JsonSerializer.Serialize(entry, options);
+        var existing = servers.FindIndex(row => JsonSerializer.Serialize(row, options) == identity);
+        if (existing >= 0) return existing;
+
+        var names = servers.Select(row => row.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var baseName = string.IsNullOrWhiteSpace(entry.Name) ? entry.Server : entry.Name;
+        var name = baseName;
+        for (var suffix = 2; names.Contains(name); suffix++)
+            name = $"{baseName} #{suffix}";
+        entry.Name = name;
+        servers.Add(entry);
+        return servers.Count - 1;
     }
 
     private static void PreserveLegacyFeed(Dictionary<string, string?> changes, Func<string, string?> read,
@@ -221,7 +279,7 @@ internal static class AndroidSubscriptionRefresh
         updates[SubscriptionUrl] = feed?.Url;
     }
 
-    private static void SelectFeedRow(Dictionary<string, string?> updates, SubscriptionEntry feed, VlessServerEntry row)
+    private static void SelectFeedRow(Dictionary<string, string?> updates, SubscriptionEntry feed, VlessServerEntry? row)
     {
         BindFeed(updates, feed, row);
         updates[ManualUri] = null;
@@ -287,7 +345,7 @@ internal static class AndroidSubscriptionRefresh
                 {
                     var target = same ?? next.Find(f => f is { Enabled: true, Servers.Count: > 0 })
                         ?? next.Find(f => f is { Enabled: true });
-                    BindFeed(changes, target, target?.Servers?.FirstOrDefault());
+                    BindFeed(changes, target, target?.Servers?.FirstOrDefault(row => !row.IsTurnRelay));
                     changes[SupersededSelection] = read(UiCommand);
                     if (retainedManual != null)
                     {
@@ -331,7 +389,7 @@ internal static class AndroidSubscriptionRefresh
                 ?? enabled.Find(f => read(SubscriptionUrl) == f.Url) ?? enabled.FirstOrDefault();
             if (source != null)
             {
-                SelectFeedRow(changes, source, choice?.Row ?? source.Servers[0]);
+                SelectFeedRow(changes, source, choice?.Row ?? source.Servers.FirstOrDefault(row => !row.IsTurnRelay));
             }
             else changes[SubscriptionUrl] = feeds.FirstOrDefault(f => f?.Enabled == true)?.Url;
         }
@@ -400,6 +458,19 @@ internal static class AndroidSubscriptionRefresh
         {
             var manual = ServerUriParser.TryParse(uri);
             if (manual == null) return null;
+            if (!string.IsNullOrEmpty(manual.DetourVia))
+            {
+                // A pasted hop + target pair is stored as plain rows; SelectOrAdd
+                // rejects chained targets because it verifies standalone rows.
+                var outbound = SubscriptionEntry.OutboundKey(manual);
+                var linked = standalone.Find(row => row != null && !row.IsTurnRelay &&
+                    string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                    row.OutboundId == manual.OutboundId && row.DetourVia == manual.DetourVia &&
+                    SubscriptionEntry.OutboundKey(row) == outbound);
+                if (linked == null) return null;
+                SelectedSources.AddOrUpdate(linked, FeedSource.Capture(null, linked));
+                return linked;
+            }
             // Old Simple saves could persist the fallback feed name when drawing the summary.
             var previous = standalone.Find(s => s != null && s.Name == name && s.UseAsSingleOutbound);
             var index = VPNRouter.Core.Services.FreeConfigs.FreeConfigSelection.SelectOrAdd(standalone, manual);
@@ -448,7 +519,7 @@ internal static class AndroidSubscriptionRefresh
         List<SubscriptionEntry> subscriptions, string? name)
     {
         var feedRows = subscriptions.Where(f => f is { Enabled: true, Servers: not null }).SelectMany(f => f.Servers);
-        var available = standalone.Concat(feedRows).Where(row => row != null);
+        var available = standalone.Concat(feedRows).Where(row => row != null && !row.IsTurnRelay);
         return available.FirstOrDefault(row => !string.IsNullOrEmpty(name) &&
             string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase)) ?? available.FirstOrDefault();
     }
@@ -459,7 +530,7 @@ internal static class AndroidSubscriptionRefresh
         var url = read(SubscriptionUrl);
         var name = read(SelectedName);
         var rows = subscriptions.Where(f => f is { Enabled: true, Servers: not null })
-            .SelectMany(f => f.Servers.Where(s => s != null).Select(s => new FeedRow(f, s)));
+            .SelectMany(f => f.Servers.Where(s => s != null && !s.IsTurnRelay).Select(s => new FeedRow(f, s)));
         bool Named(FeedRow choice) => !string.IsNullOrEmpty(name) &&
             string.Equals(choice.Row.Name, name, StringComparison.OrdinalIgnoreCase);
         var selectedIdentity = read(SelectedFeedRow);
@@ -546,12 +617,15 @@ internal static class AndroidSubscriptionRefresh
 
         if (!string.IsNullOrEmpty(current.DetourVia))
         {
-            var feed = subscriptions.FirstOrDefault(f => f is { Enabled: true, Servers: not null } &&
-                f.Id == origin.Id && f.Url == origin.Url && f.Servers.Contains(current));
+            var feed = origin.Id == null
+                ? null
+                : subscriptions.FirstOrDefault(f => f is { Enabled: true, Servers: not null } &&
+                    f.Id == origin.Id && f.Url == origin.Url && f.Servers.Contains(current));
+            // A manual hop + target paste keeps both rows in the standalone list.
+            var siblings = feed?.Servers ?? standalone;
             config.Servers = [current];
-            if (feed != null)
-                config.Servers.AddRange(feed.Servers.Where(row => string.IsNullOrEmpty(row.DetourVia) &&
-                    string.Equals(row.OutboundId, current.DetourVia, StringComparison.OrdinalIgnoreCase)));
+            config.Servers.AddRange(siblings.Where(row => string.IsNullOrEmpty(row.DetourVia) &&
+                string.Equals(row.OutboundId, current.DetourVia, StringComparison.OrdinalIgnoreCase)));
             config.ActiveServer = current.Name ?? string.Empty;
             return;
         }

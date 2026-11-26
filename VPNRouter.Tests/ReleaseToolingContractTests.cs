@@ -109,7 +109,7 @@ public sealed class ReleaseToolingContractTests
         {
             var workflow = Read(".github", "workflows", name);
             Assert.Contains("must carry arm64-v8a native libraries only", workflow);
-            Assert.Contains("for NEED in with_awg with_xhttp", workflow);
+            Assert.Contains("for NEED in with_awg with_xhttp with_turnrelay", workflow);
         }
     }
 

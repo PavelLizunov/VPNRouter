@@ -86,6 +86,59 @@ public class AutoFailoverEngineTests
     }
 
     [Fact]
+    public async Task ActiveTurnRelayHop_IsNeverReplacedSilently()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.Vless.ActiveServer = "relay";
+        settings.Vless.Servers =
+        [
+            new()
+            {
+                Name = "relay", Protocol = "turnrelay", Server = "203.0.113.20", Port = 53492,
+                OutboundId = "turnrelay-1",
+                TurnRelay = new TurnRelayConfig
+                {
+                    TurnServer = "192.0.2.10:3478", TurnUsername = "u", TurnPassword = "p",
+                    Password = "e", ServerFingerprint = new string('a', 64),
+                },
+            },
+            new() { Name = "alternative", Server = "192.0.2.11" },
+        ];
+        var engine = new AutoFailoverEngine(settings, new ConfigSanityCheck(), store: _store);
+
+        var outcome = await engine.HandleDeadConfigAsync("test", TestContext.Current.CancellationToken);
+
+        Assert.False(outcome.Switched);
+        Assert.Equal("relay", settings.Vless.ActiveServer);
+        Assert.Empty(engine.TriedServers);
+    }
+
+    [Fact]
+    public async Task SkipsTurnRelayHopRowsWhenPickingAReplacement()
+    {
+        var settings = BuildSubscribeSettings(
+            activeServer: "srv-1",
+            ("srv-1", "1.2.3.1"),
+            ("relay", "203.0.113.20"),
+            ("srv-3", "1.2.3.3"));
+        var relay = settings.App.Subscriptions[0].Servers[1];
+        relay.Protocol = "turnrelay";
+        relay.OutboundId = "turnrelay-1";
+        relay.TurnRelay = new TurnRelayConfig
+        {
+            TurnServer = "192.0.2.10:3478", TurnUsername = "u", TurnPassword = "p",
+            Password = "e", ServerFingerprint = new string('a', 64),
+        };
+
+        var engine = new AutoFailoverEngine(settings, new ConfigSanityCheck(), store: _store);
+        var outcome = await engine.HandleDeadConfigAsync("test", TestContext.Current.CancellationToken);
+
+        Assert.True(outcome.Switched);
+        Assert.Equal("srv-3", outcome.NewActiveServer);
+    }
+
+    [Fact]
     public async Task SkipsPlaceholderServersInPool()
     {
         var settings = BuildSubscribeSettings(

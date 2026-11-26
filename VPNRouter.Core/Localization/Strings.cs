@@ -626,8 +626,8 @@ public static partial class Strings
         ? "↻ Применить"
         : "↻ Apply";
     public static string ApplyNowHint => Ru
-        ? "Переприменить настройки к работающему VPN без переподключения (hot-reload через Clash API)"
-        : "Re-apply settings to the running VPN without a reconnect (hot-reload via Clash API)";
+        ? "Переприменить настройки к работающему VPN (sing-box перезапустится)"
+        : "Re-apply settings to the running VPN (sing-box restarts)";
 
     public static string ChannelStable => Ru ? "● Стабильная" : "● Stable";
     public static string ChannelExperimental => Ru ? "Эксперимент." : "Experimental";

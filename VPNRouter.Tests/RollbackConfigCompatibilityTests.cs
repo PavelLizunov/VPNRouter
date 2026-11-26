@@ -101,6 +101,46 @@ public sealed class RollbackConfigCompatibilityTests
     }
 
     [Fact]
+    public void ActiveTurnRelayHop_IsRefused()
+    {
+        var active = Server("active", "relay.example");
+        active.TurnRelay = new TurnRelayConfig { TurnServer = "192.0.2.10:3478" };
+
+        Assert.Equal(RollbackConfigCompatibility.ActiveTurnRelay,
+            RollbackConfigCompatibility.CheckActiveConfig(Generated(active), LegacyTarget));
+
+        var named = Server("active", "relay.example", "turnrelay");
+        Assert.Equal(RollbackConfigCompatibility.ActiveTurnRelay,
+            RollbackConfigCompatibility.CheckActiveConfig(Generated(named), LegacyTarget));
+    }
+
+    [Fact]
+    public void InactiveTurnRelayHop_DoesNotBlockACompatibleActiveRow()
+    {
+        var active = Server("active", "active.example");
+        var hop = Server("hop", "relay.example");
+        hop.TurnRelay = new TurnRelayConfig { TurnServer = "192.0.2.10:3478" };
+
+        Assert.Null(RollbackConfigCompatibility.CheckActiveConfig(
+            Generated(active, hop), LegacyTarget));
+    }
+
+    [Theory]
+    [InlineData("2.51.0-r2", true)]
+    [InlineData("2.51.1-r4", true)]
+    [InlineData("2.51.1-r5", false)]
+    public void TurnRelayDetour_RefusesPublishedTargetsWithoutTurnRelay(string version, bool refused)
+    {
+        var active = Server("active", "exit.invalid", "vmess");
+        active.DetourVia = "hop-id";
+        var hop = Server("hop", "relay.invalid", "turnrelay");
+        hop.OutboundId = "hop-id";
+
+        Assert.Equal(refused ? RollbackConfigCompatibility.ActiveTurnRelay : null,
+            RollbackConfigCompatibility.CheckActiveConfig(Generated(active, hop), version));
+    }
+
+    [Fact]
     public void ActiveVmessAndNewVmessFields_AreRefused()
     {
         Assert.Equal(RollbackConfigCompatibility.ActiveVmess,

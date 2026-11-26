@@ -564,14 +564,21 @@ public partial class MainWindowViewModel
                     SmpErrorText = Strings.SyncEmpty;
                     return;
                 }
-                preferred ??= candidates[0];
+                if (preferred?.IsTurnRelay != false)
+                    preferred = candidates.FirstOrDefault(row => !row.IsTurnRelay);
+                if (preferred == null)
+                {
+                    SmpErrorText = Strings.SmpTurnRelayChainRequired;
+                    return;
+                }
                 StatusText = IsRussian ? "Подбираем рабочий сервер…" : "Finding a working server…";
                 // A direct probe of an exit cannot judge the selected route through its required hop.
                 var chosen = preference?.CategoryName != null
                     ? await PickCategoryServerAsync(candidates, submitted.Dns.LocalDns)
                     : preference != null || preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia)
                         ? preferred
-                        : await PickSimpleServerAsync(candidates.Where(server => server.Dnstt == null).ToList(),
+                        : await PickSimpleServerAsync(
+                            candidates.Where(server => server.Dnstt == null && !server.IsTurnRelay).ToList(),
                             preferred, submitted.App.ConnectionIntent, Preparing);
                 if (!Preparing() || preference != SimpleServerPreference ||
                     (preference != null && (revision != _routingSettingsRevision || !choiceUnchanged()))) return;
@@ -589,6 +596,11 @@ public partial class MainWindowViewModel
                 if (Subscriptions.Any(s => !s.Enabled && s.Id == source.Id))
                 {
                     SmpErrorText = SubscriptionDisabledMessage;
+                    return;
+                }
+                if (chosen.IsTurnRelay)
+                {
+                    SmpErrorText = Strings.SmpTurnRelayChainRequired;
                     return;
                 }
                 if ((chosen.Dnstt != null || !string.IsNullOrEmpty(chosen.DetourVia)) &&
@@ -872,7 +884,9 @@ public partial class MainWindowViewModel
     {
         if (IsConsumedServerUri(uri)) return true;
 
-        var entry = ParseSimpleServerLink(uri, out var error);
+        var pair = uri.IndexOfAny(['\r', '\n']) >= 0 ? ServerUriParser.ParseTurnRelayPair(uri, out _) : null;
+        var error = Strings.SmpTurnRelayChainRequired;
+        var entry = pair?[^1] ?? (uri.Any(char.IsControl) ? null : ParseSimpleServerLink(uri, out error));
         if (entry == null)
         {
             SmpErrorText = error;
@@ -887,6 +901,7 @@ public partial class MainWindowViewModel
         }
 
         if (!retainRows) Servers.Clear();
+        if (pair != null) Servers.Add(new ServerViewModel(pair[0]));
         var row = existingRow ?? new ServerViewModel(entry);
         if (existingRow == null) Servers.Add(row);
         if (string.IsNullOrWhiteSpace(row.Name) && !string.IsNullOrWhiteSpace(entry.Name))
@@ -899,9 +914,9 @@ public partial class MainWindowViewModel
         IsSubscribeMode = false;
         IsVlessMode = true;
         ApplyServersToSettings();
-        RememberSimpleDirectLink(_settings.App, row.SourceEntry, uri);
-        _consumedServerInput = retainRows ? uri : null;
-        _consumedServerEntry = retainRows ? row.SourceEntry : null;
+        RememberSimpleDirectLink(_settings.App, row.SourceEntry, uri, pair != null);
+        _consumedServerInput = retainRows || pair != null ? uri : null;
+        _consumedServerEntry = retainRows || pair != null ? row.SourceEntry : null;
         return true;
     }
 
@@ -945,8 +960,15 @@ public partial class MainWindowViewModel
                 return null;
             }
 
+            var parsed = ServerUriParser.Parse(uri);
+            if (parsed.IsTurnRelay)
+            {
+                error = Strings.SmpTurnRelayChainRequired;
+                return null;
+            }
+
             error = string.Empty;
-            return ServerUriParser.Parse(uri);
+            return parsed;
         }
         catch (Exception)
         {

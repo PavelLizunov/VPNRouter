@@ -9,6 +9,13 @@ namespace VPNRouter.Core.Services;
 
 public enum SingBoxState { Stopped, Starting, Running, Restarting, Failed }
 
+/// <summary>
+/// A replacement apply is a two-part transition: the new process can start even
+/// when the bounded controller confirmation cannot finish. Callers must not
+/// report a started runtime as a failed start.
+/// </summary>
+internal enum ConfigApplyState { NotStarted, StartedUnconfirmed, Confirmed }
+
 public partial class SingBoxManager : IDisposable
 {
     private readonly SingBoxSettings _settings;
@@ -51,6 +58,14 @@ public partial class SingBoxManager : IDisposable
 
     private readonly IHttpClient _http;
 
+    // Test seam: starts no server, so fixtures can answer the bounded /proxies probe.
+    private static readonly AsyncLocal<IHttpClient?> s_controllerTransportForTests = new();
+    internal static IHttpClient? ControllerTransportForTests
+    {
+        get => s_controllerTransportForTests.Value;
+        set => s_controllerTransportForTests.Value = value;
+    }
+
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
     public int? Pid => _handle is { HasExited: false } handle ? handle.Pid : null;
     internal bool HasActiveTunnel => Pid.HasValue ||
@@ -59,6 +74,57 @@ public partial class SingBoxManager : IDisposable
             ProcessOwnership.FindOwnedSingBox(ProcessOwnership.ConfiguredExePath) != null) ||
         IsRunning();
     internal IProcessHandle? OwnedProcessHandle => _handle;
+
+    internal readonly record struct RuntimeIdentity(IProcessHandle? Handle, string? MacLaunchId);
+
+    internal RuntimeIdentity CaptureRuntimeIdentity() => new(_handle, _macPrivilegeLaunchId);
+
+    private bool MacHelperRuntimeHandoffStarted =>
+        OperatingSystem.IsMacOS() &&
+        State == SingBoxState.Running &&
+        _macLaunchPending &&
+        MacPrivilegeLaunchId is { Length: > 0 };
+
+    /// <summary>
+    /// Compares the runtime identity captured before a replacement. On macOS the
+    /// launcher handle is not the process identity; the helper launch id is.
+    /// </summary>
+    internal bool IsSameRuntimeIdentity(RuntimeIdentity identity)
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return string.Equals(identity.MacLaunchId, _macPrivilegeLaunchId, StringComparison.Ordinal);
+        }
+
+        return ReferenceEquals(identity.Handle, _handle);
+    }
+
+    /// <summary>
+    /// Proves that the exact runtime captured before a replacement is still
+    /// serving. A macOS launcher handle may exit while the helper-owned runtime
+    /// remains alive, so the launch id plus a live controller is the proof there.
+    /// </summary>
+    internal bool IsRuntimeIdentityLive(RuntimeIdentity identity)
+    {
+        try
+        {
+            if (OperatingSystem.IsMacOS())
+            {
+                return identity.MacLaunchId is { Length: > 0 } launchId &&
+                    string.Equals(launchId, _macPrivilegeLaunchId, StringComparison.Ordinal) &&
+                    IsRunning();
+            }
+
+            return identity.Handle is { } handle &&
+                ReferenceEquals(handle, _handle) &&
+                handle.QueryHasExited() == false &&
+                IsRunning();
+        }
+        catch
+        {
+            return false;
+        }
+    }
     internal bool ExactStopUnconfirmed => _exactStopUnconfirmed;
     public event EventHandler? Crashed;
     public event Action<int>? Started;
@@ -84,7 +150,7 @@ public partial class SingBoxManager : IDisposable
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
-        _http = http switch
+        _http = (http ?? ControllerTransportForTests) switch
         {
             null or PolicyHttpClient => LocalControllerHttp,
             IDirectHttpClient direct => direct,
@@ -129,26 +195,29 @@ public partial class SingBoxManager : IDisposable
     public void ReloadConfigJson(string configJson, bool forceRestart = false) =>
         ReloadConfigJsonWithResult(configJson, forceRestart);
 
-    internal bool ReloadConfigJsonWithResult(string configJson, bool forceRestart = false)
+    internal bool ReloadConfigJsonWithResult(string configJson, bool forceRestart = false) =>
+        ReloadConfigJsonWithOutcome(configJson, forceRestart) == ConfigApplyState.Confirmed;
+
+    internal ConfigApplyState ReloadConfigJsonWithOutcome(string configJson, bool forceRestart = false)
     {
         lock (_lifecycleGate)
         {
             if (Volatile.Read(ref _disposed) != 0)
             {
                 _logger.Debug("[SingBoxManager] ReloadConfigJson ignored — manager already disposed");
-                return false;
+                return ConfigApplyState.NotStarted;
             }
             if (!_ownsTunLock)
             {
                 _logger.Warning("[SingBoxManager] ReloadConfigJson ignored — manager does not own valid TUN lease");
-                return false;
+                return ConfigApplyState.NotStarted;
             }
 
             if (_exactStopUnconfirmed)
             {
                 StopInternal(releaseLock: false);
                 if (State != SingBoxState.Stopped)
-                    return false;
+                    return ConfigApplyState.NotStarted;
 
                 forceRestart = true;
             }
@@ -156,49 +225,29 @@ public partial class SingBoxManager : IDisposable
             if (OperatingSystem.IsMacOS())
             {
                 // The privileged helper stages the config root-owned before it
-                // starts sing-box. A hot reload would hand the user-writable path
-                // back to root, so privileged macOS always restarts.
+                // starts sing-box; the staged contract is part of the apply.
                 configJson = MacPrivilegedConfigContract.Prepare(configJson);
                 forceRestart = true;
             }
 
-            _logger.Information("[SingBoxManager] Reloading config{Mode}",
-                forceRestart ? " (force restart, no hot-reload attempt)" : "");
-            if (forceRestart) return RestartWithConfig(configJson);
+            // sing-box 1.14.4's PUT /configs answers 204 without applying the
+            // document, so every apply is a real restart followed by a bounded
+            // controller tag check. The check confirms the new process serves
+            // the applied outbounds instead of trusting a no-op response.
+            _logger.Information(
+                "[SingBoxManager] Reloading config via restart{Mode}",
+                forceRestart ? " (forced)" : "");
+            var previousRuntime = CaptureRuntimeIdentity();
+            var restarted = RestartWithConfig(configJson);
+            if (!restarted && (IsSameRuntimeIdentity(previousRuntime) || !MacHelperRuntimeHandoffStarted))
+                return ConfigApplyState.NotStarted;
 
-            _currentConfigPath = WriteJsonToDisk(configJson);
-            if (TryHotReload()) return true;
-
-            _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
-            return RestartCore();
-        }
-    }
-
-    public bool TryReloadConfigJson(string configJson)
-    {
-        lock (_lifecycleGate)
-        {
-            if (Volatile.Read(ref _disposed) != 0)
-            {
-                _logger.Debug("[SingBoxManager] TryReloadConfigJson ignored — manager already disposed");
-                return false;
-            }
-            if (!_ownsTunLock || _exactStopUnconfirmed)
-            {
-                _logger.Warning("[SingBoxManager] TryReloadConfigJson ignored — manager does not own valid TUN lease");
-                return false;
-            }
-
-            if (OperatingSystem.IsMacOS())
-            {
-                _logger.Information(
-                    "[SingBoxManager] Hot-reload is disabled on privileged macOS; a restart is required");
-                return false;
-            }
-
-            _logger.Information("[SingBoxManager] Attempting hot-reload (no restart fallback)");
-            _currentConfigPath = WriteJsonToDisk(configJson);
-            return TryHotReload();
+            // The macOS launcher handle may exit while the helper-owned runtime
+            // remains alive. In that case the bounded tag check decides whether
+            // the runtime actually started; it is never reported as NotStarted.
+            return VerifyAppliedConfigTags(configJson)
+                ? ConfigApplyState.Confirmed
+                : ConfigApplyState.StartedUnconfirmed;
         }
     }
 

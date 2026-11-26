@@ -95,6 +95,60 @@ public class AndroidSubscriptionRefreshTests
     }
 
     [Fact]
+    public void SaveServerLinks_KeepsTheHopAndSelectsTheChainedTarget()
+    {
+        var hop = new VlessServerEntry
+        {
+            Name = "relay",
+            Protocol = "turnrelay",
+            Server = "203.0.113.20",
+            Port = 53492,
+            OutboundId = "turnrelay-hop-1",
+            TurnRelay = new TurnRelayConfig
+            {
+                TurnServer = "192.0.2.10:3478",
+                TurnUsername = "user",
+                TurnPassword = "secret",
+                Password = "exit-secret",
+                ServerFingerprint = new string('a', 64),
+                Connections = 2,
+                Mode = "dtls",
+            },
+        };
+        const string targetUri =
+            "vless://00000000-0000-4000-8000-000000000001@exit.invalid:443?security=none" +
+            "&outbound=target-1&detour=turnrelay-hop-1#exit";
+        var target = VlessUriParser.Parse(targetUri);
+
+        using var prefs = new PreferenceFile(new()
+        {
+            ["subscriptions_json"] = JsonSerializer.Serialize(new[]
+            {
+                new SubscriptionEntry { Url = Feed, Servers = [VlessUriParser.Parse(targetUri)] }
+            })
+        });
+        var saved = AndroidSubscriptionRefresh.SaveServerLinks(
+            new[] { hop, target }, targetUri, "qr-command",
+            prefs.Read, prefs.Commit, JsonSerializerOptions.Default);
+
+        Assert.True(saved);
+        Assert.Equal(2, prefs.Standalone.Count);
+        Assert.Equal("exit", prefs.Read(AndroidSubscriptionRefresh.SelectedName));
+        Assert.Equal(targetUri, prefs.Read(AndroidSubscriptionRefresh.ManualUri));
+        Assert.Equal("manual", prefs.Read(AndroidSubscriptionRefresh.ConfigMode));
+
+        var resolved = Assert.IsType<VlessServerEntry>(prefs.Resolve("qr-command"));
+        var config = prefs.Prepare(resolved);
+        Assert.Contains(config.Servers, row => row.IsTurnRelay && row.OutboundId == "turnrelay-hop-1");
+
+        prefs.Commit(new Dictionary<string, string?>
+        {
+            ["servers_json"] = JsonSerializer.Serialize(new[] { hop })
+        });
+        Assert.Null(prefs.Resolve("qr-command"));
+    }
+
+    [Fact]
     public async Task QrReimport_LegacySubscriptionCannotReloadItsFlattenedStandaloneCache()
     {
         var old = VlessUriParser.Parse(OldTargetUri);

@@ -32,10 +32,10 @@ VPNRouter.sln
 
 Core services live in `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderDefense` (known-bad credential filter), plus subsystems for Zapret, Telegram proxy, subscriptions, free configs.
 
-> **Note**: Desktop builds (Windows, macOS, Linux) default to official `PavelLizunov/sing-box-vpnctl` `v1.14.4-vpnctl.3` release artifacts. Android uses the `libbox-legacy.aar` of the same release (API 21 build without naive, which Android does not offer; the app keeps Android 6.0+ / API 23+).
+> **Note**: Desktop builds (Windows, macOS, Linux) default to official `PavelLizunov/sing-box-vpnctl` `v1.14.4-vpnctl.4` release artifacts. Android uses the `libbox-legacy.aar` of the same release (API 21 build without naive, which Android does not offer; the app keeps Android 6.0+ / API 23+).
 
 Import SSH over DNSTT as native sing-box JSON in Custom Config. Add the
-[outbound example](https://github.com/PavelLizunov/sing-box-vpnctl/blob/v1.14.4-vpnctl.3/docs/vpnctl/dnstt.md)
+[outbound example](https://github.com/PavelLizunov/sing-box-vpnctl/blob/v1.14.4-vpnctl.4/docs/vpnctl/dnstt.md)
 to a complete TUN config. Set `route.final` to the SSH tag and the SSH
 outbound's `detour` to the DNSTT tag. To resolve application DNS through SSH,
 include a DNS-over-HTTPS server with the SSH tag as its `detour`. For desktop
@@ -53,5 +53,5 @@ moved out of the tree; read them with `git show 6491be4c:plans/<file>`.
 2. Generate a sing-box JSON config with the right TUN inbound, VLESS+Reality outbound, and `process_name`-based route rules
 3. Start sing-box in TUN mode (creates a virtual adapter)
 4. Traffic enters the virtual adapter; sing-box then splits based on process name matching
-5. On Windows, ETW watches for new processes starting (process scanning on macOS/Linux) → hot-reload the config via Clash API (no reconnect)
+5. On Windows, ETW watches for new processes starting (process scanning on macOS/Linux) → restart sing-box with the regenerated config and verify the applied outbounds on the Clash API
 6. On failure, enabled firewall protection depends on platform, routing mode and privileges. Linux/macOS kill switches support full-tunnel mode only and remain disarmed in split mode; do not rely on per-process crash blocking there.

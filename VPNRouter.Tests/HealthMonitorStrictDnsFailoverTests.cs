@@ -15,9 +15,11 @@ public class HealthMonitorStrictDnsFailoverTests
 
     private sealed class StubFirewall : VPNRouter.Core.Interfaces.IFirewallManager
     {
+        public int EnableCount { get; private set; }
+        public int DisableCount { get; private set; }
         public void CreateBlockRules(IEnumerable<string> processNames, bool isFullTunnel = true) { }
-        public void EnableBlockRules() { }
-        public void DisableBlockRules() { }
+        public void EnableBlockRules() => EnableCount++;
+        public void DisableBlockRules() => DisableCount++;
         public void DeleteAllRules() { }
         public void Dispose() { }
     }
@@ -47,11 +49,12 @@ public class HealthMonitorStrictDnsFailoverTests
         return s;
     }
 
-    private static HealthMonitor BuildHm(FakeSingBoxApi api)
+    private static HealthMonitor BuildHm(FakeSingBoxApi api, StubFirewall? firewall = null)
     {
-        var sb = new SingBoxManager(new SingBoxSettings { ClashApi = "127.0.0.1:65535" });
+        var sb = new SingBoxManager(new SingBoxSettings { ClashApi = "127.0.0.1:65535" },
+            http: new FakeHttpClient());
         var mon = new MonitoringSettings { HealthCheckInterval = 3600, MaxRestartAttempts = 5, RestartOnFailure = false };
-        return new HealthMonitor(sb, new StubScanner(), new StubFirewall(), mon, api: api);
+        return new HealthMonitor(sb, new StubScanner(), firewall ?? new StubFirewall(), mon, api: api);
     }
 
     private static void SetField(object obj, string name, object value)
@@ -68,6 +71,20 @@ public class HealthMonitorStrictDnsFailoverTests
         return (bool)f.GetValue(hm)!;
     }
 
+    private static T? GetNullableField<T>(HealthMonitor hm, string name) where T : struct
+    {
+        var f = hm.GetType().GetField(name,
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        return (T?)f.GetValue(hm);
+    }
+
+    private static string? GetNullableFieldReference(HealthMonitor hm, string name)
+    {
+        var f = hm.GetType().GetField(name,
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        return (string?)f.GetValue(hm);
+    }
+
     private static void Reconcile(HealthMonitor hm)
     {
         var m = hm.GetType().GetMethod("ReconcileStrictDnsFailover",
@@ -78,7 +95,7 @@ public class HealthMonitorStrictDnsFailoverTests
     private static HealthMonitor Started(FakeSingBoxApi api, AppSettings settings)
     {
         var hm = BuildHm(api);
-        hm.HotReloadHookForTests = _ => api.ReloadResultOverride ?? api.TunnelHealthy;
+        hm.ReloadHookForTests = _ => api.ReloadResultOverride ?? api.TunnelHealthy;
         hm.Start(new Profile { Name = "test" }, settings);
         SetField(hm, "_lastScan", new ScanResult { ProcessNames = new List<string> { "Discord.exe" } });
         return hm;
@@ -114,7 +131,7 @@ public class HealthMonitorStrictDnsFailoverTests
             settings.App.BlockAds = blockAds;
             using var hm = Started(new FakeSingBoxApi { ProxyDelayMs = null }, settings);
             var reloads = 0;
-            hm.HotReloadHookForTests = _ => { reloads++; return true; };
+            hm.ReloadHookForTests = _ => { reloads++; return true; };
 
             Reconcile(hm);
             Reconcile(hm);
@@ -137,6 +154,55 @@ public class HealthMonitorStrictDnsFailoverTests
             Reconcile(hm);
             Assert.False(GetFailedOver(hm));
             Assert.Empty(fired);
+        }
+        finally { hm.Stop(); hm.Dispose(); }
+    }
+
+    [Fact]
+    public void FailOpen_StartedUnconfirmed_KeepsKillSwitchArmedAndRecordsPendingTarget()
+    {
+        var api = new FakeSingBoxApi { ProxyDelayMs = null };
+        var firewall = new StubFirewall();
+        var hm = BuildHm(api, firewall);
+        hm.ReloadOutcomeHookForTests = _ => ConfigApplyState.StartedUnconfirmed;
+        hm.Start(new Profile { Name = "test" }, Settings(strictDns: true));
+        SetField(hm, "_lastScan", new ScanResult { ProcessNames = new List<string> { "Discord.exe" } });
+        try
+        {
+            Reconcile(hm);
+            Reconcile(hm);
+
+            Assert.False(GetFailedOver(hm));
+            Assert.True(GetNullableField<bool>(hm, "_pendingStrictDnsFailOpen") == true);
+            Assert.NotNull(GetNullableFieldReference(hm, "_pendingConfigConfirmation"));
+            Assert.Equal(1, firewall.EnableCount);
+            Assert.Equal(0, firewall.DisableCount);
+        }
+        finally { hm.Stop(); hm.Dispose(); }
+    }
+
+    [Fact]
+    public void PendingStrictDnsTarget_CommitsOnlyWhenConfigConfirmationArrives()
+    {
+        var api = new FakeSingBoxApi { ProxyDelayMs = null };
+        var hm = BuildHm(api);
+        hm.Start(new Profile { Name = "test" }, Settings(strictDns: true));
+        var events = new List<bool>();
+        hm.StrictDnsFailoverChanged += (_, value) => events.Add(value);
+        try
+        {
+            SetField(hm, "_pendingConfigConfirmation", "{}");
+            SetField(hm, "_pendingStrictDnsFailOpen", (bool?)true);
+
+            typeof(HealthMonitor)
+                .GetMethod("CommitPendingConfigConfirmation",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .Invoke(hm, null);
+
+            Assert.True(GetFailedOver(hm));
+            Assert.Null(GetNullableFieldReference(hm, "_pendingConfigConfirmation"));
+            Assert.Null(GetNullableField<bool>(hm, "_pendingStrictDnsFailOpen"));
+            Assert.Equal(new[] { true }, events);
         }
         finally { hm.Stop(); hm.Dispose(); }
     }

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using Serilog;
+using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Platform;
 
@@ -64,12 +65,17 @@ internal static class UnixFirewallServerIps
         {
             foreach (var ob in obs.EnumerateArray())
             {
-                if (ob.ValueKind == JsonValueKind.Object &&
-                    ob.TryGetProperty("server", out var srv) &&
-                    srv.ValueKind == JsonValueKind.String)
+                if (ob.ValueKind != JsonValueKind.Object) continue;
+                if (ob.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String &&
+                    string.Equals(type.GetString(), "turnrelay", StringComparison.OrdinalIgnoreCase))
                 {
-                    AddCandidate(srv.GetString());
+                    if (ob.TryGetProperty("turn_server", out var relay) && relay.ValueKind == JsonValueKind.String &&
+                        TurnRelayUriParserRules.TryGetHost(relay.GetString(), out var host))
+                        AddCandidate(host);
+                    continue;
                 }
+                if (ob.TryGetProperty("server", out var srv) && srv.ValueKind == JsonValueKind.String)
+                    AddCandidate(srv.GetString());
             }
         }
 

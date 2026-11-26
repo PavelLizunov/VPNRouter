@@ -48,11 +48,11 @@
             </StackPanel>
         </ToggleButton>
         <StackPanel Name="SimpleLinkEditor" IsVisible="{Binding #SimpleLinkButton.IsChecked, FallbackValue=False}"
-                    Spacing="8" KeyDown="OnLinkEditorKeyDown">
+                    Spacing="8">
             <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" TextWrapping="Wrap"/>
             <TextBox Name="SimpleConfigLink" PlaceholderText="{Binding L_SmpInputWatermark}"
                      AutomationProperties.Name="{Binding L_SmpInputLabel}"
-                     MinHeight="40" AcceptsReturn="False" CornerRadius="{StaticResource RadiusLg}"/>
+                     MinHeight="40" AcceptsReturn="True" MaxLines="2" CornerRadius="{StaticResource RadiusLg}"/>
             <TextBlock Name="SimpleLinkError" Classes="hint" TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite"
                        Foreground="{DynamicResource DangerFgBrush}"

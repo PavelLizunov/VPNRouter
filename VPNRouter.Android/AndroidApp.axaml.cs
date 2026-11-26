@@ -957,7 +957,8 @@ public partial class AndroidApp : Avalonia.Application
         {
             FontSize = UiScale.Fs(11),
             Padding = new Thickness(10, 7),
-            AcceptsReturn = false,
+            AcceptsReturn = true,
+            MaxLines = 2,
             CornerRadius = new CornerRadius(radiusXs),
             Watermark = Localization.SmpInputWatermark,
         };
@@ -1517,6 +1518,21 @@ public partial class AndroidApp : Avalonia.Application
         var raw = (_serverInput.Text ?? string.Empty).Trim();
         _serverInputError.IsVisible = false;
 
+        if (raw.IndexOfAny(['\r', '\n']) >= 0 && !ServerUriParser.IsWireGuardConf(raw))
+        {
+            var pair = ServerUriParser.ParseTurnRelayPair(raw, out var targetUri);
+            if (pair == null)
+            {
+                _serverInputError.Text = VPNRouter.Core.Localization.Strings.SmpTurnRelayChainRequired;
+                _serverInputError.IsVisible = true;
+                return false;
+            }
+            if (!AndroidStorage.SelectServerLinks(pair, targetUri, command)) return false;
+            _serverInput.Text = targetUri;
+            PublishSavedServerInput();
+            return true;
+        }
+
         if (ServerUriParser.IsSupportedScheme(raw))
         {
             try
@@ -1528,11 +1544,14 @@ public partial class AndroidApp : Avalonia.Application
                     _serverInputError.IsVisible = true;
                     return false;
                 }
+                if (parsed.IsTurnRelay)
+                {
+                    _serverInputError.Text = VPNRouter.Core.Localization.Strings.SmpTurnRelayChainRequired;
+                    _serverInputError.IsVisible = true;
+                    return false;
+                }
                 if (!AndroidStorage.SelectSingleServer(parsed, raw, command)) return false;
-                RefreshConfigModeUiFromStorage();
-                _cachedServers = AndroidStorage.GetServers();
-                UpdateServerListView();
-                UpdateConfigSummary();
+                PublishSavedServerInput();
                 return true;
             }
             catch (PlaceholderConfigException ex)
@@ -1564,6 +1583,14 @@ public partial class AndroidApp : Avalonia.Application
         _serverInputError.Text = Localization.SaveStatusUnknown;
         _serverInputError.IsVisible = true;
         return false;
+    }
+
+    private void PublishSavedServerInput()
+    {
+        RefreshConfigModeUiFromStorage();
+        _cachedServers = AndroidStorage.GetServers();
+        UpdateServerListView();
+        UpdateConfigSummary();
     }
 
 

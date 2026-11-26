@@ -265,7 +265,7 @@ public sealed class ServerFeature
 
         ct.ThrowIfCancellationRequested();
         var server = match.Server;
-        if (!string.IsNullOrEmpty(server.DetourVia) || server.Dnstt != null ||
+        if (!string.IsNullOrEmpty(server.DetourVia) || server.IsTurnRelay || server.Dnstt != null ||
             string.Equals(server.Protocol, "dnstt", StringComparison.OrdinalIgnoreCase))
             return new { id, reachable = false, latencyMs = (int?)null, requiresTunnel = true };
 
@@ -302,7 +302,7 @@ public sealed class ServerFeature
         var server = match.Server;
         // This verifier has no server pool and cannot resolve an upstream detour.
         // Do not silently verify the target over a direct connection instead.
-        if (!string.IsNullOrEmpty(server.DetourVia))
+        if (!string.IsNullOrEmpty(server.DetourVia) || server.IsTurnRelay)
             return new { id, ok = false, latencyMs = (int?)null, error = "UnsupportedByVerifier" };
 
         progress?.Invoke(new { id, stage = "verify_start", completed = 0, total = 1 });

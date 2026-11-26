@@ -21,7 +21,10 @@ public static class ProtocolGroups
     public static ProtocolGroup Of(VlessServerEntry? entry)
     {
         if (entry?.Awg != null) return ProtocolGroup.LowPing;
-        if (entry is { Dnstt: not null } or { IsDnsTunnel: true }) return ProtocolGroup.Emergency;
+        // A TurnRelay row is a chain entry, not a selectable exit; it shares the
+        // emergency-transport look so it never forms a category with no choices.
+        if (entry is { Dnstt: not null } or { IsDnsTunnel: true } or { IsTurnRelay: true })
+            return ProtocolGroup.Emergency;
         var protocol = (entry?.Protocol ?? "vless").ToLowerInvariant();
         var transport = entry?.Transport?.Type?.ToLowerInvariant();
         return protocol switch

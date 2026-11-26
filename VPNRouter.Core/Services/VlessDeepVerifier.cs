@@ -182,6 +182,13 @@ public sealed class VlessDeepVerifier
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
 
+        if (entry.IsTurnRelay)
+        {
+            _logger.Information("[VlessDeepVerifier] TurnRelay hop deep verify skipped (chain entry only)");
+            return DeepVerifyResult.Failed("deep verify: turnrelay is a chain entry; verify its VLESS target",
+                DeepVerifyFailurePhase.UnsupportedByVerifier);
+        }
+
         var policy = EffectivePolicy;
         using var policyScope = SingBoxRuntimePolicy.EnterScope(policy);
         if (policy != null)
@@ -345,7 +352,7 @@ public sealed class VlessDeepVerifier
         bool embedded = false, string? localDns = null, int? udpPort = null, string? outboundInterface = null,
         bool detectInterface = false)
     {
-        if (!string.IsNullOrEmpty(s.DetourVia))
+        if (s.IsTurnRelay || !string.IsNullOrEmpty(s.DetourVia))
             throw new InvalidOperationException(DeepVerifyConstants.DetourNote);
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
         var dnsTag = protocol == "vmess" ? "local-dns" : "dns-google";

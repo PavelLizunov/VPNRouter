@@ -36,6 +36,7 @@ public partial class SubscriptionLinkEditor : UserControl
         _linkProgress = this.FindControl<TextBlock>("SimpleLinkProgress")!;
         _linkNotice = this.FindControl<TextBlock>("SimpleLinkNotice")!;
         _saveLink = this.FindControl<Button>("SimpleSaveLink")!;
+        _linkEditor.AddHandler(InputElement.KeyDownEvent, OnLinkEditorKeyDown, RoutingStrategies.Tunnel);
         _linkInput.TextChanged += (_, _) =>
         {
             _linkDraftRevision++;

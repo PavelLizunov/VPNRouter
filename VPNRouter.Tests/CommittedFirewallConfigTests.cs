@@ -105,4 +105,22 @@ public sealed class CommittedFirewallConfigTests
         Assert.Equal(expected, linuxIps);
         Assert.Equal(expected, macIps);
     }
+
+    [Fact]
+    public void ParseServerIps_AllowsTurnDestinationForTurnRelay()
+    {
+        const string configJson = """
+        {
+          "outbounds": [
+            { "type": "turnrelay", "server": "198.51.100.30", "turn_server": "192.0.2.10:3478" },
+            { "type": "turnrelay", "server": "198.51.100.31", "turn_server": "[2001:db8::10]:3478" }
+          ]
+        }
+        """;
+        var fake = new FakeProcessRunner();
+        var expected = new[] { "192.0.2.10", "2001:db8::10" };
+
+        Assert.Equal(expected, new LinuxFirewallManager(runner: fake).ParseServerIps(configJson));
+        Assert.Equal(expected, new MacFirewallManager(runner: fake).ParseServerIps(configJson));
+    }
 }

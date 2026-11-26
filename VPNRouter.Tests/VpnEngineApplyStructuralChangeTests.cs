@@ -647,6 +647,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
         var tempDir = Path.Combine(Path.GetTempPath(), $"vpnrouter-apply-exactfail-{Guid.NewGuid():N}");
         VPNRouter.Core.AppPaths.OverrideDataDir(tempDir);
         Directory.CreateDirectory(VPNRouter.Core.AppPaths.ConfigDir);
+        File.WriteAllText(VPNRouter.Core.AppPaths.CurrentConfigPath, "{}");
 
         var profilesDir = VPNRouter.Core.AppPaths.ProfilesDir;
         Directory.CreateDirectory(profilesDir);
