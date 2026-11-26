@@ -85,7 +85,7 @@ public sealed class ClashConnectionsStreamParseTests
     public async Task NestedElements_AreCountedOnce()
     {
         var json = "{\"downloadTotal\":1,\"uploadTotal\":2,\"connections\":[" +
-                   "[[1,2,3],{\"nested\":{\"deep\":[4]}},[]]}";
+                   "[1,2,3],{\"nested\":{\"deep\":[4]}},[]]}";
 
         var result = await ParseAsync(json, chunkSize: 1);
 
