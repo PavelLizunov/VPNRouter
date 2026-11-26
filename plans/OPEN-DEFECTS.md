@@ -26,6 +26,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [ ] **P2** - Windows Business cannot select TurnRelay chains from managed subscriptions. The client restricts portal choices to direct VLESS and the vpnctl Corp eligibility regression excludes detours. Extend both contracts with verified egress for the selected chain. The .4 kernel candidate preserves the current routing contract. See [candidate plan](phase-business-turnrelay-candidate-2026-11-26.md).
+
 - [x] **P1** - Business repair calls the diagnostics core without its required cancellation argument, and a preflight subscription refresh can cancel the repair that requested it when the saved server row is replaced. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
 - [x] **P1** - Dismissing a report during the upload acknowledgement handoff can lose the visible receipt. A disposed controller can also publish a late delivery result. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.
 - [x] **P2** - The repair card omits the approved offline search retry, receipt styling and separate advice detail. Its keyboard focus can be lost when the primary button disappears. See phase-business-neon-ui-2026-11-25.md. Resolved in source. CI verification pending.

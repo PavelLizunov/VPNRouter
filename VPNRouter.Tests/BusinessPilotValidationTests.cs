@@ -114,7 +114,7 @@ public sealed class BusinessPilotValidationTests
             var output = stdout.GetAwaiter().GetResult();
             var version = output.Split('\n').Select(line => line.Trim())
                 .FirstOrDefault(line => line.StartsWith("sing-box version ", StringComparison.Ordinal));
-            Assert.Equal("sing-box version 1.14.4-vpnctl.3",
+            Assert.Equal("sing-box version 1.14.4-vpnctl.4",
                 version ?? throw new InvalidOperationException("Packaged native core did not report its version."));
             var tags = output.Split('\n')
                 .Select(line => line.Trim()).Where(line => line.StartsWith("Tags:", StringComparison.OrdinalIgnoreCase)).ToArray();

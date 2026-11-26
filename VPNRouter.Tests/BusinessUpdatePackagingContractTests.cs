@@ -61,10 +61,10 @@ public sealed class BusinessUpdatePackagingContractTests
     {
         var root = FindRoot();
         var pin = File.ReadAllText(Path.Combine(root, "packaging", "windows", "business-core.ps1"));
-        Assert.Contains("$BusinessSingBoxVersion = '1.14.4-vpnctl.3'", pin);
-        Assert.Contains("$BusinessSingBoxAsset = 'sing-box-1.14.4-vpnctl.3-windows-amd64.zip'", pin);
+        Assert.Contains("$BusinessSingBoxVersion = '1.14.4-vpnctl.4'", pin);
+        Assert.Contains("$BusinessSingBoxAsset = 'sing-box-1.14.4-vpnctl.4-windows-amd64.zip'", pin);
         Assert.Contains(
-            "$BusinessSingBoxSha256 = '11f5194ea8bf7b1796c9cfa3a160adf8748b2fd26b22bbaa1b1ff4b42f715825'",
+            "$BusinessSingBoxSha256 = '1efb965de78720f7a4c86a4a4c0403bc8b388397bb640e4547acc14817ef3287'",
             pin);
 
         foreach (var script in new[] { "build-business.ps1", "build-business-update.ps1" })
@@ -108,7 +108,7 @@ public sealed class BusinessUpdatePackagingContractTests
             var app = Path.Combine(directory, "app");
             Assert.Equal(app, BusinessUpdatePackage.ValidateStaged(directory, AppVersion.Version));
             if (OperatingSystem.IsWindows())
-                Assert.Equal("sing-box version 1.14.4-vpnctl.3", ReadCoreVersion(app));
+                Assert.Equal("sing-box version 1.14.4-vpnctl.4", ReadCoreVersion(app));
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
     }

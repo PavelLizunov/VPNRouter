@@ -1,7 +1,7 @@
 # Windows Business core pin. Shared by the private installer and shared update builders.
-# Official release: PavelLizunov/sing-box-vpnctl v1.14.4-vpnctl.3
-# Artifact: sing-box-1.14.4-vpnctl.3-windows-amd64.zip
+# Official release: PavelLizunov/sing-box-vpnctl v1.14.4-vpnctl.4
+# Artifact: sing-box-1.14.4-vpnctl.4-windows-amd64.zip
 # SHA256 from the release SHA256SUMS and gh attestation verify.
-$BusinessSingBoxVersion = '1.14.4-vpnctl.3'
-$BusinessSingBoxAsset = 'sing-box-1.14.4-vpnctl.3-windows-amd64.zip'
-$BusinessSingBoxSha256 = '11f5194ea8bf7b1796c9cfa3a160adf8748b2fd26b22bbaa1b1ff4b42f715825'
+$BusinessSingBoxVersion = '1.14.4-vpnctl.4'
+$BusinessSingBoxAsset = 'sing-box-1.14.4-vpnctl.4-windows-amd64.zip'
+$BusinessSingBoxSha256 = '1efb965de78720f7a4c86a4a4c0403bc8b388397bb640e4547acc14817ef3287'
