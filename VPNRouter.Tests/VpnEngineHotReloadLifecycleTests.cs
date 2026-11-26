@@ -751,7 +751,8 @@ public sealed class VpnEngineHotReloadLifecycleTests
         var (engine, _, spawnedHandles, firewall, _, settings, cleanup) =
             await StartHappyPathAsync(isolatedProfile: true, blockOnVpnFail: true);
         using var fixture = cleanup;
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        const System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var manager = Assert.IsType<SingBoxManager>(typeof(VpnEngine).GetField("_singBox", flags)!.GetValue(engine));
         var lease = typeof(SingBoxManager).GetField("_ownsTunLock", flags)!;
         var previous = engine.AcceptedTunnel;

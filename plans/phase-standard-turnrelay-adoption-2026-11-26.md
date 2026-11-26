@@ -93,3 +93,7 @@ if rollback cannot be confirmed. A rejected replacement that leaves the old
 runtime in place releases temporary protection once that identity is verified.
 Regression coverage includes the rollback and refusal paths, controller secret
 and deferred strict-DNS transitions. Final CI and re-review are pending.
+
+The Linux, macOS, and Windows test jobs on `dd3e9eda` stopped at the same
+`BindingFlags` compile error in the refused-replacement regression test.
+The follow-up qualifies the reflection type and triggers a fresh CI run.
