@@ -61,9 +61,10 @@ public sealed class SimpleConnectStatusTests
         Assert.True(disconnect.IsEffectivelyEnabled);
         Assert.Same(vm.SmpToggleConnectCommand, disconnect.Command);
         Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
-        Assert.True(disconnect.Bounds.Height > 0);
+        Assert.InRange(disconnect.Bounds.Height, 116, 124);
+        Assert.Equal(disconnect.Bounds.Height, disconnect.Bounds.Width);
         var initial = disconnect.TranslatePoint(default, view.Page)!.Value;
-        Assert.InRange(initial.Y, 0, view.Page.Bounds.Height - disconnect.Bounds.Height);
+        Assert.InRange(initial.Y, 1, view.Page.Bounds.Height - disconnect.Bounds.Height - 1);
 
         scroll.Offset = new Vector(0, scroll.Extent.Height - scroll.Viewport.Height);
         Dispatcher.UIThread.RunJobs();
@@ -530,11 +531,10 @@ public sealed class SimpleConnectStatusTests
         Assert.Equal(16, groupedRows.Sum(group => group.Servers.Length));
         Assert.Same(previous, groupedRows[0].Servers[0]);
         Assert.False(Shown(list));
-        Assert.All(groupedRows, group => Assert.False(group.IsExpanded));
-
-        FindGroupButton(groups, ProtocolGroup.Daily, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Dispatcher.UIThread.RunJobs();
         Assert.True(groupedRows[0].IsExpanded);
+        Assert.False(groupedRows[1].IsExpanded);
+        var dailyList = Assert.Single(groups.GetVisualDescendants().OfType<ServerPickerListBox>(), Shown);
+        Assert.IsType<ListBoxItem>(dailyList.ContainerFromIndex(0));
         Assert.Equal("SE", previous!.CountryCode);
         Assert.NotNull(previous.CountryFlag);
         Assert.False(vm.SubscriptionServers[1].HasCountryFlag);
@@ -598,10 +598,9 @@ public sealed class SimpleConnectStatusTests
 
         vm.OpenConfigPickerCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
-        FindGroupButton(groups, ProtocolGroup.WebFallback, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Dispatcher.UIThread.RunJobs();
         var groupList = Assert.Single(groups.GetVisualDescendants().OfType<ServerPickerListBox>(),
             picker => picker.IsEffectivelyVisible);
+        Assert.Equal(ProtocolGroup.WebFallback, Assert.IsType<SimpleServerGroup>(groupList.DataContext).Category);
         var groupRow = Assert.IsType<ListBoxItem>(groupList.ContainerFromIndex(0));
         groupRow.Focus();
         PressPickerKey(groupRow, Key.Enter);
@@ -849,6 +848,7 @@ public sealed class SimpleConnectStatusTests
 
             var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
             var group = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
+            Assert.True(group.IsExpanded);
             Assert.False(group.CanAutoSelect);
             Assert.Equal(Strings.SmpServerUnsupported, group.SelectionHint);
             Assert.False(FindGroupButton(groups, ProtocolGroup.StealthWeb, disclosure: false).IsEffectivelyEnabled);
@@ -901,6 +901,9 @@ public sealed class SimpleConnectStatusTests
             Assert.True(group.CanActivateCategory);
             Assert.False(group.CanAutoSelect);
             Assert.True(FindGroupButton(groups, group.Category, disclosure: false).IsEffectivelyEnabled);
+            Assert.True(group.IsExpanded);
+            Assert.Single(groups.GetVisualDescendants().OfType<ServerPickerListBox>(), Shown);
+            view.Capture("simple-picker-turnrelay-exit-360");
             Toggle(view.Page, "SimpleServerSearchButton", true);
             FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!.Text = "TurnRelay";
             Dispatcher.UIThread.RunJobs();
@@ -908,7 +911,6 @@ public sealed class SimpleConnectStatusTests
             Assert.Equal(exit.Name, Assert.IsType<ServerViewModel>(Assert.Single(results.Items)).Name);
             var feed = Assert.Single(vm.Subscriptions).UnderlyingEntry;
             Assert.Equal(exit.DetourVia, Assert.Single(feed.Servers, row => row.IsTurnRelay).OutboundId);
-            view.Capture("simple-picker-turnrelay-exit-360");
         }
         finally { SingBoxFeatures.OverrideTurnRelay = previousTurnRelay; }
     }
@@ -1030,9 +1032,26 @@ public sealed class SimpleConnectStatusTests
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(dark, vm.IsDarkTheme);
 
+            vm.SubscriptionServers[0].TestStatus = ServerProbeStatus.Ok;
+            vm.SubscriptionServers[0].PingMs = 42;
+            vm.SubscriptionServers[1].TestStatus = ServerProbeStatus.Ok;
+            vm.SubscriptionServers[1].PingMs = 58;
             vm.OpenConfigPickerCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
+            var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
+            var list = Assert.Single(groups.GetVisualDescendants().OfType<ServerPickerListBox>(), Shown);
+            Assert.Equal(2, list.Items.Count);
             view.Capture($"simple-home-expanded-{(dark ? "dark" : "light")}-360");
+
+            if (dark)
+            {
+                vm.OpenConfigPickerCommand.Execute(null);
+                Engine(vm).CommitTunnelInfo(Generate(VpnEngine.CopySessionSettings(settings)));
+                vm.IsConnected = true;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(view.Page.FindControl<TextBlock>("ConnectionDetails")!.IsEffectivelyVisible);
+                view.Capture("simple-home-connected-dark-360");
+            }
         }
         finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
     }
@@ -1045,6 +1064,9 @@ public sealed class SimpleConnectStatusTests
         {
             var settings = new AppSettings();
             settings.App.Language = "en";
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions =
+                [new() { Url = "https://feed.invalid/language", Servers = [Entry("test", "test.invalid")] }];
             var store = new InMemorySettingsStore();
             store.Save(settings, AppPaths.ConfigYamlPath);
             using var vm = CreateVm(store);
@@ -1055,13 +1077,29 @@ public sealed class SimpleConnectStatusTests
             var appRules = view.Page.FindControl<Button>("SimpleAppRules")!;
             Assert.Equal("Name, country or city", search.PlaceholderText);
 
+            vm.OpenConfigPickerCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
+            var group = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
+            Assert.True(group.IsExpanded);
+            FindGroupButton(groups, group.Category, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
             vm.SetLanguageRussianCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
+            var translated = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
+            Assert.NotSame(group, translated);
+            Assert.False(translated.IsExpanded);
             Assert.Equal("Название, страна или город", search.PlaceholderText);
             Assert.Equal("Поиск по списку", AutomationProperties.GetName(search));
             Assert.Equal("Проверить серверы", AutomationProperties.GetName(check));
             Assert.Equal("Изменить ссылку", AutomationProperties.GetName(link));
             Assert.Equal("Настроить приложения", appRules.Content);
+
+            vm.OpenConfigPickerCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            vm.OpenConfigPickerCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(translated.IsExpanded);
         }
         finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
     }
@@ -1154,6 +1192,7 @@ public sealed class SimpleConnectStatusTests
                 Click(window, simple.FindControl<TextBlock>("ConfigName")!);
                 Assert.Equal(Strings.SmpCollapseCategory, AutomationProperties.GetName(header));
                 Assert.True(simpleGroups.IsEffectivelyVisible);
+                Assert.All(simpleGroups.Items.Cast<SimpleServerGroup>(), group => Assert.True(group.IsExpanded));
                 Assert.Equal(before, store.SaveCount);
                 Assert.Same(initial, vm.SelectedSubscriptionServer);
                 Assert.Null(vm.SimpleServerPreference);
@@ -1185,6 +1224,7 @@ public sealed class SimpleConnectStatusTests
                 window.Content = advanced;
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal(automatic, vm.SimpleServerPreference);
+                Assert.All(advancedGroups.Items.Cast<SimpleServerGroup>(), group => Assert.True(group.IsExpanded));
                 Assert.True(Assert.Single(advancedGroups.Items.Cast<SimpleServerGroup>(), group => group.IsCurrent).CanAutoSelect);
                 Assert.Equal("ws", Assert.Single(advancedGroups.Items.Cast<SimpleServerGroup>(),
                     group => group.Category == ProtocolGroup.WebFallback).Protocols);
@@ -1211,12 +1251,8 @@ public sealed class SimpleConnectStatusTests
 
                 var dailyGroup = Assert.Single(advancedGroups.Items.Cast<SimpleServerGroup>(),
                     group => group.Category == ProtocolGroup.Daily);
-                if (!dailyGroup.IsExpanded)
-                    FindGroupButton(advancedGroups, dailyGroup.Category, disclosure: true)
-                        .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Dispatcher.UIThread.RunJobs();
                 var list = Assert.Single(advancedGroups.GetVisualDescendants().OfType<ServerPickerListBox>(),
-                    control => control.IsEffectivelyVisible);
+                    control => control.IsEffectivelyVisible && ReferenceEquals(control.DataContext, dailyGroup));
                 var selectedRow = Assert.IsType<ListBoxItem>(list.ContainerFromIndex(1));
                 selectedRow.Focus();
                 PressPickerKey(selectedRow, Key.Enter);
@@ -1291,8 +1327,6 @@ public sealed class SimpleConnectStatusTests
             var groups = FindOnPage<ItemsControl>(page, "SimpleServerGroups")!;
             var emergency = Assert.Single(groups.Items.Cast<SimpleServerGroup>(), group => group.Category == ProtocolGroup.Emergency);
             Assert.Equal("dnstt", emergency.Protocols);
-            FindGroupButton(groups, ProtocolGroup.Daily, disclosure: true).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Dispatcher.UIThread.RunJobs();
 
             var list = Assert.Single(groups.GetVisualDescendants().OfType<ServerPickerListBox>(), Shown);
             Assert.Equal(24, list.Items.Count);

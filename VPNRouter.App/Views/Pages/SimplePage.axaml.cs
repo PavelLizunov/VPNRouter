@@ -61,8 +61,7 @@ public partial class SimplePage : UserControl
                 SyncThemeLogo();
             }
         };
-        // The connecting arc of the status emblem spins only when the system allows animations; with reduced motion
-        // it stays a still accent arc and the state word carries the meaning.
+        // With reduced motion the connection ring stays still and the status text carries the meaning.
         Classes.Set("calm", !UiMotion.Allowed());
     }
 

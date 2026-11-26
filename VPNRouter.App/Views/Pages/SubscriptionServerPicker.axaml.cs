@@ -17,12 +17,14 @@ namespace VPNRouter.App.Views.Pages;
 
 public partial class SubscriptionServerPicker : UserControl
 {
+    private const int SmallListLimit = 12;
+
     private readonly ToggleButton _searchButton;
     private readonly TextBox _serverSearch;
     private readonly StackPanel _searchLinkHint;
     private readonly ServerPickerListBox _serverResults;
     private readonly ItemsControl _serverGroups;
-    private ProtocolGroup? _expandedServerGroup;
+    private HashSet<ProtocolGroup>? _expandedByUser;
     private ServerViewModel[] _sourceRows = [];
     private string? _language;
     private readonly TextBlock _serverCount;
@@ -66,8 +68,7 @@ public partial class SubscriptionServerPicker : UserControl
             _language = null;
         }
         if (_viewModel != null) _viewModel.PropertyChanged += OnSourceChanged;
-        _expandedServerGroup = viewModel?.SimpleServerPreference?.GetCategory() ??
-            (viewModel?.SimpleServerPreference is { CategoryName: null } ? viewModel?.SelectedSubscriptionServer?.ProtocolGroup : null);
+        _expandedByUser = null;
         RefreshLabels();
         ResetSearch();
     }
@@ -171,10 +172,17 @@ public partial class SubscriptionServerPicker : UserControl
                 .ToArray();
         }
 
+        var groups = _serverGroups.Items.OfType<SimpleServerGroup>().ToArray();
+        if (_expandedByUser is { Count: > 0 } expanded && !groups.Any(group => expanded.Contains(group.Category)))
+            _expandedByUser = null;
         var category = vm.SimpleServerPreference?.GetCategory();
-        foreach (var group in _serverGroups.Items.OfType<SimpleServerGroup>())
+        var currentCategory = category ?? current?.ProtocolGroup;
+        var defaultGroup = groups.FirstOrDefault(group => group.Category == currentCategory) ??
+            groups.FirstOrDefault(group => group.HasSelectableServers) ?? groups.FirstOrDefault();
+        var expandAll = _expandedByUser == null && _sourceRows.Count(row => row.CanSelectInSimpleMode) <= SmallListLimit;
+        foreach (var group in groups)
         {
-            group.IsExpanded = group.Category == _expandedServerGroup;
+            group.IsExpanded = _expandedByUser?.Contains(group.Category) ?? (expandAll || group == defaultGroup);
             group.SelectedServer = selected != null && group.Servers.Contains(selected) ? selected : null;
             group.IsCurrent = group.Category == category && group.CanAutoSelect;
         }
@@ -191,7 +199,7 @@ public partial class SubscriptionServerPicker : UserControl
 
     internal void Close()
     {
-        _expandedServerGroup = null;
+        _expandedByUser = null;
         ResetSearch();
     }
 
@@ -232,9 +240,17 @@ public partial class SubscriptionServerPicker : UserControl
     private void ToggleServerCategory(object? sender, RoutedEventArgs args)
     {
         if (sender is not Button { DataContext: SimpleServerGroup group }) return;
-        _expandedServerGroup = group.IsExpanded ? null : group.Category;
-        foreach (var item in _serverGroups.Items.OfType<SimpleServerGroup>())
-            item.IsExpanded = item.Category == _expandedServerGroup;
+        if (group.IsExpanded)
+        {
+            _expandedByUser ??= _serverGroups.Items.OfType<SimpleServerGroup>()
+                .Where(item => item.IsExpanded).Select(item => item.Category).ToHashSet();
+            _expandedByUser.Remove(group.Category);
+        }
+        else
+        {
+            _expandedByUser = [group.Category];
+        }
+        RefreshServerPicker();
     }
 
     private async void ChooseServerCategory(object? sender, RoutedEventArgs args)

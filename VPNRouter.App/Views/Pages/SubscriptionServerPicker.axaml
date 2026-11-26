@@ -10,24 +10,25 @@
 
     <UserControl.Resources>
         <DataTemplate x:Key="SimpleServerRowTemplate" x:DataType="vm:ServerViewModel">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
-                <Grid Width="24" Height="18" VerticalAlignment="Center">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6">
+                <icons:Pictogram Classes="picker-radio" Width="13" Height="13" VerticalAlignment="Center"/>
+                <Grid Grid.Column="1" Width="24" Height="18" VerticalAlignment="Center">
                     <Image Source="{Binding CountryFlag}" Stretch="Uniform" ToolTip.Tip="{Binding CountryFlagTooltip}"
                            IsVisible="{Binding HasCountryFlag}" AutomationProperties.Name="{Binding CountryFlagTooltip}"/>
                     <icons:ProtocolDisc Group="{Binding ProtocolGroup}" Width="18" Height="18" GlyphSize="12"
                                         CornerRadius="9" IsVisible="{Binding !HasCountryFlag}"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Grid>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                    <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="2">
-                        <TextBlock Text="{Binding SimpleDisplayName}" TextTrimming="CharacterEllipsis"
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <TextBlock Classes="server-name" Text="{Binding SimpleDisplayName}" TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center"
                                    ToolTip.Tip="{Binding DisplayName}"/>
-                        <Border Classes="chip" IsVisible="{Binding HasTurnRelayHop}"
+                        <Border Grid.Column="1" Classes="chip" IsVisible="{Binding HasTurnRelayHop}"
                                 ToolTip.Tip="{Binding TurnRelayTooltip}">
                             <TextBlock Text="{Binding TurnRelayBadgeText}" FontSize="{StaticResource FsSm}"/>
                         </Border>
-                    </WrapPanel>
+                    </Grid>
                     <TextBlock Classes="hint" Text="{Binding SimpleLocation}" TextTrimming="CharacterEllipsis"
                                IsVisible="{Binding CanSelectInSimpleMode}" ToolTip.Tip="{Binding HealthTooltip}"/>
                     <TextBlock Classes="hint advanced-verdict" Text="{Binding HealthVerdictText}"
@@ -38,13 +39,16 @@
                                Foreground="{DynamicResource WarningFgBrush}"
                                ToolTip.Tip="{Binding Endpoint}"/>
                 </StackPanel>
-                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                    <TextBlock Text="{Binding PingDisplay}" ToolTip.Tip="{Binding HealthTooltip}"
-                               HorizontalAlignment="Right" Classes="hint"/>
+                <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="2">
+                    <Border Classes="ping-pill" Classes.good="{Binding IsPingGood}" Classes.slow="{Binding IsPingSlow}"
+                            Classes.bad="{Binding IsPingBad}" MinWidth="44" ToolTip.Tip="{Binding HealthTooltip}">
+                        <TextBlock Text="{Binding PingDisplay}"/>
+                    </Border>
                     <TextBlock IsVisible="{Binding IsActive}" Text="{x:Static loc:Strings.SmpCurrentServer}"
-                               Foreground="{DynamicResource SuccessFgBrush}" FontSize="{StaticResource FsXs}"/>
+                               Foreground="{DynamicResource SuccessFgBrush}" FontSize="{StaticResource FsXs}"
+                               HorizontalAlignment="Center"/>
                 </StackPanel>
-                <Button Grid.Column="3" Classes="row-icon picker-retest"
+                <Button Grid.Column="4" Classes="row-icon picker-retest"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
                         CommandParameter="{Binding}"
                         IsEnabled="{Binding !IsTesting}"
@@ -86,6 +90,18 @@
             <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
             <Setter Property="FontSize" Value="{StaticResource FsMd}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        </Style>
+        <Style Selector="icons|Pictogram.picker-radio">
+            <Setter Property="Id" Value="radio-off"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem:selected icons|Pictogram.picker-radio">
+            <Setter Property="Id" Value="radio-on"/>
+            <Setter Property="Foreground" Value="{DynamicResource SuccessFgBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.server-name">
+            <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
         <Style Selector="ListBox.pick ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
@@ -147,17 +163,20 @@
 
     <StackPanel Name="SimpleServerPanel" Spacing="8"
                 IsEnabled="{Binding !SimpleCtaIsConnecting}">
-        <StackPanel Spacing="4">
-            <TextBlock Name="PickerSelection" Classes="label" TextWrapping="Wrap"/>
-            <TextBlock Name="PickerRunning" Classes="hint" TextTrimming="CharacterEllipsis"/>
-        </StackPanel>
-        <ToggleButton Name="SimpleServerSearchButton" Classes="change" IsVisible="{Binding SmpHasSubscriptionServers}"
-                      HorizontalAlignment="Left" Click="ToggleServerSearch">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-                <icons:Pictogram Id="search-tab" Width="14" Height="14"/>
-                <TextBlock Name="SimpleServerSearchButtonLabel"/>
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <StackPanel Spacing="4" VerticalAlignment="Center">
+                <TextBlock Name="PickerSelection" Classes="label" TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding #PickerSelection.Text}"/>
+                <TextBlock Name="PickerRunning" Classes="hint" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
-        </ToggleButton>
+            <ToggleButton Grid.Column="1" Name="SimpleServerSearchButton" Classes="change" Click="ToggleServerSearch"
+                          IsVisible="{Binding SmpHasSubscriptionServers}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <icons:Pictogram Id="search-tab" Width="14" Height="14"/>
+                    <TextBlock Name="SimpleServerSearchButtonLabel"/>
+                </StackPanel>
+            </ToggleButton>
+        </Grid>
         <StackPanel Spacing="6" IsVisible="{Binding #SimpleServerSearchButton.IsChecked, FallbackValue=False}">
             <TextBlock Name="SimpleServerSearchLabel" Classes="label"/>
             <TextBox Name="SimpleServerSearch" MinHeight="36" KeyDown="OnSearchKeyDown"/>
@@ -202,7 +221,7 @@
                             </Button>
                         </Grid>
                         <icons:ServerPickerListBox Classes="pick"
-                                                   Margin="16,0,0,2"
+                                                   Margin="4,0,0,2"
                                                    IsVisible="{Binding IsExpanded}"
                                                    ItemsSource="{Binding Servers}"
                                                    SelectedItem="{Binding SelectedServer, Mode=OneWay}"

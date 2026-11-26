@@ -38,6 +38,19 @@ hops and TurnRelay-only feeds clearly. Fix P0/P1/P3 Neon UX/UI audit findings
   section (Check updates, Version history, About), persistent update check status
   with installed version, Light/Dark `LogoSource` sync via `ActualThemeVariantChanged`.
 
+### Round connection action and server list
+
+Use the approved round-CTA layout and the Android `StatusCard` and server-row
+patterns on the desktop home. Pin the power button and status above the scroll
+area. Put the shared picker immediately after the server header, with refresh
+and link editing underneath. Open small lists by default and use the current
+category for larger lists. Keep manual disclosure choices during an open
+session, without changing server selection or starting probes.
+
+Keep both Assistant action IDs, shared picker behavior, the public ViewModel
+surface and the CI workflows intact. Verify narrow layouts, keyboard selection,
+disclosure across refresh, and idle and connected renders in hosted CI.
+
 ## Verification
 
 1. Build and run the applicable Standard suites in hosted CI.
@@ -53,5 +66,12 @@ hops and TurnRelay-only feeds clearly. Fix P0/P1/P3 Neon UX/UI audit findings
 
 Applied Standard UX/UI redesign (`F-01`..`F-07`, `F-10`) across App/Core/Tests
 without altering `MainWindowViewModel`'s public surface. XAML parse, diff check,
-and static audits passed locally; hosted CI build, tests, and synthetic renders
-running on PR #747.
+and static audits passed locally. Hosted CI was green on `1295310e` before the
+round-CTA follow-up on PR #747.
+
+The follow-up pins the round action and status, opens server rows by default in
+both modes, and keeps the Simple subscription utilities below the list. Updated
+the viewport and shared picker tests and added `simple-home-connected-dark-360`
+to the existing Windows CI captures. XML, token and localization audits passed,
+and the diff leaves `MainWindowViewModel` and workflows intact. Follow-up build,
+runtime tests, screenshots and review are tracked on PR #747.
