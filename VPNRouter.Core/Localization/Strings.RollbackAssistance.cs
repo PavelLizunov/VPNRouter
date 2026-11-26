@@ -45,6 +45,7 @@ public static partial class Strings
             {
                 "legacy-telegram-autostart" => "обновите Telegram-прокси или отключите его автозапуск перед откатом.",
                 "active-dnstt" => "активный сервер или цепочка использует DNSTT.",
+                "active-turnrelay" => "активная цепочка использует TurnRelay.",
                 "active-vmess" => "активный сервер использует VMess или новые поля VMess.",
                 "active-single-outbound" => "активный сервер закреплён за одним outbound.",
                 "active-row-ambiguous" => "в активной подписке несколько серверов с одним именем, и старая сборка выберет другой.",
@@ -62,6 +63,7 @@ public static partial class Strings
             {
                 "legacy-telegram-autostart" => "update the Telegram proxy or disable its autostart before rollback.",
                 "active-dnstt" => "the active server or chain uses DNSTT.",
+                "active-turnrelay" => "the active chain uses TurnRelay.",
                 "active-vmess" => "the active server uses VMess or the new VMess fields.",
                 "active-single-outbound" => "the active server is pinned to a single outbound.",
                 "active-row-ambiguous" => "the active subscription has duplicate server names and the old build would choose another row.",

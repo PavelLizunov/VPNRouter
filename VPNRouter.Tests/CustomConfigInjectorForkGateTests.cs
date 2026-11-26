@@ -56,10 +56,30 @@ public class CustomConfigInjectorForkGateTests
         }
         """;
 
-    private static void WithOverrides(bool awg, bool xhttp, Action body)
+    private const string TurnRelayOutboundConfig =  """
+        {
+          "outbounds": [
+            {
+              "type": "turnrelay",
+              "tag": "chain-entry",
+              "server": "203.0.113.20",
+              "server_port": 53492,
+              "turn_server": "192.0.2.10:3478",
+              "turn_username": "user",
+              "turn_password": "secret",
+              "password": "exit-secret",
+              "server_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            { "type": "direct", "tag": "direct" }
+          ]
+        }
+        """;
+
+    private static void WithOverrides(bool awg, bool xhttp, Action body, bool turnrelay = false)
     {
         SingBoxFeatures.OverrideAwg = awg;
         SingBoxFeatures.OverrideXhttp = xhttp;
+        SingBoxFeatures.OverrideTurnRelay = turnrelay;
         try { body(); }
         finally { SingBoxFeatures.ResetForTests(); }
     }
@@ -105,6 +125,23 @@ public class CustomConfigInjectorForkGateTests
             var (isValid, errors) = CustomConfigInjector.Validate(XhttpOutboundConfig);
             Assert.True(isValid, string.Join("; ", errors));
         });
+
+    [Fact]
+    public void Validate_TurnRelayOutbound_CoreWithoutTurnRelay_IsRejectedWithActionableError()
+        => WithOverrides(awg: false, xhttp: false, () =>
+        {
+            var (isValid, errors) = CustomConfigInjector.Validate(TurnRelayOutboundConfig);
+            Assert.False(isValid);
+            Assert.Contains(errors, e => e.Contains("with_turnrelay"));
+        }, turnrelay: false);
+
+    [Fact]
+    public void Validate_TurnRelayOutbound_CoreWithTurnRelay_Passes()
+        => WithOverrides(awg: false, xhttp: false, () =>
+        {
+            var (isValid, errors) = CustomConfigInjector.Validate(TurnRelayOutboundConfig);
+            Assert.True(isValid, string.Join("; ", errors));
+        }, turnrelay: true);
 
     [Fact]
     public void Inject_AwgFields_CoreWithoutAwg_ThrowsActionable_NotSingBoxFatal()

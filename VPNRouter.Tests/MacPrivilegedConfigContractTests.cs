@@ -163,8 +163,8 @@ public class MacPrivilegedConfigContractTests : IDisposable
             {
               "inbounds": [{"type":"tun"}],
               "outbounds": [
-                {"type":"dnstt"},{"type":"ssh"},{"type":"direct"},{"type":"urltest"},
-                {"type":"vless"},{"type":"hysteria2"},{"type":"tuic"},
+                {"type":"turnrelay"},{"type":"dnstt"},{"type":"ssh"},{"type":"direct"},{"type":"urltest"},
+                {"type":"vless"},{"type":"vmess"},{"type":"hysteria2"},{"type":"tuic"},
                 {"type":"shadowsocks"},{"type":"naive"},{"type":"selector"}
               ],
               "endpoints": [{"type":"wireguard"}],

@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P0** - A legacy `PUT /configs` answers HTTP 204 on sing-box 1.14.4 without applying the document, so `SingBoxManager`/`HealthMonitor` reported a successful hot reload, skipped the restart and lifted the kill switch over the old config. `ReloadConfigJsonWithResult` now always restarts and confirms the applied outbound tags on `/proxies` within a bounded budget; `HealthMonitor` keeps the previous scan and block rules unless the restart is confirmed. RESOLVED in source on `feat/turnrelay-integration`. See [TurnRelay integration](phase-turnrelay-integration-2026-11-25.md).
+
 - [x] **P2** - Choosing an automatic category during an active Standard connection passed an unchecked first eligible row to reconnect or service Apply. The desktop now requires current traffic proof for category selections. RESOLVED in source, CI pending. See [connected category selection](phase-standard-connected-category-autoselect-2026-11-25.md).
 
 - [x] **P1** - The first deep category-probe draft reused `IsConnecting`. A disconnect increments the connection generation and leaves the CTA busy. The same flag blocks Stop during verification. The probe now has its own cancellation scope and Stop cancels it. RESOLVED in source, CI pending. [PR #743](https://github.com/PavelLizunov/VPNRouter/pull/743).

@@ -435,6 +435,42 @@ public class SingBoxOutbound
     [JsonPropertyName("plugin_opts")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PluginOpts { get; set; }
+
+    [JsonPropertyName("provider")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TurnRelayProvider { get; set; }
+
+    [JsonPropertyName("server_type")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TurnRelayServerType { get; set; }
+
+    [JsonPropertyName("turn_server")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TurnServer { get; set; }
+
+    [JsonPropertyName("turn_username")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TurnUsername { get; set; }
+
+    [JsonPropertyName("turn_password")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TurnPassword { get; set; }
+
+    [JsonPropertyName("server_fingerprint")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TurnRelayServerFingerprint { get; set; }
+
+    [JsonPropertyName("connections")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? TurnRelayConnections { get; set; }
+
+    [JsonPropertyName("mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TurnRelayMode { get; set; }
+
+    [JsonPropertyName("udp")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? TurnRelayUdp { get; set; }
 }
 
 public class Hysteria2Obfs

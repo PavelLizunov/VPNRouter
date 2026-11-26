@@ -35,6 +35,16 @@ public class VlessServerEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public DnsttProfile? Dnstt { get; set; }
 
+    [YamlIgnore]
+    [JsonIgnore]
+    public bool IsTurnRelay =>
+        TurnRelay != null
+        || string.Equals(Protocol, "turnrelay", System.StringComparison.OrdinalIgnoreCase);
+
+    [YamlMember(Alias = "turnrelay", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TurnRelayConfig? TurnRelay { get; set; }
+
     // A previously matched generated grant needs fresh confirmation from its owning feed.
     [JsonIgnore]
     [YamlMember(Alias = "dnstt_refresh_binding", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]

@@ -27,6 +27,8 @@ public static class CanaryPolicy
     public static string RedactUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return "(none)";
+        if (url.AsSpan().TrimStart().StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return "turnrelay://[redacted]";
         if (url.AsSpan().TrimStart().StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return "dnstt://[redacted]";
         // A VMess payload is base64, not a URI authority; never echo it because it carries the user UUID.

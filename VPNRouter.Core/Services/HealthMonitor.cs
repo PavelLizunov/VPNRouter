@@ -422,12 +422,12 @@ public class HealthMonitor : IDisposable
         {
             var configJson = GenerateConfigJson(scan.ProcessNames.ToList(),
                 strictDnsFailedOverOverride: failOpen);
-            var reloaded = TryHotReloadViaApi(configJson);
+            var reloaded = ApplyConfigWithRestart(configJson);
 
             if (!reloaded)
             {
                 _logger.Warning(
-                    "[HealthMonitor] StrictDns failover hot-reload FAILED (target fail-open={FailOpen}) — leaving state unchanged; will retry next tick",
+                    "[HealthMonitor] StrictDns failover restart FAILED (target fail-open={FailOpen}) — leaving state unchanged; will retry next tick",
                     failOpen);
                 return;
             }
@@ -611,45 +611,37 @@ public class HealthMonitor : IDisposable
                     catch (Exception cleanupEx) { _logger.Warning(cleanupEx, "[HealthMonitor] Orphan sing-box cleanup failed before full restart"); }
                 }
 
-                var hotReloaded = managedSingBoxRunning && TryHotReloadViaApi(configJson);
-                if (!managedSingBoxRunning)
-                    _logger.Warning("[HealthMonitor] Hot-reload skipped on restart attempt — no managed sing-box process; performing full restart");
-                if (!hotReloaded)
+                // Never trust the legacy 204 reload: prepare the kill switch and
+                // restart with the regenerated document. Only a confirmed restart
+                // keeps the block rules deferred; a failure never lifts them.
+                if (_firewall is MacFirewallManager macFirewall)
+                    macFirewall.EnableBlockRules();
+                try
                 {
-                    _logger.Warning("[HealthMonitor] Hot-reload unavailable on restart attempt — performing full restart");
-                    if (_firewall is MacFirewallManager macFirewall)
-                        macFirewall.EnableBlockRules();
-                    try
-                    {
-                        var freshScan = _scanner.ScanForProfile(_activeProfile);
-                        configJson = GenerateConfigJson(freshScan.ProcessNames);
-                        scan = freshScan;
-                        _singBox.ReloadConfigJson(configJson, forceRestart: true);
-                    }
-                    catch (Exception) when (!_singBox.HasActiveTunnel)
+                    var freshScan = _scanner.ScanForProfile(_activeProfile);
+                    configJson = GenerateConfigJson(freshScan.ProcessNames);
+                    scan = freshScan;
+                    var restarted = ApplyConfigWithRestart(configJson);
+                    if (!restarted)
                     {
                         _logger.Warning(
-                            "[HealthMonitor] Config regen before full restart failed — " +
-                            "falling back to relaunch of last-good on-disk config");
-                        _singBox.Restart();
+                            "[HealthMonitor] Restart attempt {N} was not confirmed — keeping the previous scan and kill-switch block rules",
+                            _restartAttempts);
+                        return;
                     }
                 }
+                catch (Exception) when (!_singBox.HasActiveTunnel)
+                {
+                    _logger.Warning(
+                        "[HealthMonitor] Config regen before full restart failed — " +
+                        "falling back to relaunch of last-good on-disk config");
+                    _singBox.Restart();
+                }
+
                 _lastScan = scan;
                 _lastFullRestart = DateTime.UtcNow;
-
-                if (hotReloaded)
-                {
-                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
-                    try { _firewall.DisableBlockRules(); }
-                    catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to disable firewall block rules after hot-reload"); }
-                }
-                else
-                {
-                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
-                    _logger.Information("[HealthMonitor] Full restart done — deferring kill-switch lift until health confirmed");
-                }
-
-                _logger.Information("[HealthMonitor] sing-box restarted successfully");
+                System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+                _logger.Information("[HealthMonitor] Full restart done — deferring kill-switch lift until health confirmed");
             }
             catch (Exception ex)
             {
@@ -698,21 +690,25 @@ public class HealthMonitor : IDisposable
         }
     }
 
-    internal Func<string, bool>? HotReloadHookForTests { get; set; }
+    internal Func<string, bool>? ReloadHookForTests { get; set; }
 
-    private bool TryHotReloadViaApi(string configJson)
+    /// <summary>
+    /// Applies a config with a real restart and the manager's bounded controller
+    /// tag check. There is no hot-reload fallback: a legacy 204 response is not
+    /// evidence that the document was applied.
+    /// </summary>
+    private bool ApplyConfigWithRestart(string configJson)
     {
-        if (HotReloadHookForTests is { } hook)
+        if (ReloadHookForTests is { } hook)
             return hook(configJson);
 
-        var path = _singBox.WriteConfigToDisk(configJson);
         try
         {
-            return _api.ReloadConfigAsync(path).GetAwaiter().GetResult();
+            return _singBox.ReloadConfigJsonWithResult(configJson, forceRestart: true);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            _logger.Debug("[HealthMonitor] ISingBoxApi.ReloadConfigAsync threw — returning false");
+            _logger.Warning(ex, "[HealthMonitor] Controlled restart threw ({ExceptionType})", ex.GetType().Name);
             return false;
         }
     }
@@ -748,34 +744,28 @@ public class HealthMonitor : IDisposable
 
             var configJson = GenerateConfigJson(newScan.ProcessNames);
 
-            if (TryHotReloadViaApi(configJson))
+            var sinceLastRestart = DateTime.UtcNow - _lastFullRestart;
+            if (sinceLastRestart < RestartCooldown)
             {
-                _lastScan = newScan;
-                _restartAttempts = 0;
-                _logger.Information("[HealthMonitor] Hot-reload succeeded with {Count} processes", newFiltered.Count);
+                _logger.Warning(
+                    "[HealthMonitor] Process list changed but restart cooldown is active ({Remaining}s left) — keeping the previous scan",
+                    (int)(RestartCooldown - sinceLastRestart).TotalSeconds);
+                return;
             }
-            else
+
+            _lastFullRestart = DateTime.UtcNow;
+            if (!ApplyConfigWithRestart(configJson))
             {
-                var sinceLastRestart = DateTime.UtcNow - _lastFullRestart;
-                if (sinceLastRestart < RestartCooldown)
-                {
-                    _logger.Warning("[HealthMonitor] Hot-reload failed, but cooldown active ({Remaining}s left) — deferring full restart",
-                        (int)(RestartCooldown - sinceLastRestart).TotalSeconds);
-                    _lastScan = newScan;
-                }
-                else
-                {
-                    _logger.Warning("[HealthMonitor] Hot-reload failed — performing full restart");
-                    _lastFullRestart = DateTime.UtcNow;
-                    try { _firewall.EnableBlockRules(); }
-                    catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to enable block rules before debounce restart"); }
-                    _singBox.Restart();
-                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
-                    _lastScan = newScan;
-                    _restartAttempts = 0;
-                    _logger.Information("[HealthMonitor] Full restart completed with {Count} processes", newFiltered.Count);
-                }
+                // The old scan still describes the running config: never record an
+                // unapplied process list as if the restart had succeeded.
+                _logger.Warning(
+                    "[HealthMonitor] Restart for the new process list was not confirmed — keeping the previous scan");
+                return;
             }
+
+            _lastScan = newScan;
+            _restartAttempts = 0;
+            _logger.Information("[HealthMonitor] Restart confirmed with {Count} processes", newFiltered.Count);
         }
         catch (Exception ex)
         {

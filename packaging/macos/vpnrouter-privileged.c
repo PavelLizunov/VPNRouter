@@ -1138,7 +1138,7 @@ static int validate_runtime_components(const struct doc *doc, int root)
     };
     static const char *const outbounds[] = {
         "direct", "vless", "vmess", "hysteria2", "tuic", "shadowsocks", "naive",
-        "dnstt", "ssh", "urltest", "selector", NULL
+        "turnrelay", "dnstt", "ssh", "urltest", "selector", NULL
     };
     static const char *const endpoints[] = { "wireguard", NULL };
     static const char *const dns_servers[] = {

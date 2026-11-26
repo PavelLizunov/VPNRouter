@@ -36,6 +36,9 @@ public static class ServerUriParser
         if (uri.StartsWith(VmessUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return VmessUriParser.Parse(uri);
 
+        if (uri.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return TurnRelayUriParser.Parse(uri);
+
         if (uri.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return DnsttUriParser.Parse(uri);
 
@@ -77,7 +80,7 @@ public static class ServerUriParser
             entry = ParseAmneziaWg(uri);
         }
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / vmess:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / vmess:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / turnrelay:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
 
         var offendingField = PlaceholderDefense.Inspect(entry);
         if (offendingField != null)
@@ -131,6 +134,9 @@ public static class ServerUriParser
 
     public static bool IsSupportedScheme(ReadOnlySpan<char> line)
     {
+        if (line.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            return SingBoxFeatures.TurnRelayAvailable;
+
         if (line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return SingBoxFeatures.DnsttAvailable;
 

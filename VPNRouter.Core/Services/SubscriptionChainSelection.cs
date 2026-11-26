@@ -76,15 +76,25 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
         return exact.Length == 1 ? exact[0] : null;
     }
 
-    // One direct VLESS entry is the only accepted upstream. A VMess exit is a valid
-    // target when the app feed marks it as chained; it never becomes an entry.
+    // A direct VLESS entry or a complete TurnRelay hop is a valid upstream. A
+    // VMess/VLESS exit is a valid target when the app feed marks it as chained;
+    // neither TurnRelay nor VMess ever becomes a standalone target.
     internal static bool IsUsableChainTarget(VlessServerEntry row) =>
-        IsUsableChainUpstream(row) || IsUsableVmessTarget(row);
+        !row.IsTurnRelay && (IsUsableVlessUpstream(row) || IsUsableVmessTarget(row));
 
     internal static bool IsUsableChainUpstream(VlessServerEntry row) =>
+        row.IsTurnRelay ? IsUsableTurnRelayUpstream(row) : IsUsableVlessUpstream(row);
+
+    internal static bool IsUsableTurnRelayUpstream(VlessServerEntry row) =>
+        SingBoxFeatures.TurnRelayAvailable && row.TurnRelay is { } profile && profile.IsComplete() &&
+        TurnRelayConfig.IsLiteralIp(row.Server) && row.Port is > 0 and <= 65535 &&
+        TurnRelayUriParser.IsValidId(row.OutboundId) &&
+        !VlessServersResolver.IsPlaceholderEntry(row);
+
+    private static bool IsUsableVlessUpstream(VlessServerEntry row) =>
         string.Equals(row.Protocol ?? "vless", "vless", StringComparison.OrdinalIgnoreCase) &&
         !string.Equals(row.Transport?.Type, "xhttp", StringComparison.OrdinalIgnoreCase) &&
-        row.Awg == null && !row.IsDnsTunnel && !string.IsNullOrWhiteSpace(row.Server) &&
+        row.Awg == null && !row.IsDnsTunnel && !row.IsTurnRelay && !string.IsNullOrWhiteSpace(row.Server) &&
         row.Server != "your.server.com" && row.Port is > 0 and <= 65535 && !string.IsNullOrWhiteSpace(row.Uuid) &&
         !VlessServersResolver.IsPlaceholderEntry(row) &&
         (!string.Equals(row.Security, "reality", StringComparison.OrdinalIgnoreCase) ||

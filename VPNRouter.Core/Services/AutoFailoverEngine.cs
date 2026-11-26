@@ -150,7 +150,7 @@ public sealed class AutoFailoverEngine
         var active = VlessServersResolver.GetActiveServers(_settings).FirstOrDefault();
         if (preference != null && active == null)
             return new FailoverOutcome(false, null, Strings.SmpSelectionUnavailable);
-        if (active?.Dnstt != null ||
+        if (active?.Dnstt != null || active?.IsTurnRelay == true ||
             (configMode == "generated" && IsSelectionConfirmed?.Invoke() != true && active?.UseAsSingleOutbound == true))
             return new FailoverOutcome(false, null, null);
 
@@ -242,7 +242,7 @@ public sealed class AutoFailoverEngine
         var entry = (_settings.Vless?.Servers ?? new())
             .FirstOrDefault(s => !string.IsNullOrEmpty(s?.Name)
                 && s.Name.Equals(active, StringComparison.OrdinalIgnoreCase));
-        if (entry == null || entry.Dnstt != null) return false;
+        if (entry == null || entry.Dnstt != null || entry.IsTurnRelay) return false;
 
         return !VlessServersResolver.IsPlaceholderEntry(entry);
     }
@@ -336,7 +336,7 @@ public sealed class AutoFailoverEngine
         return pool[0];
     }
 
-    private static bool IsCandidateUsable(VlessServerEntry? entry)
+    private bool IsCandidateUsable(VlessServerEntry? entry)
     {
         if (entry == null) return false;
         if (string.IsNullOrWhiteSpace(entry.Server)) return false;
@@ -346,7 +346,32 @@ public sealed class AutoFailoverEngine
         if (PlaceholderDefense.Inspect(entry) is not null)
             return false;
 
+        // A TurnRelay row is a hop, never a replacement exit.
+        if (entry.IsTurnRelay)
+            return false;
+
+        if (!string.IsNullOrEmpty(entry.DetourVia))
+        {
+            var hops = AllRows().Where(hop => string.IsNullOrEmpty(hop.DetourVia) &&
+                string.Equals(hop.OutboundId, entry.DetourVia, StringComparison.OrdinalIgnoreCase))
+                .Take(2).ToList();
+            if (hops.Count != 1 || !SubscriptionChainSelection.IsUsableChainUpstream(hops[0]))
+                return false;
+        }
+
         return true;
+    }
+
+    private IEnumerable<VlessServerEntry> AllRows()
+    {
+        foreach (var row in _settings.Vless?.Servers ?? new List<VlessServerEntry>())
+            yield return row;
+        foreach (var feed in _settings.App.Subscriptions ?? new List<SubscriptionEntry>())
+        {
+            if (feed is not { Enabled: true, Servers: { } rows }) continue;
+            foreach (var row in rows)
+                yield return row;
+        }
     }
 
     private string ActiveAttemptName()

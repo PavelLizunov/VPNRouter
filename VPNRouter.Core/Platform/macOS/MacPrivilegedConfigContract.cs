@@ -35,7 +35,7 @@ public static class MacPrivilegedConfigContract
     private static readonly string[] SupportedRootKeys =
         { "$schema", "log", "dns", "inbounds", "outbounds", "endpoints", "route", "experimental" };
     private static readonly string[] SupportedOutbounds =
-        { "direct", "vless", "vmess", "hysteria2", "tuic", "shadowsocks", "naive", "dnstt", "ssh", "urltest", "selector" };
+        { "direct", "vless", "vmess", "hysteria2", "tuic", "shadowsocks", "naive", "turnrelay", "dnstt", "ssh", "urltest", "selector" };
     private static readonly string[] SupportedEndpoints = { "wireguard" };
     private static readonly string[] SupportedDnsServers = { "local", "udp", "tcp", "tls", "https", "quic", "h3", "fakeip" };
 

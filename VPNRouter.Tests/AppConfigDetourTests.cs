@@ -78,8 +78,10 @@ public class AppConfigDetourTests
         var fake = new FakeHttpClient().Setup(subUrl, $"{OrdinaryUri}\n");
         var previous = SubscriptionFetcher.Http;
         var previousCapability = SingBoxFeatures.OverrideDnstt;
+        var previousTurnRelay = SingBoxFeatures.OverrideTurnRelay;
         SubscriptionFetcher.Http = fake;
         SingBoxFeatures.OverrideDnstt = false;
+        SingBoxFeatures.OverrideTurnRelay = false;
 
         try
         {
@@ -103,6 +105,7 @@ public class AppConfigDetourTests
         {
             SubscriptionFetcher.Http = previous;
             SingBoxFeatures.OverrideDnstt = previousCapability;
+            SingBoxFeatures.OverrideTurnRelay = previousTurnRelay;
         }
     }
 

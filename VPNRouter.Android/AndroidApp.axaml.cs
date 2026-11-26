@@ -1528,6 +1528,12 @@ public partial class AndroidApp : Avalonia.Application
                     _serverInputError.IsVisible = true;
                     return false;
                 }
+                if (parsed.IsTurnRelay)
+                {
+                    _serverInputError.Text = VPNRouter.Core.Localization.Strings.SmpTurnRelayChainRequired;
+                    _serverInputError.IsVisible = true;
+                    return false;
+                }
                 if (!AndroidStorage.SelectSingleServer(parsed, raw, command)) return false;
                 RefreshConfigModeUiFromStorage();
                 _cachedServers = AndroidStorage.GetServers();

@@ -27,6 +27,9 @@ public static partial class Strings
         : "Paste the link provided by your VPN provider.";
     public static string SmpInvalidServerLink => Ru ? "Некорректная ссылка на сервер. Проверьте её формат." : "Invalid server link. Check its format.";
     public static string SmpDnsttCoreRequired => Ru ? "Для DNSTT нужна совместимая версия ядра sing-box-vpnctl." : "DNSTT requires a compatible sing-box-vpnctl core.";
+    public static string SmpTurnRelayChainRequired => Ru
+        ? "TurnRelay — это промежуточное звено. Вставьте его вместе со ссылкой VLESS-выхода (две строки)."
+        : "TurnRelay is a chain entry. Paste it together with its VLESS exit link (two lines).";
     public static string SmpTunnelModeLabel => Ru ? "Что направлять через VPN" : "Route through VPN";
     public static string SmpSplitOption => Ru
         ? "Выбранные приложения"

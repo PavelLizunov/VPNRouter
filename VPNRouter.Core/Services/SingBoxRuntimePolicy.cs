@@ -222,6 +222,12 @@ internal sealed class SingBoxRuntimePolicy
     public bool DnsttAvailable => _isPackaged;
 
     /// <summary>
+    /// The pinned 1.14.4-vpnctl.3 runtime predates with_turnrelay. Enable this together
+    /// with the RUNTIME_SHA256 bump to the turnrelay-capable release.
+    /// </summary>
+    public bool TurnRelayAvailable => false;
+
+    /// <summary>
     /// Availability indicates whether the runtime can be authorized for executable operations.
     /// Unavailable when UID is root (0) or validation fails.
     /// </summary>

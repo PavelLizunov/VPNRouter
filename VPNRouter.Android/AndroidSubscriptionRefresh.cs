@@ -175,6 +175,54 @@ internal static class AndroidSubscriptionRefresh
         return true;
     }
 
+    // Pasted hop + target pairs arrive as separate share links. Keep both rows so
+    // the target's opaque detour id resolves, and select the target (never the hop).
+    internal static bool SaveServerLinks(IReadOnlyList<VlessServerEntry> entries, string targetUri, string command,
+        Func<string, string?> read, Action<IReadOnlyDictionary<string, string?>> commit, JsonSerializerOptions options)
+    {
+        if (!IsCurrentSelection(command, read)) return false;
+        if (entries.Count == 0) return false;
+
+        var servers = ReadStandalone(read, options);
+        var updates = new Dictionary<string, string?>();
+        PreserveLegacyFeed(updates, read, servers, options);
+        RemoveRetainedManualCopy(servers, ReadRetainedManual(read), options);
+
+        var indexes = new List<int>();
+        foreach (var entry in entries)
+            indexes.Add(AddStandaloneRow(servers, entry, options));
+
+        var targetIndex = indexes[^1];
+        var target = servers[targetIndex];
+        updates[SelectedFeedId] = null;
+        updates[SelectedFeedRow] = null;
+        updates[StandaloneServers] = JsonSerializer.Serialize(servers, options);
+        updates[SelectedName] = target.Name;
+        updates[ManualUri] = targetUri;
+        updates[LegacyManualOwner] = null;
+        updates[SubscriptionUrl] = null;
+        updates[ConfigMode] = "manual";
+        commit(updates);
+        return true;
+    }
+
+    private static int AddStandaloneRow(List<VlessServerEntry> servers, VlessServerEntry entry,
+        JsonSerializerOptions options)
+    {
+        var identity = JsonSerializer.Serialize(entry, options);
+        var existing = servers.FindIndex(row => JsonSerializer.Serialize(row, options) == identity);
+        if (existing >= 0) return existing;
+
+        var names = servers.Select(row => row.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var baseName = string.IsNullOrWhiteSpace(entry.Name) ? entry.Server : entry.Name;
+        var name = baseName;
+        for (var suffix = 2; names.Contains(name); suffix++)
+            name = $"{baseName} #{suffix}";
+        entry.Name = name;
+        servers.Add(entry);
+        return servers.Count - 1;
+    }
+
     private static void PreserveLegacyFeed(Dictionary<string, string?> changes, Func<string, string?> read,
         List<VlessServerEntry> servers, JsonSerializerOptions options)
     {
@@ -400,6 +448,15 @@ internal static class AndroidSubscriptionRefresh
         {
             var manual = ServerUriParser.TryParse(uri);
             if (manual == null) return null;
+            if (!string.IsNullOrEmpty(manual.DetourVia))
+            {
+                // A pasted hop + target pair is stored as plain rows; SelectOrAdd
+                // rejects chained targets because it verifies standalone rows.
+                var linked = FindLegacyRow(standalone, subscriptions, name);
+                if (linked == null) return null;
+                SelectedSources.AddOrUpdate(linked, FeedSource.Capture(null, linked));
+                return linked;
+            }
             // Old Simple saves could persist the fallback feed name when drawing the summary.
             var previous = standalone.Find(s => s != null && s.Name == name && s.UseAsSingleOutbound);
             var index = VPNRouter.Core.Services.FreeConfigs.FreeConfigSelection.SelectOrAdd(standalone, manual);
@@ -546,12 +603,15 @@ internal static class AndroidSubscriptionRefresh
 
         if (!string.IsNullOrEmpty(current.DetourVia))
         {
-            var feed = subscriptions.FirstOrDefault(f => f is { Enabled: true, Servers: not null } &&
-                f.Id == origin.Id && f.Url == origin.Url && f.Servers.Contains(current));
+            var feed = origin.Id == null
+                ? null
+                : subscriptions.FirstOrDefault(f => f is { Enabled: true, Servers: not null } &&
+                    f.Id == origin.Id && f.Url == origin.Url && f.Servers.Contains(current));
+            // A manual hop + target paste keeps both rows in the standalone list.
+            var siblings = feed?.Servers ?? standalone;
             config.Servers = [current];
-            if (feed != null)
-                config.Servers.AddRange(feed.Servers.Where(row => string.IsNullOrEmpty(row.DetourVia) &&
-                    string.Equals(row.OutboundId, current.DetourVia, StringComparison.OrdinalIgnoreCase)));
+            config.Servers.AddRange(siblings.Where(row => string.IsNullOrEmpty(row.DetourVia) &&
+                string.Equals(row.OutboundId, current.DetourVia, StringComparison.OrdinalIgnoreCase)));
             config.ActiveServer = current.Name ?? string.Empty;
             return;
         }

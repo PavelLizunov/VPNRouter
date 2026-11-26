@@ -44,6 +44,7 @@ namespace VPNRouter.Core.Json;
 [JsonSerializable(typeof(SingBoxConfig))]
 [JsonSerializable(typeof(SingBoxOutbound))]
 [JsonSerializable(typeof(SubscriptionEntry))]
+[JsonSerializable(typeof(TurnRelayConfig))]
 [JsonSerializable(typeof(VlessServerEntry))]
 internal sealed partial class AppJsonContext : JsonSerializerContext
 {

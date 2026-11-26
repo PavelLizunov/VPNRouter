@@ -106,6 +106,65 @@ public partial class AndroidApp
             });
         }
 
+        // Newline-separated hop + target links let on-device tests paste a chained
+        // VLESS + TurnRelay route in one action. The target link is selected.
+        var lines = raw.Replace("\r\n", "\n").Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0)
+            .ToList();
+        if (lines.Count > 1 && lines.All(ServerUriParser.IsSupportedScheme))
+        {
+            var entries = new List<VlessServerEntry>(lines.Count);
+            var targetIndex = -1;
+            for (var index = 0; index < lines.Count; index++)
+            {
+                VlessServerEntry parsed;
+                try { parsed = ServerUriParser.Parse(lines[index]); }
+                catch (Exception ex)
+                {
+                    return TestHookJson.Result(action, false, w =>
+                    {
+                        w.WriteString("error", "invalid-share-link");
+                        w.WriteNumber("line", index + 1);
+                        w.WriteString("detail", ex.GetType().Name);
+                    });
+                }
+                entries.Add(parsed);
+                if (!string.IsNullOrEmpty(parsed.DetourVia)) targetIndex = index;
+            }
+            if (targetIndex < 0) targetIndex = entries.Count - 1;
+
+            // SelectServerLinks takes the last row as the active exit.
+            var targetLine = lines[targetIndex];
+            var targetEntry = entries[targetIndex];
+            if (targetIndex != entries.Count - 1)
+            {
+                entries.RemoveAt(targetIndex);
+                entries.Add(targetEntry);
+            }
+
+            app._serverInput.Text = targetLine;
+            var linkCommand = app.ReserveConnectCommand();
+            var linksRejected = linkCommand == null ||
+                !AndroidStorage.SelectServerLinks(entries, targetLine, linkCommand);
+            if (!linksRejected)
+            {
+                app.RefreshConfigModeUiFromStorage();
+                app._cachedServers = AndroidStorage.GetServers();
+                app.UpdateServerListView();
+                app.UpdateConfigSummary();
+            }
+            return TestHookJson.Result(action, !linksRejected, w =>
+            {
+                w.WriteString("kind", "share-links");
+                w.WriteNumber("links", entries.Count);
+                w.WriteBoolean("chained", targetEntry.IsTurnRelay == false &&
+                    !string.IsNullOrEmpty(targetEntry.DetourVia));
+                w.WriteString("mode", AndroidStorage.GetConfigMode());
+                w.WriteBoolean("rejectedByInputCheck", linksRejected);
+            });
+        }
+
         string kind;
         if (ServerUriParser.IsSupportedScheme(raw)) kind = "share-link";
         else if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||

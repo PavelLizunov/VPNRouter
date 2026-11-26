@@ -21,7 +21,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 - `Models/`: Data transfer objects, settings schema, profile structures, engine settings, and sing-box JSON configuration models (`AppSettings`, `Profile`, `ProcessRule`, `VPNConfig`, `AppConfig`, `TunSettings`, etc.).
 - `Services/`: Core service implementations and orchestration logic (see [Services/AGENTS.md](Services/AGENTS.md) for subsystem entry points and lifecycle caveats):
   - `VpnEngine.cs` (with `VpnEngine.Failover.cs`, `.TrueSplit.cs`, `.ProfileSources.cs`, `.StartupHost.cs`): Central VPN lifecycle orchestrator (`StartAsync`, `ApplyAsync`, `Stop`). Coordinates profile resolution, process scanning, config generation, firewall management, ETW monitoring, health checks, and true-split driver engagement.
-  - `SingBoxManager.cs`: sing-box process lifecycle and Clash API hot-reloading manager.
+  - `SingBoxManager.cs`: sing-box process lifecycle and restart-only config apply. `PUT /configs` is a 1.14.4 no-op, so `ReloadConfigJsonWithResult` always restarts and then checks `/proxies` for the applied outbound tags within a 2.5s budget.
   - `ConfigGenerator.cs`: JSON generator for sing-box routing, DNS, and outbounds.
   - `CustomConfigInjector.cs` (with `.Routing.cs`, `.Dns.cs`, `.Geo.cs`, `.Compat.cs`): Injects process routing and adjusts DNS/route settings in custom sing-box JSON; inspect the mode-specific branches and validation limits.
   - `LeakProtection.cs`: Safety validation for generated sing-box JSON configs (missing proxy outbounds, DNS strategy, strict routing).
@@ -73,9 +73,9 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQua
 - Callers of `ConfigGenerator.Generate` MUST call `VlessServersResolver.Resolve` prior to generation to hydrate `Vless.Servers` in memory (handled automatically by `VpnEngine`).
 
 ### Capability-gated App-config Detours
-- Subscription requests advertise `X-VPNRouter-Capabilities: detour-v1`; `outbound` and `detour` URI fields are opaque identifiers and must not be derived from labels or endpoint addresses.
-- A selected chained VLESS target must resolve exactly one direct, usable VLESS upstream. `GetActiveServers` includes that upstream and `ConfigGenerator` emits exactly `chain-entry` plus `proxy` with `proxy.detour = "chain-entry"`.
-- Missing, duplicate, nested, unsupported, or platform-filtered upstreams fail closed. Ordinary selection and auto-select pools must exclude chained targets unless that exact target is active; never fall back to a direct target connection.
+- Subscription requests advertise `X-VPNRouter-Capabilities` in this order: `detour-v1`, optional `dnstt-v1`, optional `turnrelay-v1`, `vmess-v1`. The optional entries require HTTPS and the matching `SingBoxFeatures` capability; `outbound` and `detour` URI fields are opaque identifiers and must not be derived from labels or endpoint addresses.
+- A selected chained VLESS/VMess target must resolve exactly one usable upstream: VLESS or a complete `turnrelay://` hop. `GetActiveServers` includes that upstream and `ConfigGenerator` emits exactly `chain-entry` plus `proxy` with `proxy.detour = "chain-entry"`.
+- TurnRelay rows are hops only. Their `OutboundId` is the exact `id` from the URI JSON (never prefixed), stay out of normal and auto-select pools, and are rejected as standalone exits. Missing, duplicate, nested, unsupported, or platform-filtered upstreams fail closed; never fall back to a direct target connection.
 
 ### Routing & DNS source navigation
 - `CustomConfigInjector.cs` adjusts `route.final` and DNS selection by routing mode and strict-DNS settings. Inspect `EnsureSynthesizedRemoteDns` and its stamping helper for fallback resolver output; helper names/comments can lag the emitted values.

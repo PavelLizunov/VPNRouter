@@ -52,9 +52,13 @@ internal static class SingBoxJsonSubscription
                     if (uri is null)
                         logger?.Information("[SingBox] Skipped outbound ({Reason})", skipReason);
                     else
-                        canChain = type == "vless"
-                            ? CanChainVless(ob)
-                            : type == "vmess" && IsMappableVmess(ob);
+                        canChain = type switch
+                        {
+                            "vless" => CanChainVless(ob),
+                            "vmess" => IsMappableVmess(ob),
+                            "turnrelay" => CanChainTurnRelay(ob),
+                            _ => false,
+                        };
                 }
             }
             catch (Exception)
@@ -186,6 +190,7 @@ internal static class SingBoxJsonSubscription
             "hysteria2" => MapHysteria2(ob, hostPort, name, out skipReason),
             "tuic" => MapTuic(ob, hostPort, name, out skipReason),
             "shadowsocks" => MapShadowsocks(ob, hostPort, name, out skipReason),
+            "turnrelay" => MapTurnRelay(ob, server, port, name, out skipReason),
             _ => Unsupported(out skipReason),
         };
     }
@@ -397,6 +402,110 @@ internal static class SingBoxJsonSubscription
             }),
             _ => false,
         };
+    }
+
+    // Only a complete turnrelay document that survives the URI round trip may
+    // become a chain upstream. Unknown fields reject the hop instead of silently
+    // dropping dialer, TLS or credential options.
+    private static bool CanChainTurnRelay(JsonElement ob)
+    {
+        if (!TurnRelayConfig.IsLiteralIp(Str(ob, "server")) ||
+            Int(ob, "server_port") is not { } port || port is < 1 or > 65535 ||
+            string.IsNullOrEmpty(Str(ob, "password")) ||
+            string.IsNullOrEmpty(Str(ob, "turn_username")) ||
+            string.IsNullOrEmpty(Str(ob, "turn_password")) ||
+            !TurnRelayUriParserRules.IsValidHostPort(Str(ob, "turn_server")) ||
+            Str(ob, "server_fingerprint") is not { } fingerprint ||
+            !TurnRelayConfig.IsFingerprint(fingerprint))
+            return false;
+
+        var mode = Str(ob, "mode");
+        if (!string.IsNullOrEmpty(mode) && mode is not ("srtp" or "dtls")) return false;
+        var provider = Str(ob, "provider");
+        if (!string.IsNullOrEmpty(provider) && provider != TurnRelayConfig.DefaultProvider) return false;
+        var serverType = Str(ob, "server_type");
+        if (!string.IsNullOrEmpty(serverType) && serverType != TurnRelayConfig.DefaultServerType) return false;
+        if (Int(ob, "connections") is { } connections && (connections < 0 || connections > 60)) return false;
+
+        return ob.EnumerateObject().All(property => property.Name switch
+        {
+            "type" or "tag" or "server" or "turn_server" or "turn_username" or
+                "turn_password" or "password" or "server_fingerprint" or "provider" or
+                "server_type" or "mode" => property.Value.ValueKind == JsonValueKind.String,
+            "server_port" or "connections" => property.Value.ValueKind == JsonValueKind.Number,
+            "udp" => property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            "domain_resolver" => CanMapTurnRelayResolver(property.Value),
+            _ => false,
+        });
+    }
+
+    private static bool CanMapTurnRelayResolver(JsonElement resolver) =>
+        (resolver.ValueKind == JsonValueKind.String && resolver.GetString() == "local-dns") ||
+        (resolver.ValueKind == JsonValueKind.Object &&
+            resolver.EnumerateObject().All(property => property.Name switch
+            {
+                "server" => property.Value.ValueKind == JsonValueKind.String &&
+                    property.Value.GetString() == "local-dns",
+                "strategy" => property.Value.ValueKind == JsonValueKind.String &&
+                    property.Value.GetString() == "prefer_ipv4",
+                _ => false,
+            }));
+
+    private static string? MapTurnRelay(
+        JsonElement ob, string server, int port, string name, out string? skipReason)
+    {
+        skipReason = null;
+        if (!TurnRelayUriParser.IsValidId(Str(ob, "tag")))
+        {
+            skipReason = "turnrelay tag is not a valid outbound id";
+            return null;
+        }
+        if (!CanChainTurnRelay(ob))
+        {
+            skipReason = "unsupported turnrelay option";
+            return null;
+        }
+        if (!TurnRelayConfig.IsLiteralIp(server))
+        {
+            skipReason = "turnrelay server is not an IP literal";
+            return null;
+        }
+
+        var connections = Int(ob, "connections") ?? 0;
+        if (connections == 0) connections = TurnRelayConfig.DefaultConnections;
+        var mode = Str(ob, "mode");
+        if (string.IsNullOrEmpty(mode)) mode = TurnRelayConfig.DefaultMode;
+        var provider = Str(ob, "provider");
+        if (string.IsNullOrEmpty(provider)) provider = TurnRelayConfig.DefaultProvider;
+        var serverType = Str(ob, "server_type");
+        if (string.IsNullOrEmpty(serverType)) serverType = TurnRelayConfig.DefaultServerType;
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["id"] = Str(ob, "tag"),
+            ["provider"] = provider,
+            ["server_type"] = serverType,
+            ["server"] = server,
+            ["server_port"] = port,
+            ["turn_server"] = Str(ob, "turn_server"),
+            ["turn_username"] = Str(ob, "turn_username"),
+            ["turn_password"] = Str(ob, "turn_password"),
+            ["password"] = Str(ob, "password"),
+            ["server_fingerprint"] = Str(ob, "server_fingerprint")!.ToLowerInvariant(),
+            ["connections"] = connections,
+            ["mode"] = mode,
+            ["udp"] = !ob.TryGetProperty("udp", out var udpNode) || udpNode.GetBoolean(),
+        };
+
+        var json = JsonSerializer.SerializeToUtf8Bytes(payload);
+        try
+        {
+            return $"{TurnRelayUriParser.Prefix}{TurnRelayUriParser.Base64UrlEncode(json)}#{Enc(name)}";
+        }
+        finally
+        {
+            Array.Clear(json);
+        }
     }
 
     private static string? MapHysteria2(JsonElement ob, string hostPort, string name, out string? skipReason)

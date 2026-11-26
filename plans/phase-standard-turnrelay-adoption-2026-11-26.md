@@ -32,4 +32,9 @@ Obtain the exact implemented branch from its source checkout. Merge or port the 
 
 ## Outcome
 
-The coordinated kernel publication and the handoff of the unpublished client branch are in progress.
+The source tree at `96fc066625a6593cb242b2ed5a428d72a9e63cd8` was retrieved from
+its verified checkout. The merge includes Standard's current category probe
+and retains both sides of the defect-ledger update. The independent core PR
+was merged and tag `v1.14.4-vpnctl.4` is building its release assets. This
+source integration commit still uses the existing runtime until the complete
+new inventory can be checked.

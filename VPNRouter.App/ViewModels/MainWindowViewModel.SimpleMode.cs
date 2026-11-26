@@ -571,7 +571,8 @@ public partial class MainWindowViewModel
                     ? await PickCategoryServerAsync(candidates, submitted.Dns.LocalDns)
                     : preference != null || preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia)
                         ? preferred
-                        : await PickSimpleServerAsync(candidates.Where(server => server.Dnstt == null).ToList(),
+                        : await PickSimpleServerAsync(
+                            candidates.Where(server => server.Dnstt == null && !server.IsTurnRelay).ToList(),
                             preferred, submitted.App.ConnectionIntent, Preparing);
                 if (!Preparing() || preference != SimpleServerPreference ||
                     (preference != null && (revision != _routingSettingsRevision || !choiceUnchanged()))) return;
@@ -589,6 +590,11 @@ public partial class MainWindowViewModel
                 if (Subscriptions.Any(s => !s.Enabled && s.Id == source.Id))
                 {
                     SmpErrorText = SubscriptionDisabledMessage;
+                    return;
+                }
+                if (chosen.IsTurnRelay)
+                {
+                    SmpErrorText = Strings.SmpTurnRelayChainRequired;
                     return;
                 }
                 if ((chosen.Dnstt != null || !string.IsNullOrEmpty(chosen.DetourVia)) &&
@@ -945,8 +951,15 @@ public partial class MainWindowViewModel
                 return null;
             }
 
+            var parsed = ServerUriParser.Parse(uri);
+            if (parsed.IsTurnRelay)
+            {
+                error = Strings.SmpTurnRelayChainRequired;
+                return null;
+            }
+
             error = string.Empty;
-            return ServerUriParser.Parse(uri);
+            return parsed;
         }
         catch (Exception)
         {

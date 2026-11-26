@@ -53,5 +53,5 @@ moved out of the tree; read them with `git show 6491be4c:plans/<file>`.
 2. Generate a sing-box JSON config with the right TUN inbound, VLESS+Reality outbound, and `process_name`-based route rules
 3. Start sing-box in TUN mode (creates a virtual adapter)
 4. Traffic enters the virtual adapter; sing-box then splits based on process name matching
-5. On Windows, ETW watches for new processes starting (process scanning on macOS/Linux) → hot-reload the config via Clash API (no reconnect)
+5. On Windows, ETW watches for new processes starting (process scanning on macOS/Linux) → restart sing-box with the regenerated config and verify the applied outbounds on the Clash API
 6. On failure, enabled firewall protection depends on platform, routing mode and privileges. Linux/macOS kill switches support full-tunnel mode only and remain disarmed in split mode; do not rely on per-process crash blocking there.

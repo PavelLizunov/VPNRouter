@@ -14,6 +14,7 @@ public class SimpleInputDetectorTests
     [InlineData("ss://x@h:443#n")]
     [InlineData("dns-tunnel://x@h:443#n")]
     [InlineData(" DNSTT://fixture ")]
+    [InlineData("turnrelay://ZmFrZQ#relay")]
     [InlineData("awg://PEER@1.2.3.4:51820?private_key=PRIV&address=10.13.13.2/32")]
     [InlineData("amneziawg://PEER@1.2.3.4:51820?private_key=PRIV&address=10.13.13.2/32")]
     [InlineData("awg3://fixture")]

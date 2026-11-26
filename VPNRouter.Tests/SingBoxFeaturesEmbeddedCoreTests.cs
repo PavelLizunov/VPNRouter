@@ -38,6 +38,34 @@ public sealed class SingBoxFeaturesEmbeddedCoreTests : IDisposable
         Assert.True(ServerUriParser.IsSupportedScheme("awg3://PEER@1.2.3.4:51820"));
     }
 
+    [Theory]
+    [InlineData("1.14.4-vpnctl.4", true)]
+    [InlineData("1.14.4-vpnctl.5", true)]
+    [InlineData("1.15.0-vpnctl.1", true)]
+    [InlineData("1.14.4-vpnctl.3", false)]
+    [InlineData("1.14.0-vpnctl.9", false)]
+    [InlineData("1.14.4-vpnctl-turnrelay.5", true)]
+    [InlineData("1.14.4-vpnctl-turnrelay.4", false)]
+    [InlineData("1.14.4", false)]
+    public void HasTurnRelayVersion_PinsTheReleaseGate(string version, bool expected)
+    {
+        Assert.Equal(expected, SingBoxFeatures.HasTurnRelayVersion(version));
+    }
+
+    [Fact]
+    public void SetEmbeddedCoreVersion_EnablesTurnRelayForThePinnedBuild()
+    {
+        SingBoxFeatures.SetEmbeddedCoreVersion("1.14.4-vpnctl.4");
+        Assert.True(SingBoxFeatures.TurnRelayAvailable);
+    }
+
+    [Fact]
+    public void SetEmbeddedCoreVersion_KeepsTurnRelayOffForOlderBuilds()
+    {
+        SingBoxFeatures.SetEmbeddedCoreVersion("1.14.4-vpnctl.3");
+        Assert.False(SingBoxFeatures.TurnRelayAvailable);
+    }
+
     [Fact]
     public void Override_StillWinsOverEmbeddedCore()
     {

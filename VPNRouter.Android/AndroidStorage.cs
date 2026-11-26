@@ -408,6 +408,10 @@ public static class AndroidStorage
         WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveSingleServer(server, uri, command,
             key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
 
+    internal static bool SelectServerLinks(IReadOnlyList<VlessServerEntry> entries, string targetUri, string command) =>
+        WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveServerLinks(entries, targetUri, command,
+            key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
+
     internal static bool SelectSubscriptionServer(SubscriptionEntry source, VlessServerEntry row, string? command) =>
         WithCommandPreferences(prefs => AndroidSubscriptionRefresh.SaveFeedSelection(source, row, command, GetSubscriptions(),
             key => prefs.GetString(key, null), changes => CommitStrings(prefs, changes), JsonOptions));
