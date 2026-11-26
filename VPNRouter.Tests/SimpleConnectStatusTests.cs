@@ -76,7 +76,7 @@ public sealed class SimpleConnectStatusTests
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]
-    public void SimpleDiagnosticsAreSeparateFromTheLinkAndServerPicker(bool cached)
+    public async Task SimpleRefreshIsAvailableWithoutOpeningDiagnostics(bool cached)
     {
         var settings = new AppSettings();
         settings.App.ConfigMode = "subscribe";
@@ -92,21 +92,40 @@ public sealed class SimpleConnectStatusTests
         var options = view.Page.FindControl<ToggleButton>("SimpleCheckServers")!;
         var linkButton = FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!;
         var link = FindOnPage<TextBox>(view.Page, "SimpleConfigLink")!;
+        var refresh = view.Page.FindControl<Button>("SimpleRefreshSubscriptions")!;
         Assert.True(options.IsEffectivelyVisible);
         Assert.True(linkButton.IsEffectivelyVisible);
         Assert.False(options.IsChecked);
+        Assert.True(refresh.IsEffectivelyVisible);
+        Assert.True(refresh.IsEffectivelyEnabled);
+        Assert.Same(vm.RefreshAllSubscriptionsCommand, refresh.Command);
+        Assert.Equal(Strings.SmpRefreshSubscriptions, AutomationProperties.GetName(refresh));
+
+        var http = new FakeHttpClient().Setup(settings.App.Subscriptions[0].Url,
+            "vless://00000000-0000-4000-8000-000000000001@new.invalid:443?security=none#new");
+        var originalHttp = SubscriptionFetcher.Http;
+        try
+        {
+            SubscriptionFetcher.Http = http;
+            await vm.RefreshAllSubscriptionsCommand.ExecuteAsync(refresh.CommandParameter);
+            Assert.Single(http.SentRequests);
+            Assert.Equal("new", Assert.Single(vm.SubscriptionServers).Name);
+            Assert.False(options.IsChecked);
+            Dispatcher.UIThread.RunJobs();
+            view.Capture($"simple-home-refresh-{(cached ? "cached" : "empty")}-380");
+        }
+        finally { SubscriptionFetcher.Http = originalHttp; }
+
         options.IsChecked = true;
         Dispatcher.UIThread.RunJobs();
         Assert.False(Shown(link));
 
         var ping = view.Page.FindControl<Button>("SimplePing")!;
         var deepCheck = view.Page.FindControl<Button>("SimpleDeepCheck")!;
-        var refresh = view.Page.FindControl<Button>("SimpleRefreshSubscriptions")!;
         Assert.Same(vm.TestAllSubscriptionServersCommand, ping.Command);
         Assert.Same(vm.DeepVerifyAllSubscriptionServersCommand, deepCheck.Command);
-        Assert.Same(vm.RefreshAllSubscriptionsCommand, refresh.Command);
-        Assert.Equal(cached, ping.IsEffectivelyVisible);
-        Assert.Equal(cached, deepCheck.IsEffectivelyVisible);
+        Assert.True(ping.IsEffectivelyVisible);
+        Assert.True(deepCheck.IsEffectivelyVisible);
         Assert.True(refresh.IsEffectivelyVisible);
         Assert.True(refresh.IsEffectivelyEnabled);
 
@@ -839,6 +858,37 @@ public sealed class SimpleConnectStatusTests
         Assert.Single(groups.GetVisualDescendants().OfType<Button>(), button =>
             button.Classes.Contains("category") && button.Classes.Contains("disclosure") == disclosure &&
             button.DataContext is SimpleServerGroup group && group.Category == category);
+
+    [AvaloniaFact]
+    public void SubscriptionPickerShowsTurnRelayExitAndKeepsItsHopInTheFeed()
+    {
+        var hop = Entry("TurnRelay hop", "203.0.113.20", 53492);
+        hop.Protocol = "turnrelay";
+        hop.OutboundId = "turnrelay-test";
+        var exit = Entry("VLESS · TurnRelay", "exit.invalid");
+        exit.DetourVia = hop.OutboundId;
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.Subscriptions = [new() { Url = "https://feed.invalid/relay", Servers = [hop, exit] }];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = CreateVm(store);
+        using var view = new OpenPage(vm, width: 360);
+        vm.OpenConfigPickerCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
+        var group = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
+        Assert.Equal(exit.Name, Assert.Single(group.Servers).Name);
+        Toggle(view.Page, "SimpleServerSearchButton", true);
+        FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!.Text = "TurnRelay";
+        Dispatcher.UIThread.RunJobs();
+        var results = FindOnPage<ServerPickerListBox>(view.Page, "SimpleServerResults")!;
+        Assert.Equal(exit.Name, Assert.IsType<ServerViewModel>(Assert.Single(results.Items)).Name);
+        var feed = Assert.Single(vm.Subscriptions).UnderlyingEntry;
+        Assert.Equal(exit.DetourVia, Assert.Single(feed.Servers, row => row.IsTurnRelay).OutboundId);
+        view.Capture("simple-picker-turnrelay-exit-360");
+    }
 
     [AvaloniaFact]
     public void SimplePickerLabelsFollowLiveLanguageChanges()

@@ -126,6 +126,7 @@ public partial class SubscriptionServerPicker : UserControl
         RefreshChoice(vm);
         var selected = vm.SelectedSubscriptionServer;
         var current = vm.IsConnected ? vm.SmpConfigServer : selected;
+        var rows = vm.SubscriptionServers.Where(row => !row.SourceEntry.IsTurnRelay);
         var query = _searchButton.IsChecked == true ? _serverSearch.Text?.Trim() ?? string.Empty : string.Empty;
         var looksLikeLink = SimpleInputDetector.Classify(query) != SmpInputKind.Invalid;
         _searchLinkHint.IsVisible = looksLikeLink;
@@ -135,11 +136,11 @@ public partial class SubscriptionServerPicker : UserControl
         if (!filtering)
         {
             _serverResults.ItemsSource = null;
-            RefreshGroups(vm, selected, current);
+            RefreshGroups(vm, rows, selected, current);
             return;
         }
 
-        var matches = vm.SubscriptionServers
+        var matches = rows
             .Where(row => row.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 ServerCountryFlags.MatchesCountry(row.CountryCode, query))
             .OrderByDescending(row => ReferenceEquals(row, current))
@@ -150,12 +151,13 @@ public partial class SubscriptionServerPicker : UserControl
         _serverCount.Text = matches.Length == 0 ? Strings.SmpNoMatchingServers : Strings.SmpKindServers(matches.Length);
     }
 
-    private void RefreshGroups(MainWindowViewModel vm, ServerViewModel? selected, ServerViewModel? current)
+    private void RefreshGroups(MainWindowViewModel vm, IEnumerable<ServerViewModel> rows,
+        ServerViewModel? selected, ServerViewModel? current)
     {
-        if (_language != Strings.Lang || !_sourceRows.SequenceEqual(vm.SubscriptionServers))
+        if (_language != Strings.Lang || !_sourceRows.SequenceEqual(rows))
         {
             _language = Strings.Lang;
-            _sourceRows = vm.SubscriptionServers.ToArray();
+            _sourceRows = rows.ToArray();
             _serverGroups.ItemsSource = _sourceRows.GroupBy(row => row.ProtocolGroup).OrderBy(group => group.Key)
                 .Select(group => new SimpleServerGroup(group.Key,
                     group.OrderByDescending(row => ReferenceEquals(row, current)).ToArray()))

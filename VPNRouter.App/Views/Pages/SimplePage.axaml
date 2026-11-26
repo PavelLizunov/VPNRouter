@@ -456,6 +456,36 @@
 
                         <pages:SubscriptionLinkEditor Name="SimpleLink" Margin="16,0,16,12"
                                                       IsVisible="{Binding SmpHasConfig}"/>
+                        <StackPanel Margin="16,0,16,12" Spacing="6"
+                                    IsVisible="{Binding SmpHasRefreshableSubscriptions}">
+                            <Button Name="SimpleRefreshSubscriptions" Classes="change" HorizontalAlignment="Left"
+                                    Command="{Binding RefreshAllSubscriptionsCommand}"
+                                    AutomationProperties.Name="{Binding L_SmpRefreshSubscriptions}">
+                                <Button.IsEnabled>
+                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                        <Binding Path="SmpCanRefreshSubscriptions"/>
+                                        <Binding Path="!SmpSubscriptionsRefreshing"/>
+                                    </MultiBinding>
+                                </Button.IsEnabled>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <icons:Pictogram Id="refresh" Width="14" Height="14"/>
+                                    <TextBlock Text="{Binding L_SmpRefreshSubscriptions}"/>
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Classes="hint" Text="{Binding L_SubsRefreshing}"
+                                       IsVisible="{Binding SmpSubscriptionsRefreshing}" AutomationProperties.LiveSetting="Polite"/>
+                            <ItemsControl ItemsSource="{Binding Subscriptions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:SubscriptionViewModel">
+                                        <Panel IsVisible="{Binding Enabled}">
+                                            <TextBlock Classes="hint" Text="{Binding StatusBadge}"
+                                                       IsVisible="{Binding LastRefreshFailed}"
+                                                       ToolTip.Tip="{Binding Name}" AutomationProperties.LiveSetting="Polite"/>
+                                        </Panel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                         <Border Classes="divider" IsVisible="{Binding #SimplePicker.IsVisible}"/>
                         <pages:SubscriptionServerPicker Name="SimplePicker" Margin="16,12,16,14"
                                                         IsVisible="False"/>
@@ -483,31 +513,13 @@
                                             IsEnabled="{Binding !SmpSubscriptionsRefreshing}"
                                             IsVisible="{Binding SmpHasSubscriptionServers}"
                                             ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
-                                    <Button Name="SimpleRefreshSubscriptions" Content="{Binding L_SmpRefreshSubscriptions}"
-                                            Command="{Binding RefreshAllSubscriptionsCommand}"
-                                            IsVisible="{Binding SmpHasRefreshableSubscriptions}"
-                                            IsEnabled="{Binding SmpCanRefreshSubscriptions}"/>
                                 </WrapPanel>
-                                <TextBlock Classes="hint" Text="{Binding L_SubsRefreshing}"
-                                           IsVisible="{Binding SmpSubscriptionsRefreshing}"/>
                                 <TextBlock Classes="hint" Text="{Binding SubscriptionTestProgressText}"
                                            IsVisible="{Binding SubscriptionTestProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 <TextBlock Classes="hint" Text="{Binding SubscriptionTestImplausibleWarning}"
                                            IsVisible="{Binding SubscriptionTestImplausibleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 <TextBlock Classes="hint" Text="{Binding SubscriptionDeepProgressText}"
                                            IsVisible="{Binding SubscriptionDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                <ItemsControl ItemsSource="{Binding Subscriptions}"
-                                              IsVisible="{Binding SmpHasRefreshableSubscriptions}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:SubscriptionViewModel">
-                                            <Panel IsVisible="{Binding Enabled}">
-                                                <TextBlock Classes="hint" Text="{Binding StatusBadge}"
-                                                           IsVisible="{Binding LastRefreshFailed}"
-                                                           ToolTip.Tip="{Binding Name}"/>
-                                            </Panel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
                             </StackPanel>
                         </StackPanel>
 

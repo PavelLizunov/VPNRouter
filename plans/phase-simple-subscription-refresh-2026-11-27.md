@@ -32,4 +32,9 @@ pool for resolving detours. Leave the existing exit and auto-selection policy.
 
 ## Outcome
 
-Implementation and CI pending.
+The Simple page places the existing refresh command and its progress and
+failure feedback by the subscription link. Both subscription pickers use
+the same filtered rows for categories and search. Offline UI regressions
+exercise refresh from the collapsed home and ensure the exit remains
+visible with its hop retained in the feed. XAML and diff checks passed.
+Hosted build, test and render results are pending.
