@@ -23,6 +23,8 @@ public class HealthMonitor : IDisposable
 
     private IDisposable? _ownedApi;
 
+    internal Action<AppSettings>? ReapplyUnixDnsOnRestart { get; set; }
+
     // The live session controller is authoritative across regenerated recovery
     // configs. On macOS the privileged contract mints a secret for a blank
     // document, so regenerating must reuse the accepted bearer, not a new one.
@@ -347,6 +349,7 @@ public class HealthMonitor : IDisposable
                 {
                     try
                     {
+                        ReapplyUnixDnsOnRestart?.Invoke(_appSettings);
                         var released = TryReleaseBlockRules();
                         if (released)
                         {

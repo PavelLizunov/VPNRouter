@@ -691,6 +691,8 @@ public partial class VpnEngine : IDisposable
             var activeBaselineIsLive = rolledBack || (!replacementStarted && BaselineRuntimeIsLive());
             if (activeBaselineIsLive)
             {
+                if (rolledBack && previousSettings != null)
+                    ApplyUnixDnsSettings(previousSettings);
                 ReleaseApplyProtectionOrRetry("after the restored runtime");
             }
             else if (!activeBaselineIsLive && !applyProtectionArmed &&

@@ -161,7 +161,12 @@ public partial class VpnEngine
 
         public void SetProcessMonitor(IProcessMonitor etw) => _engine._etw = etw;
 
-        public void SetHealthMonitor(HealthMonitor monitor) => _engine._healthMonitor = monitor;
+        public void SetHealthMonitor(HealthMonitor monitor)
+        {
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                monitor.ReapplyUnixDnsOnRestart = _engine.ApplyUnixDnsSettings;
+            _engine._healthMonitor = monitor;
+        }
 
         public void EnsureSanityCheckScaffolding(AppSettings settings, out ConfigSanityCheck sanityCheck)
         {

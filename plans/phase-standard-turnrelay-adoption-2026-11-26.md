@@ -97,3 +97,9 @@ and deferred strict-DNS transitions. Final CI and re-review are pending.
 The Linux, macOS, and Windows test jobs on `dd3e9eda` stopped at the same
 `BindingFlags` compile error in the refused-replacement regression test.
 The follow-up qualifies the reflection type and triggers a fresh CI run.
+
+All 11 checks passed on `ff9726a5`. Neon re-review was unavailable due to
+the provider's location restriction. Direct review found one remaining Unix
+restart issue. Linux systemd-resolved discards the old TUN's per-link DNS
+configuration when that link is removed. Apply rollback and automatic restart
+reuse the existing DNS setup for the new TUN before releasing the kill switch.
