@@ -41,6 +41,7 @@ namespace VPNRouter.Core.Json;
 [JsonSerializable(typeof(ProfileCollection))]
 [JsonSerializable(typeof(List<Services.CanaryTarget>))]
 [JsonSerializable(typeof(Services.ServerHealthFileDto))]
+[JsonSerializable(typeof(Services.ServerHealthRecordDto))]
 [JsonSerializable(typeof(SingBoxConfig))]
 [JsonSerializable(typeof(SingBoxOutbound))]
 [JsonSerializable(typeof(SubscriptionEntry))]

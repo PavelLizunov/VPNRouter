@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -441,6 +442,103 @@ public sealed class RuleSetCacheManagerTests : IDisposable
             cancellationToken: cts.Token);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public void FileLock_UsesCanonicalPathWithExistingComparer()
+    {
+        var dir = Path.Combine(_tempCacheDir, RuleSetCacheManager.CacheSubdir);
+
+        var direct = RuleSetCacheManager.GetFileLock(Path.Combine(dir, "alpha.srs"));
+        var dotted = RuleSetCacheManager.GetFileLock(Path.Combine(dir, ".", "alpha.srs"));
+        var upper = RuleSetCacheManager.GetFileLock(Path.Combine(dir, "ALPHA.srs"));
+
+        Assert.Same(direct, dotted);
+        Assert.Same(direct, upper);
+    }
+
+    [Fact]
+    public void FileLock_IsAFixedPool()
+    {
+        var dir = Path.Combine(_tempCacheDir, RuleSetCacheManager.CacheSubdir);
+        var locks = new HashSet<SemaphoreSlim>();
+
+        for (var i = 0; i < 500; i++)
+            locks.Add(RuleSetCacheManager.GetFileLock(Path.Combine(dir, $"file-{i}.srs")));
+
+        Assert.InRange(locks.Count, 1, RuleSetCacheManager.FileLockStripeCount);
+    }
+
+    [Fact]
+    public async Task ConcurrentSamePath_OnlyOneDownload()
+    {
+        var filename = "test-single-flight.srs";
+        var body = RuleSetSamples.UpstreamGeositeTldRu();
+        var handler = new GatedResponseHandler(body);
+        using var client = new HttpClient(handler);
+        var ct = TestContext.Current.CancellationToken;
+
+        Task<string?> first = RuleSetCacheManager.EnsureLocalAsync(
+            "https://example.invalid/single-flight.srs",
+            filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
+            httpClient: client,
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
+
+        await handler.FirstRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+
+        Task<string?> second = RuleSetCacheManager.EnsureLocalAsync(
+            "https://example.invalid/single-flight.srs",
+            filename,
+            checkContents: RuleSetSamples.CheckFixtureContentsAsync,
+            httpClient: client,
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
+
+        try
+        {
+            await Task.Delay(200, ct);
+            Assert.Equal(1, handler.RequestCount);
+        }
+        finally
+        {
+            handler.Release();
+        }
+
+        var results = await Task.WhenAll(first, second);
+
+        Assert.All(results, result => Assert.Equal(ExpectedCachedFile(filename), result));
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    private sealed class GatedResponseHandler : HttpMessageHandler
+    {
+        private readonly byte[] _body;
+        private readonly TaskCompletionSource<bool> _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _requestCount;
+
+        public GatedResponseHandler(byte[] body) => _body = body;
+
+        public TaskCompletionSource<bool> FirstRequestStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int RequestCount => Volatile.Read(ref _requestCount);
+
+        public void Release() => _release.TrySetResult(true);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _requestCount);
+            FirstRequestStarted.TrySetResult(true);
+            await _release.Task.WaitAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(_body),
+            };
+        }
     }
 
     private sealed class CountingHandler : HttpMessageHandler

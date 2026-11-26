@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:VPNRouter.App.ViewModels"
         xmlns:conv="using:VPNRouter.App"
+        xmlns:ac="using:Avalonia.Data.Converters"
         xmlns:ctrl="using:VPNRouter.App.Controls"
         xmlns:icons="using:VPNRouter.App.Controls"
         xmlns:loc="using:VPNRouter.App.Localization"
@@ -671,12 +672,54 @@
             </Border>
 
             <Grid Grid.Row="1">
-                <ctrl:DeferredPage IsActive="{Binding IsServersTabSelected}" PageType="{x:Type pages:ServersPage}"/>
-                <ctrl:DeferredPage IsActive="{Binding IsSubscribeTabSelected}" PageType="{x:Type pages:SubscribePage}"/>
-                <ctrl:DeferredPage IsActive="{Binding IsNetworkTabSelected}" PageType="{x:Type pages:NetworkPage}"/>
-                <ctrl:DeferredPage IsActive="{Binding IsAppsTabSelected}" PageType="{x:Type pages:ApplicationsPage}"/>
-                <ctrl:DeferredPage IsActive="{Binding IsToolsTabSelected}" PageType="{x:Type pages:ToolsPage}"/>
-                <ctrl:DeferredPage IsActive="{Binding IsFreeConfigsTabSelected}" PageType="{x:Type pages:FreeConfigsPage}"/>
+                <ctrl:DeferredPage PageType="{x:Type pages:ServersPage}">
+                    <ctrl:DeferredPage.IsActive>
+                        <MultiBinding Converter="{x:Static ac:BoolConverters.And}">
+                            <Binding Path="!IsSimpleMode"/>
+                            <Binding Path="IsServersTabSelected"/>
+                        </MultiBinding>
+                    </ctrl:DeferredPage.IsActive>
+                </ctrl:DeferredPage>
+                <ctrl:DeferredPage PageType="{x:Type pages:SubscribePage}">
+                    <ctrl:DeferredPage.IsActive>
+                        <MultiBinding Converter="{x:Static ac:BoolConverters.And}">
+                            <Binding Path="!IsSimpleMode"/>
+                            <Binding Path="IsSubscribeTabSelected"/>
+                        </MultiBinding>
+                    </ctrl:DeferredPage.IsActive>
+                </ctrl:DeferredPage>
+                <ctrl:DeferredPage PageType="{x:Type pages:NetworkPage}">
+                    <ctrl:DeferredPage.IsActive>
+                        <MultiBinding Converter="{x:Static ac:BoolConverters.And}">
+                            <Binding Path="!IsSimpleMode"/>
+                            <Binding Path="IsNetworkTabSelected"/>
+                        </MultiBinding>
+                    </ctrl:DeferredPage.IsActive>
+                </ctrl:DeferredPage>
+                <ctrl:DeferredPage PageType="{x:Type pages:ApplicationsPage}">
+                    <ctrl:DeferredPage.IsActive>
+                        <MultiBinding Converter="{x:Static ac:BoolConverters.And}">
+                            <Binding Path="!IsSimpleMode"/>
+                            <Binding Path="IsAppsTabSelected"/>
+                        </MultiBinding>
+                    </ctrl:DeferredPage.IsActive>
+                </ctrl:DeferredPage>
+                <ctrl:DeferredPage PageType="{x:Type pages:ToolsPage}">
+                    <ctrl:DeferredPage.IsActive>
+                        <MultiBinding Converter="{x:Static ac:BoolConverters.And}">
+                            <Binding Path="!IsSimpleMode"/>
+                            <Binding Path="IsToolsTabSelected"/>
+                        </MultiBinding>
+                    </ctrl:DeferredPage.IsActive>
+                </ctrl:DeferredPage>
+                <ctrl:DeferredPage PageType="{x:Type pages:FreeConfigsPage}">
+                    <ctrl:DeferredPage.IsActive>
+                        <MultiBinding Converter="{x:Static ac:BoolConverters.And}">
+                            <Binding Path="!IsSimpleMode"/>
+                            <Binding Path="IsFreeConfigsTabSelected"/>
+                        </MultiBinding>
+                    </ctrl:DeferredPage.IsActive>
+                </ctrl:DeferredPage>
             </Grid>
         </Grid>
 

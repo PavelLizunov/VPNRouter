@@ -16,6 +16,10 @@ public sealed class ClashLogStream : IDisposable
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
     private const int ReceiveBufferSize = 16 * 1024;
 
+    // One log record is normally a few KiB. A larger WebSocket message is
+    // drained and discarded instead of growing a StringBuilder without bound.
+    internal const int MaxMessageBytes = 256 * 1024;
+
     private readonly Uri _logsUri;
     private readonly ConnectionHealthState _state;
     private readonly Func<IReadOnlySet<string>?> _proxyEndpoints;
@@ -124,7 +128,7 @@ public sealed class ClashLogStream : IDisposable
     private async Task ReceiveLoopAsync(ClientWebSocket ws, CancellationToken ct)
     {
         var buffer = new byte[ReceiveBufferSize];
-        var sb = new StringBuilder();
+        var message = new ClashLogMessageBuffer(MaxMessageBytes);
         while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
         {
             WebSocketReceiveResult result;
@@ -140,12 +144,15 @@ public sealed class ClashLogStream : IDisposable
             if (result.MessageType == WebSocketMessageType.Close)
                 break;
 
-            sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+            // Oversized messages keep being received (drained) until their
+            // final fragment so the next record starts on a clean buffer.
+            message.Append(buffer.AsSpan(0, result.Count));
             if (!result.EndOfMessage)
                 continue;
 
-            HandleMessage(sb.ToString());
-            sb.Clear();
+            var text = message.Complete();
+            if (text is not null)
+                HandleMessage(text);
         }
     }
 
@@ -178,5 +185,75 @@ public sealed class ClashLogStream : IDisposable
         {
         }
         return false;
+    }
+}
+
+/// <summary>
+/// Accumulates one WebSocket message with a hard byte ceiling. When the
+/// ceiling is crossed the buffered bytes are discarded, but <see cref="Complete"/>
+/// is still called at the final fragment so the following message is parsed.
+/// </summary>
+internal sealed class ClashLogMessageBuffer
+{
+    private readonly int _maxBytes;
+    private readonly int _initialBytes;
+    private byte[] _buffer;
+    private int _length;
+    private bool _oversized;
+
+    internal ClashLogMessageBuffer(int maxBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxBytes);
+        _maxBytes = maxBytes;
+        _initialBytes = Math.Min(maxBytes, 16 * 1024);
+        _buffer = new byte[_initialBytes];
+    }
+
+    internal int BufferedBytes => _length;
+
+    internal bool IsOversized => _oversized;
+
+    internal void Append(ReadOnlySpan<byte> chunk)
+    {
+        if (_oversized)
+            return;
+
+        if (chunk.Length > _maxBytes - _length)
+        {
+            _oversized = true;
+            _length = 0;
+            return;
+        }
+
+        if (chunk.Length > _buffer.Length - _length)
+            Array.Resize(ref _buffer, Math.Min(_maxBytes, Math.Max(_buffer.Length * 2, _length + chunk.Length)));
+
+        chunk.CopyTo(_buffer.AsSpan(_length));
+        _length += chunk.Length;
+    }
+
+    /// <summary>
+    /// Returns the decoded message, or null when it exceeded the ceiling.
+    /// Always resets the buffer for the next message.
+    /// </summary>
+    internal string? Complete()
+    {
+        if (_oversized)
+        {
+            Reset();
+            return null;
+        }
+
+        var text = Encoding.UTF8.GetString(_buffer, 0, _length);
+        Reset();
+        return text;
+    }
+
+    internal void Reset()
+    {
+        if (_buffer.Length > _initialBytes)
+            _buffer = new byte[_initialBytes];
+        _length = 0;
+        _oversized = false;
     }
 }

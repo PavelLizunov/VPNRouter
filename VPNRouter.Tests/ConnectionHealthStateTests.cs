@@ -118,4 +118,36 @@ public sealed class ConnectionHealthStateTests
         Assert.Equal(0, byNode.Single(n => n.Node == "node-B").RelayOpenFails);
         Assert.Equal(1, byNode.Single(n => n.Node == "node-B").RelayOpenAttempts);
     }
+
+    [Fact]
+    public void HardCap_DropsOldestEntries_WithinSameWindow()
+    {
+        var now = DateTimeOffset.UnixEpoch;
+        var s = NewState(() => now);
+
+        s.Record(Ev(ConnHealthCategory.RelayOpenAttempt));
+        for (var i = 0; i < ConnectionHealthState.MaxEntries; i++)
+            s.Record(Ev(ConnHealthCategory.LocalClose));
+
+        var snap = s.Snapshot();
+        Assert.Equal(0, snap.RelayOpenAttempts);
+        Assert.Equal(ConnectionHealthState.MaxEntries, snap.LocalCloses);
+    }
+
+    [Fact]
+    public void HardCap_DoesNotChangeOrdinaryCounts()
+    {
+        var now = DateTimeOffset.UnixEpoch;
+        var s = NewState(() => now);
+
+        for (var i = 0; i < 30; i++) s.Record(Ev(ConnHealthCategory.RelayOpenAttempt));
+        for (var i = 0; i < 25; i++) s.Record(Ev(ConnHealthCategory.RelayOpenFail));
+        for (var i = 0; i < 5; i++) s.Record(Ev(ConnHealthCategory.LocalClose));
+
+        var snap = s.Snapshot();
+        Assert.Equal(30, snap.RelayOpenAttempts);
+        Assert.Equal(25, snap.RelayOpenFails);
+        Assert.Equal(5, snap.LocalCloses);
+        Assert.True(snap.WouldWarn);
+    }
 }

@@ -11,16 +11,15 @@ public class EtwProcessMonitor : IProcessMonitor
 {
     private const string SessionName = "VPNRouterETW";
     internal const int SessionBufferSizeMB = 4;
+    private static readonly SemaphoreSlim KernelSessionGate = new(1);
 
     private readonly ILogger _logger;
+    private readonly Func<IProcessTrace> _startTrace;
     private readonly object _gate = new();
-    private TraceEventSession? _session;
+    private IProcessTrace? _session;
     private Thread? _sessionThread;
-    private bool _stopRequested;
+    private CancellationTokenSource? _lifetime;
     private bool _disposed;
-
-    // Signals that RunSession assigned _session (or exited), so a fast Start/Stop cannot skip session.Stop().
-    private readonly ManualResetEventSlim _sessionReady = new(false);
 
     public event EventHandler<ProcessEventArgs>? ProcessStarted;
     public event EventHandler<ProcessEventArgs>? ProcessStopped;
@@ -28,7 +27,14 @@ public class EtwProcessMonitor : IProcessMonitor
     public EtwProcessMonitor(ILogger? logger = null, IProcessRunner? processRunner = null)
     {
         _logger = logger ?? Log.Logger;
+        _startTrace = StartTrace;
         _ = processRunner;
+    }
+
+    internal EtwProcessMonitor(Func<IProcessTrace> startTrace)
+    {
+        _logger = Log.Logger;
+        _startTrace = startTrace;
     }
 
     public void Start()
@@ -44,10 +50,9 @@ public class EtwProcessMonitor : IProcessMonitor
             if (_disposed || _session != null || _sessionThread != null) return;
 
             _logger.Information("[ETW] Starting process monitor session (buffer={BufferMB} MiB)", SessionBufferSizeMB);
-            _stopRequested = false;
-            _sessionReady.Reset();
-
-            _sessionThread = new Thread(RunSession)
+            var lifetime = new CancellationTokenSource();
+            _lifetime = lifetime;
+            _sessionThread = new Thread(() => RunSession(lifetime))
             {
                 Name = "VPNRouter-ETW",
                 IsBackground = true
@@ -56,90 +61,89 @@ public class EtwProcessMonitor : IProcessMonitor
         }
     }
 
-    public void Stop() => StopCore();
-
-    private void StopCore()
+    public void Stop()
     {
         Thread? thread;
-        TraceEventSession? session;
+        IProcessTrace? session;
         lock (_gate)
         {
-            _stopRequested = true;
+            _lifetime?.Cancel();
             thread = _sessionThread;
             session = _session;
-            if (thread == null && session == null) return;
+            _session = null;
         }
+        if (thread == null) return;
 
         _logger.Information("[ETW] Stopping process monitor");
-        if (session == null && thread != null)
-        {
-            try
-            {
-                if (!_sessionReady.Wait(TimeSpan.FromSeconds(1)))
-                {
-                    _logger.Warning("[ETW] session did not become ready within 1s — flagged for immediate stop");
-                }
-            }
-            catch (ObjectDisposedException) { }
-        }
-
-        lock (_gate)
-        {
-            session = _session;
-            _session = null;
-            _sessionThread = null;
-        }
-
         try { session?.Stop(); }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[ETW] session.Stop threw — best-effort, continuing");
         }
 
-        if (thread != null && thread.IsAlive)
+        if (thread != Thread.CurrentThread && !thread.Join(TimeSpan.FromSeconds(2)))
+            _logger.Warning("[ETW] worker still stopping after 2 seconds");
+    }
+
+    private void RunSession(CancellationTokenSource lifetime)
+    {
+        var ownsKernelSession = false;
+        try
         {
-            if (!thread.Join(TimeSpan.FromSeconds(2)))
+            // The kernel session name is shared by old and replacement monitors during failover.
+            KernelSessionGate.Wait(lifetime.Token);
+            ownsKernelSession = true;
+            if (lifetime.IsCancellationRequested) return;
+
+            using var session = _startTrace();
+            lock (_gate)
             {
-                _logger.Warning("[ETW] worker thread didn't exit within 2s after Stop; leaving daemon");
+                // Provider setup owns the session until it can actually be stopped.
+                if (lifetime.IsCancellationRequested || _disposed) return;
+                _session = session;
+            }
+
+            _logger.Information("[ETW] Session active, listening for process events");
+            session.Process();
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (ObjectDisposedException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[ETW] Session failed");
+        }
+        finally
+        {
+            if (ownsKernelSession)
+                KernelSessionGate.Release();
+            lock (_gate)
+            {
+                lifetime.Dispose();
+                _lifetime = null;
+                _session = null;
+                _sessionThread = null;
             }
         }
     }
 
-    private void RunSession()
+    private IProcessTrace StartTrace()
     {
-        TraceEventSession? ownedSession = null;
+        if (TraceEventSession.GetActiveSessionNames().Contains(SessionName))
+        {
+            _logger.Warning("[ETW] Found orphaned session '{Name}', disposing", SessionName);
+            using var old = new TraceEventSession(SessionName);
+            old.Stop();
+        }
+
+        var session = new TraceEventSession(SessionName) { BufferSizeMB = SessionBufferSizeMB };
         try
         {
-            lock (_gate)
-            {
-                if (_stopRequested || _disposed) return;
-            }
-
-            if (TraceEventSession.GetActiveSessionNames().Contains(SessionName))
-            {
-                _logger.Warning("[ETW] Found orphaned session '{Name}', disposing", SessionName);
-                using var old = new TraceEventSession(SessionName);
-                old.Stop();
-            }
-
-            using var session = new TraceEventSession(SessionName)
-            {
-                BufferSizeMB = SessionBufferSizeMB
-            };
-            ownedSession = session;
-
-            lock (_gate)
-            {
-                if (_stopRequested || _disposed) return;
-                _session = session;
-                _sessionReady.Set();
-            }
-
             session.EnableKernelProvider(
                 KernelTraceEventParser.Keywords.Process,
                 KernelTraceEventParser.Keywords.None);
 
-            session.Source.Kernel.ProcessStart += data =>
+            var source = session.Source;
+            source.Kernel.ProcessStart += data =>
             {
                 var handler = ProcessStarted;
                 if (handler == null) return;
@@ -154,7 +158,7 @@ public class EtwProcessMonitor : IProcessMonitor
                 }
             };
 
-            session.Source.Kernel.ProcessStop += data =>
+            source.Kernel.ProcessStop += data =>
             {
                 var handler = ProcessStopped;
                 if (handler == null) return;
@@ -169,25 +173,27 @@ public class EtwProcessMonitor : IProcessMonitor
                 }
             };
 
-            _logger.Information("[ETW] Session active, listening for process events");
-            session.Source.Process();
+            return new KernelProcessTrace(session, source);
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.Error(ex, "[ETW] Session failed");
+            session.Dispose();
+            throw;
         }
-        finally
-        {
-            lock (_gate)
-            {
-                if (ReferenceEquals(_session, ownedSession))
-                    _session = null;
-                if (ReferenceEquals(_sessionThread, Thread.CurrentThread))
-                    _sessionThread = null;
-                if (!_disposed)
-                    _sessionReady.Set();
-            }
-        }
+    }
+
+    internal interface IProcessTrace : IDisposable
+    {
+        void Process();
+        void Stop();
+    }
+
+    private sealed class KernelProcessTrace(TraceEventSession session, ETWTraceEventSource source) : IProcessTrace
+    {
+        public void Process() => source.Process();
+        // TraceEvent closes the consumer on Dispose, including when its native Stop call fails.
+        public void Stop() => session.Dispose();
+        public void Dispose() => session.Dispose();
     }
 
     internal static ProcessEventArgs TranslateProcessEvent(int processId, string? imageFileName, int parentProcessId)
@@ -205,15 +211,9 @@ public class EtwProcessMonitor : IProcessMonitor
         lock (_gate)
         {
             if (_disposed) return;
-            _stopRequested = true;
-        }
-        StopCore();
-        lock (_gate)
-        {
-            if (_disposed) return;
             _disposed = true;
-            try { _sessionReady.Dispose(); } catch { }
         }
+        Stop();
     }
 }
 #endif

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using VPNRouter.App.ViewModels.Internals;
 using VPNRouter.App.Views;
 
 namespace VPNRouter.App.Services;
@@ -128,6 +129,7 @@ internal sealed class TrayMemoryTrimmer : IDisposable
 
         try
         {
+            BundledServerIpCountry.ReleaseCachedTables();
             SkiaSharp.SKGraphics.PurgeAllCaches();
         }
         catch { }

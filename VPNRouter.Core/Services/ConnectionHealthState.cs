@@ -21,6 +21,10 @@ public sealed class ConnectionHealthState
     private const int DefaultMinSample = 20;
     private const double DefaultWarnThreshold = 0.5;
 
+    // Bounds a pathological log flood within one window. Normal streams stay
+    // well below this, so their counts and node attribution are unchanged.
+    internal const int MaxEntries = 10_000;
+
     private readonly TimeSpan _window;
     private readonly int _minSample;
     private readonly double _warnThreshold;
@@ -90,6 +94,9 @@ public sealed class ConnectionHealthState
     {
         var cutoff = now - _window;
         while (_entries.Count > 0 && _entries.Peek().At < cutoff)
+            _entries.Dequeue();
+
+        while (_entries.Count > MaxEntries)
             _entries.Dequeue();
     }
 

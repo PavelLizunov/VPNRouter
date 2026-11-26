@@ -15,8 +15,37 @@ public static class RuleSetCacheManager
 
     public const string CacheSubdir = "rulesets";
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> FileLocks =
-        new(StringComparer.OrdinalIgnoreCase);
+    // Fixed stripes instead of a per-path dictionary: a long-lived process can
+    // otherwise accumulate one never-released semaphore per rule-set name.
+    // Paths hashing to the same stripe may serialize, but the same canonical
+    // path always uses the same lock, so a download cannot be duplicated.
+    internal const int FileLockStripeCount = 64;
+
+    private static readonly SemaphoreSlim[] FileLocks = CreateFileLocks();
+
+    private static SemaphoreSlim[] CreateFileLocks()
+    {
+        var locks = new SemaphoreSlim[FileLockStripeCount];
+        for (var i = 0; i < locks.Length; i++)
+            locks[i] = new SemaphoreSlim(1, 1);
+        return locks;
+    }
+
+    internal static SemaphoreSlim GetFileLock(string localPath)
+    {
+        var canonicalPath = CanonicalPath(localPath);
+        var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(canonicalPath);
+        return FileLocks[(hash & int.MaxValue) % FileLocks.Length];
+    }
+
+    private static string CanonicalPath(string localPath)
+    {
+        try { return Path.GetFullPath(localPath); }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException)
+        {
+            return localPath;
+        }
+    }
 
     public static Task<string?> EnsureLocalAsync(
         string url,
@@ -51,7 +80,7 @@ public static class RuleSetCacheManager
         }
 
         var localPath = Path.Combine(dir, filename);
-        var fileLock = FileLocks.GetOrAdd(localPath, _ => new SemaphoreSlim(1, 1));
+        var fileLock = GetFileLock(localPath);
         await fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {

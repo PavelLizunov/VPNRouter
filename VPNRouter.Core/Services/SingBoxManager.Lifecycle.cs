@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Net.Http;
 using System.Runtime.Versioning;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Serilog;
 using VPNRouter.Core.Localization;
 using VPNRouter.Core.Models;
@@ -739,7 +741,8 @@ public partial class SingBoxManager
                     _linuxUsedPkexec = true;
                     spawnExe = LinuxRuntimeEnvironment.ResolvePkexec()
                         ?? throw new InvalidOperationException(Strings.LinuxPkexecUnavailable);
-                    spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
+                    ApplyPkexecMemoryTarget(_currentConfigPath);
+                    spawnArgs = BuildPkexecRuntimeArguments(exePath, _currentConfigPath);
                 }
             }
             else
@@ -753,7 +756,7 @@ public partial class SingBoxManager
                 Arguments: spawnArgs,
                 CaptureStdout: true,
                 CaptureStderr: true,
-                EnvironmentOverrides: BuildGoMemLimitOverride());
+                EnvironmentOverrides: _linuxUsedPkexec ? null : BuildGoMemLimitOverride());
         }
 
         // Last-moment disposal re-check at the spawn point: Dispose can race past the entry guard.
@@ -802,6 +805,52 @@ public partial class SingBoxManager
 
     internal const string DefaultGoMemLimit = "256MiB";
     internal const string DeepVerifyGoMemLimit = "64MiB";
+
+    internal static IReadOnlyList<string> BuildPkexecRuntimeArguments(string executable, string configPath) =>
+        [executable, "run", "-c", configPath];
+
+    private static void ApplyPkexecMemoryTarget(string configPath)
+    {
+        var original = File.ReadAllText(configPath);
+        var prepared = WithPkexecMemoryTarget(original);
+        if (prepared == original) return;
+
+        var staged = $"{configPath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            WriteConfigFile(staged, prepared);
+            File.Move(staged, configPath, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(staged);
+        }
+    }
+
+    internal static string WithPkexecMemoryTarget(string original)
+    {
+        // pkexec strips GOMEMLIMIT. The core applies two thirds of debug.memory_limit to the Go GC.
+        const int memoryLimitBytes = 384 * 1024 * 1024;
+        const string memoryLimit = "memory_limit";
+        try
+        {
+            if (JsonNode.Parse(original) is not JsonObject config) return original;
+            var experimental = config["experimental"];
+            if (experimental is not (null or JsonObject)) return original;
+            var options = (JsonObject?)experimental ?? new JsonObject();
+            var debug = options["debug"];
+            if (debug is not (null or JsonObject)) return original;
+            var settings = (JsonObject?)debug ?? new JsonObject();
+            if (settings.ContainsKey(memoryLimit)) return original;
+
+            settings[memoryLimit] = memoryLimitBytes;
+            if (debug is null) options["debug"] = settings;
+            if (experimental is null) config["experimental"] = options;
+            return config.ToJsonString();
+        }
+        catch (JsonException) { return original; }
+        catch (ArgumentException) { return original; }
+    }
 
     internal static IReadOnlyDictionary<string, string>? BuildGoMemLimitOverride(
         string defaultLimit = DefaultGoMemLimit,

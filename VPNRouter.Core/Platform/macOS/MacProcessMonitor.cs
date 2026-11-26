@@ -9,74 +9,109 @@ public class MacProcessMonitor : IProcessMonitor
 {
     private readonly ILogger _logger;
     private readonly TimeSpan _pollInterval;
+    private readonly Func<Dictionary<int, ProcessEventArgs>> _takeSnapshot;
+    private readonly object _gate = new();
 
     private Thread? _pollThread;
     private CancellationTokenSource? _cts;
-    private HashSet<int> _lastPids = new();
     private bool _disposed;
 
     public event EventHandler<ProcessEventArgs>? ProcessStarted;
     public event EventHandler<ProcessEventArgs>? ProcessStopped;
 
     public MacProcessMonitor(ILogger? logger = null, TimeSpan? pollInterval = null)
+        : this(logger, pollInterval, TakeSnapshot)
+    {
+    }
+
+    internal MacProcessMonitor(ILogger? logger, TimeSpan? pollInterval,
+        Func<Dictionary<int, ProcessEventArgs>> takeSnapshot)
     {
         _logger = logger ?? Log.Logger;
         _pollInterval = pollInterval ?? TimeSpan.FromSeconds(2);
+        _takeSnapshot = takeSnapshot;
     }
 
     public void Start()
     {
-        if (_pollThread != null) return;
-
-        _logger.Information("[MacProcessMonitor] Starting polling monitor (interval: {Interval}ms)",
-            _pollInterval.TotalMilliseconds);
-
-        _cts = new CancellationTokenSource();
-
-        _pollThread = new Thread(() => RunPolling(_cts.Token))
+        lock (_gate)
         {
-            Name = "VPNRouter-MacPollMonitor",
-            IsBackground = true
-        };
-        _pollThread.Start();
+            if (_disposed || _pollThread != null || (ProcessStarted == null && ProcessStopped == null)) return;
+
+            _logger.Information("[MacProcessMonitor] Starting polling monitor (interval: {Interval}ms)",
+                _pollInterval.TotalMilliseconds);
+
+            var lifetime = new CancellationTokenSource();
+            _cts = lifetime;
+            _pollThread = new Thread(() => RunWorker(lifetime))
+            {
+                Name = "VPNRouter-MacPollMonitor",
+                IsBackground = true
+            };
+            _pollThread.Start();
+        }
     }
 
     public void Stop()
     {
-        _logger.Information("[MacProcessMonitor] Stopping");
-        _cts?.Cancel();
-        _pollThread = null;
-        _cts = null;
+        Thread? worker;
+        lock (_gate)
+        {
+            worker = _pollThread;
+            _cts?.Cancel();
+        }
+
+        if (worker != null && worker != Thread.CurrentThread && !worker.Join(TimeSpan.FromSeconds(2)))
+            _logger.Warning("[MacProcessMonitor] worker still stopping after 2 seconds");
+    }
+
+    private void RunWorker(CancellationTokenSource lifetime)
+    {
+        try
+        {
+            RunPolling(lifetime.Token);
+        }
+        catch (ThreadInterruptedException) { }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[MacProcessMonitor] Poll loop failed");
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                lifetime.Dispose();
+                _cts = null;
+                _pollThread = null;
+            }
+        }
     }
 
     private void RunPolling(CancellationToken ct)
     {
-        try
+        if (ct.IsCancellationRequested) return;
+        var lastPids = _takeSnapshot().Keys.ToHashSet();
+        _logger.Debug("[MacProcessMonitor] Initial snapshot: {Count} processes", lastPids.Count);
+
+        while (!ct.WaitHandle.WaitOne(_pollInterval))
         {
-            _lastPids = TakeSnapshot().Keys.ToHashSet();
-            _logger.Debug("[MacProcessMonitor] Initial snapshot: {Count} processes", _lastPids.Count);
-
-            while (!ct.IsCancellationRequested)
+            try
             {
-                Thread.Sleep(_pollInterval);
+                var current = _takeSnapshot();
                 if (ct.IsCancellationRequested) break;
+                var currentPids = current.Keys.ToHashSet();
 
-                try
+                if (ProcessStarted is { } onStart)
                 {
-                    var current = TakeSnapshot();
-                    var currentPids = current.Keys.ToHashSet();
+                    foreach (var pid in currentPids.Except(lastPids))
+                        onStart(this, current[pid]);
+                }
 
-                    foreach (var pid in currentPids.Except(_lastPids))
+                if (ProcessStopped is { } onStop)
+                {
+                    foreach (var pid in lastPids.Except(currentPids))
                     {
-                        if (current.TryGetValue(pid, out var info))
-                        {
-                            ProcessStarted?.Invoke(this, info);
-                        }
-                    }
-
-                    foreach (var pid in _lastPids.Except(currentPids))
-                    {
-                        ProcessStopped?.Invoke(this, new ProcessEventArgs
+                        onStop(this, new ProcessEventArgs
                         {
                             ProcessId = pid,
                             ProcessName = string.Empty,
@@ -84,22 +119,18 @@ public class MacProcessMonitor : IProcessMonitor
                         });
                     }
 
-                    _lastPids = currentPids;
                 }
-                catch (Exception ex) when (!ct.IsCancellationRequested)
-                {
-                    _logger.Warning(ex, "[MacProcessMonitor] Error during poll");
-                }
+
+                lastPids = currentPids;
             }
-        }
-        catch (ThreadInterruptedException) { }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "[MacProcessMonitor] Poll loop failed");
+            catch (Exception ex) when (!ct.IsCancellationRequested && ex is not ThreadInterruptedException)
+            {
+                _logger.Warning(ex, "[MacProcessMonitor] Error during poll");
+            }
         }
     }
 
-    private Dictionary<int, ProcessEventArgs> TakeSnapshot()
+    private static Dictionary<int, ProcessEventArgs> TakeSnapshot()
     {
         var result = new Dictionary<int, ProcessEventArgs>();
         var procs = Process.GetProcesses();
@@ -131,8 +162,11 @@ public class MacProcessMonitor : IProcessMonitor
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
         Stop();
     }
 }
