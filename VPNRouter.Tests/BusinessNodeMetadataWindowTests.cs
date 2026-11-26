@@ -313,7 +313,6 @@ public sealed class BusinessNodeMetadataWindowTests
         ScreenshotHelper.Capture(fixture.Window, "business-server-load-levels-360");
         fixture.Selector.IsDropDownOpen = false;
     }
-    }
 
     [AvaloniaFact]
     public async Task HideShowWindow_CancelsOldRead_AndReusesOwnerWithoutPublishingLateMetadata()
