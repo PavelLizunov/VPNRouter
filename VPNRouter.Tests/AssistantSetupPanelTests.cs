@@ -534,12 +534,14 @@ public sealed class AssistantSetupPanelTests
             store.Save(settings, AppPaths.ConfigYamlPath);
             var release = new TaskCompletionSource<AssistantStep>(TaskCreationOptions.RunContinuationsAsynchronously);
             CancellationToken requestToken = default;
+            AssistantControl? capturedControl = null;
             using var logger = new Serilog.LoggerConfiguration().CreateLogger();
             using var vm = new MainWindowViewModel(store, logger)
             {
                 StepAssistantAsync = (_, _, _, obs, ct) =>
                 {
                     requestToken = ct;
+                    capturedControl = Assert.Single(obs.Controls);
                     return release.Task.WaitAsync(ct);
                 },
             };
@@ -575,9 +577,8 @@ public sealed class AssistantSetupPanelTests
                 Assert.False(requestToken.IsCancellationRequested);
 
                 // Resolve the step into the confirmation phase.
-                var obs = new AssistantWindowAutomation(window, panel).Observe();
-                var flushControl = obs.Single(c => c.Name == "SetFlushDnsOnStart");
-                release.SetResult(new AssistantStep(AssistantStepStatus.Act, flushControl, Toggle: true));
+                Assert.NotNull(capturedControl);
+                release.SetResult(new AssistantStep(AssistantStepStatus.Act, capturedControl, Toggle: true));
                 await Task.Delay(50, TestContext.Current.CancellationToken);
                 Avalonia.Threading.Dispatcher.UIThread.RunJobs();
                 Assert.True(confirm.IsVisible);

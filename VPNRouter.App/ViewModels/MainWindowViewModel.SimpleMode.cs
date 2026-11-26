@@ -1042,13 +1042,13 @@ public partial class MainWindowViewModel
             if (IsConnected && DisplayedTunnel == null) return Strings.SmpStatusConnectedNoDetails;
             if (!IsConnected && SimpleServerPreference != null && SelectedSubscriptionServer == null)
                 return Core.Localization.Strings.SmpSelectionUnavailableTitle;
-            var (name, address) = DeriveConnectedServerLabel();
-            if (!string.IsNullOrWhiteSpace(name)) return name;
             if (!IsConnected && string.Equals(_settings?.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase) &&
                 !SmpHasSelectableSubscriptionServers && Subscriptions.Any(s => s.Enabled))
                 return SmpHasOnlyTurnRelayHops
                     ? Core.Localization.Strings.SmpTurnRelayOnlyHopsTitle
                     : Core.Localization.Strings.SmpEmptySubTitle;
+            var (name, address) = DeriveConnectedServerLabel();
+            if (!string.IsNullOrWhiteSpace(name)) return name;
             return string.IsNullOrWhiteSpace(address) ? SmpConfigKind : address;
         }
     }

@@ -113,11 +113,11 @@ public sealed class SimpleConnectStatusTests
         {
             SubscriptionFetcher.Http = http;
             await vm.RefreshAllSubscriptionsCommand.ExecuteAsync(refresh.CommandParameter);
+            Dispatcher.UIThread.RunJobs();
             Assert.Single(http.SentRequests);
             Assert.Equal("new", Assert.Single(vm.SubscriptionServers).Name);
             Assert.True(options.IsEffectivelyVisible);
             Assert.False(options.IsChecked);
-            Dispatcher.UIThread.RunJobs();
             Assert.True(view.Page.FindControl<TextBlock>("SimpleRefreshFeedback")!.IsEffectivelyVisible);
             view.Capture($"simple-home-refresh-{(cached ? "cached" : "empty")}-380");
         }
@@ -870,41 +870,47 @@ public sealed class SimpleConnectStatusTests
     [AvaloniaFact]
     public void SubscriptionPickerShowsTurnRelayExitAndKeepsItsHopInTheFeed()
     {
-        var hop = Entry("TurnRelay hop", "203.0.113.20", 53492);
-        hop.Protocol = "turnrelay";
-        hop.OutboundId = "turnrelay-test";
-        var exit = Entry("Frankfurt Exit", "exit.invalid");
-        exit.DetourVia = hop.OutboundId;
-        var settings = new AppSettings();
-        settings.App.ConfigMode = "subscribe";
-        settings.App.Subscriptions = [new() { Url = "https://feed.invalid/relay", Servers = [hop, exit] }];
-        var store = new InMemorySettingsStore();
-        store.Save(settings, AppPaths.ConfigYamlPath);
-        using var vm = CreateVm(store);
-        using var view = new OpenPage(vm, width: 360);
-        Assert.Equal(1, vm.SmpSelectableServerCount);
-        Assert.Equal(1, Assert.Single(vm.Subscriptions).SelectableServerCount);
-        vm.OpenConfigPickerCommand.Execute(null);
-        Dispatcher.UIThread.RunJobs();
+        var previousTurnRelay = SingBoxFeatures.OverrideTurnRelay;
+        SingBoxFeatures.OverrideTurnRelay = true;
+        try
+        {
+            var hop = Entry("TurnRelay hop", "203.0.113.20", 53492);
+            hop.Protocol = "turnrelay";
+            hop.OutboundId = "turnrelay-test";
+            var exit = Entry("Frankfurt Exit", "exit.invalid");
+            exit.DetourVia = hop.OutboundId;
+            var settings = new AppSettings();
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions = [new() { Url = "https://feed.invalid/relay", Servers = [hop, exit] }];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = CreateVm(store);
+            using var view = new OpenPage(vm, width: 360);
+            Assert.Equal(1, vm.SmpSelectableServerCount);
+            Assert.Equal(1, Assert.Single(vm.Subscriptions).SelectableServerCount);
+            vm.OpenConfigPickerCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
 
-        var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
-        var group = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
-        var exitRow = Assert.Single(group.Servers);
-        Assert.Equal(exit.Name, exitRow.Name);
-        Assert.True(exitRow.HasTurnRelayHop);
-        Assert.Equal(Strings.SmpTurnRelayBadge, exitRow.TurnRelayBadgeText);
-        Assert.True(group.HasSelectableServers);
-        Assert.True(group.CanActivateCategory);
-        Assert.False(group.CanAutoSelect);
-        Assert.True(FindGroupButton(groups, group.Category, disclosure: false).IsEffectivelyEnabled);
-        Toggle(view.Page, "SimpleServerSearchButton", true);
-        FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!.Text = "TurnRelay";
-        Dispatcher.UIThread.RunJobs();
-        var results = FindOnPage<ServerPickerListBox>(view.Page, "SimpleServerResults")!;
-        Assert.Equal(exit.Name, Assert.IsType<ServerViewModel>(Assert.Single(results.Items)).Name);
-        var feed = Assert.Single(vm.Subscriptions).UnderlyingEntry;
-        Assert.Equal(exit.DetourVia, Assert.Single(feed.Servers, row => row.IsTurnRelay).OutboundId);
-        view.Capture("simple-picker-turnrelay-exit-360");
+            var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
+            var group = Assert.IsType<SimpleServerGroup>(Assert.Single(groups.Items));
+            var exitRow = Assert.Single(group.Servers);
+            Assert.Equal(exit.Name, exitRow.Name);
+            Assert.True(exitRow.HasTurnRelayHop);
+            Assert.Equal(Strings.SmpTurnRelayBadge, exitRow.TurnRelayBadgeText);
+            Assert.True(group.HasSelectableServers);
+            Assert.True(group.CanActivateCategory);
+            Assert.False(group.CanAutoSelect);
+            Assert.True(FindGroupButton(groups, group.Category, disclosure: false).IsEffectivelyEnabled);
+            Toggle(view.Page, "SimpleServerSearchButton", true);
+            FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!.Text = "TurnRelay";
+            Dispatcher.UIThread.RunJobs();
+            var results = FindOnPage<ServerPickerListBox>(view.Page, "SimpleServerResults")!;
+            Assert.Equal(exit.Name, Assert.IsType<ServerViewModel>(Assert.Single(results.Items)).Name);
+            var feed = Assert.Single(vm.Subscriptions).UnderlyingEntry;
+            Assert.Equal(exit.DetourVia, Assert.Single(feed.Servers, row => row.IsTurnRelay).OutboundId);
+            view.Capture("simple-picker-turnrelay-exit-360");
+        }
+        finally { SingBoxFeatures.OverrideTurnRelay = previousTurnRelay; }
     }
 
     [AvaloniaFact]

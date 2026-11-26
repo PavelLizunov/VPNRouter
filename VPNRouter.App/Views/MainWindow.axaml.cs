@@ -85,10 +85,10 @@ public partial class MainWindow : Window
 
     private void RefreshMenuLabels()
     {
-        if (this.FindControl<TextBlock>("MenuAppSectionLabel") is { } label)
-            label.Text = VPNRouter.Core.Localization.Strings.SmpMenuAppSection;
-        if (this.FindControl<Button>("MenuVersionHistoryButton") is { } history)
-            history.Content = VPNRouter.Core.Localization.Strings.SmpMenuVersionHistory;
+        if (MenuAppSectionLabel != null)
+            MenuAppSectionLabel.Text = VPNRouter.Core.Localization.Strings.SmpMenuAppSection;
+        if (MenuVersionHistoryButton != null)
+            MenuVersionHistoryButton.Content = VPNRouter.Core.Localization.Strings.SmpMenuVersionHistory;
     }
 
     private void FitToScreen()
