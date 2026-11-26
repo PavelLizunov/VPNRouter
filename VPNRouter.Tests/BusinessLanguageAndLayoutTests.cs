@@ -369,8 +369,8 @@ public sealed class BusinessLanguageAndLayoutTests
         var cta = ConnectionButton(fixture);
         Assert.Contains("solid", cta.Classes);
         Assert.DoesNotContain("business-outline", cta.Classes);
-        var solidAccent = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(
-            window.FindResource("AccentSolidBrush"));
+        Assert.True(window.TryFindResource("AccentSolidBrush", window.ActualThemeVariant, out var accent));
+        var solidAccent = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(accent);
         var ctaBackground = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(cta.Background);
         Assert.Equal(solidAccent.Color, ctaBackground.Color);
         AssertInsideViewport(serverButton, scroll);
