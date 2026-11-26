@@ -455,8 +455,7 @@
                         AutomationProperties.Name="Menu">
                     <Button.Content><icons:Pictogram Id="more-horizontal" Width="18" Height="18"/></Button.Content>
                     <Button.Flyout>
-                        <Flyout x:Name="OverflowMenuFlyout"
-                                Placement="BottomEdgeAlignedRight"
+                        <Flyout Placement="BottomEdgeAlignedRight"
                                 ShowMode="Standard"
                                 FlyoutPresenterClasses="naked">
                             <Border Width="248"
