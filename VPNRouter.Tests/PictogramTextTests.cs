@@ -2,8 +2,10 @@ using System.Runtime.CompilerServices;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
+using Avalonia.Threading;
 using VPNRouter.App.Controls;
 
 namespace VPNRouter.Tests;
@@ -99,25 +101,54 @@ public class PictogramTextTests
         PictogramText.SetIcons(text, "arrow-down,arrow-up");
 
         var abandoned = UpdateAndCaptureAbandonedIcons(text, iterations: 200);
+        AssertAbandonedIconsReleased(abandoned);
+        GC.KeepAlive(text);
+    }
 
+    [AvaloniaFact]
+    public void RenderedTextUpdates_DoNotRetainAbandonedPictogramControls()
+    {
+        var text = new TextBlock { FontSize = 12, Foreground = Brushes.White };
+        PictogramText.SetIcons(text, "arrow-down,arrow-up");
+        var window = new Window { Width = 240, Height = 120, Content = text };
+        window.Show();
+        try
+        {
+            var abandoned = UpdateAndCaptureAbandonedIcons(text, iterations: 8, render: () =>
+            {
+                Dispatcher.UIThread.RunJobs();
+                using var frame = window.CaptureRenderedFrame();
+                Assert.NotNull(frame);
+            });
+            AssertAbandonedIconsReleased(abandoned);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    private static void AssertAbandonedIconsReleased(List<WeakReference<Pictogram>> abandoned)
+    {
         for (var i = 0; i < 4; i++)
         {
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
             GC.WaitForPendingFinalizers();
         }
 
-        GC.KeepAlive(text);
         Assert.NotEmpty(abandoned);
         Assert.All(abandoned, weak => Assert.False(weak.TryGetTarget(out _)));
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static List<WeakReference<Pictogram>> UpdateAndCaptureAbandonedIcons(TextBlock text, int iterations)
+    private static List<WeakReference<Pictogram>> UpdateAndCaptureAbandonedIcons(TextBlock text, int iterations,
+        Action? render = null)
     {
         var abandoned = new List<WeakReference<Pictogram>>(iterations * 2);
         for (var i = 0; i < iterations; i++)
         {
             PictogramText.SetText(text, $"\u2193 {i} KB/s \u2191 {i + 1} KB/s");
+            render?.Invoke();
             foreach (var inline in text.Inlines!)
             {
                 if (inline is InlineUIContainer { Child: Pictogram icon })
@@ -127,6 +158,7 @@ public class PictogramTextTests
 
         // Replace with a final value so every captured Pictogram above is abandoned.
         PictogramText.SetText(text, "\u2193 final \u2191 final");
+        render?.Invoke();
         return abandoned;
     }
 

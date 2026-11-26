@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
@@ -8,8 +9,15 @@ namespace VPNRouter.App.ViewModels.Internals;
 
 internal static class BundledServerIpCountry
 {
-    private static readonly Lazy<byte[]> Ipv4 = new(() => Load("ipv4"));
-    private static readonly Lazy<byte[]> Ipv6 = new(() => Load("ipv6"));
+    private const int MaxTableBytes = 32 * 1024 * 1024;
+    private static Lazy<byte[]> _ipv4 = new(() => Load("ipv4"));
+    private static Lazy<byte[]> _ipv6 = new(() => Load("ipv6"));
+
+    internal static void ReleaseCachedTables()
+    {
+        Interlocked.Exchange(ref _ipv4, new Lazy<byte[]>(() => Load("ipv4")));
+        Interlocked.Exchange(ref _ipv6, new Lazy<byte[]>(() => Load("ipv6")));
+    }
 
     // Each sorted record is an inclusive first/last address in network byte order,
     // followed by a two-byte ASCII country code.
@@ -20,7 +28,7 @@ internal static class BundledServerIpCountry
 
         var ipv4 = ip.AddressFamily == AddressFamily.InterNetwork;
         var bytes = ipv4 ? 4 : 16;
-        var table = (ipv4 ? Ipv4 : Ipv6).Value;
+        var table = (ipv4 ? Volatile.Read(ref _ipv4) : Volatile.Read(ref _ipv6)).Value;
         Span<byte> address = stackalloc byte[bytes];
         if (!ip.TryWriteBytes(address, out var size) || size != bytes) return string.Empty;
 
@@ -48,6 +56,23 @@ internal static class BundledServerIpCountry
         var uri = new Uri($"avares://VPNRouter.App/Assets/CountryData/{family}.ranges.gz");
         if (!AssetLoader.Exists(uri)) return [];
         using var source = AssetLoader.Open(uri);
+
+        if (source.CanSeek && source.Length >= 4)
+        {
+            // The embedded tables are single-member gzip files. ISIZE gives the exact array size.
+            source.Seek(-4, SeekOrigin.End);
+            Span<byte> sizeBytes = stackalloc byte[4];
+            source.ReadExactly(sizeBytes);
+            var size = BinaryPrimitives.ReadUInt32LittleEndian(sizeBytes);
+            if (size > MaxTableBytes) return [];
+
+            source.Position = 0;
+            using var tableStream = new GZipStream(source, CompressionMode.Decompress);
+            var table = new byte[(int)size];
+            tableStream.ReadExactly(table);
+            return tableStream.ReadByte() == -1 ? table : [];
+        }
+
         using var decompressed = new GZipStream(source, CompressionMode.Decompress);
         using var destination = new MemoryStream();
         decompressed.CopyTo(destination);

@@ -1973,7 +1973,8 @@ static int command_start(const char *request_json, size_t request_length,
     char tmp_environment[sizeof(working_dir) + sizeof("TMPDIR=")];
     snprintf(tmp_environment, sizeof(tmp_environment), "TMPDIR=%s", working_dir);
     char *const envp[] = {
-        "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "HOME=/var/root", tmp_environment, NULL
+        "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "HOME=/var/root", tmp_environment,
+        "GOMEMLIMIT=256MiB", NULL
     };
     int devnull = open("/dev/null", O_RDONLY);
     if (devnull >= 0) {

@@ -108,6 +108,17 @@ public sealed class DeferredPageMemoryTests
 
             var rehydratedServers = Assert.IsType<ServersPage>(serversPage.Content);
             Assert.NotSame(originalServers, rehydratedServers);
+
+            vm.IsSimpleMode = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(serversPage.IsActive);
+            Assert.True(window.ReleaseInactivePages() >= 1);
+            Assert.Null(serversPage.Content);
+
+            vm.IsSimpleMode = false;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(serversPage.IsActive);
+            Assert.NotSame(rehydratedServers, Assert.IsType<ServersPage>(serversPage.Content));
         }
         finally
         {

@@ -188,8 +188,9 @@ public partial class FreeConfigsPageViewModel
         }
 
         IsBusy = true;
-        _refreshCts = new CancellationTokenSource();
-        var ct = _refreshCts.Token;
+        using var refreshCts = new CancellationTokenSource();
+        _refreshCts = refreshCts;
+        var ct = refreshCts.Token;
 
         try
         {
@@ -236,7 +237,7 @@ public partial class FreeConfigsPageViewModel
             var tested = 0;
             var lastSaveAt = DateTime.UtcNow;
 
-            var sem = new SemaphoreSlim(5);
+            using var sem = new SemaphoreSlim(5);
             var runningTasks = new List<Task>();
 
             async Task TestOneWithUI(FreeConfigEntry cfg)
@@ -286,19 +287,27 @@ public partial class FreeConfigsPageViewModel
 
             await Task.Run(async () =>
             {
-                foreach (var cfg in candidates)
+                try
                 {
-                    if (ct.IsCancellationRequested) break;
-                    if (Volatile.Read(ref foundVerified) >= target) break;
-
-                    runningTasks.Add(TestOneWithUI(cfg));
-                    if (runningTasks.Count >= 20)
+                    foreach (var cfg in candidates)
                     {
-                        var done = await Task.WhenAny(runningTasks);
-                        runningTasks.Remove(done);
+                        ct.ThrowIfCancellationRequested();
+                        if (Volatile.Read(ref foundVerified) >= target) break;
+
+                        runningTasks.Add(TestOneWithUI(cfg));
+                        if (runningTasks.Count >= 20)
+                        {
+                            var done = await Task.WhenAny(runningTasks);
+                            runningTasks.Remove(done);
+                            await done;
+                        }
                     }
                 }
-                await Task.WhenAll(runningTasks);
+                finally
+                {
+                    await Task.WhenAll(runningTasks);
+                }
+                ct.ThrowIfCancellationRequested();
             });
 
             await Dispatcher.UIThread.InvokeAsync(TrimAndReclaim);
@@ -337,6 +346,7 @@ public partial class FreeConfigsPageViewModel
         }
         finally
         {
+            Interlocked.CompareExchange(ref _refreshCts, null, refreshCts);
             IsBusy = false;
             ProgressTotal = 0;
             ProgressDone = 0;

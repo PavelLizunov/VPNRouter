@@ -32,6 +32,16 @@ public sealed class LinuxTunSandboxTests
         Assert.Null(LinuxRuntimeEnvironment.ResolvePkexec(_ => false));
     }
 
+    [Fact]
+    public void PkexecArguments_SetFixedGoTargetAfterElevation_AndPreservePathArguments()
+    {
+        const string executable = "/opt/VPN Router/sing-box";
+        const string configPath = "/home/test user/TUN config.json";
+
+        Assert.Equal(new[] { "/usr/bin/env", "--", "GOMEMLIMIT=256MiB", executable, "run", "-c", configPath },
+            SingBoxManager.BuildPkexecRuntimeArguments(executable, configPath));
+    }
+
     [Theory]
     [InlineData("FATAL configure tun interface: TUNSETIFF: operation not permitted", true)]
     [InlineData("fatal configure tun interface: tunsetiff: OPERATION NOT PERMITTED", true)]

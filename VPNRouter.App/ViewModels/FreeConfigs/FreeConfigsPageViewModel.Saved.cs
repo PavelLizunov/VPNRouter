@@ -169,8 +169,9 @@ public partial class FreeConfigsPageViewModel
 
         item.IsRecheckRunning = true;
         IsBusy = true;
-        _refreshCts = new CancellationTokenSource();
-        var ct = _refreshCts.Token;
+        using var refreshCts = new CancellationTokenSource();
+        _refreshCts = refreshCts;
+        var ct = refreshCts.Token;
 
         try
         {
@@ -215,6 +216,7 @@ public partial class FreeConfigsPageViewModel
         }
         finally
         {
+            Interlocked.CompareExchange(ref _refreshCts, null, refreshCts);
             item.IsRecheckRunning = false;
             IsBusy = false;
         }
@@ -229,8 +231,9 @@ public partial class FreeConfigsPageViewModel
         if (stale.Count == 0) return;
 
         IsBusy = true;
-        _refreshCts = new CancellationTokenSource();
-        var ct = _refreshCts.Token;
+        using var refreshCts = new CancellationTokenSource();
+        _refreshCts = refreshCts;
+        var ct = refreshCts.Token;
         var verified = 0;
         var failed = 0;
 
@@ -244,7 +247,7 @@ public partial class FreeConfigsPageViewModel
                 ProgressDone = 0;
             });
 
-            var sem = new SemaphoreSlim(5);
+            using var sem = new SemaphoreSlim(5);
             var done = 0;
             var tasks = stale.Select(async cfg =>
             {
@@ -308,6 +311,7 @@ public partial class FreeConfigsPageViewModel
         }
         finally
         {
+            Interlocked.CompareExchange(ref _refreshCts, null, refreshCts);
             IsBusy = false;
             ProgressTotal = 0;
             ProgressDone = 0;

@@ -739,7 +739,7 @@ public partial class SingBoxManager
                     _linuxUsedPkexec = true;
                     spawnExe = LinuxRuntimeEnvironment.ResolvePkexec()
                         ?? throw new InvalidOperationException(Strings.LinuxPkexecUnavailable);
-                    spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
+                    spawnArgs = BuildPkexecRuntimeArguments(exePath, _currentConfigPath);
                 }
             }
             else
@@ -753,7 +753,7 @@ public partial class SingBoxManager
                 Arguments: spawnArgs,
                 CaptureStdout: true,
                 CaptureStderr: true,
-                EnvironmentOverrides: BuildGoMemLimitOverride());
+                EnvironmentOverrides: _linuxUsedPkexec ? null : BuildGoMemLimitOverride());
         }
 
         // Last-moment disposal re-check at the spawn point: Dispose can race past the entry guard.
@@ -802,6 +802,10 @@ public partial class SingBoxManager
 
     internal const string DefaultGoMemLimit = "256MiB";
     internal const string DeepVerifyGoMemLimit = "64MiB";
+
+    // pkexec clears the launcher environment. Set only the fixed memory target after authorization.
+    internal static IReadOnlyList<string> BuildPkexecRuntimeArguments(string executable, string configPath) =>
+        ["/usr/bin/env", "--", $"GOMEMLIMIT={DefaultGoMemLimit}", executable, "run", "-c", configPath];
 
     internal static IReadOnlyDictionary<string, string>? BuildGoMemLimitOverride(
         string defaultLimit = DefaultGoMemLimit,

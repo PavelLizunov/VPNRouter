@@ -1,4 +1,5 @@
 using VPNRouter.Core.Platform.macOS;
+using VPNRouter.Core.Services;
 using Xunit;
 
 namespace VPNRouter.Tests;
@@ -70,6 +71,19 @@ public class MacPrivilegedSourceContractTests
         Assert.Contains("CreateStartRequest(_currentConfigPath, macLaunchId)", lifecycle, StringComparison.Ordinal);
         Assert.Contains("_macPrivilegeLaunchId = macLaunchId", lifecycle, StringComparison.Ordinal);
         Assert.Contains("StopLaunch(launchId, launcherExited)", lifecycle, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Mac_helper_passes_the_default_go_memory_target_in_the_fixed_runtime_environment()
+    {
+        var helper = Read("packaging", "macos", "vpnrouter-privileged.c");
+        var start = helper.IndexOf("static int command_start", StringComparison.Ordinal);
+        var environment = helper.IndexOf("char *const envp[] = {", start, StringComparison.Ordinal);
+        var end = helper.IndexOf("};", environment, StringComparison.Ordinal);
+
+        Assert.Contains($"\"GOMEMLIMIT={SingBoxManager.DefaultGoMemLimit}\"", helper[environment..end],
+            StringComparison.Ordinal);
+        Assert.Contains("execve(ROOT_BIN, argv, envp)", helper[end..], StringComparison.Ordinal);
     }
 
     [Fact]
