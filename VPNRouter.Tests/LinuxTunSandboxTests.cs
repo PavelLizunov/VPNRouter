@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
@@ -32,15 +33,39 @@ public sealed class LinuxTunSandboxTests
         Assert.Null(LinuxRuntimeEnvironment.ResolvePkexec(_ => false));
     }
 
-    [Fact]
-    public void PkexecArguments_SetFixedGoTargetAfterElevation_AndPreservePathArguments()
+    [Theory]
+    [InlineData("/opt/VPN Router/sing-box")]
+    [InlineData("/opt/vpn=1/sing-box")]
+    public void PkexecArguments_AuthorizeTheExactExecutable(string executable)
     {
-        const string executable = "/opt/VPN Router/sing-box";
         const string configPath = "/home/test user/TUN config.json";
 
-        Assert.Equal(new[] { "/usr/bin/env", "--", "GOMEMLIMIT=256MiB", executable, "run", "-c", configPath },
+        Assert.Equal(new[] { executable, "run", "-c", configPath },
             SingBoxManager.BuildPkexecRuntimeArguments(executable, configPath));
     }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"experimental\":{\"debug\":{\"gc_percent\":70}}}")]
+    public void PkexecConfig_AddsTheGoTargetWithoutChangingExistingOptions(string json)
+    {
+        var expected = JsonNode.Parse(json)!.AsObject();
+        var prepared = JsonNode.Parse(SingBoxManager.WithPkexecMemoryTarget(json))!.AsObject();
+        var experimental = prepared["experimental"]!.AsObject();
+        var debug = experimental["debug"]!.AsObject();
+        Assert.Equal(402_653_184, debug["memory_limit"]!.GetValue<int>());
+        debug.Remove("memory_limit");
+        if (debug.Count == 0) experimental.Remove("debug");
+        if (experimental.Count == 0) prepared.Remove("experimental");
+        Assert.True(JsonNode.DeepEquals(expected, prepared));
+    }
+
+    [Theory]
+    [InlineData("{\"experimental\":{\"debug\":{\"memory_limit\":\"768MB\"}}}")]
+    [InlineData("{\"experimental\":{\"debug\":[]}}")]
+    [InlineData("{")]
+    public void PkexecConfig_PreservesExplicitLimitAndLeavesInvalidJsonToTheCore(string json) =>
+        Assert.Equal(json, SingBoxManager.WithPkexecMemoryTarget(json));
 
     [Theory]
     [InlineData("FATAL configure tun interface: TUNSETIFF: operation not permitted", true)]

@@ -107,6 +107,7 @@ public class EtwProcessMonitor : IProcessMonitor
             session.Process();
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (ObjectDisposedException) when (lifetime.IsCancellationRequested) { }
         catch (Exception ex)
         {
             _logger.Error(ex, "[ETW] Session failed");
@@ -190,7 +191,8 @@ public class EtwProcessMonitor : IProcessMonitor
     private sealed class KernelProcessTrace(TraceEventSession session, ETWTraceEventSource source) : IProcessTrace
     {
         public void Process() => source.Process();
-        public void Stop() => session.Stop();
+        // TraceEvent closes the consumer on Dispose, including when its native Stop call fails.
+        public void Stop() => session.Dispose();
         public void Dispose() => session.Dispose();
     }
 

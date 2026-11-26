@@ -13,6 +13,10 @@ namespace VPNRouter.Tests;
 public sealed class VerificationProxyLoopbackTests
 {
     [Fact]
+    public Task PinnedRuntimeStartsWithTheLinuxPkexecMemoryConfig() =>
+        WithOwnedProxyAsync((_, _) => Task.CompletedTask, prepareConfig: SingBoxManager.WithPkexecMemoryTarget);
+
+    [Fact]
     public Task OwnedProxyDeliversHttpsWithIndependentDestinationTrust() => WithOwnedProxyAsync(async (proxy, ct) =>
     {
         var now = DateTimeOffset.UtcNow;
@@ -152,7 +156,7 @@ public sealed class VerificationProxyLoopbackTests
     }
 
     private static async Task WithOwnedProxyAsync(Func<VerificationProxy, CancellationToken, Task> test,
-        Func<VerificationProxy, JsonObject>? buildConfig = null)
+        Func<VerificationProxy, JsonObject>? buildConfig = null, Func<string, string>? prepareConfig = null)
     {
         var runtime = Environment.GetEnvironmentVariable("VPNROUTER_TEST_VERIFIER_RUNTIME");
         Assert.SkipUnless(!string.IsNullOrEmpty(runtime), "Requires the verified sing-box fixture");
@@ -170,8 +174,9 @@ public sealed class VerificationProxyLoopbackTests
         var path = Path.Combine(Path.GetTempPath(), $"vpnrouter-verify-fixture-{Guid.NewGuid():N}.json");
         try
         {
+            var json = config.ToJsonString();
             await using (var writer = new StreamWriter(AppPaths.CreatePrivateFile(path, FileMode.CreateNew)))
-                await writer.WriteAsync(config.ToJsonString().AsMemory(), cts.Token);
+                await writer.WriteAsync((prepareConfig?.Invoke(json) ?? json).AsMemory(), cts.Token);
 
             using var child = new ProcessRunner().Start(new ProcessRequest(runtime!, ["run", "-c", path]), process =>
             {

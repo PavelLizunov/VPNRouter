@@ -39,8 +39,8 @@ process wait for the old kernel session to close. The Unix monitor captures
 its own cancellation source and interrupts its polling delay at Stop.
 
 The macOS helper sets the fixed Go memory target in the core environment.
-The Linux pkexec path sets the same target after authorization, through the
-system env command with separate arguments. Capability launches retain the
+Linux pkexec launches the exact core path directly, and the core reads the
+memory setting from its runtime configuration. Capability launches retain the
 direct-launch override semantics. The target is a Go GC tuning value.
 
 Simple Mode marks Advanced pages inactive without changing tab selection.
@@ -50,7 +50,7 @@ before releasing semaphores and clears and disposes the three manual command
 lifetimes on their normal paths.
 
 Static checks covered whitespace, XAML parsing, embedded gzip member sizes,
-the macOS environment literal, and the Linux env argument shape. All ten PR
+the macOS environment literal, and the first Linux launch argument shape. All ten PR
 checks passed for `0d6b57b2`, including Windows characterization and macOS
 privileged-system acceptance. The Linux test artifact reports 4,647 passes
 with no failures, including the rendered Pictogram, process polling, memory
@@ -65,8 +65,27 @@ array. TUN diagnostics reuse their static regex instances.
 Clash connection statistics parse in a pooled 64 KiB buffer under a 4 MiB
 body limit. Opt-in log health discards individual messages over 256 KiB and
 caps its rolling queue at 10,000 events. Oversized and invalid snapshots keep
-the existing failure representation. Build, tests, and independent review
-for this combined revision are pending.
+the existing failure representation. All ten PR checks passed on `3679fd82`.
+The Linux test artifact reports 4,712 passes with no failures. This includes
+the nested Clash fixture corrected after the first combined CI run.
+
+### Independent review follow-up
+
+Neon identified the invalid nested Clash fixture, a Linux authorization
+regression introduced by the `env` wrapper, and incomplete compaction of
+duplicate health records. The fixture is covered by the green `3679fd82`
+run. The revised Linux launch keeps the previous polkit target and preserves
+existing explicit `experimental.debug.memory_limit` values. At pinned core
+revision `fe24739a`, the 384 MiB config value yields a 256 MiB Go GC target
+through `debug.SetMemoryLimit(value / 1.5)`. The runtime config is replaced
+privately and atomically. The pinned-core fixture covers startup with this
+configuration, and argument tests exercise executable paths with spaces
+and equals signs. Health-store fixtures check last-value semantics and
+compaction for duplicate keys and repeated arrays. ETW uses the documented
+TraceEvent session disposal path to stop a real-time consumer.
+
+Exact-head CI and the scoped follow-up review are pending. Installed polkit
+launch and long-run memory measurements remain platform acceptance items.
 
 The independent watchdog design recommends observing per-process trends first.
 Cache cleanup can reuse existing trim paths. Any future owned-core restart

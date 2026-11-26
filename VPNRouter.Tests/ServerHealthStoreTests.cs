@@ -96,6 +96,36 @@ public class ServerHealthStoreTests : IDisposable
         return dto!;
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Load_CompactsDuplicateRecords_AndKeepsTheLastValue(bool repeatedArray)
+    {
+        var entry = Entry();
+        var record = new ServerHealthRecordDto
+        {
+            Key = ServerHealthStore.KeyFor(entry),
+            RecordedAt = DateTimeOffset.UtcNow,
+            Verdict = ServerHealthVerdict.TcpOpenProtocolUntested,
+        };
+        var first = JsonSerializer.Serialize(record, AppJsonContext.Default.ServerHealthRecordDto);
+        record.Verdict = ServerHealthVerdict.Healthy;
+        var last = JsonSerializer.Serialize(record, AppJsonContext.Default.ServerHealthRecordDto);
+        var json = repeatedArray
+            ? $"{{\"Records\":[{first}],\"records\":[{last}]}}"
+            : $"{{\"Records\":[{first},{last}]}}";
+        Directory.CreateDirectory(AppPaths.CacheDir);
+        File.WriteAllText(StorePath, json);
+
+        Assert.Equal(ServerHealthVerdict.Healthy, ServerHealthStore.GetFresh(entry));
+        var compacted = File.ReadAllText(StorePath);
+        using var document = JsonDocument.Parse(compacted);
+        Assert.Single(document.RootElement.EnumerateObject().Where(property =>
+            string.Equals(property.Name, "Records", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(ServerHealthVerdict.Healthy, Assert.Single(ReadStore().Records).Verdict);
+        Assert.NotEqual(json, compacted);
+    }
+
     [Fact]
     public void ExpiredRecords_ArePrunedOnLoad_AndFileIsRewritten()
     {

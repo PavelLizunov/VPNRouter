@@ -155,6 +155,7 @@ public static class ServerHealthStore
         var isFinal = bytes < 3;
         var inRecords = false;
         var pendingRecordsArray = false;
+        var sawRecordsArray = false;
         var changed = false;
         var cutoff = now - FreshTtl;
 
@@ -166,6 +167,8 @@ public static class ServerHealthStore
             {
                 if (pendingRecordsArray)
                 {
+                    changed |= sawRecordsArray;
+                    sawRecordsArray = true;
                     map.Clear();
                     pendingRecordsArray = false;
                     inRecords = reader.TokenType == JsonTokenType.StartArray;
@@ -188,6 +191,7 @@ public static class ServerHealthStore
                     }
                     else
                     {
+                        changed |= map.ContainsKey(record.Key);
                         map[record.Key] = record;
                         if (map.Count > 2 * MaxRecords)
                             changed |= PruneInPlace(map, now);
