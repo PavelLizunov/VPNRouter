@@ -34,7 +34,46 @@ Obtain the exact implemented branch from its source checkout. Merge or port the 
 
 The source tree at `96fc066625a6593cb242b2ed5a428d72a9e63cd8` was retrieved from
 its verified checkout. The merge includes Standard's current category probe
-and retains both sides of the defect-ledger update. The independent core PR
-was merged and tag `v1.14.4-vpnctl.4` is building its release assets. This
-source integration commit still uses the existing runtime until the complete
-new inventory can be checked.
+and retains both sides of the defect-ledger update. The source integration
+commit used the .3 runtime. The [core release](https://github.com/PavelLizunov/sing-box-vpnctl/releases/tag/v1.14.4-vpnctl.4)
+is now published at source revision `de4d55ca046482cc3d90c3a97693651768020866`.
+
+### Runtime provenance
+
+Local SHA-256, the release sidecars, `SHA256SUMS`, and the GitHub asset digests
+agree. GitHub attestations verified against the core repository. Go build
+metadata confirms `with_turnrelay` on Windows amd64, Linux amd64, both macOS
+slices, and all four native ABIs of both Android AARs. The Windows and Linux
+Cronet library module remains at `4ecba4761b20`. The app packages the API 21
+legacy AAR, and the Android build checks that the packaged ABI retains the tag.
+
+| Standard runtime input | SHA-256 |
+| --- | --- |
+| Windows amd64 ZIP | `1efb965de78720f7a4c86a4a4c0403bc8b388397bb640e4547acc14817ef3287` |
+| Linux amd64 tarball, desktop and Arch | `a6014cfad5494fe8fa3f178facad6a7c6dab59f5143f7b5af645e8e4e5d84094` |
+| macOS Universal ZIP | `2020768bfefb2e1ce52a1535ab7b39b4904ca7bf95de119bc8986a1549a75117` |
+| Android legacy AAR | `07a903e0a8b8f8dda3bba409e663e5c2d235c8df15348c17d22bc246c8bbae26` |
+
+The Arch license catalog records the extracted Linux binary digest
+`839c0ddc4383f5bc603a2d00f23d2901102b5f8a8dbadec359d65607c6201269`.
+The bundled license digest matches the existing notice. The core source at
+the pinned revision includes tagged outbounds and endpoints in `GET /proxies`.
+Installed product traffic on the published core remains a separate check
+from the development-run evidence.
+
+### Follow-up after independent review
+
+The ten checks on `8afb7b55` passed with core .3. Neon reviewed that revision
+and flagged unsafe restart transitions in HealthMonitor and desktop Apply,
+missing TURN relay firewall allowance, cleartext subscription imports, and
+entry-only rows being picked as exits. Keep the PR draft through the fixes,
+new CI and re-review of the material lifecycle changes.
+
+- Restart safety: retain the macOS controller secret through automatic recovery,
+  protect configured traffic before replacing a TUN, and explicitly reconcile
+  an unconfirmed or rejected replacement with the last accepted runtime config.
+- Transport boundaries: admit remote TurnRelay links only over HTTPS, allow the
+  real TURN destination in Unix firewall rules, and keep hop rows out of exit
+  selection and standalone validation. Exercise both link orders at import.
+- Compatibility: check the rollback boundary, feature-version parsing, placeholder
+  rejection, trim-safe JSON mapping, and diagnostic credential redaction.

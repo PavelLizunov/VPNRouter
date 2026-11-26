@@ -384,7 +384,7 @@
                                  MinHeight="40"
                                  Padding="8,10,12,10"
                                  VerticalContentAlignment="Center"
-                                 AcceptsReturn="False"
+                                 AcceptsReturn="True" MaxLines="2"
                                  CornerRadius="{StaticResource RadiusLg}">
                             <TextBox.InnerLeftContent>
                                 <icons:Pictogram Id="link" Width="16" Height="16"

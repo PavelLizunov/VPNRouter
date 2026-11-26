@@ -77,12 +77,14 @@ public sealed class TurnRelayConfig
 /// <summary>Small shared checks used by the URI parser and the model.</summary>
 internal static class TurnRelayUriParserRules
 {
-    internal static bool IsValidHostPort(string? value)
+    internal static bool IsValidHostPort(string? value) => TryGetHost(value, out _);
+
+    internal static bool TryGetHost(string? value, out string host)
     {
+        host = string.Empty;
         if (string.IsNullOrWhiteSpace(value) || value.Any(char.IsControl) || value.Any(char.IsWhiteSpace))
             return false;
 
-        string host;
         string portText;
         if (value.StartsWith('['))
         {

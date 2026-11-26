@@ -82,16 +82,15 @@ public static class SingBoxFeatures
 
         const string localPrefix = "-vpnctl-turnrelay.";
         var localIndex = version.IndexOf(localPrefix, StringComparison.Ordinal);
-        if (localIndex > 0 && int.TryParse(version[(localIndex + localPrefix.Length)..], out var localPatch)
-            && localPatch >= 5)
-            return true;
+        var minimumCore = new Version(1, 14, 4);
+        if (localIndex > 0)
+            return Version.TryParse(version[..localIndex], out var localCore) && localCore >= minimumCore &&
+                int.TryParse(version[(localIndex + localPrefix.Length)..], out var localPatch) && localPatch >= 5;
 
         var parts = version.Split("-vpnctl.", StringSplitOptions.None);
-        if (parts.Length != 2 || !Version.TryParse(parts[0], out var core))
-            return false;
-        if (core > new Version(1, 14, 4))
-            return true;
-        return core == new Version(1, 14, 4) && int.TryParse(parts[1], out var patch) && patch >= 4;
+        return parts.Length == 2 && Version.TryParse(parts[0], out var core) &&
+            int.TryParse(parts[1], out var patch) && patch >= 1 &&
+            (core > minimumCore || (core == minimumCore && patch >= 4));
     }
 
     internal static bool? OverrideDnstt { get; set; }
@@ -105,7 +104,7 @@ public static class SingBoxFeatures
     public static void Prewarm()
     {
         if (SingBoxRuntimePolicy.Current != null) return;
-        if (OverrideAwg.HasValue && OverrideXhttp.HasValue && OverrideTurnRelay.HasValue) return;
+        if (OverrideAwg.HasValue && OverrideXhttp.HasValue && OverrideDnstt.HasValue && OverrideTurnRelay.HasValue) return;
         _ = Task.Run(() => { try { _ = Probe(); } catch { } });
     }
 

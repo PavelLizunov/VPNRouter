@@ -19,7 +19,7 @@ internal sealed class AndroidFreeConfigDeepVerifier(ILogger logger)
         try
         {
             var entry = ServerUriParser.Parse(cfg.RawUri);
-            if (!string.IsNullOrEmpty(entry.DetourVia))
+            if (entry.IsTurnRelay || !string.IsNullOrEmpty(entry.DetourVia))
             {
                 cfg.LastError = DeepVerifyConstants.DetourNote;
                 return;

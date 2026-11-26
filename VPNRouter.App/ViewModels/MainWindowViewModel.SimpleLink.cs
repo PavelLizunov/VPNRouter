@@ -37,7 +37,8 @@ public partial class MainWindowViewModel
         if (_savingSimpleLink || !CanSaveSimpleLink()) return Strings.SmpLinkSaveBusy;
         input = input.Trim();
         var kind = SimpleInputDetector.Classify(input);
-        if (kind == SmpInputKind.Invalid || input.Any(char.IsControl)) return Strings.SmpLinkInputInvalid;
+        if (kind == SmpInputKind.Invalid || (kind == SmpInputKind.SubscriptionUrl && input.Any(char.IsControl)))
+            return Strings.SmpLinkInputInvalid;
 
         var choiceUnchanged = CaptureSimpleChoice(out _);
         var generation = _connectionGeneration;
@@ -49,13 +50,24 @@ public partial class MainWindowViewModel
         try
         {
             VlessServerEntry? server = null;
+            VlessServerEntry[]? pair = null;
             SubscriptionEntry? feed = null;
             var refreshFailed = false;
             SubscriptionInputAction action = default;
             if (kind == SmpInputKind.ServerUri)
             {
-                server = ParseSimpleServerLink(input, out var error);
-                if (server == null) return error;
+                if (input.IndexOfAny(['\r', '\n']) >= 0)
+                {
+                    pair = ServerUriParser.ParseTurnRelayPair(input, out _);
+                    if (pair == null) return Strings.SmpTurnRelayChainRequired;
+                    server = pair[^1];
+                }
+                else
+                {
+                    if (input.Any(char.IsControl)) return Strings.SmpLinkInputInvalid;
+                    server = ParseSimpleServerLink(input, out var error);
+                    if (server == null) return error;
+                }
             }
             else
             {
@@ -104,10 +116,10 @@ public partial class MainWindowViewModel
                 else if (rememberConsumedLink)
                     candidate.Vless.Servers.Add(server);
                 else
-                    candidate.Vless.Servers = [server];
+                    candidate.Vless.Servers = pair?.ToList() ?? [server];
                 candidate.Vless.ActiveServer = server.Name ?? string.Empty;
                 SetLegacyManualServer(candidate.Vless, server);
-                RememberSimpleDirectLink(candidate.App, server, input);
+                RememberSimpleDirectLink(candidate.App, server, input, pair != null);
             }
             else
             {
@@ -117,7 +129,7 @@ public partial class MainWindowViewModel
             BackupConfigFile();
             _settingsStore.Save(candidate, AppPaths.ConfigYamlPath);
             PublishSavedSimpleLink(candidate, input, server != null);
-            if (rememberConsumedLink)
+            if (rememberConsumedLink || pair != null)
             {
                 _consumedServerInput = input;
                 _consumedServerEntry = SelectedServer?.SourceEntry;
@@ -140,7 +152,8 @@ public partial class MainWindowViewModel
         var keepSelection = string.Equals(app.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase) &&
             app.ActiveSubscriptionId == feed.Id;
         var selected = keepSelection ? feed.FindExactRow(app.ActiveSubscriptionServer, app.ActiveSubscriptionRow) : null;
-        selected ??= feed.Servers[0];
+        if (selected?.IsTurnRelay != false)
+            selected = feed.Servers.FirstOrDefault(row => !row.IsTurnRelay);
 
         if (action == SubscriptionInputAction.Replace) app.Subscriptions.Add(feed);
         else if (action == SubscriptionInputAction.KeepAndRefresh)
@@ -149,14 +162,14 @@ public partial class MainWindowViewModel
 
         app.ConfigMode = "subscribe";
         app.ActiveSubscriptionId = feed.Id;
-        app.ActiveSubscriptionServer = selected.Name;
-        app.ActiveSubscriptionRow = SubscriptionEntry.RowKey(selected);
+        app.ActiveSubscriptionServer = selected?.Name ?? string.Empty;
+        app.ActiveSubscriptionRow = selected == null ? null : SubscriptionEntry.RowKey(selected);
     }
 
-    private static void RememberSimpleDirectLink(AppConfig app, VlessServerEntry server, string input)
+    private static void RememberSimpleDirectLink(AppConfig app, VlessServerEntry server, string input, bool isPair = false)
     {
         // A legacy/manual edit of the row invalidates its original link without changing the usable server.
-        app.SimpleServerLink = input.Any(char.IsControl) ? null : input;
+        app.SimpleServerLink = !isPair && input.Any(char.IsControl) ? null : input;
         app.SimpleServerLinkRow = app.SimpleServerLink == null ? null : SubscriptionEntry.RowKey(server);
     }
 

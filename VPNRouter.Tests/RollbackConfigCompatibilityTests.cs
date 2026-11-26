@@ -125,6 +125,21 @@ public sealed class RollbackConfigCompatibilityTests
             Generated(active, hop), LegacyTarget));
     }
 
+    [Theory]
+    [InlineData("2.51.0-r2", true)]
+    [InlineData("2.51.1-r4", true)]
+    [InlineData("2.51.1-r5", false)]
+    public void TurnRelayDetour_RefusesPublishedTargetsWithoutTurnRelay(string version, bool refused)
+    {
+        var active = Server("active", "exit.invalid", "vmess");
+        active.DetourVia = "hop-id";
+        var hop = Server("hop", "relay.invalid", "turnrelay");
+        hop.OutboundId = "hop-id";
+
+        Assert.Equal(refused ? RollbackConfigCompatibility.ActiveTurnRelay : null,
+            RollbackConfigCompatibility.CheckActiveConfig(Generated(active, hop), version));
+    }
+
     [Fact]
     public void ActiveVmessAndNewVmessFields_AreRefused()
     {

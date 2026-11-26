@@ -726,7 +726,7 @@ public partial class MainWindowViewModel
         }
         ServerViewModel.RefreshUdpSiblingFlags(Servers);
         ServerViewModel.RefreshProviderRiskFlags(Servers);
-        SelectedServer = activeServer ?? Servers.FirstOrDefault();
+        SelectedServer = activeServer ?? Servers.FirstOrDefault(row => !row.SourceEntry.IsTurnRelay);
 
         MarkOrphanServers();
     }
@@ -969,7 +969,7 @@ public partial class MainWindowViewModel
 
         var activeSub = SelectedSubscriptionServer;
         if (activeSub == null && SimpleServerPreference == null)
-            activeSub = SubscriptionServers.FirstOrDefault();
+            activeSub = SubscriptionServers.FirstOrDefault(row => !row.SourceEntry.IsTurnRelay);
         // A missing scoped row is still the user's choice. Keep its registration identity
         // so a saved link cannot be interpreted as an explicit source switch on Connect.
         if (activeSub != null || SimpleServerPreference == null)
@@ -1053,10 +1053,10 @@ public partial class MainWindowViewModel
     private void ApplyServersToSettings()
     {
         _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
-        var activeVless = SelectedServer ?? Servers.FirstOrDefault();
+        var activeVless = SelectedServer ?? Servers.FirstOrDefault(row => !row.SourceEntry.IsTurnRelay);
         _settings.Vless.ActiveServer = activeVless?.Name ?? "";
-        if (_settings.Vless.Servers.Count > 0)
-            SetLegacyManualServer(_settings.Vless, activeVless?.ToEntry() ?? _settings.Vless.Servers[0]);
+        if (activeVless != null)
+            SetLegacyManualServer(_settings.Vless, activeVless.ToEntry());
     }
 
     private static void SetLegacyManualServer(VlessConfig config, VlessServerEntry entry)

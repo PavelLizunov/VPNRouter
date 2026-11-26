@@ -68,6 +68,32 @@ public sealed class TurnRelayUriParserTests : IDisposable
         return $"turnrelay://{encoded}#{Uri.EscapeDataString(name)}";
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TwoLinkPaste_SelectsTheExitInEitherOrder(bool hopFirst)
+    {
+        const string exit = "vless://00000000-0000-4000-8000-000000000001@exit.invalid:443" +
+            "?security=none&outbound=exit-1&detour=turnrelay-relay-1#Exit";
+        var hop = Link();
+        var pair = ServerUriParser.ParseTurnRelayPair(
+            hopFirst ? $"{hop}\r\n{exit}" : $"{exit}\n{hop}", out var targetUri);
+
+        Assert.NotNull(pair);
+        Assert.Collection(pair, entry => Assert.True(entry.IsTurnRelay), entry => Assert.False(entry.IsTurnRelay));
+        Assert.Equal(exit, targetUri);
+        Assert.Equal(pair[0].OutboundId, pair[1].DetourVia);
+        Assert.Null(ServerUriParser.ParseTurnRelayPair(
+            $"{hop}\n{exit.Replace("detour=turnrelay-relay-1", "detour=other", StringComparison.Ordinal)}", out _));
+    }
+
+    [Fact]
+    public void Parse_RejectsTheKnownPlaceholderAddress()
+    {
+        var uri = Link(overrides: new() { ["server"] = PlaceholderDefense.KnownFingerprints.First(f => f.Server != null).Server });
+        Assert.Throws<PlaceholderConfigException>(() => ServerUriParser.Parse(uri));
+    }
+
     [Fact]
     public void Parse_DefaultsAndIdentity_MatchLockedContract()
     {
@@ -291,14 +317,36 @@ public sealed class TurnRelayUriParserTests : IDisposable
         finally { SubscriptionFetcher.Http = previousHttp; }
     }
 
+    [Theory]
+    [InlineData("http", "http", false)]
+    [InlineData("https", "http", false)]
+    [InlineData("https", "https", true)]
+    public async Task Fetch_ImportsTurnRelayOnlyOverHttps(string sourceScheme, string finalScheme, bool expected)
+    {
+        var source = $"{sourceScheme}://provider.example/api";
+        var response = new HttpResponse(200, new Dictionary<string, string>(), Encoding.UTF8.GetBytes(Link()), TimeSpan.Zero)
+        {
+            FinalUri = new Uri($"{finalScheme}://provider.example/api")
+        };
+        var previousHttp = SubscriptionFetcher.Http;
+        SubscriptionFetcher.Http = new FakeHttpClient().Setup(source, response);
+        try
+        {
+            var entries = await SubscriptionFetcher.FetchAsync(source, ct: TestContext.Current.CancellationToken);
+            Assert.Equal(expected, entries.Any(row => row.IsTurnRelay));
+        }
+        finally { SubscriptionFetcher.Http = previousHttp; }
+    }
+
     [Fact]
     public void Diagnostics_RedactTurnRelayProfile()
     {
         var uri = Link();
         Assert.Equal("turnrelay://[redacted]", CanaryPolicy.RedactUrl(uri));
         var redacted = VPNRouter.Core.Services.Diagnostics.DiagnosticsRedactor.RedactLogText(
-            $"turn_username=user turn_password=secret uri={uri}");
+            $"turn_username=user turn_password=secret turnPassword=camel-value uri={uri}");
         Assert.DoesNotContain("secret", redacted);
+        Assert.DoesNotContain("camel-value", redacted);
         Assert.DoesNotContain("turnrelay-relay-1", redacted);
     }
 

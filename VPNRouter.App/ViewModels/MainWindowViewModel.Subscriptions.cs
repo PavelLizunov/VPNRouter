@@ -76,7 +76,7 @@ public partial class MainWindowViewModel
             {
                 SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault(row =>
                     (source == null || row.SubscriptionId == source.Id) && ReferenceEquals(row.SourceEntry, selected))
-                    ?? SubscriptionServers.FirstOrDefault();
+                    ?? SubscriptionServers.FirstOrDefault(row => !row.SourceEntry.IsTurnRelay);
             }
 
             RefreshActiveIndicator();
@@ -375,7 +375,7 @@ public partial class MainWindowViewModel
         // The editor must still show the selected row without an unsaved edit; otherwise the
         // next SaveSettings would write the user's value over the rotated grant.
         return row != null &&
-            ReferenceEquals(SelectedServer ?? Servers.FirstOrDefault(), row) &&
+            ReferenceEquals(SelectedServer ?? Servers.FirstOrDefault(item => !item.SourceEntry.IsTurnRelay), row) &&
             row.Name == binding.Active.Name &&
             row.Server == binding.Active.Server &&
             row.Port == binding.Active.Port &&
@@ -442,7 +442,7 @@ public partial class MainWindowViewModel
             ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers);
             ServerViewModel.RefreshProviderRiskFlags(SubscriptionServers);
 
-            SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault();
+            SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault(row => !row.SourceEntry.IsTurnRelay);
             SaveSettings();
             StatusText = Strings.SyncComplete(entries.Count);
         }

@@ -1,4 +1,5 @@
 #nullable enable
+using System.Buffers;
 using System.Globalization;
 using System.Text.Json;
 using Serilog;
@@ -480,31 +481,31 @@ internal static class SingBoxJsonSubscription
         var serverType = Str(ob, "server_type");
         if (string.IsNullOrEmpty(serverType)) serverType = TurnRelayConfig.DefaultServerType;
 
-        var payload = new Dictionary<string, object?>
-        {
-            ["id"] = Str(ob, "tag"),
-            ["provider"] = provider,
-            ["server_type"] = serverType,
-            ["server"] = server,
-            ["server_port"] = port,
-            ["turn_server"] = Str(ob, "turn_server"),
-            ["turn_username"] = Str(ob, "turn_username"),
-            ["turn_password"] = Str(ob, "turn_password"),
-            ["password"] = Str(ob, "password"),
-            ["server_fingerprint"] = Str(ob, "server_fingerprint")!.ToLowerInvariant(),
-            ["connections"] = connections,
-            ["mode"] = mode,
-            ["udp"] = !ob.TryGetProperty("udp", out var udpNode) || udpNode.GetBoolean(),
-        };
-
-        var json = JsonSerializer.SerializeToUtf8Bytes(payload);
+        var buffer = new ArrayBufferWriter<byte>();
         try
         {
-            return $"{TurnRelayUriParser.Prefix}{TurnRelayUriParser.Base64UrlEncode(json)}#{Enc(name)}";
+            using var writer = new Utf8JsonWriter(buffer);
+            writer.WriteStartObject();
+            writer.WriteString("id", Str(ob, "tag"));
+            writer.WriteString("provider", provider);
+            writer.WriteString("server_type", serverType);
+            writer.WriteString("server", server);
+            writer.WriteNumber("server_port", port);
+            writer.WriteString("turn_server", Str(ob, "turn_server"));
+            writer.WriteString("turn_username", Str(ob, "turn_username"));
+            writer.WriteString("turn_password", Str(ob, "turn_password"));
+            writer.WriteString("password", Str(ob, "password"));
+            writer.WriteString("server_fingerprint", Str(ob, "server_fingerprint")!.ToLowerInvariant());
+            writer.WriteNumber("connections", connections);
+            writer.WriteString("mode", mode);
+            writer.WriteBoolean("udp", !ob.TryGetProperty("udp", out var udpNode) || udpNode.GetBoolean());
+            writer.WriteEndObject();
+            writer.Flush();
+            return $"{TurnRelayUriParser.Prefix}{TurnRelayUriParser.Base64UrlEncode(buffer.WrittenSpan)}#{Enc(name)}";
         }
         finally
         {
-            Array.Clear(json);
+            buffer.Clear();
         }
     }
 

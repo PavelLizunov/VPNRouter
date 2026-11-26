@@ -42,10 +42,12 @@ public sealed class SingBoxFeaturesEmbeddedCoreTests : IDisposable
     [InlineData("1.14.4-vpnctl.4", true)]
     [InlineData("1.14.4-vpnctl.5", true)]
     [InlineData("1.15.0-vpnctl.1", true)]
+    [InlineData("1.15.0-vpnctl.invalid", false)]
     [InlineData("1.14.4-vpnctl.3", false)]
     [InlineData("1.14.0-vpnctl.9", false)]
     [InlineData("1.14.4-vpnctl-turnrelay.5", true)]
     [InlineData("1.14.4-vpnctl-turnrelay.4", false)]
+    [InlineData("1.14.3-vpnctl-turnrelay.5", false)]
     [InlineData("1.14.4", false)]
     public void HasTurnRelayVersion_PinsTheReleaseGate(string version, bool expected)
     {

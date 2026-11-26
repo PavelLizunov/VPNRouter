@@ -62,16 +62,16 @@
     },
     {
       "id": "sing-box-vpnctl",
-      "version": "1.14.4-vpnctl.3",
+      "version": "1.14.4-vpnctl.4",
       "repository_url": "https://github.com/PavelLizunov/sing-box-vpnctl",
-      "revision": "fe24739a8b8c1ebd573269e50b124366310e4d3e",
+      "revision": "de4d55ca046482cc3d90c3a97693651768020866",
       "license_expression": "GPL-3.0-or-later",
-      "payload_sha256": "5e2e2eba00ffacc51219a7379004fdde56c07401387054cb52029628667b6827",
+      "payload_sha256": "839c0ddc4383f5bc603a2d00f23d2901102b5f8a8dbadec359d65607c6201269",
       "files": [
         {
           "path": "sing-box-vpnctl/LICENSE",
           "sha256": "650d5e3b99a446fb38e820fa87a49562e0c79eab868fff58618ac487a58e554c",
-          "source_url": "https://raw.githubusercontent.com/PavelLizunov/sing-box-vpnctl/fe24739a8b8c1ebd573269e50b124366310e4d3e/LICENSE"
+          "source_url": "https://raw.githubusercontent.com/PavelLizunov/sing-box-vpnctl/de4d55ca046482cc3d90c3a97693651768020866/LICENSE"
         }
       ],
       "coverage": "partial",

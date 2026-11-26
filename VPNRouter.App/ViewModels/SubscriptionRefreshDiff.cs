@@ -27,9 +27,9 @@ internal static class SubscriptionRefreshDiff
     {
         if (source != null && previous != null && (previous.Dnstt != null || !string.IsNullOrEmpty(previous.DetourVia)))
             return new SubscriptionChainSelection(source.Id, source.Url, previous, previousRoute).Match(source, all);
-        var pool = source?.Servers ?? all;
+        var pool = (source?.Servers ?? all).Where(row => !row.IsTurnRelay);
         var exact = source?.FindExactRow(name, key);
-        if (exact != null) return exact;
+        if (exact?.IsTurnRelay == false) return exact;
         if (source != null && previous != null && previousRoute != null)
         {
             var equivalent = source.Servers.Where(s => s.Port == previous.Port && s.Server == previous.Server &&

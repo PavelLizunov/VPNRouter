@@ -24,7 +24,8 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
             // A legacy name-only setting has the same first-match semantics as GetActiveServers.
             var pool = source != null ? source.Servers.AsEnumerable() : feeds.SelectMany(s => s.Servers);
             row = pool.FirstOrDefault(s => !string.IsNullOrEmpty(app.ActiveSubscriptionServer) &&
-                string.Equals(s.Name, app.ActiveSubscriptionServer, StringComparison.OrdinalIgnoreCase)) ?? pool.FirstOrDefault();
+                string.Equals(s.Name, app.ActiveSubscriptionServer, StringComparison.OrdinalIgnoreCase))
+                ?? pool.FirstOrDefault(s => !s.IsTurnRelay);
             if (row != null) source ??= feeds.First(s => s.Servers.Contains(row));
         }
         return source == null || row == null || (row.Dnstt == null && string.IsNullOrEmpty(row.DetourVia)) ? null :

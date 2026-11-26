@@ -72,8 +72,8 @@ jobs:
       - name: Bundle sing-box-vpnctl-linux-amd64 + libcronet
         run: |
           set -euo pipefail
-          SINGBOX_VPNCTL_VER="1.14.4-vpnctl.3"
-          SINGBOX_VPNCTL_SHA256="62c7d4ab2ec93fc6a51790facbcc50436d1183d8bf6f9c84b07d1d75e1618eae"
+          SINGBOX_VPNCTL_VER="1.14.4-vpnctl.4"
+          SINGBOX_VPNCTL_SHA256="a6014cfad5494fe8fa3f178facad6a7c6dab59f5143f7b5af645e8e4e5d84094"
           curl -sSL -o /tmp/singbox-vpnctl.tar.gz \
             "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v${SINGBOX_VPNCTL_VER}/sing-box-${SINGBOX_VPNCTL_VER}-linux-amd64.tar.gz"
           echo "${SINGBOX_VPNCTL_SHA256}  /tmp/singbox-vpnctl.tar.gz" | sha256sum -c -

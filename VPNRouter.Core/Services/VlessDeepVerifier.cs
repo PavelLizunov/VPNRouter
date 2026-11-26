@@ -352,7 +352,7 @@ public sealed class VlessDeepVerifier
         bool embedded = false, string? localDns = null, int? udpPort = null, string? outboundInterface = null,
         bool detectInterface = false)
     {
-        if (!string.IsNullOrEmpty(s.DetourVia))
+        if (s.IsTurnRelay || !string.IsNullOrEmpty(s.DetourVia))
             throw new InvalidOperationException(DeepVerifyConstants.DetourNote);
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
         var dnsTag = protocol == "vmess" ? "local-dns" : "dns-google";

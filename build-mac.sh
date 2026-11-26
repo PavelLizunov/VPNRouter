@@ -33,8 +33,8 @@ chmod +x "$APP/Contents/MacOS/VPNRouter.App"
 cp "$REPO_DIR/VPNRouter.App/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 echo "    sing-box-vpnctl: downloading darwin-universal release..."
-SB_DARWIN_VER="1.14.4-vpnctl.3"
-SB_DARWIN_SHA256="70f3f0a856d619e8a7ce7c8ae3ff037cd65d82b68799a1569d806b536542bc68"
+SB_DARWIN_VER="1.14.4-vpnctl.4"
+SB_DARWIN_SHA256="2020768bfefb2e1ce52a1535ab7b39b4904ca7bf95de119bc8986a1549a75117"
 SB_DARWIN_ZIP="/tmp/sing-box-${SB_DARWIN_VER}-darwin-universal.zip"
 curl -sSL -o "$SB_DARWIN_ZIP" \
   "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v${SB_DARWIN_VER}/sing-box-${SB_DARWIN_VER}-darwin-universal.zip"

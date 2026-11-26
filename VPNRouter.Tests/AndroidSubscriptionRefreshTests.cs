@@ -120,7 +120,13 @@ public class AndroidSubscriptionRefreshTests
             "&outbound=target-1&detour=turnrelay-hop-1#exit";
         var target = VlessUriParser.Parse(targetUri);
 
-        using var prefs = new PreferenceFile(new());
+        using var prefs = new PreferenceFile(new()
+        {
+            ["subscriptions_json"] = JsonSerializer.Serialize(new[]
+            {
+                new SubscriptionEntry { Url = Feed, Servers = [VlessUriParser.Parse(targetUri)] }
+            })
+        });
         var saved = AndroidSubscriptionRefresh.SaveServerLinks(
             new[] { hop, target }, targetUri, "qr-command",
             prefs.Read, prefs.Commit, JsonSerializerOptions.Default);
@@ -134,6 +140,12 @@ public class AndroidSubscriptionRefreshTests
         var resolved = Assert.IsType<VlessServerEntry>(prefs.Resolve("qr-command"));
         var config = prefs.Prepare(resolved);
         Assert.Contains(config.Servers, row => row.IsTurnRelay && row.OutboundId == "turnrelay-hop-1");
+
+        prefs.Commit(new Dictionary<string, string?>
+        {
+            ["servers_json"] = JsonSerializer.Serialize(new[] { hop })
+        });
+        Assert.Null(prefs.Resolve("qr-command"));
     }
 
     [Fact]

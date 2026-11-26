@@ -95,8 +95,8 @@ public static class SubscriptionFetcher
                 return (result, 0, userInfo, false);
             }
 
-            var allowDnstt = secure && (httpResp.FinalUri ?? parsedUri).Scheme == Uri.UriSchemeHttps;
-            result = ParseBody(response, out droppedPlaceholders, out skippedChains, logger, allowDnstt);
+            var allowSecureTransports = secure && (httpResp.FinalUri ?? parsedUri).Scheme == Uri.UriSchemeHttps;
+            result = ParseBody(response, out droppedPlaceholders, out skippedChains, logger, allowSecureTransports);
 
             if (droppedPlaceholders > 0)
             {
@@ -123,12 +123,12 @@ public static class SubscriptionFetcher
         ParseBody(responseBody, out droppedPlaceholders, out _, logger);
 
     private static List<VlessServerEntry> ParseBody(
-        string responseBody, out int droppedPlaceholders, out bool skippedChains, ILogger? logger, bool allowDnstt = true)
+        string responseBody, out int droppedPlaceholders, out bool skippedChains, ILogger? logger, bool allowSecureTransports = true)
     {
         var lines = DecodeToShareUris(responseBody, logger, out skippedChains);
         if (skippedChains)
             logger?.Warning("[Subscription] Skipped entries with an unsupported proxy chain");
-        var result = DeduplicateServers(ParseShareUris(lines, logger, out droppedPlaceholders, allowDnstt), logger);
+        var result = DeduplicateServers(ParseShareUris(lines, logger, out droppedPlaceholders, allowSecureTransports), logger);
 
         if (result.Count >= 500)
             logger?.Warning("[Subscription] Large subscription: {Count} servers — may impact performance", result.Count);
@@ -195,15 +195,17 @@ public static class SubscriptionFetcher
     }
 
     private static List<VlessServerEntry> ParseShareUris(
-        IEnumerable<string> lines, ILogger? logger, out int droppedPlaceholders, bool allowDnstt)
+        IEnumerable<string> lines, ILogger? logger, out int droppedPlaceholders, bool allowSecureTransports)
     {
         droppedPlaceholders = 0;
         var result = new List<VlessServerEntry>();
 
         foreach (var line in lines)
         {
-            if ((!allowDnstt && line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
-                || !ServerUriParser.IsSupportedScheme(line))
+            if (!allowSecureTransports && (line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            if (!ServerUriParser.IsSupportedScheme(line))
                 continue;
 
             try
