@@ -497,13 +497,13 @@ public partial class ServerViewModel : ViewModelBase
     public bool HasTurnRelayHop { get; private set; }
     public bool IsChainUpstreamMissing { get; private set; }
     public bool IsTurnRelayCoreMissing { get; private set; }
-    public string TurnRelayBadgeText => HasTurnRelayHop ? Strings.SmpTurnRelayBadge : string.Empty;
-    public string TurnRelayTooltip => HasTurnRelayHop ? Strings.SmpTurnRelayTooltip : string.Empty;
+    public string TurnRelayBadgeText => HasTurnRelayHop ? CoreStrings.SmpTurnRelayBadge : string.Empty;
+    public string TurnRelayTooltip => HasTurnRelayHop ? CoreStrings.SmpTurnRelayTooltip : string.Empty;
     public string UnavailableReasonText => IsChainUpstreamMissing
-        ? Strings.SmpTurnRelayMissingHop
+        ? CoreStrings.SmpTurnRelayMissingHop
         : IsTurnRelayCoreMissing
-            ? Strings.SmpTurnRelayCoreRequired
-            : Strings.SmpServerUnsupported;
+            ? CoreStrings.SmpTurnRelayCoreRequired
+            : CoreStrings.SmpServerUnsupported;
 
     // A TurnRelay row is a chain upstream and must never be selected as the exit.
     public bool CanSelectInSimpleMode => ConfigGenerator.IsServerRuntimeAvailable(_originalEntry) &&

@@ -1046,7 +1046,9 @@ public partial class MainWindowViewModel
             if (!string.IsNullOrWhiteSpace(name)) return name;
             if (!IsConnected && string.Equals(_settings?.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase) &&
                 !SmpHasSelectableSubscriptionServers && Subscriptions.Any(s => s.Enabled))
-                return SmpHasOnlyTurnRelayHops ? Strings.SmpTurnRelayOnlyHopsTitle : Strings.SmpEmptySubTitle;
+                return SmpHasOnlyTurnRelayHops
+                    ? Core.Localization.Strings.SmpTurnRelayOnlyHopsTitle
+                    : Core.Localization.Strings.SmpEmptySubTitle;
             return string.IsNullOrWhiteSpace(address) ? SmpConfigKind : address;
         }
     }
@@ -1091,7 +1093,7 @@ public partial class MainWindowViewModel
                 var count = SmpSelectableServerCount;
                 if (count > 0) return $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(count)}";
                 if (SmpHasOnlyTurnRelayHops) return $"{Strings.SmpKindSubscription} · {Strings.SmpKindServers(0)}";
-                if (Subscriptions.Any(s => s.Enabled)) return $"{Strings.SmpKindSubscription} · {Strings.SmpEmptySubHint}";
+                if (Subscriptions.Any(s => s.Enabled)) return $"{Strings.SmpKindSubscription} · {Core.Localization.Strings.SmpEmptySubHint}";
                 return Strings.SmpKindSubscription;
             }
             return mode.Equals("generated", StringComparison.OrdinalIgnoreCase)
@@ -1110,9 +1112,9 @@ public partial class MainWindowViewModel
         get
         {
             if (SmpCanRefreshSubscriptions || SmpSubscriptionsRefreshing) return string.Empty;
-            if (IsApplying) return Strings.SmpRefreshBlockedApplying;
-            if (IsTestingServers || IsDeepTestingServers) return Strings.SmpRefreshBlockedTesting;
-            if (SimpleCtaIsConnecting) return Strings.SmpRefreshBlockedConnecting;
+            if (IsApplying) return Core.Localization.Strings.SmpRefreshBlockedApplying;
+            if (IsTestingServers || IsDeepTestingServers) return Core.Localization.Strings.SmpRefreshBlockedTesting;
+            if (SimpleCtaIsConnecting) return Core.Localization.Strings.SmpRefreshBlockedConnecting;
             return string.Empty;
         }
     }
