@@ -163,3 +163,9 @@ strings and synthetic headless fixtures.
   terminal messages; a future new message keeps the neutral treatment until it
   is added. This is recorded as a presentation limitation, not a connection
   state change.
+
+### Header branding follow-up
+
+Restore the existing theme-aware penguin logo in the Business header. The
+Neon preview used a shield as its header mark. Keep the 32 px header slot
+and verify the original `LogoSource` in the compact-window test and CI render.

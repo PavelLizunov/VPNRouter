@@ -26,6 +26,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P3** - The Neon Business header replaced the product mascot with a shield. Restored the theme-aware penguin through `LogoSource` in [PR #745](https://github.com/PavelLizunov/VPNRouter/pull/745).
+
 - [x] **P1** - The Business primary Connect action and the update action rendered as the soft tonal button because `solid` had no base style in the window. The window now applies the accent-solid role to both and keeps the connected Disconnect action as the outline role. See phase-business-sync-r4-neon-2026-11-26.md. Resolved in source. CI verification pending.
 - [x] **P2** - The Business Home server summary did not mark the active server or a warning selection, and the server row had no load meter after the antenna icon was removed. The summary now uses the success or warning role and the row renders the approved three-segment load meter. See phase-business-sync-r4-neon-2026-11-26.md. Resolved in source. CI verification pending.
 - [x] **P2** - After a failed Business connection the repair entry stayed a quiet ghost control and the connection pill had no error state. The repair entry now becomes an outline action and the pill uses the danger role for known terminal failures. See phase-business-sync-r4-neon-2026-11-26.md. Resolved in source. CI verification pending.

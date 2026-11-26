@@ -211,12 +211,9 @@
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="20,18,20,20" Spacing="12" MaxWidth="400" HorizontalAlignment="Stretch">
             <Grid ColumnDefinitions="32,*,32" ColumnSpacing="10">
-                <Border Width="32" Height="32" Background="{DynamicResource SurfaceBaseBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusSm}">
-                    <icons:Pictogram Id="shield-check" Width="20" Height="20" HorizontalAlignment="Center"
-                                     VerticalAlignment="Center" Foreground="{DynamicResource AccentFgBrush}"/>
-                </Border>
+                <Image x:Name="BusinessHeaderLogo" Source="{Binding LogoSource}"
+                       Width="32" Height="32" Stretch="Uniform"
+                       RenderOptions.BitmapInterpolationMode="HighQuality"/>
                 <TextBlock Grid.Column="1" Text="{Binding AppVersionShortText, StringFormat='VPNRouter Business {0}'}"
                            AutomationProperties.AutomationId="BusinessProductVersion" FontSize="15" FontWeight="SemiBold"
                            TextWrapping="Wrap" VerticalAlignment="Center"/>
