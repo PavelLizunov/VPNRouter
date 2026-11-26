@@ -12,16 +12,16 @@ public static partial class Strings
     public static string BusinessRepairStopWaiting => Ru ? "Не ждать ответ" : "Stop waiting";
     public static string BusinessRepairConsentTitle => Ru ? "Отправить диагностику?" : "Send diagnostics?";
     public static string BusinessRepairConsent => Ru
-        ? "Поддержка компании получит логи с именами ПК и пользователя, возможны адреса и названия приложений."
-        : "Company support will receive logs with your PC and user names. They may include addresses and app names.";
+        ? "Можно отправить диагностику в поддержку компании: в отчёт попадут логи с именами ПК и пользователя, возможны адреса и названия приложений."
+        : "You can send diagnostics to company support: the report includes logs with your PC and user names, and may include addresses and app names.";
     public static string BusinessRepairConsentOnline => Ru
-        ? "VPN останется включённым. Поддержка компании получит логи с именами ПК и пользователя, возможны адреса и названия приложений."
-        : "VPN will stay connected. Company support will receive logs with your PC and user names. They may include addresses and app names.";
+        ? "VPN останется включённым. Можно отправить диагностику в поддержку компании: в отчёт попадут логи с именами ПК и пользователя, возможны адреса и названия приложений."
+        : "VPN will stay connected. You can send diagnostics to company support: the report includes logs with your PC and user names, and may include addresses and app names.";
     public static string BusinessRepairChecking => Ru ? "Ищем рабочий сервер…" : "Finding a working server…";
     public static string BusinessRepairCheckingDetail => Ru
         ? "Обновляем список и проверяем серверы. Логи не отправляются."
         : "Refreshing list and testing servers. No logs are sent.";
-    public static string BusinessRepairFailed => Ru ? "Не удалось подключиться." : "Couldn’t connect.";
+    public static string BusinessRepairFailed => Ru ? "Не удалось подключиться" : "Couldn’t connect";
     public static string BusinessRepairNoSupportDetail => Ru
         ? "Ни один сервер не ответил. Попробуйте позже или выберите сервер вручную."
         : "No server answered. Try again later or choose a server manually.";
@@ -35,4 +35,10 @@ public static partial class Strings
     public static string BusinessRepairReceiptUnavailable => Ru ? "Краткий разбор сейчас недоступен." : "A short analysis is currently unavailable.";
     public static string BusinessRepairAdviceTitle => Ru ? "Отчёт получен · рекомендация" : "Report received · advice";
     public static string BusinessRepairAdviceFooter => Ru ? "Настройки VPN не изменены." : "VPN settings were not changed.";
+    public static string BusinessRepairDeliveredBadge(string time) => Ru
+        ? $"Отчёт доставлен в {time} · Открыть"
+        : $"Report delivered at {time} · View";
+    public static string BusinessRepairResendNote(string time) => Ru
+        ? $"Предыдущий отчёт уже доставлен в {time}. Отправка создаст новый отчёт."
+        : $"A previous report was delivered at {time}. Sending creates a new report.";
 }

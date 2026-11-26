@@ -105,7 +105,7 @@ public sealed class BusinessWindowTests
             vm.IsConnected = true;
             Assert.All(modes, mode => Assert.False(mode.IsEffectivelyEnabled));
             Assert.Contains(modeButton.GetVisualDescendants().OfType<TextBlock>(),
-                text => text.IsEffectivelyVisible && text.Text == Strings.BusinessModeUnknown);
+                text => text.IsEffectivelyVisible && text.Text == Strings.BusinessModeServiceManaged);
             vm.IsConnected = false;
             modes[0].IsChecked = true;
             Assert.True(vm.IsSplitTunnel);
@@ -294,6 +294,11 @@ public sealed class BusinessWindowTests
                 .Where(text => AutomationProperties.GetAutomationId(text) == "BusinessServerSummary"));
             Assert.Contains("active-tag", summary.Classes);
             Assert.DoesNotContain("warn-tag", summary.Classes);
+
+            vm.SetBusinessConnectedServerName(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(window.Texts.IsServerSummaryActive);
+            Assert.Equal(Strings.BusinessModeServiceManaged, window.Texts.ModeSummary);
         }
         finally { window.Close(); }
     }

@@ -33,6 +33,12 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
     public bool IsActivityLow => ActivityLevel == BusinessNodeActivityLevel.Low;
     public bool IsActivityMedium => ActivityLevel == BusinessNodeActivityLevel.Medium;
     public bool IsActivityHigh => ActivityLevel == BusinessNodeActivityLevel.High;
+    public bool Seg1Low => IsActivityLow;
+    public bool Seg1Medium => IsActivityMedium;
+    public bool Seg1High => IsActivityHigh;
+    public bool Seg2Medium => IsActivityMedium;
+    public bool Seg2High => IsActivityHigh;
+    public bool Seg3High => IsActivityHigh;
     public bool HasKnownActivity => ActivityLevel is BusinessNodeActivityLevel.Low
         or BusinessNodeActivityLevel.Medium or BusinessNodeActivityLevel.High;
     public string MetricsText => ActivityLevel switch
@@ -122,6 +128,12 @@ public sealed class BusinessServerChoiceViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsActivityLow));
         OnPropertyChanged(nameof(IsActivityMedium));
         OnPropertyChanged(nameof(IsActivityHigh));
+        OnPropertyChanged(nameof(Seg1Low));
+        OnPropertyChanged(nameof(Seg1Medium));
+        OnPropertyChanged(nameof(Seg1High));
+        OnPropertyChanged(nameof(Seg2Medium));
+        OnPropertyChanged(nameof(Seg2High));
+        OnPropertyChanged(nameof(Seg3High));
         OnPropertyChanged(nameof(HasKnownActivity));
     }
 

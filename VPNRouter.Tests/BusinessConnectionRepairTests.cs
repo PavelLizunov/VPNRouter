@@ -167,7 +167,7 @@ public sealed class BusinessConnectionRepairTests
                 return;
             }
 
-            Click(fixture.Window, FindButton(fixture.Repair, "BusinessRepairClose"));
+            Click(fixture.Window, FindButton(fixture.Repair, "BusinessRepairDismiss"));
             await sending;
 
             Assert.True(fixture.Services.IsRepairOpen);
@@ -176,8 +176,13 @@ public sealed class BusinessConnectionRepairTests
             Assert.Equal(Strings.BusinessDiagnosticsReplyWaitCancelled, fixture.Services.DiagnosticStatus);
             Assert.Equal(new[] { "report-1.zip" }, fixture.Diagnostics.Sent);
             Assert.True(fixture.Vm.IsConnected);
+            Assert.False(FindButton(fixture.Repair, "BusinessRepairDismiss").IsEffectivelyVisible);
             Click(fixture.Window, FindButton(fixture.Repair, "BusinessRepairClose"));
             Assert.False(fixture.Services.IsRepairOpen);
+            Assert.True(fixture.Services.HasDeliveredReceiptBadge);
+            Click(fixture.Window, FindButton(fixture.Repair, "BusinessRepairReceiptBadge"));
+            Assert.True(fixture.Services.IsRepairOpen);
+            Assert.True(fixture.Services.IsRepairReceipt);
         }
         finally
         {
@@ -234,7 +239,8 @@ public sealed class BusinessConnectionRepairTests
             Assert.False(fixture.Services.HasRepairPrimaryAction);
             Assert.Contains(fixture.Repair.GetVisualDescendants().OfType<ProgressBar>(),
                 progress => progress.IsEffectivelyVisible && progress.IsIndeterminate);
-            Assert.True(FindButton(fixture.Repair, "BusinessRepairClose").IsEffectivelyEnabled);
+            Assert.True(FindButton(fixture.Repair, "BusinessRepairDismiss").IsEffectivelyEnabled);
+            Assert.False(FindButton(fixture.Repair, "BusinessRepairClose").IsEffectivelyVisible);
             Assert.Equal(1, fixture.LocalAttempts);
             Assert.Equal(0, fixture.Diagnostics.Collected);
             Assert.Empty(fixture.Diagnostics.Sent);
@@ -371,9 +377,36 @@ public sealed class BusinessConnectionRepairTests
         diagnostics.Reply.SetResult(BusinessSupportReply.Unavailable);
         await pending;
         Assert.False(services.OpenRepairCommand.CanExecute(null));
-        Assert.Equal(initiallyConnected, services.IsRepairOpen);
+        Assert.True(services.IsRepairOpen);
+        Assert.True(services.IsRepairReceipt);
         Assert.Equal(initiallyConnected, vm.IsConnected);
         if (initiallyConnected) Assert.Equal(Strings.BusinessDiagnosticsReplyUnavailable, services.DiagnosticStatus);
+    }
+
+    [AvaloniaFact]
+    public async Task HidingWindowPreservesStickyAdviceAndClosesTransientConsent()
+    {
+        using var fixture = new RepairWindowFixture(initiallyConnected: true);
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+        Assert.True(fixture.Services.IsRepairOpen);
+        fixture.Services.SetVisible(false);
+        Assert.False(fixture.Services.IsRepairOpen);
+
+        fixture.Services.SetVisible(true);
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairOpen"));
+        await ClickAsync(fixture.Window, FindButton(fixture.Repair, "BusinessRepairAnalyze"));
+        Assert.True(fixture.Services.HasRepairAdvice);
+
+        fixture.Services.SetVisible(false);
+        Assert.True(fixture.Services.IsRepairOpen);
+        Assert.True(fixture.Services.HasRepairAdvice);
+        fixture.Services.SetVisible(true);
+
+        Click(fixture.Window, FindButton(fixture.Repair, "BusinessRepairClose"));
+        Assert.False(fixture.Services.IsRepairOpen);
+        Assert.True(fixture.Services.HasDeliveredReceiptBadge);
+        Click(fixture.Window, FindButton(fixture.Repair, "BusinessRepairReceiptBadge"));
+        Assert.True(fixture.Services.HasRepairAdvice);
     }
 
     [AvaloniaTheory]

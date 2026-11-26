@@ -27,6 +27,9 @@ internal sealed partial class BusinessServicesViewModel
     private CancellationTokenSource? _repairAttempt;
     private bool _repairSendActive;
     private bool _repairStartedOffline;
+    private string? _deliveredReceiptAt;
+    private RepairStep _lastStickyStep;
+    private BusinessSupportReply? _lastDeliveredReply;
     private readonly Func<CancellationToken, Task<bool>> _connectVerified;
 
     public bool IsRepairOpen => _repairStep != RepairStep.Closed;
@@ -36,6 +39,16 @@ internal sealed partial class BusinessServicesViewModel
         or RepairStep.SendFailed;
     public bool IsRepairReceipt => IsStickyResult;
     public bool HasRepairAdvice => _repairStep == RepairStep.Advice;
+    public bool ShowRepairHeaderClose => _repairStep is not (RepairStep.Searching or RepairStep.Collecting
+        or RepairStep.Sending or RepairStep.Consent or RepairStep.ReceiptPending);
+    public bool ShowRepairBottomDismiss => !ShowRepairHeaderClose;
+    public bool HasDeliveredReceiptBadge => !IsRepairOpen && _deliveredReceiptAt != null;
+    public string DeliveredReceiptBadgeText => _deliveredReceiptAt is { } time
+        ? Strings.BusinessRepairDeliveredBadge(time) : string.Empty;
+    public bool HasRepairResendNote => _deliveredReceiptAt != null &&
+        _repairStep is RepairStep.Consent or RepairStep.Failed && _configuration.SupportEndpoint != null;
+    public string RepairResendNote => _deliveredReceiptAt is { } time
+        ? Strings.BusinessRepairResendNote(time) : string.Empty;
     public string RepairAdviceFooter => Strings.BusinessRepairAdviceFooter;
     public string RepairRetrySearchText => Strings.BusinessRepairRetrySearch;
     public bool HasRepairRetrySearchAction => _repairStartedOffline && !_vm.IsConnected &&
@@ -267,9 +280,28 @@ internal sealed partial class BusinessServicesViewModel
         }
     }
 
+    [RelayCommand]
+    private void ReopenDeliveredReceipt()
+    {
+        if (_disposed || IsRepairOpen || _deliveredReceiptAt == null) return;
+        _supportReply = _lastDeliveredReply;
+        var target = _lastStickyStep is RepairStep.Closed or RepairStep.ReceiptPending
+            ? RepairStep.ReceiptWaitCancelled : _lastStickyStep;
+        SetRepairStep(target);
+    }
+
     private void CloseRepairForHide()
     {
         if (_repairStep == RepairStep.Closed) return;
+        if (IsStickyResult)
+        {
+            if (_repairStep == RepairStep.ReceiptPending)
+            {
+                _diagnostic?.Cancel();
+                SetRepairStep(RepairStep.ReceiptWaitCancelled);
+            }
+            return;
+        }
         _repairAttempt?.Cancel();
         _diagnostic?.Cancel();
         SetRepairStep(RepairStep.Closed);
@@ -383,6 +415,12 @@ internal sealed partial class BusinessServicesViewModel
         OnPropertyChanged(nameof(HasRepairRetrySearchAction));
         OnPropertyChanged(nameof(IsRepairReceipt));
         OnPropertyChanged(nameof(HasRepairAdvice));
+        OnPropertyChanged(nameof(ShowRepairHeaderClose));
+        OnPropertyChanged(nameof(ShowRepairBottomDismiss));
+        OnPropertyChanged(nameof(HasDeliveredReceiptBadge));
+        OnPropertyChanged(nameof(DeliveredReceiptBadgeText));
+        OnPropertyChanged(nameof(HasRepairResendNote));
+        OnPropertyChanged(nameof(RepairResendNote));
         OnPropertyChanged(nameof(RepairHeading));
         OnPropertyChanged(nameof(RepairBody));
         OnPropertyChanged(nameof(RepairActionText));
@@ -397,6 +435,12 @@ internal sealed partial class BusinessServicesViewModel
     private void SetRepairStep(RepairStep step)
     {
         _repairStep = step;
+        if (IsStickyResult)
+        {
+            _deliveredReceiptAt ??= DateTime.Now.ToString("HH:mm");
+            _lastStickyStep = step;
+            _lastDeliveredReply = _supportReply;
+        }
         NotifyRepairState();
     }
 
@@ -407,6 +451,7 @@ internal sealed partial class BusinessServicesViewModel
         RepairPrimaryCommand.NotifyCanExecuteChanged();
         RetryRepairSearchCommand.NotifyCanExecuteChanged();
         CloseRepairCommand.NotifyCanExecuteChanged();
+        ReopenDeliveredReceiptCommand.NotifyCanExecuteChanged();
         CollectCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
     }

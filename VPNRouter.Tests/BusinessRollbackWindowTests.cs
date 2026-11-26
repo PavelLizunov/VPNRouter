@@ -47,8 +47,10 @@ public sealed class BusinessRollbackWindowTests
         Assert.True(fixture.Vm.UpdateVm.IsRollbackConfirmationVisible);
         Assert.Equal("2.50.7", fixture.Vm.UpdateVm.SelectedRollback!.Version);
         Assert.Contains("2.50.7", fixture.Vm.UpdateVm.RollbackConfirmationText);
+        Assert.Contains(AppVersion.Version, fixture.Vm.UpdateVm.RollbackConfirmationText);
         Assert.Same(fixture.Vm.UpdateVm.ConfirmRollbackCommand,
             fixture.ById<Button>("BusinessRollbackConfirm").Command);
+        ScreenshotHelper.Capture(fixture.Window, "business-menu-rollback-340");
         fixture.ById<Button>("BusinessRollbackCancel").Command!.Execute(null);
         fixture.Flush();
         Assert.Null(fixture.Vm.UpdateVm.SelectedRollback);

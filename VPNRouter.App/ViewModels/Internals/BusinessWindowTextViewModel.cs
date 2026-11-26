@@ -88,6 +88,8 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsServerSummaryWarning));
         OnPropertyChanged(nameof(ServerPickerCaption));
         OnPropertyChanged(nameof(ServerPickerPlaceholder));
+        OnPropertyChanged(nameof(ServerFallbackLabel));
+        OnPropertyChanged(nameof(HasServerFallbackLabel));
     }
 
     public string Menu => Strings.BusinessMenu;
@@ -116,6 +118,8 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     {
         _savedServer = choice;
         OnPropertyChanged(nameof(ServerPickerPlaceholder));
+        OnPropertyChanged(nameof(ServerFallbackLabel));
+        OnPropertyChanged(nameof(HasServerFallbackLabel));
         RefreshServerSummary();
     }
 
@@ -159,7 +163,7 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
         }
     }
 
-    public bool IsServerSummaryActive => _client is { IsConnected: true, BusinessActiveServerName: not null };
+    public bool IsServerSummaryActive => _client?.IsConnected == true;
 
     public bool IsServerSummaryWarning
     {
@@ -173,6 +177,10 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     }
 
     public string ServerPickerPlaceholder => _savedServer?.DisplayName ?? Strings.BusinessServer;
+    public string ServerFallbackLabel => AutoSelectEnabled && _savedServer != null
+        ? Strings.BusinessServerAutoFallback(_savedServer.DisplayName)
+        : string.Empty;
+    public bool HasServerFallbackLabel => ServerFallbackLabel.Length != 0;
     public string ServerPickerCaption => AutoSelectEnabled
         ? Strings.BusinessServerPickerAutoCaption : Strings.BusinessServerPickerManualCaption;
     public string ServerLocked => _client?.BusinessActiveServerName is { } name
@@ -182,6 +190,7 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
         {
             "split" => Strings.BusinessSplit,
             "full" => Strings.BusinessFullCompact,
+            _ when _client.IsBusinessServiceManaged => Strings.BusinessModeServiceManaged,
             _ => Strings.BusinessModeUnknown
         }
         : _client?.IsSplitTunnel == true ? Strings.BusinessSplit : Strings.BusinessFullCompact;

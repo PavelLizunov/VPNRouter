@@ -59,13 +59,27 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Equal("CH", choice.CountryCode);
             Assert.Equal("Switzerland", choice.CountryName);
             Assert.NotNull(choice.CountryFlag);
-            Assert.Equal("Activity: low", choice.MetricsText);
+            Assert.Equal("Load: low", choice.MetricsText);
             Assert.Contains("assessed by the server", choice.MetricsHint);
             Assert.True(choice.IsActivityLow);
+            Assert.True(choice.Seg1Low);
+            Assert.False(choice.Seg1Medium || choice.Seg2Medium || choice.Seg1High || choice.Seg2High || choice.Seg3High);
             Assert.False(choice.IsActivityMedium);
             Assert.False(choice.IsActivityHigh);
             Assert.True(choice.IsGood);
             Assert.Equal("12 ms", choice.PingText);
+
+            var medium = Snapshot(Node("node.example.invalid", "CH", available: 1024, load: 50, activity: "medium"));
+            choice.UpdateMetadata(medium, medium.Nodes.Values.Single());
+            Assert.Equal("Load: medium", choice.MetricsText);
+            Assert.True(choice.Seg1Medium && choice.Seg2Medium);
+            Assert.False(choice.Seg1Low || choice.Seg1High || choice.Seg2High || choice.Seg3High);
+
+            var high = Snapshot(Node("node.example.invalid", "CH", available: 1024, load: 90, activity: "high"));
+            choice.UpdateMetadata(high, high.Nodes.Values.Single());
+            Assert.Equal("Load: high", choice.MetricsText);
+            Assert.True(choice.Seg1High && choice.Seg2High && choice.Seg3High);
+            Assert.False(choice.Seg1Low || choice.Seg1Medium || choice.Seg2Medium);
 
             var romania = Snapshot(Node("node.example.invalid", "RO"));
             choice.UpdateMetadata(romania, romania.Nodes.Values.Single());
@@ -84,11 +98,11 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Equal("Country unknown", choice.CountryName);
             Assert.Null(choice.CountryFlag);
             Assert.False(choice.HasCountry);
-            Assert.Equal("Activity: data is stale", choice.MetricsText);
+            Assert.Equal("Load: data is stale", choice.MetricsText);
             Assert.False(choice.IsActivityLow || choice.IsActivityMedium || choice.IsActivityHigh);
             Strings.Lang = "ru";
             choice.RefreshLocalization();
-            Assert.Equal("Активность: данные устарели", choice.MetricsText);
+            Assert.Equal("Нагрузка: данные устарели", choice.MetricsText);
             Strings.Lang = "en";
             Assert.Contains("Data is stale", choice.MetricsHint);
             Assert.True(choice.IsGood);
@@ -103,13 +117,13 @@ public sealed class BusinessNodeMetadataWindowTests
 
             var future = Snapshot(Node("node.example.invalid", "CH", observed: 2001, age: 0));
             choice.UpdateMetadata(future, future.Nodes.Values.Single());
-            Assert.Equal("Activity: no data", choice.MetricsText);
+            Assert.Equal("Load: no data", choice.MetricsText);
             Assert.Contains("Sample age is unknown", choice.MetricsHint);
             Assert.Equal("CH", choice.CountryCode);
             Assert.True(choice.IsGood);
             choice.UpdateMetadata(null, null);
             Assert.True(choice.HasMetadata);
-            Assert.Equal("Activity: no data", choice.MetricsText);
+            Assert.Equal("Load: no data", choice.MetricsText);
         }
         finally { Strings.Lang = previousLanguage; }
     }
@@ -180,7 +194,7 @@ public sealed class BusinessNodeMetadataWindowTests
     {
         using var fixture = new Fixture();
         Assert.True(fixture.Choices[0].HasMetadata);
-        Assert.Equal("Activity: no data", fixture.Choices[0].MetricsText);
+        Assert.Equal("Load: no data", fixture.Choices[0].MetricsText);
         fixture.Vm.IsConnected = true;
         var selected = fixture.Vm.SelectedServer;
         var pool = fixture.Vm.Servers.ToArray();
@@ -196,14 +210,14 @@ public sealed class BusinessNodeMetadataWindowTests
         Assert.Equal(before, fixture.Store.SaveCount);
         var choice = Assert.IsType<BusinessServerChoiceViewModel>(fixture.Selector.SelectedItem);
         Assert.Equal("CH", choice.CountryCode);
-        Assert.Equal("Activity: low", choice.MetricsText);
+        Assert.Equal("Load: low", choice.MetricsText);
         Assert.False(choice.IsGood);
         var menu = OpenMenu(fixture.Window);
         foreach (var index in new[] { 0, 1 })
         {
             fixture.Window.FindControl<ComboBox>("BusinessLanguageSelector")!.SelectedIndex = index;
             Flush(fixture.Window);
-            Assert.Equal(index == 0 ? "Активность: низкая" : "Activity: low", choice.MetricsText);
+            Assert.Equal(index == 0 ? "Нагрузка: низкая" : "Load: low", choice.MetricsText);
             Assert.Equal(index == 0 ? "Швейцария" : "Switzerland", choice.CountryName);
             Assert.Same(choice, fixture.Selector.SelectedItem);
             Assert.Same(selected, fixture.Vm.SelectedServer);
@@ -257,7 +271,7 @@ public sealed class BusinessNodeMetadataWindowTests
             Assert.Single(fixture.Choices.Where(choice => ReferenceEquals(choice.Server, server)))).ToArray();
         Assert.NotSame(original[0], rebuilt[0]);
         Assert.Equal(new[] { "CH", "SE", "NL" }, rebuilt.Select(choice => choice.CountryCode));
-        Assert.Equal("Activity: data is stale", rebuilt[0].MetricsText);
+        Assert.Equal("Load: data is stale", rebuilt[0].MetricsText);
         Assert.Contains("Data is stale", rebuilt[0].MetricsHint);
         Assert.Same(snapshot, fixture.Controller.LastSnapshot);
         Assert.Equal(received, fixture.Controller.LastSnapshot!.ReceivedTimestamp);
@@ -270,7 +284,35 @@ public sealed class BusinessNodeMetadataWindowTests
         await refresh.WaitAsync(Budget);
         Assert.Equal(beforeMetadataFailure, fixture.Store.SaveCount);
         Assert.Same(snapshot, fixture.Controller.LastSnapshot);
-        Assert.Equal("Activity: data is stale", rebuilt[0].MetricsText);
+        Assert.Equal("Load: data is stale", rebuilt[0].MetricsText);
+    }
+
+    [AvaloniaFact]
+    public async Task LoadSegmentsFillCumulativelyAcrossLowMediumAndHigh()
+    {
+        using var fixture = new Fixture(language: "ru", width: 360);
+        var round = fixture.Controller!.RefreshAsync();
+        var snapshot = Snapshot(
+            Node("node.example.invalid", "IS", available: 1024, load: 10, activity: "low"),
+            Node("2001:0db8:0:0:0:0:0:2", "SE", available: 1024, load: 55, activity: "medium"),
+            Node("bücher.example", "DE", available: 1024, load: 95, activity: "high"));
+        (await fixture.Fetch.NextAsync()).Result.SetResult(snapshot);
+        await round.WaitAsync(Budget);
+        Flush(fixture.Window);
+
+        var low = fixture.Choices.Single(c => c.CountryCode == "IS");
+        var med = fixture.Choices.Single(c => c.CountryCode == "SE");
+        var high = fixture.Choices.Single(c => c.CountryCode == "DE");
+        Assert.True(low.Seg1Low && !low.Seg2Medium && !low.Seg3High);
+        Assert.True(med.Seg1Medium && med.Seg2Medium && !med.Seg3High);
+        Assert.True(high.Seg1High && high.Seg2High && high.Seg3High);
+
+        fixture.Window.OpenServerPanel();
+        fixture.Selector.IsDropDownOpen = true;
+        Flush(fixture.Window);
+        ScreenshotHelper.Capture(fixture.Window, "business-server-load-levels-360");
+        fixture.Selector.IsDropDownOpen = false;
+    }
     }
 
     [AvaloniaFact]

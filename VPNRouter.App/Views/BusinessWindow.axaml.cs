@@ -42,6 +42,7 @@ public partial class BusinessWindow : Window
         InitializeComponent();
         _metadata = metadataFactory?.Invoke(ApplyNodeMetadata);
         DataContextChanged += (_, _) => AttachViewModel();
+        ActualThemeVariantChanged += (_, _) => SyncThemeVariant();
         PropertyChanged += (_, e) =>
         {
             if (e.Property == IsVisibleProperty)
@@ -62,7 +63,11 @@ public partial class BusinessWindow : Window
 
     private void DetachViewModel()
     {
-        if (_vm != null) _vm.PropertyChanged -= OnVmPropertyChanged;
+        if (_vm != null)
+        {
+            _vm.PropertyChanged -= OnVmPropertyChanged;
+            _vm.UpdateVm.PropertyChanged -= OnUpdateVmPropertyChanged;
+        }
         _metadata?.SetVisible(false);
         DetachHealth();
         if (_services != null)
@@ -97,9 +102,31 @@ public partial class BusinessWindow : Window
             BusinessSubscriptionActions.DataContext = _services;
             BusinessRepairActions.DataContext = _services;
             _vm.PropertyChanged += OnVmPropertyChanged;
+            _vm.UpdateVm.PropertyChanged += OnUpdateVmPropertyChanged;
             _services.PropertyChanged += OnServicesPropertyChanged;
             _services.SetVisible(IsVisible);
             _metadata?.SetVisible(IsVisible);
+            SyncThemeVariant();
+        }
+    }
+
+    private void SyncThemeVariant()
+    {
+        if (_vm == null) return;
+        _vm.IsDarkTheme = ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark;
+    }
+
+    private void OnUpdateVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(UpdateNotificationViewModel.IsVersionHistoryVisible) &&
+            _vm?.UpdateVm.IsVersionHistoryVisible == true)
+        {
+            Dispatcher.UIThread.Post(() => BusinessVersionHistoryPanel.BringIntoView(), DispatcherPriority.Background);
+        }
+        else if (e.PropertyName == nameof(UpdateNotificationViewModel.IsRollbackConfirmationVisible) &&
+                 _vm?.UpdateVm.IsRollbackConfirmationVisible == true)
+        {
+            Dispatcher.UIThread.Post(() => BusinessRollbackConfirmPanel.BringIntoView(), DispatcherPriority.Background);
         }
     }
 
@@ -260,7 +287,12 @@ public partial class BusinessWindow : Window
         => _repairLauncher = BusinessRepairButton;
 
     private void OnBusinessRepairActionClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        => BusinessRepairDismiss.Focus();
+        => FocusRepairDismiss();
+
+    private Control ActiveRepairDismissButton() =>
+        BusinessRepairDismiss.IsVisible ? BusinessRepairDismiss : BusinessRepairCloseButton;
+
+    private bool FocusRepairDismiss() => ActiveRepairDismissButton().Focus();
 
     private void OnBusinessDiagnosticMenuClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
@@ -278,7 +310,7 @@ public partial class BusinessWindow : Window
         Dispatcher.UIThread.Post(() =>
         {
             if (!IsVisible || !ReferenceEquals(_services, services) || services.IsRepairOpen != open) return;
-            var target = open ? BusinessRepairDismiss : launcher;
+            var target = open ? ActiveRepairDismissButton() : launcher;
             if (!target.Focus() && !BusinessConnectButton.Focus()) BusinessMenuButton.Focus();
         }, DispatcherPriority.Background);
     }
