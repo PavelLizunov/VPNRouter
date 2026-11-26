@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.Json;
+using System.Threading;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -61,14 +63,18 @@ public sealed class HealthMonitorControlledReloadTests
         return settings;
     }
 
-    private static HealthMonitor Build(string[] scannerNames, out StubFirewall firewall)
+    private static HealthMonitor Build(string[] scannerNames, out StubFirewall firewall,
+        AppSettings? settings = null, string? clashApiSecret = null,
+        Action<SingBoxManager>? configureSingBox = null, FakeHttpClient? http = null)
     {
-        var singBox = new SingBoxManager(new SingBoxSettings { ClashApi = "127.0.0.1:65535" });
+        var singBox = new SingBoxManager(
+            new SingBoxSettings { ClashApi = "127.0.0.1:65535" }, http: http ?? new FakeHttpClient());
+        configureSingBox?.Invoke(singBox);
         firewall = new StubFirewall();
         var monitor = new HealthMonitor(singBox, new StubScanner(scannerNames), firewall,
             new MonitoringSettings { HealthCheckInterval = 3600, MaxRestartAttempts = 5, RestartOnFailure = true },
-            api: new FakeSingBoxApi());
-        monitor.Start(new Profile { Name = "test" }, Settings());
+            api: new FakeSingBoxApi(), clashApiSecret: clashApiSecret);
+        monitor.Start(new Profile { Name = "test" }, settings ?? Settings());
         return monitor;
     }
 
@@ -81,6 +87,18 @@ public sealed class HealthMonitorControlledReloadTests
     private static void Rescan(HealthMonitor monitor) =>
         typeof(HealthMonitor).GetMethod("RescanProcesses", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(monitor, null);
+
+    private static void RunScheduledRestart(HealthMonitor monitor) =>
+        typeof(HealthMonitor).GetMethod("RunScheduledRestart", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(monitor, new object?[] { CancellationToken.None });
+
+    private static string GenerateRecoveryConfig(HealthMonitor monitor) =>
+        (string)typeof(HealthMonitor)
+            .GetMethod("GenerateConfigJson", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(monitor, new object?[] { new List<string>(), null })!;
+
+    private static int DeferredKillSwitchLift(HealthMonitor monitor) =>
+        GetField<int>(monitor, "_deferredBlockRuleDisable");
 
     [Fact]
     public void FailedRestart_DoesNotAdvanceLastScan()
@@ -111,6 +129,96 @@ public sealed class HealthMonitorControlledReloadTests
     }
 
     [Fact]
+    public void RecoveryStartedButUnconfirmed_DefersKillSwitchLift()
+    {
+        using var monitor = Build(new[] { "new.exe" }, out var firewall);
+        monitor.ReloadOutcomeHookForTests = _ => ConfigApplyState.StartedUnconfirmed;
+
+        RunScheduledRestart(monitor);
+
+        Assert.Equal(1, firewall.EnableCount);
+        Assert.Equal(0, firewall.DisableCount);
+        Assert.Equal(1, DeferredKillSwitchLift(monitor));
+        Assert.NotNull(GetField<string?>(monitor, "_pendingConfigConfirmation"));
+        Assert.True(GetField<DateTime>(monitor, "_lastFullRestart") > DateTime.MinValue);
+        Assert.Equal(new[] { "new.exe" }, GetField<ScanResult>(monitor, "_lastScan").ProcessNames);
+    }
+
+    [Fact]
+    public void UnstartedProcessRescan_KeepsKillSwitchArmedWhenPriorRuntimeIsNotConfirmed()
+    {
+        using var monitor = Build(new[] { "new.exe" }, out var firewall);
+        var previous = new ScanResult { ProcessNames = new List<string> { "old.exe" } };
+        SetField(monitor, "_lastScan", previous);
+        monitor.ReloadOutcomeHookForTests = _ => ConfigApplyState.NotStarted;
+
+        Rescan(monitor);
+
+        Assert.Same(previous, GetField<ScanResult>(monitor, "_lastScan"));
+        Assert.Equal(1, firewall.EnableCount);
+        Assert.Equal(0, firewall.DisableCount);
+        Assert.Equal(0, DeferredKillSwitchLift(monitor));
+    }
+
+    [Fact]
+    public void UnstartedProcessRescan_ReleasesKillSwitchWhenPriorRuntimeIsConfirmedLive()
+    {
+        var http = new FakeHttpClient().Setup("/configs", "{}");
+        using var monitor = Build(new[] { "new.exe" }, out var firewall, http: http,
+            configureSingBox: manager =>
+            {
+                var handle = new FakeProcessHandle(pid: 4242);
+                SetField(manager, "_handle", handle);
+                SetField(manager, "_macPrivilegeLaunchId", "fixture-launch");
+                typeof(SingBoxManager).GetProperty(nameof(SingBoxManager.State))!
+                    .GetSetMethod(nonPublic: true)!
+                    .Invoke(manager, new object[] { SingBoxState.Running });
+            });
+        SetField(monitor, "_lastScan", new ScanResult { ProcessNames = new List<string> { "old.exe" } });
+        monitor.ReloadOutcomeHookForTests = _ => ConfigApplyState.NotStarted;
+
+        Rescan(monitor);
+
+        Assert.Equal(1, firewall.EnableCount);
+        Assert.Equal(1, firewall.DisableCount);
+        Assert.Equal(0, DeferredKillSwitchLift(monitor));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("short")]
+    public void RecoveryConfig_ReusesActiveControllerSecret(string configuredSecret)
+    {
+        const string activeSecret = "0123456789abcdef0123456789abcdef";
+        var settings = Settings();
+        settings.SingBox.ClashApiSecret = configuredSecret;
+        using var monitor = Build(new[] { "new.exe" }, out _, settings: settings,
+            clashApiSecret: activeSecret);
+
+        var json = GenerateRecoveryConfig(monitor);
+
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(activeSecret, document.RootElement
+            .GetProperty("experimental").GetProperty("clash_api").GetProperty("secret").GetString());
+    }
+
+    [Fact]
+    public void RecoveryConfigPin_ReplacesBlankControllerSecretInRecoveredCustomDocument()
+    {
+        const string activeSecret = "0123456789abcdef0123456789abcdef";
+        using var monitor = Build(new[] { "new.exe" }, out _, clashApiSecret: activeSecret);
+        var pin = typeof(HealthMonitor)
+            .GetMethod("PinActiveControllerSecret", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var output = (string)pin.Invoke(monitor,
+            new object?[] { """{"experimental":{"clash_api":{"secret":""}},"outbounds":[]}""" })!;
+
+        using var document = JsonDocument.Parse(output);
+        Assert.Equal(activeSecret, document.RootElement
+            .GetProperty("experimental").GetProperty("clash_api").GetProperty("secret").GetString());
+    }
+
+    [Fact]
     public void AttemptRestart_NeverLiftsKillSwitchBlockRules()
     {
         var source = ReadHealthMonitorSource();
@@ -120,7 +228,7 @@ public sealed class HealthMonitorControlledReloadTests
         Assert.True(end > start, "AttemptRestart end marker is missing");
         var body = source[start..end];
 
-        Assert.Contains("ApplyConfigWithRestart", body, StringComparison.Ordinal);
+        Assert.Contains("ApplyConfigWithProtection", body, StringComparison.Ordinal);
         Assert.DoesNotContain("DisableBlockRules", body, StringComparison.Ordinal);
         Assert.DoesNotContain("ReloadConfigAsync", body, StringComparison.Ordinal);
     }

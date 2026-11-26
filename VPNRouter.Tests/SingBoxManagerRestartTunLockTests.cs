@@ -752,9 +752,9 @@ public sealed class SingBoxManagerRestartTunLockTests : IDisposable
         {
             const string config =
                 """{"outbounds":[{"type":"vless","tag":"proxy","server":"203.0.113.9","server_port":443,"uuid":"u"}],"route":{"final":"proxy"}}""";
-            var result = manager.ReloadConfigJsonWithResult(config, forceRestart: true);
+            var state = manager.ReloadConfigJsonWithOutcome(config, forceRestart: true);
 
-            Assert.False(result, "A controller that does not serve the applied tag is not a confirmed reload.");
+            Assert.Equal(ConfigApplyState.StartedUnconfirmed, state);
             Assert.True(initialHandle.HasExited, "The restart still happened; only the verification failed.");
             Assert.Same(replacementHandle, GetField(manager, "_handle"));
             Assert.Single(runner.StartCalls);

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Text;
 using VPNRouter.Core;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
@@ -45,6 +46,49 @@ public sealed class VpnEngineHotReloadLifecycleTests
         public void Start() => StartCount++;
         public void Stop() => StopCount++;
         public void Dispose() => DisposeCount++;
+    }
+
+    private sealed class SecretRoutingHttpClient : IDirectHttpClient
+    {
+        private readonly HashSet<string> _rejectedSecrets;
+        private readonly bool _rejectAllProxies;
+
+        public SecretRoutingHttpClient(params string[] rejectedSecrets) =>
+            _rejectedSecrets = new HashSet<string>(rejectedSecrets, StringComparer.Ordinal);
+
+        public SecretRoutingHttpClient(bool rejectAllProxies) => _rejectAllProxies = rejectAllProxies;
+
+        public Task<HttpResponse> SendAsync(HttpRequest request, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (request.Uri.AbsolutePath.EndsWith("/proxies", StringComparison.Ordinal))
+            {
+                var secret = ReadSecret(request);
+                if (_rejectAllProxies || (secret != null && _rejectedSecrets.Contains(secret)))
+                    return Task.FromResult(Response(401, "{}"));
+            }
+
+            return Task.FromResult(Response(200,
+                """{"proxies":{"proxy":{},"proxy-udp":{},"chain-entry":{},"custom-proxy":{}}}"""));
+        }
+
+        public Task<IHttpStreamingResponse> SendStreamingAsync(HttpRequest request, CancellationToken ct = default) =>
+            throw new NotSupportedException("The lifecycle fixture does not use streaming controller requests.");
+
+        private static string? ReadSecret(HttpRequest request)
+        {
+            if (request.Headers is null ||
+                !request.Headers.TryGetValue("Authorization", out var header) ||
+                !header.StartsWith("Bearer ", StringComparison.Ordinal))
+                return null;
+            return header["Bearer ".Length..];
+        }
+
+        private static HttpResponse Response(int status, string body) => new(
+            status,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            Encoding.UTF8.GetBytes(body),
+            TimeSpan.Zero);
     }
 
 #pragma warning disable CS0618
@@ -174,7 +218,8 @@ public sealed class VpnEngineHotReloadLifecycleTests
                                 StubProcessMonitor monitor,
                                 AppSettings settings,
                                 IDisposable cleanup)>
-        StartHappyPathAsync(bool isolatedProfile = false)
+        StartHappyPathAsync(bool isolatedProfile = false, bool blockOnVpnFail = false,
+            IHttpClient? controllerTransport = null)
     {
         var previousDataDir = AppPaths.DataDir;
         var tempDataDir = Path.Combine(
@@ -200,14 +245,16 @@ public sealed class VpnEngineHotReloadLifecycleTests
         if (isolatedProfile)
         {
             var profile = Path.Combine(tempDataDir, "receipt-profile.json");
-            File.WriteAllText(profile, """{"profiles":[{"name":"Receipt","dns_mode":"vpn_only","processes":[]}]}""");
+            File.WriteAllText(profile, blockOnVpnFail
+                ? """{"profiles":[{"name":"Receipt","dns_mode":"vpn_only","block_on_vpn_fail":true,"processes":[]}]}"""
+                : """{"profiles":[{"name":"Receipt","dns_mode":"vpn_only","processes":[]}]}""");
             settings.ProfileSources = [new ProfileSource { Type = "local", Path = profile }];
             settings.ActiveProfile = "Receipt";
             settings.SingBox.ClashApi = "127.0.0.1:0";
         }
 
         var previousControllerTransport = SingBoxManager.ControllerTransportForTests;
-        SingBoxManager.ControllerTransportForTests = new FakeHttpClient()
+        SingBoxManager.ControllerTransportForTests = controllerTransport ?? new FakeHttpClient()
             .Setup("/proxies", """{"proxies":{"proxy":{},"proxy-udp":{},"chain-entry":{},"custom-proxy":{}}}""");
 
         var cleanup = new HotReloadCleanup(
@@ -620,6 +667,137 @@ public sealed class VpnEngineHotReloadLifecycleTests
     }
 
     [Fact]
+    public async Task Apply_DesktopReplacementNotConfirmed_RollsBackToPreviousAppliedConfig()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "ColdStart prerequisite + SingBoxManager.Restart's Windows-specific TUN cleanup are Windows-only.");
+
+        const string candidateSecret = "0123456789abcdef0123456789abcdef";
+        var (engine, _, spawnedHandles, _, _, settings, cleanup) =
+            await StartHappyPathAsync(controllerTransport: new SecretRoutingHttpClient(candidateSecret));
+        using var fixture = cleanup;
+
+        var previousJson = File.ReadAllText(AppPaths.CurrentConfigPath);
+        var initialInfo = engine.AcceptedTunnel;
+        Assert.NotNull(initialInfo);
+        Assert.Equal(1, spawnedHandles.Count);
+
+        var candidate = SettingsLoader.Copy(settings);
+        candidate.Vless.Servers[0].Server = "192.0.2.42";
+        candidate.SingBox.ClashApiSecret = candidateSecret;
+
+        var applied = await engine.ApplyAsync(candidate, TestContext.Current.CancellationToken);
+
+        Assert.False(applied, "A candidate whose controller cannot serve its tags is not an accepted apply.");
+        Assert.Equal(previousJson, File.ReadAllText(AppPaths.CurrentConfigPath));
+        Assert.Same(initialInfo, engine.AcceptedTunnel);
+        Assert.Equal(3, spawnedHandles.Count);
+        Assert.True(spawnedHandles[1].HasExited, "The rejected candidate runtime must be replaced by the rollback.");
+        Assert.False(spawnedHandles[^1].HasExited);
+        Assert.True(engine.IsRunning);
+    }
+
+    [Fact]
+    public void Apply_PausesRecoveryBeforeCapturingReplacementIdentityAndSnapshot()
+    {
+        var source = ReadVpnEngineSource();
+        var start = source.IndexOf("private async Task<bool> ApplyGatedAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0, "ApplyGatedAsync is missing");
+        var end = source.IndexOf("private void UpdateFirewallCommittedConfig", start, StringComparison.Ordinal);
+        Assert.True(end > start, "ApplyGatedAsync end marker is missing");
+        var body = source[start..end];
+
+        var pause = body.IndexOf("_healthMonitor.PauseForApply()", StringComparison.Ordinal);
+        var identity = body.IndexOf("replacementRuntimeIdentity = _singBox.CaptureRuntimeIdentity()", StringComparison.Ordinal);
+        var snapshot = body.IndexOf("lastGoodJson = File.ReadAllText(snapshotPath)", StringComparison.Ordinal);
+        var replacement = body.IndexOf("ReloadConfigJsonWithResult(configJson", StringComparison.Ordinal);
+
+        Assert.True(pause >= 0 && pause < identity,
+            "Recovery must be paused before the replaced runtime identity is captured.");
+        Assert.True(identity >= 0 && identity < snapshot,
+            "The replaced runtime identity must be captured before its rollback document.");
+        Assert.True(snapshot >= 0 && snapshot < replacement,
+            "The rollback document must be read before the runtime is replaced.");
+        Assert.Contains("_singBox.IsSameRuntimeIdentity(identity)", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Apply_WithoutRollbackSnapshot_IsRefusedBeforeReplacement()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "ColdStart prerequisite + SingBoxManager.Restart's Windows-specific TUN cleanup are Windows-only.");
+
+        var (engine, _, spawnedHandles, firewall, _, settings, cleanup) = await StartHappyPathAsync();
+        using var fixture = cleanup;
+
+        var initialInfo = engine.AcceptedTunnel;
+        Assert.NotNull(initialInfo);
+        Assert.Equal(1, spawnedHandles.Count);
+        File.Delete(AppPaths.CurrentConfigPath);
+
+        var applied = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
+
+        Assert.False(applied);
+        Assert.Equal(1, spawnedHandles.Count);
+        Assert.Same(initialInfo, engine.AcceptedTunnel);
+        Assert.True(engine.IsRunning);
+        Assert.Equal(0, firewall.EnableBlockRulesCount);
+    }
+
+    [Fact]
+    public async Task Apply_WhenReplacementCannotStart_ReleasesProtectionForTheUnchangedRuntime()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The fixture starts a Windows engine.");
+        var (engine, _, spawnedHandles, firewall, _, settings, cleanup) =
+            await StartHappyPathAsync(isolatedProfile: true, blockOnVpnFail: true);
+        using var fixture = cleanup;
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var manager = Assert.IsType<SingBoxManager>(typeof(VpnEngine).GetField("_singBox", flags)!.GetValue(engine));
+        var lease = typeof(SingBoxManager).GetField("_ownsTunLock", flags)!;
+        var previous = engine.AcceptedTunnel;
+        var releasedBefore = firewall.DisableBlockRulesCount;
+
+        lease.SetValue(manager, false);
+        try
+        {
+            Assert.False(await engine.ApplyAsync(settings, TestContext.Current.CancellationToken));
+            Assert.Single(spawnedHandles);
+            Assert.Same(previous, engine.AcceptedTunnel);
+            Assert.Equal(1, firewall.EnableBlockRulesCount);
+            Assert.Equal(releasedBefore + 1, firewall.DisableBlockRulesCount);
+        }
+        finally { lease.SetValue(manager, true); }
+    }
+
+    [Fact]
+    public async Task Apply_DesktopRollbackNotConfirmed_DoesNotPresentOldBaselineAsActive()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "ColdStart prerequisite + SingBoxManager.Restart's Windows-specific TUN cleanup are Windows-only.");
+
+        var (engine, _, spawnedHandles, firewall, _, settings, cleanup) =
+            await StartHappyPathAsync(isolatedProfile: true, blockOnVpnFail: true,
+                controllerTransport: new SecretRoutingHttpClient(rejectAllProxies: true));
+        using var fixture = cleanup;
+
+        var previousJson = File.ReadAllText(AppPaths.CurrentConfigPath);
+        Assert.NotNull(engine.AcceptedTunnel);
+
+        var candidate = SettingsLoader.Copy(settings);
+        candidate.Vless.Servers[0].Server = "192.0.2.43";
+
+        var applied = await engine.ApplyAsync(candidate, TestContext.Current.CancellationToken);
+
+        Assert.False(applied);
+        Assert.Null(engine.AcceptedTunnel);
+        Assert.Equal(previousJson, File.ReadAllText(AppPaths.CurrentConfigPath));
+        Assert.Equal(3, spawnedHandles.Count);
+        Assert.False(spawnedHandles[^1].HasExited);
+        Assert.True(engine.IsRunning);
+        Assert.Equal(1, firewall.EnableBlockRulesCount);
+    }
+
+    [Fact]
     public async Task StartAsync_WhenAlreadyRunning_IsNoOp_NotSecondSpawn()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),
@@ -724,5 +902,16 @@ public sealed class VpnEngineHotReloadLifecycleTests
         Assert.Equal(0, monitor.StopCount);
         Assert.Equal(0, firewall.CreateBlockRulesCount);
         Assert.Equal(0, firewall.DeleteAllRulesCount);
+    }
+
+    private static string ReadVpnEngineSource()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var depth = 0; depth < 10 && directory != null; depth++, directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, "VPNRouter.Core", "Services", "VpnEngine.cs");
+            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+        }
+        throw new FileNotFoundException("VpnEngine.cs");
     }
 }

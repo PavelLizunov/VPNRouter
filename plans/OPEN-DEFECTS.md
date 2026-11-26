@@ -16,13 +16,13 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
-- [ ] **P0** - macOS health restarts can rotate the generated Clash secret while the manager and monitor keep using the previous one. A started runtime can also time out during tag confirmation and leave the kill switch armed indefinitely. Evidence and acceptance in [PR #746 task record](phase-standard-turnrelay-adoption-2026-11-26.md).
+- [x] **P0** - macOS health restarts could rotate the Clash secret and leave existing clients unauthorized. A started runtime could time out before scheduling kill-switch release. RESOLVED in source on PR #746 with session-secret retention and deferred reconciliation. Final CI and installed checks are recorded in the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
 
-- [ ] **P1** - HealthMonitor configuration restarts can bypass configured traffic protection. Desktop Apply can leave the newly started process running under a rejected configuration. See [PR #746 task record](phase-standard-turnrelay-adoption-2026-11-26.md).
+- [x] **P1** - HealthMonitor config restarts skipped the configured kill switch. Desktop Apply could leave a rejected runtime presented as the accepted tunnel. RESOLVED in source on PR #746 with restart protection, a quiesced rollback snapshot, and accepted-tunnel invalidation when rollback is unconfirmed. See the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
 
-- [ ] **P1** - TurnRelay needs its actual TURN address under the Unix kill switch, HTTPS enforcement for remote subscription imports, and exit-only default selection and two-link import in Standard. See [PR #746 task record](phase-standard-turnrelay-adoption-2026-11-26.md).
+- [x] **P1** - TurnRelay needed the actual TURN address under the Unix kill switch, HTTPS enforcement for remote imports, and exit-only default selection and two-link import in Standard. RESOLVED at `193fffd9` with all 11 checks passing. See the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
 
-- [ ] **P2** - Review found gaps in TurnRelay standalone probes, placeholder validation, rollback compatibility, version gating, JSON serialization, and diagnostic redaction. See [PR #746 task record](phase-standard-turnrelay-adoption-2026-11-26.md).
+- [x] **P2** - Review found gaps in TurnRelay standalone probes, placeholder validation, rollback compatibility, version gating, JSON serialization, and diagnostic redaction. RESOLVED at `193fffd9` with all 11 checks passing. See the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).
 
 - [x] **P0** - A legacy `PUT /configs` answers HTTP 204 on sing-box 1.14.4 without applying the document, so `SingBoxManager`/`HealthMonitor` reported a successful hot reload, skipped the restart and lifted the kill switch over the old config. `ReloadConfigJsonWithResult` now always restarts and confirms the applied outbound tags on `/proxies` within a bounded budget; `HealthMonitor` keeps the previous scan and block rules unless the restart is confirmed. RESOLVED in source on `feat/turnrelay-integration`. See [TurnRelay integration](phase-turnrelay-integration-2026-11-25.md).
 

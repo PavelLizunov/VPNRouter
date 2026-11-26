@@ -77,3 +77,19 @@ new CI and re-review of the material lifecycle changes.
   selection and standalone validation. Exercise both link orders at import.
 - Compatibility: check the rollback boundary, feature-version parsing, placeholder
   rejection, trim-safe JSON mapping, and diagnostic credential redaction.
+
+Transport, package, and compatibility fixes are in `193fffd9`. All 11 checks on
+that revision passed, including the Windows update and characterization runs,
+macOS helper system acceptance, Android APK compile, Arch packaging and Linux
+tests against the pinned runtime.
+
+The lifecycle follow-up preserves the live controller bearer in recovered
+documents. Recovery records a started replacement separately from a failed
+launch and reconciles pending tags on later ticks. For a pending tag check the
+45-second fallback also requires a responsive controller. Apply pauses recovery
+before taking its runtime and config snapshot. A failed replacement restores the
+prior document, or clears the accepted tunnel and retains configured protection
+if rollback cannot be confirmed. A rejected replacement that leaves the old
+runtime in place releases temporary protection once that identity is verified.
+Regression coverage includes the rollback and refusal paths, controller secret
+and deferred strict-DNS transitions. Final CI and re-review are pending.

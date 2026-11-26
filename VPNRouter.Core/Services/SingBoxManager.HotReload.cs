@@ -49,7 +49,7 @@ public partial class SingBoxManager
     /// applied document declares. A legacy <c>PUT /configs</c> 204 is never evidence:
     /// only a real process restart followed by this probe counts.
     /// </summary>
-    private bool VerifyAppliedConfigTags(string configJson)
+    internal bool VerifyAppliedConfigTags(string configJson, bool logFailure = true)
     {
         HashSet<string> expected;
         try
@@ -110,9 +110,18 @@ public partial class SingBoxManager
             Thread.Sleep(TagVerificationPollDelay);
         }
 
-        _logger.Warning(
-            "[SingBoxManager] Restart verification failed — controller did not serve the applied outbound tags within {Sec:F1}s",
-            TagVerificationBudget.TotalSeconds);
+        if (logFailure)
+        {
+            _logger.Warning(
+                "[SingBoxManager] Restart verification failed — controller did not serve the applied outbound tags within {Sec:F1}s",
+                TagVerificationBudget.TotalSeconds);
+        }
+        else
+        {
+            _logger.Debug(
+                "[SingBoxManager] Deferred controller confirmation is still incomplete after {Sec:F1}s",
+                TagVerificationBudget.TotalSeconds);
+        }
         return false;
     }
 
