@@ -4,6 +4,8 @@ This document describes the candidate contract. The dated prerelease acceptance 
 
 The desktop owns the VPN engine, routing rules, settings, application selection and updater. Its assistant asks the gateway at `https://ninitux.com/api/v1/assistant/vpnrouter` for a typed proposal or explanation. The person at the desktop authorizes a local change or the disclosure of diagnostic evidence.
 
+The eligible subscriber types a request directly on Simple Home and selects Send or presses Enter. The same panel previews a proposed change and asks for explicit confirmation. Undo is available when the desktop has a restorable change. The diagnostics disclosure groups on-device repair and online analysis. User-facing labels name the VPNRouter assistant and its actions so a compatible provider change can be made at the gateway.
+
 | Entry point | Data sent | What the desktop does with the result |
 | --- | --- | --- |
 | Legacy `POST /plan`, schema 1 | Goal, language and whether an application target was resolved | Older clients understand a route-only proposal or a request for clarification. The endpoint remains available for those clients. |

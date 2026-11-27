@@ -63,9 +63,14 @@ public sealed class SimpleConnectStatusTests
 
             Assert.True(panel.IsEffectivelyVisible);
             CaptureAssistant("simple-home-assistant-ru-380");
-            panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Assert.True(panel.FindControl<TextBox>("AssistantGoal")!.IsEffectivelyVisible);
-            CaptureAssistant("simple-home-assistant-open-ru-380");
+            var goal = panel.FindControl<TextBox>("AssistantGoal")!;
+            var send = panel.FindControl<Button>("RunAssistant")!;
+            Assert.True(goal.IsEffectivelyVisible);
+            Assert.False(send.IsEnabled);
+            goal.Text = "Хочу, чтобы игры шли мимо VPN";
+            Assert.True(send.IsEnabled);
+            Assert.Equal("Отправить", send.Content);
+            CaptureAssistant("simple-home-assistant-typed-ru-380");
         }
         finally { VPNRouter.App.Localization.Strings.Lang = language; }
     }
@@ -89,7 +94,7 @@ public sealed class SimpleConnectStatusTests
 
         var assistant = Assert.Single(view.Page.GetVisualDescendants().OfType<AssistantSetupPanel>());
         Assert.True(assistant.IsEffectivelyVisible);
-        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(assistant.FindControl<TextBox>("AssistantGoal")!.IsEffectivelyVisible);
         Assert.True(assistant.FindControl<StackPanel>("AssistantFields")!.IsEffectivelyVisible);
 
         var scroll = view.Page.FindControl<ScrollViewer>("SimpleContentScroll")!;

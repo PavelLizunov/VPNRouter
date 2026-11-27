@@ -21,3 +21,7 @@ Expose the assistant input on Simple Home and let a subscriber request that game
 6. Verify the public ViewModel characterization and the existing assistant regression suite.
 
 Routing has user-visible consequences. Rollback is a revert of the feature commit. Installed acceptance belongs to a separately shipped candidate.
+
+## Outcome
+
+The initial Windows test captured the collapsed r7 panel and its expanded state on the same 380 px Russian Simple Home at 01967676. All seven checks passed. The new layout exposes an empty free-text field with Send beside the input, supports Enter, and keeps confirmation, cancellation and undo in the panel. The game and regional routing verification follows this UI block.
