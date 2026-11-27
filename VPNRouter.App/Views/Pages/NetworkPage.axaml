@@ -1735,18 +1735,17 @@
                              TextWrapping="Wrap"
                              Foreground="{DynamicResource WarningFgBrush}"/>
                   <StackPanel Spacing="6">
-                    <Button Classes="solid" Command="{Binding UpdateVm.ConfirmRollbackCommand}"
-                            Background="{DynamicResource WarningSolidBrush}"
-                            Foreground="White"
+                    <Button Classes="warning-action" Command="{Binding UpdateVm.ConfirmRollbackCommand}"
                             HorizontalAlignment="Stretch"
-                            FontSize="10" Padding="10,5" MinHeight="0"
+                            FontSize="11" Padding="10,6" MinHeight="0"
+                            CornerRadius="{StaticResource RadiusSm}"
                             AutomationProperties.AutomationId="ConfirmVersionRollbackButton">
                       <TextBlock Text="{Binding UpdateVm.ConfirmRollbackText}"
                                  TextWrapping="Wrap" TextAlignment="Center"/>
                     </Button>
-                    <Button Command="{Binding UpdateVm.CancelRollbackCommand}"
+                    <Button Classes="ghost" Command="{Binding UpdateVm.CancelRollbackCommand}"
                             HorizontalAlignment="Stretch"
-                            FontSize="10" Padding="10,5" MinHeight="0">
+                            FontSize="11" Padding="10,5" MinHeight="0">
                       <TextBlock Text="{Binding UpdateVm.CancelRollbackText}"
                                  TextWrapping="Wrap" TextAlignment="Center"/>
                     </Button>

@@ -494,10 +494,23 @@ public partial class ServerViewModel : ViewModelBase
     /// <summary>What the server is good for; the lists show it as the coloured icon in front of the name.</summary>
     public ProtocolGroup ProtocolGroup => ProtocolGroups.Of(_originalEntry);
 
+    public bool HasTurnRelayHop { get; private set; }
+    public bool IsChainUpstreamMissing { get; private set; }
+    public bool IsTurnRelayCoreMissing { get; private set; }
+    public string TurnRelayBadgeText => HasTurnRelayHop ? CoreStrings.SmpTurnRelayBadge : string.Empty;
+    public string TurnRelayTooltip => HasTurnRelayHop ? CoreStrings.SmpTurnRelayTooltip : string.Empty;
+    public string UnavailableReasonText => IsChainUpstreamMissing
+        ? CoreStrings.SmpTurnRelayMissingHop
+        : IsTurnRelayCoreMissing
+            ? CoreStrings.SmpTurnRelayCoreRequired
+            : CoreStrings.SmpServerUnsupported;
+
     // A TurnRelay row is a chain upstream and must never be selected as the exit.
     public bool CanSelectInSimpleMode => ConfigGenerator.IsServerRuntimeAvailable(_originalEntry) &&
         _originalEntry?.IsTurnRelay != true &&
-        (_originalEntry.Dnstt == null || SingBoxFeatures.DnsttAvailable);
+        (_originalEntry?.Dnstt == null || SingBoxFeatures.DnsttAvailable) &&
+        !IsChainUpstreamMissing &&
+        !IsTurnRelayCoreMissing;
 
     public string ProtocolUseCase => ProtocolGroup switch
     {
@@ -532,5 +545,58 @@ public partial class ServerViewModel : ViewModelBase
         foreach (var v in list)
             if (VPNRouter.Core.Services.NaivePairing.IsNaive(v._originalEntry))
                 v.HasUdpSibling = VPNRouter.Core.Services.NaivePairing.FindUdpSibling(v._originalEntry!, pool) != null;
+    }
+
+    public static void RefreshChainFlags(System.Collections.Generic.IEnumerable<ServerViewModel> vms)
+    {
+        var list = new System.Collections.Generic.List<ServerViewModel>(vms);
+        foreach (var group in list.GroupBy(v => v.SubscriptionId ?? string.Empty, StringComparer.Ordinal))
+        {
+            var members = group.ToList();
+            foreach (var v in members)
+            {
+                var detour = v._originalEntry?.DetourVia;
+                bool hasTurnRelay = false;
+                bool missingUpstream = false;
+                bool missingCore = false;
+
+                if (!string.IsNullOrWhiteSpace(detour))
+                {
+                    var matches = members.Where(other =>
+                        !ReferenceEquals(other, v) &&
+                        other._originalEntry != null &&
+                        string.Equals(other._originalEntry.OutboundId, detour, StringComparison.Ordinal)).ToList();
+                    if (matches.Count == 1)
+                    {
+                        var hop = matches[0]._originalEntry!;
+                        if (hop.IsTurnRelay)
+                        {
+                            hasTurnRelay = true;
+                            missingCore = !SingBoxFeatures.TurnRelayAvailable;
+                        }
+                    }
+                    else
+                    {
+                        missingUpstream = true;
+                    }
+                }
+
+                if (v.HasTurnRelayHop != hasTurnRelay ||
+                    v.IsChainUpstreamMissing != missingUpstream ||
+                    v.IsTurnRelayCoreMissing != missingCore)
+                {
+                    v.HasTurnRelayHop = hasTurnRelay;
+                    v.IsChainUpstreamMissing = missingUpstream;
+                    v.IsTurnRelayCoreMissing = missingCore;
+                    v.OnPropertyChanged(nameof(HasTurnRelayHop));
+                    v.OnPropertyChanged(nameof(IsChainUpstreamMissing));
+                    v.OnPropertyChanged(nameof(IsTurnRelayCoreMissing));
+                    v.OnPropertyChanged(nameof(TurnRelayBadgeText));
+                    v.OnPropertyChanged(nameof(TurnRelayTooltip));
+                    v.OnPropertyChanged(nameof(UnavailableReasonText));
+                    v.OnPropertyChanged(nameof(CanSelectInSimpleMode));
+                }
+            }
+        }
     }
 }

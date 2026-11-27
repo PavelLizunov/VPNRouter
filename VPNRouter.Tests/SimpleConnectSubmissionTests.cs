@@ -143,8 +143,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
         }
         finally { SubscriptionFetcher.Http = originalHttp; }
 
-        if (cached) Assert.Empty(http.SentRequests);
-        else Assert.Equal(Feed, Assert.Single(http.SentRequests).Uri.AbsoluteUri);
+        Assert.Equal(Feed, Assert.Single(http.SentRequests).Uri.AbsoluteUri);
         Assert.False(vm.IsConnecting);
         Assert.False(vm.IsSplitTunnel);
         Assert.True(vm.HasPendingAppChanges);
@@ -164,7 +163,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
         Assert.Equal("subscribe", started.App.ConfigMode);
         var source = Assert.Single(started.App.Subscriptions);
         Assert.Equal(Feed, source.Url);
-        var expectedRows = cached ? new[] { "first", "manual" } : new[] { "first", "winner", "manual" };
+        var expectedRows = new[] { "first", "winner", "manual" };
         Assert.Equal(expectedRows, source.Servers.Select(s => s.Name));
         Assert.Equal(expectedRows, started.Vless.Servers.Select(s => s.Name));
         var chosen = cached ? "manual" : "winner";
@@ -288,7 +287,7 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
             Assert.Equal(expected, Assert.Single(EngineSelection(Assert.Single(starts))).Server);
             Assert.Equal(expected, editor.SelectedSubscriptionServer?.Server);
             Assert.Equal(new[] { b.Server, a.Server }, Assert.Single(store.Load(AppPaths.ConfigYamlPath).App.Subscriptions).Servers.Select(row => row.Server));
-            Assert.Single(http.SentRequests);
+            Assert.Equal(2, http.SentRequests.Count);
         }
         finally { SubscriptionFetcher.Http = oldHttp; }
     }
@@ -437,7 +436,35 @@ public sealed class SimpleConnectSubmissionTests : IDisposable
         Assert.Equal(new[] { target.Server, via.Server }, active.Select(s => s.Server));
         Assert.Equal("new-hop", active[0].DetourVia);
         Assert.Equal(active[0].DetourVia, active[1].OutboundId);
+        Assert.Equal(2, http.SentRequests.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task SimpleConnectFallsBackToCachedServersWhenPreConnectRefreshFails()
+    {
+        var dead = ServerUriParser.Parse(Link("dead"));
+        var working = ServerUriParser.Parse(Link("working"));
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "subscribe";
+        settings.App.Subscriptions = [new() { Enabled = true, Url = Feed, Servers = [dead, working] }];
+        var store = new InMemorySettingsStore();
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        var http = new FakeHttpClient().Setup(Feed, string.Empty, statusCode: 502);
+        SubscriptionFetcher.Http = http;
+
+        using var vm = new MainWindowViewModel(store);
+        vm.SimpleProbe = (rows, _) => Task.FromResult(rows.Select(row =>
+            new ServerLiveness(row, Alive: row.Name == "working", LatencyMs: 15)).ToList());
+        var starts = CaptureSimpleStarts(vm);
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
         Assert.Single(http.SentRequests);
+        Assert.True(vm.IsConnected);
+        Assert.Empty(vm.SmpErrorText);
+        var submitted = Assert.Single(starts);
+        Assert.Equal(working.Server, Assert.Single(EngineSelection(submitted)).Server);
+        Assert.Equal(working.Server, vm.SelectedSubscriptionServer?.Server);
     }
 
     [AvaloniaTheory]

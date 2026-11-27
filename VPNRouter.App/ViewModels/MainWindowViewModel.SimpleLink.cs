@@ -29,16 +29,21 @@ public partial class MainWindowViewModel
         }
     }
 
+    internal readonly record struct SimpleLinkSaveResult(string? Error, string? Notice);
+
     // The editor owns the draft. The view supplies its lifetime so a cancelled or edited submission
     // cannot publish a late network result to the settings or to a different view.
-    internal async Task<string?> SaveSimpleLinkAsync(string input, Func<bool> isCurrent)
+    internal async Task<string?> SaveSimpleLinkAsync(string input, Func<bool> isCurrent) =>
+        (await SaveSimpleLinkDetailedAsync(input, isCurrent)).Error;
+
+    internal async Task<SimpleLinkSaveResult> SaveSimpleLinkDetailedAsync(string input, Func<bool> isCurrent)
     {
-        if (SafeMode.Enabled) return Strings.ApplyFailed;
-        if (_savingSimpleLink || !CanSaveSimpleLink()) return Strings.SmpLinkSaveBusy;
+        if (SafeMode.Enabled) return new(Strings.ApplyFailed, null);
+        if (_savingSimpleLink || !CanSaveSimpleLink()) return new(Strings.SmpLinkSaveBusy, null);
         input = input.Trim();
         var kind = SimpleInputDetector.Classify(input);
         if (kind == SmpInputKind.Invalid || (kind == SmpInputKind.SubscriptionUrl && input.Any(char.IsControl)))
-            return Strings.SmpLinkInputInvalid;
+            return new(Strings.SmpLinkInputInvalid, null);
 
         var choiceUnchanged = CaptureSimpleChoice(out _);
         var generation = _connectionGeneration;
@@ -59,24 +64,24 @@ public partial class MainWindowViewModel
                 if (input.IndexOfAny(['\r', '\n']) >= 0)
                 {
                     pair = ServerUriParser.ParseTurnRelayPair(input, out _);
-                    if (pair == null) return Strings.SmpTurnRelayChainRequired;
+                    if (pair == null) return new(Strings.SmpTurnRelayChainRequired, null);
                     server = pair[^1];
                 }
                 else
                 {
-                    if (input.Any(char.IsControl)) return Strings.SmpLinkInputInvalid;
+                    if (input.Any(char.IsControl)) return new(Strings.SmpLinkInputInvalid, null);
                     server = ParseSimpleServerLink(input, out var error);
-                    if (server == null) return error;
+                    if (server == null) return new(error, null);
                 }
             }
             else
             {
                 if (!Uri.TryCreate(input, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
-                    return Strings.SmpLinkInputInvalid;
+                    return new(Strings.SmpLinkInputInvalid, null);
 
                 var registered = Subscriptions.Select(row => row.ToEntry()).ToList();
                 action = SimpleConnectPolicy.DecideSubscriptionInput(input, registered);
-                if (action == SubscriptionInputAction.Disabled) return SubscriptionDisabledMessage;
+                if (action == SubscriptionInputAction.Disabled) return new(SubscriptionDisabledMessage, null);
                 feed = registered.FirstOrDefault(entry => entry.Enabled && SimpleConnectPolicy.SameUrl(entry.Url, input))
                     ?? new SubscriptionEntry { Name = "simple", Url = input, Enabled = true };
                 if (action != SubscriptionInputAction.KeepCached)
@@ -91,18 +96,18 @@ public partial class MainWindowViewModel
             if (!isCurrent() || !CanSaveSimpleLink() || generation != _connectionGeneration || IsConnected != wasConnected ||
                 applyGeneration != _subscriptionRefreshApplyGeneration ||
                 revision != _routingSettingsRevision || !ReferenceEquals(settings, _settings) || !choiceUnchanged())
-                return Strings.SmpLinkSaveStale;
-            if (refreshFailed) return Strings.SyncEmpty;
+                return new(Strings.SmpLinkSaveStale, null);
+            if (refreshFailed) return new(Strings.SyncEmpty, null);
             if (server != null && input == SimpleSavedLink ||
                 feed != null && action == SubscriptionInputAction.KeepCached && SimpleConnectPolicy.SameUrl(input, SimpleSavedLink))
-                return null;
+                return new(null, Strings.SmpLinkAlreadySaved);
 
             var candidate = SnapshotDesktopSettings();
             var rememberConsumedLink = false;
             if (server != null)
             {
                 var dnsttError = CheckSimpleDnsttLink(server, out var existingRow, out rememberConsumedLink);
-                if (dnsttError != null) return dnsttError;
+                if (dnsttError != null) return new(dnsttError, null);
 
                 candidate.App.ConfigMode = "generated";
                 candidate.App.SubscriptionPreference = null;
@@ -134,17 +139,22 @@ public partial class MainWindowViewModel
                 _consumedServerInput = input;
                 _consumedServerEntry = SelectedServer?.SourceEntry;
             }
-            return null;
+            var loadedCount = server != null ? 1 : (feed?.Servers.Count(s => !s.IsTurnRelay) ?? SmpSelectableServerCount);
+            var countLabel = Strings.SmpKindServers(loadedCount);
+            var notice = wasConnected
+                ? Strings.SmpLinkSavedConnected(countLabel)
+                : Strings.SmpLinkSavedLoaded(countLabel);
+            return new(null, notice);
         }
         catch (Exception ex)
         {
             _logger.Warning("[Simple] Link save failed ({ErrorType})", ex.GetType().Name);
-            return Strings.ApplyFailed;
+            return new(Strings.ApplyFailed, null);
         }
         finally { _savingSimpleLink = false; }
     }
 
-    private bool CanSaveSimpleLink() => !_disposed && (IsSimpleMode || IsSubscribeMode) && SmpHasConfig &&
+    private bool CanSaveSimpleLink() => !_disposed && (IsSimpleMode || IsSubscribeMode) &&
         !SimpleCtaIsConnecting && !_isReconnecting && !SmpSubscriptionsRefreshing;
 
     private static void SelectSavedSimpleFeed(AppConfig app, SubscriptionEntry feed, SubscriptionInputAction action)

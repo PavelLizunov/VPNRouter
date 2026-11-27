@@ -27,7 +27,7 @@
     <Window.Styles>
 
         <Style Selector="TextBlock.section-label">
-            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
             <Setter Property="Margin" Value="8,6,8,4"/>
@@ -88,7 +88,7 @@
         </Style>
 
         <Style Selector="TextBlock.version-hint">
-            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         </Style>
@@ -322,9 +322,9 @@
         <Border Grid.Row="1" Padding="14,10,10,10" BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource BorderSubtleBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
                 <!-- The brand tile: the mascot art placed on its light tile by tools/icons/make-icons.py (art unchanged); it reads in both themes. -->
-                <Border Grid.Column="0" Width="40" Height="40"
+                <Border Grid.Column="0" Width="40" Height="40" Margin="0,0,6,0"
                         CornerRadius="{StaticResource RadiusLg}"
                         DoubleTapped="OnBrandTileDoubleTapped"
                         ToolTip.Tip="{Binding L_SmpMenuResetWindowSize}"
@@ -417,6 +417,88 @@
                     </StackPanel>
                 </StackPanel>
 
+                <!-- Simple mode quick-add "+" right next to the overflow menu: add a subscription or server link in one click. -->
+                <Button Name="QuickAddButton" Grid.Column="2" Width="32" Height="32" Padding="0"
+                        IsVisible="{Binding IsSimpleMode}"
+                        IsEnabled="{Binding !SimpleCtaIsConnecting}"
+                        Background="Transparent" BorderThickness="0"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Foreground="{DynamicResource TextPrimaryBrush}"
+                        VerticalAlignment="Center"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        Cursor="Hand">
+                    <Button.Content><icons:Pictogram Id="add" Width="18" Height="18"/></Button.Content>
+                    <Button.Styles>
+                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+                        </Style>
+                    </Button.Styles>
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight"
+                                ShowMode="Standard"
+                                FlyoutPresenterClasses="naked">
+                            <Border Width="296"
+                                    Background="{DynamicResource SurfaceBaseBrush}"
+                                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="12">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Name="QuickAddTitle"
+                                               FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               TextWrapping="Wrap"/>
+                                    <TextBox Name="QuickAddInput"
+                                             PlaceholderText="{Binding L_SmpInputWatermark}"
+                                             FontSize="12"
+                                             MinHeight="40"
+                                             AcceptsReturn="True" MaxLines="3"
+                                             CornerRadius="{StaticResource RadiusMd}"
+                                             KeyDown="OnQuickAddInputKeyDown">
+                                        <TextBox.InnerLeftContent>
+                                            <icons:Pictogram Id="link" Width="14" Height="14"
+                                                             Margin="10,0,0,0"
+                                                             VerticalAlignment="Center"
+                                                             Foreground="{DynamicResource TextMutedBrush}"/>
+                                        </TextBox.InnerLeftContent>
+                                    </TextBox>
+                                    <ProgressBar Name="QuickAddProgress"
+                                                 Height="3" MinHeight="3"
+                                                 IsIndeterminate="True"
+                                                 Foreground="{DynamicResource AccentSolidBrush}"
+                                                 IsVisible="False"/>
+                                    <TextBlock Name="QuickAddError"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource DangerFgBrush}"
+                                               AutomationProperties.LiveSetting="Polite"
+                                               IsVisible="False"/>
+                                    <TextBlock Name="QuickAddNotice"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource SuccessFgBrush}"
+                                               AutomationProperties.LiveSetting="Polite"
+                                               IsVisible="False"/>
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                                        <Button Grid.Column="0" Name="QuickAddPasteButton"
+                                                Classes="ghost" FontSize="11" Padding="8,5"
+                                                Click="OnQuickAddPasteClick"/>
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                            <Button Name="QuickAddCancelButton"
+                                                    Classes="ghost" FontSize="11" Padding="8,5"
+                                                    Click="OnQuickAddCancelClick"/>
+                                            <Button Name="QuickAddSaveButton"
+                                                    Classes="solid" FontSize="11" Padding="12,5"
+                                                    Background="{DynamicResource AccentSolidBrush}"
+                                                    Foreground="{DynamicResource AccentOnSolidBrush}"
+                                                    Click="OnQuickAddSaveClick"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
                 <!-- The way back to the home screen: the house icon and the word "Home" on a quiet accent tint, like the other header controls. -->
                 <Button Grid.Column="2"
                         Command="{Binding ToggleUiModeCommand}"
@@ -444,25 +526,29 @@
                     </Button.Styles>
                 </Button>
 
-                <Button Grid.Column="3" Width="28" Height="28" Padding="0"
+                <Button Name="OverflowMenuButton" Grid.Column="3" Width="32" Height="32" Padding="0"
                         FontSize="15" FontWeight="Bold"
                         Background="Transparent" BorderThickness="0"
                         CornerRadius="{StaticResource RadiusSm}"
                         Foreground="{DynamicResource TextSecondaryBrush}"
                         VerticalAlignment="Center"
                         HorizontalContentAlignment="Center"
-                        VerticalContentAlignment="Center">
+                        VerticalContentAlignment="Center"
+                        AutomationProperties.Name="Menu">
                     <Button.Content><icons:Pictogram Id="more-horizontal" Width="18" Height="18"/></Button.Content>
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight"
-                                ShowMode="TransientWithDismissOnPointerMoveAway"
+                                ShowMode="Standard"
                                 FlyoutPresenterClasses="naked">
-                            <Border Width="232"
+                            <Border Width="248"
                                     Background="{DynamicResource SurfaceBaseBrush}"
                                     BorderBrush="{DynamicResource BorderDefaultBrush}"
                                     BorderThickness="1"
                                     CornerRadius="{StaticResource RadiusMd}"
                                     Padding="6">
+                                <ScrollViewer MaxHeight="520"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
                                 <StackPanel Spacing="1">
 
                                     <TextBlock Classes="section-label"
@@ -521,9 +607,6 @@
                                             Command="{Binding OpenLeakTestCommand}"
                                             Content="{Binding L_SmpMenuCheckLeaks}"
                                             ToolTip.Tip="{Binding L_TipIpLeak}"/>
-                                    <Button Classes="menu-item"
-                                            Command="{Binding UpdateVm.CheckManuallyCommand}"
-                                            Content="{Binding UpdateVm.CheckLinkText}"/>
 
                                     <Border Classes="menu-divider"/>
 
@@ -557,6 +640,16 @@
 
                                     <Border Classes="menu-divider"/>
 
+                                    <TextBlock Name="MenuAppSectionLabel" Classes="section-label"/>
+
+                                    <Button Classes="menu-item"
+                                            Command="{Binding UpdateVm.CheckManuallyCommand}">
+                                        <TextBlock Text="{Binding UpdateVm.CheckLinkText}"
+                                                   TextWrapping="Wrap"
+                                                   AutomationProperties.LiveSetting="Polite"/>
+                                    </Button>
+                                    <Button Name="MenuVersionHistoryButton" Classes="menu-item"
+                                            Click="OnOpenVersionHistoryClick"/>
                                     <Button Classes="menu-item"
                                             Command="{Binding OpenAboutCommand}"
                                             ToolTip.Tip="{Binding L_TipSmpMenuAbout}">
@@ -575,6 +668,7 @@
                                             Command="{Binding ToggleUiModeCommand}"
                                             icons:PictogramText.Icons="chevron-left,chevron-right" icons:PictogramText.Content="{Binding UiModeToggleText}"/>
                                 </StackPanel>
+                                </ScrollViewer>
                             </Border>
                         </Flyout>
                     </Button.Flyout>
@@ -589,23 +683,30 @@
                 BorderThickness="0,0,0,1"
                 Padding="16,10">
             <DockPanel>
-                <Button Classes="solid" DockPanel.Dock="Right"
+                <Button Classes="warning-action" DockPanel.Dock="Right"
                         Content="{Binding L_UpdateButton}"
                         Command="{Binding UpdateVm.DownloadAndApplyCommand}"
                         IsVisible="{Binding !UpdateVm.IsDownloading}"
-                        Background="{DynamicResource WarningSolidBrush}" Foreground="White"
-                        FontWeight="Bold" Padding="14,6" CornerRadius="{StaticResource RadiusSm}"/>
+                        FontWeight="Bold" Padding="14,6" CornerRadius="{StaticResource RadiusSm}"
+                        VerticalAlignment="Center"/>
                 <ProgressBar DockPanel.Dock="Right"
                              Value="{Binding UpdateVm.DownloadProgress}"
                              Maximum="100"
-                             Width="180" Height="20"
+                             Width="160" Height="18"
                              Margin="8,0,0,0"
+                             VerticalAlignment="Center"
                              IsVisible="{Binding UpdateVm.IsDownloading}"/>
-                <TextBlock Text="{Binding UpdateVm.Message}"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource WarningFgBrush}"
-                           FontWeight="Bold"
-                           TextTrimming="CharacterEllipsis"/>
+                <StackPanel Spacing="2" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding UpdateVm.Message}"
+                               Foreground="{DynamicResource WarningFgBrush}"
+                               FontWeight="Bold"
+                               TextWrapping="Wrap"
+                               AutomationProperties.LiveSetting="Polite"/>
+                    <TextBlock Text="{Binding UpdateVm.UpdateBannerDetails}"
+                               FontSize="{StaticResource FsSm}"
+                               Foreground="{DynamicResource WarningFgBrush}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
             </DockPanel>
         </Border>
 

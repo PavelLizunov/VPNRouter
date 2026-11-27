@@ -181,7 +181,7 @@ public sealed class SubscriptionChainRefreshTests : IDisposable
         Assert.Equal(0, probeCalls);
         Assert.NotNull(started);
         CheckChain(started, false);
-        Assert.Empty(((FakeHttpClient)SubscriptionFetcher.Http).SentRequests);
+        Assert.Single(((FakeHttpClient)SubscriptionFetcher.Http).SentRequests);
     }
 
     [AvaloniaFact]

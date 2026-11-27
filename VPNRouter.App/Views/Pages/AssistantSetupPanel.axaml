@@ -2,41 +2,82 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="VPNRouter.App.Views.Pages.AssistantSetupPanel"
              IsVisible="False">
-    <StackPanel Spacing="8" Margin="0,16,0,0">
-        <Button x:Name="OpenAssistant" Click="OpenAssistant_Click"
-                AutomationProperties.AutomationId="Assistant.Open"
-                HorizontalAlignment="Left"/>
-        <StackPanel x:Name="AssistantFields" IsVisible="False" Spacing="8">
-            <TextBox x:Name="AssistantGoal" AutomationProperties.AutomationId="Assistant.Goal"
-                     AcceptsReturn="False" MaxLength="384"/>
-            <TextBlock x:Name="AssistantNotice" FontSize="{StaticResource FsSm}"
-                       Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
-            <TextBlock x:Name="AssistantStatus" TextWrapping="Wrap"
-                       AutomationProperties.AutomationId="Assistant.Status"
-                       AutomationProperties.LiveSetting="Polite"/>
-            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
-                <Button x:Name="RunAssistant" AutomationProperties.AutomationId="Assistant.Run"
-                        Click="RunAssistant_Click"/>
-                <Button x:Name="DiagnoseCrash" AutomationProperties.AutomationId="Assistant.DiagnoseCrash"
-                        Click="DiagnoseCrash_Click"/>
-                <Button x:Name="RepairVpn" AutomationProperties.AutomationId="Assistant.Repair"
-                        Click="RepairVpn_Click"/>
-                <Button x:Name="ConfirmAssistant" AutomationProperties.AutomationId="Assistant.Confirm"
-                        Click="ConfirmAssistant_Click" IsVisible="False"/>
-                <Button x:Name="CancelAssistant" AutomationProperties.AutomationId="Assistant.Cancel"
-                        Click="CancelAssistant_Click" IsVisible="False"/>
-                <Button x:Name="UndoAssistant" AutomationProperties.AutomationId="Assistant.Undo"
-                        Click="UndoAssistant_Click" IsVisible="False"/>
-            </WrapPanel>
-            <Expander x:Name="SourceDiagnosisDetails" HorizontalContentAlignment="Stretch">
-                <StackPanel Spacing="6">
-                    <TextBlock x:Name="SourceDiagnosisNotice" TextWrapping="Wrap"/>
-                    <Button x:Name="DiagnoseConnection" HorizontalAlignment="Left"
-                            AutomationProperties.AutomationId="Assistant.DiagnoseConnection" Click="DiagnoseSource_Click"/>
-                    <Button x:Name="DiagnoseSource" HorizontalAlignment="Left"
-                            AutomationProperties.AutomationId="Assistant.DiagnoseSource" Click="DiagnoseSource_Click"/>
+    <Border Margin="0,16,0,0"
+            Background="{DynamicResource SurfaceBaseBrush}"
+            BorderBrush="{DynamicResource BorderDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource RadiusXl}"
+            Padding="14,12">
+        <StackPanel Spacing="10">
+            <Button x:Name="OpenAssistant" Classes="ghost" Click="OpenAssistant_Click"
+                    AutomationProperties.AutomationId="Assistant.Open"
+                    HorizontalAlignment="Left" Padding="4,4"/>
+            <StackPanel x:Name="AssistantFields" IsVisible="False" Spacing="12">
+                <!-- 1. Local repair (nothing leaves the device). -->
+                <StackPanel x:Name="LocalRepairSection" Spacing="6">
+                    <TextBlock x:Name="LocalRepairTitle" FontSize="{StaticResource FsSm}" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                        <Button x:Name="RepairVpn" Classes="outline" AutomationProperties.AutomationId="Assistant.Repair"
+                                Click="RepairVpn_Click"/>
+                        <Button x:Name="UndoAssistant" Classes="ghost" AutomationProperties.AutomationId="Assistant.Undo"
+                                Click="UndoAssistant_Click" IsVisible="False"/>
+                    </WrapPanel>
                 </StackPanel>
-            </Expander>
+
+                <!-- 2. Command & quick crash diagnosis via DeepSeek. -->
+                <StackPanel x:Name="CloudAssistantSection" Spacing="6">
+                    <TextBlock x:Name="CloudAssistantTitle" FontSize="{StaticResource FsSm}" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                    <TextBox x:Name="AssistantGoal" AutomationProperties.AutomationId="Assistant.Goal"
+                             AcceptsReturn="False" MaxLength="384" MinHeight="36"
+                             CornerRadius="{StaticResource RadiusMd}"/>
+                    <TextBlock x:Name="AssistantNotice" FontSize="{StaticResource FsSm}"
+                               Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                        <Button x:Name="RunAssistant" Classes="outline" AutomationProperties.AutomationId="Assistant.Run"
+                                Click="RunAssistant_Click"/>
+                        <Button x:Name="DiagnoseCrash" Classes="ghost" AutomationProperties.AutomationId="Assistant.DiagnoseCrash"
+                                Click="DiagnoseCrash_Click"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="AssistantCrashNotice" FontSize="{StaticResource FsSm}"
+                               Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <!-- 3. Source-code diagnosis (explicit consent before send). -->
+                <Expander x:Name="SourceDiagnosisDetails" HorizontalContentAlignment="Stretch">
+                    <StackPanel Spacing="8" Margin="0,6,0,0">
+                        <TextBlock x:Name="SourceDiagnosisNotice" FontSize="{StaticResource FsSm}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                            <Button x:Name="DiagnoseConnection" Classes="outline" HorizontalAlignment="Left"
+                                    AutomationProperties.AutomationId="Assistant.DiagnoseConnection" Click="DiagnoseSource_Click"/>
+                            <Button x:Name="DiagnoseSource" Classes="outline" HorizontalAlignment="Left"
+                                    AutomationProperties.AutomationId="Assistant.DiagnoseSource" Click="DiagnoseSource_Click"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Expander>
+
+                <!-- 4. Active status, progress, and explicit confirmation/cancel pair. -->
+                <StackPanel x:Name="AssistantFeedbackArea" Spacing="8">
+                    <ProgressBar x:Name="AssistantProgress" Height="3" MinHeight="3" IsIndeterminate="True"
+                                 Foreground="{DynamicResource AccentSolidBrush}" IsVisible="False"/>
+                    <TextBlock x:Name="AssistantStatus" FontSize="{StaticResource FsSm}" LineHeight="18"
+                               TextWrapping="Wrap"
+                               AutomationProperties.AutomationId="Assistant.Status"
+                               AutomationProperties.LiveSetting="Polite"/>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                        <Button x:Name="ConfirmAssistant" Classes="solid"
+                                Background="{DynamicResource AccentSolidBrush}"
+                                Foreground="{DynamicResource AccentOnSolidBrush}"
+                                AutomationProperties.AutomationId="Assistant.Confirm"
+                                Click="ConfirmAssistant_Click" IsVisible="False"/>
+                        <Button x:Name="CancelAssistant" Classes="ghost"
+                                AutomationProperties.AutomationId="Assistant.Cancel"
+                                Click="CancelAssistant_Click" IsVisible="False"/>
+                    </WrapPanel>
+                </StackPanel>
+            </StackPanel>
         </StackPanel>
-    </StackPanel>
+    </Border>
 </UserControl>

@@ -574,14 +574,23 @@ public static partial class Strings
         ? "Пока недоступно на Linux"
         : "Not available on Linux yet";
 
-    public static string CheckForUpdates => Ru ? "Проверить обновления" : "Check for updates";
+    public static string CheckForUpdates => Ru ? "Проверить обновления приложения" : "Check app updates";
     public static string Checking => Ru ? "Проверка..." : "Checking...";
     public static string UpToDate => Ru ? "Актуальная версия" : "Up to date";
-    public static string CheckFailed => Ru ? "Ошибка проверки" : "Check failed";
-    public static string UpdateAvailableShort => Ru ? "Обновление доступно" : "Update available";
+    internal static string UpToDateWithVersion(string version) => Ru
+        ? $"Приложение актуально (v{version})"
+        : $"App is up to date (v{version})";
+    public static string CheckFailed => Ru ? "Не удалось проверить обновления" : "Couldn't check app updates";
+    public static string UpdateAvailableShort => Ru ? "Доступно обновление приложения" : "App update available";
+    internal static string UpdateAvailableWithVersion(string version) => Ru
+        ? $"Доступно обновление приложения v{version}"
+        : $"App update available: v{version}";
     public static string UpdateAvailableMessage => Ru
-        ? "Доступно обновление v{0} ({1:F1} МБ)"
-        : "Update available: v{0} ({1:F1} MB)";
+        ? "Доступно обновление приложения v{0} ({1:F1} МБ)"
+        : "App update available: v{0} ({1:F1} MB)";
+    internal static string UpdateBannerDetails(string currentVersion) => Ru
+        ? $"Текущая: v{currentVersion}. VPN остановится на время обновления."
+        : $"Current: v{currentVersion}. VPN will stop during the update.";
     public static string UpdateButton => Ru ? "Обновить" : "Update";
     public static string UpdateDownloading => Ru ? "Загрузка обновления: {0}%" : "Downloading update: {0}%";
     public static string UpdateApplying => Ru ? "Применение обновления..." : "Applying update...";
@@ -604,6 +613,9 @@ public static partial class Strings
     public static string RollbackConfirmation => Ru
         ? "Установить v{0}? VPN остановится, приложение перезапустится. Перед откатом будет сохранена резервная копия настроек."
         : "Install v{0}? VPN will stop and the app will restart. A settings backup will be saved before rollback.";
+    internal static string RollbackConfirmationWithCurrent(string targetVersion, string currentVersion) => Ru
+        ? $"Установить v{targetVersion} вместо v{currentVersion}? VPN остановится, приложение перезапустится. Перед откатом сохранится копия настроек."
+        : $"Install v{targetVersion} in place of v{currentVersion}? VPN will stop and the app will restart. A settings backup will be saved first.";
     public static string ConfirmRollback => Ru ? "Установить старую версию" : "Install older version";
     public static string Cancel => Ru ? "Отмена" : "Cancel";
     public static string DowngradeNoConfigBackup => Ru

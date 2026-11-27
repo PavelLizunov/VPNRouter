@@ -19,7 +19,6 @@ namespace VPNRouter.App.ViewModels;
 
 public partial class UpdateNotificationViewModel : ObservableObject
 {
-    private const int CheckStateResetDelayMs = 3000;
     private const int StableHistoryLimit = 3;
     private const int CandidateHistoryLimit = 8;
 
@@ -30,10 +29,12 @@ public partial class UpdateNotificationViewModel : ObservableObject
     private readonly Action<int> _exitApplication;
     private readonly ConnectionRollbackHistory? _rollbackHistory;
     internal Func<Action<bool>>? ReserveRestart { get; set; }
-    private System.Threading.CancellationTokenSource? _resetCheckStateCts;
 
-    [ObservableProperty] private bool _isVisible;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UpdateBannerDetails))]
+    private bool _isVisible;
     [ObservableProperty] private string _message = string.Empty;
+    public string UpdateBannerDetails => IsVisible ? CoreStrings.UpdateBannerDetails(AppVersion.Version) : string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRollbackAssistanceChoiceVisible))]
     private bool _isDownloading;
@@ -48,8 +49,8 @@ public partial class UpdateNotificationViewModel : ObservableObject
     public string CheckLinkText => CheckState switch
     {
         UpdateCheckState.Checking => Strings.Checking,
-        UpdateCheckState.UpToDate => Strings.UpToDate,
-        UpdateCheckState.Found    => Strings.UpdateAvailableShort,
+        UpdateCheckState.UpToDate => CoreStrings.UpToDateWithVersion(AppVersion.Version),
+        UpdateCheckState.Found    => _pendingUpdate is { } info ? CoreStrings.UpdateAvailableWithVersion(info.Version) : Strings.UpdateAvailableShort,
         UpdateCheckState.Failed   => Strings.CheckFailed,
         _                         => Strings.CheckForUpdates,
     };
@@ -57,6 +58,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
     public void NotifyLangChanged()
     {
         OnPropertyChanged(nameof(CheckLinkText));
+        OnPropertyChanged(nameof(UpdateBannerDetails));
         OnPropertyChanged(nameof(VersionHistoryButtonText));
         OnPropertyChanged(nameof(VersionHistoryMessage));
         OnPropertyChanged(nameof(RollbackConfirmationText));
@@ -106,7 +108,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     public string RollbackConfirmationText => SelectedRollback == null
         ? string.Empty
-        : string.Format(Strings.RollbackConfirmation, SelectedRollback.Version);
+        : CoreStrings.RollbackConfirmationWithCurrent(SelectedRollback.Version, AppVersion.Version);
     public string ConfirmRollbackText => Strings.ConfirmRollback;
     public string CancelRollbackText => Strings.Cancel;
 
@@ -199,23 +201,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
         finally
         {
             IsChecking = false;
-            var oldCts = _resetCheckStateCts;
-            _resetCheckStateCts = new System.Threading.CancellationTokenSource();
-            var token = _resetCheckStateCts.Token;
-            if (oldCts != null)
-            {
-                try { oldCts.Cancel(); } catch (ObjectDisposedException) { }
-                oldCts.Dispose();
-            }
-            _ = Task.Delay(CheckStateResetDelayMs, token).ContinueWith(t =>
-            {
-                if (t.IsCanceled) return;
-                Dispatcher.UIThread.Post(() =>
-                {
-                    if (!token.IsCancellationRequested)
-                        CheckState = UpdateCheckState.Default;
-                });
-            }, TaskScheduler.Default);
+            OnPropertyChanged(nameof(CheckLinkText));
         }
     }
 

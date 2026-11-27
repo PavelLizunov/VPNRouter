@@ -6,8 +6,8 @@ public static partial class Strings
 {
     internal static string SourceDiagnosisTitle => Ru ? "Разбор по исходному коду" : "Analyze with source code";
     internal static string SourceDiagnosisNotice => Ru
-        ? "DeepSeek получит версию приложения, систему, архитектуру и признаки выбранного сбоя. Шлюз подберёт строки кода из этой сборки."
-        : "DeepSeek receives the app build, OS, architecture and the selected failure indicators. The gateway selects source lines from this build.";
+        ? "После подтверждения DeepSeek получит версию сборки, ОС, архитектуру, признаки выбранного события и подходящие фрагменты публичного исходного кода этой сборки."
+        : "After you confirm, DeepSeek receives the build version, OS, architecture, classified event indicators and selected public source excerpts for this build.";
     internal static string SourceDiagnosisPreview => Ru ? "Выбрать последний отчёт" : "Review latest report";
     internal static string SourceConnectionPreview => Ru ? "Разобрать последнее подключение" : "Review last failed connection";
     internal static string SourceConnectionExpired => Ru ? "Состояние подключения изменилось. Выберите актуальный сбой." : "The connection state changed. Select the current failure.";
@@ -31,6 +31,10 @@ public static partial class Strings
         ? "В отчёте не удалось определить ни тип ошибки, ни место сбоя, ни состояние подключения."
         : "The report contains no recognized error, failing component or connection signal.";
     internal static string SourceDiagnosisDeclined => Ru ? "Признаки сбоя остались на устройстве." : "Crash indicators stayed on this device.";
+    internal static string SourceConnectionDeclined => Ru ? "Сведения о подключении остались на устройстве." : "Connection indicators stayed on this device.";
+    internal static string SourceDiagnosisCancelledAfterSend => Ru
+        ? "Ожидание ответа остановлено. Уже отправленные данные не могут быть отозваны."
+        : "Stopped waiting for a reply. Data already sent cannot be recalled.";
     internal static string SourceDiagnosisDoNotSend => Ru ? "Не отправлять" : "Keep on device";
     internal static string SourceDiagnosisConsent(AssistantCrashReport report)
     {
@@ -42,6 +46,7 @@ public static partial class Strings
     }
 
     internal static string SourceDiagnosisSend => Ru ? "Отправить признаки сбоя" : "Send crash indicators";
+    internal static string SourceConnectionSend => Ru ? "Отправить признаки подключения" : "Send connection indicators";
     internal static string SourceDiagnosisMismatch => Ru
         ? "Не удалось связать последний отчёт с установленной сборкой. Можно воспользоваться обычным разбором сбоя."
         : "The last report could not be matched to this installation. You can still use Analyze crash.";
@@ -52,6 +57,7 @@ public static partial class Strings
         ? "В каталоге пока нет исходников этой сборки. Доступен обычный разбор сбоя."
         : "Source for this build is unavailable in the catalog. You can still use Analyze crash.";
     internal static string SourceDiagnosisWorking => Ru ? "Сопоставляю сбой с исходниками сборки…" : "Matching the crash to this build’s source…";
+    internal static string SourceConnectionWorking => Ru ? "Сопоставляю отказ подключения с исходниками сборки…" : "Matching the connection failure to this build’s source…";
 
     internal static string SourceDiagnosisText(AssistantSourceDiagnosis report)
     {

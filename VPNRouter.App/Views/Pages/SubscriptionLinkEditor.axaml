@@ -41,31 +41,37 @@
     </UserControl.Styles>
 
     <StackPanel Spacing="8">
-        <ToggleButton Name="SimpleLinkButton" Classes="change" HorizontalAlignment="Left" Click="ToggleLinkEditor">
+        <ToggleButton Name="SimpleLinkButton" Classes="ghost" HorizontalAlignment="Left" Click="ToggleLinkEditor">
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <icons:Pictogram Id="link" Width="14" Height="14"/>
                 <TextBlock Name="SimpleLinkButtonLabel"/>
             </StackPanel>
         </ToggleButton>
-        <StackPanel Name="SimpleLinkEditor" IsVisible="{Binding #SimpleLinkButton.IsChecked, FallbackValue=False}"
-                    Spacing="8">
-            <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" TextWrapping="Wrap"/>
-            <TextBox Name="SimpleConfigLink" PlaceholderText="{Binding L_SmpInputWatermark}"
-                     AutomationProperties.Name="{Binding L_SmpInputLabel}"
-                     MinHeight="40" AcceptsReturn="True" MaxLines="2" CornerRadius="{StaticResource RadiusLg}"/>
-            <TextBlock Name="SimpleLinkError" Classes="hint" TextWrapping="Wrap"
-                       AutomationProperties.LiveSetting="Polite"
-                       Foreground="{DynamicResource DangerFgBrush}"
-                       IsVisible="{Binding #SimpleLinkError.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-            <TextBlock Name="SimpleLinkProgress" Classes="hint" TextWrapping="Wrap"
-                       IsVisible="False" AutomationProperties.LiveSetting="Polite"/>
-            <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
-                <Button Name="SimpleCancelLink" Classes="change" Click="CancelLinkEdit"/>
-                <Button Name="SimpleSaveLink" Classes="solid" Click="SaveLink"
-                        Background="{DynamicResource AccentSolidBrush}"
-                        Foreground="{DynamicResource AccentOnSolidBrush}"/>
-            </WrapPanel>
-        </StackPanel>
+        <Border IsVisible="{Binding #SimpleLinkButton.IsChecked, FallbackValue=False}"
+                Background="{DynamicResource SurfaceSunkenBrush}"
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusMd}"
+                Padding="10">
+            <StackPanel Name="SimpleLinkEditor" Spacing="8">
+                <TextBlock Classes="label" Text="{Binding L_SmpInputLabel}" TextWrapping="Wrap"/>
+                <TextBox Name="SimpleConfigLink" PlaceholderText="{Binding L_SmpInputWatermark}"
+                         AutomationProperties.Name="{Binding L_SmpInputLabel}"
+                         MinHeight="40" AcceptsReturn="True" MaxLines="2" CornerRadius="{StaticResource RadiusLg}"/>
+                <TextBlock Name="SimpleLinkError" Classes="hint" TextWrapping="Wrap"
+                           AutomationProperties.LiveSetting="Polite"
+                           Foreground="{DynamicResource DangerFgBrush}"
+                           IsVisible="{Binding #SimpleLinkError.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <TextBlock Name="SimpleLinkProgress" Classes="hint" TextWrapping="Wrap"
+                           IsVisible="False" AutomationProperties.LiveSetting="Polite"/>
+                <WrapPanel ItemSpacing="6" LineSpacing="6" HorizontalAlignment="Right">
+                    <Button Name="SimpleCancelLink" Classes="ghost" Click="CancelLinkEdit"/>
+                    <Button Name="SimpleSaveLink" Classes="solid" Click="SaveLink"
+                            Background="{DynamicResource AccentSolidBrush}"
+                            Foreground="{DynamicResource AccentOnSolidBrush}"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
         <TextBlock Name="SimpleLinkNotice" Classes="hint" TextWrapping="Wrap"
                    AutomationProperties.LiveSetting="Polite"
                    IsVisible="{Binding #SimpleLinkNotice.Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>

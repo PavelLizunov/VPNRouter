@@ -154,14 +154,14 @@ public partial class SubscriptionLinkEditor : UserControl
         _linkError.Text = string.Empty;
         try
         {
-            var error = await vm.SaveSimpleLinkAsync(input, Current);
+            var result = await vm.SaveSimpleLinkDetailedAsync(input, Current);
             if (!Current()) return;
-            if (error != null) { _linkError.Text = error; return; }
+            if (result.Error != null) { _linkError.Text = result.Error; return; }
 
             var restoreFocus = _linkEditor.IsKeyboardFocusWithin;
             _hasLinkDraft = false;
             _linkButton.IsChecked = false;
-            _linkNotice.Text = Strings.SmpLinkSaved;
+            _linkNotice.Text = result.Notice ?? Strings.SmpLinkSaved;
             if (restoreFocus) _linkButton.Focus();
         }
         finally

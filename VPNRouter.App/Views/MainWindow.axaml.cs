@@ -1,5 +1,8 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Platform;
 using Avalonia.VisualTree;
@@ -13,11 +16,36 @@ public partial class MainWindow : Window
 {
     // Set after InitializeComponent: the window base class raises ClientSize changes from its own constructor, before the name scope exists.
     private ListBox? _mainTabs;
+    private int _quickAddRevision;
+    private bool _quickAddSaving;
 
     public MainWindow()
     {
         InitializeComponent();
         _mainTabs = this.FindControl<ListBox>("MainTabs");
+        if (QuickAddButton?.Flyout is { } quickAddFlyout)
+        {
+            quickAddFlyout.Opened += OnQuickAddFlyoutOpened;
+            quickAddFlyout.Closed += OnQuickAddFlyoutClosed;
+        }
+        if (QuickAddInput != null)
+        {
+            QuickAddInput.TextChanged += (_, _) =>
+            {
+                _quickAddRevision++;
+                if (QuickAddError != null)
+                {
+                    QuickAddError.Text = string.Empty;
+                    QuickAddError.IsVisible = false;
+                }
+                if (QuickAddNotice != null)
+                {
+                    QuickAddNotice.Text = string.Empty;
+                    QuickAddNotice.IsVisible = false;
+                }
+            };
+        }
+        RefreshMenuLabels();
 
         Opened += (_, _) =>
         {
@@ -75,6 +103,153 @@ public partial class MainWindow : Window
 
     private void OnResetWindowSizeClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => ResetWindowSize();
 
+    private void OnOpenVersionHistoryClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (this.FindControl<Button>("OverflowMenuButton")?.Flyout is { } flyout)
+            flyout.Hide();
+        if (DataContext is MainWindowViewModel vm)
+            vm.OpenVersionHistoryFromMenu();
+    }
+
+    private void RefreshMenuLabels()
+    {
+        if (MenuAppSectionLabel != null)
+            MenuAppSectionLabel.Text = VPNRouter.Core.Localization.Strings.SmpMenuAppSection;
+        if (MenuVersionHistoryButton != null)
+            MenuVersionHistoryButton.Content = VPNRouter.Core.Localization.Strings.SmpMenuVersionHistory;
+
+        var russian = (DataContext as MainWindowViewModel)?.IsRussian ?? VPNRouter.Core.Localization.Strings.Lang == "ru";
+        var addTitle = russian ? "Добавить подписку или сервер" : "Add subscription or server";
+        if (QuickAddButton != null)
+        {
+            ToolTip.SetTip(QuickAddButton, addTitle);
+            AutomationProperties.SetName(QuickAddButton, addTitle);
+        }
+        if (QuickAddTitle != null)
+            QuickAddTitle.Text = addTitle;
+        if (QuickAddInput != null)
+            AutomationProperties.SetName(QuickAddInput, addTitle);
+        if (QuickAddPasteButton != null)
+            QuickAddPasteButton.Content = russian ? "Вставить" : "Paste";
+        if (QuickAddCancelButton != null)
+            QuickAddCancelButton.Content = VPNRouter.Core.Localization.Strings.CommonCancel;
+        if (QuickAddSaveButton != null)
+            QuickAddSaveButton.Content = russian ? "Добавить" : "Add";
+    }
+
+    private void OnQuickAddFlyoutOpened(object? sender, EventArgs e)
+    {
+        _quickAddRevision++;
+        RefreshMenuLabels();
+        if (QuickAddInput != null)
+        {
+            QuickAddInput.Text = string.Empty;
+            QuickAddInput.IsEnabled = !_quickAddSaving;
+        }
+        if (QuickAddError != null)
+        {
+            QuickAddError.Text = string.Empty;
+            QuickAddError.IsVisible = false;
+        }
+        if (QuickAddNotice != null)
+        {
+            QuickAddNotice.Text = string.Empty;
+            QuickAddNotice.IsVisible = false;
+        }
+        if (QuickAddProgress != null)
+            QuickAddProgress.IsVisible = _quickAddSaving;
+        QuickAddInput?.Focus();
+    }
+
+    private void OnQuickAddFlyoutClosed(object? sender, EventArgs e) => _quickAddRevision++;
+
+    private void OnQuickAddPasteClick(object? sender, RoutedEventArgs e)
+    {
+        if (QuickAddInput == null || _quickAddSaving) return;
+        QuickAddInput.Focus();
+        QuickAddInput.SelectAll();
+        try { QuickAddInput.Paste(); }
+        catch { }
+    }
+
+    private void OnQuickAddCancelClick(object? sender, RoutedEventArgs e)
+    {
+        _quickAddRevision++;
+        QuickAddButton?.Flyout?.Hide();
+    }
+
+    private void OnQuickAddInputKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            _quickAddRevision++;
+            QuickAddButton?.Flyout?.Hide();
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None)
+        {
+            e.Handled = true;
+            _ = SaveQuickAddAsync();
+        }
+    }
+
+    private void OnQuickAddSaveClick(object? sender, RoutedEventArgs e) => _ = SaveQuickAddAsync();
+
+    private async Task SaveQuickAddAsync()
+    {
+        if (_quickAddSaving || DataContext is not MainWindowViewModel vm || QuickAddInput == null) return;
+
+        var input = QuickAddInput.Text ?? string.Empty;
+        var revision = _quickAddRevision;
+        _quickAddSaving = true;
+        SetQuickAddBusy(true);
+        try
+        {
+            var result = await vm.SaveSimpleLinkDetailedAsync(
+                input,
+                () => _quickAddRevision == revision && ReferenceEquals(DataContext, vm));
+            if (_quickAddRevision != revision || !ReferenceEquals(DataContext, vm)) return;
+
+            if (result.Error != null)
+            {
+                if (QuickAddError != null)
+                {
+                    QuickAddError.Text = result.Error;
+                    QuickAddError.IsVisible = true;
+                }
+                QuickAddInput.Focus();
+                return;
+            }
+
+            if (result.Notice == VPNRouter.Core.Localization.Strings.SmpLinkAlreadySaved)
+            {
+                if (QuickAddNotice != null)
+                {
+                    QuickAddNotice.Text = result.Notice;
+                    QuickAddNotice.IsVisible = true;
+                }
+                return;
+            }
+
+            QuickAddInput.Text = string.Empty;
+            QuickAddButton?.Flyout?.Hide();
+        }
+        finally
+        {
+            _quickAddSaving = false;
+            SetQuickAddBusy(false);
+        }
+    }
+
+    private void SetQuickAddBusy(bool busy)
+    {
+        if (QuickAddProgress != null) QuickAddProgress.IsVisible = busy;
+        if (QuickAddInput != null) QuickAddInput.IsEnabled = !busy;
+        if (QuickAddPasteButton != null) QuickAddPasteButton.IsEnabled = !busy;
+        if (QuickAddSaveButton != null) QuickAddSaveButton.IsEnabled = !busy;
+    }
+
     private void FitToScreen()
     {
         try
@@ -113,13 +288,17 @@ public partial class MainWindow : Window
                 if (change.NewValue is MainWindowViewModel current) current.PropertyChanged += OnViewModelPropertyChanged;
             }
             ApplyCompactTabs();
+            RefreshMenuLabels();
         }
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainWindowViewModel.IsRussian))
+        {
             ApplyCompactTabs();
+            RefreshMenuLabels();
+        }
     }
 
     private void ApplyCompactTabs()
