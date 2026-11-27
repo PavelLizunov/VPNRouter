@@ -17,9 +17,13 @@ public sealed class HealthMonitorControlledReloadTests
     private sealed class StubScanner : IProcessScanner
     {
         private readonly string[] _names;
+        public int ScanCount { get; private set; }
         public StubScanner(params string[] names) => _names = names;
-        public ScanResult ScanForProfile(Profile profile) =>
-            new() { ProcessNames = new List<string>(_names) };
+        public ScanResult ScanForProfile(Profile profile)
+        {
+            ScanCount++;
+            return new ScanResult { ProcessNames = new List<string>(_names) };
+        }
     }
 
     private sealed class StubFirewall : IFirewallManager
@@ -33,14 +37,18 @@ public sealed class HealthMonitorControlledReloadTests
         public void Dispose() { }
     }
 
-    private static AppSettings Settings()
+    private static AppSettings Settings(string routingMode = "full", string routingAppsMode = "include",
+        List<string>? includeApps = null, bool includeInitialized = false)
     {
         var settings = new AppSettings
         {
             App = new AppConfig
             {
                 ConfigMode = "generated",
-                RoutingMode = "full",
+                RoutingMode = routingMode,
+                RoutingAppsMode = routingAppsMode,
+                RoutingAppsInclude = includeApps ?? new List<string>(),
+                RoutingAppsIncludeInitialized = includeInitialized,
                 BypassRussianTraffic = false,
             },
             Tun = new TunSettings(),
@@ -65,13 +73,19 @@ public sealed class HealthMonitorControlledReloadTests
 
     private static HealthMonitor Build(string[] scannerNames, out StubFirewall firewall,
         AppSettings? settings = null, string? clashApiSecret = null,
+        Action<SingBoxManager>? configureSingBox = null, FakeHttpClient? http = null) =>
+        Build(scannerNames, out firewall, out _, settings, clashApiSecret, configureSingBox, http);
+
+    private static HealthMonitor Build(string[] scannerNames, out StubFirewall firewall,
+        out StubScanner scanner, AppSettings? settings = null, string? clashApiSecret = null,
         Action<SingBoxManager>? configureSingBox = null, FakeHttpClient? http = null)
     {
         var singBox = new SingBoxManager(
             new SingBoxSettings { ClashApi = "127.0.0.1:65535" }, http: http ?? new FakeHttpClient());
         configureSingBox?.Invoke(singBox);
         firewall = new StubFirewall();
-        var monitor = new HealthMonitor(singBox, new StubScanner(scannerNames), firewall,
+        scanner = new StubScanner(scannerNames);
+        var monitor = new HealthMonitor(singBox, scanner, firewall,
             new MonitoringSettings { HealthCheckInterval = 3600, MaxRestartAttempts = 5, RestartOnFailure = true },
             api: new FakeSingBoxApi(), clashApiSecret: clashApiSecret);
         monitor.Start(new Profile { Name = "test" }, settings ?? Settings());
@@ -84,9 +98,17 @@ public sealed class HealthMonitorControlledReloadTests
     private static T GetField<T>(object target, string name) =>
         (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
 
+    private static T? GetFieldOrNull<T>(object target, string name) where T : class =>
+        (T?)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target);
+
     private static void Rescan(HealthMonitor monitor) =>
         typeof(HealthMonitor).GetMethod("RescanProcesses", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(monitor, null);
+
+    private static ConfigApplyState ApplyConfigWithRestart(HealthMonitor monitor, string configJson) =>
+        (ConfigApplyState)typeof(HealthMonitor)
+            .GetMethod("ApplyConfigWithRestart", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(monitor, new object?[] { configJson })!;
 
     private static void RunScheduledRestart(HealthMonitor monitor) =>
         typeof(HealthMonitor).GetMethod("RunScheduledRestart", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -101,31 +123,99 @@ public sealed class HealthMonitorControlledReloadTests
         GetField<int>(monitor, "_deferredBlockRuleDisable");
 
     [Fact]
-    public void FailedRestart_DoesNotAdvanceLastScan()
+    public void ProcessRescan_NeverRestartsLiveTunnelOrArmsKillSwitch()
     {
-        using var monitor = Build(new[] { "new.exe" }, out _);
-        var previous = new ScanResult { ProcessNames = new List<string> { "old.exe" } };
-        SetField(monitor, "_lastScan", previous);
-        monitor.ReloadHookForTests = _ => false;
+        using var monitor = Build(new[] { "new.exe" }, out var firewall, out var scanner,
+            settings: Settings(routingMode: "split"));
+        SetField(monitor, "_lastScan", new ScanResult { ProcessNames = new List<string> { "old.exe" } });
+        var reloads = 0;
+        monitor.ReloadOutcomeHookForTests = _ => { reloads++; return ConfigApplyState.Confirmed; };
 
         Rescan(monitor);
 
-        var current = GetField<ScanResult>(monitor, "_lastScan");
-        Assert.Same(previous, current);
-        Assert.Equal(new[] { "old.exe" }, current.ProcessNames);
+        Assert.Equal(1, scanner.ScanCount);
+        Assert.Equal(0, reloads);
+        Assert.Equal(0, firewall.EnableCount);
+        Assert.Equal(0, firewall.DisableCount);
+        Assert.Equal(0, DeferredKillSwitchLift(monitor));
+        Assert.Equal(new[] { "old.exe", "new.exe" }, GetField<ScanResult>(monitor, "_lastScan").ProcessNames);
     }
 
     [Fact]
-    public void ConfirmedRestart_AdvancesLastScan()
+    public void ProcessRescan_RetainsPreviouslyTrackedProcessesWhenChildExits()
     {
-        using var monitor = Build(new[] { "new.exe" }, out _);
-        SetField(monitor, "_lastScan", new ScanResult { ProcessNames = new List<string> { "old.exe" } });
-        monitor.ReloadHookForTests = _ => true;
+        using var monitor = Build(new[] { "still-running.exe" }, out var firewall,
+            settings: Settings(routingMode: "split"));
+        SetField(monitor, "_lastScan",
+            new ScanResult { ProcessNames = new List<string> { "still-running.exe", "exited-child.exe" } });
+        var reloads = 0;
+        monitor.ReloadOutcomeHookForTests = _ => { reloads++; return ConfigApplyState.Confirmed; };
 
         Rescan(monitor);
 
-        var current = GetField<ScanResult>(monitor, "_lastScan");
-        Assert.Equal(new[] { "new.exe" }, current.ProcessNames);
+        Assert.Equal(0, reloads);
+        Assert.Equal(0, firewall.EnableCount);
+        Assert.Equal(
+            new[] { "still-running.exe", "exited-child.exe" },
+            GetField<ScanResult>(monitor, "_lastScan").ProcessNames);
+    }
+
+    [Theory]
+    [InlineData("full", "include", false, false)]
+    [InlineData("split", "exclude", false, false)]
+    [InlineData("split", "include", true, false)]
+    [InlineData("split", "include", false, true)]
+    public void ProcessRescan_SkipsScanWhenModeDoesNotUseDynamicProfileScan(
+        string routingMode, string routingAppsMode, bool withExplicitApps, bool includeInitialized)
+    {
+        var settings = Settings(
+            routingMode: routingMode,
+            routingAppsMode: routingAppsMode,
+            includeApps: withExplicitApps ? new List<string> { "chrome.exe" } : null,
+            includeInitialized: includeInitialized);
+        using var monitor = Build(new[] { "new.exe" }, out var firewall, out var scanner, settings: settings);
+        var previous = new ScanResult { ProcessNames = new List<string> { "old.exe" } };
+        SetField(monitor, "_lastScan", previous);
+        var reloads = 0;
+        monitor.ReloadOutcomeHookForTests = _ => { reloads++; return ConfigApplyState.Confirmed; };
+
+        Rescan(monitor);
+        monitor.OnNewProcessDetected("new");
+
+        Assert.Equal(0, scanner.ScanCount);
+        Assert.Equal(0, reloads);
+        Assert.Equal(0, firewall.EnableCount);
+        Assert.Same(previous, GetField<ScanResult>(monitor, "_lastScan"));
+        Assert.Null(GetFieldOrNull<Timer>(monitor, "_debounceTimer"));
+    }
+
+    [Fact]
+    public void OnNewProcessDetected_MatchesWindowsExeSuffixWithoutSchedulingDebounce()
+    {
+        using var monitor = Build(new[] { "chrome.exe" }, out _, settings: Settings(routingMode: "split"));
+        SetField(monitor, "_lastScan", new ScanResult { ProcessNames = new List<string> { "chrome.exe" } });
+
+        monitor.OnNewProcessDetected("chrome");
+        Assert.Null(GetFieldOrNull<Timer>(monitor, "_debounceTimer"));
+
+        monitor.OnNewProcessDetected("Discord");
+        Assert.NotNull(GetFieldOrNull<Timer>(monitor, "_debounceTimer"));
+    }
+
+    [Fact]
+    public void ConfirmedControlledRestart_ReleasesKillSwitchImmediately()
+    {
+        using var monitor = Build(new[] { "new.exe" }, out var firewall);
+        monitor.ReloadOutcomeHookForTests = _ => ConfigApplyState.Confirmed;
+
+        var state = ApplyConfigWithRestart(monitor, "{}");
+
+        Assert.Equal(ConfigApplyState.Confirmed, state);
+        Assert.Equal(1, firewall.EnableCount);
+        Assert.Equal(1, firewall.DisableCount);
+        Assert.Equal(0, DeferredKillSwitchLift(monitor));
+        Assert.Null(GetFieldOrNull<string>(monitor, "_pendingConfigConfirmation"));
+        Assert.True(GetField<DateTime>(monitor, "_lastFullRestart") > DateTime.MinValue);
     }
 
     [Fact]
@@ -145,23 +235,21 @@ public sealed class HealthMonitorControlledReloadTests
     }
 
     [Fact]
-    public void UnstartedProcessRescan_KeepsKillSwitchArmedWhenPriorRuntimeIsNotConfirmed()
+    public void UnstartedControlledRestart_KeepsKillSwitchArmedWhenPriorRuntimeIsNotConfirmed()
     {
         using var monitor = Build(new[] { "new.exe" }, out var firewall);
-        var previous = new ScanResult { ProcessNames = new List<string> { "old.exe" } };
-        SetField(monitor, "_lastScan", previous);
         monitor.ReloadOutcomeHookForTests = _ => ConfigApplyState.NotStarted;
 
-        Rescan(monitor);
+        var state = ApplyConfigWithRestart(monitor, "{}");
 
-        Assert.Same(previous, GetField<ScanResult>(monitor, "_lastScan"));
+        Assert.Equal(ConfigApplyState.NotStarted, state);
         Assert.Equal(1, firewall.EnableCount);
         Assert.Equal(0, firewall.DisableCount);
         Assert.Equal(0, DeferredKillSwitchLift(monitor));
     }
 
     [Fact]
-    public void UnstartedProcessRescan_ReleasesKillSwitchWhenPriorRuntimeIsConfirmedLive()
+    public void UnstartedControlledRestart_ReleasesKillSwitchWhenPriorRuntimeIsConfirmedLive()
     {
         var http = new FakeHttpClient().Setup("/configs", "{}");
         using var monitor = Build(new[] { "new.exe" }, out var firewall, http: http,
@@ -174,11 +262,11 @@ public sealed class HealthMonitorControlledReloadTests
                     .GetSetMethod(nonPublic: true)!
                     .Invoke(manager, new object[] { SingBoxState.Running });
             });
-        SetField(monitor, "_lastScan", new ScanResult { ProcessNames = new List<string> { "old.exe" } });
         monitor.ReloadOutcomeHookForTests = _ => ConfigApplyState.NotStarted;
 
-        Rescan(monitor);
+        var state = ApplyConfigWithRestart(monitor, "{}");
 
+        Assert.Equal(ConfigApplyState.NotStarted, state);
         Assert.Equal(1, firewall.EnableCount);
         Assert.Equal(1, firewall.DisableCount);
         Assert.Equal(0, DeferredKillSwitchLift(monitor));

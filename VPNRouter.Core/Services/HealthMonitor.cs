@@ -79,7 +79,6 @@ public class HealthMonitor : IDisposable
 
     private static readonly TimeSpan DebounceWindow = TimeSpan.FromSeconds(5);
 
-    private static readonly TimeSpan RestartCooldown = TimeSpan.FromSeconds(60);
     private DateTime _lastFullRestart = DateTime.MinValue;
 
     // After a full restart the new TUN is not routing yet: lift the kill switch only once the tunnel is confirmed healthy.
@@ -282,9 +281,8 @@ public class HealthMonitor : IDisposable
 
     public void OnNewProcessDetected(string processName)
     {
-        if (_isStopping || _disposed) return;
-        if (_lastScan?.ProcessNames != null &&
-            _lastScan.ProcessNames.Contains(processName, StringComparer.OrdinalIgnoreCase))
+        if (_isStopping || _disposed || !UsesDynamicProfileScan(_appSettings)) return;
+        if (IsProcessAlreadyTracked(_lastScan, processName))
         {
             _logger.Verbose("[HealthMonitor] Process {Name} already monitored — skipping debounce", processName);
             return;
@@ -819,14 +817,32 @@ public class HealthMonitor : IDisposable
         }
 
         _lastFullRestart = DateTime.UtcNow;
-        Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
         if (state == ConfigApplyState.Confirmed)
         {
             _pendingConfigConfirmation = null;
-            _logger.Information("[HealthMonitor] Config replacement confirmed — deferring kill-switch lift until health confirmed");
+            try
+            {
+                ReapplyUnixDnsOnRestart?.Invoke(_appSettings);
+                if (TryReleaseBlockRules())
+                {
+                    Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
+                    _logger.Information("[HealthMonitor] Config replacement confirmed — kill-switch block rules lifted");
+                }
+                else
+                {
+                    Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+                    _logger.Warning("[HealthMonitor] Config replacement confirmed but block-rule release was not confirmed — deferring lift to next health tick");
+                }
+            }
+            catch (Exception fwEx)
+            {
+                Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+                _logger.Error(fwEx, "[HealthMonitor] Config replacement confirmed but lifting kill-switch block rules threw — deferring lift to next health tick");
+            }
         }
         else
         {
+            Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
             _pendingConfigConfirmation = configJson;
             _logger.Warning(
                 "[HealthMonitor] Restart started but controller tag confirmation did not finish — keeping the kill switch armed and deferring its lift to the next health reconcile");
@@ -891,64 +907,103 @@ public class HealthMonitor : IDisposable
     {
         if (_isStopping) return;
 
+        if (!UsesDynamicProfileScan(_appSettings))
+        {
+            _logger.Debug("[HealthMonitor] Skipping process rescan — active routing mode does not use dynamic profile scanning");
+            return;
+        }
+
         try
         {
-            _logger.Information("[HealthMonitor] Debounce elapsed — rescanning processes");
+            _logger.Debug("[HealthMonitor] Debounce elapsed — rescanning processes");
 
             var newScan = _scanner.ScanForProfile(_activeProfile);
+            var mergedNames = MergeTrackedProcessNames(_lastScan?.ProcessNames, newScan.ProcessNames);
+            var mergedScan = new ScanResult
+            {
+                ProcessNames = mergedNames,
+                ScannedAt = newScan.ScannedAt,
+            };
 
-            var newFiltered  = FilterForSingBox(newScan.ProcessNames);
+            var newFiltered  = FilterForSingBox(mergedScan.ProcessNames);
             var prevFiltered = _lastScan == null ? null : FilterForSingBox(_lastScan.ProcessNames);
+
+            _lastScan = mergedScan;
 
             if (prevFiltered != null &&
                 new HashSet<string>(newFiltered, StringComparer.OrdinalIgnoreCase)
                     .SetEquals(prevFiltered))
             {
-                _logger.Debug("[HealthMonitor] No effective process changes — skipping reload");
-                _lastScan = newScan;
+                _logger.Debug("[HealthMonitor] No new processes discovered during rescan");
                 return;
             }
 
-            _logger.Information("[HealthMonitor] Process list changed ({Prev} → {New} processes) — reloading sing-box config",
-                prevFiltered?.Count ?? 0, newFiltered.Count);
-
-            _restartCts?.Cancel();
-
-            // This document supersedes any unconfirmed strict-DNS transition.
-            _pendingStrictDnsFailOpen = null;
-
-            var configJson = GenerateConfigJson(newScan.ProcessNames);
-
-            var sinceLastRestart = DateTime.UtcNow - _lastFullRestart;
-            if (sinceLastRestart < RestartCooldown)
-            {
-                _logger.Warning(
-                    "[HealthMonitor] Process list changed but restart cooldown is active ({Remaining}s left) — keeping the previous scan",
-                    (int)(RestartCooldown - sinceLastRestart).TotalSeconds);
-                return;
-            }
-
-            var state = ApplyConfigWithRestart(configJson);
-            if (state == ConfigApplyState.NotStarted)
-            {
-                // The old runtime and its scan are still active: never record an
-                // unapplied process list as if the restart had succeeded.
-                _logger.Warning(
-                    "[HealthMonitor] Restart for the new process list did not start — keeping the previous scan");
-                return;
-            }
-
-            _lastScan = newScan;
-            _restartAttempts = 0;
+            // sing-box has no non-disruptive config hot-reload (PUT /configs is a no-op).
+            // Restarting the runtime on background process churn tears down VPNRouter-TUN
+            // and arms the kill switch, dropping active games, voice calls, and TCP/UDP
+            // sessions. Keep the live tunnel running and retain the expanded scan for
+            // the next explicit Apply, reconnect, or crash recovery.
             _logger.Information(
-                "[HealthMonitor] Process-list replacement {State} with {Count} processes",
-                state == ConfigApplyState.Confirmed ? "confirmed" : "started; controller confirmation deferred",
-                newFiltered.Count);
+                "[HealthMonitor] Process scan updated ({Prev} → {New} processes) — keeping live tunnel running without restart",
+                prevFiltered?.Count ?? 0, newFiltered.Count);
         }
         catch (Exception ex)
         {
             _logger.Error("[HealthMonitor] Error in debounced rescan ({ExceptionType})", ex.GetType().Name);
         }
+    }
+
+    private static bool UsesDynamicProfileScan(AppSettings? settings)
+    {
+        var app = settings?.App;
+        if (app is null) return false;
+        if (string.Equals(app.RoutingMode, "full", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (string.Equals(app.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (app.RoutingAppsIncludeInitialized || app.RoutingAppsInclude?.Count > 0)
+            return false;
+        return true;
+    }
+
+    private static bool IsProcessAlreadyTracked(ScanResult? scan, string processName)
+    {
+        if (scan?.ProcessNames == null || string.IsNullOrWhiteSpace(processName))
+            return false;
+
+        if (scan.ProcessNames.Contains(processName, StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        if (!processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+            scan.ProcessNames.Contains(processName + ".exe", StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    private static List<string> MergeTrackedProcessNames(
+        IEnumerable<string>? previous,
+        IEnumerable<string> current)
+    {
+        var merged = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (previous != null)
+        {
+            foreach (var name in previous)
+            {
+                if (!string.IsNullOrWhiteSpace(name) && seen.Add(name))
+                    merged.Add(name);
+            }
+        }
+
+        foreach (var name in current)
+        {
+            if (!string.IsNullOrWhiteSpace(name) && seen.Add(name))
+                merged.Add(name);
+        }
+
+        return merged;
     }
 
     private string GenerateConfigJson(List<string> processNames, bool? strictDnsFailedOverOverride = null)

@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P0** - In Standard v2.51.1-r5, background process rescans in `HealthMonitor.RescanProcesses()` restarted a live `sing-box` runtime and held the kill switch armed until the next 30s health tick, kicking active realtime sessions such as VALORANT (`ConnectionTimeout`). Background rescans now update `_lastScan` monotonically without restarting a healthy tunnel, skip non-profile routing modes, match Windows `.exe` names in `OnNewProcessDetected`, and lift the kill switch immediately on `Confirmed` recovery/failover restarts. RESOLVED in source on `fix/no-process-rescan-restart-20261127`. [Task record](phase-no-process-rescan-restart-2026-11-27.md).
+
 - [x] **P1** - Native subscription profiles could lose their selected row after credential rotation. Rebind only an exact or unique same-protocol endpoint in the same feed. RESOLVED in source with a refresh regression test. [Task record](phase-trusttunnel-mieru-subscriptions-2026-11-27.md).
 
 - [x] **P1** - Deep verification rendered native subscription profiles as VLESS, and restart confirmation omitted their outbound tags. Both use the native outbound types. RESOLVED in source. [Task record](phase-trusttunnel-mieru-subscriptions-2026-11-27.md).
