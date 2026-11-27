@@ -77,96 +77,53 @@ public sealed class SimpleConnectStatusTests
     [AvaloniaTheory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task SimpleRefreshIsAvailableWithoutOpeningDiagnostics(bool cached)
+    public async Task SimpleHomeHidesManualUtilitiesAndAutoRefreshesBeforeConnect(bool refreshSucceeds)
     {
         var settings = new AppSettings();
         settings.App.ConfigMode = "subscribe";
         settings.App.UiMode = "simple";
         settings.App.Subscriptions =
         [
-            new() { Enabled = true, Url = "https://feed.invalid/simple", Servers = cached ? [Entry("test", "test.invalid")] : [] }
+            new() { Enabled = true, Url = "https://feed.invalid/simple", Servers = [Entry("cached", "cached.invalid")] }
         ];
         var store = new InMemorySettingsStore();
         store.Save(settings, AppPaths.ConfigYamlPath);
         using var vm = CreateVm(store);
         using var view = new OpenPage(vm, width: 380);
-        var options = view.Page.FindControl<ToggleButton>("SimpleCheckServers")!;
-        var linkButton = FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!;
-        var link = FindOnPage<TextBox>(view.Page, "SimpleConfigLink")!;
-        var refresh = view.Page.FindControl<Button>("SimpleRefreshSubscriptions")!;
-        Assert.Equal(cached, options.IsEffectivelyVisible);
-        Assert.True(linkButton.IsEffectivelyVisible);
-        Assert.False(options.IsChecked);
-        Assert.True(refresh.IsEffectivelyVisible);
-        Assert.True(refresh.IsEffectivelyEnabled);
-        Assert.Same(vm.RefreshAllSubscriptionsCommand, refresh.Command);
-        Assert.Equal(Strings.SmpRefreshSubscriptions, AutomationProperties.GetName(refresh));
-        if (!cached)
-        {
-            Dispatcher.UIThread.RunJobs();
-            view.Capture("simple-home-refresh-empty-before-380");
-        }
 
-        var http = new FakeHttpClient().Setup(settings.App.Subscriptions[0].Url,
-            "vless://00000000-0000-4000-8000-000000000001@new.invalid:443?security=none#new");
+        Assert.Null(view.Page.FindControl<Button>("SimpleRefreshSubscriptions"));
+        Assert.Null(view.Page.FindControl<ToggleButton>("SimpleCheckServers"));
+        Assert.Null(view.Page.FindControl<Button>("SimplePing"));
+        Assert.Null(view.Page.FindControl<Button>("SimpleDeepCheck"));
+        Assert.Null(FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton"));
+
+        var http = refreshSucceeds
+            ? new FakeHttpClient().Setup(settings.App.Subscriptions[0].Url,
+                "vless://00000000-0000-4000-8000-000000000001@fresh.invalid:443?security=none#fresh")
+            : new FakeHttpClient().Setup(settings.App.Subscriptions[0].Url, string.Empty, statusCode: 502);
         var originalHttp = SubscriptionFetcher.Http;
         try
         {
             SubscriptionFetcher.Http = http;
-            await vm.RefreshAllSubscriptionsCommand.ExecuteAsync(refresh.CommandParameter);
+            vm.SimpleProbe = (rows, _) => Task.FromResult(rows.Select(row => new ServerLiveness(row, Alive: true, LatencyMs: 12)).ToList());
+            AppSettings? started = null;
+            vm.SimpleTunnelStart = (submission, _, _) =>
+            {
+                started = submission;
+                return Task.FromResult((Task.CompletedTask, TwoPhaseStartOutcome.Connected));
+            };
+
+            await vm.SmpToggleConnectCommand.ExecuteAsync(null);
             Dispatcher.UIThread.RunJobs();
+
             Assert.Single(http.SentRequests);
-            Assert.Equal("new", Assert.Single(vm.SubscriptionServers).Name);
-            Assert.True(options.IsEffectivelyVisible);
-            Assert.False(options.IsChecked);
-            Assert.True(view.Page.FindControl<TextBlock>("SimpleRefreshFeedback")!.IsEffectivelyVisible);
-            view.Capture($"simple-home-refresh-{(cached ? "cached" : "empty")}-380");
+            Assert.True(vm.IsConnected);
+            Assert.Empty(vm.SmpErrorText);
+            var expectedName = refreshSucceeds ? "fresh" : "cached";
+            Assert.Equal(expectedName, Assert.Single(vm.SubscriptionServers).Name);
+            Assert.Equal(expectedName, Assert.IsType<AppSettings>(started).App.ActiveSubscriptionServer);
         }
         finally { SubscriptionFetcher.Http = originalHttp; }
-
-        options.IsChecked = true;
-        Dispatcher.UIThread.RunJobs();
-        Assert.False(Shown(link));
-
-        var ping = view.Page.FindControl<Button>("SimplePing")!;
-        var deepCheck = view.Page.FindControl<Button>("SimpleDeepCheck")!;
-        Assert.Same(vm.TestAllSubscriptionServersCommand, ping.Command);
-        Assert.Same(vm.DeepVerifyAllSubscriptionServersCommand, deepCheck.Command);
-        Assert.True(ping.IsEffectivelyVisible);
-        Assert.True(deepCheck.IsEffectivelyVisible);
-        Assert.True(refresh.IsEffectivelyVisible);
-        Assert.True(refresh.IsEffectivelyEnabled);
-
-        vm.IsTestingServers = true;
-        vm.IsDeepTestingServers = true;
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(Strings.ServerTestCancel, ping.Content);
-        Assert.Equal(Strings.ServerDeepStop, deepCheck.Content);
-        Assert.False(refresh.IsEffectivelyEnabled);
-        vm.IsTestingServers = false;
-        vm.IsDeepTestingServers = false;
-
-        vm.IsConnecting = true;
-        Dispatcher.UIThread.RunJobs();
-        Assert.False(refresh.IsEffectivelyEnabled);
-        vm.SmpErrorText = Strings.StartTimeoutPhaseB;
-        Dispatcher.UIThread.RunJobs();
-        Assert.False(vm.SmpHeroIsBusy);
-        Assert.False(refresh.IsEffectivelyEnabled);
-        vm.IsConnecting = false;
-        vm.SmpErrorText = string.Empty;
-        Dispatcher.UIThread.RunJobs();
-        Assert.True(refresh.IsEffectivelyEnabled);
-
-        vm.IsApplying = true;
-        Dispatcher.UIThread.RunJobs();
-        Assert.False(refresh.IsEffectivelyEnabled);
-        vm.IsApplying = false;
-        vm.Subscriptions.Single().Enabled = false;
-        Dispatcher.UIThread.RunJobs();
-        Assert.False(ping.IsEffectivelyVisible);
-        Assert.False(deepCheck.IsEffectivelyVisible);
-        Assert.False(refresh.IsEffectivelyVisible);
     }
 
     [AvaloniaFact]
@@ -184,7 +141,7 @@ public sealed class SimpleConnectStatusTests
             control => control.IsEffectivelyVisible && ReferenceEquals(control.Command, vm.SmpToggleConnectCommand));
         Assert.True(link.IsEffectivelyVisible);
         Assert.False(connect.IsEffectivelyEnabled);
-        Assert.False(Shown(FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!));
+        Assert.Null(FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton"));
         Assert.False(Shown(FindOnPage<ToggleButton>(view.Page, "SimpleServerSearchButton")!));
         if (OperatingSystem.IsWindows()) view.Capture("simple-home-first-link-320");
 
@@ -215,89 +172,96 @@ public sealed class SimpleConnectStatusTests
             var store = new InMemorySettingsStore();
             store.Save(settings, AppPaths.ConfigYamlPath);
             using var vm = CreateVm(store);
-            using var view = new OpenPage(vm, width, width == 320 ? ThemeVariant.Light : ThemeVariant.Dark);
-            var page = view.Page;
-            var linkButton = FindOnPage<ToggleButton>(page, "SimpleLinkButton")!;
-            var searchButton = FindOnPage<ToggleButton>(page, "SimpleServerSearchButton")!;
-            var search = FindOnPage<TextBox>(page, "SimpleServerSearch")!;
-            var link = FindOnPage<TextBox>(page, "SimpleConfigLink")!;
-            var transfer = FindOnPage<Button>(page, "SimpleTransferLink")!;
-            var groups = FindOnPage<ItemsControl>(page, "SimpleServerGroups")!;
-            var selected = vm.SelectedSubscriptionServer;
-            var before = store.SaveCount;
+            vm.ToggleUiModeCommand.Execute(null);
+            var page = new SubscribePage { DataContext = vm };
+            var window = new Window
+            {
+                Content = page,
+                Width = width,
+                Height = 800,
+                RequestedThemeVariant = width == 320 ? ThemeVariant.Light : ThemeVariant.Dark,
+            };
+            window.Show();
+            try
+            {
+                Dispatcher.UIThread.RunJobs();
+                var linkButton = FindOnPage<ToggleButton>(page, "SimpleLinkButton")!;
+                var searchButton = FindOnPage<ToggleButton>(page, "SimpleServerSearchButton")!;
+                var search = FindOnPage<TextBox>(page, "SimpleServerSearch")!;
+                var link = FindOnPage<TextBox>(page, "SimpleConfigLink")!;
+                var transfer = FindOnPage<Button>(page, "SimpleTransferLink")!;
+                var groups = FindOnPage<ItemsControl>(page, "SimpleServerGroups")!;
+                var selected = vm.SelectedSubscriptionServer;
+                var before = store.SaveCount;
 
-            Assert.True(linkButton.IsEffectivelyVisible);
-            Assert.False(Shown(searchButton));
-            vm.OpenConfigPickerCommand.Execute(null);
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(linkButton.IsEffectivelyVisible);
-            Assert.True(searchButton.IsEffectivelyVisible);
-            Assert.False(Shown(search));
+                Assert.True(linkButton.IsEffectivelyVisible);
+                Assert.True(searchButton.IsEffectivelyVisible);
+                Assert.False(Shown(search));
 
-            Toggle(page, "SimpleServerSearchButton", true);
-            Assert.True(search.IsFocused);
-            search.Text = "Швеция";
-            Dispatcher.UIThread.RunJobs();
-            var result = Assert.Single(FindOnPage<ServerPickerListBox>(page, "SimpleServerResults")!.Items);
-            Assert.Same(vm.SubscriptionServers[0], result);
-            PressPickerKey(search, Key.Escape);
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(searchButton.IsFocused);
-            Assert.False(Shown(search));
-            Assert.True(string.IsNullOrEmpty(search.Text));
+                Toggle(page, "SimpleServerSearchButton", true);
+                Assert.True(search.IsFocused);
+                search.Text = "Швеция";
+                Dispatcher.UIThread.RunJobs();
+                var result = Assert.Single(FindOnPage<ServerPickerListBox>(page, "SimpleServerResults")!.Items);
+                Assert.Same(vm.SubscriptionServers[0], result);
+                PressPickerKey(search, Key.Escape);
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(searchButton.IsFocused);
+                Assert.False(Shown(search));
+                Assert.True(string.IsNullOrEmpty(search.Text));
 
-            Toggle(page, "SimpleServerSearchButton", true);
-            var draft = "https://feed.invalid/" + new string('a', 320);
-            search.Text = draft;
-            Dispatcher.UIThread.RunJobs();
-            PressPickerKey(search, Key.Enter);
-            Assert.True(transfer.IsEffectivelyVisible);
-            Assert.False(Shown(link));
-            Assert.False(vm.IsConnecting);
-            Assert.Equal(before, store.SaveCount);
-            if (OperatingSystem.IsWindows()) view.Capture($"simple-picker-search-{width}");
+                Toggle(page, "SimpleServerSearchButton", true);
+                var draft = "https://feed.invalid/" + new string('a', 320);
+                search.Text = draft;
+                Dispatcher.UIThread.RunJobs();
+                PressPickerKey(search, Key.Enter);
+                Assert.True(transfer.IsEffectivelyVisible);
+                Assert.False(Shown(link));
+                Assert.False(vm.IsConnecting);
+                Assert.Equal(before, store.SaveCount);
+                Capture(window, $"simple-picker-search-{width}");
 
-            transfer.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(link.IsFocused);
-            Assert.Equal(draft, link.Text);
-            Assert.False(Shown(search));
-            Assert.True(string.IsNullOrEmpty(search.Text));
-            Assert.True(link.Bounds.Width < width);
-            Assert.True(groups.IsEffectivelyVisible);
+                transfer.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(link.IsFocused);
+                Assert.Equal(draft, link.Text);
+                Assert.False(Shown(search));
+                Assert.True(string.IsNullOrEmpty(search.Text));
+                Assert.True(link.Bounds.Width < width);
+                Assert.True(groups.IsEffectivelyVisible);
 
-            link.CaretIndex = 12;
-            vm.OpenConfigPickerCommand.Execute(null);
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(link.IsEffectivelyVisible);
-            Assert.Equal(12, link.CaretIndex);
-            Assert.Equal(draft, link.Text);
-            Assert.Equal(savedLink, vm.SmpInput);
-            Assert.Same(selected, vm.SelectedSubscriptionServer);
-            Assert.Equal(before, store.SaveCount);
-            if (OperatingSystem.IsWindows()) view.Capture($"simple-picker-editor-{width}");
+                link.CaretIndex = 12;
+                Assert.True(link.IsEffectivelyVisible);
+                Assert.Equal(12, link.CaretIndex);
+                Assert.Equal(draft, link.Text);
+                Assert.Equal(savedLink, vm.SmpInput);
+                Assert.Same(selected, vm.SelectedSubscriptionServer);
+                Assert.Equal(before, store.SaveCount);
+                Capture(window, $"simple-picker-editor-{width}");
 
-            link.Text = string.Empty;
-            Dispatcher.UIThread.RunJobs();
-            PressPickerKey(link, Key.Enter);
-            Dispatcher.UIThread.RunJobs();
-            Assert.Equal(Strings.SmpLinkInputInvalid, BoundText(page, "SimpleLinkError"));
-            PressPickerKey(link, Key.Escape);
-            Dispatcher.UIThread.RunJobs();
-            Assert.False(Shown(link));
-            Assert.True(linkButton.IsFocused);
-            Assert.Equal(savedLink, link.Text);
-            Assert.Equal(before, store.SaveCount);
+                link.Text = string.Empty;
+                Dispatcher.UIThread.RunJobs();
+                PressPickerKey(link, Key.Enter);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(Strings.SmpLinkInputInvalid, BoundText(page, "SimpleLinkError"));
+                PressPickerKey(link, Key.Escape);
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(Shown(link));
+                Assert.True(linkButton.IsFocused);
+                Assert.Equal(savedLink, link.Text);
+                Assert.Equal(before, store.SaveCount);
 
-            Toggle(page, "SimpleLinkButton", true);
-            var save = FindOnPage<Button>(page, "SimpleSaveLink")!;
-            Assert.True(save.Focus());
-            save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(linkButton.IsFocused);
-            Assert.False(Shown(link));
-            Assert.Equal(before, store.SaveCount);
-            Assert.Equal(Strings.SmpLinkAlreadySaved, BoundText(page, "SimpleLinkNotice"));
+                Toggle(page, "SimpleLinkButton", true);
+                var save = FindOnPage<Button>(page, "SimpleSaveLink")!;
+                Assert.True(save.Focus());
+                save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(linkButton.IsFocused);
+                Assert.False(Shown(link));
+                Assert.Equal(before, store.SaveCount);
+                Assert.Equal(Strings.SmpLinkAlreadySaved, BoundText(page, "SimpleLinkNotice"));
+            }
+            finally { window.Close(); }
         }
         finally { VPNRouter.App.Localization.Strings.Lang = language; }
     }
@@ -514,7 +478,7 @@ public sealed class SimpleConnectStatusTests
         var search = FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!;
         var list = FindOnPage<ServerPickerListBox>(view.Page, "SimpleServerResults")!;
         var count = FindOnPage<TextBlock>(view.Page, "SimpleServerCount")!;
-        var link = FindOnPage<TextBox>(view.Page, "SimpleConfigLink")!;
+        Assert.Null(FindOnPage<TextBox>(view.Page, "SimpleConfigLink"));
         var previous = vm.SelectedSubscriptionServer;
         var before = store.SaveCount;
         var input = vm.SmpInput;
@@ -524,7 +488,6 @@ public sealed class SimpleConnectStatusTests
         vm.OpenConfigPickerCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         Assert.False(Shown(search));
-        Assert.False(Shown(link));
         var groups = FindOnPage<ItemsControl>(view.Page, "SimpleServerGroups")!;
         var groupedRows = groups.Items.Cast<SimpleServerGroup>().ToArray();
         Assert.Equal(new[] { ProtocolGroup.Daily, ProtocolGroup.WebFallback }, groupedRows.Select(group => group.Category));
@@ -983,29 +946,34 @@ public sealed class SimpleConnectStatusTests
             var store = new InMemorySettingsStore();
             store.Save(settings, AppPaths.ConfigYamlPath);
             using var vm = CreateVm(store);
-            using var view = new OpenPage(vm, width: 380, ThemeVariant.Light);
-
-            vm.IsConnecting = true;
-            Dispatcher.UIThread.RunJobs();
-            Assert.Equal(Strings.SmpRefreshBlockedConnecting, BoundText(view.Page, "SimpleRefreshBlockedReason"));
-            vm.IsConnecting = false;
-            Dispatcher.UIThread.RunJobs();
-            Assert.False(view.Page.FindControl<TextBlock>("SimpleRefreshBlockedReason")!.IsEffectivelyVisible);
-
-            var http = new FakeHttpClient()
-                .Setup(settings.App.Subscriptions[0].Url, "vless://00000000-0000-4000-8000-000000000001@ok2.invalid:443?security=none#Sweden")
-                .Setup(settings.App.Subscriptions[1].Url, string.Empty, statusCode: 502);
-            var originalHttp = SubscriptionFetcher.Http;
+            vm.ToggleUiModeCommand.Execute(null);
+            var page = new SubscribePage { DataContext = vm };
+            var window = new Window { Content = page, Width = 380, Height = 720, RequestedThemeVariant = ThemeVariant.Light };
+            window.Show();
             try
             {
-                SubscriptionFetcher.Http = http;
-                await vm.RefreshAllSubscriptionsCommand.ExecuteAsync(null);
+                vm.IsConnecting = true;
                 Dispatcher.UIThread.RunJobs();
-                Assert.True(vm.SmpRefreshResultIsError);
-                Assert.Contains("1", BoundText(view.Page, "SimpleRefreshFeedback"));
-                view.Capture("simple-home-refresh-partial-fail-380");
+                Assert.Equal(Strings.SmpRefreshBlockedConnecting, BoundText(page, "SubscribeRefreshBlockedReason"));
+                vm.IsConnecting = false;
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(page.FindControl<TextBlock>("SubscribeRefreshBlockedReason")!.IsEffectivelyVisible);
+
+                var http = new FakeHttpClient()
+                    .Setup(settings.App.Subscriptions[0].Url, "vless://00000000-0000-4000-8000-000000000001@ok2.invalid:443?security=none#Sweden")
+                    .Setup(settings.App.Subscriptions[1].Url, string.Empty, statusCode: 502);
+                var originalHttp = SubscriptionFetcher.Http;
+                try
+                {
+                    SubscriptionFetcher.Http = http;
+                    await vm.RefreshAllSubscriptionsCommand.ExecuteAsync(null);
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.True(vm.SmpRefreshResultIsError);
+                    Assert.Contains("1", vm.SmpRefreshResultText);
+                }
+                finally { SubscriptionFetcher.Http = originalHttp; }
             }
-            finally { SubscriptionFetcher.Http = originalHttp; }
+            finally { window.Close(); }
         }
         finally { VPNRouter.App.Localization.Strings.Lang = previousLanguage; }
     }
@@ -1072,8 +1040,6 @@ public sealed class SimpleConnectStatusTests
             using var vm = CreateVm(store);
             using var view = new OpenPage(vm);
             var search = FindOnPage<TextBox>(view.Page, "SimpleServerSearch")!;
-            var check = view.Page.FindControl<ToggleButton>("SimpleCheckServers")!;
-            var link = FindOnPage<ToggleButton>(view.Page, "SimpleLinkButton")!;
             var appRules = view.Page.FindControl<Button>("SimpleAppRules")!;
             Assert.Equal("Name, country or city", search.PlaceholderText);
 
@@ -1091,8 +1057,6 @@ public sealed class SimpleConnectStatusTests
             Assert.False(translated.IsExpanded);
             Assert.Equal("Название, страна или город", search.PlaceholderText);
             Assert.Equal("Поиск по списку", AutomationProperties.GetName(search));
-            Assert.Equal("Проверить серверы", AutomationProperties.GetName(check));
-            Assert.Equal("Изменить ссылку", AutomationProperties.GetName(link));
             Assert.Equal("Настроить приложения", appRules.Content);
 
             vm.OpenConfigPickerCommand.Execute(null);
@@ -1181,11 +1145,10 @@ public sealed class SimpleConnectStatusTests
                 Dispatcher.UIThread.RunJobs();
                 var header = simple.FindControl<ToggleButton>("SimpleChangeServer")!;
                 var simpleGroups = FindOnPage<ItemsControl>(simple, "SimpleServerGroups")!;
-                var link = FindOnPage<ToggleButton>(simple, "SimpleLinkButton")!;
                 var advancedGroups = FindOnPage<ItemsControl>(advanced, "SimpleServerGroups")!;
                 Assert.Empty(header.GetVisualDescendants().OfType<Button>());
                 Assert.Equal(Strings.SmpExpandCategory, AutomationProperties.GetName(header));
-                Assert.True(link.IsEffectivelyVisible);
+                Assert.Null(FindOnPage<ToggleButton>(simple, "SimpleLinkButton"));
                 Assert.False(Shown(simpleGroups));
                 var before = store.SaveCount;
                 var initial = vm.SelectedSubscriptionServer;
@@ -1196,9 +1159,6 @@ public sealed class SimpleConnectStatusTests
                 Assert.Equal(before, store.SaveCount);
                 Assert.Same(initial, vm.SelectedSubscriptionServer);
                 Assert.Null(vm.SimpleServerPreference);
-                Toggle(simple, "SimpleLinkButton", true);
-                Assert.True(simpleGroups.IsEffectivelyVisible);
-                Toggle(simple, "SimpleLinkButton", false);
 
                 FindGroupButton(simpleGroups, ProtocolGroup.Daily, disclosure: false)
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -1532,7 +1492,7 @@ public sealed class SimpleConnectStatusTests
         public void Capture(string name) => SimpleConnectStatusTests.Capture(_window, name);
     }
 
-    private static string BoundText(SimplePage page, string name)
+    private static string BoundText(UserControl page, string name)
     {
         Dispatcher.UIThread.RunJobs();
         return FindOnPage<TextBlock>(page, name)!.Text!;

@@ -154,7 +154,9 @@ public partial class MainWindowViewModel
     {
         get
         {
-            if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsConnecting) return SmpSubscriptionsRefreshing
+                ? (IsRussian ? "Обновляем список серверов…" : "Updating server list…")
+                : Strings.SmpStatusConnectingHint;
             if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (HasConnectionAlert) return _lastConnectionAlert!;
             if (IsConnected)
@@ -414,6 +416,7 @@ public partial class MainWindowViewModel
     // Only the command that raised IsConnecting may release it after pre-flight.
     private int? _simplePreparationGeneration;
     private CancellationTokenSource? _categoryProbeCts;
+    private static readonly TimeSpan PreConnectRefreshTimeout = TimeSpan.FromSeconds(4);
 
     internal Func<IReadOnlyList<VlessServerEntry>, TimeSpan, Task<List<ServerLiveness>>>? SimpleProbe { get; set; }
     internal Func<VlessServerEntry, string?, CancellationToken, Task<DeepVerifyResult>>? CategoryProbe { get; set; }
@@ -513,21 +516,47 @@ public partial class MainWindowViewModel
             var previous = selectedSource?.FindExactRow(selectedName, selectedKey);
             var previousRoute = previous == null ? null : SubscriptionEntry.RouteKey(previous, selectedSource!.Servers);
 
-            if (refresh)
+            var isSubscribe = string.Equals(submitted.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase);
+            var liveRows = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
+            var rows = submitted.App.Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url))
+                .Select(s => new SubscriptionViewModel(s)).ToList();
+            var bestEffortRefresh = !refresh && useSimpleInput && isSubscribe && rows.Count > 0 && !liveRows.Any(r => r.IsRefreshing);
+            if (refresh || bestEffortRefresh)
             {
-                var liveRows = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
-                var rows = submitted.App.Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url))
-                    .Select(s => new SubscriptionViewModel(s)).ToList();
+                StatusText = Strings.Syncing;
                 foreach (var row in liveRows) row.IsRefreshing = true;
                 NotifySubscriptionRefreshState();
+                var published = false;
                 try
                 {
-                    var updates = await FetchSubscriptionRowsAsync(rows, CancellationToken.None);
-                    if (!Preparing()) return;
-                    if (!PublishSubscriptionRows(rows, updates, submitted).Accepted)
+                    using var refreshCts = bestEffortRefresh ? new CancellationTokenSource(PreConnectRefreshTimeout) : null;
+                    SubscriptionCacheUpdate[]? updates = null;
+                    try
                     {
-                        SmpErrorText = Strings.SyncEmpty;
-                        return;
+                        updates = await FetchSubscriptionRowsAsync(rows, refreshCts?.Token ?? CancellationToken.None);
+                    }
+                    catch (OperationCanceledException) when (refreshCts?.IsCancellationRequested == true)
+                    {
+                        updates = null;
+                    }
+                    if (!Preparing()) return;
+                    if (refresh)
+                    {
+                        if (updates == null || !PublishSubscriptionRows(rows, updates, submitted).Accepted)
+                        {
+                            SmpErrorText = Strings.SyncEmpty;
+                            return;
+                        }
+                        published = true;
+                    }
+                    else if (updates != null && updates.Any(u => !u.Failed) &&
+                             PublishSubscriptionRows(rows, updates, submitted).Accepted)
+                    {
+                        published = true;
+                    }
+                    else
+                    {
+                        _logger.Information("[SmartConnect] Pre-connect subscription refresh unavailable; continuing with cached servers");
                     }
                 }
                 finally
@@ -536,7 +565,7 @@ public partial class MainWindowViewModel
                     NotifySubscriptionRefreshState();
                 }
                 if (!Preparing()) return;
-                if (choiceUnchanged())
+                if (published && choiceUnchanged())
                 {
                     PublishSimpleRefresh(submitted, liveRows, rows);
                     choiceUnchanged = CaptureSimpleChoice(out editorInput, includePresentation: !scoped);
@@ -1027,7 +1056,9 @@ public partial class MainWindowViewModel
         {
             if (SmpHeroIsError) return SmpErrorText;
             if (SmpStopUnconfirmed) return Strings.TunnelStopUnconfirmed;
-            if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsConnecting) return SmpSubscriptionsRefreshing
+                ? (IsRussian ? "Обновляем список серверов…" : "Updating server list…")
+                : Strings.SmpStatusConnectingHint;
             if (IsApplying) return Strings.SmpStatusApplyingHint;
             if (HasConnectionAlert) return _lastConnectionAlert!.TrimStart('\u26A0', '\uFE0F', ' ').Trim();
             if (SmpNeedsConfig) return Strings.SmpHeroAddConfigHint;

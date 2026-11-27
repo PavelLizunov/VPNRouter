@@ -129,7 +129,7 @@ public partial class SubscriptionServerPicker : UserControl
         var current = vm.IsConnected ? vm.SmpConfigServer : selected;
         var rows = vm.SubscriptionServers.Where(row => !row.SourceEntry.IsTurnRelay);
         var query = _searchButton.IsChecked == true ? _serverSearch.Text?.Trim() ?? string.Empty : string.Empty;
-        var looksLikeLink = SimpleInputDetector.Classify(query) != SmpInputKind.Invalid;
+        var looksLikeLink = LinkTransferred != null && SimpleInputDetector.Classify(query) != SmpInputKind.Invalid;
         _searchLinkHint.IsVisible = looksLikeLink;
         var filtering = query.Length != 0 && !looksLikeLink;
         _serverGroups.IsVisible = !filtering;

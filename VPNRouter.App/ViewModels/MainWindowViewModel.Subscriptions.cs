@@ -242,6 +242,7 @@ public partial class MainWindowViewModel
     {
         OnPropertyChanged(nameof(SmpSubscriptionsRefreshing));
         OnPropertyChanged(nameof(SmpCanConnect));
+        OnPropertyChanged(nameof(SmpHomeSubline));
         SubscriptionRefreshFeedbackChanged?.Invoke();
     }
 
