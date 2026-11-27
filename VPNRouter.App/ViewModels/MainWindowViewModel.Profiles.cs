@@ -153,6 +153,12 @@ public partial class MainWindowViewModel
             BypassAppGroups.Add(bypassGroup);
         }
 
+        var listedExclusions = BypassAppGroups.SelectMany(group => group.Apps)
+            .Select(app => app.ProcessName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in _settings.App.RoutingAppsExclude)
+            if (!string.IsNullOrWhiteSpace(name) && listedExclusions.Add(name))
+                bypassCustomGroup.Apps.Add(CreateExcludeAppItem(name, false));
+
         SelectedAppGroup ??= AppGroups.FirstOrDefault();
         SelectedBypassAppGroup ??= BypassAppGroups.FirstOrDefault();
         _appsLoaded = true;

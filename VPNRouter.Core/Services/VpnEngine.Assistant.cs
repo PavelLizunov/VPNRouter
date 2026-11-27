@@ -5,7 +5,8 @@ namespace VPNRouter.Core.Services;
 internal enum AssistantCandidateRejection { ProxyHealth, ServerMismatch }
 
 internal sealed record AssistantRouteIntent(AcceptedTunnelInfo? Session, string? Process, bool Direct = false,
-    string? ExpectedServerRow = null, string? ExpectedFeed = null, Action<AssistantCandidateRejection>? OnRejection = null);
+    string? ExpectedServerRow = null, string? ExpectedFeed = null, Action<AssistantCandidateRejection>? OnRejection = null,
+    Func<AcceptedTunnelInfo, bool>? VerifyRoute = null);
 
 public partial class VpnEngine
 {

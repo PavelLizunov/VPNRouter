@@ -18,8 +18,8 @@ public static partial class Strings
     public static string AssistantPlanning => Ru ? "Готовлю ответ…" : "Preparing a response…";
     public static string AssistantConfirm => Ru ? "Применить" : "Apply";
     public static string AssistantSingleCommand => Ru
-        ? "Укажите одно действие, например «Включи VPN», «Пусти Edge напрямую» или «Только Firefox через VPN»."
-        : "Enter one action, such as “Connect VPN”, “Route Edge directly” or “Route only Firefox through the VPN”.";
+        ? "Что именно вы хотите изменить? Опишите одно действие."
+        : "What would you like to change? Describe one action.";
     internal static string AssistantSuggestedCommand(string command) => Ru
         ? $"Настройки не изменены. Если это ваша цель, введите отдельную команду «{command}»."
         : $"Your settings are unchanged. If this is what you intended, enter the separate command “{command}”.";

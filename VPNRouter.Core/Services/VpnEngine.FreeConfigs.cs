@@ -84,6 +84,9 @@ public partial class VpnEngine
                 if (routeIntent != null && !AssistantRouteMatches(candidate, routeIntent.Process, routeIntent.Direct))
                     return RejectVerifiedCandidate("app-route");
 
+                if (routeIntent?.VerifyRoute?.Invoke(tunnel) == false)
+                    return RejectVerifiedCandidate("route-rules");
+
                 commitSelection();
                 confirmed = true;
                 _warmupConfirmed = true;

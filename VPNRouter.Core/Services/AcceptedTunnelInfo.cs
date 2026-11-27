@@ -99,6 +99,36 @@ internal sealed class AcceptedTunnelInfo
         return targets.All(HasDirectOutbound);
     }
 
+    internal bool RoutesGamesDirect(IReadOnlyList<string> games) =>
+        games.Count > 0 && _acceptedRoute.ValueKind == JsonValueKind.Object
+        && _acceptedRoute.TryGetProperty("final", out var final) && final.ValueKind == JsonValueKind.String
+        && final.ValueEquals("proxy") && games.All(RoutesAppDirect);
+
+    internal bool RoutesRussianTrafficDirect()
+    {
+        if (_acceptedRoute.ValueKind != JsonValueKind.Object ||
+            !_acceptedRoute.TryGetProperty("rules", out var rules) || rules.ValueKind != JsonValueKind.Array)
+            return false;
+        foreach (var rule in rules.EnumerateArray())
+        {
+            if (rule.ValueKind != JsonValueKind.Object) return false;
+            var action = rule.TryGetProperty("action", out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString() : null;
+            if (action == "sniff" || IsGeneratedInfrastructureAction(rule, action)) continue;
+            if (action is not (null or "route") || !rule.TryGetProperty("outbound", out var outbound)
+                || outbound.ValueKind != JsonValueKind.String || !outbound.ValueEquals("direct"))
+                return false;
+            if (!rule.TryGetProperty("rule_set", out var sets)) continue;
+            if (sets.ValueKind != JsonValueKind.Array || sets.GetArrayLength() != 2 ||
+                !rule.EnumerateObject().All(field => field.Name is "action" or "outbound" or "rule_set"))
+                return false;
+            var tags = sets.EnumerateArray().Where(tag => tag.ValueKind == JsonValueKind.String)
+                .Select(tag => tag.GetString()).ToHashSet(StringComparer.Ordinal);
+            return tags.SetEquals([ConfigGenerator.GeoIpRuleSetTag, ConfigGenerator.GeoSiteRuleSetTag]);
+        }
+        return false;
+    }
+
     private bool HasDirectOutbound(string process)
     {
         if (_acceptedRoute.ValueKind != JsonValueKind.Object ||

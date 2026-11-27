@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
 using Strings = VPNRouter.Core.Localization.Strings;
 
@@ -104,8 +105,6 @@ public partial class AssistantSetupPanel : UserControl
         AssistantHeading.Text = Strings.AssistantTitle;
         AssistantGoal.Watermark = Strings.AssistantGoalHint;
         AutomationProperties.SetName(AssistantGoal, Strings.AssistantGoalHint);
-        AutomationProperties.SetHelpText(AssistantGoal, Strings.AssistantDataNotice);
-        AssistantNotice.Text = Strings.AssistantDataNotice;
         AssistantCrashNotice.Text = Strings.AssistantCrashNotice;
         RunAssistant.Content = Strings.AssistantPlan;
         ConfirmAssistant.Content = _diagnosingSource
@@ -130,6 +129,10 @@ public partial class AssistantSetupPanel : UserControl
     private void UpdateComposer()
     {
         var hasText = !string.IsNullOrWhiteSpace(AssistantGoal.Text);
+        var notice = hasText && AssistantRouteRecipe.Parse(AssistantGoal.Text!) != null
+            ? Strings.AssistantLocalNotice : Strings.AssistantDataNotice;
+        AssistantNotice.Text = notice;
+        AutomationProperties.SetHelpText(AssistantGoal, notice);
         RunAssistant.IsEnabled = _request == null && hasText;
         AssistantNotice.IsVisible = _request == null && hasText;
     }

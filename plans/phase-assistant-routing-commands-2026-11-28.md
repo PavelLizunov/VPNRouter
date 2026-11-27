@@ -25,3 +25,5 @@ Routing has user-visible consequences. Rollback is a revert of the feature commi
 ## Outcome
 
 The initial Windows test captured the collapsed r7 panel and its expanded state on the same 380 px Russian Simple Home at 01967676. All seven checks passed. The new layout exposes an empty free-text field with Send beside the input, supports Enter, and keeps confirmation, cancellation and undo in the panel. The game and regional routing verification follows this UI block.
+
+The two local commands use installed Steam executable names and the existing regional bypass. Before confirmation the panel names the applicable scope and the resulting routing mode. The accepted tunnel must satisfy the operation-specific route check inside the engine transaction before saving. Candidate tests exercise typed requests, unchanged settings before consent, undo and Windows screenshots of both proposals.
