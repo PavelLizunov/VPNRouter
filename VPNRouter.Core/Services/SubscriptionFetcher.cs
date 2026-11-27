@@ -34,6 +34,8 @@ public static class SubscriptionFetcher
         if (SingBoxFeatures.DnsttAvailable) capabilities.Add("dnstt-v1");
         if (SingBoxFeatures.TurnRelayAvailable) capabilities.Add("turnrelay-v1");
         capabilities.Add("vmess-v1");
+        if (SingBoxFeatures.TrustTunnelAvailable) capabilities.Add("trusttunnel-v1");
+        if (SingBoxFeatures.MieruAvailable) capabilities.Add("mieru-v1");
         return new Dictionary<string, string>
         {
             ["X-VPNRouter-Capabilities"] = string.Join(", ", capabilities),
@@ -203,7 +205,8 @@ public static class SubscriptionFetcher
         foreach (var line in lines)
         {
             if (!allowSecureTransports && (line.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
-                || line.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase)))
+                || line.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+                || NativeTransportUriParser.HasScheme(line)))
                 continue;
             if (!ServerUriParser.IsSupportedScheme(line))
                 continue;
@@ -275,14 +278,17 @@ public static class SubscriptionFetcher
         string? TurnRelayFingerprint,
         int? TurnRelayConnections,
         string? TurnRelayMode,
-        bool? TurnRelayUdp);
+        bool? TurnRelayUdp,
+        TrustTunnelProfile? TrustTunnel,
+        MieruProfile? Mieru);
 
     private static ServerDedupKey DedupeKey(VlessServerEntry entry)
     {
         var protocol = (entry.Protocol ?? "vless").Trim().ToLowerInvariant();
         var isVmess = protocol == "vmess";
+        var isTrustTunnel = protocol == "trusttunnel";
         return new ServerDedupKey(
-            Protocol: isVmess ? protocol : string.Empty,
+            Protocol: isVmess || isTrustTunnel || protocol == "mieru" ? protocol : string.Empty,
             Server: entry.Server,
             Port: entry.Port,
             Uuid: entry.Uuid,
@@ -294,7 +300,7 @@ public static class SubscriptionFetcher
             VmessSecurity: isVmess ? entry.VmessSecurity : null,
             AlterId: isVmess ? entry.AlterId : null,
             TlsEnabled: isVmess ? entry.Tls?.Enabled : null,
-            TlsServerName: isVmess ? entry.Tls?.ServerName : null,
+            TlsServerName: isVmess || isTrustTunnel ? entry.Tls?.ServerName : null,
             TlsInsecure: isVmess ? entry.Tls?.Insecure : null,
             TlsFingerprint: isVmess ? entry.Tls?.Fingerprint : null,
             TlsAlpn: isVmess ? entry.Tls?.Alpn : null,
@@ -314,7 +320,9 @@ public static class SubscriptionFetcher
             TurnRelayFingerprint: entry.TurnRelay?.ServerFingerprint,
             TurnRelayConnections: entry.TurnRelay?.Connections,
             TurnRelayMode: entry.TurnRelay?.Mode,
-            TurnRelayUdp: entry.TurnRelay?.Udp);
+            TurnRelayUdp: entry.TurnRelay?.Udp,
+            TrustTunnel: entry.TrustTunnel,
+            Mieru: entry.Mieru);
     }
 
     public static async Task<int> RefreshEntryAsync(

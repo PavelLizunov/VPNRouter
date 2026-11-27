@@ -15,6 +15,8 @@ namespace VPNRouter.Core.Yaml;
 [YamlSerializable(typeof(CustomRule))]
 [YamlSerializable(typeof(DnsSettings))]
 [YamlSerializable(typeof(DnsttProfile))]
+[YamlSerializable(typeof(TrustTunnelProfile))]
+[YamlSerializable(typeof(MieruProfile))]
 [YamlSerializable(typeof(MonitoringSettings))]
 [YamlSerializable(typeof(ProfileSource))]
 [YamlSerializable(typeof(SingBoxSettings))]

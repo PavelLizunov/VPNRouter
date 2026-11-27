@@ -78,7 +78,7 @@ What's not in this BETA
   * AppImage self-update — the .deb and tar.gz installs auto-update in place;
     the AppImage is read-only, so update it by downloading a new one
 
-NaiveProxy and the DNS-tunnel (Slipstream) transport ARE supported on Linux.
+The bundled Linux core supports TrustTunnel and Mieru. DNS-tunnel (Slipstream) is available through its sidecar.
 
 
 Questions / bugs

@@ -27,6 +27,8 @@ public static class CanaryPolicy
     public static string RedactUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return "(none)";
+        if (NativeTransportUriParser.HasScheme(url.AsSpan().TrimStart()))
+            return "[redacted native transport URI]";
         if (url.AsSpan().TrimStart().StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return "turnrelay://[redacted]";
         if (url.AsSpan().TrimStart().StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))

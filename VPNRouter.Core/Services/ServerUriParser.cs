@@ -9,8 +9,11 @@ namespace VPNRouter.Core.Services;
 
 public static class ServerUriParser
 {
-    public static bool NaiveRuntimeAvailable { get; internal set; } =
-        OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
+    public static bool NaiveRuntimeAvailable
+    {
+        get => SingBoxFeatures.NaiveAvailable;
+        internal set => SingBoxFeatures.OverrideNaive = value;
+    }
 
     public static bool SlipstreamRuntimeAvailable { get; internal set; } =
         OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
@@ -40,7 +43,9 @@ public static class ServerUriParser
             return DnsttUriParser.Parse(uri);
 
         VlessServerEntry entry;
-        if (uri.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+        if (NativeTransportUriParser.HasScheme(uri))
+            entry = NativeTransportUriParser.Parse(uri);
+        else if (uri.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             entry = TurnRelayUriParser.Parse(uri);
         else if (uri.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
             uri.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
@@ -55,8 +60,7 @@ public static class ServerUriParser
         {
             if (!NaiveRuntimeAvailable)
                 throw new FormatException(
-                    "NaiveProxy is supported only on Windows and Linux (it needs sing-box's Cronet runtime). " +
-                    "This platform can't use naive servers — use a VLESS / Hysteria2 / TUIC / Shadowsocks server instead.");
+                    "NaiveProxy requires a Windows or Linux sing-box build with NaiveProxy and Cronet.");
             entry = ParseNaive(uri);
         }
         else if (uri.StartsWith("dns-tunnel://", StringComparison.OrdinalIgnoreCase))
@@ -79,7 +83,7 @@ public static class ServerUriParser
             entry = ParseAmneziaWg(uri);
         }
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / vmess:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / turnrelay:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / vmess:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive:// / dns-tunnel:// / turnrelay:// / trusttunnel:// / mieru:// / awg:// / awg3://. Got: {Truncate(CanaryPolicy.RedactUrl(uri), 40)}");
 
         var offendingField = PlaceholderDefense.Inspect(entry);
         if (offendingField != null)
@@ -153,6 +157,9 @@ public static class ServerUriParser
 
     public static bool IsSupportedScheme(ReadOnlySpan<char> line)
     {
+        if (NativeTransportUriParser.HasScheme(line))
+            return NativeTransportUriParser.IsSupported(line);
+
         if (line.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
             return SingBoxFeatures.TurnRelayAvailable;
 

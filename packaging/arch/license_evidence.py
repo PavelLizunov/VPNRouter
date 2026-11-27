@@ -26,9 +26,9 @@ MAX_ENTRIES: int = 256
 
 APPHOST_PLACEHOLDER: bytes = b"c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"
 APPHOST_REGION_LEN: int = 1024
-MANDATORY_IDS: frozenset[str] = frozenset({"microsoft.netcore.app.host.linux-x64", "sing-box-vpnctl", "cronet"})
-CANONICAL_REQUIRED_IDS: frozenset[str] = frozenset({"serilog", "yamldotnet", "microsoft.netcore.app.host.linux-x64", "sing-box-vpnctl", "cronet"})
-NATIVE_PAYLOAD_MAP: dict[str, str] = {"cronet": "runtime/libcronet.so", "sing-box-vpnctl": "runtime/sing-box"}
+MANDATORY_IDS: frozenset[str] = frozenset({"microsoft.netcore.app.host.linux-x64", "sing-box-vpnctl"})
+CANONICAL_REQUIRED_IDS: frozenset[str] = frozenset({"serilog", "yamldotnet", "microsoft.netcore.app.host.linux-x64", "sing-box-vpnctl"})
+NATIVE_PAYLOAD_MAP: dict[str, str] = {"sing-box-vpnctl": "runtime/sing-box"}
 
 
 def compute_sha256(path: Path, max_size: int = MAX_PAYLOAD_SIZE) -> str:

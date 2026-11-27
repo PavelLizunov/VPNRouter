@@ -61,9 +61,9 @@ default "Latest" filter.
 ### Active libbox source
 
 Since 2.50.1 the Android build no longer uses a tooling release of this repository.
-`build-android.yml` and `android-compile.yml` download `libbox-legacy-1.14.4-vpnctl.4.aar`
+`build-android.yml` and `android-compile.yml` download `libbox-legacy-1.14.5-vpnctl.1.aar`
 (Android API 21, no naive outbound; the app keeps minSdk 23) from the
-`PavelLizunov/sing-box-vpnctl` release `v1.14.4-vpnctl.4` as `VPNRouter.Android/Lib/libbox.aar`,
+`PavelLizunov/sing-box-vpnctl` release `v1.14.5-vpnctl.1` as `VPNRouter.Android/Lib/libbox.aar`,
 compare it with the SHA-256 pinned next to the tag and run `gh attestation verify` against that
 repository. To move to another core release, bump `LIBBOX_RELEASE_TAG`, `LIBBOX_ASSET` and
 `LIBBOX_AAR_SHA256` together in both workflows; the sums are in the release's `SHA256SUMS`.

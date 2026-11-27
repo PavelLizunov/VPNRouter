@@ -62,13 +62,8 @@ public sealed class VpnctlPackagingCharacterizationTests
     {
         var script = Read("build.ps1");
         var idx1 = script.IndexOf("Write-Host \"[6/9] Bundling sing-box.exe...\"", StringComparison.Ordinal);
-        var cronetMarker = "if (-not $SingBoxPath) {";
         var slipstreamMarker = "Write-Host \"[6b/9] Bundling slipstream-client.exe";
-        var idx2 = script.IndexOf(cronetMarker, idx1, StringComparison.Ordinal);
-        if (idx2 < 0)
-        {
-            idx2 = script.IndexOf(slipstreamMarker, idx1, StringComparison.Ordinal);
-        }
+        var idx2 = script.IndexOf(slipstreamMarker, idx1, StringComparison.Ordinal);
         Assert.True(idx1 >= 0 && idx2 > idx1, "Could not locate sing-box bundling section.");
 
         var bundling = StripComments(script.Substring(idx1, idx2 - idx1));
@@ -81,22 +76,11 @@ public sealed class VpnctlPackagingCharacterizationTests
     [Fact]
     [Trait("Category", "PackagingCharacterization")]
     [Trait("Baseline", "LegacyDefectGuards")]
-    public void BuildScript_LibcronetBundling_SourceContract()
+    public void BuildScript_DefaultCoreDoesNotDownloadCronet()
     {
-        var script = Read("build.ps1");
-        var idx1 = script.IndexOf("if (-not $SingBoxPath) {", StringComparison.Ordinal);
-        var idx2 = script.IndexOf("Write-Host \"[6b/9] Bundling slipstream-client.exe", idx1 >= 0 ? idx1 : 0, StringComparison.Ordinal);
-        Assert.True(idx1 >= 0 && idx2 > idx1, "Could not locate libcronet bundling section in build.ps1.");
-
-        var section = StripComments(script.Substring(idx1, idx2 - idx1));
-        var downloadIndex = section.IndexOf("Invoke-WebRequest", StringComparison.Ordinal);
-        var hashIndex = section.IndexOf("Get-FileHash", StringComparison.Ordinal);
-        var rejectIndex = section.IndexOf("throw \"libcronet.dll SHA256 mismatch", StringComparison.Ordinal);
-        var copyIndex = section.IndexOf("Copy-Item", StringComparison.Ordinal);
-        Assert.True(downloadIndex >= 0 && hashIndex > downloadIndex && rejectIndex > hashIndex && copyIndex > rejectIndex,
-            "Downloaded and cached libraries must be verified before publication.");
-        Assert.Contains("4ecba4761b201f6c552aabd0462a94fe2a8f833c/lib/windows_amd64/libcronet.dll", section);
-        Assert.DoesNotContain("sing-box.exe", section);
+        var script = StripComments(Read("build.ps1"));
+        Assert.DoesNotContain("SagerNet/cronet-go", script);
+        Assert.Contains("1.14.5-vpnctl.1", script);
     }
 
     [Fact]
@@ -294,13 +278,8 @@ public sealed class VpnctlPackagingCharacterizationTests
         }
 
         var idx2 = buildPs1.IndexOf("Write-Host \"[6/9] Bundling sing-box.exe...\"", StringComparison.Ordinal);
-        var cronetMarker = "if (-not $SingBoxPath) {";
         var slipstreamMarker = "Write-Host \"[6b/9] Bundling slipstream-client.exe";
-        var idx2End = buildPs1.IndexOf(cronetMarker, idx2, StringComparison.Ordinal);
-        if (idx2End < 0)
-        {
-            idx2End = buildPs1.IndexOf(slipstreamMarker, idx2, StringComparison.Ordinal);
-        }
+        var idx2End = buildPs1.IndexOf(slipstreamMarker, idx2, StringComparison.Ordinal);
         Assert.True(idx2 >= 0 && idx2End > idx2, "Could not locate sing-box bundling section in build.ps1.");
         var sec2 = buildPs1.Substring(idx2, idx2End - idx2);
 

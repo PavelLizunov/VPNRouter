@@ -1137,8 +1137,8 @@ static int validate_runtime_components(const struct doc *doc, int root)
         "$schema", "log", "dns", "inbounds", "outbounds", "endpoints", "route", "experimental", NULL
     };
     static const char *const outbounds[] = {
-        "direct", "vless", "vmess", "hysteria2", "tuic", "shadowsocks", "naive",
-        "turnrelay", "dnstt", "ssh", "urltest", "selector", NULL
+        "direct", "vless", "vmess", "hysteria2", "tuic", "shadowsocks",
+        "turnrelay", "dnstt", "trusttunnel", "mieru", "ssh", "urltest", "selector", NULL
     };
     static const char *const endpoints[] = { "wireguard", NULL };
     static const char *const dns_servers[] = {

@@ -94,9 +94,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           LIBBOX_SOURCE_REPO: "PavelLizunov/sing-box-vpnctl"
-          LIBBOX_RELEASE_TAG: "v1.14.4-vpnctl.4"
-          LIBBOX_ASSET: "libbox-legacy-1.14.4-vpnctl.4.aar"
-          LIBBOX_AAR_SHA256: "07a903e0a8b8f8dda3bba409e663e5c2d235c8df15348c17d22bc246c8bbae26"
+          LIBBOX_RELEASE_TAG: "v1.14.5-vpnctl.1"
+          LIBBOX_ASSET: "libbox-legacy-1.14.5-vpnctl.1.aar"
+          LIBBOX_AAR_SHA256: "0db1d467356c67df353b5826e48c09a0ca669576135e605b7dfe5ff4cb9cbf99"
         run: |
           set -euo pipefail
           mkdir -p VPNRouter.Android/Lib
@@ -119,7 +119,7 @@ jobs:
             -p:RuntimeIdentifier=android-arm64 \
             -nologo
 
-      - name: Verify the APK is arm64-only and its core keeps AWG and XHTTP
+      - name: Verify the arm64 APK core transport profile
         run: |
           set -euo pipefail
           mapfile -t APKS < <(find VPNRouter.Android/bin/Release -name '*.apk' -type f)
@@ -138,12 +138,18 @@ jobs:
             unzip -q -o "$APK" lib/arm64-v8a/libbox.so -d "$WORK"
             TAGS="$(grep -a -o -m1 -- '-tags=with_[A-Za-z0-9_,]*' "$WORK/lib/arm64-v8a/libbox.so" || true)"
             echo "libbox build tags: $TAGS"
-            for NEED in with_awg with_xhttp with_turnrelay; do
+            for NEED in with_awg with_xhttp with_turnrelay with_trusttunnel with_mieru; do
               case ",${TAGS#-tags=}," in
                 *",$NEED,"*) ;;
                 *) echo "::error::libbox.so was built without $NEED"; exit 1 ;;
               esac
             done
+            if grep -Eq '(^|,)(with_naive_outbound|with_purego)(,|$)' <<< "${TAGS#-tags=}" ||
+               grep -aq 'github.com/sagernet/cronet-go' "$WORK/lib/arm64-v8a/libbox.so" ||
+               grep -qi 'libcronet' <<< "$(unzip -Z1 "$APK")"; then
+              echo "::error::unexpected NaiveProxy or Cronet in $APK"
+              exit 1
+            fi
             rm -rf "$WORK"
           done
 

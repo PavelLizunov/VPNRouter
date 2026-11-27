@@ -154,9 +154,9 @@ boundary.
 ## Core provenance and controller verification
 
 The macOS bundle pin is `PavelLizunov/sing-box-vpnctl` tag
-`v1.14.4-vpnctl.4`. The GitHub release asset
-`sing-box-1.14.4-vpnctl.4-darwin-universal.zip` has
-`sha256:2020768bfefb2e1ce52a1535ab7b39b4904ca7bf95de119bc8986a1549a75117`,
+`v1.14.5-vpnctl.1`. The GitHub release asset
+`sing-box-1.14.5-vpnctl.1-darwin-universal.zip` has
+`sha256:2f79f9dc9a630abbcbb218cfcb1cea7c1f1c75e792cbc73d0c46c9900345c54f`,
 which matches `SB_DARWIN_SHA256` in `build-mac.sh`. The source at that tag was
 read for this contract:
 

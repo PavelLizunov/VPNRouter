@@ -62,7 +62,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: tools/singbox-cache/
-          key: singbox-1.14.4-vpnctl.4-${{ runner.os }}
+          key: singbox-1.14.5-vpnctl.1-${{ runner.os }}
 
       - name: Setup Go (for VPNRouter.GUI stub)
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7.1.0
@@ -118,41 +118,26 @@ jobs:
             ./build.ps1 -Version $env:VERSION
           }
 
-      - name: Validate libcronet.dll and sing-box naive check
+      - name: Validate packaged sing-box transport profile
         shell: pwsh
         run: |
           $ver = "${{ steps.ver.outputs.version }}"
-          $expectedCronetHash = "683948ed11ad09b5ab75d49e171f25239977d79fc07c98d91809dffdb903f9b5"
           $installZipPath = (Resolve-Path "VPNRouter-v$ver-win.zip").Path
           $updateZipPath  = (Resolve-Path "VPNRouter-update-v$ver-win.zip").Path
 
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $sha256 = [System.Security.Cryptography.SHA256]::Create()
-
           foreach ($zipPath in @($installZipPath, $updateZipPath)) {
             $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
             try {
-              $entry = $zip.Entries | Where-Object { $_.Name -ieq "libcronet.dll" } | Select-Object -First 1
-              if (-not $entry) {
-                throw "libcronet.dll not found in $(Split-Path $zipPath -Leaf)"
-              }
-              $stream = $entry.Open()
-              try {
-                $hash = [Convert]::ToHexString($sha256.ComputeHash($stream)).ToLowerInvariant()
-                if ($hash -ne $expectedCronetHash) {
-                  throw "libcronet.dll SHA256 mismatch in $(Split-Path $zipPath -Leaf): expected $expectedCronetHash, got $hash"
-                }
-                Write-Host "OK: libcronet.dll verified in $(Split-Path $zipPath -Leaf) ($hash)"
-              } finally {
-                $stream.Dispose()
+              if ($zip.Entries | Where-Object { $_.Name -ieq "libcronet.dll" }) {
+                throw "Unexpected libcronet.dll in $(Split-Path $zipPath -Leaf)"
               }
             } finally {
               $zip.Dispose()
             }
           }
-          $sha256.Dispose()
 
-          $cleanDir = "C:\TestVPNRouter\cronet-validation"
+          $cleanDir = "C:\TestVPNRouter\core-profile-validation"
           Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $cleanDir | Out-Null
 
@@ -162,11 +147,21 @@ jobs:
             if (-not $sbEntry) { throw "sing-box.exe not found in $(Split-Path $installZipPath -Leaf)" }
             [System.IO.Compression.ZipFileExtensions]::ExtractToFile($sbEntry, (Join-Path $cleanDir "sing-box.exe"), $true)
 
-            $crEntry = $zip.Entries | Where-Object { $_.Name -ieq "libcronet.dll" } | Select-Object -First 1
-            if (-not $crEntry) { throw "libcronet.dll not found in $(Split-Path $installZipPath -Leaf)" }
-            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($crEntry, (Join-Path $cleanDir "libcronet.dll"), $true)
           } finally {
             $zip.Dispose()
+          }
+
+          $updateCore = Join-Path $cleanDir "update-sing-box.exe"
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($updateZipPath)
+          try {
+            $entry = $zip.Entries | Where-Object { $_.FullName.Replace('\', '/') -ieq "_bootstrap/sing-box.exe" } | Select-Object -First 1
+            if (-not $entry) { throw "Update ZIP has no _bootstrap/sing-box.exe" }
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $updateCore, $true)
+          } finally {
+            $zip.Dispose()
+          }
+          if ((Get-FileHash -Algorithm SHA256 $updateCore).Hash -ne (Get-FileHash -Algorithm SHA256 (Join-Path $cleanDir "sing-box.exe")).Hash) {
+            throw "Update ZIP sing-box differs from the validated install core"
           }
 
           $naiveConfigPath = Join-Path $cleanDir "naive-check.json"
@@ -203,34 +198,19 @@ jobs:
           }
 
           $sbExe = Join-Path $cleanDir "sing-box.exe"
-          $posResult = Invoke-BoundedProcess $sbExe "check -c naive-check.json" $cleanDir
-          Write-Host "sing-box check output (with libcronet.dll):`n$($posResult.Output)"
-          if ($posResult.ExitCode -ne 0) {
-            throw "sing-box check failed unexpectedly with exit code $($posResult.ExitCode): $($posResult.Output)"
+          $version = Invoke-BoundedProcess $sbExe "version" $cleanDir
+          if ($version.ExitCode -ne 0 -or $version.Output -notmatch '\bwith_trusttunnel\b' -or
+              $version.Output -notmatch '\bwith_mieru\b' -or $version.Output -match 'with_naive_outbound|with_purego') {
+            throw "Unexpected sing-box release profile: $($version.Output)"
           }
-          Write-Host "OK: sing-box check -c exited with code 0 (libcronet loaded)"
-
-          $negDir = "C:\TestVPNRouter\cronet-negative-control"
-          Remove-Item -Recurse -Force $negDir -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $negDir | Out-Null
-
-          Copy-Item $sbExe (Join-Path $negDir "sing-box.exe") -Force
-          Copy-Item $naiveConfigPath (Join-Path $negDir "naive-check.json") -Force
-
-          $negSbExe = Join-Path $negDir "sing-box.exe"
-          $negResult = Invoke-BoundedProcess $negSbExe "check -c naive-check.json" $negDir
-          Write-Host "sing-box check output (missing libcronet.dll negative control):`n$($negResult.Output)"
-          if ($negResult.ExitCode -eq 0) {
-            throw "Negative control FAIL: sing-box check succeeded without libcronet.dll (expected non-zero exit)"
+          $naive = Invoke-BoundedProcess $sbExe "check -c naive-check.json" $cleanDir
+          if ($naive.ExitCode -eq 0 -or $naive.Output -notmatch 'naive outbound is not included in this build') {
+            throw "Packaged sing-box did not reject NaiveProxy: $($naive.Output)"
           }
-          if ($negResult.Output -notmatch 'libcronet') {
-            throw "Negative control FAIL: expected 'libcronet' in output, got:`n$($negResult.Output)"
-          }
-          Write-Host "OK: Negative control verified dependency exercised (exit $($negResult.ExitCode), 'libcronet' in output)"
 
           $env:VPNCTL_TEST_CORE = $sbExe
           try {
-            dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~Native_MigratedFakeIp|FullyQualifiedName~Native_DnsttImport" --logger 'console;verbosity=normal'
+            dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --filter "FullyQualifiedName~Native_MigratedFakeIp|FullyQualifiedName~Native_DnsttImport|FullyQualifiedName~Native_Transport" --logger 'console;verbosity=normal'
             if ($LASTEXITCODE -ne 0) {
               throw "Native config checks failed with exit code $LASTEXITCODE"
             }
@@ -239,7 +219,6 @@ jobs:
           }
 
           Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force $negDir   -ErrorAction SilentlyContinue
 
       - name: Lay out dedicated protected test installation
         id: layout
@@ -266,8 +245,9 @@ jobs:
             throw "VPNRouter.CLI.exe not found at $cliExe"
           }
           Set-Content -LiteralPath (Join-Path $appDir 'stop-vpnrouter.ps1') -Value '# old fixture' -Encoding ascii
+          Set-Content -LiteralPath (Join-Path $appDir 'sing-box.exe') -Value '# old core fixture' -Encoding ascii
           $expectedHashes = @{}
-          foreach ($name in @('VPNRouter.Core.dll', 'VPNRouter.GUI.exe', 'stop-vpnrouter.ps1')) {
+          foreach ($name in @('VPNRouter.Core.dll', 'VPNRouter.GUI.exe', 'stop-vpnrouter.ps1', 'sing-box.exe')) {
               $source = if ($name -eq 'VPNRouter.GUI.exe') { Join-Path $stagedDir $name } else { Join-Path (Join-Path $stagedDir '_bootstrap') $name }
               $expectedHashes[$name] = (Get-FileHash -Algorithm SHA256 $source).Hash
           }
@@ -366,11 +346,6 @@ jobs:
           }
           Write-Host "OK: sing-box.exe present"
 
-          $cronet = Join-Path "${{ steps.layout.outputs.appDir }}" "libcronet.dll"
-          if (-not (Test-Path $cronet)) {
-            throw "libcronet.dll missing post-update at $cronet"
-          }
-          Write-Host "OK: libcronet.dll present"
 
       - name: Assert install receipt was written
         shell: pwsh

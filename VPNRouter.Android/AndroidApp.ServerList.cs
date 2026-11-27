@@ -947,6 +947,17 @@ public partial class AndroidApp
                     parts.Add(srv.CongestionControl.ToLowerInvariant());
                 break;
 
+            case "trusttunnel":
+                parts.Add("TrustTunnel");
+                parts.Add(srv.TrustTunnel?.Quic == true ? "HTTP/3" : "HTTP/2");
+                break;
+
+            case "mieru":
+                parts.Add("Mieru");
+                if (srv.Mieru?.Transport is { } mieruTransport)
+                    parts.Add(mieruTransport.ToUpperInvariant());
+                break;
+
             case "amneziawg":
             case "awg":
                 parts.Add("amneziawg");

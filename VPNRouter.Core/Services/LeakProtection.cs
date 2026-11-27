@@ -282,6 +282,18 @@ public static class LeakProtection
             case "shadowsocks":
                 ValidateShadowsocksOutbound(o, errors);
                 break;
+            case "mieru":
+                if (string.IsNullOrWhiteSpace(o.Server) || string.IsNullOrWhiteSpace(o.Username) ||
+                    string.IsNullOrWhiteSpace(o.Password) || o.MieruPortBindings is not { Count: 1 } bindings ||
+                    bindings[0].Port is < 1 or > 65535 || bindings[0].Transport is not ("tcp" or "udp"))
+                    errors.Add("Mieru outbound requires an endpoint, credentials and a port binding");
+                break;
+            case "trusttunnel":
+                if (string.IsNullOrWhiteSpace(o.Server) || o.ServerPort is null or < 1 or > 65535 ||
+                    string.IsNullOrWhiteSpace(o.Username) || string.IsNullOrWhiteSpace(o.Password) ||
+                    o.Tls is not { Enabled: true, Insecure: false })
+                    errors.Add("TrustTunnel outbound requires an endpoint, credentials and verified TLS");
+                break;
             default:
                 if (string.IsNullOrWhiteSpace(o.Server))
                     errors.Add($"{o.Type} outbound '{o.Tag}': server is empty");

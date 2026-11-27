@@ -49,7 +49,7 @@ public partial class MainWindowViewModel
             var selected = SubscriptionRefreshDiff.FindRegisteredServer(source?.UnderlyingEntry, entries, name, key,
                 previous?.SourceEntry, SelectedSubscriptionRoute()?.Route);
             if (SimpleServerPreference == null && selected == null && IsSubscribeConfig(_settings.App.ConfigMode) && source != null &&
-                (previous?.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(previous?.SourceEntry.DetourVia)))
+                SubscriptionChainSelection.RequiresMatchingSuccessor(previous?.SourceEntry))
             {
                 foreach (var row in SubscriptionServers.Where(row => enabled.All(feed => feed.Id != row.SubscriptionId)).ToArray())
                     SubscriptionServers.Remove(row);
@@ -362,7 +362,7 @@ public partial class MainWindowViewModel
         // not veto a feed replacement or a legacy DNSTT reconciliation.
         if (submission == null && preference == null && IsSubscribeConfig(app.ConfigMode) &&
             SelectedSubscriptionServer is { } selectedRow &&
-            (selectedRow.SourceEntry.Dnstt != null || !string.IsNullOrEmpty(selectedRow.SourceEntry.DetourVia)) &&
+            SubscriptionChainSelection.RequiresMatchingSuccessor(selectedRow.SourceEntry) &&
             feeds.FirstOrDefault(s => s.Id == selectedRow.SubscriptionId) is { } source)
             chain = new(source.Id, source.Url, selectedRow.SourceEntry, SelectedSubscriptionRoute()?.Route);
 

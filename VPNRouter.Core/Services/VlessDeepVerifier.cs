@@ -175,6 +175,10 @@ public sealed class VlessDeepVerifier
                 DeepVerifyFailurePhase.UnsupportedByVerifier);
         }
 
+        if (entry.IsNativeTransport && !ConfigGenerator.IsServerRuntimeAvailable(entry))
+            return DeepVerifyResult.Failed("deep verify: this profile requires a compatible sing-box core",
+                DeepVerifyFailurePhase.UnsupportedByVerifier);
+
         if (entry.IsDnsTunnel)
         {
             _logger.Information("[VlessDeepVerifier] dns-tunnel deep verify unsupported (needs slipstream sidecar)");
@@ -212,8 +216,8 @@ public sealed class VlessDeepVerifier
         {
             if (!ServerUriParser.NaiveRuntimeAvailable)
             {
-                _logger.Warning("[VlessDeepVerifier] naive unsupported on this platform (needs libcronet)");
-                return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)",
+                _logger.Warning("[VlessDeepVerifier] NaiveProxy unavailable in this runtime");
+                return DeepVerifyResult.Failed("NaiveProxy requires a compatible core with Cronet",
                     DeepVerifyFailurePhase.UnsupportedByVerifier);
             }
             if (policy == null)
@@ -364,6 +368,11 @@ public sealed class VlessDeepVerifier
         {
             foreach (var item in ConfigGenerator.BuildDnsttProxyPair(s))
                 outboundsArray.Add(JsonSerializer.SerializeToNode(item, AppJsonContext.Default.SingBoxOutbound));
+        }
+        else if (protocol is "trusttunnel" or "mieru")
+        {
+            outboundsArray.Add(JsonSerializer.SerializeToNode(
+                ConfigGenerator.BuildVlessOutbound(s, "proxy"), AppJsonContext.Default.SingBoxOutbound));
         }
         else if (protocol is "amneziawg" or "awg" or "awg3" or "amneziawg3")
         {

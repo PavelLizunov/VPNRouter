@@ -21,6 +21,7 @@ public static class RollbackConfigCompatibility
     public const string ActiveDnstt = "active-dnstt";
     public const string ActiveTurnRelay = "active-turnrelay";
     public const string ActiveVmess = "active-vmess";
+    internal const string ActiveNativeTransport = "active-native-transport";
     public const string ActiveSingleOutbound = "active-single-outbound";
     public const string ActiveRowMissing = "active-row-missing";
     public const string ActiveRowAmbiguous = "active-row-ambiguous";
@@ -111,6 +112,9 @@ public static class RollbackConfigCompatibility
             server.VmessSecurity != null ||
             server.AlterId != 0)
             return ActiveVmess;
+
+        if (IsNativeTransport(protocol))
+            return ActiveNativeTransport;
 
         if (server.UseAsSingleOutbound)
             return ActiveSingleOutbound;
@@ -219,6 +223,10 @@ public static class RollbackConfigCompatibility
         return CheckServers(rows.Where(row => row.Server == active.Server && string.IsNullOrEmpty(row.DetourVia)));
     }
 
+    private static bool IsNativeTransport(string type) =>
+        type.Equals("trusttunnel", StringComparison.OrdinalIgnoreCase) ||
+        type.Equals("mieru", StringComparison.OrdinalIgnoreCase);
+
     private static string? CheckCustom(AppSettings settings, bool turnRelayOnly = false)
     {
         var path = VpnEngine.ResolveCustomConfigPath(settings);
@@ -246,10 +254,10 @@ public static class RollbackConfigCompatibility
 
             if (root["outbounds"] is JsonArray outbounds &&
                 outbounds.OfType<JsonObject>().Any(IsNewOnlyOutbound))
-                return ActiveDnsttOrVmess(outbounds);
+                return DescribeNewOnlyOutbound(outbounds);
             if (root["endpoints"] is JsonArray endpoints &&
                 endpoints.OfType<JsonObject>().Any(IsNewOnlyOutbound))
-                return ActiveDnsttOrVmess(endpoints);
+                return DescribeNewOnlyOutbound(endpoints);
 
             return null;
         }
@@ -271,10 +279,10 @@ public static class RollbackConfigCompatibility
             return type.Equals("dnstt", StringComparison.OrdinalIgnoreCase) ||
                    type.Equals("dns-tunnel", StringComparison.OrdinalIgnoreCase) ||
                    type.Equals("turnrelay", StringComparison.OrdinalIgnoreCase) ||
-                   type.Equals("vmess", StringComparison.OrdinalIgnoreCase);
+                   type.Equals("vmess", StringComparison.OrdinalIgnoreCase) || IsNativeTransport(type);
         }
 
-        static string ActiveDnsttOrVmess(JsonArray items)
+        static string DescribeNewOnlyOutbound(JsonArray items)
         {
             foreach (var item in items.OfType<JsonObject>())
             {
@@ -285,6 +293,8 @@ public static class RollbackConfigCompatibility
                     return ActiveTurnRelay;
                 if (type.Equals("vmess", StringComparison.OrdinalIgnoreCase))
                     return ActiveVmess;
+                if (IsNativeTransport(type))
+                    return ActiveNativeTransport;
                 if (type.Equals("dnstt", StringComparison.OrdinalIgnoreCase) ||
                     type.Equals("dns-tunnel", StringComparison.OrdinalIgnoreCase))
                     return ActiveDnstt;

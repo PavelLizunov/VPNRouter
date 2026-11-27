@@ -1,4 +1,5 @@
 using System;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App;
 
@@ -18,7 +19,8 @@ public static class SimpleInputDetector
         if (string.IsNullOrWhiteSpace(input)) return SmpInputKind.Invalid;
         var trimmed = input.Trim();
 
-        if (trimmed.StartsWith("vless://",       StringComparison.OrdinalIgnoreCase) ||
+        if (NativeTransportUriParser.HasScheme(trimmed) ||
+            trimmed.StartsWith("vless://",       StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("vmess://",       StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("hysteria2://",   StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("hy2://",         StringComparison.OrdinalIgnoreCase) ||

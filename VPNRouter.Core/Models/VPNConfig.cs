@@ -470,7 +470,31 @@ public class SingBoxOutbound
 
     [JsonPropertyName("udp")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public bool? TurnRelayUdp { get; set; }
+    public bool? Udp { get; set; }
+
+    [JsonIgnore]
+    public bool? TurnRelayUdp { get => Udp; set => Udp = value; }
+
+    [JsonPropertyName("port_bindings")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<MieruPortBinding>? MieruPortBindings { get; set; }
+
+    [JsonPropertyName("multiplexing")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MieruMultiplexing { get; set; }
+
+    [JsonPropertyName("handshake_mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MieruHandshakeMode { get; set; }
+}
+
+public class MieruPortBinding
+{
+    [JsonPropertyName("port")]
+    public int Port { get; set; }
+
+    [JsonPropertyName("transport")]
+    public string Transport { get; set; } = string.Empty;
 }
 
 public class Hysteria2Obfs
@@ -492,6 +516,10 @@ public class TlsConfig
 
     [JsonPropertyName("insecure")]
     public bool Insecure { get; set; } = false;
+
+    [JsonPropertyName("certificate_public_key_sha256")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? CertificatePublicKeySha256 { get; set; }
 
     [JsonPropertyName("reality")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

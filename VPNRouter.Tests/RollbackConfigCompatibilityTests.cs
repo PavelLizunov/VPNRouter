@@ -285,6 +285,16 @@ public sealed class RollbackConfigCompatibilityTests
         }
     }
 
+    [Theory]
+    [InlineData("trusttunnel")]
+    [InlineData("mieru")]
+    public void ActiveNativeTransportRequiresANewerRollbackTarget(string protocol)
+    {
+        Assert.Equal(RollbackConfigCompatibility.ActiveNativeTransport,
+            RollbackConfigCompatibility.CheckActiveConfig(
+                Generated(Server("active", "edge.example.test", protocol)), LegacyTarget));
+    }
+
     [Fact]
     public void NewerTarget_DoesNotApplyLegacyRestrictions()
     {

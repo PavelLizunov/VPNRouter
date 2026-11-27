@@ -470,6 +470,17 @@ public partial class ServerViewModel : ViewModelBase
                         parts.Add(_originalEntry!.TurnRelay!.TurnServer);
                     break;
 
+                case "trusttunnel":
+                    parts.Add("TrustTunnel");
+                    parts.Add(_originalEntry?.TrustTunnel?.Quic == true ? "HTTP/3" : "HTTP/2");
+                    break;
+
+                case "mieru":
+                    parts.Add("Mieru");
+                    if (_originalEntry?.Mieru?.Transport is { } mieruTransport)
+                        parts.Add(mieruTransport.ToUpperInvariant());
+                    break;
+
                 case "amneziawg":
                 case "awg":
                     parts.Add("amneziawg");

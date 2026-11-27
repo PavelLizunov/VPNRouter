@@ -38,21 +38,13 @@ except ImportError as err:
 
 RUNTIME_URL: str = (
     "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/"
-    "v1.14.4-vpnctl.4/sing-box-1.14.4-vpnctl.4-linux-amd64.tar.gz"
+    "v1.14.5-vpnctl.1/sing-box-1.14.5-vpnctl.1-linux-amd64.tar.gz"
 )
-RUNTIME_SHA256: str = "a6014cfad5494fe8fa3f178facad6a7c6dab59f5143f7b5af645e8e4e5d84094"
-RUNTIME_VERSION: str = "1.14.4-vpnctl.4"
-
-CRONET_URL: str = (
-    "https://raw.githubusercontent.com/SagerNet/cronet-go/4ecba4761b201f6c552aabd0462a94fe2a8f833c/"
-    "lib/linux_amd64/libcronet.so"
-)
-CRONET_SHA256: str = "99eb98eb47102c7418c7fed1e666d27e2bfb67c6b5517f7ae6b033748d657ed4"
-CRONET_VERSION: str = "v0.0.0-20261118104455-4ecba4761b20"
+RUNTIME_SHA256: str = "72a65339089f9f41a05d746f03c2ee0105878a91a373295a0fae2af07cd2b7d4"
+RUNTIME_VERSION: str = "1.14.5-vpnctl.1"
 
 ALLOWED_DOWNLOADS: dict[str, tuple[str, str]] = {
     RUNTIME_URL: (RUNTIME_SHA256, "runtime.tar.gz"),
-    CRONET_URL: (CRONET_SHA256, "libcronet.so"),
 }
 
 CHUNK_SIZE: int = 64 * 1024
@@ -717,8 +709,6 @@ def main(argv: list[str] | None = None) -> int:
     extracted_runtime = work_dir / "extracted_runtime"
     staging_tools.safe_extract(runtime_tar, extracted_runtime, RUNTIME_SHA256)
 
-    cronet = acquire_archive(CRONET_URL, CRONET_SHA256, "libcronet.so", work_dir, args.archive_cache)
-
     publish_dir = work_dir / "publish"
     dotnet_version = publish_headless(source_tree, publish_dir, work_dir)
 
@@ -753,9 +743,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime_dest_dir = payload_dir / "runtime"
     runtime_dest_dir.mkdir(parents=True, mode=0o755)
     shutil.copy2(find_file(extracted_runtime, "sing-box"), runtime_dest_dir / "sing-box")
-    shutil.copy2(cronet, runtime_dest_dir / "libcronet.so")
-    for name in ("sing-box", "libcronet.so"):
-        os.chmod(runtime_dest_dir / name, 0o755)
+    os.chmod(runtime_dest_dir / "sing-box", 0o755)
 
     licenses_dest_dir = payload_dir / "licenses"
     licenses_dest_dir.mkdir(parents=True, mode=0o755)
@@ -789,12 +777,10 @@ def main(argv: list[str] | None = None) -> int:
     headless_elf = payload_dir / "VPNRouter.Headless"
     staging_tools.validate_elf_x86_64(headless_elf)
     staging_tools.validate_elf_x86_64(runtime_dest_dir / "sing-box")
-    staging_tools.validate_elf_x86_64(runtime_dest_dir / "libcronet.so")
 
     needed_deps = {
         "VPNRouter.Headless": get_elf_needed(headless_elf),
         "sing-box": get_elf_needed(runtime_dest_dir / "sing-box"),
-        "libcronet.so": get_elf_needed(runtime_dest_dir / "libcronet.so"),
     }
 
     template_pkgbuild = ARCH_DIR / "PKGBUILD"
@@ -827,9 +813,8 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "arch": "x86_64",
         "runtime_version": RUNTIME_VERSION,
-        "cronet_version": CRONET_VERSION,
-        "archive_urls": {"runtime": RUNTIME_URL, "cronet": CRONET_URL},
-        "archive_hashes": {"runtime": RUNTIME_SHA256, "cronet": CRONET_SHA256},
+        "archive_urls": {"runtime": RUNTIME_URL},
+        "archive_hashes": {"runtime": RUNTIME_SHA256},
         "dependencies": {
             "arch_packages": ["glibc", "gcc-libs", "libcap", "dotnet-runtime>=10", "dotnet-runtime<11"],
             "elf_needed": needed_deps,

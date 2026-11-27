@@ -45,6 +45,20 @@ public class VlessServerEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public TurnRelayConfig? TurnRelay { get; set; }
 
+    [YamlMember(Alias = "trusttunnel", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TrustTunnelProfile? TrustTunnel { get; set; }
+
+    [YamlMember(Alias = "mieru", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MieruProfile? Mieru { get; set; }
+
+    [YamlIgnore]
+    [JsonIgnore]
+    internal bool IsNativeTransport =>
+        string.Equals(Protocol, "trusttunnel", System.StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Protocol, "mieru", System.StringComparison.OrdinalIgnoreCase);
+
     // A previously matched generated grant needs fresh confirmation from its owning feed.
     [JsonIgnore]
     [YamlMember(Alias = "dnstt_refresh_binding", DefaultValuesHandling = DefaultValuesHandling.OmitNull)]

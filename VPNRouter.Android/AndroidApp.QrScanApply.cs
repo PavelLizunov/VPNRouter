@@ -30,7 +30,8 @@ public partial class AndroidApp
             lowered.StartsWith("hy2://") ||
             lowered.StartsWith("hysteria2://") ||
             lowered.StartsWith("tuic://") ||
-            lowered.StartsWith("ss://"))
+            lowered.StartsWith("ss://") ||
+            NativeTransportUriParser.HasScheme(trimmed))
         {
             ApplyScannedServerUri(trimmed, command);
             return;

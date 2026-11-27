@@ -170,7 +170,7 @@ public partial class SingBoxManager
 
     private static bool IsProxyOutboundType(string type) => type.ToLowerInvariant() is
         "vless" or "vmess" or "hysteria2" or "tuic" or "shadowsocks" or "naive" or "ssh" or
-        "turnrelay" or "trojan" or "socks" or "http" or "wireguard";
+        "turnrelay" or "trusttunnel" or "mieru" or "trojan" or "socks" or "http" or "wireguard";
 
     private bool IsClashApiAlive()
     {

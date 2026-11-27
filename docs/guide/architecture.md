@@ -32,10 +32,10 @@ VPNRouter.sln
 
 Core services live in `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderDefense` (known-bad credential filter), plus subsystems for Zapret, Telegram proxy, subscriptions, free configs.
 
-> **Note**: Desktop builds (Windows, macOS, Linux) default to official `PavelLizunov/sing-box-vpnctl` `v1.14.4-vpnctl.4` release artifacts. Android uses the `libbox-legacy.aar` of the same release (API 21 build without naive, which Android does not offer; the app keeps Android 6.0+ / API 23+).
+> **Note**: Desktop builds (Windows, macOS, Linux) default to official `PavelLizunov/sing-box-vpnctl` `v1.14.5-vpnctl.1` release artifacts. Android uses the `libbox-legacy.aar` of the same release (API 21 build without naive, which Android does not offer; the app keeps Android 6.0+ / API 23+).
 
 Import SSH over DNSTT as native sing-box JSON in Custom Config. Add the
-[outbound example](https://github.com/PavelLizunov/sing-box-vpnctl/blob/v1.14.4-vpnctl.4/docs/vpnctl/dnstt.md)
+[outbound example](https://github.com/PavelLizunov/sing-box-vpnctl/blob/v1.14.5-vpnctl.1/docs/vpnctl/dnstt.md)
 to a complete TUN config. Set `route.final` to the SSH tag and the SSH
 outbound's `detour` to the DNSTT tag. To resolve application DNS through SSH,
 include a DNS-over-HTTPS server with the SSH tag as its `detour`. For desktop
