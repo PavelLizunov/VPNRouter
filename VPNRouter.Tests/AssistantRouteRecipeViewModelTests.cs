@@ -12,6 +12,7 @@ using VPNRouter.App.Views.Pages;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 using Strings = VPNRouter.Core.Localization.Strings;
 
 namespace VPNRouter.Tests;
