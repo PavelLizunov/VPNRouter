@@ -608,6 +608,7 @@ public partial class AndroidApp
 
         BindSimpleInput(preserveInputEdit);
         if (_serverInputError is not null) _serverInputError.IsVisible = false;
+        UpdateInputCardVisibility();
 
         if (_ccModeSubBtn is not null) StyleSegmentButton(_ccModeSubBtn, mode == "subscribe");
         if (_ccModeManualBtn is not null) StyleSegmentButton(_ccModeManualBtn, mode == "manual");

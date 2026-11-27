@@ -227,6 +227,7 @@ public partial class AndroidApp
 
     private void OnKebabMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        HideQuickAddOverlay();
         if (_kebabPopup is null) return;
         if (_kebabPopup.IsOpen)
         {

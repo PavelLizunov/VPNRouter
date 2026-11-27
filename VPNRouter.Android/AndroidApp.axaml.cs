@@ -60,6 +60,7 @@ public partial class AndroidApp : Avalonia.Application
     private IconView? _configRowChevron;
     private TextBlock? _configRowToggleText;
 
+    private Border? _inputCard;
     private Border? _formCard;
     private TextBox? _serverInput;
     private TextBlock? _serverInputLabel;
@@ -102,6 +103,7 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _vpnChip;
     private TextBlock? _zapretChip;
     private Image? _mascotImage;
+    private Avalonia.Controls.Button? _quickAddButton;
     private Avalonia.Controls.Button? _kebabMenuButton;
     private Popup? _kebabPopup;
     private Avalonia.Controls.Button? _menuLangRu;
@@ -387,6 +389,7 @@ public partial class AndroidApp : Avalonia.Application
         if (_cfgExportOverlay is not null) _cfgExportOverlay.Padding = pad;
         if (_cfgImportOverlay is not null) _cfgImportOverlay.Padding = pad;
         if (_profilesOverlay is not null) _profilesOverlay.Padding = pad;
+        ApplyQuickAddSafeArea(insets);
     }
 
     private void ApplyTheme()
@@ -458,9 +461,11 @@ public partial class AndroidApp : Avalonia.Application
             CornerRadius = new CornerRadius(radiusSm),
             Padding = new Thickness(10),
             Child = inputSection,
+            IsVisible = !HasSavedSimpleConfig(),
         };
         inputCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
         inputCard.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
+        _inputCard = inputCard;
 
         _formCard = new Border
         {
@@ -556,6 +561,8 @@ public partial class AndroidApp : Avalonia.Application
 
         _advShellOverlay = BuildAdvancedShellOverlay();
 
+        _quickAddOverlay = BuildQuickAddOverlay();
+
         _updateBannerFloating = new Grid
         {
             VerticalAlignment = VerticalAlignment.Top,
@@ -577,7 +584,7 @@ public partial class AndroidApp : Avalonia.Application
         _pageRoot = new Grid
         {
             Children = { mainScroller, _advShellOverlay, _logOverlay, _aboutOverlay,
-                         _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
+                         _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay, _quickAddOverlay,
                          updateBannerFloating, _menuFeedbackFloating }
         };
         return _pageRoot;
@@ -789,16 +796,37 @@ public partial class AndroidApp : Avalonia.Application
 
         HideSubtreeFromAccessibility(menuPanel);
 
+        _quickAddButton = new Avalonia.Controls.Button
+        {
+            Content = IconContent(UiIcons.Plus, 22),
+            Width = 44,
+            Height = 44,
+            Margin = new Thickness(0, -6, 0, -6),
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _quickAddButton.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextPrimaryBrush");
+        ToolTip.SetTip(_quickAddButton, QuickAddTitleText);
+        AutomationProperties.SetName(_quickAddButton, QuickAddTitleText);
+        _quickAddButton.Click += (_, _) => OpenQuickAddOverlay();
+
         var headerRow = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("28,*,Auto"),
-            ColumnSpacing = 10,
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"),
+            ColumnSpacing = 4,
         };
+        mascot.Margin = new Thickness(0, 0, 6, 0);
         Grid.SetColumn(mascot, 0);
         Grid.SetColumn(brandStack, 1);
-        Grid.SetColumn(_kebabMenuButton, 2);
+        Grid.SetColumn(_quickAddButton, 2);
+        Grid.SetColumn(_kebabMenuButton, 3);
         headerRow.Children.Add(mascot);
         headerRow.Children.Add(brandStack);
+        headerRow.Children.Add(_quickAddButton);
         headerRow.Children.Add(_kebabMenuButton);
         headerRow.Children.Add(_kebabPopup);
 
@@ -1499,6 +1527,7 @@ public partial class AndroidApp : Avalonia.Application
         };
         if (_configRowLabel is not null) _configRowLabel.Text = $"{Localization.SmpConfigRowLabel} · {source}";
         UpdatePerAppSummary();
+        UpdateInputCardVisibility();
     }
 
     private void UpdatePerAppSummary()
@@ -1763,6 +1792,7 @@ public partial class AndroidApp : Avalonia.Application
         if (_updateBannerSubtitle is not null && _updateBannerSubtitle.IsVisible)
             _updateBannerSubtitle.Text = Localization.UpdateBannerSubtitle;
         RefreshServerListLocalizedStrings();
+        RefreshQuickAddLocalization();
         UpdateConfigSummary();
     }
 
