@@ -62,6 +62,8 @@ public class ProtocolGroupsTests
     [InlineData("ss", null, ProtocolGroup.Fallback)]
     [InlineData("shadowsocks", null, ProtocolGroup.Fallback)]
     [InlineData("dns-tunnel", null, ProtocolGroup.Emergency)]
+    [InlineData("dnstt", null, ProtocolGroup.Emergency)]
+    [InlineData("DNSTT", "ws", ProtocolGroup.Emergency)]
     [InlineData("VLESS", "XHTTP", ProtocolGroup.StealthWeb)]
     public void Of_MapsProtocolAndTransport(string protocol, string? transport, ProtocolGroup expected)
     {
@@ -78,6 +80,10 @@ public class ProtocolGroupsTests
         var dns = Entry("vless");
         dns.DnsDomain = "t.example";
         Assert.Equal(ProtocolGroup.Emergency, ProtocolGroups.Of(dns));
+
+        var managedDnstt = Entry("vless");
+        managedDnstt.Dnstt = new DnsttProfile();
+        Assert.Equal(ProtocolGroup.Emergency, ProtocolGroups.Of(managedDnstt));
 
         Assert.Equal(ProtocolGroup.Daily, ProtocolGroups.Of(null));
     }

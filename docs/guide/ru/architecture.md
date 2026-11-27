@@ -32,10 +32,10 @@ VPNRouter.sln
 
 Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderDefense` (фильтр known-bad credentials), плюс подсистемы для Zapret, Telegram proxy, подписок, free configs.
 
-> **Примечание**: Desktop-сборки (Windows, macOS, Linux) по умолчанию используют официальные релизные артефакты `PavelLizunov/sing-box-vpnctl` `v1.14.4-vpnctl.2`. Android использует `libbox-legacy.aar` того же выпуска (сборка для API 21 без naive, которого на Android нет; приложение остаётся на Android 6.0+ / API 23+).
+> **Примечание**: Desktop-сборки (Windows, macOS, Linux) по умолчанию используют официальные релизные артефакты `PavelLizunov/sing-box-vpnctl` `v1.14.4-vpnctl.3`. Android использует `libbox-legacy.aar` того же выпуска (сборка для API 21 без naive, которого на Android нет; приложение остаётся на Android 6.0+ / API 23+).
 
 Импортируйте SSH поверх DNSTT как нативный JSON sing-box в режиме Custom
-Config. Добавьте [пример outbounds](https://github.com/PavelLizunov/sing-box-vpnctl/blob/v1.14.4-vpnctl.2/docs/vpnctl/dnstt.md)
+Config. Добавьте [пример outbounds](https://github.com/PavelLizunov/sing-box-vpnctl/blob/v1.14.4-vpnctl.3/docs/vpnctl/dnstt.md)
 в полный конфиг с TUN-входом. Укажите тег SSH в `route.final`, а тег DNSTT
 в `detour` у SSH. Чтобы DNS-запросы приложений шли через SSH, добавьте
 DNS-over-HTTPS-сервер с тегом SSH в его `detour`. При автоматической

@@ -13,6 +13,10 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     public bool CanToggleConnection => _client is { CanToggleConnection: true } &&
         (!_client.IsBusinessRepairInProgress || _client.IsConnected);
     public bool IsConnectionBusy => _client is { } client && (client.IsConnecting || client.IsBusinessRepairInProgress);
+    public bool IsConnectionFailure => _client is
+        { IsConnected: false, IsConnecting: false, IsBusinessRepairInProgress: false } client &&
+        IsFailureStatus(client.StatusText);
+    public bool IsConnectionHealthy => !IsConnectionFailure;
     public string ConnectButton => _client?.IsConnecting == true && IsStoppingStatus(_client.StatusText) ? Strings.Stopping
         : _client?.IsConnecting == true ? Strings.ButtonConnecting
         : _client?.IsConnected == true ? Strings.BusinessDisconnect : Strings.BusinessConnect;
@@ -32,6 +36,21 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
 
     private static bool IsNeutralStartingStatus(string status) =>
         string.IsNullOrEmpty(status) || status is "Starting..." or "Запуск..." or "Connecting…" or "Подключение…" or "Not connected" or "Не подключено";
+
+    // Presentation-only classification of a terminal connection failure. A new
+    // message that is not listed here keeps the neutral treatment; it never
+    // changes connection state or recovery behavior.
+    private static bool IsFailureStatus(string status) =>
+        !string.IsNullOrWhiteSpace(status) &&
+        (status.StartsWith(Strings.FailedStartVpn, StringComparison.Ordinal) ||
+         status == Strings.StartTimeoutPhaseA ||
+         status == Strings.StartTimeoutPhaseB ||
+         status == Strings.TunnelStopUnconfirmed ||
+         status == Strings.ConflictOtherVpnDetectedTitle ||
+         status == Strings.BusinessPolicyRecoveryRequired ||
+         status == Strings.BusinessConfigMissing ||
+         status == Strings.BusinessExternalTunnelBusy ||
+         status == Strings.BusinessAutoNoneWorking);
 
     private static bool IsHealthyConnectionStatus(string status, bool serviceManaged = false)
     {
@@ -65,8 +84,12 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
         OnPropertyChanged(nameof(AutoSelectStatus));
         OnPropertyChanged(nameof(HasAutoSelectStatus));
         OnPropertyChanged(nameof(ServerSummary));
+        OnPropertyChanged(nameof(IsServerSummaryActive));
+        OnPropertyChanged(nameof(IsServerSummaryWarning));
         OnPropertyChanged(nameof(ServerPickerCaption));
         OnPropertyChanged(nameof(ServerPickerPlaceholder));
+        OnPropertyChanged(nameof(ServerFallbackLabel));
+        OnPropertyChanged(nameof(HasServerFallbackLabel));
     }
 
     public string Menu => Strings.BusinessMenu;
@@ -95,12 +118,16 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
     {
         _savedServer = choice;
         OnPropertyChanged(nameof(ServerPickerPlaceholder));
+        OnPropertyChanged(nameof(ServerFallbackLabel));
+        OnPropertyChanged(nameof(HasServerFallbackLabel));
         RefreshServerSummary();
     }
 
     internal void RefreshServerSummary()
     {
         OnPropertyChanged(nameof(ServerSummary));
+        OnPropertyChanged(nameof(IsServerSummaryActive));
+        OnPropertyChanged(nameof(IsServerSummaryWarning));
         OnPropertyChanged(nameof(AutoSelectStatus));
         OnPropertyChanged(nameof(HasAutoSelectStatus));
     }
@@ -136,7 +163,24 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
         }
     }
 
+    public bool IsServerSummaryActive => _client?.IsConnected == true;
+
+    public bool IsServerSummaryWarning
+    {
+        get
+        {
+            if (_client is not { } client || client.IsConnected) return false;
+            if (client.BusinessAutoSelect) return client.IsBusinessAutoProblem;
+            return _savedServer is { IsChecking: false } saved &&
+                ReferenceEquals(saved.Server, client.SelectedServer) && (saved.IsSlow || saved.IsBad);
+        }
+    }
+
     public string ServerPickerPlaceholder => _savedServer?.DisplayName ?? Strings.BusinessServer;
+    public string ServerFallbackLabel => AutoSelectEnabled && _savedServer != null
+        ? Strings.BusinessServerAutoFallback(_savedServer.DisplayName)
+        : string.Empty;
+    public bool HasServerFallbackLabel => ServerFallbackLabel.Length != 0;
     public string ServerPickerCaption => AutoSelectEnabled
         ? Strings.BusinessServerPickerAutoCaption : Strings.BusinessServerPickerManualCaption;
     public string ServerLocked => _client?.BusinessActiveServerName is { } name
@@ -146,6 +190,7 @@ public sealed class BusinessWindowTextViewModel : ViewModelBase
         {
             "split" => Strings.BusinessSplit,
             "full" => Strings.BusinessFullCompact,
+            _ when _client.IsBusinessServiceManaged => Strings.BusinessModeServiceManaged,
             _ => Strings.BusinessModeUnknown
         }
         : _client?.IsSplitTunnel == true ? Strings.BusinessSplit : Strings.BusinessFullCompact;

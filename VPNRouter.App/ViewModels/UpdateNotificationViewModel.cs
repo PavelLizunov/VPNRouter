@@ -35,8 +35,13 @@ public partial class UpdateNotificationViewModel : ObservableObject
     [ObservableProperty] private string _message = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCheckUpdates))]
+    [NotifyPropertyChangedFor(nameof(IsDownloadProgressIndeterminate))]
     private bool _isDownloading;
-    [ObservableProperty] private int _downloadProgress;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDownloadProgressIndeterminate))]
+    private int _downloadProgress;
+
+    public bool IsDownloadProgressIndeterminate => IsDownloading && DownloadProgress <= 0;
 
     public enum UpdateCheckState { Default, Checking, UpToDate, Found, Failed }
 
@@ -111,7 +116,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     public string RollbackConfirmationText => SelectedRollback == null
         ? string.Empty
-        : string.Format(Strings.RollbackConfirmation, SelectedRollback.Version);
+        : VPNRouter.Core.Localization.Strings.BusinessRollbackConfirmationWithCurrent(SelectedRollback.Version, AppVersion.Version);
     public string ConfirmRollbackText => _updateSource is BusinessUpdateSource
         ? Strings.RollbackAction : Strings.ConfirmRollback;
     public string CancelRollbackText => Strings.Cancel;

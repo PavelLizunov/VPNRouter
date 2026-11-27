@@ -156,6 +156,17 @@ public sealed class VlessDeepVerifier
         bool runCanaries = true) =>
         VerifyConfiguredAsync(entry, pool, measureBandwidth, runCanaries, ct);
 
+    // Automatic Business selection must prove real traffic through the exact
+    // candidate, not just a cached or redirected HTTP reply. It uses the
+    // profile resolver and requires HTTPS plus UDP for games/voice protocols.
+    internal Task<DeepVerifyResult> VerifyForSelectionAsync(
+        VlessServerEntry entry,
+        IReadOnlyList<VlessServerEntry> pool,
+        string? localDns,
+        CancellationToken ct) =>
+        VerifyConfiguredAsync(entry, pool, measureBandwidth: false, runCanaries: false,
+            forSelection: true, localDns: localDns, ct: ct);
+
     internal static VlessServerEntry? ResolveChainUpstream(
         VlessServerEntry entry, IReadOnlyList<VlessServerEntry>? pool)
     {
@@ -173,7 +184,9 @@ public sealed class VlessDeepVerifier
         IReadOnlyList<VlessServerEntry>? pool,
         bool measureBandwidth,
         bool runCanaries,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool forSelection = false,
+        string? localDns = null)
     {
         var chainUpstream = ResolveChainUpstream(entry, pool);
         var protocol = (entry.Protocol ?? "vless").Trim().ToLowerInvariant();
@@ -264,6 +277,8 @@ public sealed class VlessDeepVerifier
         using var probeScope = DeepVerifyProbe.BeginProbeScope();
 
         var proxy = new VerificationProxy(NetPortUtil.FindFreePort());
+        int? udpPort = forSelection && ProtocolGroups.Of(entry) == ProtocolGroup.GamesVoice
+            ? NetPortUtil.FindFreeUdpPort() : null;
         string? tmpConfigPath = null;
         IProcessHandle? handle = null;
 
@@ -273,7 +288,7 @@ public sealed class VlessDeepVerifier
         try
         {
             var configJson = BuildSingleOutboundConfig(entry, proxy, chainUpstream: chainUpstream,
-                useConfiguredOutbound: pool != null);
+                useConfiguredOutbound: pool != null, localDns: localDns, udpPort: udpPort);
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-dv-{Guid.NewGuid():N}.json");
             await using (var writer = new StreamWriter(AppPaths.CreatePrivateFile(tmpConfigPath, FileMode.CreateNew)))
                 await writer.WriteAsync(configJson.AsMemory(), overallCts.Token);
@@ -302,16 +317,31 @@ public sealed class VlessDeepVerifier
             if (handle.HasExited || !await proxy.WaitUntilBoundAsync(EffectiveSocksBindWait, overallCts.Token))
                 return DeepVerifyResult.Failed(proxy.StartupError, DeepVerifyFailurePhase.SocksBind);
 
-            var (httpOk, httpLatencyMs, httpErr) = await DeepVerifyProbe.ProbeViaProxyAsync(proxy, HttpTimeout, overallCts.Token);
+            var traceUrl = forSelection ? FreshProbeUrl(DeepVerifyConstants.ProbeUrl) : DeepVerifyConstants.ProbeUrl;
+            var trace = DeepVerifyProbe.ProbeViaProxyAsync(proxy, HttpTimeout, overallCts.Token, traceUrl);
+            if (forSelection)
+            {
+                var control = DeepVerifyProbe.ProbeViaProxyAsync(proxy, HttpTimeout, overallCts.Token,
+                    FreshProbeUrl(DeepVerifyConstants.NoContentProbeUrl), expectNoContent: true);
+                var udp = udpPort is int listenPort
+                    ? DeepVerifyProbe.ProbeStunAsync(listenPort, overallCts.Token)
+                    : Task.FromResult(true);
+                await Task.WhenAll(trace, control, udp);
+                if (!(await control).ok || !await udp)
+                    return DeepVerifyResult.Failed("candidate traffic check failed",
+                        DeepVerifyFailurePhase.ProxiedHttp);
+            }
+
+            var (httpOk, httpLatencyMs, httpErr) = await trace;
             if (!httpOk)
             {
                 _logger.Information("[VlessDeepVerifier] HTTP probe failed");
                 return DeepVerifyResult.Failed(httpErr ?? "http failed", DeepVerifyFailurePhase.ProxiedHttp);
             }
 
-            var canary = runCanaries
-                ? await ProbeCanariesViaProxyAsync(proxy, overallCts.Token)
-                : PhaseOutcome.Unknown;
+            var canary = forSelection
+                ? PhaseOutcome.Unknown
+                : runCanaries ? await ProbeCanariesViaProxyAsync(proxy, overallCts.Token) : PhaseOutcome.Unknown;
 
             double? mbps = null;
             if (measureBandwidth)
@@ -375,8 +405,11 @@ public sealed class VlessDeepVerifier
         }
     }
 
+    private static string FreshProbeUrl(string url) => $"{url}?probe={Guid.NewGuid():N}";
+
     internal static string BuildSingleOutboundConfig(VlessServerEntry s, VerificationProxy proxy,
-        bool embedded = false, VlessServerEntry? chainUpstream = null, bool useConfiguredOutbound = false)
+        bool embedded = false, VlessServerEntry? chainUpstream = null, bool useConfiguredOutbound = false,
+        string? localDns = null, int? udpPort = null)
     {
         if (!string.IsNullOrEmpty(s.DetourVia) && chainUpstream == null)
             throw new InvalidOperationException(DeepVerifyConstants.DetourNote);
@@ -427,23 +460,38 @@ public sealed class VlessDeepVerifier
         }
         outboundsArray.Add((JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true });
 
+        const string dnsTag = "dns-google";
+        var resolver = ConfigGenerator.BuildLocalDnsServer(localDns, out var bootstrap, dnsTag);
+        if (resolver.Detour != null) resolver.Detour = "dns-direct-out";
+        var dnsServers = new JsonArray(JsonSerializer.SerializeToNode(resolver, AppJsonContext.Default.DnsServer));
+        if (bootstrap != null)
+            dnsServers.Add(JsonSerializer.SerializeToNode(bootstrap, AppJsonContext.Default.DnsServer));
+
+        var inbounds = new JsonArray(proxy.CreateInbound());
+        if (udpPort is int listenPort)
+        {
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "direct", ["tag"] = "verify-udp", ["listen"] = "127.0.0.1",
+                ["listen_port"] = listenPort, ["network"] = "udp",
+                ["override_address"] = DeepVerifyConstants.StunHost, ["override_port"] = DeepVerifyConstants.StunPort,
+            });
+        }
+
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = embedded ? "error" : "info" },
             ["dns"] = new JsonObject
             {
-                ["servers"] = new JsonArray
-                {
-                    (JsonNode?)new JsonObject { ["type"] = "https", ["tag"] = "dns-google", ["server"] = "8.8.8.8", ["path"] = "/dns-query", ["detour"] = "dns-direct-out" },
-                },
-                ["final"] = "dns-google",
+                ["servers"] = dnsServers,
+                ["final"] = dnsTag,
             },
-            ["inbounds"] = new JsonArray(proxy.CreateInbound()),
+            ["inbounds"] = inbounds,
             ["outbounds"] = outboundsArray,
             ["route"] = new JsonObject
             {
                 ["final"] = "proxy",
-                ["default_domain_resolver"] = new JsonObject { ["server"] = "dns-google" },
+                ["default_domain_resolver"] = new JsonObject { ["server"] = dnsTag },
                 ["rules"] = new JsonArray
                 {
                     (JsonNode?)new JsonObject { ["action"] = "sniff" },

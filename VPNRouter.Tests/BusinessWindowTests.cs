@@ -105,7 +105,7 @@ public sealed class BusinessWindowTests
             vm.IsConnected = true;
             Assert.All(modes, mode => Assert.False(mode.IsEffectivelyEnabled));
             Assert.Contains(modeButton.GetVisualDescendants().OfType<TextBlock>(),
-                text => text.IsEffectivelyVisible && text.Text == Strings.BusinessModeUnknown);
+                text => text.IsEffectivelyVisible && text.Text == Strings.BusinessModeServiceManaged);
             vm.IsConnected = false;
             modes[0].IsChecked = true;
             Assert.True(vm.IsSplitTunnel);
@@ -236,6 +236,72 @@ public sealed class BusinessWindowTests
 
     private static BusinessWindow CreateWindow(MainWindowViewModel vm, int width = 420) =>
         new(static (_, _) => Task.FromResult(ServerProbeResult.Unknown)) { DataContext = vm, Width = width };
+
+    [AvaloniaFact]
+    public void FailedConnect_ShowsErrorPillAndEmphasizesRepair()
+    {
+        var store = new InMemorySettingsStore();
+        var settings = new AppSettings();
+        BusinessDefaults.Apply(settings, BusinessDefaultsTests.MultiServerConnection,
+            App.Services.BusinessBootstrap.ReadRules());
+        settings.App.Language = "ru";
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store);
+        var window = CreateWindow(vm);
+        window.Show();
+        try
+        {
+            vm.StatusText = $"{Strings.FailedStartVpn} synthetic";
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            var pill = window.FindControl<Border>("BusinessStatusPill")!;
+            Assert.Contains("error", pill.Classes);
+            var repair = window.FindControl<Button>("BusinessRepairButton")!;
+            Assert.Contains("business-outline", repair.Classes);
+            Assert.DoesNotContain("business-ghost", repair.Classes);
+
+            vm.IsConnecting = true;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            Assert.DoesNotContain("error", pill.Classes);
+            Assert.Contains("busy", pill.Classes);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void ActiveTunnelSummary_UsesTheSuccessTag()
+    {
+        var store = new InMemorySettingsStore();
+        var settings = new AppSettings();
+        BusinessDefaults.Apply(settings, BusinessDefaultsTests.MultiServerConnection,
+            App.Services.BusinessBootstrap.ReadRules());
+        settings.App.Language = "ru";
+        store.Save(settings, AppPaths.ConfigYamlPath);
+        using var vm = new MainWindowViewModel(store);
+        var window = CreateWindow(vm);
+        window.Show();
+        try
+        {
+            vm.IsConnected = true;
+            vm.SetBusinessConnectedServerName("Synthetic active");
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            Assert.True(window.Texts.IsServerSummaryActive);
+            var summary = Assert.Single(window.GetVisualDescendants().OfType<TextBlock>()
+                .Where(text => AutomationProperties.GetAutomationId(text) == "BusinessServerSummary"));
+            Assert.Contains("active-tag", summary.Classes);
+            Assert.DoesNotContain("warn-tag", summary.Classes);
+
+            vm.SetBusinessConnectedServerName(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(window.Texts.IsServerSummaryActive);
+            Assert.Equal(Strings.BusinessModeServiceManaged, window.Texts.ModeSummary);
+        }
+        finally { window.Close(); }
+    }
 
     [AvaloniaFact]
     public void ServerSelection_WriteFailureKeepsWindowUsableAndReportsGenericError()

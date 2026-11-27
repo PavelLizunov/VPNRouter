@@ -38,21 +38,21 @@ public static partial class Strings
     public static string BusinessDiagnosticsSendFailed => Ru ? "Отправка не подтверждена. Повторите." : "Delivery not confirmed. Retry Send.";
     public static string BusinessDiagnosticsCancelled => Ru ? "Операция остановлена. Сохранённые отчёты оставлены на компьютере." : "Operation stopped. Saved reports are retained locally.";
     public static string BusinessDiagnosticsOpenFailed => Ru ? "Не удалось открыть папку отчёта." : "Could not open the report folder.";
-    public static string BusinessNodeMetricsUnavailable => Ru ? "Активность: нет данных" : "Activity: no data";
-    public static string BusinessNodeMetricsStale => Ru ? "Активность: данные устарели" : "Activity: data is stale";
+    public static string BusinessNodeMetricsUnavailable => Ru ? "Нагрузка: нет данных" : "Load: no data";
+    public static string BusinessNodeMetricsStale => Ru ? "Нагрузка: данные устарели" : "Load: data is stale";
     public static string BusinessUpdatesUnavailable => Ru ? "Обновления недоступны" : "Updates unavailable";
     public static string BusinessUpdateWaitForConnection => Ru ? "Дождитесь завершения подключения и повторите обновление." : "Wait for the connection to finish and retry the update.";
     public static string BusinessUpdateStopFailed => Ru ? "Не удалось остановить VPN. Отключите его и повторите обновление." : "Could not stop VPN. Disconnect and retry the update.";
     public static string BusinessUpdateDownloadFailed => Ru ? "Не удалось загрузить проверенное обновление. Повторите позже." : "Could not download a verified update. Retry later.";
     public static string BusinessUpdateInstallFailed => Ru ? "Не удалось запустить обновление. Повторите позже." : "Could not start the update. Retry later.";
-    public static string BusinessNodeActivityLow => Ru ? "Активность: низкая" : "Activity: low";
-    public static string BusinessNodeActivityMedium => Ru ? "Активность: средняя" : "Activity: medium";
-    public static string BusinessNodeActivityHigh => Ru ? "Активность: высокая" : "Activity: high";
+    public static string BusinessNodeActivityLow => Ru ? "Нагрузка: низкая" : "Load: low";
+    public static string BusinessNodeActivityMedium => Ru ? "Нагрузка: средняя" : "Load: medium";
+    public static string BusinessNodeActivityHigh => Ru ? "Нагрузка: высокая" : "Load: high";
     public static string BusinessNodeMetricsHint(ulong? ageSeconds, bool stale)
     {
         var meaning = Ru
-            ? "Активность по трафику за последние сутки; оценка от сервера."
-            : "Activity from traffic over the last day, assessed by the server.";
+            ? "Нагрузка по трафику за последние сутки; оценка от сервера."
+            : "Load from traffic over the last day, assessed by the server.";
         if (ageSeconds is not { } age)
             return meaning + (Ru ? " Время пробы неизвестно." : " Sample age is unknown.");
         var amount = age < 60 ? age : age / 60;
@@ -170,7 +170,11 @@ public static partial class Strings
     public static string BusinessServerLocked => Ru
         ? "Отключите VPN, чтобы изменить сервер."
         : "Disconnect VPN to change server.";
-    public static string BusinessModeUnknown => Ru ? "Не определён" : "Unknown";
+    public static string BusinessServerAutoFallback(string name) => Ru
+        ? $"Резервный сервер: {name}"
+        : $"Fallback server: {name}";
+    public static string BusinessModeUnknown => Ru ? "Внешний туннель" : "External tunnel";
+    public static string BusinessModeServiceManaged => Ru ? "Управляется службой" : "Managed by service";
     public static string BusinessModeLocked => Ru
         ? "Отключите VPN, чтобы изменить режим."
         : "Disconnect VPN to change mode.";
@@ -195,6 +199,9 @@ public static partial class Strings
     public static string BusinessRollbackSafetyHint => Ru
         ? "Доступны только проверенные стабильные версии."
         : "Only verified stable releases are available.";
+    public static string BusinessRollbackConfirmationWithCurrent(string targetVersion, string currentVersion) => Ru
+        ? $"Установить v{targetVersion} вместо v{currentVersion}? VPN остановится на время установки."
+        : $"Install v{targetVersion} instead of v{currentVersion}? VPN will stop during installation.";
     public static string BusinessUpdateApplying => Ru
         ? "Останавливаем VPN и устанавливаем обновление…"
         : "Stopping VPN and installing the update…";

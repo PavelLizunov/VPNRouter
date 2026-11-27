@@ -82,6 +82,10 @@ internal sealed partial class BusinessServicesViewModel : ViewModelBase, IDispos
         OnPropertyChanged(nameof(RepairDismissText));
         OnPropertyChanged(nameof(RepairAdviceFooter));
         OnPropertyChanged(nameof(RepairRetrySearchText));
+        OnPropertyChanged(nameof(DeliveredReceiptBadgeText));
+        OnPropertyChanged(nameof(HasDeliveredReceiptBadge));
+        OnPropertyChanged(nameof(RepairResendNote));
+        OnPropertyChanged(nameof(HasRepairResendNote));
         OnPropertyChanged(nameof(RefreshStatus));
         OnPropertyChanged(nameof(IsRefreshStatusVisible));
         OnPropertyChanged(nameof(DiagnosticStatus));

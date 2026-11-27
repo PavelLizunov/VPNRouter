@@ -167,6 +167,58 @@ public sealed class VerificationProxyLoopbackTests
         });
     }
 
+    [Theory]
+    [InlineData("204 No Content", true)]
+    [InlineData("200 OK", false)]
+    [InlineData("302 Found", false)]
+    public Task SelectionControlRequiresExactNoContentResponse(string status, bool expected) =>
+        WithOwnedProxyAsync(async (proxy, ct) =>
+        {
+            using var origin = new TcpListener(IPAddress.Loopback, 0);
+            origin.Start();
+            var probe = DeepVerifyProbe.ProbeViaProxyAsync(proxy, TimeSpan.FromSeconds(5), ct,
+                $"http://{origin.LocalEndpoint}/control", expectNoContent: true);
+            using var connection = await origin.AcceptTcpClientAsync(ct);
+            await ReadOriginRequestAsync(connection.GetStream(), "/control", ct);
+            await ReplyAsync(connection, status, ct);
+
+            Assert.Equal(expected, (await probe).ok);
+        });
+
+    [Fact]
+    public async Task SelectionStunRetriesThroughTheSingBoxUdpInbound()
+    {
+        using var target = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var targetPort = ((IPEndPoint)target.Client.LocalEndPoint!).Port;
+        var probePort = NetPortUtil.FindFreeUdpPort();
+        await WithOwnedProxyAsync(async (_, ct) =>
+        {
+            var probe = DeepVerifyProbe.ProbeStunAsync(probePort, ct);
+            var dropped = await target.ReceiveAsync(ct);
+            var retried = await target.ReceiveAsync(ct);
+            Assert.Equal(dropped.Buffer, retried.Buffer);
+
+            var response = new byte[32];
+            retried.Buffer.CopyTo(response, 0);
+            response[0] = 1;
+            response[3] = 12;
+            response[21] = 0x20;
+            response[23] = 8;
+            response[25] = 1;
+            await target.SendAsync(response.AsMemory(), retried.RemoteEndPoint, ct);
+            Assert.True(await probe);
+        }, proxy =>
+        {
+            var config = JsonNode.Parse(VlessDeepVerifier.BuildSingleOutboundConfig(
+                VlessDeepVerifierTests.CleanVlessEntry(), proxy, udpPort: probePort))!.AsObject();
+            var inbound = config["inbounds"]![1]!;
+            inbound["override_address"] = "127.0.0.1";
+            inbound["override_port"] = targetPort;
+            config["outbounds"]![0] = new JsonObject { ["type"] = "direct", ["tag"] = "proxy" };
+            return config;
+        });
+    }
+
     private static async Task ReplyAsync(TcpClient client, string statusAndHeaders, CancellationToken ct, string body = "")
     {
         var response = $"HTTP/1.1 {statusAndHeaders}\r\nConnection: close\r\nContent-Length: {body.Length}\r\n\r\n{body}";
