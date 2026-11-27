@@ -31,8 +31,8 @@ workflow runs or rerun attempts compare newer in pacman.
 `--work-dir` must be new and absolute. `--archive-cache` optionally reads an
 existing directory of verified archives.
 
-The package uses sing-box-vpnctl 1.14.4-vpnctl.4 linux-amd64 and libcronet.so
-from its pinned cronet-go module (4ecba4761b20). Both payload hashes match
+The package uses sing-box-vpnctl 1.14.5-vpnctl.1 linux-amd64 with TrustTunnel
+and Mieru. Its archive hash matches
 [the desktop Linux workflow](../../.github/workflows/build-linux.yml).
 The [Arch CI workflow](../../.github/workflows/arch-headless.yml) builds from
 `github.sha`, installs and upgrades the result with pacman, verifies capabilities,
@@ -139,5 +139,5 @@ steering fails without opening an authentication dialog and is logged.
 The manifest verifies file hashes and modes; ELF dependencies are inventoried
 with readelf. Managed and native notice evidence is collected offline from the
 source, SDK and [notice catalog](notices/catalog.json). Native corresponding
-source and linked Cronet notice coverage remain partial; this CI artifact is
+source coverage remains partial; this CI artifact is
 not a tagged release and does not claim complete license inventory.

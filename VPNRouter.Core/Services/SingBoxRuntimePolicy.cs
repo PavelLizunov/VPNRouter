@@ -214,13 +214,15 @@ internal sealed class SingBoxRuntimePolicy
 
     /// <summary>
     /// The packaged runtime is the sing-box-vpnctl release pinned by RUNTIME_SHA256 in
-    /// packaging/arch/build_package.py, built with AWG, XHTTP, DNSTT and TurnRelay.
+    /// packaging/arch/build_package.py, built with AWG, XHTTP, DNSTT, TurnRelay, TrustTunnel and Mieru.
     /// Test fixtures stay false; the binary is never run to discover features.
     /// </summary>
     public bool AwgAvailable => _isPackaged;
     public bool XhttpAvailable => _isPackaged;
     public bool DnsttAvailable => _isPackaged;
     public bool TurnRelayAvailable => _isPackaged;
+    public bool TrustTunnelAvailable => _isPackaged;
+    public bool MieruAvailable => _isPackaged;
 
     /// <summary>
     /// Availability indicates whether the runtime can be authorized for executable operations.

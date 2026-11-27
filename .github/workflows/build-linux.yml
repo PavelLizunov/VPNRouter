@@ -69,11 +69,11 @@ jobs:
             -c Release -r linux-x64 --self-contained true \
             -o publish/linux-x64
 
-      - name: Bundle sing-box-vpnctl-linux-amd64 + libcronet
+      - name: Bundle sing-box-vpnctl-linux-amd64
         run: |
           set -euo pipefail
-          SINGBOX_VPNCTL_VER="1.14.4-vpnctl.4"
-          SINGBOX_VPNCTL_SHA256="a6014cfad5494fe8fa3f178facad6a7c6dab59f5143f7b5af645e8e4e5d84094"
+          SINGBOX_VPNCTL_VER="1.14.5-vpnctl.1"
+          SINGBOX_VPNCTL_SHA256="72a65339089f9f41a05d746f03c2ee0105878a91a373295a0fae2af07cd2b7d4"
           curl -sSL -o /tmp/singbox-vpnctl.tar.gz \
             "https://github.com/PavelLizunov/sing-box-vpnctl/releases/download/v${SINGBOX_VPNCTL_VER}/sing-box-${SINGBOX_VPNCTL_VER}-linux-amd64.tar.gz"
           echo "${SINGBOX_VPNCTL_SHA256}  /tmp/singbox-vpnctl.tar.gz" | sha256sum -c -
@@ -81,15 +81,14 @@ jobs:
           cp "/tmp/sing-box-${SINGBOX_VPNCTL_VER}-linux-amd64/sing-box" publish/linux-x64/sing-box
           chmod +x publish/linux-x64/sing-box
 
-          curl -fsSL -o /tmp/libcronet.so \
-            "https://raw.githubusercontent.com/SagerNet/cronet-go/4ecba4761b201f6c552aabd0462a94fe2a8f833c/lib/linux_amd64/libcronet.so"
-          echo "99eb98eb47102c7418c7fed1e666d27e2bfb67c6b5517f7ae6b033748d657ed4  /tmp/libcronet.so" | sha256sum -c -
-          cp /tmp/libcronet.so publish/linux-x64/libcronet.so
-          cp packaging/arch/notices/Cronet/naiveproxy/LICENSE publish/linux-x64/LICENSE.libcronet
-          ls -lh publish/linux-x64/sing-box publish/linux-x64/libcronet.so
-
-          publish/linux-x64/sing-box version
-          publish/linux-x64/sing-box version | grep -q with_awg
+          tags=$(publish/linux-x64/sing-box version | sed -n 's/^Tags: //p')
+          for feature in with_awg with_trusttunnel with_mieru; do
+            grep -qw "$feature" <<< "$tags"
+          done
+          if grep -Eq 'with_naive_outbound|with_purego' <<< "$tags"; then
+            echo 'Unexpected NaiveProxy or Cronet build tag' >&2
+            exit 1
+          fi
 
       - name: Assemble AppDir
         run: |

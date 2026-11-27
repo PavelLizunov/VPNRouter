@@ -15,6 +15,10 @@ public static class SingBoxFeatures
     private static bool _embeddedDnstt;
     private static bool _turnrelay;
     private static bool _embeddedTurnRelay;
+    private static bool _naive;
+    private static bool _trustTunnel;
+    private static bool _mieru;
+    private static bool _embeddedNativeTransports;
 
     internal static bool EmbeddedCore { get; set; } = OperatingSystem.IsAndroid();
 
@@ -54,6 +58,50 @@ public static class SingBoxFeatures
     {
         _embeddedDnstt = HasDnsttVersion(version);
         _embeddedTurnRelay = HasTurnRelayVersion(version);
+        _embeddedNativeTransports = HasNativeTransportVersion(version);
+    }
+
+    internal static bool HasNativeTransportVersion(string version)
+    {
+        var parts = version.Trim().Split("-vpnctl.", StringSplitOptions.None);
+        return parts.Length == 2 && Version.TryParse(parts[0], out var core) &&
+            core >= new Version(1, 14, 5) && int.TryParse(parts[1], out var patch) && patch >= 1;
+    }
+
+    internal static bool NaiveAvailable
+    {
+        get
+        {
+            if (OverrideNaive is bool value) return value;
+            if (EmbeddedCore || SingBoxRuntimePolicy.Current != null ||
+                !(OperatingSystem.IsWindows() || OperatingSystem.IsLinux())) return false;
+            _ = Probe();
+            return _naive;
+        }
+    }
+
+    public static bool TrustTunnelAvailable
+    {
+        get
+        {
+            if (OverrideTrustTunnel is bool value) return value;
+            if (EmbeddedCore) return _embeddedNativeTransports;
+            if (SingBoxRuntimePolicy.Current is { } policy) return policy.TrustTunnelAvailable;
+            _ = Probe();
+            return _trustTunnel;
+        }
+    }
+
+    public static bool MieruAvailable
+    {
+        get
+        {
+            if (OverrideMieru is bool value) return value;
+            if (EmbeddedCore) return _embeddedNativeTransports;
+            if (SingBoxRuntimePolicy.Current is { } policy) return policy.MieruAvailable;
+            _ = Probe();
+            return _mieru;
+        }
     }
 
     internal static bool HasDnsttVersion(string version)
@@ -96,6 +144,9 @@ public static class SingBoxFeatures
     internal static bool? OverrideDnstt { get; set; }
 
     internal static bool? OverrideTurnRelay { get; set; }
+    internal static bool? OverrideNaive { get; set; }
+    internal static bool? OverrideTrustTunnel { get; set; }
+    internal static bool? OverrideMieru { get; set; }
 
     internal static bool? OverrideAwg { get; set; }
 
@@ -119,8 +170,15 @@ public static class SingBoxFeatures
             _embeddedDnstt = false;
             _turnrelay = false;
             _embeddedTurnRelay = false;
+            _trustTunnel = false;
+            _mieru = false;
+            _embeddedNativeTransports = false;
             OverrideDnstt = null;
             OverrideTurnRelay = null;
+            _naive = false;
+            OverrideNaive = null;
+            OverrideTrustTunnel = null;
+            OverrideMieru = null;
             EmbeddedCore = OperatingSystem.IsAndroid();
             OverrideAwg = null;
             OverrideXhttp = null;
@@ -149,6 +207,11 @@ public static class SingBoxFeatures
                     var version = Array.Find(lines, line => line.StartsWith(prefix, StringComparison.Ordinal));
                     _dnstt = version != null && HasDnsttVersion(version[prefix.Length..]);
                     _turnrelay = tags.Contains("with_turnrelay", StringComparison.Ordinal);
+                    var featureTags = tags.Length == 0 ? Array.Empty<string>() :
+                        tags.TrimStart()[5..].Split(',', StringSplitOptions.TrimEntries);
+                    _naive = Array.IndexOf(featureTags, "with_naive_outbound") >= 0;
+                    _trustTunnel = Array.IndexOf(featureTags, "with_trusttunnel") >= 0;
+                    _mieru = Array.IndexOf(featureTags, "with_mieru") >= 0;
                     _awg = tags.Contains("with_awg", StringComparison.Ordinal);
                     _xhttp = tags.Contains("with_xhttp", StringComparison.Ordinal);
                 }
@@ -160,6 +223,9 @@ public static class SingBoxFeatures
                 _xhttp = false;
                 _dnstt = false;
                 _turnrelay = false;
+                _naive = false;
+                _trustTunnel = false;
+                _mieru = false;
             }
             _probed = true;
             return (_awg, _xhttp);

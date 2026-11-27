@@ -131,14 +131,14 @@ internal static class AndroidSubscriptionRefresh
             {
                 var previous = identity == null ? null : previousRows.Find(row => row != null && RowIdentity(row) == identity);
                 var route = previous == null ? null : SubscriptionEntry.RouteKey(previous, previousRows);
-                var equivalent = previous?.Dnstt != null
+                var equivalent = previous is not null && (previous.Dnstt != null || previous.IsNativeTransport)
                     ? new SubscriptionChainSelection(affected[0].Id, affected[0].Url, previous, route)
                         .Match(affected[0], refreshed.Servers)
                     : route == null ? null : refreshed.Servers.FirstOrDefault(row => SubscriptionEntry.RouteKey(row, refreshed.Servers) == route);
                 if (equivalent != null)
                     BindFeed(updates, affected[0], equivalent);
                 else if (identity?.StartsWith(DnsttRowPrefix, StringComparison.Ordinal) != true &&
-                    string.IsNullOrEmpty(previous?.DetourVia))
+                    previous?.IsNativeTransport != true && string.IsNullOrEmpty(previous?.DetourVia))
                 {
                     var name = read(SelectedName);
                     var matches = refreshed.Servers.Where(row => !row.IsTurnRelay &&

@@ -13,7 +13,8 @@ demand or bundled with the installer, not statically linked into the managed cod
 |---|---|---|---|
 | sing-box | Core VPN/proxy engine (TUN, VLESS+Reality, DNS) | https://github.com/SagerNet/sing-box | GPL-3.0 |
 | sing-box-vpnctl | sing-box fork bundled with desktop builds (pinned release in `build.ps1`) | https://github.com/PavelLizunov/sing-box-vpnctl | GPL-3.0 (sing-box derivative) |
-| libcronet.dll | naive outbound transport on Windows, from the sing-box release | https://github.com/SagerNet/sing-box/releases | see upstream release (Chromium components) |
+| sing-trusttunnel | TrustTunnel transport linked into the sing-box-vpnctl core | https://github.com/xchacha20-poly1305/sing-trusttunnel | GPL-3.0-or-later |
+| Mieru | Mieru transport linked into the sing-box-vpnctl core | https://github.com/enfein/mieru | GPL-3.0 |
 | Mullvad win-split-tunnel driver | Windows per-app split tunneling (exclude mode) | https://github.com/mullvad/win-split-tunnel | GPL-3.0-or-later / MPL-2.0 (see `LICENSE.split-tunnel`) |
 | slipstream-client | DNS-tunnel transport bundled on Windows | https://github.com/Mygod/slipstream-rust | see upstream repository |
 | libbox.aar | sing-box gomobile binding (Android) | https://github.com/SagerNet/sing-box (experimental/libbox) | GPL-3.0 |

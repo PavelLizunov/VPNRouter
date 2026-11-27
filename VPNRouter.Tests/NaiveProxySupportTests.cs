@@ -3,8 +3,15 @@ using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
 
-public class NaiveProxySupportTests
+[Collection(SubscriptionFetcherCollection.Name)]
+public class NaiveProxySupportTests : IDisposable
 {
+    private readonly bool? _previousNaive = SingBoxFeatures.OverrideNaive;
+
+    public NaiveProxySupportTests() => SingBoxFeatures.OverrideNaive = true;
+
+    public void Dispose() => SingBoxFeatures.OverrideNaive = _previousNaive;
+
     [Fact]
     public void Naive_HttpsForm_ParsesCorrectly()
     {
@@ -88,7 +95,7 @@ public class NaiveProxySupportTests
             ServerUriParser.NaiveRuntimeAvailable = false;
             var ex = Assert.Throws<FormatException>(
                 () => ServerUriParser.Parse("naive+https://u:p@h.example:443#x"));
-            Assert.Contains("Windows and Linux", ex.Message);
+            Assert.Contains("NaiveProxy and Cronet", ex.Message);
         }
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }

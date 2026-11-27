@@ -1,7 +1,7 @@
 param(
     [string]$Version = "1.0",
-    [string]$SingBoxVersion = "1.14.4-vpnctl.4",
-    [string]$SingBoxSha256 = "1efb965de78720f7a4c86a4a4c0403bc8b388397bb640e4547acc14817ef3287",
+    [string]$SingBoxVersion = "1.14.5-vpnctl.1",
+    [string]$SingBoxSha256 = "56b1cb14110a8e0e9827eee7c0e8d046d634c4b18f67fb8e885772aac76d533f",
     [string]$SingBoxPath = "",
     [string]$SlipstreamPath = "",
     [switch]$Upload,
@@ -277,35 +277,7 @@ if ($SingBoxPath) {
         Copy-Item $_.FullName (Join-Path $DistDir $destName) -Force
     }
     $sbSize = [math]::Round((Get-Item $cachedExe).Length / 1MB, 1)
-    $cronetNote = if (Test-Path (Join-Path $extractDir 'libcronet.dll')) { ' + libcronet' } else { '' }
-    Write-Host "       Bundled sing-box-vpnctl v$SingBoxVersion$cronetNote ($sbSize MB exe)" -ForegroundColor Green
-}
-
-if (-not $SingBoxPath) {
-    $cronetCache = Join-Path $Root "tools\singbox-cache"
-    New-Item -ItemType Directory -Force -Path $cronetCache | Out-Null
-    $cronetDll = Join-Path $cronetCache "libcronet-windows-amd64-4ecba4761b20.dll"
-    $cronetDllSha256 = "683948ed11ad09b5ab75d49e171f25239977d79fc07c98d91809dffdb903f9b5"
-    if (-not (Test-Path -LiteralPath $cronetDll)) {
-        $cronetUrl = "https://raw.githubusercontent.com/SagerNet/cronet-go/4ecba4761b201f6c552aabd0462a94fe2a8f833c/lib/windows_amd64/libcronet.dll"
-        try {
-            Invoke-WebRequest -Uri $cronetUrl -OutFile $cronetDll -UseBasicParsing
-        } catch {
-            if (Test-Path -LiteralPath $cronetDll) { Remove-Item -LiteralPath $cronetDll -Force }
-            throw
-        }
-    }
-
-    $actualDllHash = (Get-FileHash -LiteralPath $cronetDll -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actualDllHash -ne $cronetDllSha256) {
-        Remove-Item -LiteralPath $cronetDll -Force
-        throw "libcronet.dll SHA256 mismatch: expected $cronetDllSha256 but got $actualDllHash"
-    }
-
-    Copy-Item -LiteralPath $cronetDll -Destination (Join-Path $DistDir "libcronet.dll") -Force
-    $cronetLicense = Join-Path $Root "packaging/arch/notices/Cronet/naiveproxy/LICENSE"
-    Copy-Item -LiteralPath $cronetLicense -Destination (Join-Path $DistDir "LICENSE.libcronet") -Force
-    Write-Host "       Bundled libcronet.dll from cronet-go 4ecba4761b20 (verified SHA256)" -ForegroundColor Green
+    Write-Host "       Bundled sing-box-vpnctl v$SingBoxVersion ($sbSize MB exe)" -ForegroundColor Green
 }
 
 Write-Host "[6b/9] Bundling slipstream-client.exe (DNS-tunnel)..." -ForegroundColor Yellow

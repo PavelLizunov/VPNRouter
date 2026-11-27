@@ -175,8 +175,7 @@ prepare
 
     def test_runtime_pins_match_desktop_linux(self) -> None:
         desktop = (PROJECT_ROOT / ".github/workflows/build-linux.yml").read_text()
-        for pin in (build_package.RUNTIME_VERSION, build_package.RUNTIME_SHA256,
-                    build_package.CRONET_URL, build_package.CRONET_SHA256):
+        for pin in (build_package.RUNTIME_VERSION, build_package.RUNTIME_SHA256):
             self.assertIn(pin, desktop)
 
     def test_pkgbuild_composite_licenses_and_dependencies(self) -> None:
@@ -586,9 +585,6 @@ class TestLicensesAndNotices(unittest.TestCase):
                 (dest / "sing-box").write_bytes(b"sb")
                 (dest / "LICENSE").write_bytes(b"lic")
                 (dest / "README.md").write_bytes(b"readme")
-            elif "cronet" in str(dest):
-                (dest / "libcronet.so").write_bytes(b"cronet")
-                (dest / "LICENSE").write_bytes(b"lic")
 
         with mock.patch("build_package.verify_repo_commit", return_value="a" * 40), \
              mock.patch("build_package.resolve_dotnet", return_value="/mock/dotnet"), \
@@ -691,12 +687,6 @@ class TestLicensesAndNotices(unittest.TestCase):
                 "complete": False,
                 "components": [
                     {
-                        "id": "Cronet",
-                        "version": "1.13.14",
-                        "status": "unresolved",
-                        "unresolved": ["linked-dependency-selection", "generated-Chromium-credits"],
-                    },
-                    {
                         "id": "sing-box-vpnctl",
                         "version": "1.14.0-vpnctl.5",
                         "status": "unresolved",
@@ -722,9 +712,6 @@ class TestLicensesAndNotices(unittest.TestCase):
                 (dest / "sing-box").write_bytes(b"sb")
                 (dest / "LICENSE").write_bytes(b"lic")
                 (dest / "README.md").write_bytes(b"readme")
-            elif "cronet" in str(dest):
-                (dest / "libcronet.so").write_bytes(b"cronet")
-                (dest / "LICENSE").write_bytes(b"lic")
 
         def fake_write_manifest(root, metadata):
             written_manifests.append(metadata)
@@ -770,8 +757,6 @@ class TestLicensesAndNotices(unittest.TestCase):
         self.assertEqual(meta["ci_run_attempt"], "2")
         self.assertFalse(meta["license_inventory_complete"])
         expected_missing = [
-            "Cronet:generated-Chromium-credits",
-            "Cronet:linked-dependency-selection",
             "VPNRouter-LICENSE",
             "sing-box-vpnctl:embedded-go-notices",
         ]

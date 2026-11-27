@@ -172,7 +172,10 @@ public static partial class ConfigGenerator
 
     private static bool IsUdpNativeProtocol(VlessServerEntry server) =>
         "hysteria2".Equals(server.Protocol, StringComparison.OrdinalIgnoreCase)
-        || "tuic".Equals(server.Protocol, StringComparison.OrdinalIgnoreCase);
+        || "tuic".Equals(server.Protocol, StringComparison.OrdinalIgnoreCase)
+        || ("mieru".Equals(server.Protocol, StringComparison.OrdinalIgnoreCase) && server.Mieru?.Transport == "udp")
+        || ("trusttunnel".Equals(server.Protocol, StringComparison.OrdinalIgnoreCase) &&
+            server.TrustTunnel is { Quic: true, Udp: true });
 
     private static VlessServerEntry? PickActiveServer(
         List<VlessServerEntry> servers, string? activeName, bool fallbackToFirstOnMiss)
@@ -188,6 +191,8 @@ public static partial class ConfigGenerator
         (!string.Equals(server.Protocol, "naive", StringComparison.OrdinalIgnoreCase) || ServerUriParser.NaiveRuntimeAvailable) &&
         (!IsAwg(server) || SingBoxFeatures.AwgAvailable) &&
         (!server.IsTurnRelay || SingBoxFeatures.TurnRelayAvailable) &&
+        (!string.Equals(server.Protocol, "trusttunnel", StringComparison.OrdinalIgnoreCase) || SingBoxFeatures.TrustTunnelAvailable) &&
+        (!string.Equals(server.Protocol, "mieru", StringComparison.OrdinalIgnoreCase) || SingBoxFeatures.MieruAvailable) &&
         (!string.Equals(server.Transport?.Type, "xhttp", StringComparison.OrdinalIgnoreCase) || SingBoxFeatures.XhttpAvailable);
 
     private static List<VlessServerEntry> FilterUnavailableServers(List<VlessServerEntry> servers) =>

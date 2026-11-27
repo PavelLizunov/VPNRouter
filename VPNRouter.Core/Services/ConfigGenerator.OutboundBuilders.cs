@@ -52,7 +52,7 @@ public static partial class ConfigGenerator
         }
     }
 
-    private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
+    internal static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
     {
         var protocol = (entry.Protocol ?? "vless").ToLowerInvariant();
         var outbound = protocol switch
@@ -64,6 +64,8 @@ public static partial class ConfigGenerator
             "ss"          => BuildShadowsocksOutbound(entry, tag),
             "naive"       => BuildNaiveOutbound(entry, tag),
             "vmess"       => BuildVmessOutbound(entry, tag),
+            "trusttunnel" => BuildTrustTunnelOutbound(entry, tag),
+            "mieru"       => BuildMieruOutbound(entry, tag),
             "dns-tunnel"  => BuildDnsTunnelOutbound(entry, tag),
             "turnrelay"   => throw new InvalidOperationException(
                 "ConfigGenerator: a TurnRelay row is a chain entry only; it cannot be built as a standalone proxy outbound."),
@@ -98,9 +100,49 @@ public static partial class ConfigGenerator
             TurnRelayServerFingerprint = profile.ServerFingerprint,
             TurnRelayConnections = profile.Connections,
             TurnRelayMode = profile.Mode,
-            TurnRelayUdp = profile.Udp,
+            Udp = profile.Udp,
             DomainResolver = new DomainResolverValue("local-dns", "prefer_ipv4"),
             SourceServer = entry,
+        };
+    }
+
+    private static SingBoxOutbound BuildTrustTunnelOutbound(VlessServerEntry entry, string tag)
+    {
+        if (!SingBoxFeatures.TrustTunnelAvailable || entry.TrustTunnel is not { } profile)
+            throw new InvalidOperationException("TrustTunnel requires a compatible core and a complete profile.");
+        return new SingBoxOutbound
+        {
+            Type = "trusttunnel",
+            Tag = tag,
+            Server = entry.Server,
+            ServerPort = entry.Port,
+            Username = entry.Username,
+            Password = entry.Password,
+            Quic = profile.Quic,
+            Udp = profile.Udp,
+            Tls = new TlsConfig
+            {
+                Enabled = true,
+                ServerName = entry.Tls?.ServerName ?? entry.Server,
+                CertificatePublicKeySha256 = profile.CertificatePublicKeySha256 is { } pin ? [pin] : null,
+            },
+        };
+    }
+
+    private static SingBoxOutbound BuildMieruOutbound(VlessServerEntry entry, string tag)
+    {
+        if (!SingBoxFeatures.MieruAvailable || entry.Mieru is not { } profile || !profile.IsValid())
+            throw new InvalidOperationException("Mieru requires a compatible core and a complete profile.");
+        return new SingBoxOutbound
+        {
+            Type = "mieru",
+            Tag = tag,
+            Server = entry.Server,
+            Username = entry.Username,
+            Password = entry.Password,
+            MieruPortBindings = [new MieruPortBinding { Port = entry.Port, Transport = profile.Transport }],
+            MieruMultiplexing = profile.Multiplexing,
+            MieruHandshakeMode = profile.HandshakeMode,
         };
     }
 

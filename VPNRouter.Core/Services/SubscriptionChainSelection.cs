@@ -2,10 +2,13 @@ using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
-// The selected exit is meaningful only within its registration. Opaque hop IDs can change
-// on refresh, but an automatic replacement must still take an unambiguous, usable detour.
+// A refresh may update a selected profile only within its registration.
+// Detour targets must retain a usable hop. Direct native profiles can rotate credentials.
 internal sealed record SubscriptionChainSelection(string FeedId, string Url, VlessServerEntry Target, string? Route)
 {
+    internal static bool RequiresMatchingSuccessor(VlessServerEntry? row) =>
+        row != null && (row.IsNativeTransport || row.Dnstt != null || !string.IsNullOrEmpty(row.DetourVia));
+
     internal static SubscriptionChainSelection? Capture(AppConfig app,
         IReadOnlyList<SubscriptionEntry>? registeredFeeds = null)
     {
@@ -28,7 +31,7 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
                 ?? pool.FirstOrDefault(s => !s.IsTurnRelay);
             if (row != null) source ??= feeds.First(s => s.Servers.Contains(row));
         }
-        return source == null || row == null || (row.Dnstt == null && string.IsNullOrEmpty(row.DetourVia)) ? null :
+        return source == null || row == null || !RequiresMatchingSuccessor(row) ? null :
             new(source.Id, source.Url, row, SubscriptionEntry.RouteKey(row, source.Servers));
     }
 
@@ -38,13 +41,23 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
             pin.FeedId != FeedId || pin.RowKey != SubscriptionEntry.RowKey(Target)) return;
 
         var feed = feeds.FirstOrDefault(s => s.Enabled && s.Id == FeedId && s.Url == Url);
-        if (feed != null && SubscriptionEntry.RouteKey(successor, feed.Servers) == Route)
+        if (feed != null && (Target.IsNativeTransport || SubscriptionEntry.RouteKey(successor, feed.Servers) == Route))
             app.SubscriptionPreference = pin with { RowKey = SubscriptionEntry.RowKey(successor) };
     }
 
     internal VlessServerEntry? Match(SubscriptionEntry? feed, IEnumerable<VlessServerEntry> enabledRows)
     {
         if (feed == null || !feed.Enabled || feed.Id != FeedId || feed.Url != Url) return null;
+        if (Target.IsNativeTransport)
+        {
+            var exact = feed.FindExactRow(Target.Name, SubscriptionEntry.RowKey(Target));
+            if (exact is { } && ConfigGenerator.IsServerRuntimeAvailable(exact)) return exact;
+            var sameProfile = feed.Servers.Where(row =>
+                string.IsNullOrEmpty(row.DetourVia) && row.Protocol == Target.Protocol &&
+                row.Name == Target.Name && row.Server == Target.Server && row.Port == Target.Port &&
+                ConfigGenerator.IsServerRuntimeAvailable(row)).Take(2).ToList();
+            return sameProfile.Count == 1 ? sameProfile[0] : null;
+        }
         if (Target.Dnstt is { } authority)
         {
             var matches = feed.Servers.Where(row => row.Dnstt is { } next

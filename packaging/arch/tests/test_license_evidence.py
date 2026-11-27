@@ -389,11 +389,8 @@ class TestLicenseEvidenceBase(unittest.TestCase):
         # Native binaries
         (self.payload_root / "runtime").mkdir()
         mock_singbox = b"MOCK_SING_BOX_BINARY"
-        mock_cronet = b"MOCK_LIBCRONET_SO"
         (self.payload_root / "runtime" / "sing-box").write_bytes(mock_singbox)
-        (self.payload_root / "runtime" / "libcronet.so").write_bytes(mock_cronet)
         self.singbox_sha = sha256_bytes(mock_singbox)
-        self.cronet_sha = sha256_bytes(mock_cronet)
 
         # Catalog & notices
         serilog_lic_text = "Apache License 2.0 Serilog text"
@@ -401,14 +398,12 @@ class TestLicenseEvidenceBase(unittest.TestCase):
         yaml_libyaml_text = "libyaml license text"
         apphost_lic_text = "MIT License .NET Apphost text"
         sing_box_lic_text = "GPL 3.0 sing-box text"
-        cronet_lic_text = "BSD-3-Clause Chromium text"
 
         (self.catalog_dir / "Serilog-LICENSE").write_text(serilog_lic_text, encoding="utf-8")
         (self.catalog_dir / "YamlDotNet-LICENSE.txt").write_text(yaml_lic_text, encoding="utf-8")
         (self.catalog_dir / "YamlDotNet-LICENSE-libyaml.txt").write_text(yaml_libyaml_text, encoding="utf-8")
         (self.catalog_dir / "dotnet-LICENSE.TXT").write_text(apphost_lic_text, encoding="utf-8")
         (self.catalog_dir / "sing-box-LICENSE").write_text(sing_box_lic_text, encoding="utf-8")
-        (self.catalog_dir / "cronet-LICENSE").write_text(cronet_lic_text, encoding="utf-8")
 
         self.catalog_content = {
             "schema_version": 1,
@@ -458,17 +453,6 @@ class TestLicenseEvidenceBase(unittest.TestCase):
                     "coverage": "partial",
                     "unresolved": ["embedded-go-notices"],
                 },
-                {
-                    "id": "Cronet",
-                    "version": "1.13.14",
-                    "repository_url": "https://github.com/SagerNet/cronet-go",
-                    "revision": "def9ff0fb992d0360f56ddbd4b43d65d29849771",
-                    "license_expression": "BSD-3-Clause",
-                    "payload_sha256": self.cronet_sha,
-                    "files": [{"path": "cronet-LICENSE", "sha256": sha256_text(cronet_lic_text), "source_url": "https://example.com/cronet"}],
-                    "coverage": "partial",
-                    "unresolved": ["linked-dependency-selection"],
-                },
             ],
         }
         (self.catalog_dir / "catalog.json").write_text(json.dumps(self.catalog_content), encoding="utf-8")
@@ -477,7 +461,7 @@ class TestLicenseEvidenceBase(unittest.TestCase):
 class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixin):
     mod = license_evidence
 
-    def test_collect_and_verify_partial_coverage_cronet(self) -> None:
+    def test_collect_and_verify_partial_native_coverage(self) -> None:
         """Verify standard collection where native components have partial coverage and unresolved notices."""
         result = license_evidence.collect_license_evidence(
             self.source_tree, self.payload_root, self.dotnet_root, self.catalog_dir
@@ -492,8 +476,7 @@ class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixi
         self.assertEqual(comps["Microsoft.NETCore.App.Host.linux-x64"]["status"], "verified_texts")
 
         self.assertEqual(comps["sing-box-vpnctl"]["status"], "unresolved")
-        self.assertEqual(comps["Cronet"]["status"], "unresolved")
-        self.assertEqual(comps["Cronet"]["payload_files"][0]["path"], "runtime/libcronet.so")
+        self.assertEqual(comps["sing-box-vpnctl"]["payload_files"][0]["path"], "runtime/sing-box")
 
         manifest_file = self.payload_root / "licenses" / "components.json"
         self.assertTrue(manifest_file.is_file())
@@ -516,7 +499,7 @@ class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixi
     def test_catalog_partial_unresolved_even_if_unresolved_list_empty(self) -> None:
         """Ensure catalog coverage partial forces unresolved even if unresolved list accidentally empty."""
         for c in self.catalog_content["components"]:
-            if c["id"] == "Cronet":
+            if c["id"] == "sing-box-vpnctl":
                 c["coverage"] = "partial"
                 c["unresolved"] = []  # accidentally empty
         (self.catalog_dir / "catalog.json").write_text(json.dumps(self.catalog_content), encoding="utf-8")
@@ -525,8 +508,8 @@ class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixi
             self.source_tree, self.payload_root, self.dotnet_root, self.catalog_dir
         )
         comps = {c["id"]: c for c in result["components"]}
-        self.assertEqual(comps["Cronet"]["status"], "unresolved")
-        self.assertIn("catalog coverage is partial", comps["Cronet"]["unresolved"])
+        self.assertEqual(comps["sing-box-vpnctl"]["status"], "unresolved")
+        self.assertIn("catalog coverage is partial", comps["sing-box-vpnctl"]["unresolved"])
         self.assertFalse(result["complete"])
 
     def test_verify_rejects_catalog_partial_falsely_marked_verified(self) -> None:
@@ -537,9 +520,10 @@ class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixi
         comp_file = self.payload_root / "licenses" / "components.json"
         data = json.loads(comp_file.read_text(encoding="utf-8"))
         for c in data["components"]:
-            if c["id"] == "Cronet":
+            if c["id"] == "sing-box-vpnctl":
                 c["status"] = "verified_texts"
                 c["unresolved"] = []
+        data["complete"] = True
         comp_file.write_text(json.dumps(data), encoding="utf-8")
 
         with self.assertRaises(ValueError) as ctx:
@@ -721,13 +705,13 @@ class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixi
         self.assertEqual(apphost_comp["status"], "unresolved")
         self.assertTrue(any("template hash mismatch" in u for u in apphost_comp["unresolved"]))
 
-    def test_native_mapping_exact_cronet(self) -> None:
-        """Ensure native Cronet is mapped strictly to runtime/libcronet.so (no lib substring collision)."""
+    def test_native_mapping_exact_sing_box(self) -> None:
+        """Ensure sing-box uses the exact runtime path."""
         result = license_evidence.collect_license_evidence(
             self.source_tree, self.payload_root, self.dotnet_root, self.catalog_dir
         )
         comps = {c["id"]: c for c in result["components"]}
-        self.assertEqual(comps["Cronet"]["payload_files"][0]["path"], "runtime/libcronet.so")
+        self.assertEqual(comps["sing-box-vpnctl"]["payload_files"][0]["path"], "runtime/sing-box")
 
     def test_root_manifest_complete_mismatch_rejected(self) -> None:
         """Ensure root manifest.json license_inventory_complete must equal evidence complete."""
@@ -749,7 +733,8 @@ class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixi
         )
         comp_file = self.payload_root / "licenses" / "components.json"
         data = json.loads(comp_file.read_text(encoding="utf-8"))
-        data["components"] = [c for c in data["components"] if c["id"] != "Cronet"]
+        data["components"] = [c for c in data["components"] if c["id"] != "sing-box-vpnctl"]
+        data["complete"] = True
         comp_file.write_text(json.dumps(data), encoding="utf-8")
 
         with self.assertRaises(ValueError) as ctx:
@@ -825,15 +810,15 @@ class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixi
             license_evidence.safe_resolve_relative(pkg_dir, "../../outside.txt")
 
     def test_real_catalog_verification(self) -> None:
-        """Verify the actual production catalog.json with 5 components and 51 notices."""
+        """Verify the actual production catalog.json with the shipped native and managed components."""
         real_catalog_dir = ARCH_DIR / "notices"
         cat_file = real_catalog_dir / "catalog.json"
         self.assertTrue(cat_file.is_file())
         cat_data = license_evidence.safe_read_json(cat_file)
         comps = cat_data.get("components", [])
-        self.assertEqual(len(comps), 5)
+        self.assertEqual(len(comps), 4)
         total_files = sum(len(c.get("files", [])) for c in comps)
-        self.assertEqual(total_files, 51)
+        self.assertEqual(total_files, 6)
         for c in comps:
             for f in c.get("files", []):
                 p = license_evidence.safe_resolve_relative(real_catalog_dir, f["path"])
@@ -964,8 +949,8 @@ class TestLicenseEvidence(TestLicenseEvidenceBase, LicenseEvidenceRegressionMixi
         data = json.loads(comp_file.read_text(encoding="utf-8"))
 
         sb_comp = next(c for c in data["components"] if c["id"] == "sing-box-vpnctl")
-        cr_comp = next(c for c in data["components"] if c["id"] == "Cronet")
-        sb_comp["payload_files"], cr_comp["payload_files"] = cr_comp["payload_files"], sb_comp["payload_files"]
+        apphost = next(c for c in data["components"] if c["id"] == "Microsoft.NETCore.App.Host.linux-x64")
+        sb_comp["payload_files"], apphost["payload_files"] = apphost["payload_files"], sb_comp["payload_files"]
         comp_file.write_text(json.dumps(data), encoding="utf-8")
 
         with self.assertRaises(ValueError) as ctx:

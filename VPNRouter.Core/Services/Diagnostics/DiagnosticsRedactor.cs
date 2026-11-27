@@ -240,6 +240,7 @@ public static class DiagnosticsRedactor
 
         if (value.AsSpan().TrimStart().StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
             || value.AsSpan().TrimStart().StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase)
+            || NativeTransportUriParser.HasScheme(value.AsSpan().TrimStart())
             || IsTurnRelaySecretKey(key)
             || key?.Equals("sshPrivateKey", StringComparison.OrdinalIgnoreCase) == true
             || key?.Equals("ssh_private_key", StringComparison.OrdinalIgnoreCase) == true)
@@ -258,7 +259,8 @@ public static class DiagnosticsRedactor
     {
         var trimmed = value.TrimStart(' ', '\t', '\'', '"');
         if (trimmed.StartsWith(TurnRelayUriParser.Prefix, StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase))
+            trimmed.StartsWith(DnsttUriParser.Prefix, StringComparison.OrdinalIgnoreCase) ||
+            NativeTransportUriParser.HasScheme(trimmed))
             return Redacted;
         var m = _urlKeepHost.Match(value);
         return m.Success ? $"{m.Groups[1].Value}{m.Groups[2].Value}/{Redacted}" : Redacted;

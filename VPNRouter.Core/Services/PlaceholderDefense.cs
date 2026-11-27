@@ -112,7 +112,7 @@ public static class PlaceholderDefense
                 if (node is not JsonObject ob) continue;
                 var type = StjNodeHelpers.AsString(ob["type"])?.ToLowerInvariant() ?? "";
                 if (type is "vless" or "vmess" or "hysteria2" or "tuic" or "shadowsocks" or "naive" or
-                    "trojan" or "turnrelay")
+                    "trojan" or "turnrelay" or "trusttunnel" or "mieru")
                     return ob;
                 if (type == "ssh" && StjNodeHelpers.AsString(ob["tag"]) == "proxy"
                     && StjNodeHelpers.AsString(ob["detour"]) is { Length: > 0 } detour

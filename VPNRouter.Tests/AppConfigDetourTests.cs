@@ -79,9 +79,13 @@ public class AppConfigDetourTests
         var previous = SubscriptionFetcher.Http;
         var previousCapability = SingBoxFeatures.OverrideDnstt;
         var previousTurnRelay = SingBoxFeatures.OverrideTurnRelay;
+        var previousTrustTunnel = SingBoxFeatures.OverrideTrustTunnel;
+        var previousMieru = SingBoxFeatures.OverrideMieru;
         SubscriptionFetcher.Http = fake;
         SingBoxFeatures.OverrideDnstt = false;
         SingBoxFeatures.OverrideTurnRelay = false;
+        SingBoxFeatures.OverrideTrustTunnel = false;
+        SingBoxFeatures.OverrideMieru = false;
 
         try
         {
@@ -106,6 +110,8 @@ public class AppConfigDetourTests
             SubscriptionFetcher.Http = previous;
             SingBoxFeatures.OverrideDnstt = previousCapability;
             SingBoxFeatures.OverrideTurnRelay = previousTurnRelay;
+            SingBoxFeatures.OverrideTrustTunnel = previousTrustTunnel;
+            SingBoxFeatures.OverrideMieru = previousMieru;
         }
     }
 

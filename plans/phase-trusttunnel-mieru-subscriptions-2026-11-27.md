@@ -54,4 +54,12 @@ vpnctl stops issuing these links to that client.
 ## Outcome
 
 The upstream core release is published and its checksum manifest attested.
-Client implementation and acceptance checks are pending.
+The client accepts direct TrustTunnel and Mieru profiles from HTTPS
+subscriptions according to the core's capabilities. It keeps the existing
+header for HTTP subscriptions and filters both profile types after a
+downgrade. The bundled desktop cores expose exact build tags. Android uses
+the version of the pinned libbox artifact.
+
+All 132 Arch packaging and 18 release-preparation tests passed. The Windows,
+Linux, macOS and Android pins match the archives and attested manifest. The
+exact candidate still needs hosted .NET, Android and loopback checks.

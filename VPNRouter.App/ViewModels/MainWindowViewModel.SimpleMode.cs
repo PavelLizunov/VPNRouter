@@ -484,8 +484,8 @@ public partial class MainWindowViewModel
                     return;
                 }
                 SmpErrorText = IsRussian
-                    ? "Вставь ссылку (vless:// / vmess:// / hysteria2:// / tuic:// / ss:// / naive://) или URL подписки (http:// / https://)."
-                    : "Paste a server link (vless:// / vmess:// / hysteria2:// / tuic:// / ss:// / naive://) or a subscription URL (http:// / https://).";
+                    ? "Вставь ссылку (vless:// / vmess:// / trusttunnel:// / mieru://) или URL подписки (http:// / https://)."
+                    : "Paste a server link (vless:// / vmess:// / trusttunnel:// / mieru://) or a subscription URL (http:// / https://).";
                 return;
             }
 
@@ -588,7 +588,7 @@ public partial class MainWindowViewModel
                     ? preference.Preferred(submitted.App)?.Server
                     : SubscriptionRefreshDiff.FindRegisteredServer(selectedSource, candidates,
                         selectedName, selectedKey, previous, previousRoute);
-                if (preference == null && preferred == null && previous != null && (previous.Dnstt != null || !string.IsNullOrEmpty(previous.DetourVia)))
+                if (preference == null && preferred == null && SubscriptionChainSelection.RequiresMatchingSuccessor(previous))
                 {
                     SmpErrorText = Strings.SyncEmpty;
                     return;
@@ -604,7 +604,7 @@ public partial class MainWindowViewModel
                 // A direct probe of an exit cannot judge the selected route through its required hop.
                 var chosen = preference?.CategoryName != null
                     ? await PickCategoryServerAsync(candidates, submitted.Dns.LocalDns)
-                    : preference != null || preferred.Dnstt != null || !string.IsNullOrEmpty(preferred.DetourVia)
+                    : preference != null || SubscriptionChainSelection.RequiresMatchingSuccessor(preferred)
                         ? preferred
                         : await PickSimpleServerAsync(
                             candidates.Where(server => server.Dnstt == null && !server.IsTurnRelay).ToList(),
@@ -978,8 +978,8 @@ public partial class MainWindowViewModel
                 !ServerUriParser.NaiveRuntimeAvailable)
             {
                 error = IsRussian
-                    ? "NaiveProxy работает только на Windows и Linux (нужен libcronet)."
-                    : "NaiveProxy works only on Windows and Linux (needs libcronet).";
+                    ? "Для NaiveProxy требуется ядро с поддержкой NaiveProxy и Cronet."
+                    : "NaiveProxy requires a core with NaiveProxy and Cronet support.";
                 return null;
             }
 

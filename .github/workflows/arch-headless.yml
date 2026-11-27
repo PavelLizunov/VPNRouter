@@ -56,6 +56,14 @@ jobs:
           grep -F 'cap_net_admin,cap_net_raw=ep' /tmp/vpnrouter-arch-build/getcap.txt
           # Match the private runtime directory created by pam_systemd on Omarchy.
           install -d -m 700 -o builder -g builder "/run/user/$(id -u builder)"
+          tags=$(grep -a -o -m1 -- '-tags=with_[A-Za-z0-9_,]*' /usr/lib/vpnrouter-headless/runtime/sing-box)
+          for feature in with_awg with_xhttp with_turnrelay with_trusttunnel with_mieru; do
+            grep -qw "$feature" <<< "$tags"
+          done
+          if grep -Eq 'with_naive_outbound|with_purego' <<< "$tags"; then
+            echo "Unexpected NaiveProxy or Cronet build tag" >&2
+            exit 1
+          fi
           python packaging/arch/installed_smoke.py --source-sha "$GITHUB_SHA" --offline
           # Reinstall must restore the xattr after the package file is replaced.
           pacman -U --noconfirm /tmp/vpnrouter-arch-build/pkgbuild/*.pkg.tar.zst

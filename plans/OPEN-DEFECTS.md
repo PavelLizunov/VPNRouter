@@ -16,6 +16,12 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P1** - Native subscription profiles could lose their selected row after credential rotation. Rebind only an exact or unique same-protocol endpoint in the same feed. RESOLVED in source with a refresh regression test. [Task record](phase-trusttunnel-mieru-subscriptions-2026-11-27.md).
+
+- [x] **P1** - Deep verification rendered native subscription profiles as VLESS, and restart confirmation omitted their outbound tags. Both use the native outbound types. RESOLVED in source. [Task record](phase-trusttunnel-mieru-subscriptions-2026-11-27.md).
+
+- [x] **P1** - Crash-report scrubbing omitted credentials in TrustTunnel and Mieru share links. Extend the existing URI guard and scrubber contract tests. RESOLVED in source. [Task record](phase-trusttunnel-mieru-subscriptions-2026-11-27.md).
+
 - [ ] **P3** - In Standard r5 the Simple home hides subscription refresh under server checks. Simple and Advanced subscription pickers also show TurnRelay hops as unsupported selectable rows. Move the refresh feedback to the home card and keep hop rows in the resolver pool while omitting them from the picker. [Task record](phase-simple-subscription-refresh-2026-11-27.md).
 
 - [x] **P0** - macOS health restarts could rotate the Clash secret and leave existing clients unauthorized. A started runtime could time out before scheduling kill-switch release. RESOLVED in source on PR #746 with session-secret retention and deferred reconciliation. Final CI and installed checks are recorded in the [task record](phase-standard-turnrelay-adoption-2026-11-26.md).

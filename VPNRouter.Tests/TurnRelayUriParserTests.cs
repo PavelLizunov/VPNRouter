@@ -308,6 +308,8 @@ public sealed class TurnRelayUriParserTests : IDisposable
         SubscriptionFetcher.Http = fake;
         SingBoxFeatures.OverrideDnstt = dnstt;
         SingBoxFeatures.OverrideTurnRelay = turnrelay;
+        SingBoxFeatures.OverrideTrustTunnel = false;
+        SingBoxFeatures.OverrideMieru = false;
         try
         {
             await SubscriptionFetcher.FetchAsync(

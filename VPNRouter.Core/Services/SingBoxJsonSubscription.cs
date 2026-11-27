@@ -172,7 +172,19 @@ internal static class SingBoxJsonSubscription
         var server = Str(ob, "server");
         if (string.IsNullOrWhiteSpace(server)) { skipReason = "missing server"; return null; }
 
-        if (Int(ob, "server_port") is not { } port || port < 1 || port > 65535)
+        var port = Int(ob, "server_port");
+        var mieruTransport = type == "mieru" ? Str(ob, "transport") : null;
+        if (type == "mieru" && ob.TryGetProperty("port_bindings", out var bindings))
+        {
+            if (port != null || bindings.ValueKind != JsonValueKind.Array || bindings.GetArrayLength() != 1 ||
+                bindings[0].ValueKind != JsonValueKind.Object ||
+                bindings[0].EnumerateObject().Any(p => p.Name is not ("port" or "transport")))
+                return Unsupported(out skipReason);
+            port = Int(bindings[0], "port");
+            mieruTransport = Str(bindings[0], "transport") ?? mieruTransport;
+        }
+
+        if (port is not { } serverPort || serverPort < 1 || serverPort > 65535)
         {
             skipReason = "missing or invalid server_port";
             return null;
@@ -182,18 +194,60 @@ internal static class SingBoxJsonSubscription
         if (string.IsNullOrWhiteSpace(name)) name = server;
 
         var host = server.Contains(':') && !server.StartsWith('[') ? $"[{server}]" : server;
-        var hostPort = $"{host}:{port.ToString(CultureInfo.InvariantCulture)}";
+        var hostPort = $"{host}:{serverPort.ToString(CultureInfo.InvariantCulture)}";
 
         return type switch
         {
             "vless" => MapVless(ob, hostPort, name, out skipReason),
-            "vmess" => MapVmess(ob, server, port, name, out skipReason),
+            "vmess" => MapVmess(ob, server, serverPort, name, out skipReason),
             "hysteria2" => MapHysteria2(ob, hostPort, name, out skipReason),
             "tuic" => MapTuic(ob, hostPort, name, out skipReason),
             "shadowsocks" => MapShadowsocks(ob, hostPort, name, out skipReason),
-            "turnrelay" => MapTurnRelay(ob, server, port, name, out skipReason),
+            "turnrelay" => MapTurnRelay(ob, server, serverPort, name, out skipReason),
+            "trusttunnel" or "mieru" => MapNativeTransport(ob, type, hostPort, name, mieruTransport, out skipReason),
             _ => Unsupported(out skipReason),
         };
+    }
+
+    private static string? MapNativeTransport(JsonElement ob, string type, string hostPort, string name,
+        string? mieruTransport, out string? skipReason)
+    {
+        var user = Str(ob, "username");
+        var password = Str(ob, "password");
+        if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(password))
+            return Unsupported(out skipReason);
+
+        var prefix = $"{type}://{Enc(user)}:{Enc(password)}@{hostPort}";
+        if (type == "mieru")
+        {
+            if (ob.TryGetProperty("port_range", out _))
+                return Unsupported(out skipReason);
+            skipReason = null;
+            return $"{prefix}?transport={Enc(mieruTransport ?? "tcp")}&multiplexing={Enc(Str(ob, "multiplexing") ?? "default")}"
+                + $"&handshake={Enc(Str(ob, "handshake_mode") ?? "default")}#{Enc(name)}";
+        }
+
+        if (Obj(ob, "tls") is not { } tls || !Bool(tls, "enabled") || Bool(tls, "insecure") ||
+            tls.EnumerateObject().Any(field => field.Name is not ("enabled" or "insecure" or "server_name" or "certificate_public_key_sha256")))
+            return Unsupported(out skipReason);
+        var query = new List<string>();
+        if (Str(tls, "server_name") is { Length: > 0 } sni)
+            query.Add($"sni={Enc(sni)}");
+        query.Add(Bool(ob, "quic") ? "quic=1" : "quic=0");
+        query.Add(ob.TryGetProperty("udp", out var udp) && udp.ValueKind == JsonValueKind.False ? "udp=0" : "udp=1");
+        if (tls.TryGetProperty("certificate_public_key_sha256", out var pinValue))
+        {
+            if (pinValue.ValueKind == JsonValueKind.Array && pinValue.GetArrayLength() == 1)
+                pinValue = pinValue[0];
+            if (pinValue.ValueKind != JsonValueKind.String || pinValue.GetString() is not { } pin)
+                return Unsupported(out skipReason);
+            Span<byte> digest = stackalloc byte[32];
+            if (!Convert.TryFromBase64String(pin, digest, out var written) || written != digest.Length)
+                return Unsupported(out skipReason);
+            query.Add($"pk_sha256={Convert.ToHexString(digest)}");
+        }
+        skipReason = null;
+        return $"{prefix}?{string.Join("&", query)}#{Enc(name)}";
     }
 
     private static string? Unsupported(out string? skipReason)
