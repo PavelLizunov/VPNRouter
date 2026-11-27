@@ -85,31 +85,30 @@
 
                 <Border Grid.Row="0"
                         Padding="14,12"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SuccessBgBrush}"
-                        BorderBrush="{DynamicResource SuccessSolidBrush}"
+                        CornerRadius="{StaticResource RadiusMd}"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
                     <StackPanel Spacing="10">
                         <TextBlock Text="{Binding L_FcDeepHint}"
-                                   FontSize="10" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource SuccessFgBrush}"
-                                   Opacity="0.85"/>
+                                   FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
                         <Button Classes="solid" icons:PictogramText.Icons="find-working" icons:PictogramText.Content="{Binding L_FcDeepVerify}"
                                 Command="{Binding FreeConfigsVm.RefreshCommand}"
                                 IsVisible="{Binding !FreeConfigsVm.IsBusy}"
-                                Padding="0,10" FontSize="13" FontWeight="Bold"
-                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="0,10" FontSize="13" FontWeight="SemiBold"
+                                CornerRadius="{StaticResource RadiusPill}"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
-                                Background="{DynamicResource SuccessSolidBrush}"
-                                Foreground="{DynamicResource SuccessOnSolidBrush}"
+                                Background="{DynamicResource AccentSolidBrush}"
+                                Foreground="{DynamicResource AccentOnSolidBrush}"
                                 ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"
                                 AutomationProperties.Name="{Binding L_FcDeepVerify}"/>
                         <Button Classes="solid" icons:PictogramText.Icons="stop" icons:PictogramText.Content="{Binding L_FcDeepStop}"
                                 Command="{Binding FreeConfigsVm.CancelCommand}"
                                 IsVisible="{Binding FreeConfigsVm.IsBusy}"
-                                Padding="0,10" FontSize="13" FontWeight="Bold"
-                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="0,10" FontSize="13" FontWeight="SemiBold"
+                                CornerRadius="{StaticResource RadiusPill}"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 Background="{DynamicResource DangerSolidBrush}"
@@ -120,7 +119,7 @@
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
                                 Background="Transparent"
-                                BorderBrush="{DynamicResource SuccessBorderBrush}"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
                                 BorderThickness="0,1,0,0"
                                 CornerRadius="0"
                                 Padding="0,8,0,0"
@@ -129,7 +128,7 @@
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Text="{Binding L_FcSettingsLabel}"
                                            FontSize="11" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource SuccessFgBrush}"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
                                            VerticalAlignment="Center"/>
                                 <Border Grid.Column="1" Classes="disclosure-pill">
                                     <StackPanel Orientation="Horizontal" Spacing="4">
@@ -147,29 +146,29 @@
                                                 Margin="0,0,12,4" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding L_FcTargetNLabel}"
                                                    FontSize="11" VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
                                         <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
                                                        Minimum="5" Maximum="500" Increment="5"
                                                        FormatString="0"
                                                        MinWidth="84" Padding="4,2" FontSize="11"/>
                                         <TextBlock Text="{Binding L_FcConfigsWord}"
-                                                   FontSize="11" Opacity="0.75"
+                                                   FontSize="11"
                                                    VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="4"
                                                 Margin="0,0,0,4" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding L_FcWithPingUnder}"
                                                    FontSize="11" VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
                                         <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalMaxPingMs}"
                                                        Minimum="20" Maximum="1000" Increment="50"
                                                        FormatString="0"
                                                        MinWidth="92" Padding="4,2" FontSize="11"/>
                                         <TextBlock Text="{Binding L_FcMsUnit}"
-                                                   FontSize="11" Opacity="0.75"
+                                                   FontSize="11"
                                                    VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                                   Foreground="{DynamicResource TextMutedBrush}"/>
                                     </StackPanel>
                                 </WrapPanel>
                                 <Grid ColumnDefinitions="20,*" ColumnSpacing="4">
@@ -185,7 +184,7 @@
                                                FontSize="11"
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Top"
-                                               Foreground="{DynamicResource SuccessFgBrush}"/>
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 </Grid>
                             </StackPanel>
                         </Border>

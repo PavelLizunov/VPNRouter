@@ -419,8 +419,8 @@ public static partial class Strings
         : "\u25CB Stopped";
 
     public static string AndroidErrorNoServerConfigured => Ru
-        ? "Сервер не настроен. Добавьте подписку или вставьте vless://-URI."
-        : "No server configured. Add a subscription or paste a vless:// URI.";
+        ? "Сервер не настроен. Добавьте подписку или вставьте ссылку на сервер."
+        : "No server configured. Add a subscription or paste a server link.";
 
     public static string AndroidDeleteCategoryConfirm => Ru
         ? "Удалить?"
@@ -998,7 +998,7 @@ public static partial class Strings
     public static string LblCustomBadge => Ru ? "свой" : "custom";
 
     public static string WmZapretCustomArgs => "--wf-tcp=443 --dpi-desync=…";
-    public static string WmVlessUri         => "vless:// / hy2:// / tuic:// / ss://...#name";
+    public static string WmVlessUri         => "vless:// / trusttunnel:// / mieru:// / hy2:// / awg://...";
     public static string WmTgProxyPort      => "1443";
     public static string WmTgProxySecret    => Ru ? "автоген" : "auto-generated";
 
@@ -1095,20 +1095,20 @@ public static partial class Strings
     public static string ServerHeader => Ru ? "Сервер" : "Server";
 
     public static string ServerInputWatermark => Ru
-        ? "vless://… или https://…/sub"
-        : "vless://… or https://…/sub";
+        ? "vless:// / trusttunnel:// / mieru:// или https://..."
+        : "vless:// / trusttunnel:// / mieru:// or https://...";
 
     public static string ButtonSave => Ru ? "Сохранить" : "Save";
 
     public static string ButtonRefresh => Ru ? "Обновить" : "Refresh";
 
     public static string ServerInputHintInitial => Ru
-        ? "Введите vless://-ссылку или подписочный URL и нажмите «Сохранить». Для подписки нажмите «Обновить»."
-        : "Paste a vless:// share-link or a subscription URL, then tap Save. For a subscription URL, tap Refresh after.";
+        ? "Введите ссылку на сервер или подписочный URL и нажмите «Сохранить». Для подписки нажмите «Обновить»."
+        : "Paste a server share-link or a subscription URL, then tap Save. For a subscription URL, tap Refresh after.";
 
     public static string SaveStatusCleared => Ru
-        ? "Сервер очищен. Будет использован встроенный placeholder."
-        : "Server cleared. The built-in placeholder will be used.";
+        ? "Сервер очищен. Добавьте сервер или подписку для подключения."
+        : "Server cleared. Add a server or subscription to connect.";
 
     public static string SaveStatusUriBadHost => Ru
         ? "URI разобран, но не указан хост или порт. Проверьте адрес."
@@ -1119,16 +1119,16 @@ public static partial class Strings
         : "Saved. Server: {0}:{1}. Tap Connect.";
 
     public static string SaveStatusUriInvalid => Ru
-        ? "Невалидный VLESS URI: {0}"
-        : "Invalid VLESS URI: {0}";
+        ? "Невалидная ссылка сервера: {0}"
+        : "Invalid server URI: {0}";
 
     public static string SaveStatusSubStored => Ru
         ? "URL подписки сохранён. Нажмите «Обновить» для загрузки списка серверов."
         : "Subscription URL saved. Tap Refresh to fetch the server list.";
 
     public static string SaveStatusUnknown => Ru
-        ? "Не распознано как vless:// или http(s):// — проверьте ввод."
-        : "Doesn't look like vless:// or http(s):// — check the input.";
+        ? "Не распознано как ссылка на сервер или подписку — проверьте ввод."
+        : "Doesn't look like a server link or subscription URL — check the input.";
 
     public static string RefreshNeedsUrl => Ru
         ? "Сначала сохраните URL подписки (https://…)."
@@ -1521,8 +1521,8 @@ public static partial class Strings
 
     public static string SrvEmptyTitle => Ru ? "Серверов пока нет" : "No servers yet";
     public static string SrvEmptyBody => Ru
-        ? "Вставьте ссылку на сервер (vless://, hy2://, tuic://, ss://) в поле ниже и нажмите «Добавить сервер(ы)»."
-        : "Paste a server link (vless://, hy2://, tuic://, ss://) into the field below and press Add Server(s).";
+        ? "Вставьте ссылку на сервер (vless://, trusttunnel://, mieru://, hy2://, awg://) в поле ниже и нажмите «Добавить сервер(ы)»."
+        : "Paste a server link (vless://, trusttunnel://, mieru://, hy2://, awg://) into the field below and press Add Server(s).";
     public static string SubsEmptyTitle => Ru ? "Подписок пока нет" : "No subscriptions yet";
     public static string SubsEmptyBody => Ru
         ? "Подписка — это ссылка от VPN-провайдера со списком серверов. Вставьте её ниже и нажмите «Добавить»."

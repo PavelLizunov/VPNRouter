@@ -373,20 +373,14 @@
                         IsVisible="{Binding SimpleCtaIsDisconnected}"
                         IsEnabled="{Binding SmpCanConnect}"
                         AutomationProperties.Name="{Binding SimpleCtaText}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <icons:Pictogram Id="power"/>
-                        <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
-                    </StackPanel>
+                    <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
                 </Button>
                 <Button Classes="cta stop"
                         Command="{Binding SmpToggleConnectCommand}"
                         AutomationProperties.AutomationId="AssistantAction.DisconnectVpn"
                         IsVisible="{Binding SimpleCtaIsConnected}"
                         AutomationProperties.Name="{Binding SimpleCtaText}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <icons:Pictogram Id="power"/>
-                        <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
-                    </StackPanel>
+                    <TextBlock Text="{Binding SimpleCtaText}" VerticalAlignment="Center"/>
                 </Button>
                 <Button Classes="cta wait"
                         Command="{Binding SmpToggleConnectCommand}"

@@ -235,6 +235,15 @@ public partial class MainWindow : Window
             QuickAddInput.Text = string.Empty;
             QuickAddButton?.Flyout?.Hide();
         }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "[MainWindow] QuickAdd save failed");
+            if (_quickAddRevision == revision && QuickAddError != null)
+            {
+                QuickAddError.Text = VPNRouter.Core.Localization.Strings.SmpInvalidServerLink;
+                QuickAddError.IsVisible = true;
+            }
+        }
         finally
         {
             _quickAddSaving = false;
