@@ -126,6 +126,83 @@ public sealed class SimpleConnectStatusTests
         finally { SubscriptionFetcher.Http = originalHttp; }
     }
 
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SimpleMainWindowQuickAddPlusButtonAddsSubscription(bool dark)
+    {
+        var previousLanguage = VPNRouter.App.Localization.Strings.Lang;
+        var originalHttp = SubscriptionFetcher.Http;
+        try
+        {
+            var settings = new AppSettings();
+            settings.App.Language = "ru";
+            settings.App.ConfigMode = "subscribe";
+            settings.App.UiMode = "simple";
+            settings.App.Subscriptions =
+            [
+                new() { Enabled = true, Url = "https://feed.invalid/first", Servers = [Entry("Sweden · Stockholm", "se.invalid")] }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = CreateVm(store);
+            var window = new VPNRouter.App.Views.MainWindow
+            {
+                DataContext = vm,
+                Width = 380,
+                Height = 760,
+                RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light,
+            };
+            window.Show();
+            try
+            {
+                Dispatcher.UIThread.RunJobs();
+                var plus = window.FindControl<Button>("QuickAddButton")!;
+                var menu = window.FindControl<Button>("OverflowMenuButton")!;
+                Assert.True(plus.IsEffectivelyVisible);
+                Assert.True(menu.IsEffectivelyVisible);
+                var plusPos = plus.TranslatePoint(default, window)!.Value;
+                var menuPos = menu.TranslatePoint(default, window)!.Value;
+                Assert.True(plusPos.X < menuPos.X);
+                Capture(window, $"simple-window-plus-{(dark ? "dark" : "light")}-380");
+
+                const string addedUrl = "https://feed.invalid/added";
+                SubscriptionFetcher.Http = new FakeHttpClient().Setup(addedUrl,
+                    "vless://00000000-0000-4000-8000-000000000001@nl.invalid:443?security=none#Netherlands");
+
+                plus.Flyout!.ShowAt(plus);
+                Dispatcher.UIThread.RunJobs();
+                var input = window.FindControl<TextBox>("QuickAddInput")!;
+                var save = window.FindControl<Button>("QuickAddSaveButton")!;
+                Assert.True(input.IsEffectivelyVisible);
+                input.Text = addedUrl;
+                Dispatcher.UIThread.RunJobs();
+                if (dark) Capture(window, "simple-window-plus-open-dark-380");
+
+                save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                while (vm.Subscriptions.Count < 2 && DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(20);
+                    Dispatcher.UIThread.RunJobs();
+                }
+
+                Assert.Equal(2, vm.Subscriptions.Count);
+                Assert.Equal("Netherlands", vm.SelectedSubscriptionServer?.Name);
+
+                vm.ToggleUiModeCommand.Execute(null);
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(plus.IsEffectivelyVisible);
+            }
+            finally { window.Close(); }
+        }
+        finally
+        {
+            SubscriptionFetcher.Http = originalHttp;
+            VPNRouter.App.Localization.Strings.Lang = previousLanguage;
+        }
+    }
+
     [AvaloniaFact]
     public void FirstRunShowsTheLinkAndOneConnectAction()
     {
