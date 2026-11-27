@@ -50,8 +50,8 @@ internal sealed record SubscriptionChainSelection(string FeedId, string Url, Vle
         if (feed == null || !feed.Enabled || feed.Id != FeedId || feed.Url != Url) return null;
         if (Target.IsNativeTransport)
         {
-            var exact = feed.FindExactRow(Target.Name, SubscriptionEntry.RowKey(Target));
-            if (exact is { } && ConfigGenerator.IsServerRuntimeAvailable(exact)) return exact;
+            var exactRow = feed.FindExactRow(Target.Name, SubscriptionEntry.RowKey(Target));
+            if (exactRow is { } && ConfigGenerator.IsServerRuntimeAvailable(exactRow)) return exactRow;
             var sameProfile = feed.Servers.Where(row =>
                 string.IsNullOrEmpty(row.DetourVia) && row.Protocol == Target.Protocol &&
                 row.Name == Target.Name && row.Server == Target.Server && row.Port == Target.Port &&
