@@ -374,7 +374,16 @@ public partial class AndroidApp
                 return;
             }
             HideQuickAddOverlay();
-            await ApplyScannedSubscriptionUrlAsync(raw);
+            try
+            {
+                await ApplyScannedSubscriptionUrlAsync(raw);
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("VpnRouter.QuickAdd",
+                    $"OnQuickAddSaveClicked: subscription apply failed — {ex.GetType().Name}");
+                ShowMenuFeedback(Localization.SmpQrSubscriptionFailed);
+            }
             UpdateInputCardVisibility();
             return;
         }
