@@ -164,7 +164,7 @@ public sealed class SimpleConnectStatusTests
                 var plusPos = plus.TranslatePoint(default, window)!.Value;
                 var menuPos = menu.TranslatePoint(default, window)!.Value;
                 Assert.True(plusPos.X < menuPos.X);
-                Capture(window, $"simple-window-plus-{(dark ? "dark" : "light")}-380");
+                Capture(window, $"simple-home-plus-{(dark ? "dark" : "light")}-380");
 
                 const string addedUrl = "https://feed.invalid/added";
                 SubscriptionFetcher.Http = new FakeHttpClient().Setup(addedUrl,
@@ -177,7 +177,7 @@ public sealed class SimpleConnectStatusTests
                 Assert.True(input.IsEffectivelyVisible);
                 input.Text = addedUrl;
                 Dispatcher.UIThread.RunJobs();
-                if (dark) Capture(window, "simple-window-plus-open-dark-380");
+                if (dark) Capture(window, "simple-home-plus-open-dark-380");
 
                 save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 var deadline = DateTime.UtcNow.AddSeconds(5);
