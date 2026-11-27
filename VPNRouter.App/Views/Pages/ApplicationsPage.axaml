@@ -50,9 +50,9 @@
       <Setter Property="Padding" Value="3"/>
     </Style>
     <Style Selector="ListBox.cat-list ListBoxItem">
-      <Setter Property="Padding" Value="8,6"/>
+      <Setter Property="Padding" Value="10,7"/>
       <Setter Property="MinHeight" Value="0"/>
-      <Setter Property="Margin" Value="0,0,0,2"/>
+      <Setter Property="Margin" Value="0,0,0,3"/>
     </Style>
     <Style Selector="TextBlock.cat-name">
       <Setter Property="FontSize" Value="11"/>

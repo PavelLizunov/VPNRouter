@@ -98,6 +98,10 @@
             <Setter Property="MinHeight" Value="0"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </Style>
+        <Style Selector="ListBoxItem.main-tab:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
         <Style Selector="ListBoxItem.main-tab StackPanel">
             <Setter Property="Spacing" Value="6"/>

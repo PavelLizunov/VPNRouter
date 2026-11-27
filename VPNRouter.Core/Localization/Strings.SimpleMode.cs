@@ -9,19 +9,19 @@ public static partial class Strings
         : "Switch between Simple and Advanced UI";
 
     public static string SmpPlaceholderTitle => Ru
-        ? "Упрощённый интерфейс скоро появится"
-        : "Simple mode is on the way";
+        ? "Упрощённый интерфейс"
+        : "Simple mode";
     public static string SmpPlaceholderBody => Ru
-        ? "В v2.17 будет одностраничный онбординг: вставил конфиг или ссылку, нажал Start — готово. А пока переключайся в полный интерфейс."
-        : "v2.17 will bring a one-page onboarding: paste a config or subscription URL, hit Start, done. Switch to the full Advanced UI for now.";
+        ? "Вставьте ссылку на сервер или подписку и нажмите «Подключить», либо перейдите в расширенный интерфейс."
+        : "Paste a server or subscription link and press Connect, or switch to the full Advanced UI.";
     public static string SmpPlaceholderSwitchToAdvanced => Ru
         ? "Переключить на Advanced"
         : "Switch to Advanced";
 
     public static string SmpInputLabel => Ru ? "Ссылка подписки или сервера" : "Subscription or server link";
     public static string SmpInputWatermark => Ru
-        ? "vless:// / naive://... или https://..."
-        : "vless:// / naive://... or https://...";
+        ? "vless:// / trusttunnel:// / mieru:// или https://..."
+        : "vless:// / trusttunnel:// / mieru:// or https://...";
     public static string SmpInputHint => Ru
         ? "Вставьте ссылку, которую получили от провайдера."
         : "Paste the link provided by your VPN provider.";
@@ -102,24 +102,24 @@ public static partial class Strings
         ? "Не удалось загрузить подписку"
         : "Failed to fetch subscription";
     public static string SmpQrUnsupportedScheme => Ru
-        ? "QR не содержит vless:// или подписку"
-        : "QR doesn't contain vless:// or a subscription URL";
+        ? "QR не содержит ссылку на сервер или подписку"
+        : "QR doesn't contain a server link or subscription URL";
     public static string SmpQrNaiveUnsupportedAndroid => Ru
-        ? "NaiveProxy не поддерживается на Android"
-        : "NaiveProxy is not supported on Android";
+        ? "NaiveProxy больше не поддерживается в этой сборке"
+        : "NaiveProxy is no longer supported in this build";
 
     public static string PlaceholderCredentialRejected => Ru
-        ? "Эта ссылка содержит шаблонные ключи Reality — настоящего VPN-сервера в ней нет. Получи рабочий vless:// у своего провайдера."
-        : "This link contains placeholder Reality credentials — no real VPN server behind it. Get a working vless:// from your provider.";
+        ? "Эта ссылка содержит шаблонные ключи Reality — настоящего VPN-сервера в ней нет. Получите рабочую ссылку у вашего провайдера."
+        : "This link contains placeholder Reality credentials — no real VPN server behind it. Get a working server link from your provider.";
     public static string PlaceholderSubscriptionDropped => Ru
-        ? "Подписка вернула {0} шаблонных серверов — они пропущены. Если повторится — пожалуйся провайдеру."
+        ? "Подписка вернула {0} шаблонных серверов — они пропущены. Если повторится — сообщите провайдеру."
         : "Subscription returned {0} placeholder servers — skipped. Report to your provider if this keeps happening.";
     public static string PlaceholderPruneBanner => Ru
-        ? "Обновление v2.32.3: убрано {0} небезопасных серверов из конфига (шаблонные ключи Reality, с которыми VPN не работает)."
-        : "v2.32.3 upgrade: removed {0} unsafe servers from your config (placeholder Reality keys — VPN couldn't work with them).";
+        ? "Убрано {0} небезопасных серверов из конфига (шаблонные ключи Reality, с которыми VPN не работает)."
+        : "Removed {0} unsafe servers from your config (placeholder Reality keys — VPN couldn't work with them).";
     public static string PlaceholderPruneBannerAllGone => Ru
-        ? "Обновление v2.32.3: все сохранённые серверы оказались шаблонными. Добавь настоящий vless:// или подписку, чтобы продолжить."
-        : "v2.32.3 upgrade: all saved servers were placeholders. Add a real vless:// or a subscription to continue.";
+        ? "Все сохранённые серверы оказались шаблонными. Добавьте рабочий сервер или подписку, чтобы продолжить."
+        : "All saved servers were placeholders. Add a working server or subscription to continue.";
 
     public static string SmpStatusProtected    => Ru ? "Подключено"     : "Connected";
     public static string SmpStatusConnecting   => Ru ? "Подключение…"   : "Connecting…";
