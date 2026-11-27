@@ -8,9 +8,12 @@ namespace VPNRouter.App.ViewModels;
 public partial class MainWindowViewModel
 {
     internal bool IsAssistantGameDetectionSupported { get; init; } = AssistantRouteRecipe.SupportsGameDetection;
-    internal Func<IReadOnlyList<string>> ReadAssistantGameProcesses { get; init; }
+    internal Func<CancellationToken, IReadOnlyList<string>> ReadAssistantGameProcesses { get; init; }
         = AssistantRouteRecipe.ReadDetectedGameProcesses;
     internal Func<bool> IsAssistantRuRuleSetAvailable { get; init; } = GeoDataDownloader.AreGeoFilesAvailable;
+
+    internal Func<CancellationToken, Task<bool>> EnsureAssistantRuRuleSetsAsync { get; init; }
+        = static ct => new GeoDataDownloader().EnsureGeoFilesAsync(ct);
 
     private async Task<string> RunAssistantRecipeAsync(AssistantRouteRecipe recipe, AssistantSnapshot snapshot,
         Window window, Control source, Func<string, CancellationToken, Task<bool>> confirm, CancellationToken token)
@@ -26,12 +29,12 @@ public partial class MainWindowViewModel
             if (!IsAssistantGameDetectionSupported) return Strings.AssistantGamesPlatformUnsupported;
             try
             {
-                detected = await Task.Run(ReadAssistantGameProcesses, token);
+                detected = await Task.Run(() => ReadAssistantGameProcesses(token), token);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.Warning("Assistant game detection failed ({ExceptionType})", ex.GetType().Name);
-                return Strings.AssistantGamesNotFound;
+                return Strings.AssistantGamesScanFailed;
             }
         }
 
@@ -41,8 +44,8 @@ public partial class MainWindowViewModel
         if (!AssistantSnapshotStillCurrent(snapshot) || !_engine.IsAssistantSessionCurrent(snapshot.Session))
             return Strings.AssistantSettingsChanged;
         var planned = regional
-            ? AssistantRouteRecipe.PlanRussianSites(snapshot.Settings, listsReady, connected)
-            : AssistantRouteRecipe.PlanGames(snapshot.Settings, detected, SimpleSplitProfile, connected);
+            ? AssistantRouteRecipe.PlanRussianSites(snapshot.Settings, listsReady, snapshot.Session)
+            : AssistantRouteRecipe.PlanGames(snapshot.Settings, detected, SimpleSplitProfile, snapshot.Session);
         if (planned.Message is { } message) return message;
         var plan = planned.Plan!;
 
@@ -56,7 +59,7 @@ public partial class MainWindowViewModel
         if (!IsCurrent()) return Strings.AssistantSettingsChanged;
         if (connected && regional && !listsReady)
         {
-            bool ready = await new GeoDataDownloader(_logger).EnsureGeoFilesAsync(token);
+            bool ready = await EnsureAssistantRuRuleSetsAsync(token);
             token.ThrowIfCancellationRequested();
             if (!ready) return Strings.AssistantRuRuleSetsMissing;
             if (!IsCurrent()) return Strings.AssistantSettingsChanged;

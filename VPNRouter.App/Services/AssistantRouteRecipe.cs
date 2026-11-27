@@ -50,8 +50,8 @@ internal sealed record AssistantRouteRecipe(AssistantRouteRecipeKind Kind)
         return null;
     }
 
-    internal static IReadOnlyList<string> ReadDetectedGameProcesses() =>
-        SteamLibraryScanner.FindInstalledGames().Select(game => game.ProcessName).ToArray();
+    internal static IReadOnlyList<string> ReadDetectedGameProcesses(CancellationToken ct) =>
+        SteamLibraryScanner.FindInstalledGames(ct).Select(game => game.ProcessName).ToArray();
 
     private static IReadOnlyList<string> NormalizeDetectedGames(IEnumerable<string> names)
     {
@@ -68,7 +68,7 @@ internal sealed record AssistantRouteRecipe(AssistantRouteRecipeKind Kind)
     }
 
     internal static AssistantRoutePlanResult PlanGames(AppSettings saved, IReadOnlyList<string> detected,
-        string splitProfile, bool connected)
+        string splitProfile, AcceptedTunnelInfo? session)
     {
         var names = NormalizeDetectedGames(detected);
         if (names.Count == 0) return AssistantRoutePlanResult.Fail(Strings.AssistantGamesNotFound);
@@ -87,7 +87,6 @@ internal sealed record AssistantRouteRecipe(AssistantRouteRecipeKind Kind)
         var detectedNames = names.ToDictionary(name => name, StringComparer.OrdinalIgnoreCase);
         var remaining = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
         var exclusions = new List<string>();
-        var previousExceptions = new List<string>();
         foreach (string previous in existing)
         {
             if (detectedNames.TryGetValue(previous, out var actual))
@@ -97,29 +96,30 @@ internal sealed record AssistantRouteRecipe(AssistantRouteRecipeKind Kind)
             else
             {
                 exclusions.Add(previous);
-                previousExceptions.Add(previous);
             }
         }
         exclusions.AddRange(names.Where(remaining.Contains));
-        if (wasExclude && existing.SequenceEqual(exclusions))
+        if (wasExclude && existing.SequenceEqual(exclusions) && (session == null || session.RoutesGamesDirect(names)))
             return AssistantRoutePlanResult.Fail(Strings.AssistantGamesAlreadySet);
 
         candidate.App.RoutingAppsExclude = exclusions;
-        var preview = Strings.AssistantGamesPreview(names, previousExceptions, wasFull, wasInclude, connected);
+        var previousExceptions = ConfigGenerator.ResolveEffectiveAppProcesses([], candidate)
+            .Where(name => !detectedNames.ContainsKey(name)).ToArray();
+        var preview = Strings.AssistantGamesPreview(names, previousExceptions, wasFull, wasInclude, session != null);
         return AssistantRoutePlanResult.Ready(new AssistantRoutePlan(candidate, preview, names));
     }
 
     internal static AssistantRoutePlanResult PlanRussianSites(AppSettings saved, bool ruleSetsAvailable,
-        bool connected)
+        AcceptedTunnelInfo? session)
     {
-        if (saved.App.BypassRussianTraffic)
-            return AssistantRoutePlanResult.Fail(ruleSetsAvailable
+        if (saved.App.BypassRussianTraffic && (session == null || session.RoutesRussianTrafficDirect()))
+            return AssistantRoutePlanResult.Fail(session != null || ruleSetsAvailable
                 ? Strings.AssistantRuAlreadyOn : Strings.AssistantRuRuleSetsPending);
 
         var candidate = SettingsLoader.Copy(saved);
         candidate.App.BypassRussianTraffic = true;
         return AssistantRoutePlanResult.Ready(new AssistantRoutePlan(candidate,
-            Strings.AssistantRuPreview(connected, ruleSetsAvailable), []));
+            Strings.AssistantRuPreview(session != null, ruleSetsAvailable), []));
     }
 
     internal static string CompletedMessage(AssistantRouteRecipeKind kind, bool connected, bool keptNewerSettings) =>

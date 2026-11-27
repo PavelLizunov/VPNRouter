@@ -42,7 +42,8 @@ public partial class VpnEngine
                 if (wasRunning)
                 {
                     // Strict generation resolves required rule sets before the owned process is replaced.
-                    if (!await ApplyGatedAsync(candidate, ct, forceRestart: true, verifySelection: true).ConfigureAwait(false))
+                    if (!await ApplyGatedAsync(candidate, ct, forceRestart: true, verifySelection: true,
+                        verifyRoute: routeIntent?.VerifyRoute).ConfigureAwait(false))
                         return RejectVerifiedCandidate("replacement");
                     _warmupConfirmed = false;
                 }

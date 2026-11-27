@@ -14,7 +14,12 @@ public class SteamLibraryScannerTests
             var steamApps = Path.Combine(library, "steamapps");
             var gameDir = Path.Combine(steamApps, "common", "Test Game");
             var binDir = Path.Combine(gameDir, "bin");
-            Directory.CreateDirectory(binDir);
+            var ue = Directory.CreateDirectory(Path.Combine(gameDir, "Game", "Binaries", "Win64"));
+            var x64 = Directory.CreateDirectory(Path.Combine(binDir, "x64"));
+            var support = Directory.CreateDirectory(Path.Combine(gameDir, "Engine", "Binaries", "Win64"));
+            File.WriteAllText(Path.Combine(ue.FullName, "Game-Shipping.exe"), "");
+            File.WriteAllText(Path.Combine(x64.FullName, "GameClient.exe"), "");
+            File.WriteAllText(Path.Combine(support.FullName, "Tool.exe"), "");
 
             Directory.CreateDirectory(Path.Combine(root.FullName, "steamapps"));
             File.WriteAllText(
@@ -49,6 +54,9 @@ public class SteamLibraryScannerTests
             var games = SteamLibraryScanner.FindGames(new[] { root.FullName });
             var names = games.Select(g => g.ProcessName).ToList();
 
+            Assert.Contains("Game-Shipping.exe", names);
+            Assert.Contains("GameClient.exe", names);
+            Assert.DoesNotContain("Tool.exe", names);
             Assert.Contains("TestGame.exe", names);
             Assert.Contains("TestGame-Win64-Shipping.exe", names);
             Assert.DoesNotContain("unins000.exe", names);

@@ -1,4 +1,6 @@
+using System.Reflection;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
@@ -6,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Avalonia.Headless.XUnit;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
@@ -30,7 +33,7 @@ public sealed class AssistantRouteRecipeViewModelTests
         using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
         {
             IsAssistantGameDetectionSupported = true,
-            ReadAssistantGameProcesses = () => ["GameB.exe", "gameA.exe", "GameA.exe", "OldGame.exe"],
+            ReadAssistantGameProcesses = _ => ["GameB.exe", "gameA.exe", "GameA.exe", "OldGame.exe"],
             StepAssistantAsync = (_, _, _, _, _) =>
                 throw new InvalidOperationException("Local recipes must not call the provider."),
         };
@@ -83,7 +86,7 @@ public sealed class AssistantRouteRecipeViewModelTests
         using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
         {
             IsAssistantGameDetectionSupported = true,
-            ReadAssistantGameProcesses = () => ["GameA.exe"],
+            ReadAssistantGameProcesses = _ => ["GameA.exe"],
             StepAssistantAsync = (_, _, _, _, _) =>
                 throw new InvalidOperationException("Local recipes must not call the provider."),
         };
@@ -111,7 +114,7 @@ public sealed class AssistantRouteRecipeViewModelTests
         using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
         {
             IsAssistantGameDetectionSupported = true,
-            ReadAssistantGameProcesses = () => ["GameA.exe"],
+            ReadAssistantGameProcesses = _ => ["GameA.exe"],
             StepAssistantAsync = (_, _, _, _, _) =>
                 throw new InvalidOperationException("Local recipes must not call the provider."),
         };
@@ -133,8 +136,10 @@ public sealed class AssistantRouteRecipeViewModelTests
         finally { window.Close(); }
     }
 
-    [AvaloniaFact]
-    public async Task Games_recipe_reports_empty_detection_and_unsupported_platform_without_a_confirmation()
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Games_recipe_reports_missing_inventory_or_scan_failure_without_a_confirmation(bool scanFailed)
     {
         using var scope = new Scope();
         var settings = NewSettings();
@@ -144,7 +149,7 @@ public sealed class AssistantRouteRecipeViewModelTests
         using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
         {
             IsAssistantGameDetectionSupported = true,
-            ReadAssistantGameProcesses = () => [],
+            ReadAssistantGameProcesses = _ => scanFailed ? throw new IOException() : [],
             StepAssistantAsync = (_, _, _, _, _) =>
                 throw new InvalidOperationException("Local recipes must not call the provider."),
         };
@@ -153,7 +158,7 @@ public sealed class AssistantRouteRecipeViewModelTests
         window.Show();
         try
         {
-            Assert.Equal(Strings.AssistantGamesNotFound, await vm.RunAssistantGoalAsync(
+            Assert.Equal(scanFailed ? Strings.AssistantGamesScanFailed : Strings.AssistantGamesNotFound, await vm.RunAssistantGoalAsync(
                 "send all games outside the VPN", window, panel, UnexpectedConfirmation, default));
             Assert.Equal(original, File.ReadAllText(AppPaths.ConfigYamlPath));
             Assert.False(vm.HasAssistantUndo);
@@ -163,7 +168,7 @@ public sealed class AssistantRouteRecipeViewModelTests
         using var unsupported = new MainWindowViewModel(RealSettingsStore.Instance, logger)
         {
             IsAssistantGameDetectionSupported = false,
-            ReadAssistantGameProcesses = () =>
+            ReadAssistantGameProcesses = _ =>
                 throw new InvalidOperationException("Unsupported platforms must not scan."),
             StepAssistantAsync = (_, _, _, _, _) =>
                 throw new InvalidOperationException("Local recipes must not call the provider."),
@@ -193,7 +198,7 @@ public sealed class AssistantRouteRecipeViewModelTests
         using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
         {
             IsAssistantGameDetectionSupported = true,
-            ReadAssistantGameProcesses = () => ["GameA.exe"],
+            ReadAssistantGameProcesses = _ => ["GameA.exe"],
             StepAssistantAsync = (_, _, _, _, _) =>
                 throw new InvalidOperationException("Local recipes must not call the provider."),
         };
@@ -343,6 +348,60 @@ public sealed class AssistantRouteRecipeViewModelTests
         finally { pendingWindow.Close(); }
     }
 
+    [AvaloniaFact]
+    public async Task Connected_regional_retry_downloads_only_after_confirmation_and_keeps_the_session_on_failure()
+    {
+        using var scope = new Scope();
+        var settings = NewSettings();
+        settings.App.BypassRussianTraffic = true;
+        SettingsLoader.Save(settings, AppPaths.ConfigYamlPath);
+        int downloads = 0;
+        using var logger = new Serilog.LoggerConfiguration().CreateLogger();
+        using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
+        {
+            IsAssistantRuRuleSetAvailable = () => false,
+            EnsureAssistantRuRuleSetsAsync = _ => { downloads++; return Task.FromResult(false); },
+            StepAssistantAsync = (_, _, _, _, _) => throw new InvalidOperationException("Unexpected provider call."),
+        };
+        const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+        var engine = Assert.IsType<VpnEngine>(typeof(MainWindowViewModel).GetField("_engine", fields)!.GetValue(vm));
+        using var manager = new SingBoxManager(new SingBoxSettings(), http: new FakeHttpClient(), runner: new FakeProcessRunner());
+        var handle = new FakeProcessHandle();
+        var handleField = typeof(SingBoxManager).GetField("_handle", fields)!;
+        var managerField = typeof(VpnEngine).GetField("_singBox", fields)!;
+        var session = new AcceptedTunnelInfo(settings, """{"route":{"final":"proxy","rules":[]}}""", "", null,
+            new Dictionary<string, VlessServerEntry>());
+        handleField.SetValue(manager, handle);
+        managerField.SetValue(engine, manager);
+        engine.CommitTunnelInfo(session);
+        var panel = new AssistantSetupPanel { DataContext = vm };
+        var window = new Window { Content = panel };
+        window.Show();
+        try
+        {
+            var original = File.ReadAllText(AppPaths.ConfigYamlPath);
+            var result = await vm.RunAssistantGoalAsync("сделать ру сайты вне впн", window, panel, (preview, _) =>
+            {
+                Assert.Equal(0, downloads);
+                Assert.Contains(Strings.AssistantRecipeRestartNotice, preview);
+                return Task.FromResult(true);
+            }, default);
+            Assert.Equal(Strings.AssistantRuRuleSetsMissing, result);
+            Assert.Equal(1, downloads);
+            Assert.Same(session, engine.AcceptedTunnel);
+            Assert.Equal(original, File.ReadAllText(AppPaths.ConfigYamlPath));
+            Assert.False(handle.HasExited);
+            Assert.False(vm.HasAssistantUndo);
+        }
+        finally
+        {
+            managerField.SetValue(engine, null);
+            handleField.SetValue(manager, null);
+            handle.Dispose();
+            window.Close();
+        }
+    }
+
     [AvaloniaTheory]
     [InlineData("Хочу, чтобы игры шли мимо VPN", "games")]
     [InlineData("Сделать ру сайты вне впн", "russia")]
@@ -358,7 +417,7 @@ public sealed class AssistantRouteRecipeViewModelTests
         using var vm = new MainWindowViewModel(RealSettingsStore.Instance, logger)
         {
             IsAssistantGameDetectionSupported = true,
-            ReadAssistantGameProcesses = () => ["game.exe"],
+            ReadAssistantGameProcesses = _ => ["game.exe"],
             IsAssistantRuRuleSetAvailable = () => false,
             StepAssistantAsync = (_, _, _, _, _) => throw new InvalidOperationException("Unexpected provider call."),
         };
@@ -374,9 +433,25 @@ public sealed class AssistantRouteRecipeViewModelTests
             var undo = panel.FindControl<Button>("UndoAssistant")!;
             var scroll = page.FindControl<ScrollViewer>("SimpleContentScroll")!;
             var original = File.ReadAllText(AppPaths.ConfigYamlPath);
+            var notice = panel.FindControl<TextBlock>("AssistantNotice")!;
+            input.Text = "Как настроить VPN?";
+            Assert.Equal(Strings.AssistantDataNotice, notice.Text);
+            Assert.Equal(notice.Text, AutomationProperties.GetHelpText(input));
             input.Focus();
             input.Text = goal;
-            input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+            Assert.Equal(Strings.AssistantLocalNotice, notice.Text);
+            Assert.Equal(notice.Text, AutomationProperties.GetHelpText(input));
+            if (scenario == "games")
+            {
+                var send = panel.FindControl<Button>("RunAssistant")!;
+                send.BringIntoView();
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                var point = send.TranslatePoint(new Point(send.Bounds.Width / 2, send.Bounds.Height / 2), window)!.Value;
+                window.MouseDown(point, MouseButton.Left);
+                window.MouseUp(point, MouseButton.Left);
+            }
+            else input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
             await WaitFor(() => confirm.IsEffectivelyVisible, status);
             Assert.Equal(original, File.ReadAllText(AppPaths.ConfigYamlPath));
             Assert.Contains(scenario == "games" ? "game.exe" : ".ru, .su, .рф", status.Text);

@@ -64,10 +64,13 @@ public static partial class Strings
     internal static string AssistantGamesNotFound => Ru
         ? "В библиотеках Steam не удалось найти процессы игр. Другие игры можно добавить в разделе «Приложения»."
         : "No game processes were found in your Steam libraries. You can add other games under Applications.";
+    internal static string AssistantGamesScanFailed => Ru
+        ? "Не удалось прочитать библиотеку Steam. Попробуйте ещё раз или добавьте игру в разделе «Приложения»."
+        : "Could not read the Steam library. Try again or add the game under Applications.";
     internal static string AssistantGamesPlatformUnsupported => Ru
         ? "Автопоиск игр Steam доступен в Windows. На этом устройстве выберите процессы в разделе «Приложения»."
         : "Automatic Steam game detection is available on Windows. Select processes under Applications on this device.";
-    internal static string AssistantRuAlreadyOn => Ru ? "Обход российского трафика уже включён в настройках." : "Russian traffic bypass is already enabled.";
+    internal static string AssistantRuAlreadyOn => Ru ? "Обход российского трафика уже включён в настройках." : "Russian traffic bypass is already enabled in settings.";
     internal static string AssistantRuRuleSetsPending => Ru
         ? "Обход уже включён в настройках. При следующем подключении VPNRouter попробует загрузить списки."
         : "Bypass is already enabled in settings. VPNRouter will try to download the lists at the next connection.";

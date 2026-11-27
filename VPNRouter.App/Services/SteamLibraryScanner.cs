@@ -21,13 +21,26 @@ internal static partial class SteamLibraryScanner
         "dxsetup",
     ];
 
-    internal static IReadOnlyList<SteamGameExecutable> FindInstalledGames()
+    private const int MaxGameDirectories = 256;
+
+    private static readonly EnumerationOptions GameEntries = new()
+    {
+        IgnoreInaccessible = true,
+        AttributesToSkip = FileAttributes.ReparsePoint,
+    };
+
+    private static readonly HashSet<string> SupportDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "_CommonRedist", "Redist", "Redistributables", "Engine", "Prerequisites", "DirectX", "EasyAntiCheat", "BattlEye",
+    };
+
+    internal static IReadOnlyList<SteamGameExecutable> FindInstalledGames(CancellationToken ct = default)
     {
         var roots = FindSteamRoots();
-        return FindGames(roots);
+        return FindGames(roots, ct);
     }
 
-    internal static IReadOnlyList<SteamGameExecutable> FindGames(IEnumerable<string> steamRoots)
+    internal static IReadOnlyList<SteamGameExecutable> FindGames(IEnumerable<string> steamRoots, CancellationToken ct = default)
     {
         var results = new List<SteamGameExecutable>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -39,13 +52,15 @@ internal static partial class SteamLibraryScanner
 
             foreach (var manifest in SafeEnumerateFiles(steamApps, "appmanifest_*.acf"))
             {
+                ct.ThrowIfCancellationRequested();
                 var (name, installDir) = ReadManifest(manifest);
-                if (string.IsNullOrWhiteSpace(installDir)) continue;
+                if (string.IsNullOrWhiteSpace(installDir) || installDir is "." or ".." ||
+                    installDir.IndexOfAny(['/', '\\', ':']) >= 0) continue;
 
                 var gameDir = Path.Combine(steamApps, "common", installDir);
                 if (!Directory.Exists(gameDir)) continue;
 
-                foreach (var exe in EnumerateCandidateExecutables(gameDir))
+                foreach (var exe in EnumerateCandidateExecutables(gameDir, ct))
                 {
                     var processName = Path.GetFileName(exe);
                     if (!seen.Add(processName)) continue;
@@ -108,18 +123,36 @@ internal static partial class SteamLibraryScanner
         return match.Success ? UnescapeSteamPath(match.Groups[1].Value) : null;
     }
 
-    private static IEnumerable<string> EnumerateCandidateExecutables(string gameDir)
+    private static IEnumerable<string> EnumerateCandidateExecutables(string gameDir, CancellationToken ct)
     {
-        var searchDirs = SafeEnumerateDirectories(gameDir).Prepend(gameDir);
-        foreach (var dir in searchDirs)
+        var pending = new Queue<(string Path, int Depth)>();
+        pending.Enqueue((gameDir, 0));
+        int scheduled = 1;
+        while (pending.TryDequeue(out var current))
         {
-            foreach (var exe in SafeEnumerateFiles(dir, "*.exe"))
-            {
+            ct.ThrowIfCancellationRequested();
+            foreach (var exe in SafeEnumerateFiles(current.Path, "*.exe"))
                 if (!ShouldSkipExe(Path.GetFileNameWithoutExtension(exe)))
                     yield return exe;
+
+            if (current.Depth == 3 || scheduled == MaxGameDirectories) continue;
+            bool inBin = IsBinaryDirectory(Path.GetFileName(current.Path));
+            foreach (var child in SafeEnumerateDirectories(current.Path))
+            {
+                var name = Path.GetFileName(child);
+                if (SupportDirectories.Contains(name)) continue;
+                if (current.Depth > 0 && !IsBinaryDirectory(name) && !(inBin && IsWindowsArchitecture(name))) continue;
+                pending.Enqueue((child, current.Depth + 1));
+                if (++scheduled == MaxGameDirectories) break;
             }
         }
     }
+
+    private static bool IsBinaryDirectory(string name) =>
+        name.Equals("bin", StringComparison.OrdinalIgnoreCase) || name.Equals("binaries", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWindowsArchitecture(string name) =>
+        name.ToLowerInvariant() is "win32" or "win64" or "x86" or "x64" or "wingdk" or "windows";
 
     private static bool ShouldSkipExe(string name)
         => SkipExePrefixes.Any(p => name.StartsWith(p, StringComparison.OrdinalIgnoreCase));
@@ -134,7 +167,7 @@ internal static partial class SteamLibraryScanner
 
     private static IReadOnlyList<string> SafeEnumerateFiles(string dir, string pattern)
     {
-        try { return Directory.EnumerateFiles(dir, pattern, SearchOption.TopDirectoryOnly).ToArray(); }
+        try { return Directory.EnumerateFiles(dir, pattern, GameEntries).ToArray(); }
         catch (IOException) { return Array.Empty<string>(); }
         catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
         catch (System.Security.SecurityException) { return Array.Empty<string>(); }
@@ -142,7 +175,7 @@ internal static partial class SteamLibraryScanner
 
     private static IReadOnlyList<string> SafeEnumerateDirectories(string dir)
     {
-        try { return Directory.EnumerateDirectories(dir).ToArray(); }
+        try { return Directory.EnumerateDirectories(dir, "*", GameEntries).Take(MaxGameDirectories).ToArray(); }
         catch (IOException) { return Array.Empty<string>(); }
         catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
         catch (System.Security.SecurityException) { return Array.Empty<string>(); }

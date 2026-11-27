@@ -7,6 +7,8 @@ public partial class AppItemViewModel : ViewModelBase
     [ObservableProperty] private string _processName = string.Empty;
     [ObservableProperty] private bool _isCustom;
 
+    internal bool IsSavedExclusionOnly { get; init; }
+
     public Func<string, bool>? ReadMode { get; set; }
 
     public Action<string, bool>? WriteMode { get; set; }

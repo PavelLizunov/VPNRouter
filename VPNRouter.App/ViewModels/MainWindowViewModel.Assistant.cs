@@ -405,8 +405,11 @@ public partial class MainWindowViewModel
             if (!applied) return new(Strings.AssistantApplyFailed, Rejection: rejection);
 
             if ((target != null || verifyRoute != null) && savedRevision is { } revision)
-                _assistantUndo = new(RoutingSelection.Capture(snapshot.Settings), RoutingSelection.Capture(candidate),
-                    revision, snapshot.Session != null, appliedSession);
+            {
+                var previous = RoutingSelection.Capture(snapshot.Settings);
+                _assistantUndo = verifyRoute != null && previous.Matches(candidate) ? null :
+                    new(previous, RoutingSelection.Capture(candidate), revision, snapshot.Session != null, appliedSession);
+            }
 
             // Commit already checked the submitted revision under the lifecycle and file locks.
             // Later edits are a separate operation, so retain this session's Undo and do not publish stale controls.

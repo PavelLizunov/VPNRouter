@@ -18,8 +18,8 @@ The eligible subscriber types a request directly on Simple Home and selects Send
 
 ## Local routing requests
 
-- “Пустить все игры вне ВПН” and “Хочу, чтобы игры шли мимо VPN” use the installed Steam library inventory on Windows. The preview shows process names, a switch to “All except selected” when needed and any saved exclusions that become active. Other stores require manual selection. An empty inventory leaves the settings untouched.
-- “Сделать ру сайты вне ВПН” enables the existing regional bypass. Its domain source is geosite-tld-ru, and its address source is geoip-ru. With the VPN disconnected, the setting can be saved before the lists are downloaded. With the VPN connected, missing lists are fetched after confirmation and the accepted session must contain the direct rule.
+- “Пустить все игры вне ВПН” and “Хочу, чтобы игры шли мимо VPN” use the installed Steam library inventory on Windows. The preview shows process names, a switch to “All except selected” when needed and any saved exclusions that become active. Detection includes nested Windows binaries such as bin/x64 and project Binaries/Win64. Only the listed executable names are covered. Other stores require manual selection. An empty inventory leaves the settings untouched.
+- “Сделать ру сайты вне ВПН” enables the existing regional bypass. Its domain source is geosite-tld-ru, and its address source is geoip-ru. With the VPN disconnected, the setting can be saved before the lists are downloaded. With the VPN connected, missing lists are fetched after confirmation and the accepted session must contain the direct rule. A saved setting with no matching active rule offers to reapply it.
 - Both operations use the desktop's subscription, session and settings-revision checks. Custom configurations and enabled custom rules get an explanation. An eligible subscriber can type other requests in the same field for the online assistant.
 
 ## Identity and transport

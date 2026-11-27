@@ -6,8 +6,8 @@ public static partial class Strings
     internal static string AssistantDiagnostics => Ru ? "Диагностика и восстановление" : "Diagnostics and repair";
     public static string AssistantGoalHint => Ru ? "Что сделать с VPN?" : "What would you like to do?";
     public static string AssistantDataNotice => Ru
-        ? "Для онлайн-команд сервис получает текст, язык, состояние VPN и доступные действия."
-        : "For online commands, the service receives your text, language, VPN state and available actions.";
+        ? "Для онлайн-запросов сервис передаёт текст, язык, состояние VPN и список действий поставщику модели."
+        : "For online requests, the service shares your text, language, VPN state and available actions with its model provider.";
     internal static string AssistantCrashNotice => Ru
         ? "Отправляются только 4 кода последнего сбоя и состояние VPN (без конфигов и сырых логов)."
         : "Sends only 4 classified crash codes and VPN state (no configs or raw logs).";

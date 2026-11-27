@@ -77,17 +77,17 @@ public sealed class AssistantRouteRecipeTests
             settings.App.RoutingMode = "split";
             settings.App.RoutingAppsMode = "include";
             settings.App.RoutingAppsInclude = ["firefox.exe"];
-            settings.App.RoutingAppsExclude = ["OLDgame.exe", "Chat.exe"];
+            settings.App.RoutingAppsExclude = ["OLDgame.exe", "Chat.exe", "unused*.exe", " "];
 
             var result = AssistantRouteRecipe.PlanGames(settings,
                 ["GameB.exe", "gameA.exe", "GameA.exe", "OldGame.exe", "../bad.exe", "readme.txt"],
-                "SplitProfile", connected: false);
+                "SplitProfile", session: null);
 
             Assert.Null(result.Message);
             var plan = result.Plan!;
             Assert.Equal("split", plan.Candidate.App.RoutingMode);
             Assert.Equal("exclude", plan.Candidate.App.RoutingAppsMode);
-            Assert.Equal(new[] { "OldGame.exe", "Chat.exe", "gameA.exe", "GameB.exe" }, plan.Candidate.App.RoutingAppsExclude);
+            Assert.Equal(new[] { "OldGame.exe", "Chat.exe", "unused*.exe", " ", "gameA.exe", "GameB.exe" }, plan.Candidate.App.RoutingAppsExclude);
             Assert.Equal(new[] { "firefox.exe" }, plan.Candidate.App.RoutingAppsInclude);
             Assert.False(plan.Candidate.App.BypassRussianTraffic);
             Assert.Equal(string.Empty, plan.Candidate.ActiveProfile);
@@ -95,6 +95,7 @@ public sealed class AssistantRouteRecipeTests
             Assert.Contains("Steam", plan.Preview);
             Assert.Contains("gameA.exe, GameB.exe", plan.Preview);
             Assert.Contains("Chat.exe", plan.Preview);
+            Assert.DoesNotContain("unused*.exe", plan.Preview);
             Assert.Contains("Все, кроме выбранных", plan.Preview);
         }
         finally { Strings.Lang = previous; }
@@ -114,7 +115,7 @@ public sealed class AssistantRouteRecipeTests
             settings.App.BypassRussianTraffic = true;
 
             var plan = AssistantRouteRecipe.PlanGames(settings, ["New.exe"], "SplitProfile",
-                connected: true).Plan!;
+                session: SessionWithoutRules(settings)).Plan!;
 
             Assert.Equal("split", plan.Candidate.App.RoutingMode);
             Assert.Equal("SplitProfile", plan.Candidate.ActiveProfile);
@@ -138,16 +139,19 @@ public sealed class AssistantRouteRecipeTests
             var settings = NewSettings();
 
             var empty = AssistantRouteRecipe.PlanGames(settings, [], "SplitProfile",
-                connected: false);
+                session: null);
             Assert.Equal(Strings.AssistantGamesNotFound, empty.Message);
             Assert.Null(empty.Plan);
 
             settings.App.RoutingAppsMode = "exclude";
             settings.App.RoutingAppsExclude = ["Old.exe"];
             var already = AssistantRouteRecipe.PlanGames(settings, ["Old.exe"], "SplitProfile",
-                connected: false);
+                session: null);
             Assert.Equal(Strings.AssistantGamesAlreadySet, already.Message);
             Assert.Null(already.Plan);
+            var retry = AssistantRouteRecipe.PlanGames(settings, ["Old.exe"], "SplitProfile", SessionWithoutRules(settings));
+            Assert.NotNull(retry.Plan);
+            Assert.Contains(Strings.AssistantRecipeRestartNotice, retry.Plan.Preview);
 
             Assert.Equal(OperatingSystem.IsWindows(), AssistantRouteRecipe.SupportsGameDetection);
         }
@@ -166,7 +170,7 @@ public sealed class AssistantRouteRecipeTests
             settings.App.RoutingAppsExclude = ["Old.exe"];
 
             var plan = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: true,
-                connected: false).Plan!;
+                session: null).Plan!;
 
             Assert.True(plan.Candidate.App.BypassRussianTraffic);
             Assert.Equal("full", plan.Candidate.App.RoutingMode);
@@ -187,16 +191,16 @@ public sealed class AssistantRouteRecipeTests
             Strings.Lang = "ru";
             var settings = NewSettings();
             settings.App.BypassRussianTraffic = true;
-            var already = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: true, connected: false);
+            var already = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: true, session: null);
             Assert.Equal(Strings.AssistantRuAlreadyOn, already.Message);
             Assert.Null(already.Plan);
 
-            var pending = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: false, connected: false);
+            var pending = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: false, session: null);
             Assert.Equal(Strings.AssistantRuRuleSetsPending, pending.Message);
             Assert.Null(pending.Plan);
 
             settings.App.BypassRussianTraffic = false;
-            var missing = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: false, connected: false);
+            var missing = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: false, session: null);
             Assert.Contains("следующем подключении", missing.Plan!.Preview);
             Assert.False(settings.App.BypassRussianTraffic);
         }
@@ -212,13 +216,13 @@ public sealed class AssistantRouteRecipeTests
             Strings.Lang = "en";
             var settings = NewSettings();
             var games = AssistantRouteRecipe.PlanGames(settings, ["GameA.exe"], "SplitProfile",
-                connected: false).Plan!;
+                session: null).Plan!;
             Assert.Contains("All except selected", games.Preview);
             Assert.Contains("GameA.exe", games.Preview);
             Assert.Contains("installed Steam", games.Preview);
 
             var ru = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: true,
-                connected: false).Plan!;
+                session: null).Plan!;
             Assert.Contains("Russian IP", ru.Preview);
         }
         finally { Strings.Lang = previous; }
@@ -229,7 +233,7 @@ public sealed class AssistantRouteRecipeTests
     {
         var settings = NewSettings();
         var plan = AssistantRouteRecipe.PlanGames(settings, ["GameA.exe", "GameB.exe"],
-            "SplitProfile", connected: false).Plan!;
+            "SplitProfile", session: null).Plan!;
 
         RuleSetSamples.WithBuiltInGeoFiles(() =>
         {
@@ -256,7 +260,7 @@ public sealed class AssistantRouteRecipeTests
     {
         var settings = NewSettings();
         var plan = AssistantRouteRecipe.PlanRussianSites(settings, ruleSetsAvailable: true,
-            connected: false).Plan!;
+            session: null).Plan!;
 
         RuleSetSamples.WithBuiltInGeoFiles(() =>
         {
@@ -276,6 +280,8 @@ public sealed class AssistantRouteRecipeTests
             var accepted = new AcceptedTunnelInfo(plan.Candidate, ConfigGenerator.Serialize(config), "", null,
                 new Dictionary<string, VlessServerEntry>());
             Assert.True(accepted.RoutesRussianTrafficDirect());
+            Assert.Equal(Strings.AssistantRuAlreadyOn,
+                AssistantRouteRecipe.PlanRussianSites(plan.Candidate, ruleSetsAvailable: false, session: accepted).Message);
 
             var plain = ConfigGenerator.Generate(NewProfile(), [], settings, null, null,
                 resolveRuleSet: null, checkGeoContents: RuleSetSamples.CheckFixtureContentsAsync);
@@ -297,6 +303,9 @@ public sealed class AssistantRouteRecipeTests
         var accepted = new AcceptedTunnelInfo(NewSettings(), config, "", null, new Dictionary<string, VlessServerEntry>());
         Assert.False(accepted.RoutesRussianTrafficDirect());
     }
+
+    private static AcceptedTunnelInfo SessionWithoutRules(AppSettings settings) => new(settings,
+        """{"route":{"final":"proxy","rules":[]}}""", "", null, new Dictionary<string, VlessServerEntry>());
 
     private static AppSettings NewSettings() => new()
     {
