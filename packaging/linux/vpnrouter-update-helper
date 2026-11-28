@@ -1,5 +1,8 @@
 #!/bin/bash
 set -e
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+umask 022
 
 SRC="${1:-}"
 DST="${2:-}"
@@ -21,10 +24,60 @@ case "$DST" in
         exit 3
         ;;
 esac
+DST="${DST%/}"
+SRC="${SRC%/}"
 
-if [ ! -d "$SRC" ]; then
+root_owned_and_protected() {
+    local metadata
+    metadata=$(stat -c '%u:%a' -- "$1") || return 1
+    [[ "${metadata%%:*}" = 0 ]] && (( (0${metadata#*:} & 022) == 0 ))
+}
+
+trusted_directory() {
+    [[ ! -L "$1" && -d "$1" ]] && root_owned_and_protected "$1"
+}
+
+trusted_file() {
+    [[ ! -L "$1" && -f "$1" ]] && root_owned_and_protected "$1"
+}
+
+tree_is_valid() {
+    local path="$1"
+    shift
+    find -P "$path" \( ! -type f ! -type d -o -perm /6000 "$@" \) -exec /bin/false {} + -quit
+}
+
+installed_tree_is_valid() {
+    tree_is_valid "$1" -o ! -uid 0 -o -perm /022 \
+        -o -type d ! -perm -0555 -o -type f ! -perm -0444
+}
+
+directory="$DST"
+if [[ ! -e "$DST" && ! -L "$DST" && "$#" -eq 2 ]]; then
+    directory="${DST%/*}"
+fi
+while true; do
+    if ! trusted_directory "$directory"; then
+        echo "Refusing to update through an untrusted directory: $directory" >&2
+        exit 3
+    fi
+    [[ "$directory" != / ]] || break
+    directory="${directory%/*}"
+    directory="${directory:-/}"
+done
+
+if [[ "$SRC" != /* || "$SRC" == */ || ! -d "$SRC" || -L "$SRC" ]]; then
     echo "Source is not a directory: $SRC" >&2
     exit 4
+fi
+
+if ! tree_is_valid "$SRC"; then
+    echo "Source contains unsupported entries or could not be verified" >&2
+    exit 5
+fi
+if [[ -d "$DST" ]] && ! installed_tree_is_valid "$DST"; then
+    echo "Refusing to update an untrusted or unreadable installation tree" >&2
+    exit 3
 fi
 
 if [ ! -f "$SRC/VPNRouter.App" ] && [ ! -f "$SRC/VPNRouter.App.dll" ]; then
@@ -32,9 +85,34 @@ if [ ! -f "$SRC/VPNRouter.App" ] && [ ! -f "$SRC/VPNRouter.App.dll" ]; then
     exit 5
 fi
 
+for filename in VPNRouter.App VPNRouter.App.dll sing-box; do
+    if [[ -e "$SRC/$filename" || -L "$SRC/$filename" ]] &&
+        [[ -L "$SRC/$filename" || ! -f "$SRC/$filename" ]]; then
+        echo "Source does not contain a regular $filename file" >&2
+        exit 5
+    fi
+    if [[ -e "$DST/$filename" || -L "$DST/$filename" ]] && ! trusted_file "$DST/$filename"; then
+        echo "Refusing to replace an untrusted file: $DST/$filename" >&2
+        exit 3
+    fi
+done
+
+stage=$(mktemp -d "${DST%/*}/.vpnrouter-update.XXXXXXXX")
+trap 'rm -rf -- "$stage"' EXIT
+cp -rT -- "$SRC" "$stage/payload"
+if ! tree_is_valid "$stage/payload" -o ! -uid 0 -o -perm /022; then
+    echo "Staged payload contains unsupported entries or could not be verified" >&2
+    exit 5
+fi
+chmod -R u=rwX,go=rX -- "$stage/payload"
+if ! installed_tree_is_valid "$stage/payload"; then
+    echo "Staged payload is not readable by the desktop user" >&2
+    exit 5
+fi
+
 if [ "$#" -eq 6 ]; then
     CURRENT_HOST="$DST/VPNRouter.App"
-    if [ ! -x "$CURRENT_HOST" ]; then
+    if ! trusted_file "$CURRENT_HOST" || [ ! -x "$CURRENT_HOST" ]; then
         echo "Current VPNRouter helper executable is unavailable: $CURRENT_HOST" >&2
         exit 6
     fi
@@ -44,13 +122,29 @@ if [ "$#" -eq 6 ]; then
     fi
 fi
 
-cp -rfT "$SRC" "$DST"
+cp -rfT --remove-destination -- "$stage/payload" "$DST"
 
-[ -f "$DST/VPNRouter.App" ] && chmod +x "$DST/VPNRouter.App"
-[ -f "$DST/sing-box" ]       && chmod +x "$DST/sing-box"
+if ! trusted_directory "$DST" || ! installed_tree_is_valid "$DST"; then
+    echo "Updated directory does not match the protected installation layout: $DST" >&2
+    exit 3
+fi
+for filename in VPNRouter.App sing-box; do
+    target="$DST/$filename"
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
+        continue
+    fi
+    if ! trusted_file "$target"; then
+        echo "Refusing to chmod an untrusted file: $target" >&2
+        exit 3
+    fi
+    chmod 0755 -- "$target"
+done
 
-if [ -f "$DST/sing-box" ] && command -v setcap >/dev/null 2>&1; then
-    setcap cap_net_admin,cap_net_bind_service=+eip "$DST/sing-box" 2>/dev/null || true
+CAPABILITIES=cap_net_admin,cap_net_bind_service=+eip
+if trusted_file "$DST/sing-box"; then
+    if ! setcap "$CAPABILITIES" "$DST/sing-box" || ! setcap -q -v "$CAPABILITIES" "$DST/sing-box"; then
+        printf '%s\n' 'VPNRouter: could not verify sing-box capabilities. Connecting may require polkit authentication.' >&2
+    fi
 fi
 
 exit 0

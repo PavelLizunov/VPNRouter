@@ -65,11 +65,13 @@ Android 6.0+ (API 23), ARM64. Установка APK вне Play Store. Подд
 | `VPNRouter-*-win.zip.sha256` | Windows | Компаньон-файл SHA256 — автоапдейтер проверяет хеш перед распаковкой (v2.15.8+) |
 | `VPNRouter-v{version}-mac.dmg` | macOS | Drag-install DMG (Apple Silicon) с `InstallGuide.html` для одноразовой настройки привилегированного helper |
 | `VPNRouter-v{version}-mac.zip` | macOS | Сырой `.app`-бандл (для ручной установки) |
-| `VPNRouter-v{version}-linux-amd64.deb` | Linux | Пакет для Debian/Ubuntu (desktop entry + `setcap` для passwordless TUN; systemd-сервиса нет). Установка: `sudo dpkg -i <file>.deb` |
+| `VPNRouter-v{version}-linux-amd64.deb` | Linux | Пакет для Debian/Ubuntu с ярлыком в меню и `setcap` для запуска TUN без пароля. Установка командой `sudo apt install ./VPNRouter-v{version}-linux-amd64.deb`. |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | Linux | Портативный single-file билд. `chmod +x`, запуск, установка не нужна |
 | `VPNRouter-v{version}-linux.tar.gz` | Linux | Сырой tarball (для ручной установки или упаковки в другие форматы) |
 | `VPNRouter-v{version}-android-arm64.apk` | Android | Подписанный ARM64 APK, API 23+. Собирается и подписывается в `build-android.yml` для каждого release-тега, затем публикуется в Releases и на [`vpn.ninitux.com/android`](https://vpn.ninitux.com/android). In-app апдейтер доставляет будущие APK. |
 | `*.sha256` для каждого бинарника | All | SHA256-сайдкары рядом с каждым артефактом (Windows `*-win.zip` + `*-update-win.zip` + `*-Setup-*.exe`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Авто-апдейтер + CI integrity check проверяют hash перед распаковкой. Сравните результат `sha256sum <file>` на Linux, `shasum -a 256 <file>` на macOS или `Get-FileHash -Algorithm SHA256 <file>` на Windows с 64-символьным хешем из сайдкара. Часть сайдкаров содержит только хеш и не подходит для прямого вызова `sha256sum -c`. |
+
+При первом обновлении со старого `.deb` запустите ту же команду `apt install` с новым файлом. APT установит зависимость `libcap2-bin` и выполнит сценарий, который назначает сетевые права.
 
 При успешном выполнении серверное задание публикует отдельный артефакт:
 

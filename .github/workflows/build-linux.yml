@@ -138,6 +138,7 @@ jobs:
       - name: Build .deb
         run: |
           set -euo pipefail
+          umask 022
           VER="${{ steps.version.outputs.version }}"
           PKG="vpnrouter_${VER}_amd64"
           mkdir -p "$PKG/DEBIAN"
@@ -147,7 +148,8 @@ jobs:
           mkdir -p "$PKG/usr/share/icons/hicolor/256x256/apps"
 
           cp -R publish/linux-x64/. "$PKG/opt/vpnrouter/"
-          chmod +x "$PKG/opt/vpnrouter/VPNRouter.App" || true
+          chmod -R u=rwX,go=rX -- "$PKG/opt/vpnrouter"
+          chmod 0755 "$PKG/opt/vpnrouter/VPNRouter.App" "$PKG/opt/vpnrouter/sing-box"
 
           cat > "$PKG/usr/bin/vpnrouter" <<'WRAP'
           #!/usr/bin/env bash
@@ -177,7 +179,7 @@ jobs:
           Section: net
           Priority: optional
           Architecture: amd64
-          Depends: libx11-6, libice6, libsm6, libfontconfig1, libicu70 | libicu71 | libicu72 | libicu74 | libicu76 | libicu78, policykit-1 | polkitd, nftables
+          Depends: libx11-6, libice6, libsm6, libfontconfig1, libicu70 | libicu71 | libicu72 | libicu74 | libicu76 | libicu78, policykit-1 | polkitd, nftables, libcap2-bin
           Recommends: libayatana-appindicator3-1
           Maintainer: NiniTux <noreply@example.invalid>
           Installed-Size: ${SIZE_KB}
@@ -189,12 +191,26 @@ jobs:
           CTRL
 
           dpkg-deb --build --root-owner-group "$PKG"
-          mv "${PKG}.deb" "VPNRouter-v${VER}-linux-amd64.deb"
-          ls -lh "VPNRouter-v${VER}-linux-amd64.deb"
+          DEB="VPNRouter-v${VER}-linux-amd64.deb"
+          mv "${PKG}.deb" "$DEB"
+
+          dpkg-deb --field "$DEB" Depends | grep -Eq '(^|, )libcap2-bin(,|$)'
+          VERIFY=$(mktemp -d)
+          trap 'rm -rf -- "$VERIFY"' EXIT
+          dpkg-deb --raw-extract "$DEB" "$VERIFY"
+          test -x "$VERIFY/DEBIAN/postinst"
+          test -x "$VERIFY/usr/libexec/vpnrouter-update-helper"
+          test -x "$VERIFY/opt/vpnrouter/sing-box"
+          find "$VERIFY/opt/vpnrouter" \( -type d ! -perm 0755 -o \
+            -type f ! -perm 0644 ! -perm 0755 -o ! -type d ! -type f \) -exec /bin/false {} + -quit
+          cmp "$PKG/DEBIAN/postinst" "$VERIFY/DEBIAN/postinst"
+          cmp "$PKG/usr/libexec/vpnrouter-update-helper" "$VERIFY/usr/libexec/vpnrouter-update-helper"
+          ls -lh "$DEB"
 
       - name: Build tar.gz
         run: |
           set -euo pipefail
+          umask 022
           VER="${{ steps.version.outputs.version }}"
           STAGE="stage/VPNRouter"
           mkdir -p "$STAGE"
@@ -204,7 +220,8 @@ jobs:
           cp VPNRouter.App/Assets/penguin_mascot_tile.png "$STAGE/icon.png"
           sed -e "s|{VERSION}|${VER}|g" -e "s|{REPO}|${GITHUB_REPOSITORY}|g" \
               packaging/linux/README.txt > "$STAGE/README.txt"
-          chmod +x "$STAGE/VPNRouter.sh" "$STAGE/VPNRouter.App" || true
+          chmod -R u=rwX,go=rX -- "$STAGE"
+          chmod 0755 "$STAGE/VPNRouter.sh" "$STAGE/VPNRouter.App" "$STAGE/sing-box"
           ( cd stage && tar -czf "../VPNRouter-v${VER}-linux.tar.gz" VPNRouter )
           ls -lh "VPNRouter-v${VER}-linux.tar.gz"
 

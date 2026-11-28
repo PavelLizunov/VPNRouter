@@ -689,6 +689,25 @@ internal sealed class SingBoxRuntimePolicy
         catch { return false; }
     }
 
+    internal static bool IsTrustedPackagePath(string path, bool directory)
+    {
+        if (!OperatingSystem.IsLinux() || string.IsNullOrWhiteSpace(path))
+            return false;
+
+        try
+        {
+            if (Statx(AT_FDCWD, path, AT_SYMLINK_NOFOLLOW, STATX_BASIC_STATS, out var stat) != 0)
+                return false;
+
+            return IsTrustedPackageMetadata(
+                stat.stx_mask, stat.stx_uid, stat.stx_mode, directory);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void ValidatePathBoundedAndFormatted(string absolutePath)
     {
         if (string.IsNullOrWhiteSpace(absolutePath))

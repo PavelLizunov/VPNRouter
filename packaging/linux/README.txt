@@ -64,8 +64,24 @@ the VPNRouter tray icon. KDE / XFCE / Cinnamon work out of the box.
 sing-box binary
 ---------------
 sing-box-linux-amd64 ships bundled next to VPNRouter.App (and inside the
-.deb), so there is no first-connect download — it is provisioned into
-~/.config/vpnrouter/bin/ on first run.
+.deb), so there is no first-connect download. The .deb runs the
+package-owned /opt/vpnrouter/sing-box directly, so the post-install file
+capabilities stay attached. The .deb requires libcap2-bin and checks those
+capabilities on installation. For the first upgrade from an older .deb, or to
+restore capabilities after an older in-app update, install the new package:
+
+    sudo apt install ./VPNRouter-v{VERSION}-linux-amd64.deb
+
+APT installs libcap2-bin and runs the post-install hook. tar.gz and AppImage
+builds that run outside that protected layout provision a copy into
+~/.config/vpnrouter/bin/ on first run and use the pkexec fallback unless you
+apply the optional setcap command above.
+
+System-wide tar.gz installations require root-owned directories with no
+group or other write permission for in-app updates. If /usr/local permits
+staff group writes, update by reinstalling from the archive.
+The updater also checks that installed files can be read before replacing
+them. Reinstall the package if an older update left restrictive permissions.
 
 
 What's not in this BETA
