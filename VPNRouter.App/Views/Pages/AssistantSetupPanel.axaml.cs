@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using VPNRouter.App.Services;
 using VPNRouter.App.ViewModels;
 using Strings = VPNRouter.Core.Localization.Strings;
 
@@ -25,10 +26,11 @@ public partial class AssistantSetupPanel : UserControl
     public AssistantSetupPanel()
     {
         InitializeComponent();
-        AssistantGoal.TextChanged += (_, _) =>
+        AssistantGoal.PropertyChanged += (_, args) =>
         {
-            if (_request == null && _confirmation == null)
-                AssistantStatus.Text = string.Empty;
+            if (args.Property != TextBox.TextProperty) return;
+            UpdateComposer();
+            if (_request == null) AssistantStatus.Text = string.Empty;
         };
         DataContextChanged += (_, _) => BindViewModel(DataContext as MainWindowViewModel);
         AttachedToVisualTree += (_, _) => BindViewModel(DataContext as MainWindowViewModel);
@@ -100,20 +102,17 @@ public partial class AssistantSetupPanel : UserControl
         var canPlan = _viewModel?.HasAssistantSubscription == true;
         var canUndo = _viewModel?.HasAssistantUndo == true;
         IsVisible = _request != null || canPlan || canUndo;
-        OpenAssistant.Content = Strings.AssistantTitle;
-        LocalRepairTitle.Text = Strings.AssistantLocalSection;
-        CloudAssistantTitle.Text = Strings.AssistantCloudSection;
+        AssistantHeading.Text = Strings.AssistantTitle;
         AssistantGoal.Watermark = Strings.AssistantGoalHint;
         AutomationProperties.SetName(AssistantGoal, Strings.AssistantGoalHint);
-        AssistantNotice.Text = Strings.AssistantDataNotice;
         AssistantCrashNotice.Text = Strings.AssistantCrashNotice;
         RunAssistant.Content = Strings.AssistantPlan;
         ConfirmAssistant.Content = _diagnosingSource
             ? (_diagnosingConnection ? Strings.SourceConnectionSend : Strings.SourceDiagnosisSend)
             : Strings.AssistantConfirm;
         DiagnoseCrash.Content = Strings.AssistantDiagnoseCrash;
-        SourceDiagnosisDetails.Header = Strings.SourceDiagnosisTitle;
-        SourceDiagnosisDetails.IsVisible = canPlan;
+        DiagnosticsDetails.Header = Strings.AssistantDiagnostics;
+        DiagnosticsDetails.IsVisible = canPlan;
         SourceDiagnosisNotice.Text = Strings.SourceDiagnosisNotice;
         DiagnoseSource.Content = Strings.SourceDiagnosisPreview;
         DiagnoseConnection.Content = Strings.SourceConnectionPreview;
@@ -122,27 +121,34 @@ public partial class AssistantSetupPanel : UserControl
         CancelAssistant.Content = _confirmation == null ? Strings.AssistantCancel :
             _diagnosingSource ? Strings.SourceDiagnosisDoNotSend : Strings.AssistantDecline;
         UndoAssistant.Content = Strings.AssistantUndo;
-        LocalRepairSection.IsVisible = canPlan || canUndo;
-        CloudAssistantSection.IsVisible = canPlan;
-        AssistantGoal.IsVisible = canPlan;
-        AssistantNotice.IsVisible = canPlan;
-        AssistantCrashNotice.IsVisible = canPlan;
-        RunAssistant.IsVisible = canPlan;
-        DiagnoseCrash.IsVisible = canPlan;
-        RepairVpn.IsVisible = canPlan;
+        AssistantFields.IsVisible = canPlan;
+        UpdateComposer();
         UndoAssistant.IsVisible = canUndo;
     }
 
-    private void OpenAssistant_Click(object? sender, RoutedEventArgs args)
+    private void UpdateComposer()
     {
-        AssistantFields.IsVisible = !AssistantFields.IsVisible;
-        if (AssistantFields.IsVisible) AssistantGoal.Focus();
+        var hasText = !string.IsNullOrWhiteSpace(AssistantGoal.Text);
+        var notice = hasText && AssistantRouteRecipe.Parse(AssistantGoal.Text!) != null
+            ? Strings.AssistantLocalNotice : Strings.AssistantDataNotice;
+        AssistantNotice.Text = notice;
+        AutomationProperties.SetHelpText(AssistantGoal, notice);
+        RunAssistant.IsEnabled = _request == null && hasText;
+        AssistantNotice.IsVisible = _request == null && hasText;
+    }
+
+    private void AssistantGoal_KeyDown(object? sender, KeyEventArgs args)
+    {
+        if (args.Key != Key.Enter || args.KeyModifiers != KeyModifiers.None ||
+            !AssistantGoal.IsFocused || !RunAssistant.IsEffectivelyEnabled) return;
+        args.Handled = true;
+        RunAssistant.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
     }
 
     private async void RunAssistant_Click(object? sender, RoutedEventArgs args)
     {
         var goal = AssistantGoal.Text;
-        if (_viewModel is not { } vm || string.IsNullOrWhiteSpace(goal)
+        if (_request != null || _viewModel is not { } vm || string.IsNullOrWhiteSpace(goal)
             || TopLevel.GetTopLevel(this) is not Window window) return;
         _lastTrigger = RunAssistant;
         window.AddHandler(InputElement.KeyDownEvent, CancelFromWindow, RoutingStrategies.Tunnel);
@@ -278,8 +284,9 @@ public partial class AssistantSetupPanel : UserControl
         if (_request != null) return;
         using var request = new CancellationTokenSource();
         _request = request;
-        DiagnoseConnection.IsEnabled = DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
-            = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
+        UpdateComposer();
+        DiagnoseConnection.IsEnabled = DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled
+            = UndoAssistant.IsEnabled = AssistantGoal.IsEnabled = false;
         CancelAssistant.IsVisible = true;
         AssistantProgress.IsVisible = true;
         AssistantStatus.Text = progress ?? Strings.AssistantWorking;
@@ -302,8 +309,8 @@ public partial class AssistantSetupPanel : UserControl
             _request = null;
             AssistantProgress.IsVisible = false;
             CancelAssistant.IsVisible = false;
-            DiagnoseConnection.IsEnabled = DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled = RunAssistant.IsEnabled
-                = UndoAssistant.IsEnabled = OpenAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
+            DiagnoseConnection.IsEnabled = DiagnoseSource.IsEnabled = RepairVpn.IsEnabled = DiagnoseCrash.IsEnabled
+                = UndoAssistant.IsEnabled = AssistantGoal.IsEnabled = true;
             RefreshLabels();
             if (_lastTrigger is { IsEffectivelyVisible: true, IsEffectivelyEnabled: true } trigger)
                 trigger.Focus();

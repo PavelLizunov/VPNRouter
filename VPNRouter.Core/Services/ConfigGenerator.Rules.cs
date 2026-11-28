@@ -262,8 +262,8 @@ public static partial class ConfigGenerator
         return result;
     }
 
-    private const string GeoIpRuleSetTag = "vpnrouter-geoip-ru";
-    private const string GeoSiteRuleSetTag = "vpnrouter-geosite-ru";
+    internal const string GeoIpRuleSetTag = "vpnrouter-geoip-ru";
+    internal const string GeoSiteRuleSetTag = "vpnrouter-geosite-ru";
 
     private static void ApplyGeoBypass(SingBoxConfig config)
     {

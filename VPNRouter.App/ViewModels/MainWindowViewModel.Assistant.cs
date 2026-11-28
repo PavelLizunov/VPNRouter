@@ -96,6 +96,8 @@ public partial class MainWindowViewModel
         budget.CancelAfter(TimeSpan.FromMinutes(2));
         var token = budget.Token;
         var state = new AssistantObservation(IsConnected, false, IsSimpleMode, [], null);
+        if (AssistantRouteRecipe.Parse(goal) is { } recipe)
+            return await RunAssistantRecipeAsync(recipe, snapshot, window, source, confirm, token);
         if (AssistantIntent.Parse(goal) is not { } intent)
             return await SuggestAssistantCommandAsync(goal, subscription.Url, snapshot, state, token);
 
@@ -351,7 +353,7 @@ public partial class MainWindowViewModel
     private async Task<AssistantChangeResult> ApplyAssistantSettingsAsync(AppSettings candidate,
         AssistantSnapshot snapshot, string? target, bool restoreWithoutStart, CancellationToken ct,
         bool keepSavedSettings = false, bool direct = false, string? preference = null,
-        AssistantRepairServer? repairServer = null)
+        AssistantRepairServer? repairServer = null, Func<AcceptedTunnelInfo, bool>? verifyRoute = null)
     {
         bool saveOnly = preference == "SetFlushDnsOnStart";
         var previousPid = _engine.SingBoxPid;
@@ -396,15 +398,18 @@ public partial class MainWindowViewModel
                 }
                 applied = await Task.Run(() => _engine.ConnectVerifiedAppRoutingAsync(runtime,
                     new AssistantRouteIntent(snapshot.Session, target, direct, expectedRow, repairServer?.FeedId,
-                        reason => rejection = reason),
+                        reason => rejection = reason, verifyRoute),
                     () => Commit(runtime, budget.Token), _skipVpnConflictThisSession, budget.Token));
             }
 
             if (!applied) return new(Strings.AssistantApplyFailed, Rejection: rejection);
 
-            if (target != null && savedRevision is { } revision)
-                _assistantUndo = new(RoutingSelection.Capture(snapshot.Settings), RoutingSelection.Capture(candidate),
-                    revision, snapshot.Session != null, appliedSession);
+            if ((target != null || verifyRoute != null) && savedRevision is { } revision)
+            {
+                var previous = RoutingSelection.Capture(snapshot.Settings);
+                _assistantUndo = verifyRoute != null && previous.Matches(candidate) ? null :
+                    new(previous, RoutingSelection.Capture(candidate), revision, snapshot.Session != null, appliedSession);
+            }
 
             // Commit already checked the submitted revision under the lifecycle and file locks.
             // Later edits are a separate operation, so retain this session's Undo and do not publish stale controls.
@@ -452,7 +457,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.Warning("DeepSeek setup failed during Apply or Undo ({ExceptionType})", ex.GetType().Name);
+            _logger.Warning("Assistant setup failed during Apply or Undo ({ExceptionType})", ex.GetType().Name);
             return new(Strings.AssistantApplyFailed);
         }
         finally

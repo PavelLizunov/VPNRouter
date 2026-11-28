@@ -347,7 +347,8 @@ public partial class VpnEngine : IDisposable
         }
     }
 
-    private async Task<bool> ApplyGatedAsync(AppSettings settings, CancellationToken ct, bool forceRestart, bool verifySelection = false)
+    private async Task<bool> ApplyGatedAsync(AppSettings settings, CancellationToken ct, bool forceRestart, bool verifySelection = false,
+        Func<AcceptedTunnelInfo, bool>? verifyRoute = null)
     {
         if (_sessionCts is null || _sessionCts.IsCancellationRequested)
         {
@@ -541,6 +542,8 @@ public partial class VpnEngine : IDisposable
             var controller = _healthMonitor != null || ConfirmServiceReplacement != null || verifySelection
                 ? ClashSingBoxApi.ReadLocalController(configJson) : ((Uri Endpoint, string? Secret)?)null;
             var tunnelInfo = new AcceptedTunnelInfo(settings, configJson, ActiveServerAddress, controller, result.ProxySources);
+            if (verifyRoute?.Invoke(tunnelInfo) == false)
+                throw new InvalidOperationException("Generated routes do not match the confirmed request.");
             if (controller is { } target)
                 await ClashSingBoxApi.ResolveControlTargetsAsync(target.Endpoint, ct).ConfigureAwait(false);
             var confirm = ConfirmServiceReplacement;

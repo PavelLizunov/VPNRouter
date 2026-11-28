@@ -122,6 +122,15 @@ public partial class MainWindowViewModel
             BypassAppGroups.Add(excludeGroup);
         }
 
+        var configuredProcesses = _settings.App.RoutingAppsInclude.Concat(_settings.App.RoutingAppsExclude)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        string CustomRowName(string stored)
+        {
+            var normalized = StripExe(stored);
+            return configuredProcesses.TryGetValue(stored, out var exact) && !configuredProcesses.Contains(normalized)
+                ? exact : normalized;
+        }
+
         var customApps = _settings.CustomApps ?? new();
         var customGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", true) { IsCustomGroup = true, IsExpanded = true };
         var bypassCustomGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", false) { IsCustomGroup = true, IsExpanded = true };
@@ -129,7 +138,7 @@ public partial class MainWindowViewModel
         {
             if (!string.IsNullOrEmpty(app))
             {
-                var name = StripExe(app);
+                var name = CustomRowName(app);
                 customGroup.Apps.Add(CreateIncludeAppItem(name, true, isCustom: true));
                 bypassCustomGroup.Apps.Add(CreateExcludeAppItem(name, false, isCustom: true));
             }
@@ -145,13 +154,19 @@ public partial class MainWindowViewModel
             foreach (var app in cat.Apps ?? new())
             {
                 if (string.IsNullOrWhiteSpace(app)) continue;
-                var name = StripExe(app);
+                var name = CustomRowName(app);
                 group.Apps.Add(CreateIncludeAppItem(name, cat.Enabled, isCustom: true));
                 bypassGroup.Apps.Add(CreateExcludeAppItem(name, false, isCustom: true));
             }
             AppGroups.Add(group);
             BypassAppGroups.Add(bypassGroup);
         }
+
+        var listedExclusions = BypassAppGroups.SelectMany(group => group.Apps)
+            .Select(app => app.ProcessName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in _settings.App.RoutingAppsExclude)
+            if (!string.IsNullOrWhiteSpace(name) && listedExclusions.Add(name))
+                bypassCustomGroup.Apps.Add(CreateExcludeAppItem(name, false, savedExclusionOnly: true));
 
         SelectedAppGroup ??= AppGroups.FirstOrDefault();
         SelectedBypassAppGroup ??= BypassAppGroups.FirstOrDefault();
@@ -212,9 +227,12 @@ public partial class MainWindowViewModel
     }
 
     private AppItemViewModel CreateExcludeAppItem(
-        string processName, bool legacyChecked, bool isCustom = false)
+        string processName, bool legacyChecked, bool isCustom = false, bool savedExclusionOnly = false)
     {
-        var item = new AppItemViewModel(processName, legacyChecked, isCustom);
+        var item = new AppItemViewModel(processName, legacyChecked, isCustom || savedExclusionOnly)
+        {
+            IsSavedExclusionOnly = savedExclusionOnly,
+        };
         item.ReadMode = IsAppCheckedInExcludeList;
         item.WriteMode = SetAppCheckedInExcludeList;
         return item;
@@ -701,6 +719,12 @@ public partial class MainWindowViewModel
     private void RemoveCustomApp(AppItemViewModel? app)
     {
         if (app == null) return;
+        if (app.IsSavedExclusionOnly)
+        {
+            BypassAppGroups.FirstOrDefault(group => group.IsCustomGroup)?.Apps.Remove(app);
+            SetAppCheckedInExcludeList(app.ProcessName, false);
+            return;
+        }
         var matches = AllAppGroups()
             .SelectMany(g => g.Apps.Select(a => new { Group = g, App = a }))
             .Where(x => x.App.IsCustom &&

@@ -286,6 +286,7 @@ public sealed class AssistantSetupPanelTests
 
     [AvaloniaTheory]
     [InlineData("confirm")]
+    [InlineData("enter")]
     [InlineData("decline")]
     [InlineData("escape")]
     [InlineData("outside")]
@@ -321,21 +322,29 @@ public sealed class AssistantSetupPanelTests
                 var run = panel.FindControl<Button>("RunAssistant")!;
                 var confirm = panel.FindControl<Button>("ConfirmAssistant")!;
                 var status = panel.FindControl<TextBlock>("AssistantStatus")!;
+                var input = panel.FindControl<TextBox>("AssistantGoal")!;
+                Assert.True(input.IsEffectivelyVisible);
+                Assert.False(run.IsEnabled);
+                input.Text = "Enable DNS flushing on startup";
                 var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 run.PropertyChanged += (_, args) =>
                 {
                     if (args.Property == Avalonia.Input.InputElement.IsEnabledProperty && run.IsEnabled)
                         completed.TrySetResult(true);
                 };
-                panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                panel.FindControl<TextBox>("AssistantGoal")!.Text = "Enable DNS flushing on startup";
                 Assert.False(confirm.IsVisible);
-                run.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (response == "enter")
+                {
+                    input.Focus();
+                    input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+                }
+                else run.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.True(confirm.IsVisible);
                 Assert.Equal(Strings.AssistantChangeDescription("SetFlushDnsOnStart", true, null, false), status.Text);
                 Assert.False(SettingsLoader.Load(AppPaths.ConfigYamlPath).App.FlushDnsOnStart);
                 switch (response)
                 {
+                    case "enter":
                     case "confirm":
                         confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                         confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -362,12 +371,12 @@ public sealed class AssistantSetupPanelTests
                 Assert.False(confirm.IsVisible);
                 var expected = response switch
                 {
-                    "confirm" => Strings.AssistantPreferenceSaved,
+                    "enter" or "confirm" => Strings.AssistantPreferenceSaved,
                     "subscription" => Strings.AssistantCancelled,
                     _ => Strings.AssistantNoChanges,
                 };
                 Assert.Equal(expected, status.Text);
-                Assert.Equal(response == "confirm", SettingsLoader.Load(AppPaths.ConfigYamlPath).App.FlushDnsOnStart);
+                Assert.Equal(response is "confirm" or "enter", SettingsLoader.Load(AppPaths.ConfigYamlPath).App.FlushDnsOnStart);
                 Assert.Equal(1, requests);
                 Assert.False(vm.IsConnected);
             }
@@ -495,7 +504,6 @@ public sealed class AssistantSetupPanelTests
             var panel = new AssistantSetupPanel { DataContext = vm };
             var window = new Window { Content = panel };
             window.Show();
-            panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             panel.FindControl<TextBox>("AssistantGoal")!.Text = "Connect VPN";
             panel.FindControl<Button>("RunAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(request.CanBeCanceled);
@@ -555,6 +563,7 @@ public sealed class AssistantSetupPanelTests
                 var confirm = panel.FindControl<Button>("ConfirmAssistant")!;
                 var progress = panel.FindControl<ProgressBar>("AssistantProgress")!;
                 var status = panel.FindControl<TextBlock>("AssistantStatus")!;
+                panel.FindControl<TextBox>("AssistantGoal")!.Text = "Enable DNS flushing on startup";
                 var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 run.PropertyChanged += (_, args) =>
                 {
@@ -562,8 +571,6 @@ public sealed class AssistantSetupPanelTests
                         completed.TrySetResult(true);
                 };
 
-                panel.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                panel.FindControl<TextBox>("AssistantGoal")!.Text = "Enable DNS flushing on startup";
                 run.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.True(progress.IsVisible);
                 Assert.False(requestToken.IsCancellationRequested);

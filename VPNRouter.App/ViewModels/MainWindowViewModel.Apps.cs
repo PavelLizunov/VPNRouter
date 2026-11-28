@@ -182,7 +182,7 @@ public partial class MainWindowViewModel
         else
         {
             if (existing == null) return;
-            list.Remove(existing);
+            list.RemoveAll(name => string.Equals(name, processName, StringComparison.OrdinalIgnoreCase));
         }
 
         if (_isLoadingUI || IsBatchUpdating) return;

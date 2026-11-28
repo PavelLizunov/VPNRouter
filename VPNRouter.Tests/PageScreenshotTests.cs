@@ -47,7 +47,7 @@ public class PageScreenshotTests
         vm.IsConnected = true;
         var page = new SimplePage { DataContext = vm };
         var assistant = page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
-        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(assistant.FindControl<TextBox>("AssistantGoal")!.IsVisible);
         ScreenshotHelper.CapturePage(page, "simple-connected-with-assistant", width: 520, height: 680);
     }
 
@@ -68,8 +68,7 @@ public class PageScreenshotTests
         subscription.Enabled = true;
         Assert.True(panel.IsVisible);
 
-        var open = panel.FindControl<Button>("OpenAssistant")!;
-        open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(panel.FindControl<TextBox>("AssistantGoal")!.IsVisible);
         Assert.True(panel.FindControl<StackPanel>("AssistantFields")!.IsVisible);
 
         var eligibleUrl = subscription.Url;

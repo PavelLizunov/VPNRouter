@@ -2,25 +2,24 @@ namespace VPNRouter.Core.Localization;
 
 public static partial class Strings
 {
-    public static string AssistantTitle => Ru ? "Помощник и диагностика" : "Assistant & diagnostics";
-    internal static string AssistantLocalSection => Ru ? "Локальное восстановление (без отправки данных)" : "Local repair (nothing is sent)";
-    internal static string AssistantCloudSection => Ru ? "Команда через DeepSeek" : "Command via DeepSeek";
-    public static string AssistantGoalHint => Ru ? "Что настроить в VPNRouter?" : "What should VPNRouter do?";
+    public static string AssistantTitle => Ru ? "Помощник VPNRouter" : "VPNRouter Assistant";
+    internal static string AssistantDiagnostics => Ru ? "Диагностика и восстановление" : "Diagnostics and repair";
+    public static string AssistantGoalHint => Ru ? "Что сделать с VPN?" : "What would you like to do?";
     public static string AssistantDataNotice => Ru
-        ? "В DeepSeek отправляется текст команды и список доступных действий. Изменения применяются только после подтверждения."
-        : "Your command text and available actions are sent to DeepSeek. Changes apply only after you confirm.";
+        ? "Для онлайн-запросов сервис передаёт текст, язык, состояние VPN и список действий поставщику модели."
+        : "For online requests, the service shares your text, language, VPN state and available actions with its model provider.";
     internal static string AssistantCrashNotice => Ru
         ? "Отправляются только 4 кода последнего сбоя и состояние VPN (без конфигов и сырых логов)."
         : "Sends only 4 classified crash codes and VPN state (no configs or raw logs).";
     public static string AssistantDiagnoseCrash => Ru ? "Разобрать сбой" : "Analyze crash";
     public static string AssistantDiagnosingCrash => Ru ? "Проверяю отчёт о последнем сбое…" : "Checking the last crash report…";
     public static string AssistantNoCrash => Ru ? "Сохранённый отчёт о сбое не найден." : "No saved crash report was found.";
-    public static string AssistantPlan => Ru ? "Проверить команду" : "Review command";
-    public static string AssistantPlanning => Ru ? "Проверяю команду…" : "Reviewing your command…";
-    public static string AssistantConfirm => Ru ? "Подтвердить изменение" : "Confirm change";
+    public static string AssistantPlan => Ru ? "Отправить" : "Send";
+    public static string AssistantPlanning => Ru ? "Готовлю ответ…" : "Preparing a response…";
+    public static string AssistantConfirm => Ru ? "Применить" : "Apply";
     public static string AssistantSingleCommand => Ru
-        ? "Укажите одно действие, например «Включи VPN», «Пусти Edge напрямую» или «Только Firefox через VPN»."
-        : "Enter one action, such as “Connect VPN”, “Route Edge directly” or “Route only Firefox through the VPN”.";
+        ? "Что именно вы хотите изменить? Опишите одно действие."
+        : "What would you like to change? Describe one action.";
     internal static string AssistantSuggestedCommand(string command) => Ru
         ? $"Настройки не изменены. Если это ваша цель, введите отдельную команду «{command}»."
         : $"Your settings are unchanged. If this is what you intended, enter the separate command “{command}”.";
@@ -43,8 +42,8 @@ public static partial class Strings
         _ => null,
     };
     public static string AssistantProposalMismatch => Ru
-        ? "Предложение DeepSeek отличается от вашей команды. Настройки сохранены без изменений."
-        : "The DeepSeek suggestion differs from your command. Your settings are unchanged.";
+        ? "Сервис предложил другое действие. Уточните команду."
+        : "The service suggested a different action. Please rephrase your command.";
     internal static string AssistantChangeDescription(string control, bool? desired, string? app, bool connected) =>
         control switch
         {
@@ -85,7 +84,7 @@ public static partial class Strings
         ? "Сейчас VPN управляет служба. Помощник может изменить подключение, запущенное из этого окна."
         : "The service is managing this VPN connection. The assistant can change a connection started in this window.";
     public static string AssistantSubscription => Ru ? "Выберите действующую подписку vpnctl." : "Select an active vpnctl subscription.";
-    public static string AssistantAccessDenied => Ru ? "Подписка не даёт доступа к DeepSeek." : "This subscription does not grant DeepSeek access.";
+    public static string AssistantAccessDenied => Ru ? "Доступ к помощнику ограничен. Проверьте подписку." : "Assistant access is restricted. Check your subscription.";
     public static string AssistantTunnelBusy => Ru ? "VPN-адаптер занят. Попробуйте ещё раз." : "The VPN adapter is busy. Try again.";
     public static string AssistantSettingsChanged => Ru ? "Настройки изменились. Запустите команду заново." : "Settings changed. Run the command again.";
     public static string AssistantRuleConflict => Ru ? "Вручную заданные правила могут изменить этот маршрут." : "Custom rules can change this route.";
@@ -107,7 +106,7 @@ public static partial class Strings
     public static string AssistantPageOpened => Ru ? "Раздел открыт." : "Section opened.";
     public static string AssistantVpnActive => Ru ? "VPN подключён." : "VPN connected.";
     public static string AssistantVpnStopped => Ru ? "VPN отключён." : "VPN disconnected.";
-    public static string AssistantRepair => Ru ? "Починить VPN" : "Repair VPN";
+    public static string AssistantRepair => Ru ? "Восстановить VPN на устройстве" : "Repair VPN on this device";
     public static string AssistantRepairWorking => Ru ? "Проверяю настройки и подключение…" : "Checking settings and connectivity…";
     public static string AssistantRepairFailed => Ru ? "Проверка VPN завершилась ошибкой." : "The VPN check failed.";
     public static string AssistantRepairInvalidSettings => Ru ? "Конфигурация не прошла проверку. Откройте настройки сети." : "The configuration did not pass validation. Open Network settings.";
@@ -139,7 +138,7 @@ public static partial class Strings
     internal static string AssistantRegionalBypassChange => Ru ? " Исключение для российского трафика будет отключено." : " The Russian traffic bypass will be turned off.";
     public static string AssistantRateLimited => Ru ? "Лимит запросов исчерпан. Попробуйте позже." : "Request limit reached. Try again later.";
     public static string AssistantInvalidGoal => Ru ? "Введите короткую команду без данных подписки." : "Enter a short request without subscription details.";
-    public static string AssistantUnavailable => Ru ? "DeepSeek недоступен. Попробуйте позже." : "DeepSeek is unavailable. Try again later.";
+    public static string AssistantUnavailable => Ru ? "Онлайн-помощник недоступен. Попробуйте позже." : "The online assistant is unavailable. Try again later.";
     public static string AssistantEndpointUnavailable => Ru
         ? "Сервер подписки пока не поддерживает эту версию помощника."
         : "The subscription server does not support this assistant version yet.";

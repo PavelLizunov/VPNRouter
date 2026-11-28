@@ -76,6 +76,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
     [InlineData("verified-free-missing-rule-set")]
     [InlineData("verified-free-invalid-native")]
     [InlineData("verified-assistant-invalid-native")]
+    [InlineData("verified-assistant-missing-route")]
     [InlineData("damaged-built-in")]
     [InlineData("missing-custom-config")]
     [InlineData("imported-unreadable-srs")]
@@ -351,15 +352,16 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 }
             }
             else if (scenario.StartsWith("verified-free-", StringComparison.Ordinal)
-                || scenario == "verified-assistant-invalid-native")
+                || scenario.StartsWith("verified-assistant-", StringComparison.Ordinal))
             {
+                bool missingRoute = scenario == "verified-assistant-missing-route";
                 runner.OnRun(r => r.Arguments.SequenceEqual(["check", "-c", "stdin"]),
-                    new ProcessResult(1, "", "", TimeSpan.Zero, false));
+                    new ProcessResult(missingRoute ? 0 : 1, "", "", TimeSpan.Zero, false));
                 var previous = SettingsLoader.Copy(settings);
                 previous.Vless.ActiveServer = "previous selection";
                 SetField(engine, "_failoverSettingsContext", previous);
                 bool saved = false;
-                if (scenario == "verified-assistant-invalid-native")
+                if (scenario.StartsWith("verified-assistant-", StringComparison.Ordinal))
                 {
                     var accepted = new AcceptedTunnelInfo(previous, originalJson, "", null,
                         new Dictionary<string, VlessServerEntry>());
@@ -383,9 +385,18 @@ public sealed class VpnEngineApplyStructuralChangeTests
                     settings.App.RoutingAppsMode = "include";
                     settings.App.RoutingAppsInclude = ["chrome.exe"];
                     settings.App.RoutingAppsIncludeInitialized = true;
+                    bool routeInspected = false;
+                    bool CheckRegionalRoute(AcceptedTunnelInfo generated)
+                    {
+                        routeInspected = true;
+                        return generated.RoutesRussianTrafficDirect();
+                    }
                     result = await engine.ConnectVerifiedAppRoutingAsync(settings,
-                        new AssistantRouteIntent(accepted, "chrome.exe"), () => saved = true,
-                        skipVpnConflictCheck: false, TestContext.Current.CancellationToken);
+                        new AssistantRouteIntent(accepted, "chrome.exe", VerifyRoute: missingRoute ? CheckRegionalRoute : null),
+                        () => saved = true, skipVpnConflictCheck: false, TestContext.Current.CancellationToken);
+                    Assert.Equal(missingRoute, routeInspected);
+                    Assert.Same(accepted, engine.AcceptedTunnel);
+                    Assert.Same(initialHandle, singBox.OwnedProcessHandle);
                 }
                 else
                 {
@@ -430,7 +441,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
                 Assert.DoesNotContain(fakeHttp.SentRequests, r => r.Method != HttpMethod.Get);
             }
             Assert.Empty(runner.StartCalls);
-            if (importedSet || scenario is "verified-free-invalid-native" or "verified-assistant-invalid-native")
+            if (importedSet || scenario is "verified-free-invalid-native" or "verified-assistant-invalid-native" or "verified-assistant-missing-route")
             {
                 var check = Assert.Single(runner.RunCalls);
                 Assert.Equal(new[] { "check", "-c", "stdin" }, check.Arguments);
@@ -484,7 +495,7 @@ public sealed class VpnEngineApplyStructuralChangeTests
 
             Assert.DoesNotContain(statuses, s => s.StartsWith("Apply failed:") && s != expectedFailure);
 
-            if (scenario == "verified-assistant-invalid-native")
+            if (scenario.StartsWith("verified-assistant-", StringComparison.Ordinal))
             {
                 initialHandle.SignalExit(0);
                 engine.Stop();

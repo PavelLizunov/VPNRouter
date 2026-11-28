@@ -502,6 +502,27 @@ public class MainWindowViewModelAppsModeTests
     }
 
     [AvaloniaFact]
+    public void Saved_exclusion_rows_keep_exact_names_and_can_be_removed_independently()
+    {
+        using var vm = MakeVm();
+        var settings = GetSettings(vm);
+        settings.CustomApps = ["Imported.exe"];
+        settings.App.RoutingAppsExclude = ["Imported.exe", "Game.exe", "GAME.exe"];
+        settings.App.RoutingAppsInclude = ["Game.exe"];
+        typeof(MainWindowViewModel).GetMethod("LoadApps", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(vm, null);
+
+        var rows = vm.BypassAppGroups.Single(group => group.IsCustomGroup).Apps;
+        var game = Assert.Single(rows.Where(row => row.ProcessName.Equals("Game.exe", StringComparison.OrdinalIgnoreCase)));
+        Assert.True(game.IsCustom && game.IsChecked);
+        Assert.Single(rows.Where(row => row.ProcessName.StartsWith("Imported", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(rows, row => row.IsChecked && row.ProcessName == "Imported.exe");
+        vm.RemoveCustomAppCommand.Execute(game);
+        Assert.DoesNotContain(game, rows);
+        Assert.Equal(new[] { "Imported.exe" }, settings.App.RoutingAppsExclude);
+        Assert.Equal(new[] { "Game.exe" }, settings.App.RoutingAppsInclude);
+    }
+
+    [AvaloniaFact]
     public void RemoveCustomApp_RemovesMirroredCustomRows()
     {
         var vm = MakeVm();

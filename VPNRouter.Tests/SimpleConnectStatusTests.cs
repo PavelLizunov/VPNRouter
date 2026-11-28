@@ -28,6 +28,53 @@ namespace VPNRouter.Tests;
 [Collection(SafeModeStateCollection.Name)]
 public sealed class SimpleConnectStatusTests
 {
+    [AvaloniaFact]
+    public void HomeAssistantAt380ShowsTheRegisteredSubscription()
+    {
+        var language = VPNRouter.App.Localization.Strings.Lang;
+        try
+        {
+            var settings = new AppSettings();
+            settings.App.Language = "ru";
+            settings.App.UiMode = "simple";
+            settings.App.ConfigMode = "subscribe";
+            settings.App.Subscriptions =
+            [
+                new() { Enabled = true, Url = "https://ninitux.com/sub/synthetic-layout", Servers = [Entry("Stockholm", "test.invalid")] }
+            ];
+            var store = new InMemorySettingsStore();
+            store.Save(settings, AppPaths.ConfigYamlPath);
+            using var vm = CreateVm(store);
+            using var view = new OpenPage(vm, 380, ThemeVariant.Light, height: 660);
+            vm.SetLanguageRussianCommand.Execute(null);
+            var panel = view.Page.FindControl<AssistantSetupPanel>("SetupAssistant")!;
+            var scroll = view.Page.FindControl<ScrollViewer>("SimpleContentScroll")!;
+            var window = Assert.IsType<Window>(TopLevel.GetTopLevel(view.Page));
+            void CaptureAssistant(string name)
+            {
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                var offset = panel.TranslatePoint(default, scroll)!.Value.Y;
+                scroll.Offset = new Vector(0, Math.Max(0, scroll.Offset.Y + offset - 12));
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+                view.Capture(name);
+            }
+
+            Assert.True(panel.IsEffectivelyVisible);
+            CaptureAssistant("simple-home-assistant-ru-380");
+            var goal = panel.FindControl<TextBox>("AssistantGoal")!;
+            var send = panel.FindControl<Button>("RunAssistant")!;
+            Assert.True(goal.IsEffectivelyVisible);
+            Assert.False(send.IsEnabled);
+            goal.Text = "Хочу, чтобы игры шли мимо VPN";
+            Assert.True(send.IsEnabled);
+            Assert.Equal("Отправить", send.Content);
+            CaptureAssistant("simple-home-assistant-typed-ru-380");
+        }
+        finally { VPNRouter.App.Localization.Strings.Lang = language; }
+    }
+
     [AvaloniaTheory]
     [InlineData(520, 540)]
     [InlineData(380, 400)]
@@ -47,7 +94,7 @@ public sealed class SimpleConnectStatusTests
 
         var assistant = Assert.Single(view.Page.GetVisualDescendants().OfType<AssistantSetupPanel>());
         Assert.True(assistant.IsEffectivelyVisible);
-        assistant.FindControl<Button>("OpenAssistant")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(assistant.FindControl<TextBox>("AssistantGoal")!.IsEffectivelyVisible);
         Assert.True(assistant.FindControl<StackPanel>("AssistantFields")!.IsEffectivelyVisible);
 
         var scroll = view.Page.FindControl<ScrollViewer>("SimpleContentScroll")!;
