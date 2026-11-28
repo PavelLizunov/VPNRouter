@@ -71,6 +71,20 @@ public sealed class SimpleConnectStatusTests
             Assert.True(send.IsEnabled);
             Assert.Equal("Отправить", send.Content);
             CaptureAssistant("simple-home-assistant-typed-ru-380");
+            var diagnostics = panel.FindControl<Expander>("DiagnosticsDetails")!;
+            var chevron = diagnostics.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>()
+                .Single(path => path.Name == "ExpandCollapseChevron");
+            Assert.False(diagnostics.IsExpanded);
+            Assert.Equal(Matrix.Identity, chevron.RenderTransform!.Value);
+            diagnostics.IsExpanded = true;
+            CaptureAssistant("simple-home-assistant-diagnostics-expanded-ru-380");
+            var expanded = chevron.RenderTransform!.Value;
+            Assert.Equal(-1d, expanded.M11, 8);
+            Assert.Equal(-1d, expanded.M22, 8);
+            Assert.Equal(0d, expanded.M12, 8);
+            Assert.Equal(0d, expanded.M21, 8);
+            diagnostics.IsExpanded = false;
+            Assert.Equal(Matrix.Identity, chevron.RenderTransform!.Value);
         }
         finally { VPNRouter.App.Localization.Strings.Lang = language; }
     }

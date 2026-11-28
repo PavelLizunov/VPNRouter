@@ -16,6 +16,8 @@ line: `- [ ] **P0** — <symptom> — <file:line or plan ref> — <target versio
 
 ## Open
 
+- [x] **P3** - Standard r8 assistant captures show the collapsed diagnostics chevron tilted during its Fluent rotation. Fixed in source with state-specific transforms and a Windows capture of each direction. [Assistant task record](phase-assistant-routing-commands-2026-11-28.md).
+
 - [x] **P2** - PR #752's first Steam scan missed nested binaries. Review also found gaps in saved versus active route reporting, scan-error copy, online disclosure, legacy exception previews and exclusion row removal. RESOLVED in source on PR #752. [Verification and disposition](phase-assistant-routing-commands-2026-11-28.md).
 
 - [x] **P2** - The first Standard assistant routing proposal included catalog entries for uninstalled software, missed a natural Russian request and checked live route evidence after saving. RESOLVED in source in PR #752 with installed inventory, a bounded request grammar and commit-time route verification. [Task record](phase-assistant-routing-commands-2026-11-28.md).
