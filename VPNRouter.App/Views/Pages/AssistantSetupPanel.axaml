@@ -36,6 +36,14 @@
             <Button x:Name="UndoAssistant" HorizontalAlignment="Left" Classes="ghost" IsVisible="False"
                     AutomationProperties.AutomationId="Assistant.Undo" Click="UndoAssistant_Click"/>
             <Expander x:Name="DiagnosticsDetails" HorizontalContentAlignment="Stretch">
+                <Expander.Styles>
+                    <Style Selector="Expander:not(:expanded) /template/ ToggleButton#ExpanderHeader /template/ Path#ExpandCollapseChevron">
+                        <Setter Property="RenderTransform" Value="rotate(0deg)"/>
+                    </Style>
+                    <Style Selector="Expander:expanded /template/ ToggleButton#ExpanderHeader /template/ Path#ExpandCollapseChevron">
+                        <Setter Property="RenderTransform" Value="rotate(180deg)"/>
+                    </Style>
+                </Expander.Styles>
                 <StackPanel Spacing="8" Margin="0,6,0,0">
                     <Button x:Name="RepairVpn" Classes="outline" HorizontalAlignment="Left"
                             AutomationProperties.AutomationId="Assistant.Repair" Click="RepairVpn_Click"/>

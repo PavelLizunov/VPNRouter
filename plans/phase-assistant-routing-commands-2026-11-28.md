@@ -13,6 +13,8 @@ Expose the assistant input on Simple Home and let a subscriber request that game
 
 ## Verification
 
+The r8 screenshot follow-up will keep the native diagnostics expander and show its two directions immediately. Check the rendered header after opening and closing, and capture both states on Windows at 380 px.
+
 1. Build the changed client in hosted CI.
 2. Test parsing, both route changes, empty results, cancellation and undo.
 3. Check both languages and align the user-visible descriptions with the generated rules.
